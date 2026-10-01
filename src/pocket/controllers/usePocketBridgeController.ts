@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { bridgeCircleEvmEmailWallet, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { readPocketBridgeQuote, recordPocketBridge, type PocketBridgeNetwork, type PocketBridgeQuote } from '../api/pocketBridgeClient'
 import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
-import { ambiguousMatchingBridge, readPocketBridgeTransfers, savePocketBridgeTransfer, type PocketPendingBridge } from '../lib/pocketPendingBridge'
+import { POCKET_BRIDGES_UPDATED, ambiguousMatchingBridge, readPocketBridgeTransfers, savePocketBridgeTransfer, type PocketPendingBridge } from '../lib/pocketPendingBridge'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { registerPocketPaymentPreparer } from '../lib/pocketPaymentApproval'
@@ -14,7 +14,7 @@ export default function usePocketBridgeController(input: {
   sourceBalance: number
   wallets: Partial<Record<PocketBridgeNetwork, CirclePocketWallet>>
   ensureWallet(network: PocketBridgeNetwork): Promise<CirclePocketWallet | null>
-  getEvmSession(network: 'base' | 'arbitrum' | 'arc', walletAddress: string): Promise<CircleEvmEmailSession>
+  getEvmSession(network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string): Promise<CircleEvmEmailSession>
   getSolanaSession(walletAddress: string): Promise<PocketSolanaEmailSession>
   getAccessToken(): Promise<string | null>
   refresh(): Promise<unknown>
@@ -30,7 +30,21 @@ export default function usePocketBridgeController(input: {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const lastAttempt = useRef('')
   const locked = useRef(false)
+  useEffect(() => {
+    const reconcile = () => {
+      if (!lastAttempt.current || !input.owner) return
+      try {
+        const record = readPocketBridgeTransfers(input.owner, localStorage).find(item => item.id === lastAttempt.current)
+        if (record?.progress === 'completed' || record?.progress === 'failed') {
+          setError(''); setNotice(record.progress === 'completed' ? 'USDC bridged.' : 'Bridge was not completed.'); lastAttempt.current = ''
+        } else if (record?.txHash) { setError(''); setNotice('Bridge in progress. Follow it in Activity.') }
+      } catch { /* Keep the saved attempt for recovery. */ }
+    }
+    window.addEventListener(POCKET_BRIDGES_UPDATED, reconcile)
+    return () => window.removeEventListener(POCKET_BRIDGES_UPDATED, reconcile)
+  }, [input.owner])
   const quoteVersion = useRef(0)
   const invalidate = () => { quoteVersion.current++; setQuote(null); setStatus('idle'); setError(''); setNotice('') }
   const updateAmount = (value: string) => { if (locked.current) return; invalidate(); setAmount(value) }
@@ -95,7 +109,7 @@ export default function usePocketBridgeController(input: {
       const session = input.source === 'solana' ? await input.getSolanaSession(sourceWallet.address) : await input.getEvmSession(input.source, sourceWallet.address)
       if (latest.current.owner !== owner) return
       let active: PocketPendingBridge = { id: crypto.randomUUID(), source: input.source, destination, amount, walletAddress: sourceWallet.address, createdAt: Date.now(), progress: 'needs_attention' }
-      const persist = () => { savePocketBridgeTransfer(owner, active, localStorage); saved = true }
+      const persist = () => { lastAttempt.current = active.id; savePocketBridgeTransfer(owner, active, localStorage); saved = true }
       setStatus('confirming')
       const txHash = input.source === 'solana'
         ? await bridgeCircleSolanaWallet({ session: session as PocketSolanaEmailSession, destination: destination as Exclude<PocketBridgeNetwork, 'solana'>, destinationAddress: destinationWallet.address, amount, accessToken, onBeforeSubmit: persist })
@@ -116,7 +130,8 @@ export default function usePocketBridgeController(input: {
       setError(reason instanceof Error ? reason.message : 'Could not complete this bridge.')
       if (saved) {
         quoteVersion.current++; setQuote(null); setAmount('')
-        setNotice('Check this transfer in Activity before repeating it.')
+        setError('')
+        setNotice('Your bridge is saved. Checking its status in Activity.')
         input.onActivity()
       }
     } finally { locked.current = false; setSubmitting(false) }

@@ -42,7 +42,7 @@ export default function PocketArcSwapPanel(props: Props) {
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
     if (response.status === 404) throw new Error('Arc swaps are not available yet. Please try again shortly.')
-    const data = await response.json()
+    const data = await response.json().catch(() => { throw new Error('Swap service is temporarily unavailable. Try again shortly.') })
     if (!response.ok || !data.ok) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || 'Arc swap request failed.')
     return data
   }, [props.getAccessToken,props.request])
@@ -103,6 +103,7 @@ export default function PocketArcSwapPanel(props: Props) {
   }, [quoted, props.enabled, busy, approvalBusy, pending, visible])
   async function discover(address: string): Promise<Token> { const data = await api(undefined, address); return data.token }
   function choose(token: Token, side: 'in' | 'out') {
+    if (locked.current || approvalBusy || pending) return
     invalidate(); setTokens(current => current.some(item => item.address.toLowerCase() === token.address.toLowerCase()) ? current : [...current, token])
     if (side === 'in') setTokenIn(token.address); else setTokenOut(token.address)
   }
@@ -111,7 +112,7 @@ export default function PocketArcSwapPanel(props: Props) {
     const active = session.current ?? await props.getSession(next.walletAddress)
     const server = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash, circleUserToken: active.userToken })
     if (server.status === 'failed' || server.status === 'not_submitted') { savePending(null); setQuoted(null); setStatus('idle'); setNotice(server.error || 'No swap was submitted. Request a new quote.'); return }
-    if (server.status === 'completed') { savePending(null); setQuoted(null); setStatus('successful'); setNotice('Received ' + server.amountOut + ' ' + next.quote.tokenOut.symbol + ' on Arc.'); await Promise.all([load(), props.refresh()]); return }
+    if (server.status === 'completed') { savePending(null); setQuoted(null); setStatus('successful'); setAmount(''); setError(''); setNotice('Swap completed.'); await Promise.all([load(), props.refresh()]); return }
     if (!next.txHash) {
       if (!next.challengeId) {
         const recovery = await api({ action: 'status', quoteToken: next.quoteToken })
@@ -126,7 +127,7 @@ export default function PocketArcSwapPanel(props: Props) {
     }
     const result = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash })
     if (result.status === 'completed') {
-      setNotice('Received ' + result.amountOut + ' ' + next.quote.tokenOut.symbol + ' on Arc.')
+      setAmount(''); setError(''); setNotice('Swap completed.')
       savePending(null); setQuoted(null); setStatus('successful')
       await Promise.all([load(), props.refresh()])
     } else if (result.status === 'failed') {
@@ -149,13 +150,13 @@ export default function PocketArcSwapPanel(props: Props) {
       if (result.transactionHash) { activePending = { ...activePending, txHash: result.transactionHash }; savePending(activePending) }
       await check(activePending)
     } catch (reason) {
-      setError((reason as Error).message)
+      setError(activePending ? '' : 'Could not prepare this swap. Please try again.')
+      if (activePending) setNotice('Your swap is saved. Check its status below.')
       setStatus('idle')
     } finally { locked.current = false }
   }
   const selected = tokens.find(token => token.address.toLowerCase() === tokenIn.toLowerCase())
   return <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-    <p className="text-xs text-gray-500 dark:text-gray-400">Exchange tokens in your Arc wallet.</p>
     {pending ? <div className="space-y-3 rounded-2xl bg-blue-50 p-4 dark:bg-blue-500/10">
       <p className="text-sm">Your swap is awaiting confirmation. Check its status before creating another.</p>
       <button type="button" disabled={busy} onClick={() => { setError(''); void prepare().then(() => check(pending)).catch(reason => setError(reason.message)) }} className="text-sm font-bold text-blue-600">Check swap status</button>
@@ -173,10 +174,8 @@ export default function PocketArcSwapPanel(props: Props) {
       {quoted && <div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#121212]">
         <p>Estimated receive: <b>{quoted.quote.expectedOut} {quoted.quote.tokenOut.symbol}</b></p>
         <p>Minimum receive: <b>{quoted.quote.minimumOut} {quoted.quote.tokenOut.symbol}</b></p>
-        <p>Slippage limit: 0.5%</p>
         {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: {fee.amount} {fee.symbol}{fee.included ? ' (included)' : ''}</p>)}
-        <p>Estimated network gas: {quoted.quote.gasUsdc} USDC · sponsorship applies if available</p>
-        <p>{quoted.quote.expiresAt > now ? 'Quote valid for ' + Math.ceil((quoted.quote.expiresAt - now) / 1000) + ' seconds' : 'Refreshing price...'}</p>
+        <p>Estimated network gas: {quoted.quote.gasUsdc} USDC</p>
       </div>}
       {error && !quoted && pairReady && amountValid && <button type="button" onClick={() => setQuoteRefresh(value => value + 1)} className="text-xs font-bold text-blue-600">Try price again</button>}
       <PocketSlideAction approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating price...' : quoted?.sufficientBalance === false ? 'Insufficient balance' : quoted && quoted.sufficientBalance !== true ? 'Balance unavailable' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} />

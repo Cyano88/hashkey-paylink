@@ -1,3 +1,4 @@
+import { collapsePocketAssetMoves } from './pocketAssetMoveActivity'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { bridgeProgressLabel, type PocketPendingBridge, type PocketBridgeProgress } from './pocketPendingBridge'
 
@@ -15,18 +16,18 @@ export function mergePocketBridgeActivity(rows: PocketActivityRow[], transfers: 
   for (const transfer of transfers) {
     const index = merged.findIndex(row => row.source === 'wallet-bridge' && (row.eventId === transfer.id || Boolean(transfer.txHash && row.txHash === transfer.txHash && row.chain === transfer.source)))
     const existing = index < 0 ? undefined : merged[index]
-    const bridge = { ...transfer, progress: existing?.bridge?.progress === 'completed' ? 'completed' as const : transfer.progress || (transfer.txHash ? 'submitted' as const : 'needs_attention' as const) }
+    const bridge = { ...transfer, destinationTxHash: transfer.destinationTxHash || existing?.bridge?.destinationTxHash || existing?.destinationTxHash, progress: existing?.bridge?.progress === 'completed' ? 'completed' as const : transfer.progress || (transfer.txHash ? 'submitted' as const : 'needs_attention' as const) }
     const row: PocketActivityRow = {
       ...existing, eventId: transfer.id, txHash: transfer.txHash || '', chain: transfer.source, payer: 'Pocket wallet',
       memo: `${transfer.source} to ${transfer.destination}`, amount: transfer.amount, ts: transfer.createdAt,
       source: 'wallet-bridge', settlementType: 'wallet_bridge', activityLabel: 'USDC bridge', contextLabel: `${transfer.source} to ${transfer.destination}`,
       direction: 'out', destination: transfer.destination, supportReference: transfer.txHash || transfer.challengeId || transfer.id,
-      paycrestStatus: bridgeProgressLabel(bridge.progress), bridge,
+      paycrestStatus: bridgeProgressLabel(bridge.progress), destinationTxHash: bridge.destinationTxHash, bridge,
     }
     if (index < 0) merged.push(row)
     else merged[index] = row
   }
   const bridgeHashes = new Set(merged.filter(row => row.bridge && row.txHash).map(row => row.chain + ':' + row.txHash))
   const fundingHashes = new Set(merged.flatMap(row => (row.paymentFunding || []).flatMap(item => [item.source + ':' + item.txHash.toLowerCase(), ...(item.destinationTxHash ? [item.destination + ':' + item.destinationTxHash.toLowerCase()] : [])])))
-  return merged.filter(row => (row.source !== 'wallet-withdrawal' || !bridgeHashes.has(row.chain + ':' + row.txHash)) && (!['wallet-bridge','wallet-withdrawal','wallet-deposit'].includes(row.source || '') || !fundingHashes.has(row.chain + ':' + row.txHash.toLowerCase())))
+  return collapsePocketAssetMoves(merged).filter(row => (row.source !== 'wallet-withdrawal' || !bridgeHashes.has(row.chain + ':' + row.txHash)) && (!['wallet-bridge','wallet-withdrawal','wallet-deposit'].includes(row.source || '') || !fundingHashes.has(row.chain + ':' + row.txHash.toLowerCase())))
 }

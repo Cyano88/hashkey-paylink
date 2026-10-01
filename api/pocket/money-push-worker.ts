@@ -30,7 +30,7 @@ type Dependencies = {
 function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions>>) {
   const hashes = new Set<string>()
   for (const record of records) {
-    if (record.action !== 'wallet.bridge' && record.action !== 'bank-withdraw.route') continue
+    if (record.action !== 'wallet.bridge' && record.action !== 'wallet.swap' && record.action !== 'bank-withdraw.route') continue
     const candidates = [record.resourceId, record.metadata?.txHash, record.metadata?.destinationTxHash]
     candidates.forEach(value => { if (value) hashes.add(String(value).toLowerCase()) })
   }

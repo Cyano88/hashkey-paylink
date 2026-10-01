@@ -1,3 +1,4 @@
+import {activePocketEvmSession} from '../controllers/usePocketWalletController'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { readPendingPocketBridges, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
 import { readCircleEvmBridgeChallenge, reconcileCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
@@ -10,7 +11,7 @@ export default function usePocketBridgeActivity(input: {
   authenticated: boolean
   rows: PocketActivityRow[]
   getAccessToken(): Promise<string | null>
-  getEvmSession(network: 'base' | 'arbitrum' | 'arc', address: string): Promise<CircleEvmEmailSession>
+  getEvmSession(network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', address: string): Promise<CircleEvmEmailSession>
 }) {
   const current = useRef(input)
   current.current = input
@@ -36,8 +37,9 @@ export default function usePocketBridgeActivity(input: {
       const token = await current.current.getAccessToken()
       if (current.current.owner !== owner) return
       if (!token) throw new Error('Sign in again to check this transfer.')
-      if (active.challengeId && active.walletAddress && active.source !== 'solana' && interactive) {
-        const session = await current.current.getEvmSession(active.source, active.walletAddress)
+      if (active.challengeId && active.walletAddress && active.source !== 'solana' && !active.txHash) {
+        const session = interactive ? await current.current.getEvmSession(active.source, active.walletAddress) : activePocketEvmSession(owner, active.source, active.walletAddress)
+        if (!session) return
         if (current.current.owner !== owner) return
         const outcome = await readCircleEvmBridgeChallenge(session, active.challengeId)
         if (current.current.owner !== owner) return
@@ -46,9 +48,9 @@ export default function usePocketBridgeActivity(input: {
           setMessages(value => ({ ...value, [record.id]: 'The source transfer did not complete. You can start a new bridge with a fresh quote.' }))
           return
         }
-        const result = await reconcileCircleEvmEmailWithdraw({ session, challengeId: active.challengeId, timeoutMs: 10_000 })
+        const result = outcome.txHash ? {txHash:outcome.txHash} : await reconcileCircleEvmEmailWithdraw({ session, challengeId: active.challengeId, timeoutMs: 5_000 })
         if (current.current.owner !== owner) return
-        if (result.txHash) active = { ...active, txHash: result.txHash, progress: 'submitted' }
+        if (result.txHash) { active = { ...active, txHash: result.txHash, progress: 'submitted' }; savePocketBridgeTransfer(owner, active, localStorage) }
       }
       if (!active.txHash) {
         if (interactive) setMessages(value => ({ ...value, [record.id]: 'The submission result is not known yet. Check again or contact support before repeating this transfer.' }))
@@ -64,7 +66,7 @@ export default function usePocketBridgeActivity(input: {
       if (current.current.owner === owner) setMessages(value => ({ ...value, [record.id]: progress === 'needs_attention' ? 'The source transfer may have succeeded, but delivery needs attention. Contact support; do not resend this transfer.' : '' }))
     } catch (reason) {
       // An unavailable status service never changes the transfer to failed.
-      if (current.current.owner === owner && interactive) setMessages(value => ({ ...value, [record.id]: reason instanceof Error ? reason.message : 'Status is temporarily unavailable. Check again shortly.' }))
+      if (current.current.owner === owner && interactive) setMessages(value => ({ ...value, [record.id]: 'Status is temporarily unavailable. Your bridge is saved; check again shortly.' }))
     } finally {
       checking.current.delete(key)
       setCheckingIds([...checking.current])
@@ -87,7 +89,7 @@ export default function usePocketBridgeActivity(input: {
       const records = readPocketBridgeTransfers(owner, localStorage)
       for (const record of records) {
         if (current.current.owner !== owner) break
-        if (record.txHash && record.progress !== 'failed' && !(record.progress === 'completed' && record.historySynced)) await check(record, false)
+        if ((record.txHash || record.challengeId) && record.progress !== 'failed' && !(record.progress === 'completed' && record.historySynced)) await check(record, false)
       }
     } catch { /* reload reports corrupt local records without claiming failure. */ }
     finally { syncing.current = false; if (current.current.owner === owner) reload() }

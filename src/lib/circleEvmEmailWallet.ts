@@ -1157,7 +1157,7 @@ export async function readCircleEvmBridgeChallenge(session: CircleEvmEmailSessio
   const result = await circleWalletApi<{ transaction?: Record<string, unknown> }>({ action: 'getTransaction', userToken: session.userToken, transactionId, chain: session.chain })
   const transaction = result.transaction
   const sourceFailed = Boolean(transaction && transaction.walletId === session.wallet.id && transaction.blockchain === session.wallet.blockchain && transactionState(transaction) === 'FAILED')
-  return { failedWithoutTransaction, sourceFailed }
+  return { failedWithoutTransaction, sourceFailed, transactionId, txHash: findTxHash(transaction) }
 }
 
 export async function bridgeCircleEvmEmailWallet(params: {
@@ -1202,13 +1202,13 @@ export async function bridgeCircleEvmEmailWallet(params: {
   )
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = await pollChallengeTransactionId(params.session, challenge.challengeId)
-    .catch(() => findTransactionId(result) ?? findTransactionId(challenge))
+  const transactionId = findTransactionId(result) ?? findTransactionId(challenge) ?? await pollChallengeTransactionId(params.session, challenge.challengeId, 5_000)
+    .catch(reason => { if (reason?.terminalFailure) throw reason; return null })
   if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId)
+    const hash = await pollTransactionHash(params.session, transactionId, 5_000).catch(reason => { if (reason?.terminalFailure) throw reason; return null })
     if (hash) return hash
   }
-  throw new Error('Bridge submitted and is being reconciled. Do not retry this bridge.')
+  throw new Error('Your bridge status is being checked. You can follow it in Activity.')
 }
 
 function findSignature(value: unknown): Hex | null {

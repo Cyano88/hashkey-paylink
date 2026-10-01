@@ -113,3 +113,11 @@ This checkpoint is not a live gift service or security certification. Nothing wa
 - Playwright rendered check passed using mocked metadata/authentication and a deliberately unavailable wallet: sign-in continuation, non-dismissal on outside tap, and preparation retry without false success. Screenshot saved locally; image inspection tool failed due to sandbox helper error.
 
 Remaining: production route/native deep-link binding, secure creator capability recovery, authoritative cancelled-approval recovery, sender funding UI, receipts/activity, reviewed deployment and live Circle sponsorship. No production deployment or Pixel installation.
+
+## Gift route and bridge release — 2026-10-01
+
+- Gift URLs now have a dedicated Pocket host route. Native users retain the gift through the existing in-place email sign-in sheet and open the network-specific Circle wallet for redemption.
+- Browser redemption opens the registered Pocket scheme. Installation fallback uses the existing configured store link and explicitly asks users to reopen the original gift link after installation; no deferred-install restoration is claimed.
+- Gift funding remains unavailable: the reviewed deployment registry is empty. Sender funding/recovery, deployment, live sponsorship, and gift receipt/activity integration remain launch requirements. This release does not claim gifts are production-ready.
+- Bridge release: menu list replaces the mode tabs, active inputs lock, technical copy is reduced, and saved no-hash approvals can reconcile read-only with cached sessions. Both bridge legs and both swap legs fold into their parent activity using exact chain/hash references. Push tests verify one scoped bridge/swap notice.
+- Scoped bridge, activity, Arc swap and gift checks pass. Android build succeeded. No real money transfer was initiated during these checks.

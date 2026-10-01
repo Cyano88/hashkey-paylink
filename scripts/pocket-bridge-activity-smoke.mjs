@@ -36,3 +36,10 @@ const remoteCompleted=mergePocketBridgeActivity([server],[{...first,txHash:'hash
 assert.equal(remoteCompleted[0].bridge.progress,'completed','server confirmation wins over stale local progress')
 assert.throws(()=>savePocketBridgeTransfer('owner',{...first,id:'c'}, {...storage,setItem:()=>{throw Error('storage unavailable')}}),/storage unavailable/)
 console.log('Pocket Activity bridge progress and multiple-transfer tests passed.')
+const dest={...server,eventId:'mint',chain:'arc',txHash:'0xAbC',source:'wallet-deposit'}
+const unified=mergePocketBridgeActivity([{...server,destinationTxHash:'0xabc'},dest,{...server,eventId:'burn',source:'wallet-withdrawal'},{...dest,eventId:'unrelated',txHash:'other'}],[{...first,txHash:'hash-a',progress:'arriving'}])
+assert.equal(unified.length,2,'exact source and destination logs are folded; unrelated deposit retained')
+assert.equal(unified.filter(row=>row.source==='wallet-bridge').length,1)
+const {collapsePocketAssetMoves}=await import('../src/pocket/lib/pocketAssetMoveActivity.ts')
+assert.equal(collapsePocketAssetMoves([{...server,source:'wallet-swap'},{...server,source:'wallet-deposit'},{...server,source:'wallet-withdrawal'}]).length,1,'one swap owns both exact transaction logs')
+console.log('PASS bridge destination receipt retention and exact bridge/swap leg grouping.')
