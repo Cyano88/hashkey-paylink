@@ -6,7 +6,7 @@ import {PocketGiftLanding} from './PocketGiftExperience'
 import PocketGiftClaimFlow from './PocketGiftClaimFlow'
 import {parseGiftLink,type GiftView} from './pocketGift'
 
-type Props={onDone?():void;onBack?():void;onOpenApp?():void;link:string;identityKey:string;authenticated:boolean;signIn():void;getAccessToken():Promise<string|null>;getSession():Promise<CircleEvmEmailSession>}
+type Props={inApp?:boolean;onDone?():void;onBack?():void;onOpenApp?():void;link:string;identityKey:string;authenticated:boolean;signIn():void;getAccessToken():Promise<string|null>;getSession():Promise<CircleEvmEmailSession>}
 /** Integration surface. Capability stays in memory/URL; never localStorage or analytics. */
 export default function PocketGiftRedeem(props:Props){
  return <Redeem key={props.link} {...props}/>
@@ -25,7 +25,7 @@ function Redeem(props:Props){
  },[link,revision])
  useEffect(()=>{if(authenticated&&wantsClaim.current){wantsClaim.current=false;setSheet(true)}if(!authenticated)setSheet(false)},[authenticated,identityKey])
  if(!gift)return <main className="mx-auto min-h-[100dvh] w-full max-w-md px-6 pb-8 pt-[max(1.5rem,var(--pocket-safe-top))] text-center text-gray-950 dark:text-white">{props.onBack&&<div className="mb-8"><PocketFlowHeader title="Claim a gift" onBack={props.onBack}/></div>}{error?<><p role="alert">{error}</p><button className="pocket-cta-primary mt-6 w-full" onClick={()=>setRevision(value=>value+1)}>Try again</button></>:<div role="status" aria-label="Loading gift" className="animate-pulse space-y-6"><div className="aspect-[3/2] rounded-[28px] bg-gray-200 dark:bg-[#171717]"/><div className="mx-auto h-7 w-40 rounded bg-gray-200 dark:bg-[#171717]"/><div className="h-12 rounded-xl bg-gray-200 dark:bg-[#171717]"/></div>}</main>
- return <><PocketGiftLanding onDone={gift.status==='claimed'&&!sheet?props.onDone:undefined} onBack={gift.status==='claimed'?undefined:props.onBack} gift={gift} onRedeem={()=>{if(props.onOpenApp){props.onOpenApp();return}if(authenticated)setSheet(true);else{wantsClaim.current=true;props.signIn()}}}/>
+ return <><PocketGiftLanding inApp={props.inApp} onDone={gift.status==='claimed'&&!sheet?props.onDone:undefined} onBack={gift.status==='claimed'?undefined:props.onBack} gift={gift} onRedeem={()=>{if(props.onOpenApp){props.onOpenApp();return}if(authenticated)setSheet(true);else{wantsClaim.current=true;props.signIn()}}}/>
   {sheet&&authenticated&&<PocketGiftClaimFlow onConfirmed={()=>setGift(value=>value?{...value,status:'claimed'}:value)} onSuccessDone={props.onDone} link={link} gift={gift} identityKey={identityKey} getAccessToken={props.getAccessToken} getSession={props.getSession} onDone={()=>{setSheet(false);setRevision(value=>value+1)}}/>}
  </>
 }

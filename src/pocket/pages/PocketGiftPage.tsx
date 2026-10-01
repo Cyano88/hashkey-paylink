@@ -33,7 +33,7 @@ export default function PocketGiftPage(){
   window.location.href=giftLink(parsed.id,parsed.secret)
  }
  return <div className="min-h-[100dvh] bg-white dark:bg-black" data-pocket-colour-scope="stablecoins">
-  <PocketGiftRedeem onDone={isPocketNativeRuntime()?()=>navigate(POCKET_ROUTES.home,{replace:true}):undefined} onBack={isPocketNativeRuntime()?()=>navigate('/gifts/claim',{replace:true}):undefined} link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>
+  <PocketGiftRedeem inApp={isPocketNativeRuntime()} onDone={isPocketNativeRuntime()?()=>navigate(POCKET_ROUTES.home,{replace:true}):undefined} onBack={isPocketNativeRuntime()?()=>navigate('/gifts/claim',{replace:true}):undefined} link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>
   {login&&!identity.authenticated&&<PocketBottomSheet title="Sign in to Pocket" onClose={()=>setLogin(false)} dismissOnBackdrop={false}><PocketEmailLogin/></PocketBottomSheet>}
   {install&&<PocketBottomSheet title="Redeem in Pocket" onClose={()=>setInstall(false)} dismissOnBackdrop={false}><p className="text-center text-sm text-gray-500 dark:text-gray-400">After installing Pocket, reopen this gift link to claim it.</p><PocketGetApp/><button className="pocket-cta-primary mt-5 w-full" onClick={openApp}>Open Pocket</button></PocketBottomSheet>}
  </div>
