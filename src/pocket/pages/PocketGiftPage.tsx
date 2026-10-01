@@ -1,5 +1,5 @@
 ﻿import {useCallback,useEffect,useState} from 'react'
-import {useLocation} from 'react-router-dom'
+import {useLocation,useNavigate} from 'react-router-dom'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import PocketBottomSheet from '../components/PocketBottomSheet'
@@ -11,7 +11,7 @@ import {readPocketGift} from '../api/pocketGiftsClient'
 import {isPocketNativeRuntime,POCKET_ORIGIN} from '../lib/pocketRoutes'
 
 export default function PocketGiftPage(){
- const location=useLocation(),identity=usePocketIdentity()
+ const location=useLocation(),navigate=useNavigate(),identity=usePocketIdentity()
  const [login,setLogin]=useState(false),[install,setInstall]=useState(false)
  const link=POCKET_ORIGIN+location.pathname+location.search+location.hash
  const wallet=usePocketWalletController({authenticated:identity.authenticated,email:identity.email,getAccessToken:identity.getAccessToken})
@@ -33,7 +33,7 @@ export default function PocketGiftPage(){
   window.location.href=giftLink(parsed.id,parsed.secret)
  }
  return <div className="min-h-[100dvh] bg-white dark:bg-black" data-pocket-colour-scope="stablecoins">
-  <PocketGiftRedeem link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>
+  <PocketGiftRedeem onBack={isPocketNativeRuntime()?()=>navigate('/gifts/claim',{replace:true}):undefined} link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>
   {login&&!identity.authenticated&&<PocketBottomSheet title="Sign in to Pocket" onClose={()=>setLogin(false)} dismissOnBackdrop={false}><PocketEmailLogin/></PocketBottomSheet>}
   {install&&<PocketBottomSheet title="Redeem in Pocket" onClose={()=>setInstall(false)} dismissOnBackdrop={false}><p className="text-center text-sm text-gray-500 dark:text-gray-400">After installing Pocket, reopen this gift link to claim it.</p><PocketGetApp/><button className="pocket-cta-primary mt-5 w-full" onClick={openApp}>Open Pocket</button></PocketBottomSheet>}
  </div>

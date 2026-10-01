@@ -251,3 +251,9 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Live Postgres synthetic tests passed: four concurrent allocations for one gift return one mapping; a colliding code cannot overwrite another gift; five parallel rate-limit attempts admit exactly three under a limit of three. All synthetic test records were removed by exact keys; no funds or real credentials were used.
 - Actual Pixel verification passed using existing gift g_BcdIOxjXfyy13-rgIpuULT: Send > Send a gift > Gift 1 now displays a valid eight-character code. Entering that code lowercase without a hyphen through Receive > Claim a gift resolved the same 0.01 USDC gift. Opened its Claim gift confirmation and stopped before submitting approval. Code/credential omitted from tool output. No new gift or funding was created.
 - Pixel is left at Claim gift for the user. End-to-end claim settlement remains pending that approval; code issuance/lookup and on-device navigation are verified.
+
+## Gift preview back navigation - 2026-10-01
+
+- The native gift preview reused the public landing without an in-app back action. Added the existing PocketFlowHeader via an optional onBack callback; native Back returns to /gifts/claim with replace semantics so it cannot loop back to the preview.
+- Header exists in loading/error/loaded states with matching safe-area spacing. The public shared-link landing keeps its existing Pocket branding. Approval sheet dismissal protections remain unchanged.
+- Changed-file TypeScript passed. Mobile build and Pixel verification pending.
