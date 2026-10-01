@@ -49,3 +49,12 @@ export async function preparePocketGiftRefund(input:Options&{id:string;session:C
  if(result.gift?.network!==input.session.chain)throw Error('Open the Pocket wallet for this gift network.')
  return approvalFrom(result)
 }
+export async function readPocketGift(id:string,fetcher:typeof fetch=fetch):Promise<import('../features/gifts/pocketGift').GiftView>{
+ if(!/^g_[A-Za-z0-9_-]{22}$/.test(id))throw Error('Open a valid Pocket gift link.')
+ const response=await fetcher(pocketApiUrl('/api/pocket/gifts')+'?id='+encodeURIComponent(id),{cache:'no-store',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(15000)})
+ const data=await response.json().catch(()=>undefined),gift=data?.gift
+ if(!response.ok||!data?.ok||!gift||gift.id!==id||typeof gift.sender!=='string'||typeof gift.message!=='string'||gift.message.length>160||!['base','arbitrum','arc','polygon','ethereum'].includes(gift.network)||!['funding','available','claimed','expired','refunded'].includes(gift.status)||typeof gift.amount!=='string')throw Error('This gift could not be loaded. Try again shortly.')
+ const {giftUnits}=await import('../features/gifts/pocketGift')
+ giftUnits(gift.amount)
+ return {sender:gift.sender,amount:gift.amount,message:gift.message,network:gift.network,status:gift.status}
+}

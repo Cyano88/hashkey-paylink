@@ -102,3 +102,14 @@ Launch work still required:
 - Scoped activity and receipts. Public drops and Solana gifts are outside this single-recipient EVM implementation.
 
 This checkpoint is not a live gift service or security certification. Nothing was deployed or installed on Pixel.
+
+## Connected claim UI checkpoint — 2026-10-01
+
+- Added a connected gift landing/claim integration component using the backend reader and Circle wallet adapters. It is not mounted in live Pocket routes yet.
+- Separate preparation, wallet approval, status checking, unconfirmed and verified-success states. A hash alone never renders success. Duplicate taps cannot start another approval; interrupted approvals offer status checking.
+- Public gift loading uses a shaped skeleton and validates metadata identity before display. The component retains redeem intent across in-place authentication while mounted; this is not store-install or full-reload recovery.
+- Retains only an account-scoped public gift attempt marker in sessionStorage. Bearer capability stays out of that storage and API payloads. Callback changes do not restart a pending approval, and changing identity/link disposes the previous controller.
+- Smoke tests passed for duplicate taps, hash-only results, timeouts, recipient-specific outcomes, missing confirmation evidence, disposal and HTML outage handling. Existing backend checks still pass; changed-file TypeScript diagnostics are zero.
+- Playwright rendered check passed using mocked metadata/authentication and a deliberately unavailable wallet: sign-in continuation, non-dismissal on outside tap, and preparation retry without false success. Screenshot saved locally; image inspection tool failed due to sandbox helper error.
+
+Remaining: production route/native deep-link binding, secure creator capability recovery, authoritative cancelled-approval recovery, sender funding UI, receipts/activity, reviewed deployment and live Circle sponsorship. No production deployment or Pixel installation.
