@@ -265,3 +265,6 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Browser regression verifies pre-claim Back, pending dismissal staying in the gift flow, and confirmed-only Done to Home with Back/Close removed. Changed-file TypeScript diagnostics zero. Final mobile build pending.
 
 - User requested removing the redundant Pocket logo/name from gift screens inside the app. Added explicit inApp presentation so native gifts show only the gift artwork/details and appropriate Back/Done navigation. Public shared-link branding remains intact. Updated navigation browser test confirms native branding absence; TypeScript passed.
+
+- Combined release c100daa1b is live on Render dep-dav5mh2j7g8c73aekrkg. Final mobile Vite build and Gradle succeeded; Pixel install -r returned Success with app data preserved. Generated tracked build files restored; unrelated XPay edits retained.
+- Before installation, the existing gift preview reported already claimed. Restoring that preview after installation lost the old CDP target as the WebView restarted. Reconnected to the new WebView and verified Pocket is at /home without dialogs or busy payment buttons. Claimed-screen Done behavior and branding were verified by the browser regression; an actual-device Done tap was not completed in this pass. No additional gift funding or claim was submitted.
