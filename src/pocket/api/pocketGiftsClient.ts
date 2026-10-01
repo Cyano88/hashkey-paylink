@@ -91,6 +91,11 @@ export async function issuePocketGiftCode(input:Options&{id:string;secret:string
 }
 export async function resolvePocketGiftCode(input:Options&{code:string}) {
  const data=await postGift({action:'resolve-code',code:input.code},input)
+ if(data.status==='claimed'){
+  const claimedGift=await readPocketGift(data.id)
+  if(claimedGift.status!=='claimed')throw Error('Gift status could not be confirmed. Try again.')
+  return {claimedGift}
+ }
  if(typeof data.link!=='string'||!parseGiftLink(data.link))throw Error('Gift code could not be verified.')
  return data.link as string
 }

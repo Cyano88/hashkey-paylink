@@ -54,10 +54,13 @@ export function createGiftCodeService(deps:{store:GiftCodeStore;key():string;gif
    const saved=open(record)
    if(saved.code.length!==code.length||!timingSafeEqual(Buffer.from(saved.code),Buffer.from(code)))throw unavailable()
    const gift=await deps.gift(record.giftId)
-   if(!gift||gift.state!=='available'||!gift.fundingHash||BigInt(gift.expiresAt)<=BigInt(Math.floor(now()/1000)))throw unavailable()
+   if(!gift||!['available','claimed'].includes(gift.state)||!gift.fundingHash)throw unavailable()
    if(giftCapabilitySigner(saved.secret).toLowerCase()!==gift.claimSigner.toLowerCase())throw unavailable()
    // Reconcile matched codes against chain truth before returning the existing claim link.
-   if((await deps.view(record.giftId)).status!=='available')throw unavailable()
+   const status=(await deps.view(record.giftId)).status
+   // A spent code reveals only the public gift ID, never a redemption capability.
+   if(status==='claimed')return {status:'claimed' as const,id:record.giftId}
+   if(status!=='available'||BigInt(gift.expiresAt)<=BigInt(Math.floor(now()/1000)))throw unavailable()
    return {link:giftLink(record.giftId,saved.secret)}
   },
  }

@@ -21,7 +21,7 @@ const issued=await svc.issue(owner,'ip-o',id,cap.secret);assert.match(issued.cod
 assert.equal((await svc.issue(owner,'ip-o',id,cap.secret)).code,issued.code,'Issuance is idempotent')
 const raw=JSON.stringify([...byHash.values()]);assert(!raw.includes(cap.secret));assert(!raw.includes(issued.code.replace('-','')),'Neither credential nor code is stored in plaintext')
 assert.equal(parseGiftLink((await svc.resolve(recipient,'ip-r',issued.code.toLowerCase())).link).secret,cap.secret)
-viewState='claimed';await assert.rejects(()=>svc.resolve(recipient,'ip-r',issued.code),e=>e.status===404);viewState='available'
+viewState='claimed';const claimed=await svc.resolve(recipient,'ip-r',issued.code);assert.deepEqual(claimed,{status:'claimed',id});assert(!JSON.stringify(claimed).includes(cap.secret));viewState='available'
 gift.expiresAt='1';await assert.rejects(()=>svc.resolve(recipient,'ip-r',issued.code),e=>e.status===404);gift.expiresAt='9999999'
 const sealed=byGift.get(id),original=sealed.sealed;sealed.sealed=Buffer.from('tampered').toString('base64');await assert.rejects(()=>svc.resolve(recipient,'ip-r',issued.code));sealed.sealed=original
 const blocked={userId:'attacker',handle:''};for(let i=0;i<5;i++)await assert.rejects(()=>svc.resolve(blocked,'ip-a','bad'),e=>e.status===404)

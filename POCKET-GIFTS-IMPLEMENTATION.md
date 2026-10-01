@@ -287,3 +287,8 @@ Remaining: production route/native deep-link binding, secure creator capability 
 ## Gift code input formatting - 2026-10-01
 - Claim input uppercases code-like text and inserts the separator after four characters. Backspace can remove the separator and continue deleting; cursor position follows formatting. Pasted full gift links are preserved without modification. No success/validity is inferred from formatting.
 - Updated browser regression covers incremental four-character typing, backspacing the separator, lowercase full-code paste, unchanged full link paste, invalid code and successful mocked lookup. TypeScript zero diagnostics. APK packaging pending.
+
+## Recognised claimed gift codes - 2026-10-01
+- A matching code whose onchain-refreshed gift is claimed now returns only claimed status and public gift ID. No bearer link/capability is returned for a spent code; issuance, funding and claim authorization remain unchanged. Unknown/expired/refunded codes retain the unavailable error and shared authenticated limits.
+- Client verifies the public claimed gift and reuses the native gift-box page: centered Claim a gift heading, already-claimed message, no Back/redemption, bottom Done to Home. It does not prepare or submit a wallet action.
+- Backend regression verifies claimed response without capability; browser checks cover formatting, pasted link preservation, claimed gift details and Done navigation. TypeScript diagnostics zero. APK/live deployment pending.
