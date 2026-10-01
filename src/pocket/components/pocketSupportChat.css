@@ -1,0 +1,30 @@
+/* Pocket Support: conversational typography within Pocket's existing font family. */
+.pocket-support { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
+.pocket-support-intro { margin: 0 0 22px; text-align: center; color: #737373; font-size: 12px; line-height: 1.6; }
+.pocket-chat-bubble { width: fit-content; max-width: 88%; margin-bottom: 14px; border-radius: 20px; padding: 12px 14px; overflow-wrap: anywhere; }
+.pocket-chat-reply { background: #e7e7e9; color: #202024; }
+.pocket-chat-outgoing { margin-left: auto; background: #171719; color: #fff; }
+.pocket-chat-sender { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; line-height: 18px; font-weight: 600; }
+.pocket-chat-text { white-space: pre-wrap; font-size: 14px; line-height: 1.55; font-weight: 400; letter-spacing: 0; }
+.pocket-chat-time { margin-top: 6px; text-align: right; font-size: 10px; line-height: 14px; opacity: .55; }
+.pocket-support-topics { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex-shrink: 0; padding: 8px 16px 12px; }
+.pocket-support-topic { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 13px; border: 1px solid #d8d8da; border-radius: 999px; font-size: 12px; line-height: 18px; font-weight: 400; }
+.pocket-support-topic:disabled { opacity: .45; }
+.pocket-support-topic:focus-visible { outline: 2px solid #737373; outline-offset: 2px; }
+.pocket-support-waiting { flex-shrink: 0; text-align: center; color: #737373; font-size: 12px; line-height: 20px; padding: 8px 16px 4px; }
+.pocket-support-composer { flex-shrink: 0; padding: 10px 14px 12px; }
+.pocket-support-input-wrap { display: flex; align-items: flex-end; gap: 8px; padding: 5px; border: 1px solid #dedee0; border-radius: 27px; background: #e7e7e9; }
+.pocket-support-input { flex: 1; min-width: 0; min-height: 40px; max-height: 116px; resize: none; padding: 10px 0 9px 12px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; line-height: 21px; outline: none; }
+.pocket-support-input::placeholder { color: #808085; }
+.pocket-support-input-wrap:focus-within { border-color: #909095; }
+.pocket-support-send { display: flex; align-items: center; justify-content: center; flex-shrink: 0; height: 40px; width: 40px; border-radius: 50%; background: #171719; color: white; }
+.pocket-support-send:disabled { opacity: .3; }
+.pocket-support-send:focus-visible { outline: 2px solid #737373; outline-offset: 2px; }
+html.dark .pocket-support-intro, html.dark .pocket-support-waiting { color: #a1a1a6; }
+html.dark .pocket-chat-reply { background: #2b2c30; color: #f4f4f5; }
+html.dark .pocket-chat-outgoing { background: #050505; color: #f4f4f5; }
+html.dark .pocket-support-topic { border-color: #343438; color: #ededee; }
+html.dark .pocket-support-input-wrap { border-color: #353539; background: #2b2c30; }
+html.dark .pocket-support-input-wrap:focus-within { border-color: #626268; }
+html.dark .pocket-support-send { background: #f4f4f5; color: #171719; }
+@media (max-height: 520px) { .pocket-support-intro { margin-bottom: 12px; } .pocket-support-topics { max-height: 104px; overflow-y: auto; } }

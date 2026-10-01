@@ -109,3 +109,11 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 
 - Render dep-davc38eq1p3s73d49a50 confirmed live at 359318aff; Pocket web HTTP 200.
 - User reported bank payment security unavailable during this session, then confirmed retry working. No security change or payment submission was performed. Diagnostic read found no retained error; monitor did not capture the failed request. Cause remains unverified; do not attribute it to deployment.
+
+### Support chat reference refresh
+
+- Inspected the three newest downloaded reference images (4407, 4408, 4409). Adapted their topic selection, support routing, conversation bubbles and queue treatment to Pocket, preserving Jakarta rather than claiming an unverified reference font identity.
+- Scoped chat CSS: regular 14px message text, quieter timestamps, grey agent/staff replies, dark outgoing bubbles, multiline composer and disabled-until-typed upward send action. Real staff names/avatar support retained; no invented teammate presence, announcement or unsupported attachment control.
+- Talk to support opens a local topic choice; only successful backend handoff displays the waiting state. Error keeps topics available; retry preserves request identity. Backend ownership, priority and lifecycle rules unchanged.
+- Native Back now navigates internal Support views and dismisses topic routing first. New messages auto-scroll only near the bottom; typing a new draft while a send completes is preserved.
+- Browser fixture checks passed: handoff success/failure/retry identity, human reply, empty composer, native Back and 390x450 keyboard-sized viewport. Dark topic/routing/queue/staff and light staff screens rendered and inspected. Conversation ownership, rate limits, lifecycle and resolution regressions passed. Changed-code diagnostics zero. No real support messages sent.
