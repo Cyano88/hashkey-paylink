@@ -1,3 +1,4 @@
+import {drainPocketGifts} from './api/pocket/gifts/worker.js'
 import { createStockWalletSessionHandlers } from './api/stock-wallet-account.js'
 import {createWalletSwapSessionHandlers} from './api/wallet-swap-sessions.js'
 import stockWalletBalancesHandler from './api/stock-wallet-balances.js'
@@ -601,6 +602,8 @@ void drainHostedCheckoutWebhookOutbox().catch(error => {
   console.error('[developer-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
 })
 
+const pocketGiftTimer = setInterval(() => { void drainPocketGifts().catch(() => console.warn('[pocket-gifts] reconciliation deferred')) }, 30_000)
+pocketGiftTimer.unref()
 const pocketReconciliationTimer = setInterval(() => {
   void drainPocketReconciliation().catch(error => {
     console.error('[pocket-reconciliation] scheduled run failed:', error instanceof Error ? error.message : String(error))

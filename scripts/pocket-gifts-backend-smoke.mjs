@@ -130,3 +130,14 @@ console.log('PASS funding recovery: owner-only, provider failure plus unfunded c
  removed=false;status=3;result=await observeGift(rpc,record);assert.equal(result.refundHash,hash(3));assert.equal(result.refundAt,123000)
 }
 console.log('PASS funding/refund receipt evidence checks exact principal/fee/expiry, canonical block and removed logs.')
+
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input),initial=await f.store.read(gift.id)
+ let record={...initial,deployment:{...deployment,deploymentBlock:'0'}},ranges=[]
+ const rpc={getChainId:async()=>8453,getBlockNumber:async()=>7001n,getBlock:async()=>({hash:hash(1),timestamp:123n}),getCode:async()=> '0x6000',readContract:async input=>input.functionName==='usdc'?deployment.token:input.functionName==='treasury'?deployment.treasury:input.functionName==='PLATFORM_FEE_BPS'?25n:[record.senderAddress,record.claimSigner,100000000n,BigInt(record.expiresAt),1],getLogs:async({fromBlock,toBlock})=>{ranges.push([fromBlock,toBlock]);return fromBlock<=2500n&&toBlock>=2500n?[{removed:false,blockNumber:2500n,blockHash:hash(1),transactionHash:hash(2),args:{giftId:record.giftId,sender:record.senderAddress,claimSigner:record.claimSigner,amount:100000000n,platformFee:250000n,expiresAt:BigInt(record.expiresAt)}}]:[]}}
+ const first=await observeGift(rpc,record);assert.equal(first.fundingHash,undefined);assert.equal(first.evidenceScanBlock,'1999')
+ record={...record,evidenceScanBlock:first.evidenceScanBlock};const next=await observeGift(rpc,record)
+ assert.equal(next.fundingHash,hash(2),'find funding older than the latest 2,000 blocks')
+ assert.deepEqual(ranges,[[0n,1999n],[2000n,3999n]])
+}
+console.log('PASS persisted event scan resumes bounded historical ranges without skipping older gift funding.')

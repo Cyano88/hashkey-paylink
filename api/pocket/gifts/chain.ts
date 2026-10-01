@@ -23,8 +23,11 @@ export async function observeGift(client:PublicClient,record:GiftRecord,receiptH
  const [sender,signer,amount,expiresAt,status]=gift
  if(status>3)throw new GiftError(503,'Gift state is invalid.')
  if(status!==0&&(!same(sender,record.senderAddress)||!same(signer,record.claimSigner)||amount!==BigInt(record.amountUnits)||expiresAt!==BigInt(record.expiresAt)))throw new GiftError(503,'Gift funding does not match its details.')
+ const scanStart=record.evidenceScanBlock?BigInt(record.evidenceScanBlock)+1n:d.deploymentBlock?BigInt(d.deploymentBlock):blockNumber>1999n?blockNumber-1999n:0n
+ const fromBlock=scanStart>blockNumber?blockNumber:scanStart
+ const scanEnd=fromBlock+1999n<blockNumber?fromBlock+1999n:blockNumber
  async function evidence(event:any,valid:(args:any)=>boolean,hint?:Hex){
-  const logs=await client.getLogs({address:d.escrow,event,args:{giftId:record.giftId},fromBlock:blockNumber>1999n?blockNumber-1999n:0n,toBlock:blockNumber,strict:true})
+  const logs=await client.getLogs({address:d.escrow,event,args:{giftId:record.giftId},fromBlock,toBlock:scanEnd,strict:true})
   for(const log of logs){if(log.removed||!valid((log as unknown as {args:Record<string,unknown>}).args))continue;const mined=await client.getBlock({blockNumber:log.blockNumber});if(mined.hash===log.blockHash)return {hash:log.transactionHash,at:Number(mined.timestamp)*1000}}
   if(hint){const receipt=await client.getTransactionReceipt({hash:hint}).catch(()=>undefined);if(receipt?.status==='success'&&receipt.blockNumber<=blockNumber){const mined=await client.getBlock({blockNumber:receipt.blockNumber});if(mined.hash===receipt.blockHash)for(const log of receipt.logs){if(!same(log.address,d.escrow))continue;try{const decoded=decodeEventLog({abi:[event],data:log.data,topics:log.topics}) as unknown as {args:Record<string,unknown>};if(decoded.args.giftId===record.giftId&&valid(decoded.args))return {hash:receipt.transactionHash,at:Number(mined.timestamp)*1000}}catch{}}}}
   return undefined
@@ -35,7 +38,7 @@ export async function observeGift(client:PublicClient,record:GiftRecord,receiptH
  let claimRecipient: GiftObservation['claimRecipient'], settlementHash:Hex|undefined
  if(status===2){
   const event=parseAbiItem('event GiftClaimed(bytes32 indexed giftId,address indexed recipient,uint256 amount)')
-  const logs=await client.getLogs({address:d.escrow,event,args:{giftId:record.giftId},fromBlock:blockNumber>1999n?blockNumber-1999n:0n,toBlock:blockNumber,strict:true})
+  const logs=await client.getLogs({address:d.escrow,event,args:{giftId:record.giftId},fromBlock,toBlock:scanEnd,strict:true})
   const match=logs.find(log=>log.args.amount===BigInt(record.amountUnits)&&!log.removed)
   if(match){const mined=await client.getBlock({blockNumber:match.blockNumber});if(mined.hash===match.blockHash){claimRecipient=match.args.recipient;settlementHash=match.transactionHash;settlementAt=Number(mined.timestamp)*1000}}
   if(!claimRecipient&&(receiptHint||record.settlementHash)){
@@ -52,5 +55,5 @@ export async function observeGift(client:PublicClient,record:GiftRecord,receiptH
  // Detect a reorg across the individual RPC reads before accepting this snapshot.
  const current=await client.getBlock({blockNumber})
  if(!block.hash||current.hash!==block.hash)throw new GiftError(503,'Gift confirmation changed. Try again shortly.')
- return {state:(['unfunded','available','claimed','refunded'] as const)[status],blockNumber,blockHash:block.hash,timestamp:block.timestamp,claimRecipient,settlementHash,settlementAt,fundingHash:funding?.hash,fundingAt:funding?.at,refundHash:refund?.hash,refundAt:refund?.at}
+ return {state:(['unfunded','available','claimed','refunded'] as const)[status],blockNumber,blockHash:block.hash,timestamp:block.timestamp,evidenceScanBlock:String(status===0?blockNumber:scanEnd),claimRecipient,settlementHash,settlementAt,fundingHash:funding?.hash,fundingAt:funding?.at,refundHash:refund?.hash,refundAt:refund?.at}
 }

@@ -69,7 +69,7 @@ export async function readPocketGiftConfig(fetcher:typeof fetch=fetch):Promise<P
 export async function readPocketGiftOwner(input:Options&{id:string}){
  const data=await postGift({action:'owner-status',id:input.id},input)
  if(data.gift?.id!==input.id||data.gift?.network!=='base'||!['funding','available','claimed','expired','refunded'].includes(data.gift?.status))throw Error('Gift status is unavailable.')
- return data as {gift:{id:string;status:'funding'|'available'|'claimed'|'expired'|'refunded'};funding:{principal:string;platformFee:string;totalDebit:string}}
+ return data as {fundingExpired?:boolean;gift:{id:string;status:'funding'|'available'|'claimed'|'expired'|'refunded'};funding:{principal:string;platformFee:string;totalDebit:string}}
 }
 export async function createPocketGift(input:Options&{draft:import('../features/gifts/giftDraftVault').SavedGiftDraft}){
  const d=input.draft

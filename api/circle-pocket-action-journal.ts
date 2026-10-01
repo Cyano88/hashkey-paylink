@@ -141,6 +141,17 @@ export async function recordCirclePocketAction(input: {
       && record.idempotencyKey === input.idempotencyKey
       && record.action === input.action
     ))
+    if (input.action.startsWith('gift.') && existing) {
+      for (const field of ['txHash','network','amount','giftId']) if (existing.metadata?.[field] !== input.metadata?.[field]) throw new Error('Gift receipt does not match its saved transfer.')
+      const oldState = existing.metadata?.state, nextState = input.metadata?.state
+      if (['claimed','refunded'].includes(oldState || '') && nextState === 'funded') return existing
+      if (['claimed','refunded'].includes(oldState || '') && nextState !== oldState) throw new Error('Gift receipt needs reconciliation.')
+    }
+    // Background gift reconciliation must not move unchanged receipts to the top.
+    if (input.action.startsWith('gift.') && existing && existing.status === input.status && existing.resourceId === input.resourceId) {
+      const previous = existing.metadata || {}, next = input.metadata || {}
+      if (Object.keys(previous).length === Object.keys(next).length && Object.keys(previous).every(key => previous[key] === next[key])) return existing
+    }
     // Bridge recovery can retry after a worker has already finalized the action.
     // Keep terminal state and the event timestamp stable for ledger deduplication.
     if (input.action === 'wallet.bridge' && existing) {
