@@ -17,8 +17,7 @@ async page => {
     if(await page.getByRole('button',{name:'Redeem in Pocket'}).count())throw Error('Terminal gift is redeemable')
   }
   await page.getByRole('button',{name:'Create gift',exact:true}).click()
-  await page.getByRole('button',{name:'Continue',exact:true}).click()
-  await page.getByRole('alert').waitFor()
+  if(!await page.getByRole('button',{name:'Continue',exact:true}).isDisabled())throw Error('Empty gift amount must disable Continue')
   await page.getByLabel('Gift amount',{exact:true}).fill('100')
   await page.getByLabel('Gift message',{exact:true}).fill('Happy birthday!')
   await page.setViewportSize({width:320,height:640})
