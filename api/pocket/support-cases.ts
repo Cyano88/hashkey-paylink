@@ -1,3 +1,4 @@
+import { createKnowledge, reviewKnowledge, POCKET_SUPPORT_TENANT, type KnowledgeStore } from '../hash-support/knowledge.js'
 import {readPocketKycLevel} from './kyc-level.js'
 import { submitSupportConversation } from './support-conversation.js'
 import { pocketActivityStore } from './activity-store.js'
@@ -39,7 +40,7 @@ type SupportCase = {
   resolvedAt?: number
   customerReadAt?: number
 }
-type SupportStore = { cases: Record<string, SupportCase>; staffNames?: Record<string, string>; staffImages?: Record<string,string> }
+type SupportStore = { knowledge?: KnowledgeStore; cases: Record<string, SupportCase>; staffNames?: Record<string, string>; staffImages?: Record<string,string> }
 
 const STORE_KEY = (process.env.POCKET_SUPPORT_STORE_KEY || 'hashpaylink:pocket-support:v1').trim()
 
@@ -112,6 +113,23 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     const action = clean(req.body?.action || req.query.action, 40) || (req.method === 'GET' ? 'list-mine' : 'create')
     if (action.startsWith('staff-')) {
       const staff = await verifiedStaff(req)
+      if (action.startsWith('staff-knowledge-')) {
+        if(req.method!=='POST')return res.status(405).json({ok:false,error:'Use POST for knowledge actions.'})
+        if(action==='staff-knowledge-list')return res.json({ok:true,knowledge:Object.values((await store()).knowledge||{}).filter(item=>item.tenantId===POCKET_SUPPORT_TENANT)})
+        if(!['staff-knowledge-draft','staff-knowledge-approve','staff-knowledge-retire'].includes(action))return res.status(400).json({ok:false,error:'Unknown knowledge action.'})
+        let entry
+        await mutateDurableJson<SupportStore>(STORE_KEY,current=>{
+          const next=current||{cases:{}};const entries=next.knowledge||={};const now=Date.now()
+          if(action==='staff-knowledge-draft'){
+            const source=next.cases[clean(req.body?.caseId,80)]
+            if(!source||source.status!=='resolved')throw Object.assign(new Error('Choose a resolved case before drafting a reusable answer.'),{status:409})
+            const privateValues=[source.customer?.fullName,source.customer?.email,source.customer?.pocketId,source.customer?.kycReference,source.reference,source.transaction?.eventId,source.transaction?.transactionHash,source.transaction?.receiptId,source.transaction?.providerReference,source.transaction?.payer,source.transaction?.recipient].filter((value):value is string=>typeof value==='string')
+            entry=createKnowledge(entries,{tenantId:POCKET_SUPPORT_TENANT,actorId:staff.userId,id:'hkn_'+crypto.randomUUID(),sourceCaseId:source.id,question:req.body?.question,answer:req.body?.answer,privateValues},now)
+          }else entry=reviewKnowledge(entries,{tenantId:POCKET_SUPPORT_TENANT,actorId:staff.userId,id:clean(req.body?.id,80),version:Number(req.body?.version),action:action==='staff-knowledge-approve'?'approve':'retire',reviewConfirmed:req.body?.reviewConfirmed===true},now)
+          return next
+        })
+        return res.json({ok:true,entry})
+      }
       if (action === 'staff-profile') {
         const displayName = clean(req.body?.displayName, 60)
         if (!displayName) return res.status(400).json({ok:false,error:'Enter your support display name.'})
@@ -188,7 +206,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       await mutateDurableJson<SupportStore>(STORE_KEY, current => {
         const next = current || {cases:{}}
         advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
-        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID())
+        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{}})
         saved.customer ||= customer
         return next
       })

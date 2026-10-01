@@ -1,6 +1,9 @@
+import HashSupportKnowledgePanel from './HashSupportKnowledgePanel'
+import type { HashKnowledge } from '../../api/hash-support/knowledge'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { Check, Loader2, RefreshCw, Send } from 'lucide-react'
+import { Check, Loader2, Send } from '../pocket/components/PocketIcons'
+import { ArrowPathIcon as RefreshCw } from '@heroicons/react/24/outline'
 
 type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; displayName?: string; kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report'; text: string; createdAt: number }
 type SupportCase = {
@@ -32,7 +35,7 @@ async function readSupportResponse(response: Response) {
       : 'Pocket Support returned an unexpected response. Please refresh and try again.')
   }
   try {
-    return await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; displayName?: string; avatarDataUrl?:string; error?: string }
+    return await response.json() as { knowledge?:HashKnowledge[]; ok?: boolean; cases?: SupportCase[]; case?: SupportCase; displayName?: string; avatarDataUrl?:string; error?: string }
   } catch {
     throw new Error('Pocket Support returned an incomplete response. Please try again.')
   }
@@ -115,6 +118,7 @@ export default function PocketSupportOperationsPanel() {
     </div>
     <div className="mb-4 flex flex-wrap items-center gap-2"><label className="text-xs">Profile photo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>void choosePhoto(event.target.files?.[0])} className="ml-2 max-w-48 text-xs"/></label>{avatarDataUrl&&<img src={avatarDataUrl} alt="Your support profile" className="h-8 w-8 rounded-full object-cover"/>}<label className="text-xs">Support display name<input aria-label="Support display name" maxLength={60} value={displayName} onChange={event=>{setDisplayName(event.target.value);setNameSaved(false)}} className="ml-2 rounded-lg border border-gray-200 bg-transparent px-3 py-2 dark:border-white/10"/></label><button disabled={busy||!displayName.trim()||nameSaved} onClick={()=>void saveName()} className="rounded-full border px-3 py-2 text-xs disabled:opacity-40">{nameSaved?'Saved':'Save name'}</button></div>
     {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
+    <HashSupportKnowledgePanel call={call} sourceCase={active}/>
     {!cases.length ? <div className="rounded-3xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-white/10 dark:bg-[#111216]">No support cases yet.</div> :
       <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
         <div className="space-y-2">{cases.map(item => <button key={item.id} type="button" onClick={() => setActiveId(item.id)} className={`w-full rounded-2xl border p-3 text-left ${item.id === activeId ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-200 bg-white dark:border-white/10 dark:bg-[#111216]'}`}>
