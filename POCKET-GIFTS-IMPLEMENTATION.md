@@ -283,3 +283,7 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Final 0a46fbb2f mobile build/Gradle passed and installed on Pixel with install -r, preserving data. Native claim entry verified centered (0.33px offset from viewport center, within pixel rounding) with Back visible. Gift completion browser regression passed for Back-before/Done-after confirmed claim. Render final deploy was still building at this checkpoint; preceding header deployment live. Generated build files restored, unrelated XPay edits preserved.
 
 - Initial final header check timed out while Pixel was backgrounded. Foregrounded Pocket and reran successfully; the centered-header device result above is from that successful retry.
+
+## Gift code input formatting - 2026-10-01
+- Claim input uppercases code-like text and inserts the separator after four characters. Backspace can remove the separator and continue deleting; cursor position follows formatting. Pasted full gift links are preserved without modification. No success/validity is inferred from formatting.
+- Updated browser regression covers incremental four-character typing, backspacing the separator, lowercase full-code paste, unchanged full link paste, invalid code and successful mocked lookup. TypeScript zero diagnostics. APK packaging pending.
