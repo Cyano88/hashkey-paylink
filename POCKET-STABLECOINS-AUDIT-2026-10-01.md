@@ -87,3 +87,10 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 - Native save/return is NOT yet verified: the phone switched to another app during the check; Pocket process remained alive. Asked user to leave Pocket open before continuing. No restart claim is made from this interrupted test.
 - Statement changes pushed as 80b3a85e6; Render dep-davbicjtqb8s73f5nfe0 was updating at this checkpoint. A subsequent independent Trade merge retains the statement commit.
 - Final web verification: dep-davbicjtqb8s73f5nfe0 is live at 80b3a85e6 and Pocket web returned HTTP 200. Subsequent Trade-only deployment is separate and retains this work.
+
+### Native statement save acceptance — passed
+
+- Repeated the real Pixel PDF export through Android Documents UI. Validated the Save control against the current foreground picker before tapping it; did not reuse coordinates while another app was foreground.
+- After Save: /activity unchanged; window acceptance marker and performance.timeOrigin unchanged; download sheet closed; no dialogs remained. Pocket PID remained 30358 throughout. This confirms successful completion without WebView reload or process restart.
+- Saved file: Downloads/pocket-statement-2026-10-01-2026-10-01.pdf, 198983 bytes. PDF header verified. No transaction contents were copied or logged.
+- Earlier cancelled/interrupted attempts are not counted as successful. Native PDF save-and-return check is now complete. CSV content/download path was verified in the browser regression; no claim is made of a separate native CSV save test.
