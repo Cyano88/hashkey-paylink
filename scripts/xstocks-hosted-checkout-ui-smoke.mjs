@@ -24,8 +24,9 @@ try{
  assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);assert.match(text(),/Payment status unavailable/);
  fail=false;await act(async()=>{await find('Try again').props.onClick()});assert.ok(find('Pay securely'));assert.doesNotMatch(text(),/Payment status unavailable/);
  globalThis.__checkout.confirm=()=>new Promise(r=>resolveConfirmation=r);
- await act(async()=>{find('Pay securely').props.onClick()});assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);assert.equal(buttons().filter(b=>b.props['aria-busy']).length,1,'progress stays in a single disabled CTA');assert.equal(buttons().find(b=>b.props['aria-busy']).props.disabled,true);
- await act(async()=>{resolveConfirmation(false)});assert.ok(find('Pay securely'));
+ await act(async()=>{find('Pay securely').props.onClick()});assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);assert.equal(buttons().filter(b=>b.props['aria-busy']).length,0,'Reviewing a confirmation is not payment processing');
+ const beforeDismiss=readCount;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(readCount,beforeDismiss,'Focus while reviewing cannot trigger a check');
+ await act(async()=>{resolveConfirmation(false)});assert.ok(find('Pay securely'));assert.equal(readCount,beforeDismiss,'Dismissal does not trigger a payment check');
  networkPending=true;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(find('Pay securely'),undefined);assert.equal(buttons().filter(b=>b.props['aria-busy']).length,1);assert.match(text(),/Confirming transaction/);networkPending=false;
  state=0;item.role='provider';await act(async()=>{tree.update(React.createElement(Checkout,{item,request,onUpdated(){}}));window.dispatchEvent(new Event('focus'))});assert.ok(find('Confirm payment terms'));assert.equal((text().match(/Confirm payment terms/g)||[]).length,1,'next action appears once, not repeated as body status');item.role='customer';
  state=2;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.match(text(),/Payment held securely/);assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);
@@ -45,7 +46,8 @@ try{
  await act(async()=>{tree.root.findByType('textarea').props.onChange({target:{value:'Agreed split for this controlled test'}});tree.root.findByType('input').props.onChange({target:{value:'0.0000000000000000001'}})});
  const beforeInvalidProposal=operations.length;await act(async()=>{await find('Propose a split').props.onClick()});assert.equal(operations.length,beforeInvalidProposal);assert.match(text(),/exact stock quantity/);
  await act(async()=>{find('Cancel').props.onClick()});await act(async()=>{await find('Try again')?.props.onClick()});
- settlement={...settlement,proposer:address};await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.ok(find('Withdraw proposal'));assert.equal(find('Accept split'),undefined);
+ await act(async()=>{find('Propose a split').props.onClick()});await act(async()=>{tree.root.findByType('textarea').props.onChange({target:{value:'A proposal that has now been confirmed'}});tree.root.findByType('input').props.onChange({target:{value:'0.00111'}})});
+ settlement={...settlement,nonce:'5',proposer:address};await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.ok(find('Withdraw proposal'));assert.equal(find('Accept split'),undefined);assert.equal(tree.root.findAllByType('textarea').length,0,'Confirmed proposal closes the editor even while state remains disputed');assert.equal(tree.root.findAllByType('input').length,0);
  settlement=undefined;
  receipt={fundedShares:'2216229757026900',currentUnderlyingUnits:'0',buyerUnderlyingAtSettlement:'0',sellerUnderlyingAtSettlement:'2219999999999999',buyerSettledShares:'0',sellerSettledShares:'2216229757026900',observedBlock:'100'};
  state=6;await act(async()=>{window.dispatchEvent(new Event('focus'))});
