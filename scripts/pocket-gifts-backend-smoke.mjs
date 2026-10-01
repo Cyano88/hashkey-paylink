@@ -150,3 +150,30 @@ console.log('PASS persisted event scan resumes bounded historical ranges without
  const before=f.calls.length;await f.service.authorize(f.bob,gift.id,'claim','token',await claim(f,f.bob,gift.id));assert.equal(f.calls.length,before+1);assert.equal((await f.service.claimStatus(f.bob,gift.id)).retryAllowed,false);
 }
 console.log('PASS claim retry requires confirmed strict deadline expiry and matching claimant; renewed authorization locks retry.')
+
+// Restricted production pilot must enforce identity and amount at both entry points.
+{
+ const {baseGiftFundingAllowed}=await import('../api/pocket/gifts/rollout.ts')
+ const f=setup();let pilotUserIds='alice'
+ f.deps.fundingEnabled=(network,identity,amount)=>baseGiftFundingAllowed({network,identity,amount,publicEnabled:false,pilotUserIds})
+ assert.equal(f.service.configuration().sendEnabled,false)
+ assert.equal(f.service.configuration(f.bob).sendEnabled,false)
+ assert.equal(f.service.configuration({...f.bob,handle:'shy'}).sendEnabled,false)
+ assert.equal(f.service.configuration(f.alice).sendEnabled,true)
+ for(const amount of ['100','0.010001','0','-1','1e-2'])await assert.rejects(f.service.create(f.alice,{...f.input,amount}),e=>e.status===503)
+ await assert.rejects(f.service.create(f.bob,{...f.input,amount:'0.01'}),e=>e.status===503)
+ await assert.rejects(f.service.create(f.alice,{...f.input,network:'polygon',amount:'0.01'}),e=>e.status===503)
+ const {gift}=await f.service.create(f.alice,{...f.input,amount:'0.01'})
+ pilotUserIds=''
+ await assert.rejects(f.service.authorize(f.alice,gift.id,'funding','token'),e=>e.status===503)
+ assert.equal(f.calls.length,0,'Removing pilot access must block saved drafts before any Circle challenge')
+ pilotUserIds='alice'
+ await f.service.authorize(f.alice,gift.id,'funding','token');assert.equal(f.calls.length,1)
+ const handler=createGiftHandler({service:f.service,identity:async()=>f.alice})
+ const config=async headers=>{let result;await handler({method:'GET',query:{action:'config'},headers},{setHeader(){},json(data){result=data}});return result}
+ assert.equal((await config({})).sendEnabled,false)
+ assert.equal((await config({authorization:'Bearer fixture'})).sendEnabled,true)
+ const {readPocketGiftConfig}=await import('../src/pocket/api/pocketGiftsClient.ts')
+ await readPocketGiftConfig(async(url,options)=>{assert.equal(options.headers.Authorization,'Bearer fixture');return new Response(JSON.stringify({ok:true,...f.service.configuration(f.alice)}))},'fixture')
+ console.log('PASS restricted gift pilot: anonymous/other accounts denied; immutable identity; 0.01 cap; Base only; saved-draft revocation; authenticated config.')
+}

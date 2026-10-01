@@ -1,4 +1,5 @@
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
+import usePocketIdentity from '../hooks/usePocketIdentity'
 import {GiftIcon} from '@heroicons/react/24/outline'
 import {readPocketGiftConfig} from '../api/pocketGiftsClient'
 import { useNavigate } from 'react-router-dom'
@@ -10,7 +11,8 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 export default function PocketTransferMenuPage({ kind }: { kind: 'send' | 'receive' }) {
   const navigate = useNavigate()
   const [giftReady,setGiftReady]=useState(false)
-  useEffect(()=>{let active=true;void readPocketGiftConfig().then(c=>{if(active)setGiftReady(kind==='send'?c.sendEnabled:c.claimEnabled)}).catch(()=>{});return()=>{active=false}},[kind])
+  const identity=usePocketIdentity(),tokenReader=useRef(identity.getAccessToken);tokenReader.current=identity.getAccessToken
+  useEffect(()=>{let active=true;setGiftReady(false);if(!identity.ready)return;void (identity.authenticated?tokenReader.current():Promise.resolve(null)).then(token=>readPocketGiftConfig(fetch,token)).then(c=>{if(active)setGiftReady(kind==='send'?c.sendEnabled:c.claimEnabled)}).catch(()=>{});return()=>{active=false}},[kind,identity.ready,identity.authenticated,identity.user?.id])
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
   const actions = kind === 'send' ? [
     { title: 'Stablecoins USDC', detail: 'Send USDC to a wallet', Icon: Coins, path: POCKET_ROUTES.send + '?mode=address' },

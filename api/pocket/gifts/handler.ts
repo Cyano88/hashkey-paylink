@@ -7,7 +7,7 @@ export function createGiftHandler(deps:{service:Service;identity(req:Request):Pr
   res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer')
   try{
    if(req.method==='GET'){
-    if(req.query.action==='config')return res.json({ok:true,...deps.service.configuration()})
+    if(req.query.action==='config'){const identity=req.headers?.authorization?await deps.identity(req):undefined;return res.json({ok:true,...deps.service.configuration(identity)})}
     if(typeof req.query.id!=='string')throw new GiftError(400,'Choose a gift.')
     return res.json({ok:true,gift:await deps.service.view(req.query.id)})
    }

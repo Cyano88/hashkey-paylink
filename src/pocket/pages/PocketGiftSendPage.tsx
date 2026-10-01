@@ -32,7 +32,7 @@ function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAcces
  const vault=useMemo(()=>isPocketNativeRuntime()?nativeGiftDraftVault(owner):null,[owner])
  const flow=useRef<ReturnType<typeof createGiftFundingFlow>|null>(null)
  const callbacks=useRef({wallet,getAccessToken});callbacks.current={wallet,getAccessToken}
- useEffect(()=>{let active=true;void readPocketGiftConfig().then(config=>{if(active)setEnabled(config.sendEnabled)}).catch(()=>{if(active)setError('Gifts are temporarily unavailable.')}).finally(()=>{if(active)setLoading(false)});try{setSaved(vault?.list()||[])}catch{setError('Saved gifts could not be loaded.')}return()=>{active=false;flow.current?.dispose()}},[vault])
+ useEffect(()=>{let active=true;void callbacks.current.getAccessToken().then(token=>readPocketGiftConfig(fetch,token)).then(config=>{if(active)setEnabled(config.sendEnabled)}).catch(()=>{if(active)setError('Gifts are temporarily unavailable.')}).finally(()=>{if(active)setLoading(false)});try{setSaved(vault?.list()||[])}catch{setError('Saved gifts could not be loaded.')}return()=>{active=false;flow.current?.dispose()}},[vault])
  useEffect(()=>{
   if(!draft||!vault)return
   let session:CircleEvmEmailSession|undefined

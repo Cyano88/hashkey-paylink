@@ -60,8 +60,8 @@ export async function readPocketGift(id:string,fetcher:typeof fetch=fetch):Promi
 }
 
 export type PocketGiftConfig={sendEnabled:boolean;claimEnabled:boolean;network:'base'}
-export async function readPocketGiftConfig(fetcher:typeof fetch=fetch):Promise<PocketGiftConfig>{
- const response=await fetcher(pocketApiUrl('/api/pocket/gifts')+'?action=config',{cache:'no-store',signal:AbortSignal.timeout(10000)})
+export async function readPocketGiftConfig(fetcher:typeof fetch=fetch,accessToken?:string|null):Promise<PocketGiftConfig>{
+ const response=await fetcher(pocketApiUrl('/api/pocket/gifts')+'?action=config',{cache:'no-store',headers:accessToken?{Authorization:'Bearer '+accessToken}:undefined,signal:AbortSignal.timeout(10000)})
  const data=await response.json().catch(()=>undefined)
  if(!response.ok||!data?.ok||data.network!=='base'||typeof data.sendEnabled!=='boolean'||typeof data.claimEnabled!=='boolean')throw Error('Gifts are temporarily unavailable.')
  return {sendEnabled:data.sendEnabled,claimEnabled:data.claimEnabled,network:'base'}
