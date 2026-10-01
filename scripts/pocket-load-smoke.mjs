@@ -16,6 +16,6 @@ const request = async () => {
 const started = performance.now()
 const results = await Promise.all(Array.from({ length: 25 }, request))
 const elapsed = performance.now() - started
-assert.ok(results.every(result => result.statusCode === 200 && result.body.total === 4))
+assert.ok(results.every(result => result.statusCode === 200 && result.body.total === 6))
 assert.ok(elapsed < 1_000, `Concurrent balance read took ${Math.round(elapsed)}ms`)
 console.log(`Pocket load smoke passed: 25 concurrent snapshots in ${Math.round(elapsed)}ms.`)

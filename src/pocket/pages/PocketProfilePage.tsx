@@ -69,6 +69,7 @@ export default function PocketProfilePage() {
   useEffect(() => { if (profile.loaded && editing) profile.edit() }, [profile.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handleNativeBack = (rawEvent: Event) => {
+      if (rawEvent.defaultPrevented || document.querySelector('[role="dialog"], [aria-modal="true"]')) return
       if (deleteOpen) {
         rawEvent.preventDefault()
         if (!deleteBusy) setDeleteOpen(false)

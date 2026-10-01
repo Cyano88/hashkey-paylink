@@ -3,8 +3,8 @@ import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import {useLocation,useNavigate} from 'react-router-dom'
 import { pocketActivityAmount } from '../lib/pocketActivityPresentation'
 import { useState, type ReactNode } from 'react'
-import { paymentReceiptOutcome } from '../../lib/paymentReceiptPdf'
-import PocketTransactionSheet from './PocketTransactionSheet'
+import PocketBottomSheet from './PocketBottomSheet'
+import PocketTransactionDetails from './PocketTransactionDetails'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { pocketActivityReceipt, pocketActivityStatus, pocketMovementTitle } from '../lib/pocketReceipt'
 
@@ -19,18 +19,20 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
     {message && <p role="status" className="mt-2 text-xs">{message}</p>}
   </div>}</>
   if (receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={onClose} extraActions={actions} />
-  const outcome = paymentReceiptOutcome({status: pocketActivityStatus(row), source: row.source})
-  const state = outcome.state
+  const status = pocketActivityStatus(row).replace(/_/g, ' ')
   const detailsRows: Array<[string, ReactNode]> = [
+    ['Status', <span className="capitalize">{status}</span>],
     ...(row.direction === 'in' && row.payer ? [['From', row.payer] as [string, ReactNode]] : []),
     ...(row.direction !== 'in' && row.recipient ? [['To', row.recipient] as [string, ReactNode]] : []),
     ...(row.feeAmount ? [['Fees', row.feeAmount + ' USDC'] as [string, ReactNode]] : []),
     ['Network', <span className="capitalize">{row.chain}</span>],
     ['Date', new Date(row.ts).toLocaleString()],
   ]
-  return <PocketTransactionSheet title={pocketMovementTitle(row)} state={state} statusLabel={outcome.label} receipt={receipt} detailsRows={detailsRows} amount={pocketActivityAmount(row)} onDone={onClose}
-    detail={row.source === 'request' && pocketActivityStatus(row) === 'declined' ? 'No payment was made.' : row.xpayCheckoutId&&outcome.label.startsWith('Refund') ? (pocketActivityStatus(row)==='refunded'?'Bank refund returned as USDC on Base.':'Bank refund returns as USDC on Base.') : state === 'pending' && outcome.label === 'Processing' ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>
-
+  return <PocketBottomSheet title={pocketMovementTitle(row)} onClose={onClose} showCloseButton={false} dismissOnBackdrop={false} dismissible={!busy}>
+    <h2 className="mb-2 text-center text-base font-semibold">{pocketMovementTitle(row)}</h2>
+    <p className="mb-5 text-center text-xl font-semibold">{pocketActivityAmount(row)}</p>
+    <PocketTransactionDetails rows={detailsRows} />
     {actions}
-  </PocketTransactionSheet>
+    <button type="button" className="pocket-cta-primary mt-4 w-full" disabled={busy} onClick={onClose}>Done</button>
+  </PocketBottomSheet>
 }

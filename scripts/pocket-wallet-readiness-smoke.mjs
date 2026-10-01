@@ -5,11 +5,11 @@ const require = createRequire(import.meta.url)
 const stubs = {
   pocketBalanceCache: 'export const balanceOwner=x=>x; export const readCachedPocketBalance=()=>null; export const replacePocketBalanceWallets=async()=>{}',
   authMode: 'export const PRIVY_AUTH_ENABLED = true',
-  circleEvmEmailWallet: 'export const canUseCircleEvmEmailWallet=()=>true; export const connectCircleEvmEmailWallet=()=>{}; export const resumeCircleArcMainnetWallet=()=>{}; export const resumeCircleProductionEvmWallet=()=>{}; export const restoreActivatedCircleEvmSession=()=>{}',
+  circleEvmEmailWallet: 'export const canUseCircleEvmEmailWallet=()=>true; export const connectCircleEvmEmailWallet=()=>{}; export const resumeCircleAdditionalEvmWallet=()=>{}; export const resumeCircleArcMainnetWallet=()=>{}; export const resumeCircleProductionEvmWallet=()=>{}; export const restoreActivatedCircleEvmSession=()=>{}',
   circleSolanaEmailWallet: 'export const canUseCircleSolanaEmailWallet=()=>true; export const connectCircleSolanaEmailWallet=()=>{}; export const resumeCircleSolanaEmailWallet=()=>{}',
   chains: 'export const CHAIN_META={base:{label:"Base"},arbitrum:{label:"Arbitrum"},arc:{label:"Arc"}}',
   pocketWalletLinkClient: 'export const linkPocketWallet=()=>{}; export const readPocketWallet=()=>{}; export const readPocketWallets=()=>{}',
-  pocketSecureWalletSession: 'export const readPocketSecureWalletSession=async()=>null; export const savePocketSecureWalletSession=async()=>{}; export const deletePocketSecureWalletSession=async()=>{}; export const secureSessionForNetwork=()=>null; export class PocketWalletSessionRecoveryRequiredError extends Error {}',
+  pocketSecureWalletSession: 'export const readPocketSecureWalletSession=async()=>globalThis.fixtureSession??null; export const savePocketSecureWalletSession=async()=>{}; export const deletePocketSecureWalletSession=async()=>{}; export const secureSessionForNetwork=()=>null; export class PocketWalletSessionRecoveryRequiredError extends Error {}',
   pocketQuickApproval: 'export const pocketQuickApprovalCredentialSaved=async()=>false; export const readPocketEvmQuickSession=async()=>null',
 }
 const output = await build({ entryPoints: ['src/pocket/controllers/usePocketWalletController.ts'], bundle: true, write: false, platform: 'node', format: 'cjs', external: ['react'], plugins: [{name:'wallet-dependencies',setup(b){b.onResolve({filter:/.*/}, args=>{const name=args.path.split('/').pop();if(name in stubs)return {path:name,namespace:'stub'}});b.onLoad({filter:/.*/,namespace:'stub'},args=>({contents:stubs[args.path],loader:'js'}))}}] })
@@ -29,4 +29,10 @@ for (const network of ['base','solana']) {
  assert.equal(ready.updatedAt,123)
  assert.equal(connections,2)
 }
-console.log('Pocket wallet readiness regression tests passed.')
+globalThis.fixtureSession={chain:'base',userToken:'fixture',wallet:{id:'base',address:'0xbase',blockchain:'BASE'},arcMainnetWallet:{id:'arc',address:'0xarc',blockchain:'ARC'}}
+await module.exports.restorePocketWalletSession('restore@fixture.invalid')
+assert.equal(module.exports.activePocketEvmSession('restore@fixture.invalid','arc','0xarc')?.wallet.id,'arc')
+assert.equal(module.exports.activePocketEvmSession('other@fixture.invalid','arc','0xarc'),null)
+assert.equal(module.exports.activePocketEvmSession('restore@fixture.invalid','arc','0xwrong'),null)
+delete globalThis.fixtureSession
+console.log('PASS wallet readiness and restored Arc session: correct owner/address, no interactive approval required.')

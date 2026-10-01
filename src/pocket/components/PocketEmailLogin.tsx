@@ -112,11 +112,12 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
   useEffect(() => {
     if (step !== 'code') return
     const handleBack = (event: Event) => {
+      if (event.defaultPrevented || document.querySelector('[role="dialog"], [aria-modal="true"]')) return
       event.preventDefault()
       if (!busy) { setStep('email'); setCode(''); setError('') }
     }
-    window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleBack)
-    return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleBack)
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleBack, true)
+    return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleBack, true)
   }, [busy, step])
 
   if (step === 'code') {

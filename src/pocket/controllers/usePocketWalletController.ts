@@ -44,6 +44,10 @@ function solanaSessionKey(email: string, walletAddress: string) {
 }
 
 function cacheEvmSession(email: string, session: CircleEvmEmailSession) {
+  if (session.arcMainnetWallet?.blockchain === 'ARC') {
+    const wallet = session.arcMainnetWallet
+    sharedEvmSessions.set(evmSessionKey(email, 'arc', wallet.address), { ...session, chain: 'arc', wallet })
+  }
   for (const network of ['ethereum','polygon'] as const) {
     const wallet=session.additionalWallets?.[network]
     if(wallet)sharedEvmSessions.set(evmSessionKey(email,network,wallet.address),{...session,chain:network,wallet})

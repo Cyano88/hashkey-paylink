@@ -19,7 +19,7 @@ try{
  }
  for(const source of ['bank-withdraw','bills'])for(const dark of [false,true]){
   await page.evaluate(({source,dark})=>{document.documentElement.classList.toggle('dark',dark);window.setReceipt({type:'money_out',receiptId:'fiat-fixture',receiptHash:'fixture',eventId:'fixture',txHash:'0x'+'a'.repeat(64),chain:'base',payer:'Fixture sender',recipient:'Fixture recipient',memo:'Fixture',amount:'0.736603',amountNgn:'1000',fiatCurrency:'NGN',asset:'USDC',createdAt:1750000000000,brandKind:'pocket',brandName:'Pocket',title:'Payment',source});window.show('successful')},{source,dark});
-  const sheet=page.getByRole('dialog',{name:'Successful',exact:true});await sheet.waitFor();await sheet.getByText('NGN 1,000',{exact:true}).waitFor();const equivalent=sheet.getByText('0.736603 USDC',{exact:true});await equivalent.waitFor();assert(await equivalent.evaluate(e=>e.classList.contains('text-xs')));await sheet.getByRole('button',{name:'Done',exact:true}).click();
+  const sheet=page.getByRole('dialog',{name:'Successful',exact:true});await sheet.waitFor();await sheet.getByText('\u20a61,000',{exact:true}).waitFor();const equivalent=sheet.getByText('0.736603 USDC',{exact:true});await equivalent.waitFor();assert(await equivalent.evaluate(e=>getComputedStyle(e).fontSize==='12px'));await sheet.getByRole('button',{name:'Done',exact:true}).click();
  }
  assert.deepEqual(errors,[]);console.log('PASS: all three states, asset details, receipt status, no X, backdrop/Escape/native-back protection, receipt return and Done')
 }finally{await browser.close()}

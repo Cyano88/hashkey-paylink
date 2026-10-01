@@ -70,7 +70,7 @@ assert.equal(forbiddenRes.statusCode, 403)
 assert.equal(forbiddenRes.payload.error, 'Restricted.')
 
 const operationsSource = await readFile(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
-const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../src/surfaces/DeveloperApp.tsx', import.meta.url), 'utf8')
 const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
 assert.equal((operationsSource.match(/> Sign out<\/button>/g) || []).length, 1)
 assert.match(operationsSource, /surface === 'transactions'/)
