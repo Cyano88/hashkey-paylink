@@ -103,3 +103,6 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 - Account header uses the current authenticated profile with an email ownership guard. Missing identity is omitted rather than borrowed from another session.
 - Data tests passed for reference parity and exact totals, existing statement/collection scope and formula safety. Browser export regression passed. Two-page synthetic PDF rendered and both pages visually inspected. Changed-code TypeScript diagnostics zero.
 - Build, deployment and Pixel installation verification follow below.
+
+- Compact statement delivery: Vite completed in 2m 7s, Capacitor sync passed, Gradle BUILD SUCCESSFUL in 14s. Pixel install -r returned Success. App runtime available after update; user was on bank confirmation, so no further navigation or payment interaction was performed. Native save code is unchanged from the previously passed acceptance check.
+- Pushed merge 359318aff preserving independent XStocks backend updates. Render dep-davc38eq1p3s73d49a50 pending live verification at this checkpoint.
