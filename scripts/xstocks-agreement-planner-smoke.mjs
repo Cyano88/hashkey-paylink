@@ -11,7 +11,7 @@ assert.equal(keccak256(code),'0xcc80a2e8e46179070a0a664636e29fa5a83f62eed9d97139
 const hash='0x'+'aa'.repeat(32);
 const binding={chainId:196,factory,termsHash:hash,contractTerms:{offerId:hash,termsHash:hash,buyer,seller,arbiter,token,amount:'1000000',decimals:6,fundBy:2000,dispatchWindow:86400,deliveryWindow:86400,inspectionWindow:86400}};
 function client(options={}){
- return {getChainId:async()=>options.chainId??196,getBlockNumber:async()=>10n,getBlock:async()=>({hash,timestamp:1000n}),getCode:async()=>options.badCode?'0x00':code,
+ return {getChainId:async()=>options.chainId??196,getBlockNumber:async()=>10n,getBlock:async()=>({hash,timestamp:options.now??1000n}),getCode:async()=>options.badCode?'0x00':code,
  readContract:async({address,functionName,args,blockNumber})=>{
   if(address===factory){if(functionName==='arbiter')return arbiter;if(functionName==='approvedTokens')return options.approved??true;if(functionName==='escrows')return options.absent?zeroAddress:escrow;}
   if(address===token){if(functionName==='decimals')return 6;if(functionName==='allowance')return options.allowance??0n;}
@@ -28,6 +28,16 @@ await assert.rejects(()=>prepareTradeXLayerAction(input,client({badCode:true})),
 assert.deepEqual((await prepareTradeXLayerAction(input,client({headState:2}))).actions,[]);
 assert.deepEqual((await prepareTradeXLayerAction({...input,account:seller},client({absent:true}))).actions,['create']);
 await assert.rejects(()=>prepareTradeXLayerAction({...input,action:'create'},client({absent:true})),/no longer available/);
+for(const account of [buyer,seller]){
+ for(const now of [2000n,2001n]){
+  const expired=await prepareTradeXLayerAction({...input,account},client({absent:true,now}));
+  assert.equal(expired.fundingExpired,true);assert.deepEqual(expired.actions,[]);
+  await assert.rejects(()=>prepareTradeXLayerAction({...input,account,action:'create'},client({absent:true,now})),/no longer available/);
+  for(const state of [0,1]){const unpaid=await prepareTradeXLayerAction({...input,account},client({state,now}));assert.equal(unpaid.fundingExpired,true);assert.deepEqual(unpaid.actions,['cancel']);}
+  const held=await prepareTradeXLayerAction({...input,account},client({state:2,now}));assert.equal(held.fundingExpired,false);
+ }
+}
+assert.equal((await prepareTradeXLayerAction({...input,account:seller},client({absent:true,now:1999n}))).fundingExpired,false);
 let plan=await prepareTradeXLayerAction({...input,action:'approve'},client());
 assert.equal(plan.transaction.to,token);
 assert.deepEqual(decodeFunctionData({abi:TRADE_TOKEN_ABI,data:plan.transaction.data}).args,[escrow,1000000n]);

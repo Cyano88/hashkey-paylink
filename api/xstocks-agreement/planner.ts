@@ -46,6 +46,7 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
   const result: TradeXLayerStatus = { observedBlock:blockNumber.toString(), enabled:true, escrow, amount:String(t.amount), token:t.token, decimals, actions:[] };
   let to: Address = escrow, data: Hex | undefined;
   if (escrow === zeroAddress) {
+    result.fundingExpired = BigInt(t.fundBy) <= block.timestamp;
     if (!buyer && approved && BigInt(t.fundBy) > block.timestamp) result.actions = ['create'];
     if (input.action === 'create') {
       to = factory;
@@ -62,6 +63,7 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
     const state = Number(await client.readContract({ address:escrow, abi:escrowAbi, functionName:'state', blockNumber }));
     const currentState = Number(await client.readContract({ address:escrow, abi:escrowAbi, functionName:'state' }));
     result.state = state;
+    result.fundingExpired = state <= 1 && BigInt(t.fundBy) <= block.timestamp;
     if (state !== currentState) return {...result, pending:true};
     const [dispatchBy, deliveryBy, inspectUntil] = await Promise.all((['dispatchBy','deliveryBy','inspectUntil'] as const).map(functionName => client.readContract({ address:escrow, abi:escrowAbi, functionName, blockNumber })));
     result.actions = tradeLifecycleActions(state, buyer, block.timestamp, {fundBy:BigInt(t.fundBy),dispatchBy,deliveryBy,inspectUntil});
