@@ -97,3 +97,9 @@ const selected=submitSupportConversation(contextCases,contextInput,100000,uuid,{
 submitSupportConversation(contextCases,{...contextInput,caseId:selected.id,newConversation:false,optionId:'gifts',message:'Gifts & requests',requestId:uuid()},100001,uuid);
 assert.equal(selected.messages.at(-1).accountContext.kind,'clarify');assert.equal(selected.messages.at(-1).accountContext.transaction,undefined);
 console.log('PASS topic changes clear selected-payment context')
+import {pocketSupportAnswer} from '../src/pocket/lib/pocketSupportContent.ts'
+for(const question of ['Can I trust pocket with my money?','I want to be sure if my money is safe with pocket by hash paylink','How does Pocket protect my funds?']){
+ const answer=pocketSupportAnswer(question);assert.equal(answer.handoff,false);assert.equal(answer.unresolved,undefined);assert.match(answer.text,/PIN and optional biometrics/);assert.match(answer.text,/no app can guarantee/);assert.deepEqual(answer.options.map(x=>x.id),['security','human'])
+}
+assert.equal(pocketSupportAnswer('My money was stolen, is Pocket safe?').handoff,true)
+console.log('PASS trust questions explain safeguards without guarantees, with human review for security incidents')

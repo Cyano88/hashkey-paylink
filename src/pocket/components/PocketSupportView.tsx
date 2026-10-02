@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Bot, ArrowLeft, ChevronDown, ChevronRight, MessageCircle, Search, Send, X, Deposit, ArrowLeftRight, Receipt, TrendingUp, UserRound } from './PocketIcons'
 import { pocketSupportFaqs, pocketSupportTopics } from '../lib/pocketSupportContent'
 
-type Message = { options?:SupportOption[]; receipt?:{eventId:string}; id:string; author:'user'|'agent'|'staff'; displayName?:string; avatarDataUrl?:string; kind?:string; text:string; createdAt:number }
+type Message = { requestId?:string; options?:SupportOption[]; receipt?:{eventId:string}; id:string; author:'user'|'agent'|'staff'; displayName?:string; avatarDataUrl?:string; kind?:string; text:string; createdAt:number }
 type SupportCase = {id:string; summary:string; status:'open'|'assigned'|'waiting_user'|'resolved'; humanSupport?:boolean; messages:Message[]; updatedAt:number; unreadCount?:number; resolutionRequestedAt?:number; resolutionPromptId?:string; priority?:string; category?:string}
 type SupportProfile = {displayName:string;avatarDataUrl?:string}
 type Result = {cases?:SupportCase[]; case?:SupportCase; team?:SupportProfile[]}
@@ -36,6 +36,7 @@ export default function PocketSupportView({call,onClose,onOpenReceipt,initialCas
   const [error,setError] = useState('')
   const [sending,setSending] = useState(false)
   const [draft,setDraft] = useState('')
+  const [pendingMessages,setPendingMessages]=useState<Array<{id:string;text:string;createdAt:number;option?:SupportOption;failed:boolean}>>([])
   const [search,setSearch] = useState('')
   const [expanded,setExpanded] = useState('')
   const [routing,setRouting] = useState(false)
@@ -82,17 +83,20 @@ export default function PocketSupportView({call,onClose,onOpenReceipt,initialCas
     return()=>window.removeEventListener(POCKET_NATIVE_BACK_EVENT,back)
   },[view,routing,active?.status,onClose])
   useEffect(()=>{if(view==='chat' && active?.unreadCount)void call({action:'mark-read',caseId:active.id}).then(data=>{if(data.case)upsert(data.case)}).catch(()=>{})},[view,active?.id,active?.unreadCount,call])
-  function openChat(id?:string){if(inFlight.current)return;request.current=null;setDraft('');setRouting(false);nearBottom.current=true;setActiveId(id||'');setError('');setView('chat')}
-  async function send(text=draft,option?:SupportOption){
+  function openChat(id?:string){if(inFlight.current)return;request.current=null;setPendingMessages([]);setDraft('');setRouting(false);nearBottom.current=true;setActiveId(id||'');setError('');setView('chat')}
+  async function send(text=draft,option?:SupportOption,retryId?:string){
     text=text.trim()
     if(!text || inFlight.current || active?.status==='resolved' || !loaded || Boolean(activeId&&!active)) return
     if(text.length>1500){setError('Keep your message under 1,500 characters.');return}
     inFlight.current=true;setSending(true);setError('')
     const startedAt=Date.now(),showTyping=!active?.humanSupport
     const key=JSON.stringify([text,option?.id,option?.eventId])
-    if(request.current?.key!==key)request.current={text,key,id:crypto.randomUUID()}
-    try{const data=await call({action:'chat',caseId:activeId||undefined,newConversation:!activeId,message:text,optionId:option?.id,eventId:option?.eventId,requestId:request.current.id});if(!data.case)throw new Error('Message could not be saved. Please try again.');if(showTyping)await new Promise(resolve=>window.setTimeout(resolve,Math.max(0,3000-(Date.now()-startedAt))));upsert(data.case);setActiveId(data.case.id);setDraft(current=>current.trim()===text?'':current);setRouting(false);request.current=null}
-    catch(reason){setError(reason instanceof Error?reason.message:'Message could not be sent. Please try again.')}
+    if(retryId||request.current?.key!==key)request.current={text,key,id:retryId||crypto.randomUUID()}
+    const messageId=request.current!.id
+    setDraft(current=>current.trim()===text?'':current)
+    setPendingMessages(rows=>[...rows.filter(row=>row.id!==messageId),{id:messageId,text,createdAt:Date.now(),option,failed:false}])
+    try{const data=await call({action:'chat',caseId:activeId||undefined,newConversation:!activeId,message:text,optionId:option?.id,eventId:option?.eventId,requestId:messageId});if(!data.case)throw new Error('Message could not be saved. Please try again.');if(showTyping)await new Promise(resolve=>window.setTimeout(resolve,Math.max(0,3000-(Date.now()-startedAt))));upsert(data.case);setActiveId(data.case.id);setPendingMessages(rows=>rows.filter(row=>row.id!==messageId));setRouting(false);request.current=null}
+    catch(reason){setPendingMessages(rows=>rows.map(row=>row.id===messageId?{...row,failed:true}:row));setError(reason instanceof Error?reason.message:'Message could not be sent. Please try again.')}
     finally{inFlight.current=false;setSending(false)}
   }
   async function answerResolution(answer:'yes'|'no') {
@@ -132,6 +136,7 @@ export default function PocketSupportView({call,onClose,onOpenReceipt,initialCas
               {active?.messages.map(message=>['handoff','staff_joined','automatic_reminder','automatic_resolution','case_reopened','resolution_prompt'].includes(message.kind || '') ? <div key={message.id} className="my-5 text-center text-xs leading-5 text-gray-500 dark:text-gray-400"><p>{message.text}</p>{message.kind==='resolution_prompt' && active.resolutionPromptId===message.id && active.status!=='resolved' && <><p className="mt-1 text-[11px]">{protectedCase?'This payment case stays open until it is reviewed.':'This conversation closes after 24 hours without a reply.'}</p><div className="mt-3 flex flex-wrap justify-center gap-2"><button disabled={sending} onClick={()=>void answerResolution('yes')} className="rounded-full border border-gray-200 px-4 py-2 text-xs dark:border-white/15">Yes, I need help</button><button disabled={sending} onClick={()=>void answerResolution('no')} className="rounded-full border border-gray-200 px-4 py-2 text-xs dark:border-white/15">No, all sorted</button></div></>}</div> : <div key={message.id} className={'pocket-chat-bubble '+(message.author==='user'?'pocket-chat-outgoing':'pocket-chat-reply')}>{message.author!=='user'&&<p className="pocket-chat-sender"><SupportSenderIcon message={message}/>{message.author==='staff'?(message.displayName&&message.displayName!=='Pocket Support'?message.displayName+' · Pocket Support':'Pocket Support'):'Hash · AI Agent'}</p>}<p className="pocket-chat-text">{message.text}</p>{message.author==='agent'&&message.receipt?.eventId&&onOpenReceipt&&<button type="button" className="mt-2 min-h-10 text-xs font-semibold underline underline-offset-4" onClick={()=>onOpenReceipt(message.receipt!.eventId)}>View receipt</button>}{message.author==='agent'&&message.id===active?.messages.at(-1)?.id&&!active.humanSupport&&active.status!=='resolved'&&message.options?.length? <div className="mt-3 flex flex-wrap gap-2" aria-label="Support options">{message.options.map(option=><button key={option.id+':'+(option.eventId||'')} type="button" disabled={sending} className="pocket-support-topic" onClick={()=>void send(supportActions[option.id]?.message||option.label,option)}>{option.label}</button>)}</div>:null}<p className="pocket-chat-time">{new Date(message.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p></div>)}
               {active?.humanSupport&&!active.messages.some(m=>m.kind==='handoff'||m.kind==='staff_joined'||m.author==='staff')&&active.status!=='resolved'&&<p className="my-5 text-center text-xs text-gray-500">You are in the queue for Pocket Support.</p>}
               {routing&&!active?.humanSupport&&<><div className="pocket-chat-bubble pocket-chat-outgoing"><p className="pocket-chat-text">Talk to support</p></div><div className="pocket-chat-bubble pocket-chat-reply"><p className="pocket-chat-sender"><Bot aria-hidden="true" className="h-4 w-4"/>Hash · AI Agent</p><p className="pocket-chat-text">What do you need help with? Choose a topic below. The team will see this conversation.</p></div></>}
+              {pendingMessages.filter(row=>!active?.messages.some(message=>message.requestId===row.id)).map(row=><div key={row.id} data-pending-message={row.id} className="pocket-chat-bubble pocket-chat-outgoing"><p className="pocket-chat-text">{row.text}</p>{row.failed?<button type="button" disabled={sending} className="mt-2 text-xs underline underline-offset-4" onClick={()=>void send(row.text,row.option,row.id)}>Not sent · Retry</button>:<p className="pocket-chat-time">{new Date(row.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>}</div>)}
               {sending&&!active?.humanSupport&&<div role="status" aria-label="Hash is preparing a reply" className="pocket-support-thinking"><div className="inline-flex items-center rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 shadow-sm dark:bg-white/[0.08]"><span className="inline-flex items-center gap-1" aria-hidden="true">{[0,1,2].map(index=><span key={index} className="pocket-typing-dot h-2 w-2 rounded-full bg-[#8e8e93] dark:bg-gray-300" style={{animationDelay:index*160+'ms'}}/>)}</span></div></div>}
             </>}<div ref={end}/>
           </section>

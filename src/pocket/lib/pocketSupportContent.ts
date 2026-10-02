@@ -1,4 +1,4 @@
-import {recoveryOptions,type SupportOption} from './pocketSupportActions'
+import {recoveryOptions,supportOptions,type SupportOption} from './pocketSupportActions'
 export const POCKET_SUPPORT_HANDOFF_TEXT = "I can't answer that reliably yet. I've passed your question to Pocket Support."
 export const pocketSupportFaqs = [
   { question: 'What can I do with Pocket?', answer: 'Use Pocket to send and receive USDC, pay supported Nigerian bills, make bank transfers, create payment requests and use POS. XStocks has its own trading, receiving and sending flows.' },
@@ -12,6 +12,7 @@ export const pocketSupportFaqs = [
   { question: 'Does Pocket offer cards?', answer: 'Cards are coming soon. Card issuing, funding and spending are not available in Pocket yet.' },
   { question: 'How do I keep my account safe?', answer: 'Manage your PIN and biometric approval in Payment security. Never send a PIN, OTP, password, private key or recovery phrase in chat. Pocket Support does not need these to investigate an issue.' },
   { question: 'Why did my payment fail?', answer: 'The reason depends on the transaction. Open its Activity details and use Report an issue so Support receives the recorded transaction reference and status. We will not guess the cause or ask you to repeat a payment whose outcome is uncertain.' },
+  { question: 'How does Pocket protect my money?', answer: "Pocket uses sign-in and payment approval controls, with PIN and optional biometrics. They help protect access, but no app can guarantee that funds are risk-free. Keep your sign-in details private and check recipients before approving payments. I can explain account security or connect you to an agent." },
 ] as const
 export const pocketSupportTopics = ['Deposit', 'Transfer', 'Bills', 'XStocks', 'Account', 'Talk to support'] as const
 export function requestsPocketHuman(message: string) {
@@ -21,6 +22,7 @@ export function pocketSupportAnswer(message: string): { text: string; handoff: b
   const q = message.trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
   if (requestsPocketHuman(q)) return {text:'Your request is in the Pocket Support queue. A representative has not joined yet. You can add details here; the team will see this conversation.',handoff:true}
   if (/^(?:(?:what(?: is|'s| are)|show me|tell me) my (?:full+ |first |last )?name(?:s|'s)?|where (?:can i|do i) (?:find|see|view) my (?:full+ |first |last )?name(?:s|'s)?)[?.! ]*$/.test(q)) return {text:'You can view your full name in Profile.',handoff:false}
+  if(/\b(trust|safe|safety|secure|security|protect|protected)\b/.test(q)&&/\b(pocket|hash paylink|money|funds)\b/.test(q)&&!/\b(stolen|unauthori[sz]ed|scam|hacked)\b/.test(q))return {text:pocketSupportFaqs[11].answer,handoff:false,options:supportOptions(['security','human'])}
   const exact = pocketSupportFaqs.find(item => item.question.toLowerCase() === q)
   if (exact) return { text: exact.answer, handoff: false }
   const topic = ({deposit: 1, transfer: 2, bills: 4, xstocks: 7, account: 9} as Record<string, number>)[q]
