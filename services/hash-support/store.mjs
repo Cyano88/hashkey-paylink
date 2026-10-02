@@ -25,6 +25,17 @@ export function createStore(pool){
    const r=await c.query("UPDATE hash_inference_budget SET reserved_calls=reserved_calls+1,reserved_tokens=reserved_tokens+512 WHERE budget_day=(now() AT TIME ZONE 'UTC')::date AND reserved_calls<20 AND reserved_tokens+512<=10240 RETURNING reserved_calls");
    await c.query('COMMIT');return r.rowCount===1;
   }catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},
+  async reserveAnswer(scope,customerHash,requestId,inputHash){return scoped({...scope,customerId:''},async c=>{
+   await c.query('SELECT pg_advisory_xact_lock(81723492)');
+   const existing=await c.query('SELECT input_hash,outcome,selected_id FROM hash_answer_usage WHERE workspace_id=$1 AND customer_hash=$2 AND request_id=$3',[scope.workspaceId,customerHash,requestId]);
+   if(existing.rows[0]){const row=existing.rows[0];return {reserved:false,selectedId:row.input_hash===inputHash&&row.outcome==='completed'?row.selected_id:null}}
+   const limits=[['global',20],['workspace:'+scope.workspaceId,20],['customer:'+scope.workspaceId+':'+customerHash,5]];
+   for(const [key,max]of limits){const used=await c.query("SELECT calls FROM hash_answer_budget WHERE scope_key=$1 AND budget_day=(now() AT TIME ZONE 'UTC')::date",[key]);if((used.rows[0]?.calls||0)>=max)return {reserved:false,selectedId:null}}
+   for(const [key]of limits)await c.query("INSERT INTO hash_answer_budget(scope_key,budget_day,calls) VALUES($1,(now() AT TIME ZONE 'UTC')::date,1) ON CONFLICT(scope_key,budget_day) DO UPDATE SET calls=hash_answer_budget.calls+1",[key]);
+   await c.query('INSERT INTO hash_answer_usage(workspace_id,customer_hash,request_id,input_hash) VALUES($1,$2,$3,$4)',[scope.workspaceId,customerHash,requestId,inputHash]);
+   return {reserved:true};
+  })},
+  async completeAnswer(scope,customerHash,requestId,selectedId){return scoped({...scope,customerId:''},async c=>{await c.query("UPDATE hash_answer_usage SET outcome='completed',selected_id=$4 WHERE workspace_id=$1 AND customer_hash=$2 AND request_id=$3 AND outcome='pending'",[scope.workspaceId,customerHash,requestId,selectedId])})},
   async health(){await pool.query('SELECT 1')},
   async createWorkspace(name){const id=randomUUID(),keyId=randomUUID(),apiKey=newApiKey(),c=await pool.connect();try{await c.query('BEGIN');await c.query('INSERT INTO hash_workspaces(id,name) VALUES($1,$2)',[id,name]);await c.query('INSERT INTO hash_api_keys(id,workspace_id,key_hash) VALUES($1,$2,$3)',[keyId,id,digest(apiKey)]);await c.query('COMMIT');return {workspaceId:id,keyId,apiKey}}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},
   async authenticate(apiKey){if(!/^hash_live_[A-Za-z0-9_-]{43}$/.test(apiKey))return null;const r=await pool.query('SELECT id,workspace_id FROM hash_api_keys WHERE key_hash=$1 AND revoked_at IS NULL',[digest(apiKey)]);return r.rows[0]?{keyId:r.rows[0].id,workspaceId:r.rows[0].workspace_id}:null},

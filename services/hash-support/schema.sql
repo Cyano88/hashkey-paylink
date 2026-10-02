@@ -43,3 +43,18 @@ CREATE POLICY hash_integration_scope ON hash_integration_state USING (workspace_
 CREATE TABLE IF NOT EXISTS hash_inference_budget (
  budget_day date PRIMARY KEY, reserved_calls integer NOT NULL DEFAULT 0, reserved_tokens integer NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS hash_answer_usage (
+ workspace_id uuid NOT NULL REFERENCES hash_workspaces(id) ON DELETE CASCADE,
+ customer_hash text NOT NULL, request_id text NOT NULL, input_hash text NOT NULL,
+ outcome text NOT NULL DEFAULT 'pending', selected_id text, created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(workspace_id,customer_hash,request_id)
+);
+CREATE INDEX IF NOT EXISTS hash_answer_usage_day ON hash_answer_usage(created_at);
+CREATE TABLE IF NOT EXISTS hash_answer_budget (
+ scope_key text NOT NULL, budget_day date NOT NULL, calls integer NOT NULL DEFAULT 0,
+ PRIMARY KEY(scope_key,budget_day)
+);
+ALTER TABLE hash_answer_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hash_answer_usage FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS hash_answer_usage_scope ON hash_answer_usage;
+CREATE POLICY hash_answer_usage_scope ON hash_answer_usage USING (workspace_id::text=current_setting('hash.workspace_id',true) AND current_setting('hash.customer_id',true)='') WITH CHECK (workspace_id::text=current_setting('hash.workspace_id',true) AND current_setting('hash.customer_id',true)='');
