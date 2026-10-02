@@ -11,11 +11,11 @@ export type Conversation = {
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
 }
 export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: string}>(
-  cases: Record<string, T>, input: {profileId: string; caseId?: string; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch},
+  cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch},
 ) {
   if (!input.message.trim() || input.message.length > 1500 || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw Object.assign(new Error('Enter a message of up to 1,500 characters.'), {status: 400})
   const mine = Object.values(cases).filter(c => c.profileId === input.profileId).sort((a,b) => b.updatedAt-a.updatedAt)
-  let item = input.caseId ? cases[input.caseId] : mine.find(c => c.status !== 'resolved')
+  let item = input.caseId ? cases[input.caseId] : input.newConversation === true ? undefined : mine.find(c => c.status !== 'resolved')
   if (input.caseId && (!item || item.profileId !== input.profileId)) throw Object.assign(new Error('Support case not found.'), {status:404})
   const duplicate = mine.find(c => c.messages.some(m => m.requestId === input.requestId))
   if (duplicate) return duplicate

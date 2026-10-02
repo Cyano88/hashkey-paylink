@@ -52,3 +52,19 @@ const representative=submitSupportConversation(fresh,{profileId:'new',message:'I
 assert.equal(representative.humanSupport,true)
 assert.match(representative.messages.at(-1).text,/queue for Pocket Support/)
 console.log('Legacy report handoff and explicit customer representative requests passed.')
+
+const separateStore={legacy:structuredClone(legacy)}
+const oldSnapshot=JSON.stringify(separateStore.legacy)
+const freshRequest=uuid()
+const freshInput={profileId:'legacy',message:'Hi',requestId:freshRequest,newConversation:true}
+const separate=submitSupportConversation(separateStore,freshInput,200000,uuid)
+assert.notEqual(separate.id,legacy.id)
+assert.equal(separate.humanSupport,false)
+assert.equal(JSON.stringify(separateStore.legacy),oldSnapshot,'Existing human case stays intact')
+assert.equal(submitSupportConversation(separateStore,freshInput,200001,uuid).id,separate.id)
+assert.equal(Object.keys(separateStore).length,2,'New conversation retries do not duplicate cases')
+const oldCount=separateStore.legacy.messages.length
+submitSupportConversation(separateStore,{...freshInput,caseId:legacy.id,requestId:uuid()},200002,uuid)
+assert.equal(separateStore.legacy.messages.length,oldCount+1,'Explicit case still takes precedence')
+assert.throws(()=>submitSupportConversation(separateStore,{...freshInput,profileId:'other',caseId:legacy.id,requestId:uuid()},200003,uuid),e=>e.status===404)
+console.log('Fresh conversations preserve human cases, retry identity and ownership.')

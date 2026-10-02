@@ -10,7 +10,7 @@ export function resolveSupportMatch(match:SupportKnowledgeMatch|undefined,entrie
  const entry=entries[match.id]
  return entry&&entry.tenantId===tenantId&&entry.status==='approved'&&!!entry.reviewedBy&&(entry.expiresAt||0)>now&&entry.version===match.version?{answer:entry.answer,id:entry.id,version:entry.version}:undefined
 }
-export async function matchSupportQuestion(input:{profileId:string;message:string;requestId:string;caseId?:string;cases:Record<string,any>;entries:KnowledgeStore;tenantId:string;privateValues?:string[]}):Promise<SupportKnowledgeMatch|undefined>{
+export async function matchSupportQuestion(input:{profileId:string;message:string;requestId:string;caseId?:string;newConversation?:boolean;cases:Record<string,any>;entries:KnowledgeStore;tenantId:string;privateValues?:string[]}):Promise<SupportKnowledgeMatch|undefined>{
  if(process.env.HASH_SUPPORT_AI_ENABLED!=='true'||!input.profileId||! /^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)||input.message.length>320)return
  if(requestsPocketHuman(input.message)||!pocketSupportAnswer(input.message).handoff||findApprovedKnowledge(input.entries,input.tenantId,input.message,Date.now()))return
  if(input.privateValues?.some(v=>v.trim().length>=4&&input.message.toLowerCase().includes(v.trim().toLowerCase())))return
@@ -18,7 +18,7 @@ export async function matchSupportQuestion(input:{profileId:string;message:strin
  if(/[\d@]|https?:|0x/i.test(input.message)||/\b(failed|failing|missing|stuck|deducted|debited|not received|not delivered|not arrived|status|charged|scam|stolen|unauthori[sz]ed|bvn|nin|passport|password|otp|private key|recovery phrase)\b/i.test(input.message))return
  if(/\b(my|our|did|happened|went|ago|yesterday|today|earlier|already|yet|and|also|plus|or|check|investigate|trace|track|confirm|reverse|cancel|approve|release)\b/i.test(input.message)||/\b(my|our)\s+(money|funds|payments?|transfers?|deposits?|refunds?|verification|account|balance|transactions?)\b/i.test(input.message))return
  const mine=Object.values(input.cases).filter(c=>c.profileId===input.profileId).sort((a,b)=>b.updatedAt-a.updatedAt)
- const current=input.caseId?input.cases[input.caseId]:mine.find(c=>c.status!=='resolved')
+ const current=input.caseId?input.cases[input.caseId]:input.newConversation===true?undefined:mine.find(c=>c.status!=='resolved')
  if(input.caseId&&(!current||current.profileId!==input.profileId))return
  if(current&&(current.status==='resolved'||current.humanSupport!==false||current.assignedTo||current.messages.some((m:any)=>m.author==='staff')))return
  if(mine.some(c=>c.messages.some((m:any)=>m.requestId===input.requestId)))return

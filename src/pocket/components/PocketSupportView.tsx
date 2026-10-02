@@ -46,7 +46,6 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
   const visibleCases = cases.filter(item=>view==='previous'?item.status==='resolved':item.status!=='resolved')
   const protectedCase = active?.priority==='high' || active?.category==='bank_payment' || active?.category==='stuck_transaction'
   const loading = !loaded
-  const open = cases.find(item=>item.status!=='resolved')
   const upsert = (item:SupportCase) => setCases(current=>[item,...current.filter(row=>row.id!==item.id)].sort((a,b)=>b.updatedAt-a.updatedAt))
   useEffect(()=>{
     let disposed=false, running=false
@@ -77,14 +76,14 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
     return()=>window.removeEventListener(POCKET_NATIVE_BACK_EVENT,back)
   },[view,routing,active?.status,onClose])
   useEffect(()=>{if(view==='chat' && active?.unreadCount)void call({action:'mark-read',caseId:active.id}).then(data=>{if(data.case)upsert(data.case)}).catch(()=>{})},[view,active?.id,active?.unreadCount,call])
-  function openChat(id?:string){setRouting(false);nearBottom.current=true;setActiveId(id||open?.id||'');setError('');setView('chat')}
+  function openChat(id?:string){if(inFlight.current)return;request.current=null;setDraft('');setRouting(false);nearBottom.current=true;setActiveId(id||'');setError('');setView('chat')}
   async function send(text=draft){
     text=text.trim()
     if(!text || inFlight.current || active?.status==='resolved' || !loaded || Boolean(activeId&&!active)) return
     if(text.length>1500){setError('Keep your message under 1,500 characters.');return}
     inFlight.current=true;setSending(true);setError('')
     if(request.current?.text!==text)request.current={text,id:crypto.randomUUID()}
-    try{const data=await call({action:'chat',caseId:activeId||undefined,message:text,requestId:request.current.id});if(!data.case)throw new Error('Message could not be saved. Please try again.');upsert(data.case);setActiveId(data.case.id);setDraft(current=>current.trim()===text?'':current);setRouting(false);request.current=null}
+    try{const data=await call({action:'chat',caseId:activeId||undefined,newConversation:!activeId,message:text,requestId:request.current.id});if(!data.case)throw new Error('Message could not be saved. Please try again.');upsert(data.case);setActiveId(data.case.id);setDraft(current=>current.trim()===text?'':current);setRouting(false);request.current=null}
     catch(reason){setError(reason instanceof Error?reason.message:'Message could not be sent. Please try again.')}
     finally{inFlight.current=false;setSending(false)}
   }
