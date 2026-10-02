@@ -26,3 +26,12 @@ const specific=await supportAccountAnswer({...base,question:'What chain was my l
 const failed=await supportAccountAnswer({...base,question:'What chain was my last failed payment?'},{...deps,payments:async()=>[row,{...row,eventId:'failed-payment',bankSettlementStatus:'failed',ts:row.ts-1}]});assert.equal(failed.receipt.eventId,'failed-payment')
 const noMy=await supportAccountAnswer({...base,question:'Which network did I last pay on?'},deps);assert.equal(noMy.receipt.eventId,'payment-a')
 
+
+for(const question of ['What chain was my last payment and what is its status?','What chain was my last payment and its status?','Show my last payment status and receipt','What network was my last payment on and also what is its status?']){
+ const result=await supportAccountAnswer({...base,question},deps)
+ assert.equal(result.handoff,false);assert.equal(result.receipt.eventId,'payment-a');assert.match(result.text,/Base/);assert.match(result.text,/processing/)
+}
+const mixed=await supportAccountAnswer({...base,question:'What chain was my last payment and what is my balance?'},deps)
+assert.equal(mixed.accountContext.kind,'clarify');assert.equal(mixed.handoff,false)
+assert.equal(await supportAccountAnswer({...base,question:'What chain was my last payment and refund it'},deps),undefined)
+console.log('PASS combined payment details, unsupported compound clarification and action boundary')

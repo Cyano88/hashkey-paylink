@@ -22,7 +22,11 @@ export async function supportAccountAnswer(input:Input,deps:Dependencies):Promis
  const readAt=deps.now?.()??Date.now()
  if(mine.flatMap(c=>c.messages).filter(m=>m.author==='user'&&readAt-(m.createdAt||0)<60000).length>=10)return
  const answer=(text:string,kind:SupportAccountContext['kind']='payment',row?:PocketActivityRow):SupportAccountAnswer=>({text,handoff:false,accountContext:{kind,readAt,...(row?{transaction:{eventId:row.eventId,chain:row.chain,txHash:row.txHash}}:{})},...(row?{receipt:{eventId:row.eventId}}:{})})
- if(/\b(and|also|plus|but|ignore|instructions?|prompt|system|someone|another|their|his|her|send|refund|reverse|cancel|approve)\b/.test(q)&&!follow)return
+ if(/\b(ignore|instructions?|prompt|system|someone|another|their|his|her|send|refund|reverse|cancel|approve)\b/.test(q))return
+ // Read-only details about the same payment share one owned lookup.
+ const clauses=q.split(/\b(?:(?:and\s+)?also|and|plus|but)\b/).map(part=>part.trim())
+ const paymentDetail=/^(?:(?:what(?: is|'s| was)|which|show|view|open|check)\s+)?(?:(?:the|its|that|this|my)\s+)?(?:status|chain|network|receipt)(?:\s+of\s+(?:it|that|this payment|my last payment))?[?.! ]*$/
+ if(clauses.length>1&&!follow&&(!payment||!clauses.slice(1).every(part=>paymentDetail.test(part))))return answer('I can check the network, recorded status and receipt for one payment. Which payment would you like me to check?','clarify')
  try{
   if(name){const profile=await deps.profile(input.identity.subject);const value=(profile?.resolvedName||[profile?.firstName,profile?.lastName].filter(Boolean).join(' ')).trim();return answer(value?'Your profile name is '+value+'.':'Your profile does not have a full name saved yet. You can add it in Profile.','profile')}
   if(/\b(xstocks?|stocks?|xlayer|x layer)\b/.test(q))return answer('This lookup covers Stablecoins payments. Open XStocks Activity for your stock transactions.','clarify')

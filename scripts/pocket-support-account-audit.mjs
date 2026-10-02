@@ -10,7 +10,7 @@ try{
  const input={identity:{kind:'privy',subject:owner},profileId,question:"What's my name?",requestId:'read-only-account-audit-name',newConversation:true,cases:{}}
  const deps={profile:async()=>profile,payments:readSupportPayments}
  const name=await supportAccountAnswer(input,deps);assert(name?.accountContext.kind==='profile');assert(name.text.startsWith('Your profile name is '))
- const payment=await supportAccountAnswer({...input,question:'What chain was my last payment?',requestId:'read-only-account-audit-payment'},deps)
+ const payment=await supportAccountAnswer({...input,question:'What chain was my last payment and what is its status?',requestId:'read-only-account-audit-payment'},deps)
  assert(payment?.accountContext.transaction&&payment.receipt?.eventId)
  console.log(JSON.stringify({accountMatched:true,nameLookup:true,paymentLookup:true,receiptBound:payment.receipt.eventId===payment.accountContext.transaction.eventId,network:payment.accountContext.transaction.chain,noConversationCreated:true}))
  process.exit(0)
