@@ -35,3 +35,9 @@ const mixed=await supportAccountAnswer({...base,question:'What chain was my last
 assert.equal(mixed.accountContext.kind,'clarify');assert.equal(mixed.handoff,false)
 assert.equal(await supportAccountAnswer({...base,question:'What chain was my last payment and refund it'},deps),undefined)
 console.log('PASS combined payment details, unsupported compound clarification and action boundary')
+
+const wording=await supportAccountAnswer({...base,question:"What chain was my last payment and what was it's status?"},deps);assert.equal(wording.receipt.eventId,'payment-a')
+const giftRow={...row,eventId:'funded-gift',source:'gift',bankSettlementStatus:undefined,paycrestStatus:'completed',giftState:'claimed',ts:row.ts-1000}
+const giftAnswer=await supportAccountAnswer({...base,question:'My last funded gift',caseId:'case',cases:{case:current}},{...deps,payments:async()=>[row,giftRow]})
+assert.equal(giftAnswer.receipt.eventId,'funded-gift');assert.match(giftAnswer.text,/Gift funding status on record: completed/);assert.match(giftAnswer.text,/Gift state: claimed/)
+console.log('PASS natural possessive wording and owned latest gift funding')

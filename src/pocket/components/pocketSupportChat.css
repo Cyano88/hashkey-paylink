@@ -29,3 +29,7 @@ html.dark .pocket-support-input-wrap:focus-within { border-color: #626268; }
 .pocket-support-team-avatar { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: -6px; border: 2px solid #f5f5f5; border-radius: 50%; background: #e7e7e9; overflow: hidden; }
 .pocket-support-team-avatar:first-child { margin-left: 0; }
 html.dark .pocket-support-team-avatar { border-color: #171719; background: #303034; }
+
+.pocket-typing-dot { animation: pocket-typing-wave 1.2s ease-in-out infinite; }
+@keyframes pocket-typing-wave { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pocket-typing-dot { animation: none; opacity: .7; } }
