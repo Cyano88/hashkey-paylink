@@ -1,3 +1,4 @@
+import {matchSupportQuestion} from '../hash-support/semantic-answer.js'
 import { createKnowledge, reviewKnowledge, POCKET_SUPPORT_TENANT, type KnowledgeStore } from '../hash-support/knowledge.js'
 import {readPocketKycLevel} from './kyc-level.js'
 import { submitSupportConversation } from './support-conversation.js'
@@ -204,10 +205,12 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       if (identity.kind !== 'privy') return res.status(401).json({ok:false,error:'Sign in to Pocket to contact Support.'})
       let saved: SupportCase | undefined
       const customer = await privateCustomerIdentity(identity)
+      const snapshot=await store()
+      const match=await matchSupportQuestion({profileId,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,cases:snapshot.cases,entries:snapshot.knowledge||{},tenantId:POCKET_SUPPORT_TENANT,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
       await mutateDurableJson<SupportStore>(STORE_KEY, current => {
         const next = current || {cases:{}}
         advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
-        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{}})
+        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{},match})
         saved.customer ||= customer
         return next
       })

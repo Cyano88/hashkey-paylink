@@ -1,3 +1,4 @@
+import {resolveSupportMatch,type SupportKnowledgeMatch} from '../hash-support/semantic-answer.js'
 import { findApprovedKnowledge, type KnowledgeStore } from '../hash-support/knowledge.js'
 import { supportSystemMessage } from './support-case-lifecycle.js'
 import { pocketSupportAnswer, requestsPocketHuman } from '../../src/pocket/lib/pocketSupportContent.js'
@@ -10,7 +11,7 @@ export type Conversation = {
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
 }
 export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: string}>(
-  cases: Record<string, T>, input: {profileId: string; caseId?: string; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore},
+  cases: Record<string, T>, input: {profileId: string; caseId?: string; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch},
 ) {
   if (!input.message.trim() || input.message.length > 1500 || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw Object.assign(new Error('Enter a message of up to 1,500 characters.'), {status: 400})
   const mine = Object.values(cases).filter(c => c.profileId === input.profileId).sort((a,b) => b.updatedAt-a.updatedAt)
@@ -37,8 +38,10 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     supportSystemMessage(item as any,'handoff','You are in the queue for Pocket Support.',now,uuid)
   } else if (!hasStaff && !item.humanSupport) {
     const remembered = !requestsPocketHuman(input.message) && knowledge ? findApprovedKnowledge(knowledge.entries,knowledge.tenantId,input.message,now) : undefined
-    const answer = remembered ? {text:remembered.answer,handoff:false} : pocketSupportAnswer(input.message)
-    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(remembered?{knowledgeId:remembered.id,knowledgeVersion:remembered.version}:{})})
+    const matched = !requestsPocketHuman(input.message)&&knowledge ? resolveSupportMatch(knowledge.match,knowledge.entries,knowledge.tenantId,now) : undefined
+    const source = remembered || matched
+    const answer = source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message)
+    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(source?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
     if (answer.handoff) item.messages[item.messages.length-1] = {id:uuid(),author:'agent',kind:'handoff',text:'You are in the queue for Pocket Support.',createdAt:now}
   }

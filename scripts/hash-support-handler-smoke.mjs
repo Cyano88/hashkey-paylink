@@ -7,6 +7,7 @@ if(remoteMode){
  process.env.HASH_SUPPORT_URL='https://hash.fixture.test';process.env.HASH_SUPPORT_API_KEY='fixture-server'
  let revision=1
  globalThis.fetch=async(_url,options)=>{
+  if(String(_url).endsWith('/v1/knowledge-match')){globalThis.hashMatchCalls=(globalThis.hashMatchCalls||0)+1;if(globalThis.hashMatchHook)globalThis.hashMatchHook();return Response.json({ok:true,selectedId:'faq_2'})}
   if(options.method==='PUT'){const input=JSON.parse(options.body);assert.equal(input.revision,revision);globalThis.hashFixture=structuredClone(input.value);revision++;return Response.json({ok:true,revision,workspaceId:'fixture-workspace'})}
   return Response.json({ok:true,revision,workspaceId:'fixture-workspace',value:globalThis.hashFixture})
  }
@@ -45,3 +46,21 @@ assert.equal((await call({action:'staff-knowledge-retire',id,version:1})).status
 assert.equal((await call({action:'staff-knowledge-retire',id,version:2})).statusCode,200)
 const after=await call({action:'chat',message:q,requestId:'fixture-request-00000003'},'new-customer');assert.equal(after.body.case.messages.at(-1).knowledgeId,undefined)
 console.log('PASS real support handler: staff auth, server-owned tenant, resolved-case requirement, privacy rejection, approval, live chat wiring, idempotency, customer isolation and withdrawal')
+
+if(remoteMode){
+ process.env.HASH_SUPPORT_AI_ENABLED='true';globalThis.hashMatchCalls=0
+ const first=await call({action:'chat',message:'Where can I download receipts?',requestId:'semantic-customer-request-0001'},'semantic-customer')
+ assert.equal(first.statusCode,200);assert.equal(first.body.case.messages.at(-1).knowledgeId,'pocket-faq-2');assert.equal(globalThis.hashMatchCalls,1)
+ const retried=await call({action:'chat',message:'Where can I download receipts?',requestId:'semantic-customer-request-0001'},'semantic-customer')
+ assert.equal(retried.body.case.messages.length,first.body.case.messages.length);assert.equal(globalThis.hashMatchCalls,1)
+ const issue=await call({action:'chat',message:'Why was I debited twice?',requestId:'semantic-customer-request-0002'},'semantic-customer')
+ assert.equal(issue.body.case.humanSupport,true);assert.equal(globalThis.hashMatchCalls,1)
+ await call({action:'chat',message:'Where can I download receipts?',requestId:'semantic-customer-request-0003'},'semantic-customer')
+ assert.equal(globalThis.hashMatchCalls,1)
+ const seeded=await call({action:'chat',message:'Hello',requestId:'semantic-race-request-0001'},'race-customer')
+ const raceId=seeded.body.case.id
+ globalThis.hashMatchHook=()=>{globalThis.hashFixture.cases[raceId].humanSupport=true;globalThis.hashFixture.cases[raceId].assignedTo='staff'}
+ const raced=await call({action:'chat',message:'Where can I download receipts?',requestId:'semantic-race-request-0002'},'race-customer')
+ assert.equal(raced.body.case.messages.at(-1).author,'user');assert.equal(raced.body.case.humanSupport,true)
+ console.log('PASS real handler AI integration: approved FAQ only, retry deduplication, sensitive-query handoff, existing human queue and concurrent staff priority')
+}
