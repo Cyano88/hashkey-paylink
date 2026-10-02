@@ -79,3 +79,44 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 - Browser export regression passes when the visible Activity list is empty because of a future-date filter: All activity still exports recorded rows; local scope excludes deposits and gifts. PDF default is asserted.
 - Two-page fixture PDF rendered with the production Jakarta and Naira fonts and inspected locally. Verified long recipient wrapping, page break/header/footer alignment, double-stroke Naira, UGX amounts and preservation of 0.00000001 USDC. No real user data was used in the PDF fixture.
 - Changed-code TypeScript diagnostics: zero. Pixel save/return and live deployment verification pending.
+
+### Statement delivery checkpoint
+
+- Mobile Vite built in 2m 41s; Gradle BUILD SUCCESSFUL in 16s. Pixel install -r returned Success with data preserved.
+- On the installed app, Download statement opened with PDF and All activity selected. A one-day PDF export was requested without logging transaction contents.
+- Native save/return is NOT yet verified: the phone switched to another app during the check; Pocket process remained alive. Asked user to leave Pocket open before continuing. No restart claim is made from this interrupted test.
+- Statement changes pushed as 80b3a85e6; Render dep-davbicjtqb8s73f5nfe0 was updating at this checkpoint. A subsequent independent Trade merge retains the statement commit.
+- Final web verification: dep-davbicjtqb8s73f5nfe0 is live at 80b3a85e6 and Pocket web returned HTTP 200. Subsequent Trade-only deployment is separate and retains this work.
+
+### Native statement save acceptance — passed
+
+- Repeated the real Pixel PDF export through Android Documents UI. Validated the Save control against the current foreground picker before tapping it; did not reuse coordinates while another app was foreground.
+- After Save: /activity unchanged; window acceptance marker and performance.timeOrigin unchanged; download sheet closed; no dialogs remained. Pocket PID remained 30358 throughout. This confirms successful completion without WebView reload or process restart.
+- Saved file: Downloads/pocket-statement-2026-10-01-2026-10-01.pdf, 198983 bytes. PDF header verified. No transaction contents were copied or logged.
+- Earlier cancelled/interrupted attempts are not counted as successful. Native PDF save-and-return check is now complete. CSV content/download path was verified in the browser regression; no claim is made of a separate native CSV save test.
+
+### Compact statement and reference column
+
+- PDF now uses a 12-row compact table with Date, Description, Reference, Status and Amount; repeats account identity, period, summary and column headings on each page. Actual local amounts stay beneath USDC amounts.
+- Reference mapping is shared with existing receipts, preserving their identifiers rather than inventing export IDs. CSV includes the same full reference. References wrap in PDF.
+- Confirmed USDC summary uses exact integer arithmetic; excludes failed/pending/refunded records, internal funding, bridges/swaps and other assets. Does not infer opening, closing or running balances.
+- Account header uses the current authenticated profile with an email ownership guard. Missing identity is omitted rather than borrowed from another session.
+- Data tests passed for reference parity and exact totals, existing statement/collection scope and formula safety. Browser export regression passed. Two-page synthetic PDF rendered and both pages visually inspected. Changed-code TypeScript diagnostics zero.
+- Build, deployment and Pixel installation verification follow below.
+
+- Compact statement delivery: Vite completed in 2m 7s, Capacitor sync passed, Gradle BUILD SUCCESSFUL in 14s. Pixel install -r returned Success. App runtime available after update; user was on bank confirmation, so no further navigation or payment interaction was performed. Native save code is unchanged from the previously passed acceptance check.
+- Pushed merge 359318aff preserving independent XStocks backend updates. Render dep-davc38eq1p3s73d49a50 pending live verification at this checkpoint.
+
+- Render dep-davc38eq1p3s73d49a50 confirmed live at 359318aff; Pocket web HTTP 200.
+- User reported bank payment security unavailable during this session, then confirmed retry working. No security change or payment submission was performed. Diagnostic read found no retained error; monitor did not capture the failed request. Cause remains unverified; do not attribute it to deployment.
+
+### Support chat reference refresh
+
+- Inspected the three newest downloaded reference images (4407, 4408, 4409). Adapted their topic selection, support routing, conversation bubbles and queue treatment to Pocket, preserving Jakarta rather than claiming an unverified reference font identity.
+- Scoped chat CSS: regular 14px message text, quieter timestamps, grey agent/staff replies, dark outgoing bubbles, multiline composer and disabled-until-typed upward send action. Real staff names/avatar support retained; no invented teammate presence, announcement or unsupported attachment control.
+- Talk to support opens a local topic choice; only successful backend handoff displays the waiting state. Error keeps topics available; retry preserves request identity. Backend ownership, priority and lifecycle rules unchanged.
+- Native Back now navigates internal Support views and dismisses topic routing first. New messages auto-scroll only near the bottom; typing a new draft while a send completes is preserved.
+- Browser fixture checks passed: handoff success/failure/retry identity, human reply, empty composer, native Back and 390x450 keyboard-sized viewport. Dark topic/routing/queue/staff and light staff screens rendered and inspected. Conversation ownership, rate limits, lifecycle and resolution regressions passed. Changed-code diagnostics zero. No real support messages sent.
+
+- Support UI delivered: Vite built in 3m 13s; Gradle BUILD SUCCESSFUL in 18s; Pixel install -r Success, preserving app data. Render dep-davcmq2vcj2c73841e80 live at 7f3341282. Device was in Telegram before installation; no live support chat was sent or operated. On-device conversation appearance is not separately certified; browser visual and interaction checks passed.
+- User proposed standalone Hash support product using 0G Compute. Discussion only; no new product, tenant data migration, external inference calls or billing integration implemented.

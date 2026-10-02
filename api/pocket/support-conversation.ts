@@ -1,3 +1,5 @@
+import {resolveSupportMatch,type SupportKnowledgeMatch} from '../hash-support/semantic-answer.js'
+import { findApprovedKnowledge, type KnowledgeStore } from '../hash-support/knowledge.js'
 import { supportSystemMessage } from './support-case-lifecycle.js'
 import { pocketSupportAnswer, requestsPocketHuman } from '../../src/pocket/lib/pocketSupportContent.js'
 import type { PocketSupportLifecycleMessage } from './support-case-lifecycle.js'
@@ -8,12 +10,12 @@ export type Conversation = {
   resolutionRequestedAt?: number; resolutionPromptId?: string; supportEscalatedAt?: number;
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
 }
-export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: string}>(
-  cases: Record<string, T>, input: {profileId: string; caseId?: string; message: string; requestId: string}, now: number, uuid: () => string,
+export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: 'normal' | 'high'}>(
+  cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch},
 ) {
   if (!input.message.trim() || input.message.length > 1500 || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw Object.assign(new Error('Enter a message of up to 1,500 characters.'), {status: 400})
   const mine = Object.values(cases).filter(c => c.profileId === input.profileId).sort((a,b) => b.updatedAt-a.updatedAt)
-  let item = input.caseId ? cases[input.caseId] : mine.find(c => c.status !== 'resolved')
+  let item = input.caseId ? cases[input.caseId] : input.newConversation === true ? undefined : mine.find(c => c.status !== 'resolved')
   if (input.caseId && (!item || item.profileId !== input.profileId)) throw Object.assign(new Error('Support case not found.'), {status:404})
   const duplicate = mine.find(c => c.messages.some(m => m.requestId === input.requestId))
   if (duplicate) return duplicate
@@ -35,12 +37,19 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
   if (!hasStaff && item.humanSupport && (legacyHandoff || requestsPocketHuman(input.message))) {
     supportSystemMessage(item as any,'handoff','You are in the queue for Pocket Support.',now,uuid)
   } else if (!hasStaff && !item.humanSupport) {
-    const answer = pocketSupportAnswer(input.message)
-    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now})
+    const remembered = !requestsPocketHuman(input.message) && knowledge ? findApprovedKnowledge(knowledge.entries,knowledge.tenantId,input.message,now) : undefined
+    const matched = !requestsPocketHuman(input.message)&&knowledge ? resolveSupportMatch(knowledge.match,knowledge.entries,knowledge.tenantId,now) : undefined
+    const source = remembered || matched
+    const answer = source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message)
+    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(source?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
-    if (answer.handoff) item.messages[item.messages.length-1] = {id:uuid(),author:'agent',kind:'handoff',text:'You are in the queue for Pocket Support.',createdAt:now}
+    if (answer.handoff) {
+      if (requestsPocketHuman(input.message)) item.messages.pop()
+      supportSystemMessage(item,'handoff','You are in the queue for Pocket Support.',now,uuid)
+    }
   }
-  item.status = item.assignedTo ? 'assigned' : 'open'
-  item.waitingSince = undefined; item.reminderSentAt = undefined; item.resolvedAt = undefined; item.updatedAt = now
+  const awaitingCustomer = !item.humanSupport && !hasStaff && item.messages.at(-1)?.author === 'agent'
+  item.status = awaitingCustomer ? 'waiting_user' : item.assignedTo ? 'assigned' : 'open'
+  item.waitingSince = awaitingCustomer ? now : undefined; item.reminderSentAt = undefined; item.resolvedAt = undefined; item.updatedAt = now
   return item
 }

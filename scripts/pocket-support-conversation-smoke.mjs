@@ -12,9 +12,11 @@ assert.equal(send({requestId:retryId}).messages.length,2)
 assert.throws(()=>send({profileId:'b',caseId:first.id}),e=>e.status===404)
 const handoff=send({message:'My payment has not arrived'})
 assert.equal(handoff.humanSupport,true)
-assert.equal(handoff.messages.length,4)
+assert.equal(handoff.messages.length,5)
 send({message:'hello'})
-assert.equal(handoff.messages.length,5,'No bot reply after handoff')
+assert.equal(handoff.messages.length,6,'No bot reply after handoff')
+assert.ok(handoff.messages[3].text.includes("can't answer that reliably"))
+assert.equal(handoff.messages[4].kind,'handoff')
 handoff.status='resolved'
 assert.throws(()=>send({caseId:handoff.id}),e=>e.status===409)
 const next=send()
@@ -52,3 +54,39 @@ const representative=submitSupportConversation(fresh,{profileId:'new',message:'I
 assert.equal(representative.humanSupport,true)
 assert.match(representative.messages.at(-1).text,/queue for Pocket Support/)
 console.log('Legacy report handoff and explicit customer representative requests passed.')
+
+const separateStore={legacy:structuredClone(legacy)}
+const oldSnapshot=JSON.stringify(separateStore.legacy)
+const freshRequest=uuid()
+const freshInput={profileId:'legacy',message:'Hi',requestId:freshRequest,newConversation:true}
+const separate=submitSupportConversation(separateStore,freshInput,200000,uuid)
+assert.notEqual(separate.id,legacy.id)
+assert.equal(separate.humanSupport,false)
+assert.equal(JSON.stringify(separateStore.legacy),oldSnapshot,'Existing human case stays intact')
+assert.equal(submitSupportConversation(separateStore,freshInput,200001,uuid).id,separate.id)
+assert.equal(Object.keys(separateStore).length,2,'New conversation retries do not duplicate cases')
+const oldCount=separateStore.legacy.messages.length
+submitSupportConversation(separateStore,{...freshInput,caseId:legacy.id,requestId:uuid()},200002,uuid)
+assert.equal(separateStore.legacy.messages.length,oldCount+1,'Explicit case still takes precedence')
+assert.throws(()=>submitSupportConversation(separateStore,{...freshInput,profileId:'other',caseId:legacy.id,requestId:uuid()},200003,uuid),e=>e.status===404)
+console.log('Fresh conversations preserve human cases, retry identity and ownership.')
+
+assert.equal(separate.status,'waiting_user','A completed AI answer starts the customer-reply countdown')
+assert.equal(separate.waitingSince,200000)
+const resumed=submitSupportConversation(separateStore,{profileId:'legacy',caseId:separate.id,message:'Hello',requestId:uuid()},250000,uuid)
+assert.equal(resumed.status,'waiting_user')
+assert.equal(resumed.waitingSince,250000,'A new customer exchange resets the countdown')
+submitSupportConversation(separateStore,{profileId:'legacy',caseId:separate.id,message:'I need a human',requestId:uuid()},260000,uuid)
+assert.equal(separate.status,'open')
+assert.equal(separate.waitingSince,undefined,'Human handoff stops automatic closure')
+
+const profileCases={}
+const profileAnswer=submitSupportConversation(profileCases,{profileId:'profile-fixture',message:'What are my full names?',requestId:uuid()},100000,uuid)
+assert.equal(profileAnswer.humanSupport,false)
+assert.equal(profileAnswer.status,'waiting_user')
+assert.equal(profileAnswer.messages.at(-1).text,'You can view your full name in Profile.')
+submitSupportConversation(profileCases,{profileId:'profile-fixture',caseId:profileAnswer.id,message:'Hello',requestId:uuid()},100001,uuid)
+assert.equal(profileAnswer.messages.at(-1).author,'agent')
+console.log('Profile guidance avoids unnecessary handoff and preserves conversation.')
+
+for(const question of ["What's my fulll name's", "What's my full name?", "What are my full names?"]){const records={};const answer=submitSupportConversation(records,{profileId:'typo-fixture',message:question,requestId:uuid()},100000,uuid);assert.equal(answer.humanSupport,false);assert.equal(answer.messages.at(-1).text,'You can view your full name in Profile.')}

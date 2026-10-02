@@ -1,3 +1,5 @@
+import { createActivityLogReader, createFinalizedActivityReader } from './activity-rpc-budget.js'
+import type { ParsedTransactionWithMeta } from '@solana/web3.js'
 import { persistObservedWalletActivity } from './activity-feed.js'
 import { readLegacyPaymentWallets } from './wallet-migration-history.js'
 import { Connection, PublicKey } from '@solana/web3.js'
@@ -7,6 +9,9 @@ import { createWalletActivityReader } from './wallet-activity-cache.js'
 import { getAssociatedTokenAddress } from '../solana-token.js'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
+
+const readActivityLogs = createActivityLogReader()
+const readFinalizedTransactions = createFinalizedActivityReader<ParsedTransactionWithMeta>()
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const SOLANA_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
@@ -77,24 +82,27 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   const config = EVM[network]
   const latest = BigInt(await rpc<string>('eth_blockNumber', []))
   const lookback = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS, 120)))
-  // The public Arc endpoint accepts the full bounded lookback. Keep small
-  // chunks for private providers unless their range limit is configured.
+  // Read the same bounded history in larger ranges when the provider permits.
+  // Explicit small-range overrides remain supported. Restricted providers learn
+  // a ten-block fallback without changing coverage or the polling cadence.
+  const blockRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, 120)))
+  const maxChunks = Math.min(12, positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12))
   const arcEndpoint = process.env.PRIVATE_RPC_URL_ARC_MAINNET?.trim()
   const publicArc = network === 'arc' && (!arcEndpoint || /^https:\/\/rpc\.mainnet\.arc\.io\/?$/.test(arcEndpoint))
-  const blockRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, publicArc ? 120 : 10)))
-  const maxChunks = Math.min(12, positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12))
-  const ranges = evmLogBlockRanges(latest, lookback, blockRange, maxChunks)
+  // Preserve the previous maximum coverage even on an explicitly larger lookback.
+  const previousRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, publicArc ? 120 : 10)))
+  const coverage = lookback < previousRange * BigInt(maxChunks) ? lookback : previousRange * BigInt(maxChunks)
+  const ranges = evmLogBlockRanges(latest, coverage, blockRange, maxChunks)
   const topic = addressTopic(wallet)
-  const logs: RpcLog[] = []
-  for (const range of ranges) {
-    // Indexed from/to filters exclude unrelated transfers at the provider.
-    // A self-transfer appears in both sets and is deduplicated below.
+  let logCount=0
+  const logs = await readActivityLogs<RpcLog>(network, ranges, async range => {
     const matches = await Promise.all([[TRANSFER_TOPIC, topic], [TRANSFER_TOPIC, null, topic]].map(topics =>
       rpc<RpcLog[]>('eth_getLogs', [{ address: config.token, ...range, topics }]),
     ))
-    logs.push(...matches.flat())
-    if (logs.length > 2_000) throw new Error('Activity result limit reached.')
-  }
+    logCount+=matches.flat().length
+    if(logCount>2_000)throw new Error('Activity result limit reached.')
+    return matches.flat()
+  })
   const byId = new Map<string, RpcLog>()
   for (const log of logs) {
     if (!evmTransferTouchesTopic(log.topics, topic)) continue
@@ -205,7 +213,7 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
   const signatures = await connection.getSignaturesForAddress(ata, { limit: 20 }, 'confirmed')
   if (!signatures.length) return []
   signal.throwIfAborted()
-  const transactions = await connection.getParsedTransactions(signatures.map(row => row.signature), { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
+  const transactions = await readFinalizedTransactions(rpcUrl, signatures, missing => connection.getParsedTransactions(missing, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }))
   signal.throwIfAborted()
   return transactions.flatMap((transaction, index) => {
     if (!transaction || transaction.meta?.err) return []

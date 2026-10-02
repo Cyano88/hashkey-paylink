@@ -2,6 +2,7 @@ import { ArrowUp, Plus, Square } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 type DynamicSendButtonProps = {
+  idleLabel?: string
   inputText: string
   isLoading: boolean
   canStop?: boolean
@@ -13,6 +14,7 @@ type DynamicSendButtonProps = {
 }
 
 export default function DynamicSendButton({
+  idleLabel = 'Add attachment',
   inputText,
   isLoading,
   canStop = true,
@@ -44,7 +46,7 @@ export default function DynamicSendButton({
       onPointerDown={event => event.preventDefault()}
       onClick={handleClick}
       disabled={disabled || (isLoading && !canStop)}
-      aria-label={isLoading ? (canStop ? 'Stop response' : 'Sending message') : hasInput ? 'Send message' : 'Add attachment'}
+      aria-label={isLoading ? (canStop ? 'Stop response' : 'Sending message') : hasInput ? 'Send message' : idleLabel}
       className={cn(
         'group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border transition-all duration-200 ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 active:scale-[0.94] dark:focus-visible:ring-neutral-500 dark:focus-visible:ring-offset-[#111114]',

@@ -4,7 +4,7 @@ export const SUPPORT_RESOLUTION_AFTER_MS = 24 * 60 * 60 * 1000
 export type PocketSupportLifecycleMessage = {
   id: string; author: 'user' | 'agent' | 'staff';
   kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report' | 'handoff' | 'staff_joined' | 'resolution_prompt' | 'case_reopened';
-  avatarDataUrl?: string; displayName?: string; requestId?: string; text: string; createdAt: number
+  knowledgeId?: string; knowledgeVersion?: number; avatarDataUrl?: string; displayName?: string; requestId?: string; text: string; createdAt: number
 }
 export type PocketSupportLifecycleCase = {
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'; priority: 'normal' | 'high';
@@ -37,6 +37,11 @@ export function advancePocketSupportLifecycle<T extends PocketSupportLifecycleCa
   let changed=false
   for(const item of Object.values(cases)) {
     if(item.status==='resolved')continue
+    // Repair older answered AI chats without reclassifying human queues or payment reports.
+    const last=item.messages.at(-1)
+    if(item.status==='open' && item.humanSupport===false && !item.assignedTo && !protectSupportCase(item) && !item.messages.some(message=>message.author==='staff') && last?.author==='agent' && !last.kind) {
+      item.status='waiting_user';item.waitingSince=last.createdAt;changed=true
+    }
     if(item.status!=='waiting_user') {
       if((item.humanSupport !== false || item.assignedTo || protectSupportCase(item)) && now-item.updatedAt>=SUPPORT_REMINDER_AFTER_MS && !item.supportEscalatedAt) {item.supportEscalatedAt=now;changed=true}
       continue
