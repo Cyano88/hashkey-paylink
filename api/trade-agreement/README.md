@@ -64,3 +64,52 @@ https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/proxies/
 https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/ModuleManager.sol
 The release manifest must pin the version actually deployed; these references
 do not establish an existing Arc Safe deployment or select its owners.
+
+## Execution recovery increment - 2026-10-03
+
+`arc-execution.ts` verifies the exact reserved call against a canonical Arc
+transaction and receipt, with five subsequent blocks before confirmation.
+It accepts a direct participant call, the exact single-call Circle wrapper, or
+one matching v0.6 EntryPoint operation. Bundles with extra operations and wrappers
+with extra calls fail closed. A successful bundle also requires the matching
+EntryPoint `UserOperationEvent`, including its operation hash, sender, nonce,
+paymaster and success flag. A failed inner operation is recorded as reverted.
+Receipts at or before the reservation's chain-head bound are rejected.
+
+Smart-wallet execution requires reviewed proxy and implementation bytecode plus
+the ERC-1967 implementation slot; EntryPoint execution additionally pins its
+runtime. These are candidate checks, not evidence that the live Circle wallet
+uses this layout or propagates inner call failures. Verify its source, delegation,
+modules, upgrade behavior and actual transaction envelope before selecting the
+production policy. `ARC_TRADE_EXECUTION_POLICY` remains null. No signing or
+broadcasting is performed by this module.
+
+`arc-execution-store.ts` provides durable reservation, challenge association,
+submission association and chain reconciliation using the existing transactional
+store. Concurrent retries retain one provider idempotency key and the original
+prepared call. Unknown outcomes block new actions. Terminal requests remain in
+history so replay cannot become a new payment. Session tokens are not stored.
+The history is bounded without evicting old idempotency records.
+
+This store is an internal helper, not an authentication boundary. The pending
+hosted adapter must authenticate the participant, verify their linked Circle
+wallet, obtain a fresh planner result and chain head, reserve before requesting
+a challenge, and read provider IDs/hashes directly from Circle. A reservation
+must never be built from browser-supplied calls. Provider cancellation, expiry
+and unknown-outcome recovery still need integration; this increment deliberately
+does not release a pending slot based on a timeout or client claim. Execution
+confirmation does not replace the planner's confirmed agreement-state reads.
+
+Validation: new execution and journal smoke tests, focused TypeScript checks,
+shared Trade and Arc planner regressions, and existing XLayer planner/hosted
+regressions. The journal tests use a serialized in-memory adapter; they do not
+constitute a real PostgreSQL concurrency test or Circle end-to-end test.
+
+Primary references checked for event semantics, operation hashing and proxy slots:
+- https://github.com/eth-infinitism/account-abstraction/blob/v0.6.0/contracts/interfaces/IEntryPoint.sol
+- https://github.com/eth-infinitism/account-abstraction/blob/v0.6.0/contracts/interfaces/UserOperation.sol
+- https://eips.ethereum.org/EIPS/eip-1967
+
+Next: authenticated hosted endpoints and Circle challenge recovery, then Stream's
+two-rail payment selector. The separate XLayer dispute test and verified Arc Trade
+deployment are still required before enabling production.
