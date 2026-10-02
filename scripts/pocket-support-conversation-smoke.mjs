@@ -92,3 +92,8 @@ assert.equal(profileAnswer.messages.at(-1).author,'agent')
 console.log('Profile guidance avoids unnecessary handoff and preserves conversation.')
 
 for(const question of ["What's my fulll name's", "What's my full name?", "What are my full names?"]){const records={};const answer=submitSupportConversation(records,{profileId:'typo-fixture',message:question,requestId:uuid()},100000,uuid);assert.equal(answer.humanSupport,false);assert.equal(answer.messages.at(-1).text,'You can view your full name in Profile.')}
+const contextCases={};const contextInput={profileId:'context-fixture',newConversation:true,message:'Last payment',requestId:uuid()};
+const selected=submitSupportConversation(contextCases,contextInput,100000,uuid,{tenantId:'pocket',entries:{},accountAnswer:{text:'Saved payment.',handoff:false,accountContext:{kind:'payment',readAt:100000,transaction:{eventId:'owned',chain:'base',txHash:'owned-hash'}},receipt:{eventId:'owned'}}});
+submitSupportConversation(contextCases,{...contextInput,caseId:selected.id,newConversation:false,optionId:'gifts',message:'Gifts & requests',requestId:uuid()},100001,uuid);
+assert.equal(selected.messages.at(-1).accountContext.kind,'clarify');assert.equal(selected.messages.at(-1).accountContext.transaction,undefined);
+console.log('PASS topic changes clear selected-payment context')

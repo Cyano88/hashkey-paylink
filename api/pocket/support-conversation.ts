@@ -44,7 +44,7 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     const source = remembered || matched
     const accountAnswer = !requestsPocketHuman(input.message) ? knowledge?.accountAnswer : undefined
     const answer: {text:string;handoff:boolean;options?:import('../../src/pocket/lib/pocketSupportActions.js').SupportOption[]} = (input.optionId&&supportMenu(input.optionId)) || accountAnswer || (source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message))
-    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,options:answer.options || (accountAnswer?.accountContext.kind==='clarify'?recoveryOptions(input.message):undefined),...(accountAnswer?{accountContext:accountAnswer.accountContext,receipt:accountAnswer.receipt}:{}),...(source&&!accountAnswer?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
+    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,options:answer.options || (accountAnswer?.accountContext.kind==='clarify'?recoveryOptions(input.message):undefined),...(accountAnswer?{accountContext:accountAnswer.accountContext,receipt:accountAnswer.receipt}:{accountContext:{kind:'clarify',readAt:now}}),...(source&&!accountAnswer?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
     if (answer.handoff) {
       if (requestsPocketHuman(input.message)) item.messages.pop()
