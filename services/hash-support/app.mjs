@@ -24,12 +24,12 @@ export function createApp({store,adminSecret,sessionSecret,inferenceCheck,knowle
     if(req.method==='DELETE'&&match&&uuid.test(match[1])){await store.revokeKey(match[1]);return send(200,{ok:true})}
     fail('Not found.',404)
    }
-   if(req.method==='POST'&&path==='/v1/knowledge-match'){
+   if(req.method==='POST'&&(path==='/v1/knowledge-match'||path==='/v1/support-intent')){
     const scope=await store.authenticate(token);if(!scope)fail('Business server authentication required.',401)
     limit('workspace:'+scope.workspaceId,120)
     if(!knowledgeMatcher)return send(200,{ok:true,selectedId:null})
     const input=await body(req)
-    return send(200,{ok:true,...await knowledgeMatcher(scope,input)})
+    return send(200,{ok:true,...await knowledgeMatcher(scope,{...input,mode:path==='/v1/support-intent'?'intent':'knowledge'})})
    }
    if(path==='/v1/integration-state'){
     const scope=await store.authenticate(token);if(!scope)fail('Business server authentication required.',401)

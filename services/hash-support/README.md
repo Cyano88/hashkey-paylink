@@ -1,6 +1,6 @@
 ﻿# Hash Support service - private pilot foundation
 
-Independent Node service and PostgreSQL database. This is the workspace, authentication and conversation-storage foundation, not the complete support SaaS. Pocket still uses its existing live support flow. No AI inference, automatic learning, model training or 0G storage uploads occur here.
+Independent Node service and PostgreSQL database. This is the workspace, authentication and conversation-storage foundation, not the complete support SaaS. Pocket uses this service for private support state and bounded 0G inference. No automatic learning, model training or transcript uploads to 0G Storage occur here.
 
 ## Run
 
@@ -38,7 +38,7 @@ This preserves Pocket's existing inbox, customer authorization, human handoff, r
 
 `HASH_0G_API_KEY` is server-only. The operator-authenticated POST `/internal/inference-check` submits one fixed synthetic prompt to `0gm-1.0-35b-a3b` with Private routing. It accepts no user prompt, performs no retries or Standard fallback, and never returns upstream error bodies. PostgreSQL reserves at most 20 checks / 10,240 conservative token units per UTC day; reservations survive restart and remain consumed after ambiguous failures. The fixed prompt and 64 output-token ceiling keep each check bounded. The key's provider-side credit limit is separate and must remain configured in 0G.
 
-This verifies the deployed inference connection. It does not enable customer-facing generated replies, model training or transcript uploads. Health still reports customer inference disabled. Before opening customer inference, add per-business/customer metering and evaluated evidence-grounded answers/handoff; do not reuse this operator-only check as a chat endpoint.
+This verifies the deployed inference connection. It does not enable customer-facing generated replies, model training or transcript uploads. Health reports whether the configured customer matcher is available. Before opening customer inference, add per-business/customer metering and evaluated evidence-grounded answers/handoff; do not reuse this operator-only check as a chat endpoint.
 
 ## Controlled customer FAQ matching
 
@@ -49,3 +49,9 @@ Private routing and the model remain pinned. Particular payment/account problems
 Pilot limits: 5 matching reservations per customer per UTC day, 20 per workspace, 20 globally; database-backed and counted before calls. Repeated request IDs with identical input reuse a completed result; pending/failed or changed-input repeats do not call the model again. Request input is capped at 6,000 UTF-8 bytes for model messages; output 32 tokens; timeout 8 seconds; no retry or downgrade. These limits bound volume; the separate 0G key credit limit provides the monetary cap. Diagnostic calls have their separate existing quota.
 
 Activation requires HASH_0G_ENABLED=true on Hash and HASH_SUPPORT_AI_ENABLED=true on Pocket. Disable the Pocket flag to stop new AI selection without affecting saved history or human support. This is approved-answer selection, not free-form diagnosis, autonomous payment execution, automatic learning or model training.
+
+## Guided read-only intent routing
+
+POST /v1/support-intent is business-server authenticated. It accepts a filtered question, an opaque customer ID, a request ID and a hasPayment boolean. The server fixes the candidate catalog: latest outgoing payment, latest funded gift, selected payment, profile name or recent outgoing list. Unknown tokens, identifiers, self-identification and sensitive actions fail closed before inference. Candidate IDs supplied by clients are ignored. The provider receives only filtered wording, public intent descriptions and the context boolean. This is conservative eligibility, not general-purpose anonymisation.
+
+Pocket reauthorizes read-only tools against the signed-in customer, validates selected payment IDs against the current offered list, and keeps financial facts out of model prompts. Invalid/ambiguous responses, quota exhaustion or provider failure lead to clarification options, never automatic human handoff. Existing staff-owned chats remain human. The existing quota and key cap remain in force; this release does not increase spending limits or claim production-scale capacity.
