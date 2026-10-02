@@ -406,9 +406,7 @@ const sourceGroups: Record<string, Partial<PocketActivityHandlerDependencies>> =
   payouts: { readClosedBankPayouts: activityDependencies.readClosedBankPayouts },
   bills: { readBills: activityDependencies.readBills, readBillsRefundPolicy: activityDependencies.readBillsRefundPolicy },
 }
-export default createDurablePocketActivityHandler({
-  verifyUser: verifiedPrivyUser,
-  transformSnapshot: async (owner, snapshot) => {
+export async function transformPocketActivitySnapshot(owner:string, snapshot:import('../../src/pocket/lib/pocketSchemas.js').PocketActivityReadData) {
     // Read persisted bank context before publishing wallet logs. This does not
     // poll Paycrest or wait for bank settlement; the workers own that work.
     const [hashes, history, bankRoutes, assetActions] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false }), listCirclePocketActions(owner, 500, 'bank-withdraw.route'), listCirclePocketActions(owner, 500)])
@@ -426,7 +424,11 @@ export default createDurablePocketActivityHandler({
       if (funding.destinationTxHash) hashes.add(funding.destinationTxHash.toLowerCase())
     }
     return { ...snapshot, groupedTransactionHashes: [...hashes], payments: payments.filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
-  },
+  }
+
+export default createDurablePocketActivityHandler({
+  verifyUser: verifiedPrivyUser,
+  transformSnapshot: transformPocketActivitySnapshot,
   sources: Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])),

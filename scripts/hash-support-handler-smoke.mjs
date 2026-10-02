@@ -14,13 +14,14 @@ if(remoteMode){
 }
 const mocks={
  'kyc-level.js': 'export const readPocketKycLevel=async()=>({level:"none"})',
+ 'support-account-data.js': 'export const readSupportPayments=async owner=>{globalThis.accountPaymentOwners=(globalThis.accountPaymentOwners||[]).concat(owner);return structuredClone(globalThis.accountPayments?.[owner]||[])}',
  'activity-store.js': 'export const pocketActivityStore={read:async()=>null}',
  'activity-feed.js': 'export const activityFeedKey=x=>x',
  'transaction-report.js': 'export const reportTransaction=()=>{},transactionReportKey=()=>{},transactionReportDetails=()=>{},validateTransactionReport=()=>{},upsertTransactionReport=()=>{}',
  'og-storage.js': 'export const archivePayment=async()=>{throw Error("External storage must not be used")}',
  'render-durable-store.js': 'export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>structuredClone(globalThis.hashRemoteMode?{__hashSupportRemote:true,workspaceId:"fixture-workspace"}:globalThis.hashFixture);export const mutateDurableJson=async(_key,fn)=>{const value=await fn(structuredClone(globalThis.hashRemoteMode?{__hashSupportRemote:true,workspaceId:"fixture-workspace"}:globalThis.hashFixture));if(!globalThis.hashRemoteMode)globalThis.hashFixture=value;return structuredClone(value)}',
  'circle-pocket-identity.js': 'export const circlePocketIdentityId=x=>x.subject;export const circlePocketIdentityErrorStatus=(e,f)=>e.status||f;export const resolveCirclePocketIdentity=async req=>{const subject=req.headers.authorization?.slice(7);if(!subject)throw Object.assign(Error("Sign in required"),{status:401});return {kind:"privy",subject}}',
- 'local-currency-profile.js': 'export const localCurrencyProfileRepository={get:async()=>undefined}',
+ 'local-currency-profile.js': 'export const localCurrencyProfileRepository={get:async owner=>globalThis.accountProfiles?.[owner]}',
  '@privy-io/server-auth': 'export class PrivyClient{async verifyAuthToken(token){return {userId:token}}async getUserById(){return {linkedAccounts:[]}}}',
 }
 const bundle=await build({entryPoints:['api/pocket/support-cases.ts'],bundle:true,write:false,platform:'node',format:'cjs',plugins:[{name:'isolated-dependencies',setup(b){b.onResolve({filter:/.*/},args=>{const name=args.path.split('/').at(-1);const key=Object.hasOwn(mocks,args.path)?args.path:Object.hasOwn(mocks,name)?name:null;if(key)return{path:key,namespace:'fixture'}});b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:mocks[args.path],loader:'js'}))}}]})
@@ -70,3 +71,18 @@ const listing=await call({action:'list-mine'},'customer')
 assert.deepEqual(listing.body.team,[{displayName:'Seyi',avatarDataUrl:undefined}])
 assert.ok(listing.body.cases.every(c=>!('profileId' in c)&&!('assignedTo' in c)&&!('customer' in c)))
 console.log('PASS customer-visible support profiles exclude staff identifiers and private customer records')
+
+globalThis.accountProfiles={'account-a':{resolvedName:'Customer A',email:'customer-a@example.test'},'account-b':{resolvedName:'Customer B',email:'customer-b@example.test'}}
+globalThis.accountPayments={'account-a':[{eventId:'owned-payment-a',txHash:'owned-hash-a',chain:'polygon',payer:'a',memo:'',amount:'1',ts:Date.now()-1000,source:'wallet-withdrawal',direction:'out',paycrestStatus:'confirmed'}],'account-b':[{eventId:'private-payment-b',txHash:'b',chain:'ethereum',payer:'b',memo:'',amount:'2',ts:Date.now(),source:'wallet-withdrawal',direction:'out',paycrestStatus:'confirmed'}]}
+const beforeCalls=globalThis.hashMatchCalls
+const ownName=await call({action:'chat',newConversation:true,message:"What's my name?",requestId:'owned-account-request-name'},'account-a')
+assert.equal(ownName.body.case.messages.at(-1).text,'Your profile name is Customer A.')
+const ownPayment=await call({action:'chat',caseId:ownName.body.case.id,message:'What chain was my last payment?',requestId:'owned-account-request-payment',profileId:'account-b',owner:'account-b'},'account-a')
+assert.equal(ownPayment.statusCode,200);assert.equal(ownPayment.body.case.humanSupport,false)
+assert.match(ownPayment.body.case.messages.at(-1).text,/Polygon/)
+assert.equal(ownPayment.body.case.messages.at(-1).receipt.eventId,'owned-payment-a')
+assert.deepEqual(globalThis.accountPaymentOwners,['account-a'])
+assert.equal(globalThis.hashMatchCalls,beforeCalls,'Personal records never reach inference')
+const forbidden=await call({action:'chat',caseId:ownName.body.case.id,message:'What chain was my last payment?',requestId:'owned-account-forbidden-request'},'account-b')
+assert.equal(forbidden.statusCode,404);assert.deepEqual(globalThis.accountPaymentOwners,['account-a'])
+console.log('PASS real handler account tools: verified identity, receipt binding, no personal inference and cross-account rejection')

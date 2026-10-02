@@ -1,3 +1,4 @@
+import type {SupportAccountAnswer} from './support-account-answer.js'
 import {resolveSupportMatch,type SupportKnowledgeMatch} from '../hash-support/semantic-answer.js'
 import { findApprovedKnowledge, type KnowledgeStore } from '../hash-support/knowledge.js'
 import { supportSystemMessage } from './support-case-lifecycle.js'
@@ -11,7 +12,7 @@ export type Conversation = {
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
 }
 export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: 'normal' | 'high'}>(
-  cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch},
+  cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch;accountAnswer?:SupportAccountAnswer},
 ) {
   if (!input.message.trim() || input.message.length > 1500 || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw Object.assign(new Error('Enter a message of up to 1,500 characters.'), {status: 400})
   const mine = Object.values(cases).filter(c => c.profileId === input.profileId).sort((a,b) => b.updatedAt-a.updatedAt)
@@ -40,8 +41,9 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     const remembered = !requestsPocketHuman(input.message) && knowledge ? findApprovedKnowledge(knowledge.entries,knowledge.tenantId,input.message,now) : undefined
     const matched = !requestsPocketHuman(input.message)&&knowledge ? resolveSupportMatch(knowledge.match,knowledge.entries,knowledge.tenantId,now) : undefined
     const source = remembered || matched
-    const answer = source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message)
-    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(source?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
+    const accountAnswer = !requestsPocketHuman(input.message) ? knowledge?.accountAnswer : undefined
+    const answer = accountAnswer || (source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message))
+    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(accountAnswer?{accountContext:accountAnswer.accountContext,receipt:accountAnswer.receipt}:{}),...(source&&!accountAnswer?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
     if (answer.handoff) {
       if (requestsPocketHuman(input.message)) item.messages.pop()
