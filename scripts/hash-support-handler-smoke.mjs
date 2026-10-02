@@ -26,8 +26,8 @@ const mocks={
  'transaction-report.js': 'export const reportTransaction=()=>{},transactionReportKey=()=>{},transactionReportDetails=()=>{},validateTransactionReport=()=>{},upsertTransactionReport=()=>{}',
  'og-storage.js': 'export const archivePayment=async()=>{throw Error("External storage must not be used")}',
  'render-durable-store.js': 'export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>structuredClone(globalThis.hashRemoteMode?{__hashSupportRemote:true,workspaceId:"fixture-workspace"}:globalThis.hashFixture);export const mutateDurableJson=async(_key,fn)=>{const value=await fn(structuredClone(globalThis.hashRemoteMode?{__hashSupportRemote:true,workspaceId:"fixture-workspace"}:globalThis.hashFixture));if(!globalThis.hashRemoteMode)globalThis.hashFixture=value;return structuredClone(value)}',
- 'circle-pocket-identity.js': 'export const circlePocketIdentityId=x=>x.subject;export const circlePocketIdentityErrorStatus=(e,f)=>e.status||f;export const resolveCirclePocketIdentity=async req=>{const subject=req.headers.authorization?.slice(7);if(!subject)throw Object.assign(Error("Sign in required"),{status:401});return {kind:"privy",subject}}',
- 'local-currency-profile.js': 'export const localCurrencyProfileRepository={get:async owner=>globalThis.accountProfiles?.[owner]}',
+ 'circle-pocket-identity.js': 'export const circlePocketIdentityId=x=>globalThis.distinctSupportIdentity?"internal:"+x.subject:x.subject;export const circlePocketIdentityErrorStatus=(e,f)=>e.status||f;export const resolveCirclePocketIdentity=async req=>{const subject=req.headers.authorization?.slice(7);if(!subject)throw Object.assign(Error("Sign in required"),{status:401});return {kind:"privy",subject}}',
+ 'local-currency-profile.js': 'export const localCurrencyProfileRepository={get:async owner=>globalThis.accountProfiles?.[owner],getByPocketId:async id=>globalThis.legacyPushProfiles?.[id]}',
  '@privy-io/server-auth': 'export class PrivyClient{async verifyAuthToken(token){return {userId:token}}async getUserById(){return {linkedAccounts:[]}}}',
 }
 const bundle=await build({entryPoints:['api/pocket/support-cases.ts'],bundle:true,write:false,platform:'node',format:'cjs',plugins:[{name:'isolated-dependencies',setup(b){b.onResolve({filter:/.*/},args=>{const name=args.path.split('/').at(-1);const key=Object.hasOwn(mocks,args.path)?args.path:Object.hasOwn(mocks,name)?name:null;if(key)return{path:key,namespace:'fixture'}});b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:mocks[args.path],loader:'js'}))}}]})
@@ -143,7 +143,23 @@ const preserved=await call({action:'staff-reply',caseId:outageCase.body.case.id,
 globalThis.failSupportPush=false
 assert.equal(preserved.statusCode,200);assert.equal(preserved.body.case.messages.at(-1).text,'Saved even if push is down.')
 const oldTime=Date.now()-7*86400000
-globalThis.hashFixture.cases['auto-fixture']={id:'auto-fixture',profileId:customer,category:'other',priority:'normal',humanSupport:true,status:'waiting_user',waitingSince:oldTime,updatedAt:oldTime,createdAt:oldTime,messages:[{id:'old-staff',author:'staff',text:'Can you confirm?',createdAt:oldTime}]}
+globalThis.hashFixture.cases['auto-fixture']={id:'auto-fixture',profileId:customer,notificationOwnerId:customer,category:'other',priority:'normal',humanSupport:true,status:'waiting_user',waitingSince:oldTime,updatedAt:oldTime,createdAt:oldTime,messages:[{id:'old-staff',author:'staff',text:'Can you confirm?',createdAt:oldTime}]}
 await call({action:'list-mine'},customer)
 assert.equal(globalThis.hashFixture.cases['auto-fixture'].status,'resolved');assert.ok(globalThis.supportPushes.some(p=>p.owner===customer&&p.notice.body==='Your support case is now closed.'))
 console.log('PASS push outage preserves staff reply and ordinary automatic closure emits a support notification')
+
+// Realistic distinction: internal support ID is not the push registration owner.
+globalThis.distinctSupportIdentity=true
+const distinct=await call({action:'chat',message:'Talk to an agent',requestId:'different-identity-0001',newConversation:true},'push-owner')
+assert.equal(distinct.statusCode,200);assert.equal(distinct.body.case.notificationOwnerId,undefined)
+const caseId=distinct.body.case.id
+assert.equal(globalThis.hashFixture.cases[caseId].profileId,'internal:push-owner')
+await call({action:'staff-reply',caseId,message:'Routing test'})
+assert.equal(globalThis.supportPushes.at(-1).owner,'push-owner')
+await call({action:'mark-read',caseId},'push-owner');assert.equal(globalThis.supportNoticeReads.owner,'push-owner')
+const stored=globalThis.hashFixture.cases[caseId];delete stored.notificationOwnerId;stored.customer={pocketId:'legacy'}
+globalThis.legacyPushProfiles={legacy:{privyUserId:'push-owner'}}
+await call({action:'staff-reply',caseId,message:'Legacy routing'});assert.equal(globalThis.supportPushes.at(-1).owner,'push-owner')
+const count=globalThis.supportPushes.length;globalThis.legacyPushProfiles.legacy.privyUserId='other-owner'
+await call({action:'staff-reply',caseId,message:'Do not misroute'});assert.equal(globalThis.supportPushes.length,count)
+console.log('PASS distinct internal/push IDs, bell read ownership, verified legacy mapping and mismatched-owner rejection')

@@ -30,6 +30,7 @@ type SupportMessage = PocketSupportLifecycleMessage
 type SupportCase = {
   id: string
   profileId: string
+  notificationOwnerId?: string
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
   category: 'bank_identity' | 'bank_payment' | 'stuck_transaction' | 'account' | 'other'
   priority: 'normal' | 'high'
@@ -78,11 +79,18 @@ async function verifiedStaff(req: Request) {
   return { email: email || claims.userId, userId: claims.userId }
 }
 async function store() { return (await readDurableJson<SupportStore>(STORE_KEY)) || { cases: {} } }
+async function supportNotificationOwner(item:SupportCase){
+ const matches=(owner:string)=>circlePocketIdentityId({kind:'privy',subject:owner,storageKey:'privy:'+owner})===item.profileId
+ if(item.notificationOwnerId&&matches(item.notificationOwnerId))return item.notificationOwnerId
+ if(!item.customer?.pocketId)return undefined
+ const profile=await localCurrencyProfileRepository.getByPocketId(item.customer.pocketId)
+ return profile?.privyUserId&&matches(profile.privyUserId)?profile.privyUserId:undefined
+}
 async function notifySupportUpdate(item:SupportCase){
  const message=item.messages.at(-1)
  if(!message||!(message.author==='staff'||['resolution_prompt','automatic_resolution','automatic_reminder'].includes(message.kind||'')))return
  const body=message.kind==='resolution_prompt'?'Has your issue been resolved? Open Support to confirm.':message.kind==='automatic_resolution'?'Your support case is now closed.':message.kind==='automatic_reminder'?'Pocket Support is waiting for your reply.':'You have a new reply from Pocket Support.'
- try{await sendPocketPush(item.profileId,'support:'+item.id+':'+message.id,{category:'support',title:'Pocket Support',body,path:'/assistant?case='+encodeURIComponent(item.id),tag:'pocket-support:'+item.id,occurredAt:message.createdAt})}catch{console.warn('[pocket-support] Notification delivery unavailable; reply is saved.')}
+ try{const owner=await supportNotificationOwner(item);if(!owner)return;await sendPocketPush(owner,'support:'+item.id+':'+message.id,{category:'support',title:'Pocket Support',body,path:'/assistant?case='+encodeURIComponent(item.id),tag:'pocket-support:'+item.id,occurredAt:message.createdAt})}catch{console.warn('[pocket-support] Notification delivery unavailable; reply is saved.')}
 }
 async function currentStore() {
   const current = await store()
@@ -97,7 +105,7 @@ async function currentStore() {
   return updated
 }
 function publicCase(item: SupportCase) {
-  const { profileId: _profileId, assignedTo: _assignedTo, customer: _customer, ...safe } = item
+  const { notificationOwnerId: _notificationOwnerId, profileId: _profileId, assignedTo: _assignedTo, customer: _customer, ...safe } = item
   const lastReadAt = item.customerReadAt || 0
   const unreadCount = item.messages.filter(message => (
     (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution' || message.kind === 'resolution_prompt' || message.kind === 'staff_joined')
@@ -245,6 +253,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
         saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,message,optionId,requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{},match,accountAnswer})
         saved.customer ||= customer
+        saved.notificationOwnerId = identity.subject
         return next
       })
       return res.json({ok:true,case:saved && publicCase(saved)})
@@ -260,7 +269,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       }
       const report=validateTransactionReport(req.body?.reason,req.body?.description)
       const now=Date.now(),transaction=transactionReportDetails(row,now),customer=await privateCustomerIdentity(identity)
-      const item:SupportCase={id:'pcs_'+crypto.randomUUID().replace(/-/g,'').slice(0,16),profileId,status:'open',humanSupport:true,priority:'high',
+      const item:SupportCase={id:'pcs_'+crypto.randomUUID().replace(/-/g,'').slice(0,16),profileId,notificationOwnerId:identity.subject,status:'open',humanSupport:true,priority:'high',
         category:row.source?.startsWith('bank-')?'bank_payment':'stuck_transaction',summary:report.label,reference:row.bankOrderId||row.providerReference||row.billReference||row.txHash||row.eventId,
         transactionKey,transaction,reportReason:report.reason,customer,createdAt:now,updatedAt:now,
         messages:[{id:crypto.randomUUID(),author:'user',text:report.label+' - '+report.description,createdAt:now},
@@ -303,7 +312,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         saved = item
         return next
       })
-      try{const notices=await readPocketNotices(profileId);const ids=notices.filter(n=>n.category==='support'&&n.path==='/assistant?case='+encodeURIComponent(caseId)&&n.occurredAt<=(saved?.customerReadAt||0)).map(n=>n.eventId);if(ids.length)await markPocketNoticesRead(profileId,ids)}catch{console.warn('[pocket-support] Notice read state could not sync.')}
+      try{const owner=identity.kind==='privy'?identity.subject:undefined;const notices=owner?await readPocketNotices(owner):[];const ids=notices.filter(n=>n.category==='support'&&n.path==='/assistant?case='+encodeURIComponent(caseId)&&n.occurredAt<=(saved?.customerReadAt||0)).map(n=>n.eventId);if(owner&&ids.length)await markPocketNoticesRead(owner,ids)}catch{console.warn('[pocket-support] Notice read state could not sync.')}
       return res.json({ ok: true, case: saved && publicCase(saved) })
     }
 
@@ -318,7 +327,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     const now = Date.now()
     const customer = await privateCustomerIdentity(identity)
     const item: SupportCase = {
-      id: 'pcs_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16), profileId, status: 'open',
+      id: 'pcs_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16), profileId, notificationOwnerId:identity.kind==='privy'?identity.subject:undefined, status: 'open',
       category: ['bank_identity', 'bank_payment', 'stuck_transaction', 'account'].includes(category) ? category : 'other',
       priority: req.body?.priority === 'high' ? 'high' : 'normal', summary, reference: clean(req.body?.reference, 160) || undefined,
       customer,
