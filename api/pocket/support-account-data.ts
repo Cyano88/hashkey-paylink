@@ -12,3 +12,9 @@ export async function readSupportPayments(owner:string){
  const excluded=new Set([...(snapshot.groupedTransactionHashes||[]),...Object.values(feed?.sources||{}).flatMap(source=>source.snapshot.groupedTransactionHashes||[])].map(hash=>hash.toLowerCase()))
  return personalPocketActivity(rows).filter(row=>!feed?.archivedKeys?.includes(pocketActivityArchiveKey(row))&&(!row.txHash||!excluded.has(row.txHash.toLowerCase())))
 }
+
+export async function readSupportPayoutStatus(row:import('../../src/pocket/models/pocketActivity.js').PocketActivityRow){
+ if(!row.source?.replace(/_/g,'-').startsWith('bank-')||!row.bankOrderId)throw new Error('No bank reference available.')
+ const {readPaycrestSupportStatus}=await import('../paycrest-pos.js')
+ return readPaycrestSupportStatus(row.bankOrderId)
+}

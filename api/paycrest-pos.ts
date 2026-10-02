@@ -576,6 +576,18 @@ export async function markPaycrestPosPayment(input: { id: string; txHash: string
   return updated
 }
 
+// Support receives this ID only from an authenticated, owned activity row.
+// This path reads provider evidence without refreshing orders or executing settlement hooks.
+export async function readPaycrestSupportStatus(providerOrderId:string) {
+  if(!/^[a-zA-Z0-9_-]{6,120}$/.test(providerOrderId))throw new Error('Invalid payout reference.')
+  const data=await paycrestFetch<any>('/v2/sender/orders/'+encodeURIComponent(providerOrderId),{method:'GET',signal:AbortSignal.timeout(8000)})
+  const id=firstText(data?.id,data?.orderId,data?.order_id)
+  if(id!==providerOrderId)throw new Error('Payout reference did not match.')
+  const status=firstText(data?.status).toLowerCase()
+  if(!['initiated','pending','processing','deposited','settling','settled','failed','expired','refunded','refunding','cancelled'].includes(status))throw new Error('Payout status is not recognized.')
+  return {status,checkedAt:Date.now()}
+}
+
 export async function refreshPaycrestOrderStatus(id: string) {
   const record = await getPaycrestPosOrder(id)
   if (!record) return null

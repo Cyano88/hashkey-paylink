@@ -14,8 +14,9 @@ if(remoteMode){
  }
 }
 const mocks={
+ 'support-investigation-chain.js':'export const checkSupportIncomingUsdc=async()=>({status:"unavailable",text:"Fixture provider unavailable"})',
  'kyc-level.js': 'export const readPocketKycLevel=async()=>({level:"none"})',
- 'support-account-data.js': 'export const readSupportPayments=async owner=>{globalThis.accountPaymentOwners=(globalThis.accountPaymentOwners||[]).concat(owner);return structuredClone(globalThis.accountPayments?.[owner]||[])}',
+ 'support-account-data.js': 'export const readSupportPayoutStatus=async()=>({status:"settled",checkedAt:Date.now()});export const readSupportPayments=async owner=>{globalThis.accountPaymentOwners=(globalThis.accountPaymentOwners||[]).concat(owner);return structuredClone(globalThis.accountPayments?.[owner]||[])}',
  'activity-store.js': 'export const pocketActivityStore={read:async()=>null}',
  'activity-feed.js': 'export const activityFeedKey=x=>x',
  'transaction-report.js': 'export const reportTransaction=()=>{},transactionReportKey=()=>{},transactionReportDetails=()=>{},validateTransactionReport=()=>{},upsertTransactionReport=()=>{}',
@@ -96,7 +97,7 @@ if(remoteMode){
  assert.equal(menu.body.case.humanSupport,false);assert.ok(menu.body.case.messages.at(-1).options.some(x=>x.id==='latest_gift'))
  assert.equal((await call({action:'chat',caseId:id,optionId:'__proto__',message:'test',requestId:'recovery-invalid-00001'},'recovery-owner')).statusCode,400)
  const timestamp=Date.now();globalThis.accountPayments['recovery-owner']=[{eventId:'owned-choice',txHash:'owned-hash',chain:'base',amount:'1',payer:'fixture',memo:'',ts:timestamp,source:'gift',giftState:'funded',direction:'out',paycrestStatus:'completed'}]
- const list=await call({action:'chat',caseId:id,optionId:'payments',requestId:'recovery-payments-0001'},'recovery-owner')
+ const list=await call({action:'chat',caseId:id,optionId:'outgoing',requestId:'recovery-payments-0001'},'recovery-owner')
  assert.equal(list.body.case.messages.at(-1).options[0].eventId,'owned-choice')
  const detail=await call({action:'chat',caseId:id,optionId:'payment_details',eventId:'owned-choice',requestId:'recovery-detail-00001'},'recovery-owner')
  assert.equal(detail.body.case.messages.at(-1).receipt.eventId,'owned-choice')

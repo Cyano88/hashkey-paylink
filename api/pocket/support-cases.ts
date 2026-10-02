@@ -1,7 +1,8 @@
+import {checkSupportIncomingUsdc} from './support-investigation-chain.js'
 import {supportActions,type SupportActionId} from '../../src/pocket/lib/pocketSupportActions.js'
 import {routeSupportIntent} from '../hash-support/intent-router.js'
 import {supportAccountAnswer} from './support-account-answer.js'
-import {readSupportPayments} from './support-account-data.js'
+import {readSupportPayments,readSupportPayoutStatus} from './support-account-data.js'
 import {POCKET_SUPPORT_HANDOFF_TEXT} from '../../src/pocket/lib/pocketSupportContent.js'
 import {matchSupportQuestion} from '../hash-support/semantic-answer.js'
 import { createKnowledge, reviewKnowledge, POCKET_SUPPORT_TENANT, type KnowledgeStore } from '../hash-support/knowledge.js'
@@ -218,10 +219,10 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       const message=optionId?supportActions[optionId].message:String(req.body?.message||'').trim()
       const customer = await privateCustomerIdentity(identity)
       const snapshot=await store()
-      let accountAnswer=await supportAccountAnswer({identity,profileId,selectedEventId:optionId==='payment_details'?clean(req.body?.eventId,250):undefined,question:message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments})
+      let accountAnswer=await supportAccountAnswer({identity,profileId,selectedEventId:optionId==='payment_details'?clean(req.body?.eventId,250):undefined,question:message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments,chainCheck:checkSupportIncomingUsdc,payoutStatus:readSupportPayoutStatus})
       if(!accountAnswer&&!optionId){
         const intent=await routeSupportIntent({profileId,message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
-        if(intent)accountAnswer=await supportAccountAnswer({identity,profileId,question:intent==='selected_payment'?'What is its status?':supportActions[intent].message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments})
+        if(intent)accountAnswer=await supportAccountAnswer({identity,profileId,question:intent==='selected_payment'?'What is its status?':supportActions[intent].message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments,chainCheck:checkSupportIncomingUsdc,payoutStatus:readSupportPayoutStatus})
       }
       const match=accountAnswer||optionId?undefined:await matchSupportQuestion({profileId,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,entries:snapshot.knowledge||{},tenantId:POCKET_SUPPORT_TENANT,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
       await mutateDurableJson<SupportStore>(STORE_KEY, current => {
