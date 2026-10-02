@@ -45,7 +45,7 @@ export default function PocketTransactionOperationsPanel() {
   const call = useCallback(async (reconcile = false) => {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch('/api/admin/pocket/transactions', {
+    const response = await fetch('/api/admin/pocket/transactions?workspace=pocket', {
       method: reconcile ? 'POST' : 'GET', cache: 'no-store',
       headers: { authorization: `Bearer ${token}`, ...(reconcile ? { 'content-type': 'application/json' } : {}) },
       ...(reconcile ? { body: JSON.stringify({ action: 'reconcile' }) } : {}),

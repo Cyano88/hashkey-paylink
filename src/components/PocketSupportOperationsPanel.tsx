@@ -57,7 +57,7 @@ export default function PocketSupportOperationsPanel() {
   const call = useCallback(async (body: Record<string, unknown>) => {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch('/api/pocket/support/cases', {
+    const response = await fetch('/api/pocket/support/cases?workspace=pocket', {
       method: 'POST', cache: 'no-store',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify(body),

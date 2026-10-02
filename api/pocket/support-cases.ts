@@ -18,7 +18,7 @@ import { activityFeedKey } from './activity-feed.js'
 import { reportTransaction, transactionReportKey, transactionReportDetails, validateTransactionReport, upsertTransactionReport } from './transaction-report.js'
 import type { Request, Response } from 'express'
 import crypto from 'node:crypto'
-import { PrivyClient, type User } from '@privy-io/server-auth'
+import { verifyOperationsSection } from '../operations-access.js'
 import { archivePayment } from '../og-storage.js'
 import { hasRenderDurableStore } from '../render-durable-store.js'
 import {mutateSupportJson as mutateDurableJson,readSupportJson as readDurableJson} from '../hash-support/pocket-storage.js'
@@ -59,24 +59,8 @@ type SupportStore = { knowledge?: KnowledgeStore; cases: Record<string, SupportC
 const STORE_KEY = (process.env.POCKET_SUPPORT_STORE_KEY || 'hashpaylink:pocket-support:v1').trim()
 
 function clean(value: unknown, max = 500) { return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max) }
-function bearer(req: Request) { return String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '' }
-function linkedEmail(user: User) {
-  for (const account of user.linkedAccounts || []) if (account.type === 'email' && typeof account.address === 'string') return account.address.trim().toLowerCase()
-  return ''
-}
 async function verifiedStaff(req: Request) {
-  const appId = (process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID || '').trim()
-  const secret = (process.env.PRIVY_APP_SECRET || '').trim()
-  const allowed = new Set((process.env.DEVELOPER_ADMIN_EMAILS || '').split(',').map(item => item.trim().toLowerCase()).filter(Boolean))
-  const allowedUserIds = new Set((process.env.DEVELOPER_ADMIN_USER_IDS || '').split(',').map(item => item.trim()).filter(Boolean))
-  if (!appId || !secret || (!allowed.size && !allowedUserIds.size)) throw Object.assign(new Error('Support staff access is not configured.'), { status: 503 })
-  const token = bearer(req)
-  if (!token) throw Object.assign(new Error('Staff sign-in required.'), { status: 401 })
-  const client = new PrivyClient(appId, secret)
-  const claims = await client.verifyAuthToken(token)
-  const email = linkedEmail(await client.getUserById(claims.userId))
-  if (!allowedUserIds.has(claims.userId) && (!email || !allowed.has(email))) throw Object.assign(new Error('This account is not allowed to manage support.'), { status: 403 })
-  return { email: email || claims.userId, userId: claims.userId }
+  return verifyOperationsSection(req, 'support')
 }
 async function store() { return (await readDurableJson<SupportStore>(STORE_KEY)) || { cases: {} } }
 async function supportNotificationOwner(item:SupportCase){

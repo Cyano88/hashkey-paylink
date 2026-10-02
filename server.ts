@@ -156,6 +156,7 @@ import publicConfigHandler from './api/public-config.js'
 import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
+import operationsSessionHandler from './api/operations-access.js'
 import developerCapabilitiesHandler from './api/developer-capabilities.js'
 import { developerEnvironmentBoundary } from './api/developer-environment.js'
 import arcWalletHandler from './api/arc-wallet.js'
@@ -466,6 +467,7 @@ app.get('/api/hashpaystream/v2/agreements', readLimiter, hashPayStreamAgreementG
 app.post('/api/hashpaystream/v2/agreements', strictLimiter, hashPayStreamAgreementGateway)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
+app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
 app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)

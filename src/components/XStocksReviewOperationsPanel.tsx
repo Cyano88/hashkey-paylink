@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { workPaymentLabel, type WorkPayment } from '../lib/xstocksAgreement/workXLayer'
 import { formatUnits } from 'viem'
@@ -6,23 +6,33 @@ import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import type { TradeXLayerStatus } from '../lib/xstocksAgreement/protocol'
 
 type Review={agreement:{id:string;title:string;terms:{description:string;xlayerPayment:WorkPayment;trade?:{handover:string;location:string;returns:string}};evidence:Array<{hash:string;body:string;role:string}>};status:TradeXLayerStatus;reviewer:{address:string;owners:string[];threshold:number;nonce:string};decision:null|{id:string;buyerAmount:string;reason:string;approvedOwners:string[];stale:boolean};typedData?:Record<string,unknown>}
+type QueueItem={id:string;projectId:string;title:string;state:number|null;observedBlock:string|null}
 const button='shrink-0 whitespace-nowrap inline-flex min-h-11 items-center justify-center rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950'
 const secondary='shrink-0 whitespace-nowrap inline-flex min-h-11 items-center justify-center rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold dark:border-white/10 disabled:opacity-40'
 const input='mt-2 w-full rounded-xl border border-gray-200 bg-transparent px-3 py-3 text-sm dark:border-white/10'
 const stages=['Awaiting seller','Ready to pay','Payment held','Ready for handover','Buyer review','Disputed','Paid','Refunded','Dispute resolved','Cancelled']
-export default function XStocksReviewOperationsPanel(){
+export default function XStocksReviewOperationsPanel({workspaceId}:{workspaceId:string}){
  const {getAccessToken,user}=usePrivy(),{wallets}=useWallets()
  const [reference,setReference]=useState(''),[review,setReview]=useState<Review>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[amount,setAmount]=useState(''),[reason,setReason]=useState(''),[executeReview,setExecuteReview]=useState(false),[submitted,setSubmitted]=useState('')
  const actor=useRef(user?.id);actor.current=user?.id
+ const [cases,setCases]=useState<QueueItem[]>([]),[filter,setFilter]=useState<'disputed'|'all'>('disputed'),[cursor,setCursor]=useState<string|null>(null),[queueBusy,setQueueBusy]=useState(false),[queueError,setQueueError]=useState('')
+ const queueRequest=useRef(0)
+ async function loadQueue(after=''){
+  const request=++queueRequest.current;setQueueBusy(true);setQueueError('')
+  try{const page=await api('list',{filter,cursor:after});if(request!==queueRequest.current)return;setCases(current=>after?[...current,...page.items]:page.items);setCursor(page.nextCursor)}
+  catch(e){if(request===queueRequest.current)setQueueError(e instanceof Error?e.message:'Cases could not load.')}
+  finally{if(request===queueRequest.current)setQueueBusy(false)}
+ }
+ useEffect(()=>{setCases([]);setCursor(null);void loadQueue();return()=>{queueRequest.current++}},[workspaceId,user?.id,filter])
  const ownerWallets=wallets.filter(w=>w.walletClientType!=='privy'&&review?.reviewer.owners.some(a=>a.toLowerCase()===w.address.toLowerCase()))
  async function api(action:string,extra:Record<string,unknown>={},id=review?.agreement.id||reference.trim()){
   const identity=actor.current,token=await getAccessToken();if(!token)throw Error('Sign in again to continue.')
-  const response=await fetch('/api/xstocks-review',{signal:AbortSignal.timeout(30000),method:'POST',cache:'no-store',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action,agreementId:id,...extra})})
+  const response=await fetch('/api/xstocks-review?workspace='+encodeURIComponent(workspaceId),{signal:AbortSignal.timeout(30000),method:'POST',cache:'no-store',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action,agreementId:id,...extra})})
   const result=await response.json().catch(()=>null);if(actor.current!==identity)throw Error('Your admin session changed. Reopen the case.')
   if(!response.ok||!result?.ok)throw Error(result?.error||'Dispute review could not load. Try again.');return result
  }
  async function run(work:()=>Promise<void>){if(busy)return;setBusy(true);setError('');setNotice('');try{await work()}catch(e){setError(e instanceof Error?e.message:'Action could not complete.')}finally{setBusy(false)}}
- async function load(){setReview(undefined);setExecuteReview(false);setSubmitted('');const value=await api('read',{},reference.trim());setReview(value);if(value.decision){try{setSubmitted(sessionStorage.getItem('hpl-review-submission:'+value.decision.id)||'')}catch{}}setAmount(value.decision?.buyerAmount||'');setReason(value.decision?.reason||'')}
+ async function load(id=reference.trim()){setReview(undefined);setExecuteReview(false);setSubmitted('');const value=await api('read',{},id);setReview(value);if(value.decision){try{setSubmitted(sessionStorage.getItem('hpl-review-submission:'+value.decision.id)||'')}catch{}}setAmount(value.decision?.buyerAmount||'');setReason(value.decision?.reason||'')}
  async function walletProvider(wallet:typeof wallets[number]){
   await wallet.switchChain(196);const provider=await wallet.getEthereumProvider()
   const chain=await provider.request({method:'eth_chainId'}),accounts=await provider.request({method:'eth_accounts'}) as string[]
@@ -50,6 +60,15 @@ export default function XStocksReviewOperationsPanel(){
  const total=review?.status.amount?formatUnits(BigInt(review.status.amount),review.status.decimals??18):'0'
  return <section className="mt-7 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
   <h1 className="text-xl font-semibold">Trade disputes</h1><p className="mt-2 text-sm text-gray-500">Review X Layer stock payments and collect reviewer approvals.</p>
+  <div className="mt-6 border-b border-gray-200 pb-6 dark:border-white/10">
+   <div className="flex flex-wrap items-center gap-3"><label className="text-sm">Cases<select className={input} value={filter} onChange={e=>setFilter(e.target.value as 'disputed'|'all')}><option value="disputed">Observed disputes</option><option value="all">All stored Trades</option></select></label><button className={secondary+' mt-6'} disabled={queueBusy} onClick={()=>void loadQueue()}>Refresh cases</button></div>
+   <p className="mt-3 text-xs text-gray-500">Last observed status for this workspace. Opening a case checks the current chain state. New disputes appear after the payment status is observed.</p>
+   {queueError&&<p role="alert" className="mt-3 text-sm text-red-600">{queueError}</p>}
+   {!queueBusy&&!queueError&&!cases.length&&<p className="mt-4 text-sm text-gray-500">{filter==='disputed'?'No observed disputes in this workspace.':'No stored Trades in this workspace.'}</p>}
+   <ul className="mt-3 divide-y divide-gray-100 dark:divide-white/10">{cases.map(item=><li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div className="min-w-0 flex-1"><p className="text-sm font-medium break-words">{item.title||'Trade payment'}</p><p className="mt-1 text-xs text-gray-500">{item.state===null?'Not yet observed':stages[item.state]||'Status unavailable'}{item.observedBlock?' · Block '+item.observedBlock:''}</p><p className="mt-1 break-all text-xs text-gray-500">{item.id}</p></div><button className={secondary} disabled={busy} onClick={()=>{setReference(item.id);void run(()=>load(item.id))}}>Review case</button></li>)}</ul>
+   {queueBusy&&<p role="status" className="mt-3 text-sm text-gray-500">Loading cases…</p>}
+   {cursor&&<button className={secondary+' mt-3'} disabled={queueBusy} onClick={()=>void loadQueue(cursor)}>Load more</button>}
+  </div>
   <form className="mt-6 flex flex-col items-end gap-3 sm:flex-row" onSubmit={e=>{e.preventDefault();void run(load)}}><label className="w-full text-sm">Agreement reference<input className={input} value={reference} onChange={e=>setReference(e.target.value)} placeholder="xag_…" disabled={busy}/></label><button className={button} disabled={busy||!reference.trim()}>Open case</button></form>
   {error&&<p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}{notice&&<p role="status" className="mt-4 text-sm text-gray-600 dark:text-gray-300">{notice}</p>}
   {busy&&<p role="status" className="mt-4 text-sm text-gray-500">Checking…</p>}

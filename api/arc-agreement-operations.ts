@@ -23,11 +23,13 @@ import {
 } from './arc-agreement-payer-lifecycle.js'
 import { readConfirmedArcAgreementSnapshot } from './arc-agreement-confirmed-snapshot.js'
 import { listArcAgreementRecords } from './arc-agreements.js'
-import { verifyDeveloperOperationsAdmin } from './developer-projects.js'
+import { verifyOperationsSection } from './operations-access.js'
+import { authorizeOperations } from './operations-policy.js'
 
 type AdminIdentity = { userId: string; email: string }
 
 type Dependencies = {
+  scope?(identity: AdminIdentity, req: Request, projectId?: string): { projectIds: string[] }
   verifyAdmin(req: Request): Promise<AdminIdentity>
   listAgreements: typeof listArcAgreementRecords
   listAttempts: typeof listArcAgreementActivationAttemptRecords
@@ -46,7 +48,8 @@ type Dependencies = {
 }
 
 const defaults: Dependencies = {
-  verifyAdmin: verifyDeveloperOperationsAdmin,
+  verifyAdmin: req => verifyOperationsSection(req, 'agreements'),
+  scope: (identity, req, projectId) => authorizeOperations(identity, req, 'agreements', projectId),
   listAgreements: listArcAgreementRecords,
   listAttempts: listArcAgreementActivationAttemptRecords,
   listOperatorActions: listArcAgreementOperatorActions,
@@ -165,13 +168,21 @@ export function createArcAgreementOperationsHandler(dependencies: Dependencies =
     res.setHeader('Cache-Control', 'no-store')
     try {
       const identity = await dependencies.verifyAdmin(req)
+      const scope = dependencies.scope?.(identity, req)
+      const scopedList = async <T extends { partnerId: string }>(list: (input: { partnerId?: string; limit: number }) => Promise<T[]>, limit: number) => {
+        if (!scope) return list({ limit })
+        return (await Promise.all(scope.projectIds.map(partnerId => list({ partnerId, limit })))).flat()
+          .filter(row => scope.projectIds.includes(row.partnerId))
+      }
       if (req.method === 'GET') {
-        const [agreements, attempts, operatorActions, payerActions] = await Promise.all([
-          dependencies.listAgreements({ limit: 100 }),
-          dependencies.listAttempts({ limit: 100 }),
-          dependencies.listOperatorActions({ limit: 250 }),
-          dependencies.listPayerActions({ limit: 100 }),
+        const records = await Promise.all([
+          scopedList(dependencies.listAgreements, 100),
+          scopedList(dependencies.listAttempts, 100),
+          scopedList(dependencies.listOperatorActions, 250),
+          scopedList(dependencies.listPayerActions, 100),
         ])
+        const permitted = <T extends { partnerId: string }>(rows: T[]) => scope ? rows.filter(row => scope.projectIds.includes(row.partnerId)) : rows
+        const agreements = permitted(records[0]), attempts = permitted(records[1]), operatorActions = permitted(records[2]), payerActions = permitted(records[3])
         const agreementsById = new Map(agreements.map(agreement => [agreement.id, agreement]))
         const operatorByAgreement = new Map<string, ArcAgreementOperatorAction[]>()
         for (const action of operatorActions) {
@@ -257,6 +268,7 @@ export function createArcAgreementOperationsHandler(dependencies: Dependencies =
       if (action === 'request-release' || action === 'request-cancel') {
         const agreementId = clean(req.body?.agreementId, 80)
         const partnerId = clean(req.body?.partnerId, 80)
+        dependencies.scope?.(identity, req, partnerId)
         const evidenceHash = clean(req.body?.evidenceHash, 66)
         const evidenceReference = clean(req.body?.evidenceReference, 240)
         if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) throw fail('Agreement id is invalid.', 400)
@@ -326,9 +338,10 @@ export function createArcAgreementOperationsHandler(dependencies: Dependencies =
         if (!/^opa_[a-f0-9]{24}$/.test(actionId)) throw fail('Operator action id is invalid.', 400)
         if (!/^[a-f0-9]{64}$/.test(requestHash)) throw fail('Operator request hash is invalid.', 400)
         if (reviewNote.length < 8) throw fail('A review note is required.', 400)
-        const pendingAction = (await dependencies.listOperatorActions({ limit: 250 }))
+        const pendingAction = (await scopedList(dependencies.listOperatorActions, 250))
           .find(item => item.id === actionId)
         if (!pendingAction) throw fail('Operator action request was not found.', 404)
+        dependencies.scope?.(identity, req, pendingAction.partnerId)
         if (pendingAction.reviewPolicy === 'payer') {
           throw fail('This delivery must be accepted by its authenticated payer.', 409)
         }

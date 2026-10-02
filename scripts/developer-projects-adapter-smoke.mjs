@@ -322,11 +322,33 @@ assert.equal((await request(otherOwner, 'PUT', { action: 'configure', projectId:
 
 const appSource = readFileSync(new URL('../src/surfaces/DeveloperApp.tsx', import.meta.url), 'utf8')
 const operationsSource = readFileSync(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
-assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage surface="projects" />'))
+assert.ok(appSource.includes('path="admin/workspaces/:workspaceId/:section"') && appSource.includes('<OperationsWorkspacePage />'))
 assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-list'") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'") && operationsSource.includes("'admin-arc-pilot-approve'"))
 assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 
 console.log('Developer projects adapter smoke tests passed.')
+
+// Production-style section grants must supersede the old broad admin allowlist.
+const workspaceEnv = { OPERATIONS_FOUNDER_EMAILS: 'founder@example.test',
+  OPERATIONS_WORKSPACES_JSON: JSON.stringify([{id:'fixture-product',name:'Fixture product',projectIds:[created.body.project.id]}]),
+  OPERATIONS_GRANTS_JSON: JSON.stringify([{email:'scoped@example.test',workspaceId:'fixture-product',sections:['projects']}]) }
+let scopedWrites = 0
+const scopedHandler = createDeveloperProjectsHandler({ operationsEnv: () => workspaceEnv,
+  hasStore: () => true, portalSecret: () => portalSecret, verify: async () => ({userId:'scoped-user',email:'scoped@example.test'}),
+  read: async () => store, mutate: async () => { scopedWrites++; return store },
+  adminEmails: () => 'scoped@example.test', adminUserIds: () => '' })
+const scopedList = responseRecorder()
+await scopedHandler({method:'POST',headers:{},query:{workspace:'fixture-product'},body:{action:'admin-list'}},scopedList)
+assert.equal(scopedList.statusCode,200)
+assert.deepEqual(scopedList.body.projects.map(p=>p.id),[created.body.project.id])
+for (const body of [{action:'admin-suspend',projectId:'dev_foreign123456',reason:'Cross-project attempt'},
+  {action:'admin-arc-pilot-disable',projectId:created.body.project.id,reason:'Wrong section attempt'}]) {
+  const result=responseRecorder()
+  await scopedHandler({method:'POST',headers:{},query:{workspace:'fixture-product'},body},result)
+  assert.ok([403,404].includes(result.statusCode))
+}
+assert.equal(scopedWrites,0)
+console.log('Workspace-scoped project reads and section-restricted mutations passed.')
 
 // An Agreement-only project cannot configure other product networks.
 const agreementOnlyConfig={action:'configure',projectId:created.body.project.id,name:'Agreement fixture',website:'https://polydesk.trade',useCase:'Work Agreements for a synthetic service platform.',settlementMode:'usdc',capabilities:['arc_agreements'],arcMainnetChainId:5042,networks:['arc'],defaultNetwork:'arc',recipients:{arc:linkedWallet},allowedOrigins:['https://polydesk.trade'],webhookUrl:''}

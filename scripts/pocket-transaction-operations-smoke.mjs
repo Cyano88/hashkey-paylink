@@ -5,6 +5,8 @@ import { createPocketTransactionOperationsHandler } from '../api/pocket/transact
 function response() {
   return {
     statusCode: 200,
+    headers: {},
+    setHeader(name, value) { this.headers[name] = value },
     payload: undefined,
     status(code) { this.statusCode = code; return this },
     json(value) { this.payload = value; return this },
@@ -34,6 +36,7 @@ const handler = createPocketTransactionOperationsHandler({
 const getRes = response()
 await handler({ method: 'GET', headers: {} }, getRes)
 assert.equal(getRes.statusCode, 200)
+assert.equal(getRes.headers['Cache-Control'], 'no-store')
 assert.equal(getRes.payload.ok, true)
 assert.equal(getRes.payload.summary.unresolved, 1)
 assert.equal(getRes.payload.summary.processing, 1)
@@ -69,11 +72,10 @@ await forbidden({ method: 'GET', headers: {} }, forbiddenRes)
 assert.equal(forbiddenRes.statusCode, 403)
 assert.equal(forbiddenRes.payload.error, 'Restricted.')
 
-const operationsSource = await readFile(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
+const operationsSource = await readFile(new URL('../src/pages/OperationsWorkspacePage.tsx', import.meta.url), 'utf8')
 const appSource = await readFile(new URL('../src/surfaces/DeveloperApp.tsx', import.meta.url), 'utf8')
 const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
-assert.equal((operationsSource.match(/> Sign out<\/button>/g) || []).length, 1)
-assert.match(operationsSource, /surface === 'transactions'/)
+assert.match(operationsSource, /section === 'transactions'/)
 assert.match(appSource, /admin\/transactions/)
 assert.match(serverSource, /\/api\/admin\/pocket\/transactions/)
 

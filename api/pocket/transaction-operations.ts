@@ -1,18 +1,18 @@
 import type { Request, Response } from 'express'
-import { verifyDeveloperOperationsAdmin } from '../developer-projects.js'
+import { verifyOperationsSection } from '../operations-access.js'
 import { drainPocketReconciliation } from './reconciliation-worker.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent } from './payment-execution-intents.js'
 import { submittedReviewThresholdMs } from './payment-timeouts.js'
 
 type Dependencies = {
-  verifyAdmin: typeof verifyDeveloperOperationsAdmin
+  verifyAdmin: (req: Request) => Promise<{ userId: string; email: string }>
   listUnresolved: (limit: number) => Promise<PaymentExecutionIntent[]>
   reconcile: typeof drainPocketReconciliation
   now: () => number
 }
 
 const defaults: Dependencies = {
-  verifyAdmin: verifyDeveloperOperationsAdmin,
+  verifyAdmin: req => verifyOperationsSection(req, 'transactions'),
   listUnresolved: limit => paymentExecutionRepository.listUnresolved(limit),
   reconcile: drainPocketReconciliation,
   now: Date.now,
@@ -43,6 +43,7 @@ function publicExecution(intent: PaymentExecutionIntent, now: number) {
 export function createPocketTransactionOperationsHandler(overrides: Partial<Dependencies> = {}) {
   const dependencies = { ...defaults, ...overrides }
   return async function pocketTransactionOperationsHandler(req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'no-store')
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     try {
       await dependencies.verifyAdmin(req)

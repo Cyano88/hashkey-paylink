@@ -1,9 +1,11 @@
 import type { Request, Response } from 'express'
 import { encodeFunctionData, hashTypedData, keccak256, parseAbi, parseUnits, recoverTypedDataAddress, stringToHex, zeroAddress, type Address, type Hex } from 'viem'
-import { verifyDeveloperOperationsAdmin } from '../developer-projects.js'
+import { verifyOperationsSection } from '../operations-access.js'
+import { authorizeOperations } from '../operations-policy.js'
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from '../render-durable-store.js'
 import { prepareTradeXLayerAction, tradeXLayerClient } from './planner.js'
 import type { XStocksAgreementRecord } from './http.js'
+import { listTradeReviewQueue } from './review-queue.js'
 
 const safeAbi=parseAbi(['function getOwners() view returns(address[])','function getThreshold() view returns(uint256)','function nonce() view returns(uint256)','function VERSION() view returns(string)','function getTransactionHash(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256) view returns(bytes32)','function execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes) returns(bool)'])
 const resolveAbi=parseAbi(['function resolveDispute(uint256 buyerAmount,bytes32 evidence)'])
@@ -14,7 +16,7 @@ export function reviewerAmount(value:unknown,decimals:number,total:bigint){
   if(typeof value!=='string'||!/^\d+(\.\d+)?$/.test(value)||((value.split('.')[1]||'').length>decimals))throw failure('Enter an exact buyer allocation.',400)
   const amount=parseUnits(value,decimals);if(amount>total)throw failure('Buyer allocation exceeds the held payment.',400);return amount
 }
-const defaults={verifyAdmin:verifyDeveloperOperationsAdmin,hasStore:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,client:()=>tradeXLayerClient(process.env),plan:prepareTradeXLayerAction,now:()=>new Date()}
+const defaults={verifyAdmin:(req:Request)=>verifyOperationsSection(req,'trade-disputes'),scope:authorizeOperations,list:listTradeReviewQueue,hasStore:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,client:()=>tradeXLayerClient(process.env),plan:prepareTradeXLayerAction,now:()=>new Date()}
 export function createReviewerHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  return async(req:Request,res:Response)=>{
@@ -24,10 +26,19 @@ export function createReviewerHandler(overrides:Partial<typeof defaults>={}){
    const actor=await d.verifyAdmin(req)
    if(!d.hasStore())throw failure('Review storage is unavailable.',503)
    const {agreementId,action}=req.body??{}
+   if(action==='list'){
+    const {projectIds}=d.scope(actor,req,'trade-disputes')
+    const filter=req.body.filter??'disputed',cursor=req.body.cursor??''
+    if(!['disputed','all'].includes(filter)||typeof cursor!=='string'||(cursor!==''&&!/^xag_[a-f0-9]{64}$/.test(cursor)))throw failure('Invalid case list request.',400)
+    const page=await d.list(projectIds,filter,cursor)
+    if(page.items.some(item=>!projectIds.includes(item.projectId)))throw failure('Case scope could not be verified.',503)
+    return res.json({ok:true,...page})
+   }
    if(typeof agreementId!=='string'||!/^xag_[a-f0-9]{64}$/.test(agreementId))throw failure('Enter a valid Agreement reference.',400)
    if(!['read','prepare','sign','execution'].includes(action))throw failure('Unknown review action.',400)
    const record=await d.read<XStocksAgreementRecord>('hashpaylink:xstocks-agreement:v1:'+agreementId)
-   if(!record?.binding||record.terms.kind!=='trade'||record.binding.custody!=='xstocks-shares-v2')throw failure('This is not a supported stock Trade.',404)
+   if(!record?.binding||typeof record.partnerId!=='string'||!/^dev_[a-z0-9]{8,64}$/i.test(record.partnerId)||record.terms.kind!=='trade'||record.binding.custody!=='xstocks-shares-v2')throw failure('This is not a supported stock Trade.',404)
+   d.scope(actor,req,'trade-disputes',record.partnerId)
    const binding=record.binding,t=binding.contractTerms,client=d.client()
    // The participant planner verifies the factory runtime, registry and every bound term.
    const status=await d.plan({env:{...process.env,HASHPAYLINK_XSTOCKS_AGREEMENT_PLANNER_ENABLED:'true'},binding,account:t.buyer},client)

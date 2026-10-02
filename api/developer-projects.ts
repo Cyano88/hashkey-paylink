@@ -1,3 +1,5 @@
+import { authorizeOperations } from './operations-policy.js'
+import { verifyOperationsSection } from './operations-access.js'
 import { effectiveProductCapabilities, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
 import { developerEnvironment } from './developer-environment.js'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../src/lib/developerNetworkPolicy.js'
@@ -126,6 +128,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  operationsEnv?: () => NodeJS.ProcessEnv
   activity?: typeof listDeveloperActivity
   hasStore: () => boolean
   read: (key: string) => Promise<DeveloperStore | undefined>
@@ -245,6 +248,7 @@ async function postPublicWebhook(value: string, payload: string, headers: Record
 }
 
 const defaults: Dependencies = {
+  operationsEnv: () => process.env,
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
   mutate: (key, update) => mutateDurableJson<DeveloperStore>(key, update),
@@ -468,7 +472,8 @@ function commaSeparatedSet(value: string) {
   return new Set(value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean))
 }
 
-function requireDeveloperAdmin(identity: VerifiedDeveloper, dependencies: Dependencies) {
+function requireDeveloperAdmin(identity: VerifiedDeveloper, dependencies: Dependencies, req: Request, section: 'projects' | 'agreements' = 'projects', projectId?: string) {
+  if (dependencies.operationsEnv) return authorizeOperations(identity, req, section, projectId, dependencies.operationsEnv())
   const emails = commaSeparatedSet(dependencies.adminEmails())
   const userIds = commaSeparatedSet(dependencies.adminUserIds())
   if (!emails.size && !userIds.size) throw Object.assign(new Error('Developer operations access is not configured.'), { status: 503 })
@@ -478,9 +483,7 @@ function requireDeveloperAdmin(identity: VerifiedDeveloper, dependencies: Depend
 }
 
 export async function verifyDeveloperOperationsAdmin(req: Request) {
-  const identity = await verifyDeveloper(req)
-  requireDeveloperAdmin(identity, defaults)
-  return identity
+  return verifyOperationsSection(req, 'projects')
 }
 
 function projectRoutingComplete(project: DeveloperProject) {
@@ -586,8 +589,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ok:true,...activity})
         }
         if (resource === 'admin') {
-          requireDeveloperAdmin(identity, dependencies)
-          return res.json(adminProjectIndex(store))
+          const scope = requireDeveloperAdmin(identity, dependencies, req)
+          return res.json(adminProjectIndex(scope ? { projects: Object.fromEntries(Object.entries(store?.projects || {}).filter(([id]) => scope.projectIds.includes(id))) } : store))
         }
         const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId)
         return res.json({ ok: true, projects: projects.map(project => projectPublic(project)) })
@@ -597,8 +600,12 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       const action = clean(req.body?.action, 40).toLowerCase()
 
       if (req.method === 'POST' && action === 'admin-list') {
-        requireDeveloperAdmin(identity, dependencies)
-        return res.json(adminProjectIndex(await dependencies.read(STORE_KEY)))
+        const section = req.body?.section === 'agreements' ? 'agreements' : 'projects'
+        const scope = requireDeveloperAdmin(identity, dependencies, req, section)
+        const store = await dependencies.read(STORE_KEY)
+        const selectedProjects = Object.entries(store?.projects || {}).filter(([id, project]) => (!scope || scope.projectIds.includes(id))
+          && (section !== 'agreements' || project.capabilities?.includes('arc_agreements')))
+        return res.json(adminProjectIndex({ projects: Object.fromEntries(selectedProjects) }))
       }
 
       if (req.method === 'POST' && action === 'create') {
@@ -636,7 +643,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       const currentStore = await dependencies.read(STORE_KEY)
 
       if (req.method === 'POST' && ['admin-arc-pilot-approve', 'admin-arc-pilot-disable'].includes(action)) {
-        requireDeveloperAdmin(identity, dependencies)
+        requireDeveloperAdmin(identity, dependencies, req, 'agreements', projectId)
         const currentProject = currentStore?.projects?.[projectId]
         if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
         const approving = action === 'admin-arc-pilot-approve'
@@ -711,7 +718,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       }
 
       if (req.method === 'POST' && ['admin-activate', 'admin-suspend', 'admin-reactivate'].includes(action)) {
-        requireDeveloperAdmin(identity, dependencies)
+        requireDeveloperAdmin(identity, dependencies, req, 'projects', projectId)
         const currentProject = currentStore?.projects?.[projectId]
         if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
         const reason = clean(req.body?.reason, 300)

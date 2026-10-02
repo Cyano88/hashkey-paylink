@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import {
   AlertTriangle,
@@ -9,7 +9,6 @@ import {
   KeyRound,
   Loader2,
   Lock,
-  LogOut,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -17,10 +16,6 @@ import {
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn } from '../lib/utils'
-import XStocksReviewOperationsPanel from '../components/XStocksReviewOperationsPanel'
-import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
-import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
-import PocketTransactionOperationsPanel from '../components/PocketTransactionOperationsPanel'
 
 type Network = 'base' | 'arbitrum' | 'arc'
 type Operation = {
@@ -94,19 +89,8 @@ function formatDate(value?: string) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-type OperationsSurface = 'trade-disputes' | 'projects' | 'agreements' | 'transactions' | 'support'
-
-const OPERATIONS_SECTIONS: Array<{ id: OperationsSurface; label: string; description: string; path: string }> = [
-  { id: 'projects', label: 'Developer projects', description: 'Integrations, API access and settlement routing', path: '/admin/developers' },
-  { id: 'trade-disputes', label: 'Trade disputes', description: 'Stock payment review and reviewer approvals', path: '/admin/trade-disputes' },
-  { id: 'agreements', label: 'Arc agreements', description: 'Agreement lifecycle and controlled operations', path: '/admin/agreements' },
-  { id: 'transactions', label: 'Transactions', description: 'Payment status and reconciliation', path: '/admin/transactions' },
-  { id: 'support', label: 'Pocket Support', description: 'Agent Hash handoffs and customer conversations', path: '/admin/support' },
-]
-
-export default function DeveloperOperationsPage({ surface }: { surface: OperationsSurface }) {
-  const { ready, authenticated, getAccessToken, logout, user } = usePrivy()
-  const userIdentityForReview=user?.id||'signed-out'
+export default function DeveloperOperationsPage({ workspaceId, mode = 'projects', arcActivationEnabled = false }: { workspaceId: string; mode?: 'projects' | 'agreements'; arcActivationEnabled?: boolean }) {
+  const { ready, authenticated, getAccessToken } = usePrivy()
   const [projects, setProjects] = useState<Project[]>([])
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
   const [activeId, setActiveId] = useState('')
@@ -122,7 +106,7 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
   async function api(method: string, body?: Record<string, unknown>) {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch('/api/developer-projects', {
+    const response = await fetch('/api/developer-projects?workspace=' + encodeURIComponent(workspaceId), {
       method,
       cache: 'no-store',
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
@@ -144,7 +128,7 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
     setLoading(true)
     setError('')
     try {
-      const data = await api('POST', { action: 'admin-list' })
+      const data = await api('POST', { action: 'admin-list', section: mode })
       if (data.scope !== 'admin') throw new Error('The server did not return the restricted operations scope.')
       const next = data.projects ?? []
       setProjects(next)
@@ -160,12 +144,12 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
   }
 
   useEffect(() => {
-    if (!ready || !authenticated || surface !== 'projects') {
+    if (!ready || !authenticated) {
       setProjects([])
       return
     }
     void loadProjects()
-  }, [ready, authenticated, surface]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, authenticated, workspaceId, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => projects.filter(project => {
     if (filter === 'active') return projectState(project) === 'Active'
@@ -240,12 +224,9 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
   if (!authenticated) return <OperationsSignIn />
 
   return (
-    <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
-      <OperationsTop onLogout={logout} />
-      <OperationsSectionNav active={surface} />
-      {surface === 'trade-disputes' ? <XStocksReviewOperationsPanel key={userIdentityForReview} /> : surface === 'agreements' ? <ArcAgreementOperationsPanel /> : surface === 'transactions' ? <PocketTransactionOperationsPanel /> : surface === 'support' ? <PocketSupportOperationsPanel /> : <>
+    <div>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard label="Projects" value={summary.total} />
+        <SummaryCard label="Integrations" value={summary.total} />
         <SummaryCard label="Active" value={summary.active} tone="success" />
         <SummaryCard label="Setup required" value={summary.setupRequired} tone="warning" />
         <SummaryCard label="Suspended" value={summary.suspended} tone="danger" />
@@ -297,58 +278,32 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
           {loading && !projects.length
             ? <InlineLoading />
             : active
-              ? <ProjectOperations
+              ? mode === 'agreements' ? <>
+                <PanelHeader eyebrow="Agreement activation" title={active.name} copy="Project approval and platform availability are separate controls." status={arcActivationEnabled ? 'Platform enabled' : 'Platform paused'} />
+                <p className="mt-4 text-sm text-gray-500">{arcActivationEnabled ? 'The global activation switch is on. All project and execution checks still apply.' : 'New Arc activations are paused globally. Approving this project does not override that pause.'}</p>
+                <ArcPilotControl project={active} busy={busy} limits={pilotLimits} setLimits={setPilotLimits} reason={pilotReason} setReason={setPilotReason} onOperate={operateArcPilot} />
+              </> : <ProjectOperations
                   project={active}
                   busy={busy}
                   reason={suspensionReason}
                   setReason={setSuspensionReason}
                   onOperate={operate}
-                  pilotLimits={pilotLimits}
-                  setPilotLimits={setPilotLimits}
-                  pilotReason={pilotReason}
-                  setPilotReason={setPilotReason}
-                  onOperateArcPilot={operateArcPilot}
                 />
               : !error && <EmptyProjects />}
           {error && <Message tone="error">{error}</Message>}
           {notice && <Message tone="success">{notice}</Message>}
         </section>
       </div>
-      </>}
-    </main>
+    </div>
   )
 }
 
-function OperationsSectionNav({ active }: { active: OperationsSurface }) {
-  return <nav aria-label="Operations sections" className="mt-6 flex gap-1 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1 dark:border-white/10 dark:bg-[#111216]">
-    {OPERATIONS_SECTIONS.map(section => <NavLink
-      key={section.id}
-      to={section.path}
-      aria-current={active === section.id ? 'page' : undefined}
-      className={({ isActive }) => cn(
-        'relative min-w-max flex-1 rounded-xl px-4 py-3 text-center transition',
-        isActive
-          ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
-          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-white',
-      )}
-    >
-      <p className="text-sm font-semibold tracking-[-0.01em]">{section.label}</p>
-      <span className="sr-only"> — {section.description}</span>
-    </NavLink>)}
-  </nav>
-}
-
-function ProjectOperations({ project, busy, reason, setReason, onOperate, pilotLimits, setPilotLimits, pilotReason, setPilotReason, onOperateArcPilot }: {
+function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
   project: Project
   busy: boolean
   reason: string
   setReason: (value: string) => void
   onOperate: (action: 'admin-activate' | 'admin-suspend' | 'admin-reactivate') => Promise<void>
-  pilotLimits: { maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: string; maxDurationSeconds: string }
-  setPilotLimits: (value: { maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: string; maxDurationSeconds: string }) => void
-  pilotReason: string
-  setPilotReason: (value: string) => void
-  onOperateArcPilot: (action: 'admin-arc-pilot-approve' | 'admin-arc-pilot-disable') => Promise<void>
 }) {
   const state = projectState(project)
   const activeKeys = project.keys.filter(key => !key.revokedAt)
@@ -397,8 +352,6 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, pilotL
       </div>
     </section>
 
-    <ArcPilotControl project={project} busy={busy} limits={pilotLimits} setLimits={setPilotLimits} reason={pilotReason} setReason={setPilotReason} onOperate={onOperateArcPilot} />
-
     <OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} />
 
     <section className="mt-4">
@@ -433,12 +386,12 @@ function ArcPilotControl({ project, busy, limits, setLimits, reason, setReason, 
 }) {
   if (!project.capabilities.includes('arc_agreements')) return null
   const pilot = project.arcAgreementPilot
-  const status = pilot?.status === 'approved' ? 'Activation approved' : pilot?.status === 'disabled' ? 'Activation disabled' : pilot ? 'Draft only' : 'Legacy pilot'
-  const activeLiveKey = project.keys.some(key => !key.revokedAt && (key.environment === 'live' || key.prefix.startsWith('hpl_test_')))
+  const status = pilot?.status === 'approved' ? 'Project approved' : pilot?.status === 'disabled' ? 'Project disabled' : pilot ? 'Draft only' : 'Legacy approval'
+  const activeLiveKey = project.keys.some(key => !key.revokedAt && (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === 'live')
   const ready = (project.checkoutMode === 'human' || project.checkoutMode === 'agentic') && project.settlementMode === 'usdc' && project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended' && project.networks.includes('arc') && Boolean(project.recipients.arc) && project.webhookConfigured && activeLiveKey
   const update = (key: keyof typeof limits, value: string) => setLimits({ ...limits, [key]: value })
   return <section className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-400/20 dark:bg-blue-400/[0.07]">
-    <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-gray-950 dark:text-white">Arc Agreement pilot</p><p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Durable project approval. Global runtime controls remain the emergency ceiling.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{status}</span></div>
+    <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-gray-950 dark:text-white">Arc activation limits</p><p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Approval applies only to this integration and remains subject to platform availability.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{status}</span></div>
     <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-gray-500 dark:text-gray-400 sm:grid-cols-5">
       {[[project.checkoutMode === 'agentic' ? 'Agentic' : 'Human', project.checkoutMode === 'human' || project.checkoutMode === 'agentic'], ['USDC ready', project.settlementMode === 'usdc' && project.settlementStatus === 'ready'], ['Arc route', project.networks.includes('arc') && Boolean(project.recipients.arc)], ['Webhook', project.webhookConfigured], ['Live key', activeLiveKey]].map(([label, ok]) => <span key={String(label)} className={cn('rounded-lg border px-2 py-2 text-center', ok ? 'border-emerald-200 text-emerald-700 dark:border-emerald-400/20 dark:text-emerald-300' : 'border-amber-200 text-amber-700 dark:border-amber-400/20 dark:text-amber-300')}>{label}</span>)}
     </div>
@@ -500,7 +453,7 @@ function OperationsControl({ project, busy, reason, setReason, onOperate }: {
   </section>
 }
 
-function OperationsSignIn() {
+export function OperationsSignIn() {
   return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-6xl items-center px-4 py-12">
     <section className="grid w-full overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-[0_32px_100px_rgba(15,23,42,.12)] dark:border-white/10 dark:bg-[#101114] lg:grid-cols-[1.05fr_.95fr]">
       <div className="bg-[#050609] p-7 text-white sm:p-10 lg:p-12">
@@ -518,16 +471,6 @@ function OperationsSignIn() {
       </div>
     </section>
   </main>
-}
-
-function OperationsTop({ onLogout }: { onLogout: () => Promise<void> }) {
-  return <header className="flex items-center justify-between">
-    <Link to="/" className="text-sm font-bold text-gray-950 dark:text-white">Hash PayLink <span className="font-medium text-gray-400">Operations</span></Link>
-    <div className="flex items-center gap-2">
-      <Link to="/developers" className="hidden h-9 items-center rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 sm:flex dark:border-white/10 dark:text-gray-300">Developer portal</Link>
-      <button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button>
-    </div>
-  </header>
 }
 
 function SummaryCard({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'success' | 'warning' | 'danger' }) {
@@ -571,7 +514,7 @@ function Message({ tone, children }: { tone: 'error' | 'success'; children: Reac
   return <p className={cn('mt-5 rounded-xl border px-3 py-2 text-xs font-medium', tone === 'error' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200')}>{children}</p>
 }
 
-function OperationsLoading() {
+export function OperationsLoading() {
   return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-xl items-center px-4 py-12"><section className="w-full rounded-[1.75rem] border border-gray-200 bg-white p-7 text-center shadow-[0_24px_80px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-[#111216]"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><Loader2 className="h-5 w-5 animate-spin" /></span><h1 className="mt-5 text-xl font-semibold tracking-[-0.03em] text-gray-950 dark:text-white">Securing operations</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">Checking Privy identity and the server-side operations allowlist.</p></section></main>
 }
 

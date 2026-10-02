@@ -151,7 +151,7 @@ function operationState(agreement: AgreementOperation) {
   return { label: 'Activation pending', tone: 'warning' as const }
 }
 
-export default function ArcAgreementOperationsPanel() {
+export default function ArcAgreementOperationsPanel({ workspaceId }: { workspaceId: string }) {
   const { getAccessToken, user } = usePrivy()
   const [agreements, setAgreements] = useState<AgreementOperation[]>([])
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
@@ -168,7 +168,7 @@ export default function ArcAgreementOperationsPanel() {
   async function api(method: 'GET' | 'POST', body?: Record<string, unknown>) {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch('/api/arc-agreement-operations', {
+    const response = await fetch('/api/arc-agreement-operations?workspace=' + encodeURIComponent(workspaceId), {
       method,
       cache: 'no-store',
       headers: {
