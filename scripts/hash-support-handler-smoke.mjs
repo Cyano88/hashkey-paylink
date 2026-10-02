@@ -102,11 +102,11 @@ if(remoteMode){
  assert.equal(detail.body.case.messages.at(-1).receipt.eventId,'owned-choice')
  const forged=await call({action:'chat',caseId:id,optionId:'payment_details',eventId:'someone-elses-event',requestId:'recovery-forged-00001'},'recovery-owner')
  assert.equal(forged.body.case.messages.at(-1).receipt,undefined)
- globalThis.intentResult='latest_gift'
+ globalThis.intentResult='name';globalThis.accountProfiles['recovery-owner']={resolvedName:'Recovery Fixture'}
  const natural=await call({action:'chat',message:'Could you tell me about my most recent gift',requestId:'recovery-inference-001',newConversation:true},'recovery-owner')
  // Direct supported wording may resolve without compute; an indirect phrasing must use routing.
- const routed=await call({action:'chat',message:'Could you tell me where my money went',requestId:'recovery-inference-002',newConversation:true},'recovery-owner')
- assert.equal(routed.body.case.messages.at(-1).receipt.eventId,'owned-choice');assert.ok(globalThis.intentCalls>0)
+ const routed=await call({action:'chat',message:'What is my profile called?',requestId:'recovery-inference-002',newConversation:true},'recovery-owner')
+ assert.equal(routed.body.case.messages.at(-1).text,'Your profile name is Recovery Fixture.');assert.ok(globalThis.intentCalls>0)
  assert.ok(!JSON.stringify(globalThis.lastIntent).includes('owned-choice'));assert.ok(!JSON.stringify(globalThis.lastIntent).includes('owned-hash'))
  globalThis.intentResult='invented';const unknown=await call({action:'chat',message:'Could you tell me where my money went',requestId:'recovery-inference-003',newConversation:true},'recovery-owner');assert.equal(unknown.body.case.humanSupport,false);assert.ok(unknown.body.case.messages.at(-1).options.length)
  const handoff=await call({action:'chat',caseId:id,optionId:'human',requestId:'recovery-human-000001'},'recovery-owner');assert.equal(handoff.body.case.humanSupport,true);assert.equal(handoff.body.case.messages.at(-1).kind,'handoff')
