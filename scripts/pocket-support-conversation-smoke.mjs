@@ -77,3 +77,12 @@ assert.equal(resumed.waitingSince,250000,'A new customer exchange resets the cou
 submitSupportConversation(separateStore,{profileId:'legacy',caseId:separate.id,message:'I need a human',requestId:uuid()},260000,uuid)
 assert.equal(separate.status,'open')
 assert.equal(separate.waitingSince,undefined,'Human handoff stops automatic closure')
+
+const profileCases={}
+const profileAnswer=submitSupportConversation(profileCases,{profileId:'profile-fixture',message:'What are my full names?',requestId:uuid()},100000,uuid)
+assert.equal(profileAnswer.humanSupport,false)
+assert.equal(profileAnswer.status,'waiting_user')
+assert.equal(profileAnswer.messages.at(-1).text,'You can view your full name in Profile.')
+submitSupportConversation(profileCases,{profileId:'profile-fixture',caseId:profileAnswer.id,message:'Hello',requestId:uuid()},100001,uuid)
+assert.equal(profileAnswer.messages.at(-1).author,'agent')
+console.log('Profile guidance avoids unnecessary handoff and preserves conversation.')

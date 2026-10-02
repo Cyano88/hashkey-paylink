@@ -18,6 +18,7 @@ export function requestsPocketHuman(message: string) {
 export function pocketSupportAnswer(message: string): { text: string; handoff: boolean } {
   const q = message.trim().toLowerCase()
   if (requestsPocketHuman(q)) return {text:'Your request is in the Pocket Support queue. A representative has not joined yet. You can add details here; the team will see this conversation.',handoff:true}
+  if (/^(?:(?:what(?: is|'s| are)|show me|tell me) my (?:full |first |last )?names?|where (?:can i|do i) (?:find|see|view) my (?:full |first |last )?names?)[?.! ]*$/.test(q)) return {text:'You can view your full name in Profile.',handoff:false}
   const exact = pocketSupportFaqs.find(item => item.question.toLowerCase() === q)
   if (exact) return { text: exact.answer, handoff: false }
   const topic = ({deposit: 1, transfer: 2, bills: 4, xstocks: 7, account: 9} as Record<string, number>)[q]
