@@ -1,6 +1,6 @@
 import HashSupportKnowledgePanel from './HashSupportKnowledgePanel'
 import type { HashKnowledge } from '../../api/hash-support/knowledge'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { Check, Loader2, Send } from '../pocket/components/PocketIcons'
 import { ArrowPathIcon as RefreshCw } from '@heroicons/react/24/outline'
@@ -48,7 +48,6 @@ export default function PocketSupportOperationsPanel() {
   const [reply, setReply] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [avatarDataUrl,setAvatarDataUrl]=useState('')
-  const photoInput=useRef<HTMLInputElement>(null)
   const [photoBusy,setPhotoBusy]=useState(false)
   const [nameSaved, setNameSaved] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -137,8 +136,10 @@ export default function PocketSupportOperationsPanel() {
     <div className="mb-4 flex flex-wrap items-end gap-3">
       <div className="flex items-center gap-3">
         {avatarDataUrl&&<img src={avatarDataUrl} alt="Your support profile" className="h-10 w-10 rounded-full object-cover"/>}
-        <input ref={photoInput} type="file" aria-label="Profile photo" accept="image/jpeg,image/png,image/webp" disabled={busy||photoBusy} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void choosePhoto(file)}} className="hidden"/>
-        <button type="button" disabled={busy||photoBusy} onClick={()=>photoInput.current?.click()} className="rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold disabled:opacity-40 dark:border-white/15">{photoBusy?'Preparing photo...':avatarDataUrl?'Change photo':'Upload photo'}</button>
+        <label className="relative inline-flex cursor-pointer items-center rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold focus-within:ring-2 focus-within:ring-blue-500 dark:border-white/15">
+          <span aria-hidden="true">{photoBusy?'Preparing photo...':avatarDataUrl?'Change photo':'Upload photo'}</span>
+          <input type="file" aria-label="Profile photo" accept="image/jpeg,image/png,image/webp" disabled={busy||photoBusy} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void choosePhoto(file)}} style={{position:'absolute',inset:0,width:'100%',height:'100%',opacity:0,cursor:'pointer'}}/>
+        </label>
       </div>
       <label className="text-xs">Support display name<input aria-label="Support display name" disabled={busy} maxLength={60} value={displayName} onChange={event=>{setDisplayName(event.target.value);setNameSaved(false)}} className="ml-2 rounded-lg border border-gray-200 bg-transparent px-3 py-2 dark:border-white/10"/></label>
       <button type="button" disabled={busy||photoBusy||!displayName.trim()||nameSaved} onClick={()=>void saveName()} className="rounded-full bg-gray-950 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy?'Saving...':nameSaved?'Saved':'Save profile'}</button>
