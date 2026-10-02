@@ -15,7 +15,7 @@ assert.equal(handoff.humanSupport,true)
 assert.equal(handoff.messages.length,5)
 send({message:'hello'})
 assert.equal(handoff.messages.length,6,'No bot reply after handoff')
-assert.match(handoff.messages[3].text,/can�t answer that reliably/)
+assert.ok(handoff.messages[3].text.includes("can't answer that reliably"))
 assert.equal(handoff.messages[4].kind,'handoff')
 handoff.status='resolved'
 assert.throws(()=>send({caseId:handoff.id}),e=>e.status===409)
@@ -88,3 +88,5 @@ assert.equal(profileAnswer.messages.at(-1).text,'You can view your full name in 
 submitSupportConversation(profileCases,{profileId:'profile-fixture',caseId:profileAnswer.id,message:'Hello',requestId:uuid()},100001,uuid)
 assert.equal(profileAnswer.messages.at(-1).author,'agent')
 console.log('Profile guidance avoids unnecessary handoff and preserves conversation.')
+
+for(const question of ["What's my fulll name's", "What's my full name?", "What are my full names?"]){const records={};const answer=submitSupportConversation(records,{profileId:'typo-fixture',message:question,requestId:uuid()},100000,uuid);assert.equal(answer.humanSupport,false);assert.equal(answer.messages.at(-1).text,'You can view your full name in Profile.')}

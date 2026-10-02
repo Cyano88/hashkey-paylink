@@ -1,3 +1,4 @@
+export const POCKET_SUPPORT_HANDOFF_TEXT = "I can't answer that reliably yet. I've passed your question to Pocket Support."
 export const pocketSupportFaqs = [
   { question: 'What can I do with Pocket?', answer: 'Use Pocket to send and receive USDC, pay supported Nigerian bills, make bank transfers, create payment requests and use POS. XStocks has its own trading, receiving and sending flows.' },
   { question: 'How do I deposit USDC?', answer: 'Open Receive in Stablecoins, choose the network and copy the address shown there. Send supported USDC on that exact network. Always check the receiving address for the selected network.' },
@@ -16,13 +17,13 @@ export function requestsPocketHuman(message: string) {
   return /\b(human|customer\s+(?:service|support|representative)|representative|real\s+(?:person|agent)|(?:talk|speak|chat|connect|transfer|escalate).{0,35}(?:support|person|agent|team))\b/i.test(message)
 }
 export function pocketSupportAnswer(message: string): { text: string; handoff: boolean } {
-  const q = message.trim().toLowerCase()
+  const q = message.trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
   if (requestsPocketHuman(q)) return {text:'Your request is in the Pocket Support queue. A representative has not joined yet. You can add details here; the team will see this conversation.',handoff:true}
-  if (/^(?:(?:what(?: is|'s| are)|show me|tell me) my (?:full |first |last )?names?|where (?:can i|do i) (?:find|see|view) my (?:full |first |last )?names?)[?.! ]*$/.test(q)) return {text:'You can view your full name in Profile.',handoff:false}
+  if (/^(?:(?:what(?: is|'s| are)|show me|tell me) my (?:full+ |first |last )?name(?:s|'s)?|where (?:can i|do i) (?:find|see|view) my (?:full+ |first |last )?name(?:s|'s)?)[?.! ]*$/.test(q)) return {text:'You can view your full name in Profile.',handoff:false}
   const exact = pocketSupportFaqs.find(item => item.question.toLowerCase() === q)
   if (exact) return { text: exact.answer, handoff: false }
   const topic = ({deposit: 1, transfer: 2, bills: 4, xstocks: 7, account: 9} as Record<string, number>)[q]
   if (topic !== undefined) return { text: pocketSupportFaqs[topic].answer + ' Tell me what you need help with.', handoff: false }
   if (/^(hi|hello|hey|good morning|good afternoon)[!. ]*$/.test(q)) return {text: 'Hello! How can I help with Pocket today?', handoff: false}
-  return { text: q === 'talk to support' ? 'Your conversation is with Pocket Support now. Tell us what happened; your messages will stay here for the team.' : 'I can�t answer that reliably yet. I�ve passed your question to Pocket Support.', handoff: true }
+  return { text: POCKET_SUPPORT_HANDOFF_TEXT, handoff: true }
 }

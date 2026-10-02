@@ -1,3 +1,4 @@
+import {POCKET_SUPPORT_HANDOFF_TEXT} from '../../src/pocket/lib/pocketSupportContent.js'
 import {matchSupportQuestion} from '../hash-support/semantic-answer.js'
 import { createKnowledge, reviewKnowledge, POCKET_SUPPORT_TENANT, type KnowledgeStore } from '../hash-support/knowledge.js'
 import {readPocketKycLevel} from './kyc-level.js'
@@ -83,7 +84,8 @@ function publicCase(item: SupportCase) {
     (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution' || message.kind === 'resolution_prompt' || message.kind === 'staff_joined')
     && message.createdAt > lastReadAt
   )).length
-  return { ...safe, humanSupport: Boolean(item.humanSupport || item.assignedTo || item.category !== 'other' || item.messages.some(m => m.author === 'staff' || m.kind === 'transaction_report')), unreadCount }
+  const messages = safe.messages.map(message => message.author==='agent' && message.text==="I can�t answer that reliably yet. I�ve passed your question to Pocket Support." ? {...message,text:POCKET_SUPPORT_HANDOFF_TEXT} : message)
+  return { ...safe, messages, humanSupport: Boolean(item.humanSupport || item.assignedTo || item.category !== 'other' || item.messages.some(m => m.author === 'staff' || m.kind === 'transaction_report')), unreadCount }
 }
 
 export async function redactPocketSupportCases(profileId: string) {
