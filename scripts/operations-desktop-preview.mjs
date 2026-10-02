@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { resolve, extname, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
-const root = process.cwd(), out = resolve(root, 'output/playwright/operations-preview'), port = 4321
+const root = process.cwd(), out = resolve(root, 'output/playwright/operations-preview'), port = Number(process.env.OPERATIONS_PREVIEW_PORT || 4321)
 await fs.mkdir(out, { recursive: true })
 const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import App from './src/surfaces/DeveloperApp';import '@fontsource/plus-jakarta-sans/400.css';import '@fontsource/plus-jakarta-sans/500.css';import '@fontsource/plus-jakarta-sans/600.css';import '@fontsource/plus-jakarta-sans/700.css';
 const project={id:'dev_preview12345678',name:'Hash PayStream · Human',ownerEmail:'founder@example.test',website:'https://example.test',useCase:'Synthetic agreement integration for the desktop preview.',checkoutMode:'human',capabilities:['arc_agreements','xstocks_agreements'],settlementMode:'usdc',settlementStatus:'ready',operationalStatus:'active',networks:['arc'],defaultNetwork:'arc',recipients:{arc:'0x1111111111111111111111111111111111111111'},allowedOrigins:['https://example.test'],webhookUrl:'https://example.test/events',webhookConfigured:true,keys:[{id:'key_preview',prefix:'hpl_app_example',environment:'live'}],arcAgreementPilot:{status:'approved',maxAgreementUsdc:'1',dailyVolumeUsdc:'1',maxActiveAgreements:1,maxDurationSeconds:604800},createdAt:'2026-09-25T12:00:00Z',updatedAt:'2026-10-02T12:00:00Z'};

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, ArrowUpRight, ChevronRight, Layers3, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, ChevronRight, Layers3, LogOut, Menu, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import ProjectOperations, { OperationsLoading, OperationsSignIn } from './DeveloperOperationsPage'
 import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
 import XStocksReviewOperationsPanel from '../components/XStocksReviewOperationsPanel'
@@ -28,7 +28,14 @@ export default function OperationsWorkspacePage() {
   const [state, setState] = useState<{ owner: string; session: Session }>()
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menu = useRef<HTMLDialogElement>(null)
   const identity = authenticated ? user?.id : undefined
+  useEffect(() => { setMenuOpen(false) }, [workspaceId, section, identity, reload])
+  useEffect(() => {
+    if (menuOpen && menu.current && !menu.current.open) menu.current.showModal()
+    else if (!menuOpen && menu.current?.open) menu.current.close()
+  }, [menuOpen])
   useEffect(() => {
     let current = true
     setState(undefined); setError('')
@@ -58,25 +65,29 @@ export default function OperationsWorkspacePage() {
   const invalid = Boolean(workspaceId && !workspace) || Boolean(section && !authorizedSection && section !== 'escalations')
     || Boolean(section === 'escalations' && (workspace?.id === 'pocket' || !session.founder))
   const contextKey = `${identity}:${workspaceId}:${section || 'overview'}`
-  return <div className="min-h-[calc(100dvh-4rem)] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-    <aside className="border-b border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#0d0d0e] lg:sticky lg:top-0 lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col lg:border-b-0 lg:border-r">
+  return <div className="min-h-[calc(100dvh-4rem)]">
+    <dialog id="operations-menu" ref={menu} aria-label="Operations menu" onCancel={() => setMenuOpen(false)} onClose={() => setMenuOpen(false)} onClick={e => { if (e.target === e.currentTarget) setMenuOpen(false) }} className="fixed inset-y-0 left-0 right-auto m-0 h-dvh max-h-none w-[min(20rem,calc(100vw-3rem))] max-w-none border-0 bg-white p-0 text-gray-950 shadow-xl backdrop:bg-black/40 dark:bg-[#0d0d0e] dark:text-white">
+    <aside className="relative flex min-h-full flex-col p-5" onClick={e => { if ((e.target as HTMLElement).closest('a')) setMenuOpen(false) }}>
+      <button type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-5 w-5" /></button>
       <Link to="/admin" className="flex min-h-11 items-center gap-2 text-sm font-semibold"><Layers3 className="h-4 w-4" />Operations</Link>
       <p className="mt-1 text-xs text-gray-500">{session.founder ? 'Founder access' : 'Team access'}</p>
       <label className="mt-6 block text-xs font-medium text-gray-500" htmlFor="operations-workspace">Product workspace</label>
       <WorkspacePicker workspaces={session.workspaces} selected={workspace?.id || ''} />
-      <nav aria-label="Workspace sections" className="mt-5 flex gap-1 overflow-x-auto lg:flex-col">
+      <nav aria-label="Workspace sections" className="mt-5 flex flex-col gap-1">
         {workspace ? <>
           <SectionLink to={path(workspace.id)} active={!section}>Overview</SectionLink>
           {workspace.sections.map(s => <SectionLink key={s} to={path(workspace.id, s)} active={section === s}>{labels[s]}</SectionLink>)}
           {workspace.id !== 'pocket' && session.founder && <SectionLink to={path(workspace.id, 'escalations')} active={section === 'escalations'}>Escalations</SectionLink>}
         </> : <SectionLink to="/admin" active>Products</SectionLink>}
       </nav>
-      <div className="mt-6 border-t border-gray-200 pt-4 dark:border-white/10 lg:mt-auto">
+      <div className="mt-auto border-t border-gray-200 pt-4 dark:border-white/10">
         <Link to="/" className="flex min-h-11 items-center justify-between text-xs text-gray-500">Developer portal<ArrowUpRight className="h-3.5 w-3.5" /></Link>
         <button onClick={() => void logout()} className="flex min-h-11 w-full items-center justify-between text-xs text-gray-500">Sign out<LogOut className="h-3.5 w-3.5" /></button>
       </div>
     </aside>
+    </dialog>
     <main id="developer-content" className="min-w-0 px-5 py-7 sm:px-8 xl:px-10">
+      <button type="button" aria-label="Open navigation" aria-controls="operations-menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="mb-5 inline-flex h-11 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium dark:border-white/10 dark:bg-[#111216]"><Menu className="h-5 w-5" /><span>Menu</span></button>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 pb-6 dark:border-white/10">
         <div>
           {workspace && <Link to="/admin" className="mb-3 inline-flex items-center gap-1 text-xs text-gray-500"><ArrowLeft className="h-3 w-3" />All products</Link>}
