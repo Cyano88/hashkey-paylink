@@ -3,7 +3,7 @@ import {digest} from './auth.mjs'
 export function generalQuestion(question){
  return typeof question==='string' && question.length<=320 && /^(how|where|what|can|does|is|are|do)\b/i.test(question.trim()) &&
  !/[\d@]|https?:|0x|\b(sk-|Bearer\s)/i.test(question) &&
- !/\b(and|also|plus|or|check|investigate|trace|track|confirm|reverse|cancel|approve|release)\b/i.test(question) &&
+ !/\b(my|our|did|happened|went|ago|yesterday|today|earlier|already|yet|and|also|plus|or|check|investigate|trace|track|confirm|reverse|cancel|approve|release)\b/i.test(question) &&
  !/\b(my|our)\s+(money|funds|payments?|transfers?|deposits?|refunds?|verification|account|balance|transactions?)\b/i.test(question) &&
  !/\b(my name|i am|i'm|call me|human|representative|support agent|speak|talk|ignore|instruction|prompt|system|pretend|bypass|override|failed|failing|missing|stuck|deducted|debited|not received|not arrived|not delivered|status|charged|scam|stolen|unauthori[sz]ed|emergency|lawsuit|bvn|nin|passport|password|otp|recovery phrase|private key)\b/i.test(question)
 }
