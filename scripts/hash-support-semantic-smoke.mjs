@@ -10,5 +10,5 @@ assert.equal(resolveSupportMatch(match,{approved:entry},'pocket',now+61000),unde
 assert.equal(resolveSupportMatch({...match,version:1},{approved:entry},'pocket',now),undefined)
 const cases={};let n=0
 const item=submitSupportConversation(cases,{profileId:'fixture',message:'Where can I download receipts?',requestId:'stale-match-request-001'},now,()=>String(++n),{tenantId:'pocket',entries:{approved:{...entry,status:'retired'}},match})
-assert.equal(item.humanSupport,true);assert.equal(item.messages.at(-1).kind,'handoff')
-console.log('PASS semantic answer revalidation: business scope, version, expiry, withdrawal and human handoff')
+assert.equal(item.humanSupport,false);assert.ok(item.messages.at(-1).options.length);assert.equal(item.messages.at(-1).knowledgeId,undefined)
+console.log('PASS semantic answer revalidation: business scope, version, expiry, withdrawal and clarification fallback')
