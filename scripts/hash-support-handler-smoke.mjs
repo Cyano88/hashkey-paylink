@@ -14,7 +14,8 @@ if(remoteMode){
  }
 }
 const mocks={
- 'support-diagnostics.js':'export const readSupportBalance=async()=>({text:"Verified balance fixture"}),readSupportBillStatus=async()=>({status:"delivered",checkedAt:Date.now()})',
+ 'support-feature-records.js':'export const readSupportFeatureRecords=async()=>[]',
+  'support-diagnostics.js':'export const readSupportBalance=async()=>({text:"Verified balance fixture"}),readSupportBillStatus=async()=>({status:"delivered",checkedAt:Date.now()})',
  'support-investigation-chain.js':'export const checkSupportIncomingUsdc=async()=>({status:"unavailable",text:"Fixture provider unavailable"})',
  'kyc-level.js': 'export const readPocketKycLevel=async()=>({level:"none"})',
  'support-account-data.js': 'export const readSupportPayoutStatus=async()=>({status:"settled",checkedAt:Date.now()});export const readSupportPayments=async owner=>{globalThis.accountPaymentOwners=(globalThis.accountPaymentOwners||[]).concat(owner);return structuredClone(globalThis.accountPayments?.[owner]||[])}',
