@@ -1,4 +1,4 @@
-﻿# Trade payment adapters
+# Trade payment adapters
 
 This directory holds physical-goods rules shared by Arc USDC and XLayer xStocks.
 It does not implement Work delivery semantics.
@@ -13,6 +13,9 @@ It does not implement Work delivery semantics.
 - Arc binding commits the chain, factory, parties, amount and accepted Trade terms.
 - Arc production binding fails closed while the Trade release registry is null.
   The deployed service-agreement factory must never fill that registry.
+- Read-only Arc transaction planning and simulation for all participant actions, including exact allowances and mutual split proposals.
+- Factory/USDC checks and two-signer Safe policy checks (proxy, singleton, owners, threshold and absence of modules). New-funding pause preserves participant recovery.
+- Production release remains null; no HTTP route signs or submits these candidate plans.
 - Pure binding construction is available for synthetic deployment rehearsal only;
   it does not authorize transactions or establish a verified deployment.
 
@@ -40,3 +43,24 @@ considered complete. Local stock reviewer regressions do not replace that test.
 
 Production services, feature flags and contract deployments were not changed.
 
+
+## Arc planner increment - 2026-10-03
+
+The candidate planner validates confirmed escrow identity and terms, checks the
+latest mapping/state/proposal, simulates the exact call, then rechecks the block
+hash and chain. Only chain 5042 and the fixed USDC token are accepted. It never
+prepares operator dispute resolution for a participant. New-funding authority
+checks run against both the confirmed and latest Safe state. They pin reviewed
+proxy/singleton bytecode, owners and a threshold of two, and reject modules.
+
+The implementation is exercised with synthetic readers, including every encoded
+participant method, paused recovery, deployment/role/term mismatches, altered
+Safe configuration, stale proposal nonces and reorg/simulation failures. The
+shared and existing XLayer planner regressions and focused TypeScript check pass.
+This is not a funded Arc canary or a complete hosted checkout/signing integration.
+
+Safe behavior was checked against primary v1.4.1 source:
+https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/proxies/SafeProxy.sol
+https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/ModuleManager.sol
+The release manifest must pin the version actually deployed; these references
+do not establish an existing Arc Safe deployment or select its owners.

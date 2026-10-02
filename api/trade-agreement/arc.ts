@@ -9,6 +9,7 @@ export type ArcTradeRelease = Readonly<{
   factory: Address
   arbiter: Address
   factoryRuntimeHash: `0x${string}`
+  authority: Readonly<{proxyRuntimeHash: `0x${string}`; singleton: Address; singletonRuntimeHash: `0x${string}`; owners: readonly Address[]; threshold: 2; version: string}>
 }>
 // The service-agreement factory is not a Trade factory. Populate this only from
 // a separately verified Trade deployment; environment variables cannot replace it.
