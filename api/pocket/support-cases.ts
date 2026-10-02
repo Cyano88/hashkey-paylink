@@ -1,3 +1,4 @@
+import {readPocketNotices,markPocketNoticesRead} from './notification-store.js'
 import {sendPocketPush} from './push-devices.js'
 import {readSupportFeatureRecords} from './support-feature-records.js'
 import {boundedSupportRead} from './support-read-budget.js'
@@ -302,6 +303,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         saved = item
         return next
       })
+      try{const notices=await readPocketNotices(profileId);const ids=notices.filter(n=>n.category==='support'&&n.path==='/assistant?case='+encodeURIComponent(caseId)&&n.occurredAt<=(saved?.customerReadAt||0)).map(n=>n.eventId);if(ids.length)await markPocketNoticesRead(profileId,ids)}catch{console.warn('[pocket-support] Notice read state could not sync.')}
       return res.json({ ok: true, case: saved && publicCase(saved) })
     }
 

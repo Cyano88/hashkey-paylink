@@ -14,6 +14,7 @@ if(remoteMode){
  }
 }
 const mocks={
+ 'notification-store.js':'export const readPocketNotices=async owner=>(globalThis.supportPushes||[]).filter(p=>p.owner===owner).map(p=>({...p.notice,eventId:p.eventId}));export const markPocketNoticesRead=async(owner,ids)=>{globalThis.supportNoticeReads={owner,ids}}',
  'push-devices.js':'export const sendPocketPush=async(owner,eventId,notice)=>{if(globalThis.failSupportPush)throw Error("Synthetic push outage");(globalThis.supportPushes||=[]).push({owner,eventId,notice});return true}',
  'support-feature-records.js':'export const readSupportFeatureRecords=async()=>[]',
   'support-diagnostics.js':'export const readSupportBalance=async()=>({text:"Verified balance fixture"}),readSupportBillStatus=async()=>({status:"delivered",checkedAt:Date.now()})',
@@ -127,6 +128,7 @@ assert.equal(reply.statusCode,200);assert.equal(reply.body.case.messages.at(-1).
 const notice=globalThis.supportPushes.at(-1);assert.equal(notice.owner,customer);assert.equal(notice.notice.category,'support');assert.equal(notice.notice.path,'/assistant?case='+humanCase);assert.ok(!notice.notice.body.includes('checking this'))
 const inbox=await call({action:'list-mine'},customer);assert.ok(inbox.body.cases.find(c=>c.id===humanCase).unreadCount>0)
 await call({action:'mark-read',caseId:humanCase},customer)
+assert.equal(globalThis.supportNoticeReads.owner,customer);assert.ok(globalThis.supportNoticeReads.ids.includes(notice.eventId))
 assert.equal((await call({action:'list-mine'},customer)).body.cases.find(c=>c.id===humanCase).unreadCount,0)
 const resolved=await call({action:'staff-resolve',caseId:humanCase});let prompt=resolved.body.case.resolutionPromptId;assert.ok(prompt);assert.match(globalThis.supportPushes.at(-1).notice.body,/resolved/)
 assert.equal((await call({action:'resolution-answer',caseId:humanCase,promptId:prompt,answer:'no'},'intruder')).statusCode,404)
