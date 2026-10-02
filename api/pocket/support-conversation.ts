@@ -47,9 +47,7 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     const answer: {text:string;handoff:boolean;options?:import('../../src/pocket/lib/pocketSupportActions.js').SupportOption[]} = (input.optionId&&supportMenu(input.optionId)) || accountAnswer || (source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message))
     item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,options:answer.options || (accountAnswer?.accountContext.kind==='clarify'?recoveryOptions(input.message):undefined),...(accountAnswer?{accountContext:accountAnswer.accountContext,receipt:accountAnswer.receipt}:{accountContext:{kind:'clarify',readAt:now}}),...(source&&!accountAnswer?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
-    if (answer.handoff) {
-      supportSystemMessage(item,'handoff','You are in the queue for Pocket Support.',now,uuid)
-    }
+
   }
   const awaitingCustomer = !item.humanSupport && !hasStaff && item.messages.at(-1)?.author === 'agent'
   item.status = awaitingCustomer ? 'waiting_user' : item.assignedTo ? 'assigned' : 'open'

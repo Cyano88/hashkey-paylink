@@ -8,7 +8,7 @@ for(const kind of ['requests','gifts','xpay','collections']){
  const choice=list.options.find(o=>o.id==='payment_details');assert.ok(choice?.eventId)
  const current={profileId:'profile',status:'waiting_user',humanSupport:false,updatedAt:now,messages:[{author:'agent',options:list.options,accountContext:list.accountContext}]}
  const select={...base,caseId:'case',cases:{case:current},question:'Check this payment',selectedEventId:choice.eventId}
- const answer=await supportAccountAnswer(select,deps);assert.match(answer.text,/Saved evidence fixture/);assert.match(answer.text,/not a new live/);assert.equal(answer.receipt,undefined)
+ const answer=await supportAccountAnswer(select,deps);assert.match(answer.text,/Saved evidence fixture/);assert.match(answer.text,/From your saved records/);assert.equal(answer.receipt,undefined)
  const follow=await supportAccountAnswer({...select,selectedEventId:undefined,question:'What is its status?',cases:{case:{...current,messages:[{author:'agent',accountContext:answer.accountContext,options:answer.options}]}}},deps);assert.match(follow.text,/Saved evidence fixture/)
  const before=reads;await supportAccountAnswer({...select,selectedEventId:choice.eventId+'-forged'},deps);assert.equal(reads,before)
  assert.equal(await supportAccountAnswer({...select,profileId:'other'},deps),undefined)

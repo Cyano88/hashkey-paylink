@@ -14,6 +14,7 @@ if(remoteMode){
  }
 }
 const mocks={
+ 'push-devices.js':'export const sendPocketPush=async(owner,eventId,notice)=>{if(globalThis.failSupportPush)throw Error("Synthetic push outage");(globalThis.supportPushes||=[]).push({owner,eventId,notice});return true}',
  'support-feature-records.js':'export const readSupportFeatureRecords=async()=>[]',
   'support-diagnostics.js':'export const readSupportBalance=async()=>({text:"Verified balance fixture"}),readSupportBillStatus=async()=>({status:"delivered",checkedAt:Date.now()})',
  'support-investigation-chain.js':'export const checkSupportIncomingUsdc=async()=>({status:"unavailable",text:"Fixture provider unavailable"})',
@@ -112,6 +113,35 @@ if(remoteMode){
  assert.equal(routed.body.case.messages.at(-1).text,'Your profile name is Recovery Fixture.');assert.ok(globalThis.intentCalls>0)
  assert.ok(!JSON.stringify(globalThis.lastIntent).includes('owned-choice'));assert.ok(!JSON.stringify(globalThis.lastIntent).includes('owned-hash'))
  globalThis.intentResult='invented';const unknown=await call({action:'chat',message:'Could you tell me where my money went',requestId:'recovery-inference-003',newConversation:true},'recovery-owner');assert.equal(unknown.body.case.humanSupport,false);assert.ok(unknown.body.case.messages.at(-1).options.length)
- const handoff=await call({action:'chat',caseId:id,optionId:'human',requestId:'recovery-human-000001'},'recovery-owner');assert.equal(handoff.body.case.humanSupport,true);assert.equal(handoff.body.case.messages.at(-1).kind,'handoff')
+ const handoff=await call({action:'chat',caseId:id,optionId:'human',requestId:'recovery-human-000001'},'recovery-owner');assert.equal(handoff.body.case.humanSupport,true);assert.match(handoff.body.case.messages.at(-1).text,/The team will reply here/)
  console.log('PASS structured recovery, menus, owned choices, forged selection rejection, 0G intent wiring, invalid intent fallback and explicit handoff')
 }
+// Complete human loop with the real handler and isolated notification transport.
+const customer='human-loop-owner'
+const opened=await call({action:'chat',message:'Talk to an agent',requestId:'human-loop-open-0001',newConversation:true},customer)
+const humanCase=opened.body.case.id
+assert.equal(opened.body.case.messages.filter(m=>m.kind==='handoff').length,0)
+await call({action:'staff-profile',displayName:'Seyi'})
+const reply=await call({action:'staff-reply',caseId:humanCase,message:'I am checking this with you.'})
+assert.equal(reply.statusCode,200);assert.equal(reply.body.case.messages.at(-1).displayName,'Seyi')
+const notice=globalThis.supportPushes.at(-1);assert.equal(notice.owner,customer);assert.equal(notice.notice.category,'support');assert.equal(notice.notice.path,'/assistant?case='+humanCase);assert.ok(!notice.notice.body.includes('checking this'))
+const inbox=await call({action:'list-mine'},customer);assert.ok(inbox.body.cases.find(c=>c.id===humanCase).unreadCount>0)
+await call({action:'mark-read',caseId:humanCase},customer)
+assert.equal((await call({action:'list-mine'},customer)).body.cases.find(c=>c.id===humanCase).unreadCount,0)
+const resolved=await call({action:'staff-resolve',caseId:humanCase});let prompt=resolved.body.case.resolutionPromptId;assert.ok(prompt);assert.match(globalThis.supportPushes.at(-1).notice.body,/resolved/)
+assert.equal((await call({action:'resolution-answer',caseId:humanCase,promptId:prompt,answer:'no'},'intruder')).statusCode,404)
+const more=await call({action:'resolution-answer',caseId:humanCase,promptId:prompt,answer:'yes'},customer);assert.notEqual(more.body.case.status,'resolved')
+const again=await call({action:'staff-resolve',caseId:humanCase});prompt=again.body.case.resolutionPromptId
+const done=await call({action:'resolution-answer',caseId:humanCase,promptId:prompt,answer:'no'},customer);assert.equal(done.body.case.status,'resolved')
+assert.equal((await call({action:'staff-reply',caseId:humanCase,message:'Too late'})).statusCode,409)
+console.log('PASS staff identity, reply notification and case deep link, unread/read, resolution Yes/No, cross-account denial and closed-case protection')
+const outageCase=await call({action:'chat',message:'Talk to an agent',requestId:'human-loop-outage-0001',newConversation:true},customer)
+globalThis.failSupportPush=true
+const preserved=await call({action:'staff-reply',caseId:outageCase.body.case.id,message:'Saved even if push is down.'})
+globalThis.failSupportPush=false
+assert.equal(preserved.statusCode,200);assert.equal(preserved.body.case.messages.at(-1).text,'Saved even if push is down.')
+const oldTime=Date.now()-7*86400000
+globalThis.hashFixture.cases['auto-fixture']={id:'auto-fixture',profileId:customer,category:'other',priority:'normal',humanSupport:true,status:'waiting_user',waitingSince:oldTime,updatedAt:oldTime,createdAt:oldTime,messages:[{id:'old-staff',author:'staff',text:'Can you confirm?',createdAt:oldTime}]}
+await call({action:'list-mine'},customer)
+assert.equal(globalThis.hashFixture.cases['auto-fixture'].status,'resolved');assert.ok(globalThis.supportPushes.some(p=>p.owner===customer&&p.notice.body==='Your support case is now closed.'))
+console.log('PASS push outage preserves staff reply and ordinary automatic closure emits a support notification')

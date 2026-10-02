@@ -14,11 +14,11 @@ const clarification=send({message:'My payment has not arrived'})
 assert.equal(clarification.humanSupport,false);assert.ok(clarification.messages.at(-1).options.length)
 const handoff=send({message:'Talk to an agent'})
 assert.equal(handoff.humanSupport,true)
-assert.equal(handoff.messages.length,7)
+assert.equal(handoff.messages.length,6)
 send({message:'hello'})
-assert.equal(handoff.messages.length,8,'No bot reply after handoff')
+assert.equal(handoff.messages.length,7,'No bot reply after handoff')
 assert.ok(handoff.messages[3].options.length)
-assert.equal(handoff.messages[6].kind,'handoff')
+assert.equal(handoff.messages.filter(m=>m.kind==='handoff').length,0);assert.match(handoff.messages[5].text,/The team will reply here/)
 handoff.status='resolved'
 assert.throws(()=>send({caseId:handoff.id}),e=>e.status===409)
 const next=send()
@@ -54,7 +54,7 @@ assert.equal(legacy.messages.length,count+1,'No automatic replies when a staff m
 const fresh={}
 const representative=submitSupportConversation(fresh,{profileId:'new',message:'I need to speak to a customer representative',requestId:uuid()},100000,uuid)
 assert.equal(representative.humanSupport,true)
-assert.match(representative.messages.at(-1).text,/queue for Pocket Support/)
+assert.match(representative.messages.at(-1).text,/with Pocket Support/)
 console.log('Legacy report handoff and explicit customer representative requests passed.')
 
 const separateStore={legacy:structuredClone(legacy)}

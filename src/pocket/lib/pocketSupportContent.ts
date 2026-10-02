@@ -20,7 +20,7 @@ export function requestsPocketHuman(message: string) {
 }
 export function pocketSupportAnswer(message: string): { text: string; handoff: boolean; options?:SupportOption[]; unresolved?:boolean } {
   const q = message.trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
-  if (requestsPocketHuman(q)) return {text:'Your request is in the Pocket Support queue. A representative has not joined yet. You can add details here; the team will see this conversation.',handoff:true}
+  if (requestsPocketHuman(q)) return {text:'Your request is with Pocket Support. The team will reply here.',handoff:true}
   if (/^(?:(?:what(?: is|'s| are)|show me|tell me) my (?:full+ |first |last )?name(?:s|'s)?|where (?:can i|do i) (?:find|see|view) my (?:full+ |first |last )?name(?:s|'s)?)[?.! ]*$/.test(q)) return {text:'You can view your full name in Profile.',handoff:false}
   if(/\b(trust|safe|safety|secure|security|protect|protected)\b/.test(q)&&/\b(pocket|hash paylink|money|funds)\b/.test(q)&&!/\b(stolen|unauthori[sz]ed|scam|hacked)\b/.test(q))return {text:pocketSupportFaqs[11].answer,handoff:false,options:supportOptions(['security','human'])}
   const exact = pocketSupportFaqs.find(item => item.question.toLowerCase() === q)

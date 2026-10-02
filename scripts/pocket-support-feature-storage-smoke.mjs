@@ -19,6 +19,6 @@ const m={exports:{}};new Function('require','module','exports',b.outputFiles[0].
 const read=m.exports.readSupportFeatureRecords;let network=0;globalThis.fetch=async()=>{network++;throw Error('No outbound requests allowed')}
 assert.equal((await read(owner,'requests','request-a'))[0].status,'accepted');globalThis.fx.request.senderId=foreign;assert.equal((await read(owner,'requests','request-a')).length,0)
 assert.equal((await read(owner,'gifts',gift))[0].status,'available');assert.ok(!JSON.stringify(await read(owner,'gifts',gift)).includes('SECRET'));globalThis.fx.gift.ownerId=foreign;assert.equal((await read(owner,'gifts',gift)).length,0)
-assert.equal((await read(owner,'xpay')).length,1);assert.equal((await read(owner,'xpay','terminal-b')).length,0);assert.match((await read(owner,'xpay','terminal-a'))[0].details.join(' '),/1000 NGN/)
+assert.equal((await read(owner,'xpay')).length,1);assert.equal((await read(owner,'xpay','terminal-b')).length,0);assert.match((await read(owner,'xpay','terminal-a'))[0].details.join(' '),/₦1,000/)
 assert.equal((await read(owner,'collections')).length,1);assert.equal((await read(owner,'collections','usdc:collection-b')).length,0);const collection=await read(owner,'collections','usdc:collection-a');assert.ok(!JSON.stringify(collection).includes('999'));assert.equal(network,0)
 console.log('PASS real feature adapters with storage fixtures: owner/recipient/terminal/collection binding, no bearer secrets, scoped contributions and zero outbound requests')

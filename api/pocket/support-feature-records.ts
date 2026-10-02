@@ -2,8 +2,8 @@
 export type SupportFeature = 'requests'|'gifts'|'xpay'|'collections'
 export type SupportFeatureRecord = {id:string;title:string;status:string;updatedAt:number;details?:string[]}
 const text=(value:unknown,max=100)=>String(value??'').replace(/[\u0000-\u001f<>]/g,' ').slice(0,max)
-const date=(value:number)=>Number.isFinite(value)&&value>0?new Date(value).toISOString():'Time unavailable'
-const payment=(p:{amount:unknown;asset:unknown;state:unknown;createdAt:number;network?:string})=>text(p.amount,40)+' '+text(p.asset,12)+' · '+text(p.state,30)+' · '+text(p.network,16)+' · '+date(p.createdAt)
+const date=(value:number)=>Number.isFinite(value)&&value>0?new Date(value).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):'Time unavailable'
+const payment=(p:{amount:unknown;asset:unknown;state:unknown;createdAt:number;network?:string})=>{const n=Number(p.amount),amount=Number.isFinite(n)?n.toLocaleString('en-GB',{maximumFractionDigits:6}):text(p.amount,40);return (p.asset==='NGN'?'₦'+amount:amount+' '+text(p.asset,12))+' · '+text(p.state,30).replace(/^./,x=>x.toUpperCase())+' · '+date(p.createdAt)}
 export async function readSupportFeatureRecords(owner:string,kind:SupportFeature,selected?:string):Promise<SupportFeatureRecord[]>{
  if(!owner)throw Error('Authenticated owner required')
  if(kind==='requests'){

@@ -1,3 +1,4 @@
+import {sendPocketPush} from './push-devices.js'
 import {readSupportFeatureRecords} from './support-feature-records.js'
 import {boundedSupportRead} from './support-read-budget.js'
 import {readSupportBalance,readSupportBillStatus} from './support-diagnostics.js'
@@ -76,14 +77,23 @@ async function verifiedStaff(req: Request) {
   return { email: email || claims.userId, userId: claims.userId }
 }
 async function store() { return (await readDurableJson<SupportStore>(STORE_KEY)) || { cases: {} } }
+async function notifySupportUpdate(item:SupportCase){
+ const message=item.messages.at(-1)
+ if(!message||!(message.author==='staff'||['resolution_prompt','automatic_resolution','automatic_reminder'].includes(message.kind||'')))return
+ const body=message.kind==='resolution_prompt'?'Has your issue been resolved? Open Support to confirm.':message.kind==='automatic_resolution'?'Your support case is now closed.':message.kind==='automatic_reminder'?'Pocket Support is waiting for your reply.':'You have a new reply from Pocket Support.'
+ try{await sendPocketPush(item.profileId,'support:'+item.id+':'+message.id,{category:'support',title:'Pocket Support',body,path:'/assistant?case='+encodeURIComponent(item.id),tag:'pocket-support:'+item.id,occurredAt:message.createdAt})}catch{console.warn('[pocket-support] Notification delivery unavailable; reply is saved.')}
+}
 async function currentStore() {
   const current = await store()
+  const previous=new Map(Object.values(current.cases).map(c=>[c.id,c.messages.at(-1)?.id]))
   if (!advancePocketSupportLifecycle(current.cases, Date.now(), () => crypto.randomUUID())) return current
-  return mutateDurableJson<SupportStore>(STORE_KEY, stored => {
+  const updated=await mutateDurableJson<SupportStore>(STORE_KEY, stored => {
     const next = stored || { cases: {} }
     advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
     return next
   })
+  for(const item of Object.values(updated.cases))if(previous.get(item.id)!==item.messages.at(-1)?.id)await notifySupportUpdate(item)
+  return updated
 }
 function publicCase(item: SupportCase) {
   const { profileId: _profileId, assignedTo: _assignedTo, customer: _customer, ...safe } = item
@@ -189,6 +199,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         saved = item
         return next
       })
+      if(saved)await notifySupportUpdate(saved)
       return res.json({ ok: true, case: saved })
     }
 
