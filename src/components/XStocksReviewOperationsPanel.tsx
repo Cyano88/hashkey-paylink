@@ -17,7 +17,7 @@ export default function XStocksReviewOperationsPanel(){
  const ownerWallets=wallets.filter(w=>w.walletClientType!=='privy'&&review?.reviewer.owners.some(a=>a.toLowerCase()===w.address.toLowerCase()))
  async function api(action:string,extra:Record<string,unknown>={},id=review?.agreement.id||reference.trim()){
   const identity=actor.current,token=await getAccessToken();if(!token)throw Error('Sign in again to continue.')
-  const response=await fetch('/api/xstocks-review',{method:'POST',cache:'no-store',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action,agreementId:id,...extra})})
+  const response=await fetch('/api/xstocks-review',{signal:AbortSignal.timeout(30000),method:'POST',cache:'no-store',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action,agreementId:id,...extra})})
   const result=await response.json().catch(()=>null);if(actor.current!==identity)throw Error('Your admin session changed. Reopen the case.')
   if(!response.ok||!result?.ok)throw Error(result?.error||'Dispute review could not load. Try again.');return result
  }
@@ -40,10 +40,11 @@ export default function XStocksReviewOperationsPanel(){
  async function execute(wallet:typeof wallets[number]){
   if(!executeReview||submitted)throw Error('Review execution before continuing.')
   const provider=await walletProvider(wallet),prepared=await api('execution',{decisionId:review?.decision?.id,executor:wallet.address})
+  if(Number(await provider.request({method:'eth_chainId'}))!==196)throw Error('Switch back to X Layer before executing.')
   setExecuteReview(false)
   // No automated retry: a wallet timeout may follow a successful submission.
   setSubmitted('pending');try{sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,'pending')}catch{throw Error('Unable to save transaction recovery state. No transaction was sent.')}
-  try{const hash=await provider.request({method:'eth_sendTransaction',params:[{from:wallet.address,to:prepared.transaction.to,data:prepared.transaction.data,value:'0x0'}]}) as string;setSubmitted(hash);sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,hash);setNotice('Transaction submitted. Refresh the case to verify settlement.')}catch{setError('Submission was not confirmed. Check the reviewer wallet activity and refresh this case before trying again.')}
+  try{const hash=await provider.request({method:'eth_sendTransaction',params:[{chainId:'0xc4',from:wallet.address,to:prepared.transaction.to,data:prepared.transaction.data,value:'0x0'}]}) as string;setSubmitted(hash);sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,hash);setNotice('Transaction submitted. Refresh the case to verify settlement.')}catch(e){if(Number((e as {code?:number})?.code)===4001){sessionStorage.removeItem('hpl-review-submission:'+review!.decision!.id);setSubmitted('');throw Error('Wallet request cancelled. No retry was sent.')}setError('Submission was not confirmed. Check the reviewer wallet activity and refresh this case before trying again.')}
  }
  const asset=review?workPaymentLabel(review.agreement.terms.xlayerPayment):''
  const total=review?.status.amount?formatUnits(BigInt(review.status.amount),review.status.decimals??18):'0'
