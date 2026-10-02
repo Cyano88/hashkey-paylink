@@ -20,6 +20,11 @@ export function createStore(pool){
    return {revision:next.rows[0].revision};
   })},
   async migrate(){const c=await pool.connect();try{await c.query('BEGIN');await c.query('SELECT pg_advisory_xact_lock(81723491)');await c.query(await readFile(new URL('./schema.sql',import.meta.url),'utf8'));await c.query('COMMIT')}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},
+  async reserveInference(){const c=await pool.connect();try{
+   await c.query('BEGIN');await c.query("INSERT INTO hash_inference_budget(budget_day) VALUES((now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING");
+   const r=await c.query("UPDATE hash_inference_budget SET reserved_calls=reserved_calls+1,reserved_tokens=reserved_tokens+512 WHERE budget_day=(now() AT TIME ZONE 'UTC')::date AND reserved_calls<20 AND reserved_tokens+512<=10240 RETURNING reserved_calls");
+   await c.query('COMMIT');return r.rowCount===1;
+  }catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},
   async health(){await pool.query('SELECT 1')},
   async createWorkspace(name){const id=randomUUID(),keyId=randomUUID(),apiKey=newApiKey(),c=await pool.connect();try{await c.query('BEGIN');await c.query('INSERT INTO hash_workspaces(id,name) VALUES($1,$2)',[id,name]);await c.query('INSERT INTO hash_api_keys(id,workspace_id,key_hash) VALUES($1,$2,$3)',[keyId,id,digest(apiKey)]);await c.query('COMMIT');return {workspaceId:id,keyId,apiKey}}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},
   async authenticate(apiKey){if(!/^hash_live_[A-Za-z0-9_-]{43}$/.test(apiKey))return null;const r=await pool.query('SELECT id,workspace_id FROM hash_api_keys WHERE key_hash=$1 AND revoked_at IS NULL',[digest(apiKey)]);return r.rows[0]?{keyId:r.rows[0].id,workspaceId:r.rows[0].workspace_id}:null},

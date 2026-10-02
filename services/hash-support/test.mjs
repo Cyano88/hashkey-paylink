@@ -53,6 +53,25 @@ test('real PostgreSQL engine and HTTP isolation',async()=>{
   assert.equal((await call('/internal/keys/'+a.keyId,adminSecret,'DELETE')).status,200)
   assert.equal((await call('/v1/conversations',fresh,'POST')).status,401)
   assert.equal((await call('/v1/customer-sessions',a.apiKey,'POST',{customerId:'customer-1'})).status,401)
+  for(let n=0;n<20;n++)assert.equal(await store.reserveInference(),true)
+  assert.equal(await store.reserveInference(),false)
+  assert.equal(await createStore(pool).reserveInference(),false)
   assert.throws(()=>sessionClaims(sessionSecret,sessionToken('wrong',{workspaceId:a.workspaceId,keyId:a.keyId,customerId:'customer-1'},now),now))
  }finally{await new Promise(r=>server.close(r));await db.close()}
+})
+
+test('private inference check is bounded and never downgrades or retries',async()=>{
+ const {createInferenceCheck}=await import('./inference.mjs')
+ let reserved=0,calls=0
+ const store={reserveInference:async()=>++reserved<=1}
+ const check=createInferenceCheck({store,apiKey:'sk-synthetic_fixture_not_a_secret',fetcher:async(url,options)=>{
+  calls++;assert.equal(url,'https://router-api.0g.ai/v1/chat/completions');assert.equal(options.redirect,'error');assert.equal(options.headers['X-0G-Provider-Trust-Mode'],'private')
+  const request=JSON.parse(options.body);assert.equal(request.model,'0gm-1.0-35b-a3b');assert.equal(request.max_tokens,64);assert.equal(request.messages.length,2)
+  return Response.json({model:request.model,choices:[{message:{content:'HASH_OK'}}],usage:{total_tokens:57}})
+ }})
+ assert.equal((await check()).totalTokens,57);await assert.rejects(check(),e=>e.status===429);assert.equal(calls,1)
+ let failedCalls=0
+ const failed=createInferenceCheck({store:{reserveInference:async()=>true},apiKey:'sk-synthetic_fixture_not_a_secret',fetcher:async()=>{failedCalls++;return Response.json({error:'unavailable'},{status:503})}})
+ await assert.rejects(failed(),e=>e.status===502);assert.equal(failedCalls,1)
+ await assert.rejects(createInferenceCheck({store,apiKey:''})(),e=>e.status===503)
 })

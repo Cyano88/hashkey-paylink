@@ -4,7 +4,7 @@ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status})}
 const text=(value,max)=>{if(typeof value!=='string'||!value.trim()||value.length>max)fail('Invalid input.');return value.trim()}
 async function body(req,max=16384){if(!String(req.headers['content-type']||'').startsWith('application/json'))fail('Use application/json.',415);let size=0,chunks=[];for await(const chunk of req){size+=chunk.length;if(size>max)fail('Request too large.',413);chunks.push(chunk)}try{const value=JSON.parse(Buffer.concat(chunks).toString());if(!value||typeof value!=='object'||Array.isArray(value))fail('Invalid JSON.');return value}catch{fail('Invalid JSON.')}}
-export function createApp({store,adminSecret,sessionSecret,now=Date.now}){
+export function createApp({store,adminSecret,sessionSecret,inferenceCheck,now=Date.now}){
  if(adminSecret?.length<32||sessionSecret?.length<32||!adminSecret||!sessionSecret)throw Error('Strong Hash service secrets are required.')
  const windows=new Map();const limit=(key,max)=>{const time=now();if(windows.size>2048)for(const [id,w]of windows)if(w.until<=time)windows.delete(id);let w=windows.get(key);if(!w||w.until<=time){if(windows.size>=4096&&!windows.has(key))fail('Please try again shortly.',429);w={n:0,until:time+60000};windows.set(key,w)}if(++w.n>max)fail('Please try again shortly.',429)}
  return async(req,res)=>{
@@ -18,6 +18,7 @@ export function createApp({store,adminSecret,sessionSecret,now=Date.now}){
    if(path.startsWith('/internal/')){
     if(!equal(token,adminSecret))fail('Operator authentication required.',401)
     limit('operator',30)
+    if(req.method==='POST'&&path==='/internal/inference-check'){if(!inferenceCheck)fail('Private inference is not configured.',503);return send(200,await inferenceCheck())}
     if(req.method==='POST'&&path==='/internal/workspaces'){const input=await body(req);return send(201,{ok:true,...await store.createWorkspace(text(input.name,100))})}
     const match=path.match(/^\/internal\/keys\/([a-f0-9-]+)$/i)
     if(req.method==='DELETE'&&match&&uuid.test(match[1])){await store.revokeKey(match[1]);return send(200,{ok:true})}

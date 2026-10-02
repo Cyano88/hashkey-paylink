@@ -39,3 +39,7 @@ ALTER TABLE hash_integration_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hash_integration_state FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS hash_integration_scope ON hash_integration_state;
 CREATE POLICY hash_integration_scope ON hash_integration_state USING (workspace_id::text=current_setting('hash.workspace_id',true) AND current_setting('hash.customer_id',true)='') WITH CHECK (workspace_id::text=current_setting('hash.workspace_id',true) AND current_setting('hash.customer_id',true)='');
+
+CREATE TABLE IF NOT EXISTS hash_inference_budget (
+ budget_day date PRIMARY KEY, reserved_calls integer NOT NULL DEFAULT 0, reserved_tokens integer NOT NULL DEFAULT 0
+);
