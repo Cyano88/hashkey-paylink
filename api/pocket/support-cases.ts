@@ -1,3 +1,5 @@
+import {supportActions,type SupportActionId} from '../../src/pocket/lib/pocketSupportActions.js'
+import {routeSupportIntent} from '../hash-support/intent-router.js'
 import {supportAccountAnswer} from './support-account-answer.js'
 import {readSupportPayments} from './support-account-data.js'
 import {POCKET_SUPPORT_HANDOFF_TEXT} from '../../src/pocket/lib/pocketSupportContent.js'
@@ -210,14 +212,22 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     if (action === 'chat') {
       if (identity.kind !== 'privy') return res.status(401).json({ok:false,error:'Sign in to Pocket to contact Support.'})
       let saved: SupportCase | undefined
+      const optionId=req.body?.optionId as SupportActionId|undefined
+      if(optionId!==undefined&&(typeof optionId!=='string'||!Object.prototype.hasOwnProperty.call(supportActions,optionId)))return res.status(400).json({ok:false,error:'Choose an available support option.'})
+      if(optionId==='payment_details'&&(!req.body?.eventId||typeof req.body.eventId!=='string'||req.body.eventId.length>250))return res.status(400).json({ok:false,error:'Choose a payment from the list.'})
+      const message=optionId?supportActions[optionId].message:String(req.body?.message||'').trim()
       const customer = await privateCustomerIdentity(identity)
       const snapshot=await store()
-      const accountAnswer=await supportAccountAnswer({identity,profileId,question:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments})
-      const match=accountAnswer?undefined:await matchSupportQuestion({profileId,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,entries:snapshot.knowledge||{},tenantId:POCKET_SUPPORT_TENANT,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
+      let accountAnswer=await supportAccountAnswer({identity,profileId,selectedEventId:optionId==='payment_details'?clean(req.body?.eventId,250):undefined,question:message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments})
+      if(!accountAnswer&&!optionId){
+        const intent=await routeSupportIntent({profileId,message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
+        if(intent)accountAnswer=await supportAccountAnswer({identity,profileId,question:intent==='selected_payment'?'What is its status?':supportActions[intent].message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments})
+      }
+      const match=accountAnswer||optionId?undefined:await matchSupportQuestion({profileId,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,entries:snapshot.knowledge||{},tenantId:POCKET_SUPPORT_TENANT,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
       await mutateDurableJson<SupportStore>(STORE_KEY, current => {
         const next = current || {cases:{}}
         advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
-        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{},match,accountAnswer})
+        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,message,optionId,requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{},match,accountAnswer})
         saved.customer ||= customer
         return next
       })

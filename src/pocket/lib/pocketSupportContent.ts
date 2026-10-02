@@ -1,3 +1,4 @@
+import {recoveryOptions,type SupportOption} from './pocketSupportActions'
 export const POCKET_SUPPORT_HANDOFF_TEXT = "I can't answer that reliably yet. I've passed your question to Pocket Support."
 export const pocketSupportFaqs = [
   { question: 'What can I do with Pocket?', answer: 'Use Pocket to send and receive USDC, pay supported Nigerian bills, make bank transfers, create payment requests and use POS. XStocks has its own trading, receiving and sending flows.' },
@@ -16,7 +17,7 @@ export const pocketSupportTopics = ['Deposit', 'Transfer', 'Bills', 'XStocks', '
 export function requestsPocketHuman(message: string) {
   return /\b(human|customer\s+(?:service|support|representative)|representative|real\s+(?:person|agent)|(?:talk|speak|chat|connect|transfer|escalate).{0,35}(?:support|person|agent|team))\b/i.test(message)
 }
-export function pocketSupportAnswer(message: string): { text: string; handoff: boolean } {
+export function pocketSupportAnswer(message: string): { text: string; handoff: boolean; options?:SupportOption[]; unresolved?:boolean } {
   const q = message.trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
   if (requestsPocketHuman(q)) return {text:'Your request is in the Pocket Support queue. A representative has not joined yet. You can add details here; the team will see this conversation.',handoff:true}
   if (/^(?:(?:what(?: is|'s| are)|show me|tell me) my (?:full+ |first |last )?name(?:s|'s)?|where (?:can i|do i) (?:find|see|view) my (?:full+ |first |last )?name(?:s|'s)?)[?.! ]*$/.test(q)) return {text:'You can view your full name in Profile.',handoff:false}
@@ -25,5 +26,6 @@ export function pocketSupportAnswer(message: string): { text: string; handoff: b
   const topic = ({deposit: 1, transfer: 2, bills: 4, xstocks: 7, account: 9} as Record<string, number>)[q]
   if (topic !== undefined) return { text: pocketSupportFaqs[topic].answer + ' Tell me what you need help with.', handoff: false }
   if (/^(hi|hello|hey|good morning|good afternoon)[!. ]*$/.test(q)) return {text: 'Hello! How can I help with Pocket today?', handoff: false}
-  return { text: POCKET_SUPPORT_HANDOFF_TEXT, handoff: true }
+  if(/\b(stolen|unauthori[sz]ed|scam|hacked)\b/.test(q))return {text:'This needs a support review. I am passing your message to the team. Never share your PIN or OTP.',handoff:true}
+  return { text: "I'm not sure what you mean. Choose an option below, or tell me a little more.", handoff: false, unresolved:true, options:recoveryOptions(q) }
 }

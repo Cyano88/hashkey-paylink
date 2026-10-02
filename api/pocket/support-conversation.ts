@@ -1,3 +1,4 @@
+import {supportMenu,recoveryOptions,type SupportActionId} from '../../src/pocket/lib/pocketSupportActions.js'
 import type {SupportAccountAnswer} from './support-account-answer.js'
 import {resolveSupportMatch,type SupportKnowledgeMatch} from '../hash-support/semantic-answer.js'
 import { findApprovedKnowledge, type KnowledgeStore } from '../hash-support/knowledge.js'
@@ -12,7 +13,7 @@ export type Conversation = {
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
 }
 export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: 'normal' | 'high'}>(
-  cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch;accountAnswer?:SupportAccountAnswer},
+  cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string; optionId?:SupportActionId}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch;accountAnswer?:SupportAccountAnswer},
 ) {
   if (!input.message.trim() || input.message.length > 1500 || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw Object.assign(new Error('Enter a message of up to 1,500 characters.'), {status: 400})
   const mine = Object.values(cases).filter(c => c.profileId === input.profileId).sort((a,b) => b.updatedAt-a.updatedAt)
@@ -42,8 +43,8 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     const matched = !requestsPocketHuman(input.message)&&knowledge ? resolveSupportMatch(knowledge.match,knowledge.entries,knowledge.tenantId,now) : undefined
     const source = remembered || matched
     const accountAnswer = !requestsPocketHuman(input.message) ? knowledge?.accountAnswer : undefined
-    const answer = accountAnswer || (source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message))
-    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(accountAnswer?{accountContext:accountAnswer.accountContext,receipt:accountAnswer.receipt}:{}),...(source&&!accountAnswer?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
+    const answer: {text:string;handoff:boolean;options?:import('../../src/pocket/lib/pocketSupportActions.js').SupportOption[]} = (input.optionId&&supportMenu(input.optionId)) || accountAnswer || (source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message))
+    item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,options:answer.options || (accountAnswer?.accountContext.kind==='clarify'?recoveryOptions(input.message):undefined),...(accountAnswer?{accountContext:accountAnswer.accountContext,receipt:accountAnswer.receipt}:{}),...(source&&!accountAnswer?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
     if (answer.handoff) {
       if (requestsPocketHuman(input.message)) item.messages.pop()

@@ -12,7 +12,7 @@ export function resolveSupportMatch(match:SupportKnowledgeMatch|undefined,entrie
 }
 export async function matchSupportQuestion(input:{profileId:string;message:string;requestId:string;caseId?:string;newConversation?:boolean;cases:Record<string,any>;entries:KnowledgeStore;tenantId:string;privateValues?:string[]}):Promise<SupportKnowledgeMatch|undefined>{
  if(process.env.HASH_SUPPORT_AI_ENABLED!=='true'||!input.profileId||! /^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)||input.message.length>320)return
- if(requestsPocketHuman(input.message)||!pocketSupportAnswer(input.message).handoff||findApprovedKnowledge(input.entries,input.tenantId,input.message,Date.now()))return
+ if(requestsPocketHuman(input.message)||!pocketSupportAnswer(input.message).unresolved||findApprovedKnowledge(input.entries,input.tenantId,input.message,Date.now()))return
  if(input.privateValues?.some(v=>v.trim().length>=4&&input.message.toLowerCase().includes(v.trim().toLowerCase())))return
  // Requests containing transaction identifiers, credentials or particular payment problems never reach inference.
  if(/[\d@]|https?:|0x/i.test(input.message)||/\b(failed|failing|missing|stuck|deducted|debited|not received|not delivered|not arrived|status|charged|scam|stolen|unauthori[sz]ed|bvn|nin|passport|password|otp|private key|recovery phrase)\b/i.test(input.message))return

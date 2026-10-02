@@ -7,6 +7,7 @@ if(remoteMode){
  process.env.HASH_SUPPORT_URL='https://hash.fixture.test';process.env.HASH_SUPPORT_API_KEY='fixture-server'
  let revision=1
  globalThis.fetch=async(_url,options)=>{
+  if(String(_url).endsWith('/v1/support-intent')){globalThis.intentCalls=(globalThis.intentCalls||0)+1;globalThis.lastIntent=JSON.parse(options.body);return Response.json({ok:true,selectedId:globalThis.intentResult||null})}
   if(String(_url).endsWith('/v1/knowledge-match')){globalThis.hashMatchCalls=(globalThis.hashMatchCalls||0)+1;if(globalThis.hashMatchHook)globalThis.hashMatchHook();return Response.json({ok:true,selectedId:'faq_2'})}
   if(options.method==='PUT'){const input=JSON.parse(options.body);assert.equal(input.revision,revision);globalThis.hashFixture=structuredClone(input.value);revision++;return Response.json({ok:true,revision,workspaceId:'fixture-workspace'})}
   return Response.json({ok:true,revision,workspaceId:'fixture-workspace',value:globalThis.hashFixture})
@@ -55,8 +56,8 @@ if(remoteMode){
  const retried=await call({action:'chat',message:'Where can I download receipts?',requestId:'semantic-customer-request-0001'},'semantic-customer')
  assert.equal(retried.body.case.messages.length,first.body.case.messages.length);assert.equal(globalThis.hashMatchCalls,1)
  const issue=await call({action:'chat',message:'Why was I debited twice?',requestId:'semantic-customer-request-0002'},'semantic-customer')
- assert.equal(issue.body.case.humanSupport,true);assert.equal(globalThis.hashMatchCalls,1)
- await call({action:'chat',message:'Where can I download receipts?',requestId:'semantic-customer-request-0003'},'semantic-customer')
+ assert.equal(issue.body.case.humanSupport,false);assert.equal(globalThis.hashMatchCalls,1)
+ await call({action:'chat',message:'Talk to an agent',requestId:'semantic-customer-request-0003'},'semantic-customer')
  assert.equal(globalThis.hashMatchCalls,1)
  const seeded=await call({action:'chat',message:'Hello',requestId:'semantic-race-request-0001'},'race-customer')
  const raceId=seeded.body.case.id
@@ -86,3 +87,28 @@ assert.equal(globalThis.hashMatchCalls,beforeCalls,'Personal records never reach
 const forbidden=await call({action:'chat',caseId:ownName.body.case.id,message:'What chain was my last payment and what is its status?',requestId:'owned-account-forbidden-request'},'account-b')
 assert.equal(forbidden.statusCode,404);assert.deepEqual(globalThis.accountPaymentOwners,['account-a'])
 console.log('PASS real handler account tools: verified identity, receipt binding, no personal inference and cross-account rejection')
+if(remoteMode){
+ const beforeInference=globalThis.hashMatchCalls;
+ const unclear=await call({action:'chat',message:'My question is unusual',requestId:'recovery-unknown-00001',newConversation:true},'recovery-owner')
+ assert.equal(unclear.body.case.humanSupport,false);assert.deepEqual(unclear.body.case.messages.at(-1).options.map(x=>x.id),['payments','gifts','account','human'])
+ const id=unclear.body.case.id
+ const menu=await call({action:'chat',caseId:id,optionId:'gifts',message:'forged irrelevant wording',requestId:'recovery-gifts-00001'},'recovery-owner')
+ assert.equal(menu.body.case.humanSupport,false);assert.ok(menu.body.case.messages.at(-1).options.some(x=>x.id==='latest_gift'))
+ assert.equal((await call({action:'chat',caseId:id,optionId:'__proto__',message:'test',requestId:'recovery-invalid-00001'},'recovery-owner')).statusCode,400)
+ const timestamp=Date.now();globalThis.accountPayments['recovery-owner']=[{eventId:'owned-choice',txHash:'owned-hash',chain:'base',amount:'1',payer:'fixture',memo:'',ts:timestamp,source:'gift',giftState:'funded',direction:'out',paycrestStatus:'completed'}]
+ const list=await call({action:'chat',caseId:id,optionId:'payments',requestId:'recovery-payments-0001'},'recovery-owner')
+ assert.equal(list.body.case.messages.at(-1).options[0].eventId,'owned-choice')
+ const detail=await call({action:'chat',caseId:id,optionId:'payment_details',eventId:'owned-choice',requestId:'recovery-detail-00001'},'recovery-owner')
+ assert.equal(detail.body.case.messages.at(-1).receipt.eventId,'owned-choice')
+ const forged=await call({action:'chat',caseId:id,optionId:'payment_details',eventId:'someone-elses-event',requestId:'recovery-forged-00001'},'recovery-owner')
+ assert.equal(forged.body.case.messages.at(-1).receipt,undefined)
+ globalThis.intentResult='latest_gift'
+ const natural=await call({action:'chat',message:'Could you tell me about my most recent gift',requestId:'recovery-inference-001',newConversation:true},'recovery-owner')
+ // Direct supported wording may resolve without compute; an indirect phrasing must use routing.
+ const routed=await call({action:'chat',message:'Could you tell me where my money went',requestId:'recovery-inference-002',newConversation:true},'recovery-owner')
+ assert.equal(routed.body.case.messages.at(-1).receipt.eventId,'owned-choice');assert.ok(globalThis.intentCalls>0)
+ assert.ok(!JSON.stringify(globalThis.lastIntent).includes('owned-choice'));assert.ok(!JSON.stringify(globalThis.lastIntent).includes('owned-hash'))
+ globalThis.intentResult='invented';const unknown=await call({action:'chat',message:'Could you tell me where my money went',requestId:'recovery-inference-003',newConversation:true},'recovery-owner');assert.equal(unknown.body.case.humanSupport,false);assert.ok(unknown.body.case.messages.at(-1).options.length)
+ const handoff=await call({action:'chat',caseId:id,optionId:'human',requestId:'recovery-human-000001'},'recovery-owner');assert.equal(handoff.body.case.humanSupport,true);assert.equal(handoff.body.case.messages.at(-1).kind,'handoff')
+ console.log('PASS structured recovery, menus, owned choices, forged selection rejection, 0G intent wiring, invalid intent fallback and explicit handoff')
+}

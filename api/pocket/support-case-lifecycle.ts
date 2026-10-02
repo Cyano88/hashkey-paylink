@@ -1,3 +1,4 @@
+import type {SupportOption} from '../../src/pocket/lib/pocketSupportActions.js'
 import type {SupportAccountContext} from './support-account-answer.js'
 export const SUPPORT_REMINDER_AFTER_MS = 24 * 60 * 60 * 1000
 export const SUPPORT_AUTO_RESOLVE_AFTER_MS = 72 * 60 * 60 * 1000
@@ -5,7 +6,7 @@ export const SUPPORT_RESOLUTION_AFTER_MS = 24 * 60 * 60 * 1000
 export type PocketSupportLifecycleMessage = {
   id: string; author: 'user' | 'agent' | 'staff';
   kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report' | 'handoff' | 'staff_joined' | 'resolution_prompt' | 'case_reopened';
-  accountContext?: SupportAccountContext; receipt?: {eventId:string};
+  options?:SupportOption[]; accountContext?: SupportAccountContext; receipt?: {eventId:string};
   knowledgeId?: string; knowledgeVersion?: number; avatarDataUrl?: string; displayName?: string; requestId?: string; text: string; createdAt: number
 }
 export type PocketSupportLifecycleCase = {
