@@ -16,7 +16,7 @@ export async function matchSupportQuestion(input:{profileId:string;message:strin
  if(input.privateValues?.some(v=>v.trim().length>=4&&input.message.toLowerCase().includes(v.trim().toLowerCase())))return
  // Requests containing transaction identifiers, credentials or particular payment problems never reach inference.
  if(/[\d@]|https?:|0x/i.test(input.message)||/\b(failed|failing|missing|stuck|deducted|debited|not received|not delivered|not arrived|status|charged|scam|stolen|unauthori[sz]ed|bvn|nin|passport|password|otp|private key|recovery phrase)\b/i.test(input.message))return
- if(/\b(and|also|plus|or|check|investigate|trace|track|confirm|reverse|cancel|approve|release)\b/i.test(input.message)||/\b(my|our)\s+(money|funds|payments?|transfers?|deposits?|refunds?|verification|account|balance|transactions?)\b/i.test(input.message))return
+ if(/\b(my|our|did|happened|went|ago|yesterday|today|earlier|already|yet|and|also|plus|or|check|investigate|trace|track|confirm|reverse|cancel|approve|release)\b/i.test(input.message)||/\b(my|our)\s+(money|funds|payments?|transfers?|deposits?|refunds?|verification|account|balance|transactions?)\b/i.test(input.message))return
  const mine=Object.values(input.cases).filter(c=>c.profileId===input.profileId).sort((a,b)=>b.updatedAt-a.updatedAt)
  const current=input.caseId?input.cases[input.caseId]:mine.find(c=>c.status!=='resolved')
  if(input.caseId&&(!current||current.profileId!==input.profileId))return
