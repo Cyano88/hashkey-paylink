@@ -17,5 +17,5 @@ export function safeIntentQuestion(value){
 }
 export function allowedIntentCandidates(question,hasPayment){
  const refersToSelection=/\b(it|its|that|this)\b/i.test(question)&&!/\b(last|latest|recent|previous)\b/i.test(question)
- return refersToSelection?(hasPayment?intentCandidates.filter(item=>item.id==='selected_payment'):[]):intentCandidates.filter(item=>hasPayment||item.id!=='selected_payment')
+ return refersToSelection?(hasPayment?intentCandidates.filter(item=>item.id==='selected_payment'):[]):intentCandidates.filter(item=>(hasPayment||item.id!=='selected_payment')&&(!item.id.startsWith('latest_')||/\b(last|latest|recent|previous)\b/i.test(question))&&(item.id!=='latest_gift'||/\bgift\b/i.test(question))&&(item.id!=='name'||/\b(name|profile|called)\b/i.test(question)))
 }
