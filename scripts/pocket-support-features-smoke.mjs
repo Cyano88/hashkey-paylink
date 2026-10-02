@@ -19,3 +19,6 @@ for(const kind of ['requests','gifts','xpay','collections']){
 }
 assert.equal(provider,0)
 console.log('PASS all four feature lists/selections, offered-choice binding, account isolation, human queue, storage failure, no receipt misrouting, and zero RPC/provider calls')
+const {supportFeatureAnswer}=await import('../api/pocket/support-feature-answer.ts')
+for(const status of ['deleted','setup incomplete']){const result=await supportFeatureAnswer({owner,question:'Check this payment',selected:'support-feature:xpay:owned',offered:[{id:'payment_details',eventId:'support-feature:xpay:owned'}],now},async()=>[{id:'owned',title:'Shop',status,updatedAt:now,details:[]}]);assert.ok(result.text.includes('Status: '+status))}
+console.log('PASS important terminal states remain visible while routine configuration copy is omitted')
