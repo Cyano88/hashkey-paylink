@@ -93,7 +93,7 @@ function AppProviders() {
       },
     },
     externalWallets: {
-      disableAllExternalWallets: true,
+      disableAllExternalWallets: surface !== 'developer',
     },
     appearance: {
       theme: theme === 'dark' ? 'dark' : 'light',

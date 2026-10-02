@@ -17,6 +17,7 @@ import {
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn } from '../lib/utils'
+import XStocksReviewOperationsPanel from '../components/XStocksReviewOperationsPanel'
 import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
 import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
 import PocketTransactionOperationsPanel from '../components/PocketTransactionOperationsPanel'
@@ -93,17 +94,19 @@ function formatDate(value?: string) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-type OperationsSurface = 'projects' | 'agreements' | 'transactions' | 'support'
+type OperationsSurface = 'trade-disputes' | 'projects' | 'agreements' | 'transactions' | 'support'
 
 const OPERATIONS_SECTIONS: Array<{ id: OperationsSurface; label: string; description: string; path: string }> = [
   { id: 'projects', label: 'Developer projects', description: 'Integrations, API access and settlement routing', path: '/admin/developers' },
+  { id: 'trade-disputes', label: 'Trade disputes', description: 'Stock payment review and reviewer approvals', path: '/admin/trade-disputes' },
   { id: 'agreements', label: 'Arc agreements', description: 'Agreement lifecycle and controlled operations', path: '/admin/agreements' },
   { id: 'transactions', label: 'Transactions', description: 'Payment status and reconciliation', path: '/admin/transactions' },
   { id: 'support', label: 'Pocket Support', description: 'Agent Hash handoffs and customer conversations', path: '/admin/support' },
 ]
 
 export default function DeveloperOperationsPage({ surface }: { surface: OperationsSurface }) {
-  const { ready, authenticated, getAccessToken, logout } = usePrivy()
+  const { ready, authenticated, getAccessToken, logout, user } = usePrivy()
+  const userIdentityForReview=user?.id||'signed-out'
   const [projects, setProjects] = useState<Project[]>([])
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
   const [activeId, setActiveId] = useState('')
@@ -240,7 +243,7 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
     <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
       <OperationsTop onLogout={logout} />
       <OperationsSectionNav active={surface} />
-      {surface === 'agreements' ? <ArcAgreementOperationsPanel /> : surface === 'transactions' ? <PocketTransactionOperationsPanel /> : surface === 'support' ? <PocketSupportOperationsPanel /> : <>
+      {surface === 'trade-disputes' ? <XStocksReviewOperationsPanel key={userIdentityForReview} /> : surface === 'agreements' ? <ArcAgreementOperationsPanel /> : surface === 'transactions' ? <PocketTransactionOperationsPanel /> : surface === 'support' ? <PocketSupportOperationsPanel /> : <>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Projects" value={summary.total} />
         <SummaryCard label="Active" value={summary.active} tone="success" />
@@ -323,7 +326,7 @@ function OperationsSectionNav({ active }: { active: OperationsSurface }) {
       to={section.path}
       aria-current={active === section.id ? 'page' : undefined}
       className={({ isActive }) => cn(
-        'min-w-max flex-1 rounded-xl px-4 py-3 text-center transition',
+        'relative min-w-max flex-1 rounded-xl px-4 py-3 text-center transition',
         isActive
           ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-white',
