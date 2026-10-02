@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 import { usePrivy } from '@privy-io/react-auth'
 import {
   AlertTriangle,
@@ -515,7 +516,7 @@ function Message({ tone, children }: { tone: 'error' | 'success'; children: Reac
 }
 
 export function OperationsLoading() {
-  return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-xl items-center px-4 py-12"><section className="w-full rounded-[1.75rem] border border-gray-200 bg-white p-7 text-center shadow-[0_24px_80px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-[#111216]"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><Loader2 className="h-5 w-5 animate-spin" /></span><h1 className="mt-5 text-xl font-semibold tracking-[-0.03em] text-gray-950 dark:text-white">Securing operations</h1><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">Checking Privy identity and the server-side operations allowlist.</p></section></main>
+  return <DeveloperLoadingSkeleton />
 }
 
 function InlineLoading() {

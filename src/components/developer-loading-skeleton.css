@@ -1,0 +1,6 @@
+.developer-shimmer { position: relative; overflow: hidden; background: #e5e7eb; }
+.developer-shimmer::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgb(255 255 255 / .6), transparent); animation: developer-shimmer-sweep 1.8s ease-in-out infinite; }
+.dark .developer-shimmer { background: #25272c; }
+.dark .developer-shimmer::after { background: linear-gradient(90deg, transparent, rgb(255 255 255 / .08), transparent); }
+@keyframes developer-shimmer-sweep { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .developer-shimmer::after { animation: none; background: none; } }

@@ -11,6 +11,7 @@ import '@fontsource/plus-jakarta-sans/800.css'
 import './index.css'
 
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
+import DeveloperLoadingSkeleton from './components/DeveloperLoadingSkeleton'
 import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
 import { pocketXLayer } from './pocket/lib/pocketXStocksWallet'
@@ -35,6 +36,7 @@ const rootAppModule = surface === 'pocket' ? import('./pocket/PocketHostApp')
 const RootApp = lazy(() => rootAppModule)
 
 function AppBootFallback() {
+  if (surface === 'developer') return <DeveloperLoadingSkeleton fullPage />
   if (isPocketNativeRuntime()) {
     return <main aria-label="Opening Pocket" className="min-h-screen bg-[#F5F5F7]" />
   }

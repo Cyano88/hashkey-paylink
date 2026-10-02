@@ -2,13 +2,14 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import DeveloperLayout from './DeveloperLayout'
 import ExternalRedirect from './ExternalRedirect'
+import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 const DeveloperPortalPage = lazy(() => import('../pages/DeveloperPortalPage'))
 const OperationsWorkspacePage = lazy(() => import('../pages/OperationsWorkspacePage'))
 
 const DeveloperCliAccessPage = lazy(() => import('../pages/DeveloperCliAccessPage'))
 
 export default function DeveloperApp() {
-  return <BrowserRouter><Suspense fallback={<p className="p-6 text-sm">Opening developer portal…</p>}><Routes>
+  return <BrowserRouter><Suspense fallback={<DeveloperLoadingSkeleton fullPage />}><Routes>
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
     <Route element={<DeveloperLayout />}>
       <Route index element={<DeveloperPortalPage />} />

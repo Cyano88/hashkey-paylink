@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, ArrowUpRight, ChevronRight, Layers3, LogOut, Menu, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import ProjectOperations, { OperationsLoading, OperationsSignIn } from './DeveloperOperationsPage'
@@ -8,6 +9,7 @@ import XStocksReviewOperationsPanel from '../components/XStocksReviewOperationsP
 import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
 import PocketTransactionOperationsPanel from '../components/PocketTransactionOperationsPanel'
 import { cn } from '../lib/utils'
+import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 
 type Section = 'projects' | 'agreements' | 'trade-disputes' | 'support' | 'transactions'
 type Workspace = { id: string; name: string; projectIds: string[]; sections: Section[]; missingProjectIds: string[];
@@ -55,6 +57,7 @@ export default function OperationsWorkspacePage() {
   if (!ready) return <OperationsLoading />
   if (!authenticated) return <OperationsSignIn />
   const session = state && state.owner === identity ? state.session : undefined
+  if (!session && !error) return <DeveloperLoadingSkeleton />
   if (!session) return <main id="developer-content" className="mx-auto max-w-xl px-6 py-20">
     <h1 className="text-2xl font-semibold">Hash PayLink Operations</h1>
     <p role={error ? 'alert' : 'status'} className="mt-4 text-sm text-gray-500">{error || 'Checking your operations access…'}</p>
@@ -65,20 +68,19 @@ export default function OperationsWorkspacePage() {
   const invalid = Boolean(workspaceId && !workspace) || Boolean(section && !authorizedSection && section !== 'escalations')
     || Boolean(section === 'escalations' && (workspace?.id === 'pocket' || !session.founder))
   const contextKey = `${identity}:${workspaceId}:${section || 'overview'}`
+  const menuSlot = document.getElementById('operations-navigation-trigger')
+  const titleSlot = document.getElementById('operations-workspace-title')
   return <div className="min-h-[calc(100dvh-4rem)]">
+    {menuSlot && createPortal(<button type="button" aria-label="Open navigation" aria-controls="operations-menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-white/10"><Menu className="h-5 w-5" /></button>, menuSlot)}
+    {titleSlot && createPortal(<span>{workspace?.name || 'Operations'}</span>, titleSlot)}
     <dialog id="operations-menu" ref={menu} aria-label="Operations menu" onCancel={() => setMenuOpen(false)} onClose={() => setMenuOpen(false)} onClick={e => { if (e.target === e.currentTarget) setMenuOpen(false) }} className="fixed inset-y-0 left-0 right-auto m-0 h-dvh max-h-none w-[min(20rem,calc(100vw-3rem))] max-w-none border-0 bg-white p-0 text-gray-950 shadow-xl backdrop:bg-black/40 dark:bg-[#0d0d0e] dark:text-white">
     <aside className="relative flex min-h-full flex-col p-5" onClick={e => { if ((e.target as HTMLElement).closest('a')) setMenuOpen(false) }}>
       <button type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-5 w-5" /></button>
       <Link to="/admin" className="flex min-h-11 items-center gap-2 text-sm font-semibold"><Layers3 className="h-4 w-4" />Operations</Link>
       <p className="mt-1 text-xs text-gray-500">{session.founder ? 'Founder access' : 'Team access'}</p>
-      <label className="mt-6 block text-xs font-medium text-gray-500" htmlFor="operations-workspace">Product workspace</label>
-      <WorkspacePicker workspaces={session.workspaces} selected={workspace?.id || ''} />
-      <nav aria-label="Workspace sections" className="mt-5 flex flex-col gap-1">
-        {workspace ? <>
-          <SectionLink to={path(workspace.id)} active={!section}>Overview</SectionLink>
-          {workspace.sections.map(s => <SectionLink key={s} to={path(workspace.id, s)} active={section === s}>{labels[s]}</SectionLink>)}
-          {workspace.id !== 'pocket' && session.founder && <SectionLink to={path(workspace.id, 'escalations')} active={section === 'escalations'}>Escalations</SectionLink>}
-        </> : <SectionLink to="/admin" active>Products</SectionLink>}
+      <p className="mt-6 text-xs font-medium text-gray-500">Products</p>
+      <nav aria-label="Product workspaces" className="mb-6 mt-3 flex flex-col gap-1">
+        {session.workspaces.map(w => <Link key={w.id} to={path(w.id)} aria-current={workspace?.id === w.id ? 'page' : undefined} className={cn('min-h-11 rounded-xl px-3 py-3 text-sm font-medium', workspace?.id === w.id ? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}>{w.name}</Link>)}
       </nav>
       <div className="mt-auto border-t border-gray-200 pt-4 dark:border-white/10">
         <Link to="/" className="flex min-h-11 items-center justify-between text-xs text-gray-500">Developer portal<ArrowUpRight className="h-3.5 w-3.5" /></Link>
@@ -86,8 +88,12 @@ export default function OperationsWorkspacePage() {
       </div>
     </aside>
     </dialog>
+    {workspace && <nav aria-label="Workspace sections" className="flex gap-5 overflow-x-auto border-b border-gray-200 bg-white px-5 dark:border-white/10 dark:bg-[#0a0a0a] sm:px-8 xl:px-10">
+      <SectionLink to={path(workspace.id)} active={!section}>Overview</SectionLink>
+      {workspace.sections.map(s => <SectionLink key={s} to={path(workspace.id, s)} active={section === s}>{labels[s]}</SectionLink>)}
+      {workspace.id !== 'pocket' && session.founder && <SectionLink to={path(workspace.id, 'escalations')} active={section === 'escalations'}>Escalations</SectionLink>}
+    </nav>}
     <main id="developer-content" className="min-w-0 px-5 py-7 sm:px-8 xl:px-10">
-      <button type="button" aria-label="Open navigation" aria-controls="operations-menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="mb-5 inline-flex h-11 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium dark:border-white/10 dark:bg-[#111216]"><Menu className="h-5 w-5" /><span>Menu</span></button>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 pb-6 dark:border-white/10">
         <div>
           {workspace && <Link to="/admin" className="mb-3 inline-flex items-center gap-1 text-xs text-gray-500"><ArrowLeft className="h-3 w-3" />All products</Link>}
@@ -120,12 +126,6 @@ export default function OperationsWorkspacePage() {
   </div>
 }
 
-function WorkspacePicker({ workspaces, selected }: { workspaces: Workspace[]; selected: string }) {
-  const navigate = useNavigate()
-  return <select id="operations-workspace" value={selected} onChange={e => navigate(e.target.value ? path(e.target.value) : '/admin')} className="mt-2 h-11 w-full rounded-xl border border-gray-200 bg-transparent px-3 text-sm dark:border-white/10 dark:bg-[#111216]">
-    <option value="">All products</option>{workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-  </select>
-}
 function SectionLink({ to, active, children }: { to: string; active: boolean; children: React.ReactNode }) {
-  return <Link to={to} aria-current={active ? 'page' : undefined} className={cn('min-h-11 whitespace-nowrap rounded-xl px-3 py-3 text-sm font-medium', active ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}>{children}</Link>
+  return <Link to={to} aria-current={active ? 'page' : undefined} className={cn('min-h-12 shrink-0 whitespace-nowrap border-b-2 py-4 text-xs font-medium', active ? 'border-gray-950 text-gray-950 dark:border-white dark:text-white' : 'border-transparent text-gray-500 hover:text-gray-950 dark:hover:text-white')}>{children}</Link>
 }
