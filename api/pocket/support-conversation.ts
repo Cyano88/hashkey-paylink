@@ -43,7 +43,10 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     const answer = source ? {text:source.answer,handoff:false} : pocketSupportAnswer(input.message)
     item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now,...(source?{knowledgeId:source.id,knowledgeVersion:source.version}:{})})
     item.humanSupport = answer.handoff
-    if (answer.handoff) item.messages[item.messages.length-1] = {id:uuid(),author:'agent',kind:'handoff',text:'You are in the queue for Pocket Support.',createdAt:now}
+    if (answer.handoff) {
+      if (requestsPocketHuman(input.message)) item.messages.pop()
+      supportSystemMessage(item,'handoff','You are in the queue for Pocket Support.',now,uuid)
+    }
   }
   const awaitingCustomer = !item.humanSupport && !hasStaff && item.messages.at(-1)?.author === 'agent'
   item.status = awaitingCustomer ? 'waiting_user' : item.assignedTo ? 'assigned' : 'open'

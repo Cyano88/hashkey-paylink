@@ -24,5 +24,5 @@ export function pocketSupportAnswer(message: string): { text: string; handoff: b
   const topic = ({deposit: 1, transfer: 2, bills: 4, xstocks: 7, account: 9} as Record<string, number>)[q]
   if (topic !== undefined) return { text: pocketSupportFaqs[topic].answer + ' Tell me what you need help with.', handoff: false }
   if (/^(hi|hello|hey|good morning|good afternoon)[!. ]*$/.test(q)) return {text: 'Hello! How can I help with Pocket today?', handoff: false}
-  return { text: q === 'talk to support' ? 'Your conversation is with Pocket Support now. Tell us what happened; your messages will stay here for the team.' : 'I have saved this for Pocket Support to review. If it concerns a transaction, open it in Activity and use Report an issue to attach its verified details. I cannot confirm a cause from this message alone.', handoff: true }
+  return { text: q === 'talk to support' ? 'Your conversation is with Pocket Support now. Tell us what happened; your messages will stay here for the team.' : 'I can�t answer that reliably yet. I�ve passed your question to Pocket Support.', handoff: true }
 }
