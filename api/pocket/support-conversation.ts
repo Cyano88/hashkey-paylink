@@ -10,7 +10,7 @@ export type Conversation = {
   resolutionRequestedAt?: number; resolutionPromptId?: string; supportEscalatedAt?: number;
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
 }
-export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: string}>(
+export function submitSupportConversation<T extends Omit<Conversation, 'category' | 'priority'> & {category: string; priority: 'normal' | 'high'}>(
   cases: Record<string, T>, input: {profileId: string; caseId?: string; newConversation?: boolean; message: string; requestId: string}, now: number, uuid: () => string, knowledge?: {tenantId:string;entries:KnowledgeStore;match?:SupportKnowledgeMatch},
 ) {
   if (!input.message.trim() || input.message.length > 1500 || !/^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId)) throw Object.assign(new Error('Enter a message of up to 1,500 characters.'), {status: 400})

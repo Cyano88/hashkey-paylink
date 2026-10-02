@@ -185,8 +185,10 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     const identity = await resolveCirclePocketIdentity(req)
     const profileId = circlePocketIdentityId(identity)
     if (req.method === 'GET' || action === 'list-mine') {
-      const rows = Object.values((await currentStore()).cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
-      return res.json({ ok: true, cases: rows.map(publicCase) })
+      const current = await currentStore()
+      const rows = Object.values(current.cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
+      const team = Object.entries(current.staffNames || {}).slice(0,3).map(([id,displayName])=>({displayName,avatarDataUrl:current.staffImages?.[id]||undefined}))
+      return res.json({ ok: true, cases: rows.map(publicCase), team })
     }
     if (action === 'resolution-answer') {
       if (!['yes','no'].includes(req.body?.answer)) return res.status(400).json({ok:false,error:'Choose Yes or No.'})

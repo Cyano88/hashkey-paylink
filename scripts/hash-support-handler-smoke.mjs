@@ -64,3 +64,9 @@ if(remoteMode){
  assert.equal(raced.body.case.messages.at(-1).author,'user');assert.equal(raced.body.case.humanSupport,true)
  console.log('PASS real handler AI integration: approved FAQ only, retry deduplication, sensitive-query handoff, existing human queue and concurrent staff priority')
 }
+
+assert.equal((await call({action:'staff-profile',displayName:'Seyi',avatarDataUrl:''})).statusCode,200)
+const listing=await call({action:'list-mine'},'customer')
+assert.deepEqual(listing.body.team,[{displayName:'Seyi',avatarDataUrl:undefined}])
+assert.ok(listing.body.cases.every(c=>!('profileId' in c)&&!('assignedTo' in c)&&!('customer' in c)))
+console.log('PASS customer-visible support profiles exclude staff identifiers and private customer records')

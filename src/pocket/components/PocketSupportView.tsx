@@ -1,12 +1,14 @@
 import './pocketSupportChat.css'
+import DynamicSendButton from '../../components/DynamicSendButton'
 import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Bot, ArrowLeft, ArrowUpFromLine, ChevronDown, ChevronRight, MessageCircle, Search, Send, X, Deposit, ArrowLeftRight, Receipt, TrendingUp, UserRound } from './PocketIcons'
+import { Bot, ArrowLeft, ChevronDown, ChevronRight, MessageCircle, Search, Send, X, Deposit, ArrowLeftRight, Receipt, TrendingUp, UserRound } from './PocketIcons'
 import { pocketSupportFaqs, pocketSupportTopics } from '../lib/pocketSupportContent'
 
 type Message = { id:string; author:'user'|'agent'|'staff'; displayName?:string; avatarDataUrl?:string; kind?:string; text:string; createdAt:number }
 type SupportCase = {id:string; summary:string; status:'open'|'assigned'|'waiting_user'|'resolved'; humanSupport?:boolean; messages:Message[]; updatedAt:number; unreadCount?:number; resolutionRequestedAt?:number; resolutionPromptId?:string; priority?:string; category?:string}
-type Result = {cases?:SupportCase[]; case?:SupportCase}
+type SupportProfile = {displayName:string;avatarDataUrl?:string}
+type Result = {cases?:SupportCase[]; case?:SupportCase; team?:SupportProfile[]}
 type Props = {call:(body:Record<string,unknown>)=>Promise<Result>; onClose:()=>void; initialCaseId?:string}
 const topicIcons = {Deposit, Transfer:ArrowLeftRight, Bills:Receipt, XStocks:TrendingUp, Account:UserRound, 'Talk to support':MessageCircle}
 const humanTopics = ['Deposits', 'Bank transfers', 'USDC transfers', 'Bills', 'XStocks', 'XPay', 'Gifts & requests', 'Account & verification']
@@ -27,6 +29,7 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
     return()=>{if(previous)root.dataset.pocketSupportSurface=previous;else delete root.dataset.pocketSupportSurface}
   },[view])
   const [cases,setCases] = useState<SupportCase[]>([])
+  const [team,setTeam] = useState<SupportProfile[]>([])
   const [activeId,setActiveId] = useState(initialCaseId)
   const [loaded,setLoaded] = useState(false)
   const [error,setError] = useState('')
@@ -43,6 +46,8 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
   const chatScroll = useRef<HTMLElement>(null)
   const nearBottom = useRef(true)
   const active = cases.find(item=>item.id===activeId)
+  const representative = active?.messages.slice().reverse().find(message=>message.author==='staff')
+  const waitingForSupport = active?.humanSupport && active.status==='open' && !active.messages.some(message=>message.author==='staff'||message.kind==='staff_joined')
   const visibleCases = cases.filter(item=>view==='previous'?item.status==='resolved':item.status!=='resolved')
   const protectedCase = active?.priority==='high' || active?.category==='bank_payment' || active?.category==='stuck_transaction'
   const loading = !loaded
@@ -52,7 +57,7 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
     async function load(quiet=false){
       if(running || quiet && document.visibilityState!=='visible') return
       running=true
-      try {const data=await call({action:'list-mine'});if(!disposed){setCases(current=>{
+      try {const data=await call({action:'list-mine'});if(!disposed){setTeam(data.team||[]);setCases(current=>{
         const fresh=data.cases||[]
         return [...fresh.map(item=>{const newer=current.find(old=>old.id===item.id);return newer && newer.updatedAt>item.updatedAt?newer:item}),...current.filter(old=>!fresh.some(item=>item.id===old.id))].sort((a,b)=>b.updatedAt-a.updatedAt)
       });setLoaded(true);if(!quiet)setError('')}}
@@ -112,7 +117,7 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
       </> : <>
         <header className="flex min-h-16 shrink-0 items-center justify-between border-b border-gray-100 px-4 dark:border-white/10">
           <button aria-label="Back" onClick={goBack} className="flex h-11 w-11 items-center justify-center"><ArrowLeft className="h-5 w-5"/></button>
-          <div className={view==='chat'?'flex min-w-0 flex-1 items-center gap-2.5 pl-1':'text-center'}>{view==='chat'&&<Bot className="h-6 w-6 shrink-0" aria-hidden="true"/>}<div><h1 className="text-base font-semibold">{view==='chat'?'Pocket Support':view==='faqs'?'Support':view==='previous'?'Previous conversations':'Messages'}</h1>{view==='chat'&&<p className="text-[11px] text-gray-500 dark:text-gray-400">{active?.status==='resolved'?'Conversation closed':active?.humanSupport?'The team will reply here':'The team can also help'}</p>}</div></div>
+          <div className={view==='chat'?'flex min-w-0 flex-1 items-center gap-2.5 pl-1':'text-center'}>{view==='chat'&&(representative?<SupportSenderIcon message={representative}/>:<Bot className="h-6 w-6 shrink-0" aria-hidden="true"/>)}<div><h1 className="text-base font-semibold">{view==='chat'?(representative?.displayName||'Pocket Support'):view==='faqs'?'Support':view==='previous'?'Previous conversations':'Messages'}</h1>{view==='chat'&&<p className="text-[11px] text-gray-500 dark:text-gray-400">{active?.status==='resolved'?'Conversation closed':representative?'Pocket Support':active?.humanSupport?'The team will reply here':'The team can also help'}</p>}</div></div>
           <button aria-label="Close support" onClick={onClose} className="flex h-11 w-11 items-center justify-center"><X className="h-5 w-5"/></button>
         </header>
         {view==='faqs' && <section className="flex-1 overflow-y-auto px-5 py-5"><h2 className="mb-5 text-xl font-semibold tracking-tight">Frequently asked questions</h2><label className="mb-5 flex items-center gap-3 rounded-xl bg-gray-50 px-4 dark:bg-white/5"><Search className="h-4 w-4 shrink-0 text-gray-400"/><input aria-label="Search FAQs" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search for help" className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"/></label><div className={panelClass}>{pocketSupportFaqs.filter(faq=>(faq.question+' '+faq.answer).toLowerCase().includes(search.toLowerCase())).map(faq=><div key={faq.question} className="mx-4 border-b border-gray-100 last:border-0 dark:border-white/10"><button className="flex min-h-16 w-full items-center justify-between gap-4 py-4 text-left text-sm" aria-expanded={expanded===faq.question} onClick={()=>setExpanded(expanded===faq.question?'':faq.question)}>{faq.question}<ChevronDown className={'h-4 w-4 shrink-0 '+(expanded===faq.question?'rotate-180':'')}/></button>{expanded===faq.question&&<p className="pb-5 text-sm leading-6 text-gray-500 dark:text-gray-400">{faq.answer}</p>}</div>)}</div>{!pocketSupportFaqs.some(faq=>(faq.question+' '+faq.answer).toLowerCase().includes(search.toLowerCase()))&&<p className="py-6 text-center text-sm text-gray-500">No matching questions. Send us a message.</p>}</section>}
@@ -131,9 +136,9 @@ export default function PocketSupportView({call,onClose,initialCaseId=''}:Props)
             {routing?<>{humanTopics.map(topic=><button key={topic} disabled={sending} onClick={()=>void send('Talk to support about '+topic.toLowerCase())} className="pocket-support-topic">{topic}</button>)}<button disabled={sending} onClick={()=>setRouting(false)} className="pocket-support-topic">Go back</button></>:pocketSupportTopics.map(topic=>{const Icon=topicIcons[topic];return <button key={topic} disabled={sending} onClick={()=>topic==='Talk to support'?setRouting(true):void send(topic)} className="pocket-support-topic"><Icon className="h-4 w-4" aria-hidden="true"/>{topic}</button>})}
           </div>}
           {loaded&&activeId&&active&&!active.humanSupport&&active.status!=='resolved'&&!routing&&<div className="pocket-support-topics"><button disabled={sending} onClick={()=>setRouting(true)} className="pocket-support-topic"><MessageCircle className="h-4 w-4" aria-hidden="true"/>Talk to support</button></div>}
-          {active?.humanSupport&&active.status==='open'&&!active.messages.some(message=>message.author==='staff'||message.kind==='staff_joined')&&<p className="pocket-support-waiting" role="status">Waiting for Pocket Support</p>}
+          {waitingForSupport&&<div className="pocket-support-waiting" role="status"><span className="pocket-support-team" aria-hidden="true">{team.length?team.slice(0,3).map((profile,index)=><span key={index} className="pocket-support-team-avatar"><SupportSenderIcon message={{id:'team-'+index,author:'staff',text:'',createdAt:0,...profile}}/></span>):<span className="pocket-support-team-avatar"><UserRound className="h-4 w-4"/></span>}</span><span>Waiting for Pocket Support</span></div>}
           {active?.status==='resolved'?<button onClick={()=>{setActiveId('');setDraft('');setError('');setRouting(false);nearBottom.current=true}} className="mx-5 mb-4 min-h-12 rounded-full bg-gray-950 text-sm text-white dark:bg-white dark:text-gray-950">Start a new conversation</button>:<form onSubmit={event=>{event.preventDefault();void send()}} className="pocket-support-composer">
-            <div className="pocket-support-input-wrap"><textarea rows={1} ref={composer} data-agent-hash-input="true" aria-label="Message" value={draft} maxLength={1500} onChange={event=>setDraft(event.target.value)} onFocus={()=>{nearBottom.current=true;window.requestAnimationFrame(()=>end.current?.scrollIntoView({behavior:'auto',block:'end'}))}} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send()}}} placeholder="Message..." disabled={!loaded||Boolean(activeId&&!active)} className="pocket-support-input"/><button type="submit" aria-label={sending?'Sending message':'Send message'} disabled={sending||!draft.trim()||!loaded||Boolean(activeId&&!active)} className="pocket-support-send"><ArrowUpFromLine className={'h-5 w-5 '+(sending?'animate-pulse motion-reduce:animate-none':'')} aria-hidden="true"/></button></div>
+            <div className="pocket-support-input-wrap"><textarea rows={1} ref={composer} data-agent-hash-input="true" aria-label="Message" value={draft} maxLength={1500} onChange={event=>setDraft(event.target.value)} onFocus={()=>{nearBottom.current=true;window.requestAnimationFrame(()=>end.current?.scrollIntoView({behavior:'auto',block:'end'}))}} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send()}}} placeholder="Message..." disabled={!loaded||Boolean(activeId&&!active)} className="pocket-support-input"/><DynamicSendButton inputText={draft} isLoading={sending} canStop={false} onSend={()=>void send()} onStop={()=>{}} idleLabel="Write a message" onAddAttachment={()=>composer.current?.focus()} disabled={!loaded||Boolean(activeId&&!active)} className="absolute bottom-1 right-1"/></div>
           </form>}
 
         </>}
