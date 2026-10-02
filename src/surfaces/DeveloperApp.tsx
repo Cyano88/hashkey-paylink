@@ -16,6 +16,7 @@ export default function DeveloperApp() {
       <Route path="developers" element={<DeveloperPortalPage />} />
       <Route path="admin" element={<Navigate to="/admin/developers" replace />} />
       <Route path="admin/developers" element={<DeveloperOperationsPage surface="projects" />} />
+      <Route path="admin/trade-disputes" element={<DeveloperOperationsPage surface="trade-disputes" />} />
       <Route path="admin/agreements" element={<DeveloperOperationsPage surface="agreements" />} />
       <Route path="admin/transactions" element={<DeveloperOperationsPage surface="transactions" />} />
       <Route path="admin/support" element={<DeveloperOperationsPage surface="support" />} />

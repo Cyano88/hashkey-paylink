@@ -166,6 +166,7 @@ import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipient
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
 import arcAgreementProjectPayerHandler from './api/arc-agreement-project-payer.js'
 import arcAgreementAgentHandler from './api/arc-agreement-agent.js'
+import xstocksReviewHandler from './api/xstocks-agreement/reviewer.js'
 import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
 import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
 import hashPayStreamArcWebhookHandler from './api/hashpaystream-arc-webhook.js'
@@ -465,6 +466,7 @@ app.get('/api/hashpaystream/v2/agreements', readLimiter, hashPayStreamAgreementG
 app.post('/api/hashpaystream/v2/agreements', strictLimiter, hashPayStreamAgreementGateway)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
+app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
 app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
 app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectPayerHandler)
