@@ -1,4 +1,4 @@
-import {intentCandidates,safeIntentQuestion} from './intent-policy.mjs'
+import {allowedIntentCandidates,safeIntentQuestion} from './intent-policy.mjs'
 import {digest} from './auth.mjs'
 // A conservative eligibility screen, not complete anonymisation. Never send transcript or identity records.
 export function generalQuestion(question){
@@ -12,7 +12,7 @@ export function createKnowledgeMatcher({store,apiKey,enabled=false,fetcher=fetch
  return async(scope,input)=>{
   const none={selectedId:null}
   const intent=input.mode==='intent'
-  if(intent){if(!safeIntentQuestion(input.question)||typeof input.hasPayment!=='boolean')return none;input={...input,question:safeIntentQuestion(input.question),candidates:intentCandidates}}
+  if(intent){if(!safeIntentQuestion(input.question)||typeof input.hasPayment!=='boolean')return none;input={...input,question:safeIntentQuestion(input.question),candidates:allowedIntentCandidates(input.question,input.hasPayment)}}
 
   if(!enabled||!apiKey||!(intent||generalQuestion(input.question)))return none
   if(typeof input.customerId!=='string'||!input.customerId||input.customerId.length>128||! /^[a-zA-Z0-9_-]{16,80}$/.test(input.requestId||''))return none

@@ -120,3 +120,10 @@ test('intent classification has fixed tools, filtered input, contextual binding 
  reserved=false;const count=calls;assert.equal((await matcher({workspaceId:'w'},input)).selectedId,null);assert.equal(calls,count)
  const failing=createKnowledgeMatcher({store:{reserveAnswer:async()=>({reserved:true}),completeAnswer:async()=>{}},apiKey:'fixture',enabled:true,fetcher:async()=>{throw Error('provider down')}});assert.equal((await failing({workspaceId:'w'},input)).selectedId,null)
 })
+
+test('referential follow-ups cannot drift to another payment',async()=>{
+ const {createKnowledgeMatcher}=await import('./knowledge-match.mjs');const {allowedIntentCandidates}=await import('./intent-policy.mjs');
+ assert.deepEqual(allowedIntentCandidates('and did it go through',true).map(x=>x.id),['selected_payment']);assert.deepEqual(allowedIntentCandidates('and did it go through',false),[]);
+ const matcher=createKnowledgeMatcher({store:{reserveAnswer:async()=>({reserved:true}),completeAnswer:async()=>{}},apiKey:'fixture',enabled:true,fetcher:async()=>Response.json({model:'0gm-1.0-35b-a3b',choices:[{finish_reason:'stop',message:{content:'{"id":"latest_payment"}'}}]})});
+ assert.equal((await matcher({workspaceId:'w'},{mode:'intent',question:'And did it go through?',hasPayment:true,customerId:'fixture',requestId:'referential-request-001'})).selectedId,null)
+})
