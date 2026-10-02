@@ -37,6 +37,11 @@ export function advancePocketSupportLifecycle<T extends PocketSupportLifecycleCa
   let changed=false
   for(const item of Object.values(cases)) {
     if(item.status==='resolved')continue
+    // Repair older answered AI chats without reclassifying human queues or payment reports.
+    const last=item.messages.at(-1)
+    if(item.status==='open' && item.humanSupport===false && !item.assignedTo && !protectSupportCase(item) && !item.messages.some(message=>message.author==='staff') && last?.author==='agent' && !last.kind) {
+      item.status='waiting_user';item.waitingSince=last.createdAt;changed=true
+    }
     if(item.status!=='waiting_user') {
       if((item.humanSupport !== false || item.assignedTo || protectSupportCase(item)) && now-item.updatedAt>=SUPPORT_REMINDER_AFTER_MS && !item.supportEscalatedAt) {item.supportEscalatedAt=now;changed=true}
       continue

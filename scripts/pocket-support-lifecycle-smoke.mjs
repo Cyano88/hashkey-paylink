@@ -44,3 +44,14 @@ assert.equal(advancePocketSupportLifecycle(assigned, 1_000 + SUPPORT_AUTO_RESOLV
 assert.equal(assigned.case1.status, 'assigned')
 
 console.log('Pocket Support lifecycle smoke checks passed.')
+
+const answered={case1:waitingCase({status:'open',humanSupport:false,waitingSince:undefined,messages:[{id:'answer',author:'agent',text:'Open Activity.',createdAt:1000}]})}
+advancePocketSupportLifecycle(answered,1000+SUPPORT_AUTO_RESOLVE_AFTER_MS-1,uuid)
+assert.equal(answered.case1.status,'waiting_user')
+advancePocketSupportLifecycle(answered,1000+SUPPORT_AUTO_RESOLVE_AFTER_MS,uuid)
+assert.equal(answered.case1.status,'resolved')
+const unserved={case1:waitingCase({status:'open',humanSupport:true,waitingSince:undefined,messages:[{id:'question',author:'user',text:'Help',createdAt:1000}]})}
+advancePocketSupportLifecycle(unserved,1000+SUPPORT_AUTO_RESOLVE_AFTER_MS*20,uuid)
+assert.equal(unserved.case1.status,'open')
+assert.ok(unserved.case1.supportEscalatedAt)
+console.log('Answered AI chat recovery and unresolved human-queue preservation passed.')

@@ -68,3 +68,12 @@ submitSupportConversation(separateStore,{...freshInput,caseId:legacy.id,requestI
 assert.equal(separateStore.legacy.messages.length,oldCount+1,'Explicit case still takes precedence')
 assert.throws(()=>submitSupportConversation(separateStore,{...freshInput,profileId:'other',caseId:legacy.id,requestId:uuid()},200003,uuid),e=>e.status===404)
 console.log('Fresh conversations preserve human cases, retry identity and ownership.')
+
+assert.equal(separate.status,'waiting_user','A completed AI answer starts the customer-reply countdown')
+assert.equal(separate.waitingSince,200000)
+const resumed=submitSupportConversation(separateStore,{profileId:'legacy',caseId:separate.id,message:'Hello',requestId:uuid()},250000,uuid)
+assert.equal(resumed.status,'waiting_user')
+assert.equal(resumed.waitingSince,250000,'A new customer exchange resets the countdown')
+submitSupportConversation(separateStore,{profileId:'legacy',caseId:separate.id,message:'I need a human',requestId:uuid()},260000,uuid)
+assert.equal(separate.status,'open')
+assert.equal(separate.waitingSince,undefined,'Human handoff stops automatic closure')

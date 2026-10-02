@@ -45,7 +45,8 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     item.humanSupport = answer.handoff
     if (answer.handoff) item.messages[item.messages.length-1] = {id:uuid(),author:'agent',kind:'handoff',text:'You are in the queue for Pocket Support.',createdAt:now}
   }
-  item.status = item.assignedTo ? 'assigned' : 'open'
-  item.waitingSince = undefined; item.reminderSentAt = undefined; item.resolvedAt = undefined; item.updatedAt = now
+  const awaitingCustomer = !item.humanSupport && !hasStaff && item.messages.at(-1)?.author === 'agent'
+  item.status = awaitingCustomer ? 'waiting_user' : item.assignedTo ? 'assigned' : 'open'
+  item.waitingSince = awaitingCustomer ? now : undefined; item.reminderSentAt = undefined; item.resolvedAt = undefined; item.updatedAt = now
   return item
 }
