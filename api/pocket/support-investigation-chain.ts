@@ -1,3 +1,4 @@
+import {checkSupportSolana,checkSupportStockTransaction} from './support-asset-investigation.js'
 import {circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {formatUnits,isAddress} from 'viem'
 export type SupportChainFinding={status:'included'|'not_found'|'unmatched'|'unavailable';text:string}
@@ -6,6 +7,8 @@ const transfer='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3
 type Dependencies={wallet:(owner:string,network:string)=>Promise<string|undefined>;rpc:(url:string,method:string,params:unknown[],signal:AbortSignal)=>Promise<any>}
 const dependencies:Dependencies={wallet:async(owner,network)=>(await readCircleLink(circleLinkKey(owner,network,'payment')))?.circleWalletAddress,rpc:async(url,method,params,signal)=>{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal});if(!response.ok)throw Error('Provider unavailable');const data=await response.json();if(data.error||!Object.hasOwn(data,'result'))throw Error('Provider unavailable');return data.result}}
 export async function checkSupportIncomingUsdc(owner:string,network:string,hash:string,overrides:Partial<Dependencies>={}):Promise<SupportChainFinding>{
+ if(network==='solana')return checkSupportSolana(owner,hash)
+ if(network==='xlayer')return checkSupportStockTransaction(owner,hash)
  const d={...dependencies,...overrides};const config=chains[network as keyof typeof chains]
  if(!config||!/^0x[a-fA-F0-9]{64}$/.test(hash))return {status:'unavailable',text:'Support does not have a live USDC check for this network or reference format yet. The team can investigate with these details.'}
  try{
