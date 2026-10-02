@@ -4,6 +4,7 @@ import { workPaymentLabel, type WorkPayment } from '../lib/xstocksAgreement/work
 import { formatUnits } from 'viem'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import type { TradeXLayerStatus } from '../lib/xstocksAgreement/protocol'
+import { submitReviewerTransaction } from '../lib/xstocksAgreement/reviewerSubmission'
 
 type Review={agreement:{id:string;title:string;terms:{description:string;xlayerPayment:WorkPayment;trade?:{handover:string;location:string;returns:string}};evidence:Array<{hash:string;body:string;role:string}>};status:TradeXLayerStatus;reviewer:{address:string;owners:string[];threshold:number;nonce:string};decision:null|{id:string;buyerAmount:string;reason:string;approvedOwners:string[];stale:boolean};typedData?:Record<string,unknown>}
 type QueueItem={id:string;projectId:string;title:string;state:number|null;observedBlock:string|null}
@@ -16,6 +17,10 @@ export default function XStocksReviewOperationsPanel({workspaceId,onBusyChange}:
  const [reference,setReference]=useState(''),[review,setReview]=useState<Review>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[amount,setAmount]=useState(''),[reason,setReason]=useState(''),[executeReview,setExecuteReview]=useState(false),[submitted,setSubmitted]=useState('')
  const actor=useRef(user?.id);actor.current=user?.id
  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false)},[busy,onBusyChange])
+ const errorPanel=useRef<HTMLParagraphElement>(null)
+ useEffect(()=>{if(error){errorPanel.current?.scrollIntoView({block:'nearest'});errorPanel.current?.focus({preventScroll:true})}},[error])
+ const [walletActivityChecked,setWalletActivityChecked]=useState(false)
+ useEffect(()=>setWalletActivityChecked(false),[review?.decision?.id,submitted])
  const [cases,setCases]=useState<QueueItem[]>([]),[filter,setFilter]=useState<'disputed'|'all'>('disputed'),[cursor,setCursor]=useState<string|null>(null),[queueBusy,setQueueBusy]=useState(false),[queueError,setQueueError]=useState('')
  const queueRequest=useRef(0)
  async function loadQueue(after=''){
@@ -53,9 +58,17 @@ export default function XStocksReviewOperationsPanel({workspaceId,onBusyChange}:
   const provider=await walletProvider(wallet),prepared=await api('execution',{decisionId:review?.decision?.id,executor:wallet.address})
   if(Number(await provider.request({method:'eth_chainId'}))!==196)throw Error('Switch back to X Layer before executing.')
   setExecuteReview(false)
-  // No automated retry: a wallet timeout may follow a successful submission.
-  setSubmitted('pending');try{sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,'pending')}catch{throw Error('Unable to save transaction recovery state. No transaction was sent.')}
-  try{const hash=await provider.request({method:'eth_sendTransaction',params:[{chainId:'0xc4',from:wallet.address,to:prepared.transaction.to,data:prepared.transaction.data,value:'0x0'}]}) as string;setSubmitted(hash);sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,hash);setNotice('Transaction submitted. Refresh the case to verify settlement.')}catch(e){if(Number((e as {code?:number})?.code)===4001){sessionStorage.removeItem('hpl-review-submission:'+review!.decision!.id);setSubmitted('');throw Error('Wallet request cancelled. No retry was sent.')}setError('Submission was not confirmed. Check the reviewer wallet activity and refresh this case before trying again.')}
+  await submitReviewerTransaction({provider,transaction:{chainId:'0xc4',from:wallet.address,to:prepared.transaction.to,data:prepared.transaction.data,value:'0x0'},storage:sessionStorage,key:'hpl-review-submission:'+prepared.decisionId,onState:setSubmitted})
+  setNotice('Transaction submitted. Refresh the case to verify settlement.')
+ }
+ async function recover(){
+  if(submitted!=='pending'||!walletActivityChecked||!review?.decision)throw Error('Check both reviewer wallets before continuing.')
+  const decisionId=review.decision.id
+  const checked=await api('recovery',{decisionId,walletActivityChecked:true})
+  if(!checked.canReviewAgain||checked.decisionId!==decisionId)throw Error('Execution state could not be verified. Keep the case locked.')
+  sessionStorage.removeItem('hpl-review-submission:'+decisionId)
+  setSubmitted('');setWalletActivityChecked(false);setExecuteReview(false)
+  setNotice('The dispute and both approvals were rechecked. No pending owner transaction was reported by the network. Review execution again; nothing has been sent.')
  }
  const asset=review?workPaymentLabel(review.agreement.terms.xlayerPayment):''
  const total=review?.status.amount?formatUnits(BigInt(review.status.amount),review.status.decimals??18):'0'
@@ -71,7 +84,7 @@ export default function XStocksReviewOperationsPanel({workspaceId,onBusyChange}:
    {cursor&&<button className={secondary+' mt-3'} disabled={queueBusy} onClick={()=>void loadQueue(cursor)}>Load more</button>}
   </div>
   <form className="mt-6 flex flex-col items-end gap-3 sm:flex-row" onSubmit={e=>{e.preventDefault();void run(load)}}><label className="w-full text-sm">Agreement reference<input className={input} value={reference} onChange={e=>setReference(e.target.value)} placeholder="xag_…" disabled={busy}/></label><button className={button} disabled={busy||!reference.trim()}>Open case</button></form>
-  {error&&<p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}{notice&&<p role="status" className="mt-4 text-sm text-gray-600 dark:text-gray-300">{notice}</p>}
+  {error&&<p ref={errorPanel} tabIndex={-1} role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">{error}</p>}{notice&&<p role="status" className="mt-4 text-sm text-gray-600 dark:text-gray-300">{notice}</p>}
   {busy&&<p role="status" className="mt-4 text-sm text-gray-500">Checking…</p>}
   {review&&<div className="mt-6 space-y-6">
    <div className="flex items-start justify-between gap-4"><div><h2 className="font-semibold">{review.agreement.title}</h2><p className="mt-1 text-sm text-gray-500">{stages[review.status.state??-1]||'Status unavailable'}</p></div><button className={secondary} disabled={busy} onClick={()=>void run(async()=>{setReview(await api('read'))})}>Refresh</button></div>
@@ -90,7 +103,8 @@ export default function XStocksReviewOperationsPanel({workspaceId,onBusyChange}:
       {ownerWallets.map(wallet=><div key={wallet.address} className="flex flex-wrap gap-2"><button className={button} disabled={busy||review.decision!.approvedOwners.includes(wallet.address.toLowerCase())} onClick={()=>void run(()=>sign(wallet))}>Approve with {wallet.address.slice(0,6)}…{wallet.address.slice(-4)}</button></div>)}
       {!ownerWallets.length&&<p className="text-xs text-gray-500">Connect one of the reviewer owner wallets shown above.</p>}
       {review.decision.approvedOwners.length===review.reviewer.threshold&&!submitted&&<div className="rounded-xl border border-gray-200 p-4 dark:border-white/10">{!executeReview?<button className={button} disabled={busy} onClick={()=>setExecuteReview(true)}>Review execution</button>:<><p className="mb-3 text-sm">Execute the approved allocation on X Layer. Settlement moves the held shares and is final. Network fees apply.</p>{ownerWallets.map(wallet=><button key={wallet.address} className={button} disabled={busy} onClick={()=>void run(()=>execute(wallet))}>Execute with {wallet.address.slice(0,6)}…</button>)}<button className={secondary} disabled={busy} onClick={()=>setExecuteReview(false)}>Cancel</button></>}</div>}
-      {submitted&&<p className="break-all text-sm">{submitted==='pending'?'Check reviewer wallet activity before any retry.':'Submitted: '+submitted}</p>}
+      {submitted&&<p className="break-all text-sm">{submitted==='pending'?(busy?'Waiting for the reviewer wallet. Open its extension or app to review the transaction.':'No transaction hash was recorded. This does not confirm submission. Check reviewer wallet activity before any retry; refreshing does not unlock an uncertain attempt.'):'Submitted: '+submitted}</p>}
+      {submitted==='pending'&&!busy&&<div className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-white/10"><p className="text-sm">Check both reviewer wallets. Wait for any pending transaction and dismiss any outstanding execution request before continuing.</p><label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={walletActivityChecked} onChange={e=>setWalletActivityChecked(e.target.checked)}/>I checked both wallets: no pending transaction or outstanding execution request.</label><button className={secondary} disabled={!walletActivityChecked} onClick={()=>void run(recover)}>Recheck before reviewing again</button></div>}
      </>}
     </div>}
    </>}
