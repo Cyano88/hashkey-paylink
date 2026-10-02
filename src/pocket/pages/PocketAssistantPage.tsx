@@ -21,5 +21,5 @@ export default function PocketAssistantPage() {
     if (!response.ok || !data.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Support could not load. Please try again.')
     return data
   }, [getAccessToken])
-  return <PocketSupportView call={call} onOpenReceipt={eventId=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.activity+'?receipt='+encodeURIComponent(eventId))} initialCaseId={params.get('case') || ''} onClose={() => navigate(returnPath, {replace:true})} />
+  return <PocketSupportView key={params.get('case') || 'support-home'} call={call} onOpenReceipt={eventId=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.activity+'?receipt='+encodeURIComponent(eventId))} initialCaseId={params.get('case') || ''} onClose={() => navigate(returnPath, {replace:true})} />
 }

@@ -23,3 +23,8 @@ assert.equal(notice({...row,source:'gift',amount:'0.1',direction:'in',bankSettle
 assert.equal(notice({...row,source:'gift',amount:'0.1',bankSettlementStatus:undefined,paycrestStatus:'refunded'}).title,'Gift refunded')
 assert.equal(notice({...row,source:'gift',bankSettlementStatus:undefined,paycrestStatus:'processing'}),null)
 console.log('PASS gift pushes describe funded, received and refunded principal only; no pending or fee announcement.')
+
+assert.equal(pocketNotificationPath('/assistant?case=pcs_1874fda2f8564b26'),'/assistant?case=pcs_1874fda2f8564b26')
+assert.equal(pocketNotificationPath('/assistant?case=pcs_1874fda2f8564b26&redirect=https://evil.test'),'/assistant?case=pcs_1874fda2f8564b26')
+for(const path of ['/assistant','/assistant?case=other','/assistant?case=../admin','/assistant?case=pcs_1874fda2f8564b26%2fadmin'])assert.equal(pocketNotificationPath(path),null)
+console.log('PASS support push case route preserved and invalid destinations rejected')
