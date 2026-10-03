@@ -40,6 +40,7 @@ export default function PocketArcSwapPanel(props: Props) {
       method: body ? 'POST' : 'GET',
       headers: { authorization: 'Bearer ' + accessToken, ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(15_000),
     })
     if (response.status === 404) throw new Error('Arc swaps are not available yet. Please try again shortly.')
     const data = await response.json().catch(() => { throw new Error('Swap service is temporarily unavailable. Try again shortly.') })
@@ -107,21 +108,27 @@ export default function PocketArcSwapPanel(props: Props) {
     invalidate(); setTokens(current => current.some(item => item.address.toLowerCase() === token.address.toLowerCase()) ? current : [...current, token])
     if (side === 'in') setTokenIn(token.address); else setTokenOut(token.address)
   }
-  async function check(value: Pending) {
+  const checking = useRef(false)
+  async function check(value: Pending, quiet = false) {
+    if(checking.current)return
+    checking.current=true
+    try{await checkPending(value,quiet)}finally{checking.current=false}
+  }
+  async function checkPending(value: Pending, quiet: boolean) {
     let next = value
-    const active = session.current ?? await props.getSession(next.walletAddress)
-    const server = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash, circleUserToken: active.userToken })
+    const active = session.current ?? (quiet ? null : await props.getSession(next.walletAddress))
+    const server = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash, ...(active ? {circleUserToken: active.userToken} : {}) })
     if (server.status === 'failed' || server.status === 'not_submitted') { savePending(null); setQuoted(null); setStatus('idle'); setNotice(server.error || 'No swap was submitted. Request a new quote.'); return }
     if (server.status === 'completed') { savePending(null); setQuoted(null); setStatus('successful'); setAmount(''); setError(''); setNotice('Swap completed.'); await Promise.all([load(), props.refresh()]); return }
     if (!next.txHash) {
       if (!next.challengeId) {
-        const recovery = await api({ action: 'status', quoteToken: next.quoteToken })
-        if (recovery.status === 'not_submitted') { savePending(null); setQuoted(null); setStatus('idle'); setNotice('No swap was submitted. You can request a new quote.'); return }
+        const recovery = server
         if (!recovery.challengeId) { setNotice('Checking the submitted request. Do not create a second swap.'); setStatus('idle'); return }
         next = { ...next, challengeId: recovery.challengeId }; savePending(next)
       }
-      const active = session.current ?? await props.getSession(next.walletAddress)
-      const result = await reconcileCircleEvmEmailWithdraw({ session: active, challengeId: next.challengeId!, timeoutMs: 15_000 })
+      if(quiet&&!active)return
+      const walletSession = active ?? await props.getSession(next.walletAddress)
+      const result = await reconcileCircleEvmEmailWithdraw({ session: walletSession, challengeId: next.challengeId!, timeoutMs: 15_000 })
       if (!result.txHash) { setNotice('Waiting for wallet confirmation. Check status again shortly.'); setStatus('idle'); return }
       next = { ...next, txHash: result.txHash }; savePending(next)
     }
@@ -132,10 +139,11 @@ export default function PocketArcSwapPanel(props: Props) {
       await Promise.all([load(), props.refresh()])
     } else if (result.status === 'failed') {
       savePending(null); setStatus('idle'); setError(result.error)
-    } else { setNotice(result.error || 'Swap submitted. Waiting for onchain confirmation.'); setStatus('idle') }
+    } else { setNotice(result.error || 'Swap pending. Check Activity for updates.'); setStatus('idle') }
   }
   async function execute() {
-    if (locked.current || !quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= Date.now()) return
+    if (locked.current || !quoted || quoted.sufficientBalance !== true) return
+    if(quoted.quote.expiresAt<=Date.now()){setError('Price expired. Review the updated quote.');setQuoteRefresh(value=>value+1);return}
     locked.current = true; setStatus('pending'); setError('')
     let activePending: Pending | null = pending
     try {
@@ -155,10 +163,17 @@ export default function PocketArcSwapPanel(props: Props) {
       setStatus('idle')
     } finally { locked.current = false }
   }
+  const recover = useRef(check); recover.current=check
+  useEffect(()=>{
+    if(!pending||!visible||props.enabled===false)return
+    const update=()=>{if(!locked.current&&navigator.onLine!==false)void recover.current(pending,true).catch(()=>{})}
+    update();const timer=window.setInterval(update,15000);window.addEventListener('online',update)
+    return()=>{clearInterval(timer);window.removeEventListener('online',update)}
+  },[pending,visible,props.enabled])
   const selected = tokens.find(token => token.address.toLowerCase() === tokenIn.toLowerCase())
   return <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
     {pending ? <div className="space-y-3 rounded-2xl bg-blue-50 p-4 dark:bg-blue-500/10">
-      <p className="text-sm">Your swap is awaiting confirmation. Check its status before creating another.</p>
+      <p className="text-sm">Swap pending. Checking for updates.</p>
       <button type="button" disabled={busy} onClick={() => { setError(''); void prepare().then(() => check(pending)).catch(reason => setError(reason.message)) }} className="text-sm font-bold text-blue-600">Check swap status</button>
       {pending.txHash && <a className="block text-xs text-blue-600" href={'https://explorer.arc.io/tx/' + pending.txHash} target="_blank" rel="noreferrer">View transaction</a>}
     </div> : <>
@@ -172,10 +187,10 @@ export default function PocketArcSwapPanel(props: Props) {
       <p className="text-xs text-gray-500 dark:text-gray-400">Available: {selected?.balance ?? '—'} {selected?.symbol}</p>
       {selected?.balanceStatus === 'wallet_required' && <button type="button" onClick={() => void props.ensureWallet().then(() => load()).catch(reason => setError(reason.message))} className="text-xs font-bold text-blue-600">Open Arc wallet</button>}
       {quoted && <div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#121212]">
-        <p>Estimated receive: <b>{quoted.quote.expectedOut} {quoted.quote.tokenOut.symbol}</b></p>
-        <p>Minimum receive: <b>{quoted.quote.minimumOut} {quoted.quote.tokenOut.symbol}</b></p>
+        <p>You receive: <b>{quoted.quote.expectedOut} {quoted.quote.tokenOut.symbol}</b></p>
+        <details><summary className="cursor-pointer">Fees and minimum received</summary><p>Minimum received: <b>{quoted.quote.minimumOut} {quoted.quote.tokenOut.symbol}</b></p>
         {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: {fee.amount} {fee.symbol}{fee.included ? ' (included)' : ''}</p>)}
-        <p>Estimated network gas: {quoted.quote.gasUsdc} USDC</p>
+        <p>Network fee: {quoted.quote.gasUsdc} USDC</p></details>
       </div>}
       {error && !quoted && pairReady && amountValid && <button type="button" onClick={() => setQuoteRefresh(value => value + 1)} className="text-xs font-bold text-blue-600">Try price again</button>}
       <PocketSlideAction approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating price...' : quoted?.sufficientBalance === false ? 'Insufficient balance' : quoted && quoted.sufficientBalance !== true ? 'Balance unavailable' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} />
