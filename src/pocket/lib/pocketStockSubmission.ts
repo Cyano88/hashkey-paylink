@@ -78,10 +78,14 @@ export async function runStockSubmission(options: {
    return existing.hash
   } catch(reason){const error=stockSubmissionError(reason);if(readStockAttempts(key).some(r=>r.id===existing.id&&r.status==='pending'))Object.assign(error,{transactionPending:true,attemptId:existing.id});throw error}
  }
+ // Shared across hook instances: never start another signature while the
+ // previous submission has no known transaction hash. Known-hash attempts
+ // remain independently trackable and do not take this signing lock.
+ if(localStorage.getItem(signingKey(key))||readStockAttempts(key).some(r=>r.status==='pending'&&!r.hash))throw Object.assign(new Error('A payment is still being checked. View Activity before trying again.'),{transactionPending:true})
  const id=crypto.randomUUID()
  const draft:StockPending={key,kind,id,details,xpayPaymentId,gift,hash:'' as Hex,status:'pending'}
- saveStockAttempt(draft)
  localStorage.setItem(signingKey(key), String(Date.now()))
+ try{saveStockAttempt(draft)}catch(reason){localStorage.removeItem(signingKey(key));throw reason}
  // Signing in progress is not an uncertain outcome. Only a rejected call with
  // an unknown broadcast outcome sets that warning.
  onUncertain(false)

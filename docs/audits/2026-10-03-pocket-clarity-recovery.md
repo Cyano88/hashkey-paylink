@@ -11,7 +11,7 @@ Recovery findings:
 - Stablecoin send attempts are persisted per owner and attempt; terminal results cannot regress. usePocketSendRecovery is mounted in CirclePocketApp, checks every 20 seconds and on focus/online, and pauses when hidden. Activity merges saved attempts with receipts. A fresh send does not clear previous attempt history.
 - Bank recovery runs independently of its form and retains unresolved records. Bills and gift controllers also retain pending outcomes and reconcile; success requires evidence.
 - XStocks persists attempts and known hashes, polls receipts every 15 seconds while its wallet hook is mounted, and treats an explicit wallet rejection as failed. Unknown submission outcomes remain pending.
-- hasStockSubmission locks the XStocks wallet for a pending or unknown submission. Do not clear this lock based on elapsed time. Narrowing the known-hash lock requires verifying wallet nonce/concurrent-send behavior and a regression test first.
+- Correction after call-site audit: ordinary XStocks sends check signing/uncertainty and already permit independent known-hash sends after the current call returns. Trades, XPay and gifts use the broader hasStockSubmission guard. Those multi-step checks remain unchanged.
 - A local attempt without a transaction hash can require an active wallet session/provider recovery. Full app-closed recovery is not proven for every rail. UI must not promise continuous device background work.
 
 Outstanding before a whole-app release sign-off:
@@ -19,3 +19,9 @@ Outstanding before a whole-app release sign-off:
 - Verify provider recovery for no-hash interrupted signing on both rails.
 - Verify safe independent same-wallet sends before changing the XStocks lock.
 - Dynamic provider errors and all route-specific states require further live validation; this source audit does not establish universal wording coverage.
+
+## Shared signing guard follow-up
+
+The submission helper now checks the persisted signing marker and pending no-hash attempts before creating a new attempt. The marker is acquired before notifying subscribers of a saved draft. This protects multiple hook instances in the same Pocket runtime. It is not a cross-device or cross-tab distributed lock.
+
+Regression tests verify simultaneous hook calls cannot sign twice, other wallet scopes remain independent, a different send is allowed after a known hash, an unknown outcome is retained, and ordinary send/gift recovery does not resubmit. The stricter trade/gift checks and provider nonce behavior are unchanged.
