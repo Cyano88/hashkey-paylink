@@ -37,7 +37,7 @@ export function createStockWalletBalancesHandler(overrides: Partial<typeof defau
       })
       const pricingComplete = holdings.every(h => h.estimatedValueUsd !== null)
       const sum = holdings.reduce((total, h) => total + (h.estimatedValueUsd ?? 0), 0)
-      return res.json({ ok: true, ...identity, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)), gas: { symbol: 'OKB', decimals: 18, units: snapshot.gas.toString(), balance: formatUnits(snapshot.gas, 18), observedAt: snapshot.observedAt, stale }, holdings, complete: snapshot.complete, stale, observedAt: snapshot.observedAt, blockNumber: snapshot.blockNumber.toString(), pricingComplete, estimatedValueUsd: snapshot.complete && !stale && pricingComplete && Number.isFinite(sum) ? sum : null })
+      return res.json({ ok: true, ...identity, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)), gas: { symbol: 'OKB', decimals: 18, units: snapshot.gas.toString(), balance: formatUnits(snapshot.gas, 18), observedAt: snapshot.observedAt, stale }, holdings, complete: snapshot.complete, stale, observedAt: snapshot.observedAt, blockNumber: snapshot.blockNumber?.toString() ?? null, pricingComplete, estimatedValueUsd: snapshot.complete && !stale && pricingComplete && Number.isFinite(sum) ? sum : null })
     } catch (reason) {
       const error = reason as Error & { status?: number }
       return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Stock balances are unavailable. Try again.' })

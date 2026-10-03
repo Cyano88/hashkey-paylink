@@ -23,10 +23,11 @@ export function stockAmountUnits(amount: string, decimals: number) {
 export async function assertStockChain() {
   if (await stockClient.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
 }
-export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; blockNumber: bigint; blockHash: Hex; fullScanAt: number; observedAt: number }
+export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; fullScanAt: number; observedAt: number } & ({source?:'rpc';blockNumber:bigint;blockHash:Hex}|{source:'okx';blockNumber:null;blockHash:null})
 const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
 const tokenDecimals = new Map<string, number>()
 export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot, signal?: AbortSignal, options?: { rpcUrl?: string; force?: boolean }): Promise<StockBalanceSnapshot> {
+  if (previous?.source === 'okx') previous = undefined
   const client = signal || options?.rpcUrl ? createPublicClient({ chain: pocketXLayer, transport: http(options?.rpcUrl || pocketXLayer.rpcUrls.default.http[0], { timeout: 15_000, retryCount: 0, fetchOptions: { signal } }) }) : stockClient
   if (await client.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
   const block = await client.getBlock({ blockTag: 'latest' })

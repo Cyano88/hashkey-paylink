@@ -82,14 +82,14 @@ export default function PocketHomePage() {
     <section data-pocket-balance-card className="overflow-hidden rounded-[26px] bg-gray-950 px-5 py-4 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
       <div className="relative">
         <div className="min-w-0 text-center">
-          <div className="flex items-center justify-center gap-1.5 px-12">
+          <div className="flex items-center justify-center px-12"><div className="relative">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 dark:text-gray-500">Total USDC</p>
-            <button type="button" onClick={toggleBalance} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>
+            <button type="button" onClick={toggleBalance} className="absolute left-full top-1/2 ml-1.5 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>
               {balanceVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             </button>
-          </div>
+          </div></div>
           <div className="mt-1.5">
-            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
+            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-total-amount>{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden}</span><span className="absolute bottom-1 left-full ml-1.5 whitespace-nowrap text-xs font-medium tracking-normal opacity-50">USDC</span></span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
           {<div className="mt-1 flex h-4 items-center justify-center text-xs font-semibold tabular-nums leading-4 text-white/55 dark:text-gray-500">
             {!showNgn ? null : !balanceVisible ? (currency === 'NGN' ? '\u20a6' : 'USh ') + hidden : balancesVisible && fx.quote ? '~ ' + localCurrencyAmount(Math.round(displayTotal * fx.quote.rate), currency === 'UGX' ? 'UGX' : 'NGN') : !balancesVisible || fx.loading ? <span role="status" aria-label="Loading local equivalent" className="block h-3 w-24 animate-pulse rounded bg-white/10 motion-reduce:animate-none dark:bg-gray-950/[0.08]" /> : <span aria-label="Local equivalent temporarily unavailable">Rate unavailable</span>}

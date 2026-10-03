@@ -1,3 +1,4 @@
+import { readCircleDisplayBalance } from './circle-display-balances.js'
 import { pocketBalanceRevision } from '../../src/pocket/lib/pocketBalanceRevision.js'
 import { readDurableJson } from '../render-durable-store.js'
 import type { MigrationPlan } from './wallet-migration-plan.js'
@@ -28,6 +29,7 @@ import {
 } from '../../src/pocket/lib/pocketSchemas.js'
 
 type PocketBalancesHandlerDependencies = {
+  readDisplayBalance?: typeof readCircleDisplayBalance
   readMigrationPlan?(userId:string):Promise<MigrationPlan|undefined>
   readWalletUpdate?(userId: string): Promise<PocketWalletUpdateRecord | undefined>
   verifyUser(req: Request): Promise<VerifiedLinkUser>
@@ -170,9 +172,10 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
         }
         try {
           if (network !== 'solana') links[network] = link
-          const balance = await dependencies.readBalance(network, link.circleWalletAddress, req.query?.refresh === '1')
+          const display = dependencies.readDisplayBalance ? await dependencies.readDisplayBalance(link, () => dependencies.readBalance(network, link.circleWalletAddress, true), req.query?.refresh === '1') : { balance: await dependencies.readBalance(network, link.circleWalletAddress, req.query?.refresh === '1'), observedAt: Date.now() }
+          const balance = display.balance
           if (!Number.isFinite(balance) || balance < 0) throw new Error('Balance reader returned an invalid amount.')
-          return { key: network, label: LABELS[network], balance, status: 'ok', walletRevision, observedAt: Date.now() }
+          return { key: network, label: LABELS[network], balance, status: 'ok', walletRevision, observedAt: display.observedAt }
         } catch {
           return {
             key: network,
@@ -204,6 +207,7 @@ export default createPocketBalancesHandler({
   verifyUser: verifiedPrivyUser,
   readLink: readCircleLink,
   readBalance: readPocketNetworkBalance,
+  readDisplayBalance: readCircleDisplayBalance,
   readWalletUpdate: readPocketWalletUpdate,
   readMigrationPlan:userId=>readDurableJson<MigrationPlan>('pocket:wallet-migration-plan:v1:'+userId),
 })
