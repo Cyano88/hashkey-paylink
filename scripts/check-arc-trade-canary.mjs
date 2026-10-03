@@ -18,5 +18,6 @@ for(const [path,headers,body] of [
 assert.equal(existsSync(pending),before)
 const seller=await(await fetch(origin+'/status?role=seller')).json()
 const buyer=await(await fetch(origin+'/status?role=buyer')).json()
-assert.equal(seller.action,'create');assert.equal(buyer.action,null)
-console.log('PASS: page/bundle, Host/Origin, account/action/amount/consent restrictions, and seller-first initial state. No OTP or challenge sent.')
+assert.equal(seller.action,process.argv.includes('--refund')?'refund':'create');assert.equal(buyer.action,null)
+if(process.argv.includes('--refund')){assert.equal(seller.state,2);assert.equal(buyer.state,2);assert.equal(seller.label,'Return 0.10 USDC to buyer')}
+console.log('PASS: page/bundle, Host/Origin, account/action/amount/consent restrictions, and participant actions. No OTP or challenge sent.')

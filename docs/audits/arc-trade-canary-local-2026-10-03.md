@@ -24,7 +24,8 @@ The server binds to loopback and checks Host and write Origin. Allowed operation
 are create/accept for seller and approve/fund for buyer. Intent validation rejects
 extra fields, changed terms, other networks/amounts and wrong roles. The approval
 step requires zero prior allowance, so it cannot silently perform an allowance
-reset or increase beyond the canary amount. The page stops after funding.
+reset or increase beyond the canary amount. After funding verification, the seller
+can authorize a full refund to the original buyer through the same local page.
 
 An exclusive pending file is written before provider submission, with stable
 idempotency key, exact planned call and preparation block. Unknown outcomes retain
@@ -52,3 +53,23 @@ approval and funding are recorded as confirmed in the local journal.
 `node --import tsx scripts/verify-arc-trade-canary-funding.mjs` repeats these
 read-only checks while the escrow remains Funded. Recovery/refund has not yet
 completed; this evidence does not declare the full product production-ready.
+
+## Seller refund preparation
+
+The local canary now permits seller-only `refundBySeller` from confirmed Funded
+state, using fixed server-owned evidence. The contract returns the entire
+principal to its immutable buyer; the browser cannot supply an amount, recipient
+or evidence. The production planner simulates the call before requesting Circle
+approval. The buyer has no refund signing action.
+
+Reconciliation requires the existing v0.7 execution verification, terminal
+Refunded state, the shared settlement receipt verifier with exact outgoing USDC
+transfer, buyer allocation 100000, seller allocation zero, the fixed evidence hash
+and zero escrow balance. The verified settlement receipt is saved in the local
+journal before clearing the pending request. No production receipt store is used.
+This is a voluntary seller refund, not the dual-signer dispute resolution test.
+
+`node --import tsx scripts/check-arc-trade-canary-refund.mjs` performs read-only
+mainnet wallet validation and refund simulation, including buyer-role rejection.
+`node scripts/check-arc-trade-canary.mjs --refund` checks the local funded UI and
+request restrictions without creating an OTP or signing challenge.

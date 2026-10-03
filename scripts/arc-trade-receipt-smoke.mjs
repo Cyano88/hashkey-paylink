@@ -24,4 +24,13 @@ assert.deepEqual(await save(record,hash),good);assert.deepEqual(await save(recor
 stored={...stored,receipt:{...good,buyerAmountUnits:'1'}};await assert.rejects(()=>save(record,hash),/different settlement/)
 stored={...record,partnerId:'dev_wrong12345'};await assert.rejects(()=>save(record,hash),/Agreement changed/)
 await assert.rejects(()=>createArcTradeReceiptRecorder({release:()=>null})(record,hash),/pending verification/)
-console.log('Arc receipts passed: canonical terminal event, exact USDC payouts, failed/unconfirmed/foreign/reorg rejection, immutable storage and project binding.')
+reset({state:7});patch={state:7,buyerAmount:1250000n,sellerAmount:0n}
+const refundReceipt=receipt()
+refundReceipt.logs=refundReceipt.logs.slice(0,2)
+refundReceipt.logs[1].data=encodeAbiParameters(parseAbiParameters('uint256'),[1250000n])
+const refundReader={...client,getTransactionReceipt:async()=>refundReceipt}
+const refund=await verifyArcTradeReceipt(record,hash,refundReader,release)
+assert.equal(refund.state,7);assert.equal(refund.buyerAmountUnits,'1250000');assert.equal(refund.sellerAmountUnits,'0')
+refundReceipt.logs[1].topics=encodeEventTopics({abi:transferAbi,eventName:'Transfer',args:{from:escrow,to:seller}})
+await assert.rejects(()=>verifyArcTradeReceipt(record,hash,refundReader,release),/USDC transfers/)
+console.log('Arc receipts passed: canonical terminal event, exact USDC payouts and full buyer refund, wrong refund recipient, failed/unconfirmed/foreign/reorg rejection, immutable storage and project binding.')
