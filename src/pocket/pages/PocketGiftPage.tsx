@@ -1,3 +1,4 @@
+import PocketPaymentSecurityGate from '../components/PocketPaymentSecurityGate'
 import usePocketStockWallet from '../hooks/usePocketStockWallet'
 import {xStockPath} from '../lib/pocketRail'
 import type {GiftWalletSession} from '../api/pocketGiftsClient'
@@ -37,8 +38,9 @@ export default function PocketGiftPage(){
   // Bearer credentials must never enter a hijackable custom URI scheme.
   window.location.href=giftLink(parsed.id,parsed.secret)
  }
+ const redeem=<PocketGiftRedeem onGiftLoaded={gift=>setStockGift(gift.network==='xlayer')} inApp={isPocketNativeRuntime()} onDone={isPocketNativeRuntime()?()=>navigate(stockGift?xStockPath('home'):POCKET_ROUTES.home,{replace:true}):undefined} onBack={isPocketNativeRuntime()?()=>navigate('/gifts/claim'+(stockGift?'?rail=xstocks':''),{replace:true}):undefined} link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>
  return <div className="min-h-[100dvh] bg-white dark:bg-black" data-pocket-gift-surface data-pocket-colour-scope={stockGift?'xstocks':'stablecoins'}>
-  <PocketGiftRedeem onGiftLoaded={gift=>setStockGift(gift.network==='xlayer')} inApp={isPocketNativeRuntime()} onDone={isPocketNativeRuntime()?()=>navigate(stockGift?xStockPath('home'):POCKET_ROUTES.home,{replace:true}):undefined} onBack={isPocketNativeRuntime()?()=>navigate('/gifts/claim'+(stockGift?'?rail=xstocks':''),{replace:true}):undefined} link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>
+  {stockGift&&identity.authenticated?<PocketPaymentSecurityGate key={identity.user?.id} email={identity.email} getAccessToken={identity.getAccessToken}>{redeem}</PocketPaymentSecurityGate>:redeem}
   {login&&!identity.authenticated&&<PocketBottomSheet title="Sign in to Pocket" onClose={()=>setLogin(false)} dismissOnBackdrop={false}><PocketEmailLogin/></PocketBottomSheet>}
   {install&&<PocketBottomSheet title="Redeem in Pocket" onClose={()=>setInstall(false)} dismissOnBackdrop={false}><p className="text-center text-sm text-gray-500 dark:text-gray-400">After installing Pocket, reopen this gift link to claim it.</p><PocketGetApp/><button className="pocket-cta-primary mt-5 w-full" onClick={openApp}>Open Pocket</button></PocketBottomSheet>}
  </div>
