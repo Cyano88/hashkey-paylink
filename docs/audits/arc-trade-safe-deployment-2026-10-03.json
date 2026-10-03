@@ -1,0 +1,34 @@
+{
+  "verified": true,
+  "checkedAt": "2026-10-03T11:47:32.717Z",
+  "chainId": 5042,
+  "transactionHash": "0x0cdfff331bedeaa2e26f4180d72ce443dc20c94350c6df5b6c5c2c95e0b8c1bf",
+  "calldataHash": "0x1364ce767d512579258f98a858a4e1a3bf90f02516cd7ff3234f46788a2e4fb8",
+  "blockNumber": "24044619",
+  "blockHash": "0x7c85740d9052a70f21b0359d2f2dc9a8185852a6664c69cc363633ef96fbae96",
+  "headBlock": "24044899",
+  "confirmations": "281",
+  "safe": "0x83C0608F4695e82b6658757f9a0B658001A73a73",
+  "owners": [
+    "0xaA6EE4589832Fb9FA49c27cB56CBcecf29B847c7",
+    "0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753"
+  ],
+  "threshold": 2,
+  "version": "1.5.0",
+  "nonce": "0",
+  "modules": [],
+  "proxyRuntimeHash": "0x4e381985ca68b3e5d27b4425fa581c19cf33146d3f887a3cfca96f55528ea46f",
+  "singleton": {
+    "address": "0xFf51A5898e281Db6DfC7855790607438dF2ca44b",
+    "runtimeHash": "0xdda019cbd7c867a533a2a86e5c53434fdc50b13122b5a5ddb4a8df61b31c20f2"
+  },
+  "proxyFactory": {
+    "address": "0x14F2982D601c9458F93bd70B218933A6f8165e7b",
+    "runtimeHash": "0x967dae4cda22b0c9ef7f31b010bdc1ceb0af9904b0c3dc060b5302e4c18a4529"
+  },
+  "sourceRegistryRevision": "7b1fb6d615ab2d2999550ec9166554b180e813e5",
+  "deploymentVerified": true,
+  "tradeFactoryDeployed": false,
+  "productionReady": false,
+  "fundingEnabled": false
+}
