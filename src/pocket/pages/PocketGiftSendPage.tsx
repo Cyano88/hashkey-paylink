@@ -76,7 +76,7 @@ function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAcces
  const back=()=>{if(!busy)navigate(stockRail?xStockPath('send'):POCKET_ROUTES.transfer)}
  if(loading&&!listOpen)return <PocketGiftCreateSkeleton onBack={back}/>
  if(!vault)return <main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm">Create gifts in the Pocket app.</p></main>
- return <div data-pocket-colour-scope={stockRail?'xstocks':'stablecoins'} className="min-h-[100dvh] bg-white text-gray-950 dark:bg-black dark:text-white">
+ return <div data-pocket-gift-surface data-pocket-colour-scope={stockRail?'xstocks':'stablecoins'} className="min-h-[100dvh] bg-white text-gray-950 dark:bg-black dark:text-white">
   {listOpen?<PocketGiftList rail={stockRail?'xstocks':'stablecoins'} owner={owner} vault={vault} getAccessToken={getAccessToken} onOpen={openSaved} revision={revision} archived={archived} onBack={()=>giftParams(archived?{view:'gifts'}:{})} onArchived={()=>giftParams({view:'gifts',archived:'1'})}/>:enabled?<PocketGiftCreate key={revision} onYourGifts={()=>giftParams({view:'gifts'})} networks={stockRail?['xlayer']:['base']} assets={stockRail?config?.stockAssets:undefined} maxRecipients={maxRecipients} onContinue={begin} onBack={back}/>:<main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm text-gray-500">{configError||(stockRail?'Stock gifts are not available yet.':'Base gifts are not available yet.')}</p>{configError&&<button className="pocket-cta-primary mt-6 w-full" onClick={retryConfig}>Try again</button>}</main>}
   {error&&<p role="alert" className="mx-auto max-w-md px-6 text-sm text-red-500">{error}</p>}
 
