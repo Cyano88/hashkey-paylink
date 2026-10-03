@@ -1,3 +1,4 @@
+import { formatStockQuantity } from '../../lib/pocketStockDisplay'
 import PocketFlowHeader from '../../components/PocketFlowHeader'
 import { GiftIcon } from '@heroicons/react/24/outline'
 import { CPurseIcon } from '../../components/CPurseIcon'
@@ -11,7 +12,7 @@ export function PocketGiftArtwork({ compact = false }: { compact?: boolean }) {
   </div>
 }
 function GiftDetails({ gift }: { gift: GiftView }) {
-  return <><h1 className="mt-7 text-2xl font-bold tracking-tight">A gift for you</h1><p className="mt-3 text-3xl font-bold tabular-nums">{gift.amount} <span className="text-base font-medium">{gift.asset?.symbol||'USDC'}</span></p>{gift.maxClaims&&<p className="mt-2 text-xs text-gray-500">{gift.remainingClaims} of {gift.maxClaims} claims remaining · One claim per Pocket account</p>}<p className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400"><PocketNetworkMark network={gift.network} /><span className="capitalize">{gift.network==='xlayer'?'X Layer':gift.network}</span></p><p className="mt-5 text-sm text-gray-600 dark:text-gray-300">From {gift.sender}</p>{gift.message && <p className="mx-auto mt-4 max-w-xs break-words text-sm leading-6 text-gray-500 dark:text-gray-400">{gift.message}</p>}</>
+  return <><h1 className="mt-7 text-2xl font-bold tracking-tight">A gift for you</h1><p className="mt-3 text-3xl font-bold tabular-nums">{gift.asset?.rail==='xstocks'?formatStockQuantity(gift.amount):gift.amount} <span className="text-base font-medium">{gift.asset?.symbol||'USDC'}</span></p>{gift.maxClaims&&<p className="mt-2 text-xs text-gray-500">{gift.remainingClaims} of {gift.maxClaims} claims remaining · One claim per Pocket account</p>}<p className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400"><PocketNetworkMark network={gift.network} /><span className="capitalize">{gift.network==='xlayer'?'X Layer':gift.network}</span></p><p className="mt-5 text-sm text-gray-600 dark:text-gray-300">From {gift.sender}</p>{gift.message && <p className="mx-auto mt-4 max-w-xs break-words text-sm leading-6 text-gray-500 dark:text-gray-400">{gift.message}</p>}</>
 }
 export function PocketGiftLanding({ gift, onRedeem, onCopyCode, onBack, onDone, inApp = false }: { inApp?: boolean; onDone?: () => void; onBack?: () => void; gift: GiftView; onRedeem: () => void; onCopyCode?: () => void }) {
   const available = gift.status === 'available'

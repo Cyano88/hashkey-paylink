@@ -1,7 +1,8 @@
+import { formatStockQuantity } from './pocketStockDisplay'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isIncomingPosPayment } from './pocketPurchaseKind'
 export type PocketMoneyNotice = { eventId:string; title:string; body:string; path:string; tag:string; occurredAt:number }
-const labels:Record<string,string>={base:'Base',arc:'Arc',polygon:'Polygon',arbitrum:'Arbitrum',ethereum:'Ethereum',solana:'Solana'}
+const labels:Record<string,string>={base:'Base',arc:'Arc',polygon:'Polygon',arbitrum:'Arbitrum',ethereum:'Ethereum',solana:'Solana',xlayer:'X Layer'}
 const amount=(value:string,currency:string)=>currency==='NGN'?'\u20a6'+Number(value).toLocaleString('en-NG',{maximumFractionDigits:2}):currency==='UGX'?'UGX '+Number(value).toLocaleString('en-UG',{maximumFractionDigits:2}):value+' '+currency
 /** Notification truth follows the original purchase, never its funding debit. */
 export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice|null {
@@ -13,9 +14,9 @@ export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice
  if(!success&&!refunded&&!refundAvailable&&!failed)return null
  if(!row.txHash)return null
  if(bank&&(!row.amountNgn||!Number.isFinite(Number(row.amountNgn))))return null
- const local=(bank||bill)&&row.amountNgn&&['NGN','UGX'].includes(row.fiatCurrency||'NGN')?amount(row.amountNgn,row.fiatCurrency||'NGN'):amount(row.amount,row.assetSymbol||'USDC')
+ const local=(bank||bill)&&row.amountNgn&&['NGN','UGX'].includes(row.fiatCurrency||'NGN')?amount(row.amountNgn,row.fiatCurrency||'NGN'):amount(row.assetSymbol?formatStockQuantity(row.amount):row.amount,row.assetSymbol||'USDC')
  const gift=source==='gift'
- const kind=gift?(row.direction==='in'?'Gift received':'Gift funded'):bank?'Bank transfer':bill?({airtime:'Airtime',data:'Data',electricity:'Electricity',tv:'TV'}[row.billCategory||'airtime']):merchant?'XPay payment':purchase?'Payment':source==='wallet-bridge'?'USDC bridged':source==='wallet-swap'?'Swap completed':row.direction==='in'?'USDC received':'USDC sent'
+ const kind=gift?(row.direction==='in'?'Gift received':'Gift funded'):bank?'Bank transfer':bill?({airtime:'Airtime',data:'Data',electricity:'Electricity',tv:'TV'}[row.billCategory||'airtime']):merchant?'XPay payment':purchase?'Payment':source==='wallet-bridge'?'USDC bridged':source==='wallet-swap'?'Swap completed':row.direction==='in'?(row.assetSymbol||'USDC')+' received':(row.assetSymbol||'USDC')+' sent'
  const target=bank?(row.accountName||row.recipient||'your recipient'):bill?(row.billProvider||row.recipient||''):merchant?(row.activityLabel||row.contextLabel||'your terminal'):purchase?(row.recipient||row.memo||'merchant'):''
  let body=gift?(row.direction==='in'?`${local} has been added to your Pocket.`:`Your ${local} gift is ready to share.`):bank?`Your ${local} transfer to ${target}${row.bankName?' at '+row.bankName:''} was successful.`:bill?`${local} ${kind.toLowerCase()} purchase completed${target?' with '+target:''}.`:merchant?`${local} received at ${target}.`:purchase?`${local} paid to ${target}.`:source==='wallet-bridge'?`${row.amount} USDC bridged from ${labels[row.chain]||row.chain} to ${labels[row.destination||'']||row.destination||'your wallet'}.`:source==='wallet-swap'?`Your swap on Arc completed. ${row.contextLabel||''}`:`${local} ${row.direction==='in'?'received':'sent'} on ${labels[row.chain]||row.chain}.`
  if(refunded)body=gift?`${local} from your unclaimed gift has been returned to your Pocket.`:`Your ${local} ${kind.toLowerCase()} was refunded.`

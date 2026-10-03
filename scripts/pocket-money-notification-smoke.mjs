@@ -28,3 +28,12 @@ assert.equal(pocketNotificationPath('/assistant?case=pcs_1874fda2f8564b26'),'/as
 assert.equal(pocketNotificationPath('/assistant?case=pcs_1874fda2f8564b26&redirect=https://evil.test'),'/assistant?case=pcs_1874fda2f8564b26')
 for(const path of ['/assistant','/assistant?case=other','/assistant?case=../admin','/assistant?case=pcs_1874fda2f8564b26%2fadmin'])assert.equal(pocketNotificationPath(path),null)
 console.log('PASS support push case route preserved and invalid destinations rejected')
+const stockGift={eventId:'stock-gift',source:'gift',chain:'xlayer',amount:'0.000009999999999999',assetSymbol:'NVDAx',ts:1000,txHash:'0x'+'2'.repeat(64),paycrestStatus:'completed',direction:'in'}
+assert.equal(notice(stockGift).body,'0.00001 NVDAx has been added to your Pocket.')
+assert.equal(notice({...stockGift,direction:'out'}).body,'Your 0.00001 NVDAx gift is ready to share.')
+assert.equal(notice({...stockGift,paycrestStatus:'refunded'}).body,'0.00001 NVDAx from your unclaimed gift has been returned to your Pocket.')
+assert.equal(notice({...stockGift,paycrestStatus:'pending'}),null)
+assert.equal(stockGift.amount,'0.000009999999999999','display formatting must not mutate exact accounting')
+assert.equal(notice({...stockGift,source:'wallet-deposit'}).title,'NVDAx received')
+assert.match(notice({...stockGift,source:'wallet-deposit'}).body,/on X Layer/)
+console.log('PASS stock gift and transfer push display, status gating and unchanged exact quantity')

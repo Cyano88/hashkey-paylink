@@ -1,3 +1,4 @@
+import { formatStockQuantity } from '../../lib/pocketStockDisplay'
 import {useEffect,useRef,useState} from 'react'
 import {useGiftAutoRefresh} from './useGiftAutoRefresh'
 import {CheckCircleIcon} from '@heroicons/react/24/solid'
@@ -41,7 +42,7 @@ function Claim({link,gift,identityKey,getAccessToken,getSession,onDone,onConfirm
  return <PocketBottomSheet title={progress.phase==='confirmed'?'Successful':'Claim gift'} onClose={onDone} dismissOnBackdrop={false} dismissible={!busy&&progress.phase!=='confirmed'}>
   <section data-pocket-colour-scope={gift.asset?.rail||'stablecoins'} className="text-center text-gray-950 dark:text-white">
    {progress.phase==='confirmed'?<CheckCircleIcon aria-hidden="true" className="mx-auto h-14 w-14 text-green-600"/>:<PocketGiftArtwork compact/>}
-   <p className="mt-5 text-2xl font-bold">{gift.amount} {gift.asset?.symbol||'USDC'}</p>
+   <p className="mt-5 text-2xl font-bold">{gift.asset?.rail==='xstocks'?formatStockQuantity(gift.amount):gift.amount} {gift.asset?.symbol||'USDC'}</p>
    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">From {gift.sender}</p>
    {progress.message&&<p role="status" className="mt-4 text-sm text-gray-500 dark:text-gray-400">{progress.message}</p>}
    <button type="button" disabled={busy||(!flow&&!terminal)} className="pocket-cta-primary mt-6 w-full disabled:opacity-50" onClick={()=>progress.phase==='confirmed'?(onSuccessDone??onDone)():terminal?onDone():progress.phase==='unconfirmed'?onDone():void flow?.claim()}>
