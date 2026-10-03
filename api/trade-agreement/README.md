@@ -86,8 +86,9 @@ the ERC-1967 implementation slot; EntryPoint execution additionally pins its
 runtime. These are candidate checks, not evidence that the live Circle wallet
 uses this layout or propagates inner call failures. Verify its source, delegation,
 modules, upgrade behavior and actual transaction envelope before selecting the
-production policy. `ARC_TRADE_EXECUTION_POLICY` remains null. No signing or
-broadcasting is performed by this module.
+production policy. The reviewed v0.7 policy is now pinned after the mainnet
+funding/refund canary; project and runtime activation remain required. No signing
+or broadcasting is performed by this module.
 
 The verifier now also supports explicitly policy-selected EntryPoint v0.7 packed
 operations. Its native wallet policy rejects plugins/hooks and checks the actual
