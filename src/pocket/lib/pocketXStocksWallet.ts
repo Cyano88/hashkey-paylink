@@ -41,11 +41,15 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   if (!full && previous) {
     // Re-read transfers across a short overlap to cover ordinary shallow reorganizations.
     const fromBlock = previous.blockNumber > 12n ? previous.blockNumber - 12n : 0n
-    const logs = (await Promise.all([
-      client.getLogs({ event: transferEvent, args: { from: owner }, fromBlock, toBlock: blockNumber }),
-      client.getLogs({ event: transferEvent, args: { to: owner }, fromBlock, toBlock: blockNumber }),
-    ])).flat()
-    const changed = new Set(logs.map(log => log.address.toLowerCase()))
+    const changed = new Set<string>()
+    for(let start=fromBlock;start<=blockNumber;start+=100n){
+      const end=start+99n<blockNumber?start+99n:blockNumber
+      const logs=(await Promise.all([
+        client.getLogs({event:transferEvent,args:{from:owner},fromBlock:start,toBlock:end}),
+        client.getLogs({event:transferEvent,args:{to:owner},fromBlock:start,toBlock:end}),
+      ])).flat()
+      for(const log of logs)changed.add(log.address.toLowerCase())
+    }
     assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase()))
   }
   const balances = assets.length ? await client.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []

@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import {createStockBalanceCache} from '../src/pocket/lib/pocketStockBalanceCache.ts'
 import {readStockHoldings,stockClient,stockAssets} from '../src/pocket/lib/pocketXStocksWallet.ts'
 let now=100000,calls=0,fail=false,release
@@ -22,6 +22,7 @@ try {
  const full=await readStockHoldings(address);assert.equal(scanned[0],808);assert.equal(full.holdings.length,0)
  block++;changed=true;scanned=[];const delta=await readStockHoldings(address,full);assert.equal(scanned[0],1);assert.equal(delta.holdings[0].units,2n*10n**18n)
  block++;changed=false;scanned=[];const unchanged=await readStockHoldings(address,delta);assert.equal(scanned.length,0);assert.equal(unchanged.holdings[0].units,2n*10n**18n)
+ const ranges=[];stockClient.getLogs=async({fromBlock,toBlock})=>{assert.ok(toBlock-fromBlock<100n);ranges.push([fromBlock,toBlock]);return []};block=350n;await readStockHoldings(address,unchanged);assert.equal(ranges.length,6);assert.deepEqual(ranges.filter((_,i)=>i%2===0),[[90n,189n],[190n,289n],[290n,350n]])
  block=99n;await assert.rejects(readStockHoldings(address,unchanged),/behind/)
  console.log('PASS: shared request deduplication, TTL, quiet failed refresh, expiry, owner isolation, forced refresh, 808-contract baseline to 1-contract delta, unchanged no scan, lagging node rejection.')
 }finally{Object.assign(stockClient,old)}

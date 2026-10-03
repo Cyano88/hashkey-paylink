@@ -37,10 +37,24 @@ export async function fetchOkxDisplayBalances(owner:Address,previous?:StockBalan
  return {source:'okx',holdings:held.map(([k])=>({asset:catalog.get(k)!,units:units(k),decimals:precision.get(k)!})),cash:units(cashKey),gas:units(''),complete:true,blockNumber:null,blockHash:null,fullScanAt:started,observedAt:started}
 }
 export function createStockDisplayReader(provider=fetchOkxDisplayBalances,rpc=readStockHoldings,now=Date.now){
- let retryAt=0
+ // A provider failure belongs to this wallet, not every Pocket user.
+ const wallets=new Map<string,{retryAt:number;baseline?:StockBalanceSnapshot}>()
  return async(owner:Address,previous?:StockBalanceSnapshot,signal?:AbortSignal,options?:{force?:boolean})=>{
-  if(!options?.force&&now()>=retryAt){try{return await provider(owner,previous,signal)}catch{retryAt=now()+60000}}
+  const key=owner.toLowerCase()
+  let state=wallets.get(key)
+  if(!state){state={retryAt:0};wallets.set(key,state);if(wallets.size>128)wallets.delete(wallets.keys().next().value!)}
   if(signal?.aborted)throw Error('Balance request cancelled.')
-  return rpc(owner,previous?.source==='okx'?undefined:previous,signal,{rpcUrl:process.env.XLAYER_RPC_URL})
+  if(!options?.force&&now()>=state.retryAt){
+   try{const result=await provider(owner,previous,signal);if(signal?.aborted)throw Error('Balance request cancelled.');state.retryAt=0;return result}
+   catch{if(signal?.aborted)throw Error('Balance request cancelled.');state.retryAt=now()+60000}
+  }
+  // Retain a canonical RPC baseline across healthy OKX reads. The RPC reader
+  // checks its block hash, scans intervening transfers, and periodically rescans all stocks.
+  const baseline=options?.force?undefined:previous&&previous.source!=='okx'?previous:state.baseline
+  const result=await rpc(owner,baseline,signal,{rpcUrl:process.env.XLAYER_RPC_URL})
+  if(signal?.aborted)throw Error('Balance request cancelled.')
+  if(result.source==='okx'||!result.complete)throw Error('RPC balance verification unavailable.')
+  if(!state.baseline||result.observedAt>=state.baseline.observedAt)state.baseline=result
+  return result
  }
 }
