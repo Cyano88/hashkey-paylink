@@ -349,3 +349,23 @@ verification rather than changing historical deployment evidence.
 The prior pending-deployment statements above are historical. Safe creation is
 complete; the physical Trade factory has not yet been deployed against it. The
 Arc release/execution policies and public funding remain disabled.
+
+## Factory signing preparation
+
+The Stream planner now computes the factory's expected runtime hash by applying
+the token and arbiter values at the compiler-reported immutable references. Its
+local deployment test checks that exact hash against deployed code.
+
+With the generated plan saved as `.codex-temp/arc-trade-factory-plan.json`, run
+`node --import tsx scripts/arc-trade-factory-simulate.mjs`. It rechecks the verified
+Safe using the production authority verifier at confirmed/latest blocks, checks
+USDC decimals, compares Arc's constructor simulation with the computed runtime,
+and checks the Rabby nonce and gas balance. The output remains unsigned and does
+not update either production policy.
+
+`node scripts/serve-arc-safe-local.mjs --factory` serves the prepared transaction
+at `http://127.0.0.1:4389`. The browser verifies constructor arguments, creation
+code, Safe state, immutable runtime, nonce, gas and account before requesting
+Rabby submission. It pins the expected nonce and prevents automatic retries.
+Successful simulation and mocked signing tests do not establish deployment:
+record and independently verify the returned transaction before pinning a release.
