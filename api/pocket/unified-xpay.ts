@@ -1,12 +1,14 @@
+import {isAddress} from 'viem'
 import {requirePocketBasicKyc} from './kyc-level.js'
 import {xpayStockHistory,xpayStockTotals} from '../../src/pocket/lib/pocketXPayStockHistory.js'
 import {retirePosQr} from './pos-retirement.js'
+import {ownsTerminalSetupKey} from './unified-xpay-store.js'
 import {UNIFIED_XPAY_KEY as KEY,readUnifiedXPayStore as read,type UnifiedXPayRecord as Record,type UnifiedXPayStore as Store} from './unified-xpay-store.js'
 import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
-import {verifiedPrivyUser} from '../privy-circle-link.js'
+import {circleLinkKey,readCircleLink,verifiedPrivyUser} from '../privy-circle-link.js'
 import {mutateDurableJson} from '../render-durable-store.js'
-import {ownedPosSetupKeys,ownedPosSetupKey,ownsPocketPosQr,listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
+import {createNgPosMerchant,ownedPosSetupKeys,ownedPosSetupKey,ownsPocketPosQr,listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
 import {ownedStockSetupKeys,ownedStockSetupKey,listPocketXPayStockDestinations,listPocketUnifiedXPayStockPayments} from './xpay.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {validateXPayDestinations,type XPayCheckout,type XPayDestination} from '../../src/pocket/lib/pocketUnifiedXPay.js'
@@ -73,7 +75,7 @@ export default async function handler(req:Request,res:Response){
   }
   if(b.action==='begin-setup'){
    if(b.kind==='bank')await requirePocketBasicKyc(owner)
-   if(!['bank','wallet'].includes(b.kind))return res.status(400).json({ok:false,error:'Choose a receiving option.'})
+   if(!['bank','wallet','stablecoins'].includes(b.kind))return res.status(400).json({ok:false,error:'Choose a receiving option.'})
    let key=''
    await mutateDurableJson<Store>(KEY,current=>{
     const s=current||{checkouts:[]},c=s.checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)
@@ -82,6 +84,19 @@ export default async function handler(req:Request,res:Response){
     key=randomUUID();c.setupKeys=[...(c.setupKeys||[]),{key,kind:b.kind}];return s
    })
    return res.json({ok:true,key})
+  }
+  if(b.action==='setup-usdc'){
+   if(!await ownsTerminalSetupKey(owner,String(b.key||''),'stablecoins'))return res.status(409).json({ok:false,error:'Reopen USDC setup for this terminal.'})
+   const networks=b.networks
+   if(!Array.isArray(networks)||!networks.length||networks.length>3||new Set(networks).size!==networks.length||networks.some(n=>!['base','arbitrum','arc'].includes(n)))return res.status(400).json({ok:false,error:'Choose supported receiving networks.'})
+   const terminal=(await read()).checkouts.find(c=>c.owner===owner&&!c.deletedAt&&c.setupKeys?.some(k=>k.key===b.key&&k.kind==='stablecoins'))!
+   const wallets:{[network:string]:string}={}
+   for(const network of networks){const link=await readCircleLink(circleLinkKey(owner,network,'payment'));if(!link||link.privyUserId!==owner||link.chain!==network||!link.circleWalletId||!isAddress(link.circleWalletAddress))return res.status(409).json({ok:false,error:'Open your '+network+' wallet in Pocket before enabling it.'});wallets[network]=link.circleWalletAddress}
+   const result=await createNgPosMerchant(Object.assign(Object.create(req),{headers:{...req.headers,'idempotency-key':b.key}}) as Request,{display_name:terminal.name,payout_preference:'KEEP_CRYPTO',supported_networks:networks,circle_smart_wallet_address:wallets[networks[0]]},wallets)
+   if(!('merchant' in result)||!result.merchant)throw Error('Receiving setup returned no merchant.')
+   const merchant=result.merchant as {merchant_id:string;supported_networks:string[];network_wallets?:{[network:string]:string}}
+   if(JSON.stringify(merchant.supported_networks)!==JSON.stringify(networks)||networks.some(n=>merchant.network_wallets?.[n]?.toLowerCase()!==wallets[n].toLowerCase()))return res.status(409).json({ok:false,error:'This setup was already saved with different wallets. Reopen USDC setup.'})
+   return res.json({ok:true,merchant})
   }
   if(b.action==='configure'){
    const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)
@@ -98,7 +113,7 @@ export default async function handler(req:Request,res:Response){
     for(const [i,d] of selected.entries()){
      if(s.checkouts.some(other=>other.id!==live.id&&(other.destinationIds.includes(d.id)||other.pastDestinations?.some(p=>p.id===d.id))))throw Object.assign(Error('Receiving options cannot be shared between terminals.'),{status:409})
      const belongs=live.destinationIds.includes(d.id)||live.pastDestinations?.some(p=>p.id===d.id)
-     if(!belongs&&!live.setupKeys?.some(k=>k.key===proofs[i]&&k.kind===(d.kind==='xstocks'?'wallet':'bank')))throw Object.assign(Error('Set up this receiving option inside this business terminal.'),{status:409})
+     if(!belongs&&!live.setupKeys?.some(k=>k.key===proofs[i]&&k.kind===(d.kind==='xstocks'?'wallet':d.kind==='stablecoins'?'stablecoins':'bank')))throw Object.assign(Error('Set up this receiving option inside this business terminal.'),{status:409})
     }
     live.pastDestinations=[...(live.pastDestinations||[]),...live.destinationIds.map((id,i)=>({id,revision:live.revisions[i]}))].filter((d,i,all)=>all.findIndex(p=>p.id===d.id&&p.revision===d.revision)===i)
     live.setupKeys=live.setupKeys?.filter(k=>!proofs.includes(k.key))

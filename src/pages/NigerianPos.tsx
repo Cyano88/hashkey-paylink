@@ -31,8 +31,10 @@ function formatUsdc(value: number) {
   return `${value.toLocaleString('en-US', { maximumFractionDigits: 6 })} USDC`
 }
 
-export function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.location.origin) {
-  const network = merchant.bank_configured ? 'base' : supportedMerchantNetworks(merchant.supported_networks)[0]
+export function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.location.origin, selectedNetwork?: string) {
+  const supported=supportedMerchantNetworks(merchant.supported_networks)
+  if(selectedNetwork&&!supported.includes(selectedNetwork as PosNetwork))throw Error('This network is not enabled by the merchant.')
+  const network = merchant.payout_preference==='INSTANT_FIAT' ? 'base' : selectedNetwork as PosNetwork || supported[0]
   const url = new URL('/pay', origin)
   url.searchParams.set('f', '1')
   url.searchParams.set('n', network)
@@ -51,7 +53,9 @@ export function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.l
   } else if (network === 'solana' && merchant.solana_wallet_address) {
     url.searchParams.set('s', merchant.solana_wallet_address)
   } else {
-    url.searchParams.set('e', merchant.circle_smart_wallet_address)
+    const recipient=merchant.network_wallets?merchant.network_wallets[network]:merchant.circle_smart_wallet_address
+    if(!recipient)throw Error('Merchant wallet is unavailable on this network.')
+    url.searchParams.set('e', recipient)
   }
   return url.toString()
 }
@@ -64,6 +68,7 @@ type PublicMerchant = {
   payout_preference: SettlementType
   settlement_enabled: boolean
   kyc_status: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'RESTRICTED'
+  network_wallets?: Partial<Record<PosNetwork,string>>
   circle_smart_wallet_address: string
   solana_wallet_address?: string
   supported_networks?: PosNetwork[]

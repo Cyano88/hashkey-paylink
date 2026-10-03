@@ -27,3 +27,8 @@ const ug=resolvePocketPosCheckout({...fiat,country:'UG'},url+'&fx=NGN&fiat_curre
 const ugParams=new URL(ug.paymentUrl,'https://app.hashpaylink.com').searchParams;
 assert.equal(ug.settlement,'UGX');assert.equal(ugParams.get('fx'),'UGX');assert.equal(ugParams.get('fiat_currency'),'UGX');
 console.log('PASS: Uganda QR currency comes from the stored merchant, not QR parameters.');
+
+const mapped={...merchant,network_wallets:{base:'0x'+'3'.repeat(40),arbitrum:'0x'+'4'.repeat(40)}};
+const mappedParams=new URL(resolvePocketPosCheckout(mapped,url+'&n=arbitrum&e=0x'+'9'.repeat(40)).paymentUrl,'https://app.hashpaylink.com').searchParams;
+assert.equal(mappedParams.get('e'),mapped.network_wallets.arbitrum);assert.equal(mappedParams.get('n'),'arbitrum');assert.throws(()=>resolvePocketPosCheckout(mapped,url+'&n=arc'));
+console.log('PASS selected network binds its configured wallet; QR recipient injection and missing network mappings cannot redirect funds.');

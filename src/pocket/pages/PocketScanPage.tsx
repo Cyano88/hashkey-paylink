@@ -67,7 +67,7 @@ export default function PocketScanPage() {
   return()=>{stop();abort.current?.abort();pending.current=false}
  },[location.search])
  useEffect(()=>{const hide=()=>{if(document.visibilityState!=='visible')stop()};document.addEventListener('visibilitychange',hide);return()=>document.removeEventListener('visibilitychange',hide)},[])
- const back=()=>{stop();abort.current?.abort();navigate(new URLSearchParams(location.search).get('rail')==='xstocks'?xStockPath('home'):POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
+ const back=()=>{stop();abort.current?.abort();if(location.state?.xpayReturnTo){navigate(location.state.xpayReturnTo,{replace:true,state:location.state});return}navigate(new URLSearchParams(location.search).get('rail')==='xstocks'?xStockPath('home'):POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
  return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white'>
   <div className='mx-auto w-full max-w-[462px]'>
    <header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>

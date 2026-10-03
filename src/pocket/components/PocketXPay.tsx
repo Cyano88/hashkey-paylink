@@ -1,3 +1,4 @@
+import PocketXPayCheckoutBackdrop from './PocketXPayCheckoutBackdrop'
 import PocketConfirmationDetails from './PocketConfirmationDetails'
 import PocketSlideAction from './PocketSlideAction'
 import {xpayOrigin,xpayReturnPath} from '../lib/pocketXPayNavigation'
@@ -105,12 +106,13 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
   const data=await xpayRequest(getAccessToken,{action:'confirm',id:p.id,hash});adopt(data.payment);setUsd('');setReview(null)
  })
  const Surface=checkout&&!review?CheckoutSurface:PocketBottomSheet
- const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{xpayOrigin:xpayOrigin(location.state)}})}
+ const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{...location.state,xpayOrigin:xpayOrigin(location.state)}})}
  const assetTokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>merchant?.tokens.includes(t.address.toLowerCase()))
  const selected=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===token)
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
+  {merchantId&&<PocketXPayCheckoutBackdrop/>}
   {!merchantId&&<PocketXPayLinks key={user?.id||'guest'} onLayoutChange={onLayoutChange} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
   {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title={review?"Confirm payment":"XPay"} onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
    {!review&&<h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}

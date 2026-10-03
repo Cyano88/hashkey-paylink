@@ -1,3 +1,4 @@
+import PocketXPayCheckoutBackdrop from '../pocket/components/PocketXPayCheckoutBackdrop'
 import PocketPosPaymentAction from '../pocket/components/PocketPosPaymentAction'
 import PocketKycPrompt from '../pocket/components/PocketKycPrompt'
 import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
@@ -3950,7 +3951,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
       type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
-    return <PocketTransactionSheet title="Merchant payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/>
+    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
   }
 
   if (!pocketScan && isConfirmed && !isWalletManagerFunding) {
@@ -5294,7 +5295,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 </div>
               )}
               {circleSmartAccount && circleEvmWalletUnlocked && (!circleWalletNeedsFunds || pocketMovePayExpected) && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
-                <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+                <PocketPosPaymentAction pocket={Boolean(pocketScan)} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                   status={checkoutSlideStatus}
                   disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                   onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCirclePasskeyPay}
@@ -5404,7 +5405,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                       </div>
                     )}
                     {circleSolanaSession && (!circleSolanaNeedsFunds || pocketMovePayExpected) ? (
-                      <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+                      <PocketPosPaymentAction pocket={Boolean(pocketScan)} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                         status={checkoutSlideStatus}
                         disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                         onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCircleSolanaEmailPay}
@@ -5515,7 +5516,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                   </div>
                 ) : !smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
               <div className="space-y-2">
-              <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+              <PocketPosPaymentAction pocket={Boolean(pocketScan)} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
@@ -5565,7 +5566,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             </div>
           ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
-              <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+              <PocketPosPaymentAction pocket={Boolean(pocketScan)} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
