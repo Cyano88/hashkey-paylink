@@ -8,7 +8,7 @@ export type GiftRecord={
  version:1|2;maxClaims?:number;amountPerClaim?:string;claims?:Record<string,GiftAttempt>;settlements?:Record<string,{recipient:Address;hash:Hex;at:number}>;claimedCount?:number;refundUnits?:string;id:string;binding:string;ownerId:string;senderHandle:string;senderAddress:Address;walletId:string;
  deployment:GiftDeployment;giftId:Hex;salt:Hex;claimSigner:Address;amount:string;amountUnits:string;feeUnits:string;expiresAt:string;message:string;
  fundingHash?:Hex;fundingAt?:number;refundHash?:Hex;refundAt?:number;settlementAt?:number;claimRecipient?:Address;settlementHash?:Hex;state:'unfunded'|'available'|'claimed'|'refunded';observedBlock?:string;observedTimestamp?:string;observedBlockHash?:Hex;createdAt:number;updatedAt:number;
- evidenceScanBlock?:string;evidenceScanHash?:Hex;nextReconcileAt?:number;reconcileComplete?:boolean;
+ eventHints?:Hex[];evidenceScanBlock?:string;evidenceScanHash?:Hex;nextReconcileAt?:number;reconcileComplete?:boolean;
  discardedAt?:number;funding?:GiftAttempt;claim?:GiftAttempt;refund?:GiftAttempt;
 }
 export type GiftObservation={claimedCount?:number;refundUnits?:string;settlements?:GiftRecord['settlements'];state:GiftRecord['state'];blockNumber:bigint;blockHash:Hex;timestamp:bigint;evidenceScanBlock?:string;evidenceScanHash?:Hex;fundingHash?:Hex;fundingAt?:number;refundHash?:Hex;refundAt?:number;settlementAt?:number;claimRecipient?:Address;settlementHash?:Hex}

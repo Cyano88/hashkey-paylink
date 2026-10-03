@@ -1,3 +1,4 @@
+import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
 import {drainPocketGifts} from './api/pocket/gifts/worker.js'
 import { createStockWalletSessionHandlers } from './api/stock-wallet-account.js'
 import {createWalletSwapSessionHandlers} from './api/wallet-swap-sessions.js'
@@ -276,6 +277,7 @@ app.post(
 
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.
+app.all('/api/pocket/gifts/events', rateLimit({ name: 'gift-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketGiftEventWebhook)
 app.use(express.json({ limit: '256kb' }))
 
 // A CLI credential must not activate a different API surface, including public
