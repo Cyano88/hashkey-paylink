@@ -1,4 +1,4 @@
-﻿import {giftUnits} from './pocketGift'
+﻿import {giftAssetUnits} from './pocketGift'
 import {formatUnits} from 'viem'
 import type {SavedGiftDraft} from './giftDraftVault'
 import type {GiftApproval} from '../../api/pocketGiftsClient'
@@ -22,7 +22,7 @@ export function createGiftFundingFlow(deps:{draft:SavedGiftDraft;save(draft:Save
  },dispose(){active=false},async review(){
   if(!active||locked)return;locked=true;set({...state,phase:'preparing',message:'Preparing your gift.'})
   try{if(!draft.giftId&&BigInt(draft.expiresAt)<=BigInt(Math.floor(Date.now()/1000))){set({phase:'expired_unfunded',message:'This draft expired without funding. Create a new gift.'});return}const review=await deps.create(draft);if(!active)return
-   if(BigInt(review.principal)!==giftUnits(draft.amount)||BigInt(review.platformFee)!==giftUnits(draft.amount)*25n/10000n||BigInt(review.totalDebit)!==BigInt(review.principal)+BigInt(review.platformFee))throw Error('Invalid funding total')
+   if(BigInt(review.principal)!==giftAssetUnits(draft.amount,draft.asset)||BigInt(review.platformFee)!==giftAssetUnits(draft.amount,draft.asset)*25n/10000n||BigInt(review.totalDebit)!==BigInt(review.principal)+BigInt(review.platformFee))throw Error('Invalid funding total')
    draft={...draft,giftId:review.id};await deps.save(draft);if(!active)return
    set({phase:'review',message:'',review});await status()
   }catch{set({...state,phase:'draft',message:'Could not prepare your gift. The saved draft is safe to retry.'})}finally{locked=false}
@@ -32,7 +32,7 @@ export function createGiftFundingFlow(deps:{draft:SavedGiftDraft;save(draft:Save
    const approval=await deps.prepare(draft.giftId);if(!active)return
    draft={...draft,approvalStarted:true};await deps.save(draft);if(!active)return
    set({...state,phase:'approval',message:'Confirm in your wallet.'});await deps.approve(approval);if(active)await status()
-  }catch{if(draft.approvalStarted)await status();else set({...state,phase:'review',message:'Approval did not finish. Your gift has not been confirmed.'})}finally{locked=false}
+  }catch(reason){if(draft.asset&&(reason as {giftDefinitelyNotSubmitted?:boolean})?.giftDefinitelyNotSubmitted){const next={...draft,approvalStarted:false};await deps.save(next);draft=next}if(draft.approvalStarted)await status();else set({...state,phase:'review',message:'Approval did not finish. Your gift has not been confirmed.'})}finally{locked=false}
  },async refund(){
   if(!active||locked||state.phase!=='expired'||!draft.giftId||!deps.prepareRefund)return;locked=true
   try{set({...state,phase:'preparing',message:'Preparing your refund.'});await deps.security();if(!active)return;const approval=await deps.prepareRefund(draft.giftId);if(!active)return;set({...state,phase:'approval',message:'Confirm in your wallet.'});await deps.approve(approval);if(active)await status()}

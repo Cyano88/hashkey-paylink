@@ -1,3 +1,4 @@
+import {observeMultiGift} from './multi-chain.js'
 import {keccak256,parseAbi,parseAbiItem,decodeEventLog,type Hex,type PublicClient} from 'viem'
 import {GiftError,type GiftRecord,type GiftObservation} from './types.js'
 const abi=parseAbi([
@@ -5,6 +6,7 @@ const abi=parseAbi([
  'function usdc() view returns(address)','function treasury() view returns(address)','function PLATFORM_FEE_BPS() view returns(uint256)',
 ])
 export async function observeGift(client:PublicClient,record:GiftRecord,receiptHint?:Hex):Promise<GiftObservation>{
+ if(record.version===2)return observeMultiGift(client,record)
  const d=record.deployment
  if(!Number.isSafeInteger(d.confirmations)||d.confirmations<1)throw new GiftError(503,'Gift network verification is unavailable.')
  if(await client.getChainId()!==d.chainId)throw new GiftError(503,'Gift network verification is unavailable.')

@@ -1,0 +1,5667 @@
+{
+  "escrow": "0x0BF819a2bdB78f059937Ee3C3e6498473dcdeABE",
+  "runtimeHash": "0x211c3a67c8d65a3912e468aa3d0528a2dfd1915f6c95ed43c1d4770eee7fb12e",
+  "treasury": "0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753",
+  "authority": "0xdD4670dF8C8D9C0D64b0291b36990990743C3801",
+  "deploymentBlock": "72248488",
+  "confirmations": 12,
+  "transactionHash": "0x6f37795071bd7e3fe0f67f9480b6235fec59731c6d319acca0704ebdfd02e9aa",
+  "assets": [
+    {
+      "chainId": 196,
+      "token": "0x707C6Bc22b6Cf83B930b0A68c3Bb20A94836dE71",
+      "symbol": "MMMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x89233399708C18Ac6887F90A2B4Cd8Ba5fEdD06e",
+      "symbol": "ABTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfBF2398dF672cEE4aFcC2A4A733222331c742a6A",
+      "symbol": "ABBVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x05473ceA3774D898C7b6dDa21e1876D6Bca7277b",
+      "symbol": "PALLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8e9e4a8d7f1C65dcB42D9103832b27E75946055D",
+      "symbol": "PPLTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x03183Ce31b1656B72A55fa6056e287f50C35BbEB",
+      "symbol": "ACNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x16E0B579be45bAaE54cEddd52e742B6457A7fE12",
+      "symbol": "ADBEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x81f87EAf62c1Ac8E5e55c5C5E014E1b7D99fEc1B",
+      "symbol": "WMSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf90653EA8C2f1dbD69C8Ce6d4360A4c31d867534",
+      "symbol": "AEISx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdB0245163fDA906f27Dc5813d2d2B51673c33BDe",
+      "symbol": "AFRMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFbCdA977c2991eCfb3bF4d7AF2848E5510081b8F",
+      "symbol": "AFLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x933B254AEd47BDc03b19CaDCd0b0D4ca038D974F",
+      "symbol": "Ax",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC9FA9D22FD52a634f395260e921Aa06044e19d09",
+      "symbol": "AGNCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8658E84FC8b5c21710902cdfe50f1385Ff28b329",
+      "symbol": "AIAGRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2488583FD85DE034571F84609B978018dc72d3C2",
+      "symbol": "APDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC1566b43Ee3D9F507C75435C5eeA81De7E7515F3",
+      "symbol": "ABNBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9D651601f24d162800B816b22BDE370e9B277E7F",
+      "symbol": "AKAMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x94164391DE9fa0204aEfD36A863743544dFa4f31",
+      "symbol": "ALBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6362767DF5bf9D9B6C945D1ff5e2bf96188A1df1",
+      "symbol": "AAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xef0C9DE21450863f0F8B46F8d476f9Ef8Db69e39",
+      "symbol": "ALGNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xceFbdA1E8cdA85b4a9d066496B1989d63413B289",
+      "symbol": "LNTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xA4E2cd78c1D50cfd00b6606d7e0FFc54742FcBFa",
+      "symbol": "ALSNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD2AcDE8e0883FD38039D073Ae69228c7e8E0ed0d",
+      "symbol": "ALLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB5439dB439A5A3cd33837331fFbF5fD62d24085b",
+      "symbol": "ALLYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9CE59fc950eDA062492CECA15f2a13467fc388fE",
+      "symbol": "ALNYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe92f673Ca36C5E2Efd2DE7628f815f84807e803F",
+      "symbol": "GOOGLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x933f92c009009f0aE2912Bd8F42A2FE8d04dBA6b",
+      "symbol": "MOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3557Ba345B01EFa20A1bdDC61F573BFD87195081",
+      "symbol": "AMZNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2f9a35aB5dDFBc49927BFdEab98A86c53DC6E763",
+      "symbol": "AMBRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3522513E5F146a2006e2901b05f16B2821485E19",
+      "symbol": "AMDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe3B8d0690B6d54ec272A728C780f3aDda68f526c",
+      "symbol": "ASx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0da1f9a13b0D65956E3CF34801445458d96cC8f4",
+      "symbol": "AEEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCE3eC6D03C17c35A814444e079Bd6Aa5a14387e8",
+      "symbol": "AEPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd45b9ffcF15744476E5e7b79D4266818177E1A34",
+      "symbol": "AFGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8D53FB379e89D2E2d772A79923a0bD093A03a011",
+      "symbol": "AHRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf751B35Bb44f4B03b12262ceF112Fcaf0307f406",
+      "symbol": "AMHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2a78b1E0F391C8A2Cc7AC092bCA2DaDa939384dC",
+      "symbol": "AIGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x26Fa8748a658E51EbebDFBE2eEb813470F10c9BE",
+      "symbol": "AMTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x12B4675E66D1c43ff8550FfA63251C6c2c99C2A9",
+      "symbol": "AWKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2496da59F7b59801B862BB4667f0D4d7C2eb93f9",
+      "symbol": "AMPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0d9CAF20E33Fcb7ADf6Cb95C3F9bB012FdB2fD97",
+      "symbol": "AMEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdCD6B813D01a45de8dA9367b36cB02B2E570fDFD",
+      "symbol": "AMGNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF208153Ba23Df793B9A9a5EF1517CD4644D04889",
+      "symbol": "AMKRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7848475161802da675C321b250e0b25658FDf96c",
+      "symbol": "APHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCCc9e8d1182f64b15E350dB929fF6c6F98ebea29",
+      "symbol": "ADIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFa5CB298ac2eaF852699Bb08309dc6f701de286f",
+      "symbol": "NLYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0a4119A517726b418695caAe6E4e6Fdb07246F36",
+      "symbol": "ANTASx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x711710400E35283E7C59e9398006Ac687ffd8FB8",
+      "symbol": "AMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x70853c88915B95EFAa7BB5C15413d3C841bfe807",
+      "symbol": "ARx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6006d2029F25549774d0684AA14b250E3e81c83E",
+      "symbol": "APAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAB90d40660E6Fd89B4560ef11fB938dfB4D7da02",
+      "symbol": "APGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x38c49e8236242Ec4dCE135775c2A8d525830fFc0",
+      "symbol": "APOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a",
+      "symbol": "AAPLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9F7371F5b85443EE59457468eDe9D244A71C08d6",
+      "symbol": "APLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDA5B4b4C469Bc34fE2493a980A2E017a4885B28f",
+      "symbol": "AITx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe9FA01197B7E836982a1cab03FE591F7e331E313",
+      "symbol": "AMATx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xed242f35bf53ce7757C74ECB9E6De070157A74c0",
+      "symbol": "AAOIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x50a1291F69D9d3853Def8209cFb1AF0b46927BE1",
+      "symbol": "APPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0B5409F293F78a290a7e8d63C70963e2c06D5e07",
+      "symbol": "ARMKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe6D9b0127a5f742Bc79aF0b327D25624A9150C06",
+      "symbol": "ADMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x96180d4B7c607816eEEe8D58228D05B009366852",
+      "symbol": "ARESx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x27aD5CC5242f4258030D81A5639098ce0a96820F",
+      "symbol": "ANETx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd15140134a81d3718c87a2D5c17145d324d874A6",
+      "symbol": "ARMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAB24B29D230795Fb14F37042b40D003fE7ff7C3b",
+      "symbol": "ARWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x26e58f0D3c6E211D6E30D9f5A016c4883670aCb7",
+      "symbol": "ARWRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x63e3E2C8d59Af0489a41Ee899117138cd2e575BC",
+      "symbol": "AJGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC0B417e7F83db438631Eb5E096684dd742E5294F",
+      "symbol": "ASMLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5873CE319fD206789B7Cf6c6Ad3d17d803A10f1C",
+      "symbol": "ASMPTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2d21247c1855D12A69024b596E7c630636Dc82b6",
+      "symbol": "AIZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x89b2607878ae19baB8020b8140eD550Ef3E953bb",
+      "symbol": "ASTSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD64cb407FE4E76f5676Ab656866f0e1de2ff4330",
+      "symbol": "ALABx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5D642505FE1a28897eb3BaBA665F454755D8daA2",
+      "symbol": "AZNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9d05846CeB65e27052AD783181cf8364460b1fab",
+      "symbol": "ATIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x592c21777443D7f857fB517c799abfB6c36E730F",
+      "symbol": "TEAMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x93551be7e70231D9B8CDCE24218805d19A924f79",
+      "symbol": "ATOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD5B5F0613F9F3d6A670Eb32d59Dd5Bedbb444426",
+      "symbol": "AURx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7320FF11b32baa599d44FC8c8Ecb31C7932443e1",
+      "symbol": "ADSKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb207a53f551BFfacA2718911f30F86F888F42eBF",
+      "symbol": "ADPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb68396Bb3D29447019F360E2106996Fd23856BD4",
+      "symbol": "AZOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x66aA8475A988006c6B9E6297B2D0cA6021017A08",
+      "symbol": "AVYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x98c04F53AeE02Cc622Ab49352f0165B4799aFb84",
+      "symbol": "AXONx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcE39E4fb8E9e415f60869A5Ea3467091AE115E15",
+      "symbol": "AXSMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAC63197eaD820A810141b942Ebe593abDBB1d07F",
+      "symbol": "BKRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x60143Db3B316A95771435b5cF6A1d71b7A09bBed",
+      "symbol": "BALLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x314938c596F5ce31C3f75307d2979338C346D7F2",
+      "symbol": "BACx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF758e87cA18824b767Aa4F3eD58c188d3BabE428",
+      "symbol": "BANKCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x38C62f1E6AfaA0b80eEB6F5C0A9Df7CF7D6e07B1",
+      "symbol": "BOCOMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB972542e747aF613e8cF824a405EE92B6304397c",
+      "symbol": "BNYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x957d422AB6dD484C01F84B40b5a0b00bCF742D09",
+      "symbol": "BAXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x83a53e205CD5DBA6Ca2EeA5CB2345638279dDBBc",
+      "symbol": "BDXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7796F4E23a62eF3653829c21032A9E24bEaf4Cf5",
+      "symbol": "BSPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBE57c33d1278f5dbda142F328d805353B94aA6ca",
+      "symbol": "BSYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x12992613fDd35aBe95DEc5a4964331b1ee23B50d",
+      "symbol": "BRK.Bx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x44BE932030afB9FccD22621f5F5f5C2Fe72EFc5c",
+      "symbol": "BBYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB954C3C643050CB532A4082D3Def7FC29eCed300",
+      "symbol": "BIIBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf4C5Ab39067a38B4E01B35d128F3d2BD6BC7298c",
+      "symbol": "BMRNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x22E1991e5f82736A2a990322a46aac0e95826c5B",
+      "symbol": "BTBTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x60Ae7D760a1C7B528C0384Bc945fadF1438F47A5",
+      "symbol": "BTGOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaeB681B69E5094E04d11BCeF51A71358A374C3ED",
+      "symbol": "BMNRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xA5E265e9A992eAeCC06a6C4C787f73743cb01f35",
+      "symbol": "BJx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC0B359593633c8bdb05Cd838d6b23CeF42ac7d03",
+      "symbol": "BXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaE7267bda08c44f0422e3c85d0967C7a71f120dF",
+      "symbol": "XYZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdCF5F4a677514c293474556133dcfd3276F5E998",
+      "symbol": "BEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEBD96eFFc88cEf240a35D8223008a7F788695608",
+      "symbol": "OWLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x255Eb175e5dD1a58e7996a6EC18E1D825EA168d9",
+      "symbol": "BOCHKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5e5e6aA595f5Ba2E12D3120810B9Fe607735aC8C",
+      "symbol": "BAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDeDdf43e79fA035bD86D976751BfdaE474A29580",
+      "symbol": "BWAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5fe45d4B2CAd6eB5Ef6Bda8626764817FdB4E940",
+      "symbol": "BSXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE0F324A026ca55492637009d98034103Db4a6967",
+      "symbol": "SLMTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1A7Ad9Dc7e1DC6873c7c47504aaD8C99B86cE114",
+      "symbol": "BBIOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x20641E4790423744b42d5aF39C7A50bc1d815931",
+      "symbol": "BMYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x38BAC69cbBd28156796e4163B2B6dcb81E336565",
+      "symbol": "AVGOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x44A81c9D99b59BCc19ee2B852aC2ABDf81062869",
+      "symbol": "BRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd629f4cf39b225EDcd94c075DD17bCF37FA2C068",
+      "symbol": "BAMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8B992e525990069BAE4eBCF52Cb76Ca50358D5E6",
+      "symbol": "BROx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD98fB2A0C8ddF4Ec072fC0bA3bDa4d38363f55c5",
+      "symbol": "BDWAPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBBc5399873223b7B4Aa877685e57837643e54ce4",
+      "symbol": "BURLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD66C91211925caF1DCF694ADb5FC9B13fFa92A0D",
+      "symbol": "BWXTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xca7e36BeE157F2DE07610D331FD76d826E054573",
+      "symbol": "BXPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2d2B6Cb9eE02535d1a36fDb1b130A488891B895b",
+      "symbol": "BYDCOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEd6DA309DD1E1C12b09D7e7f03282f9581850804",
+      "symbol": "CHRWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x02A6f0539DA50E2ef5365eeA214495C5cD42f127",
+      "symbol": "CACIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2219785c22c0e38c675515f0010E7443F0EB9487",
+      "symbol": "CDNSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1fC9ecC975c1CC50A372634A5039f4f3b4180aC5",
+      "symbol": "CPTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf6d5373B0CAfC08da97CCb0a38Db60C73494D586",
+      "symbol": "COFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1BB280D8702180860C03319AC920388BB77487f2",
+      "symbol": "CAHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x77Bc8f5AEaCf2dED90307C9207Da1746cA1E9241",
+      "symbol": "CSLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7FedAC22A2E1369eB3D850cCe752067dbB93588F",
+      "symbol": "CRSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x46464de7eC96039CC22b58eBBcB718Ed3E7B6957",
+      "symbol": "CARRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3783c4704B2fB000B8426250661A3959441DeC2C",
+      "symbol": "CVNAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEeD0831dAAf44Eec5fA82B067F1828F23A996024",
+      "symbol": "CASYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x54D883064B634390C30b780D0CaD761be8bFaAe9",
+      "symbol": "CATx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x460e90e673298Be0bE403068437424500E3A2f7d",
+      "symbol": "CTPCAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc7acC638da6A8F61559342A36Bfb3ce8D5032Cb4",
+      "symbol": "CBREx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC191Fc475a0a45EF598FF42E1ae72917582dBEAA",
+      "symbol": "CDWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd7Ed2c1A0264cF3967cDfdc698EbaE895f66C856",
+      "symbol": "CORx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x65f3D5C5cb7989130dA4f84DBdc8B431670B1745",
+      "symbol": "CNCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5c6dc244b258d71c55eee3bE0C3cbb6B443CB73D",
+      "symbol": "CNPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x874C1986ede15f6520686652268E0d62d9A10618",
+      "symbol": "CBRSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfF0b421a304faC14F9CC1d8837E4c7F5D0792710",
+      "symbol": "CFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0bF06F8eE1550352417DF572aE66D821d3fDb8E5",
+      "symbol": "SCHWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xef0A450dC85989ca228FA7198e17c834218C5334",
+      "symbol": "CHTRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdce993F8a6DbcE7F27434874F5DFe9A8d58509c9",
+      "symbol": "LNGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDB5727519fCB04d2B42cd55528bccE7378a05D65",
+      "symbol": "CRAUTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xad5cdc3340904285B8159089974A99a1A09EB4C0",
+      "symbol": "CVXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0aB16f6CF8DF81E1b6b0A82CC2bdff21a7Ff613D",
+      "symbol": "CCONBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x526C4252142F4D91EAcA08Bc36081FE788010C6B",
+      "symbol": "CHONGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD042F1C206e5857911732B7132044AdfBec06A7d",
+      "symbol": "CLINSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5EaC3a8128627C67a33a3D3Eaa12433CBd15C783",
+      "symbol": "CLONPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x88A8Fa2cC310846f0a76Fae93065b365b51B8334",
+      "symbol": "CMENDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0877Ef9820416Fa01E4EC0c89bbE35855459c58C",
+      "symbol": "CMERPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3427B17E44F8FCa0E91981B7c15b40727FE4Ad81",
+      "symbol": "COVELx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd658b561629EE87aB00A4b1be071F69Ce6a282d3",
+      "symbol": "CPETCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0c6F997a246D4A2Be703d389FB95A8b350D9ae56",
+      "symbol": "CRESBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7198598c8DB29708ED857ac5EafB62e0E5faFc8a",
+      "symbol": "CRESLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2770481435cafc9003F1fAb21170Af7579DC9CbA",
+      "symbol": "CRESMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5c697e3CFd5A97a194A9a32f73FFC850CC86c02f",
+      "symbol": "CRESPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDF1C0AFA8adABa2c9FdBf5C0Dd739D703Ae037c9",
+      "symbol": "CSHEEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x76C29D9249430eb16834A6A28D1D1b1B437103b7",
+      "symbol": "CTINSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDad1865dD327fD305DF6ec6aCCEDE2B5fAAEC9cA",
+      "symbol": "CMGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9a301DE98A27abdeE0461dd1AA796427df5FB073",
+      "symbol": "CTFJWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8a0D5dECCD1193105B2ED895b4ed7542D54e7519",
+      "symbol": "CHDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9d18FE6C68e62E97FAa14EF736879ED3b5449a3D",
+      "symbol": "CIENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x600aa2917F0223aB6623cE8bF95e9BCaFFD8499D",
+      "symbol": "CINFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x671b6083bf2f77844DD61F4376A4FE900270c5E4",
+      "symbol": "CTASx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfEbDEd1B0986a8ee107f5AB1a1c5a813491DeCEB",
+      "symbol": "CRCLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x053C784cD87B74f42e0c089f98643E79c1A3ff16",
+      "symbol": "CSCOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x41778f4F36B2dD8FD27C55043154BA7a3dF18D83",
+      "symbol": "CITICx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb9A403dc62154512C3B2b366aa2CA3E094aD3e60",
+      "symbol": "Cx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x010D5e78A62879Ebc58F04Cb9EAdedd73A4E43e6",
+      "symbol": "CFGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x285e1e3268557770f83083717e66a65250E9706E",
+      "symbol": "CKAHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcD8c9D447aACec3de5E3093003e218AA8a8af0A1",
+      "symbol": "CKHUTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFd09e7d3CF7Fc3a3a5f1f89f80ec65794A0Bfed0",
+      "symbol": "CKINFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7a1C7312Aa5AB60D6deD33bb5cF23e1B15430b65",
+      "symbol": "CLHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD0194F0f077968DA8ca59811e9407f54AE6c9432",
+      "symbol": "CLSKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8e38Da2ed94E3779Da83075D8c73ea98fbf934F4",
+      "symbol": "CLXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x995dB25F900E38851CF4e67a05960E66F774530D",
+      "symbol": "NETx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB859DF8c25325083a71ac67FA83c8c285e50DCE0",
+      "symbol": "CLPHDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x388Bd41Aaf969D13e3538d62c051d08302a7fa6E",
+      "symbol": "CMEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd7C595a1C093BD21284E1acC036f37CDD429E536",
+      "symbol": "CMSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd41e61bFddfa78AF89d82B3d1b3007899A1E3393",
+      "symbol": "CNAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdCC1a2699441079dA889B1F49e12B69cC791129b",
+      "symbol": "KOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x769621695D9C1B8D1C88C9B973fCaC6F2067A0a3",
+      "symbol": "CDEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x853c65ef470689195a52fFCB85874B901A181B58",
+      "symbol": "CTSHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8bB9F6047997bF5fD679c6649833f8D89503Ae6E",
+      "symbol": "COHRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x364f210f430eC2448Fc68A49203040F6124096F0",
+      "symbol": "COINx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9D13e2a71d55497241AeE64b48992A2Ce3bbf98e",
+      "symbol": "CLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBC7170a1280Be28513B4e940C681537EB25e39f4",
+      "symbol": "CMCSAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf52766f10DFc0052ede3477337BE4C7E66DfD7Fe",
+      "symbol": "FIXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF50631342BB3b83CD2bE267c11dA3A97d803dC27",
+      "symbol": "COPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8b0D5A46457F946dDa728a71b1d97c841E720a46",
+      "symbol": "EDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEdeACbeE9C1F9c66d769C3E38A5f2B7a7d4b0420",
+      "symbol": "STZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7636244Bab612264e1B2dFd4bA6E26d0311b1Eb7",
+      "symbol": "CEGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x154D7C2A6C4E17037060C84c4132C86140aD0c74",
+      "symbol": "CPRTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8b1C0548D402b860EaaDF6da598f754E7AB60D1A",
+      "symbol": "CORTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6a668332825450ACD2e449372057d31b3de16a1E",
+      "symbol": "IEMGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x51eD5b74A05F256DbD9Ebb4e4f68Bb41ba10160b",
+      "symbol": "CORZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x139Bc1d061CC62BE1C1F9AB7b2D7CE722E54cC9B",
+      "symbol": "CRBGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x16314D1032E6476c9451d1F02ba365A249fF36c7",
+      "symbol": "CRWVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDC12f19AF085310e952e0A03b173fAaCdDeAD8c2",
+      "symbol": "GLWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4e30b8A21d1e8A5581e3226D8e85eD03fC1c4732",
+      "symbol": "CPAYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x708E74a00C49cA0CBBf892eBBb9efDE84e9844DD",
+      "symbol": "CTVAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6593131B9A950e00B7838194548A081d3037afaa",
+      "symbol": "COSCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd5a68aD7413EacC211F2382F55BCBBCF8F30030a",
+      "symbol": "CSGPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x60CB8C81bdb4AE6e2bc66de8713B52C68148E5Ac",
+      "symbol": "CPNGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8a51d83eBD03E381515724FB3493fdFD149710Ec",
+      "symbol": "CRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x214151022C2a5E380aB80CdaC31f23Ae554a7345",
+      "symbol": "CRWDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd7b67B7Fc787FBCE0adEac16c2CCb1c8047d8CcA",
+      "symbol": "CCKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2E2d7Cb3E0936Ac6aA76bf91EC597986Fbe63BFD",
+      "symbol": "CCIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x74F4f275d72B2c431A2C049Ce46220a8b21F5A90",
+      "symbol": "CSPCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x41d7f18d1967D20e13c7949b954C50ff697f40cc",
+      "symbol": "CSXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaf79388D25A99c3806fc44e937b9eA3B503A9394",
+      "symbol": "CMIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x88829e4e48eB5e41a7EB0118603036B75F0C685F",
+      "symbol": "CWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6E6Dabe27FeB2E21Ac6A8Bc15F20f2878B146c41",
+      "symbol": "CVSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcE50D7B79f1a4243754CCD4B4740547ECB54339E",
+      "symbol": "DHIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdbA228936F4079DaF9Aa906fd48a87f2300405F4",
+      "symbol": "DHRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd80840F51367e5F22d29C2DE161D86fE992eBF77",
+      "symbol": "DRIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x84BB81e42faBBdFC7A760a19f73983Da1bD90080",
+      "symbol": "DDOGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB5638D3Ccf90d90b9EC38bD876d406f4f92df70c",
+      "symbol": "DVAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAfD798910608fD531912F9262c2A5Eb1EbE78E07",
+      "symbol": "DECKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6b530E7df5A66422672632CA1a3277C497F0AfcB",
+      "symbol": "DEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2782dF1cC877F720C81B4f6568Db64563F1D3AA3",
+      "symbol": "DELLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x978a8aE09a7f7b5A39afB288bc2a63b4Aa4feB45",
+      "symbol": "DALx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x384557a6946952b37AAd045b189C3C1FE9f6Fb53",
+      "symbol": "DVNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x67bD52640b0c14260F7732aE6F464EA59658cF6d",
+      "symbol": "DXCMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x521860bB5dF5468358875266B89BFE90d990C6e7",
+      "symbol": "DFDVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAd0772Bf1f744e58bD2d65c5aa5e9681B924d052",
+      "symbol": "FANGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8e2fb41b55937ea5F939723a2B9E4a55632fD8Dd",
+      "symbol": "DKSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9E350c07ab5bfC75f684DccB4D392403A1641d9b",
+      "symbol": "DLRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEd258844f20a0162D476D98cf370508088755C29",
+      "symbol": "DOCNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x53EE7F58Cf031Ea4d897FDFCDafAd124b3160689",
+      "symbol": "SOXLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x876AC27dbaa175411D53B269f70146acd1E2BABa",
+      "symbol": "DOCUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE4F827151471Be4C2f0e5C754E74F89F3D6888c0",
+      "symbol": "DGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF52835d4163e4F37547dDB40876578a2d6d9d319",
+      "symbol": "DLTRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3ef11a28f69D7134C957Bfe31995106D0E5C3255",
+      "symbol": "Dx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x14E7901b89158E80a953cfeF3CeBE065f9CB8eef",
+      "symbol": "DPZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1bBae6c80E40b44bc36E63D592EEcE9440AD5c7b",
+      "symbol": "DCIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF38665a4a42A1E7eEB36A5f26D1757B788E64A4F",
+      "symbol": "DASHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2181335979aFF9af53C1805A3EDE635629F392Cc",
+      "symbol": "DOVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2e6EF35624EB900E7e537FC45F523cff49D274b4",
+      "symbol": "DOWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfBf32f87bd0eaa8c8bB290cf1C5650648A36aa18",
+      "symbol": "DKNGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x573833074A35e5cCf1835646F0D4A15ced7527d7",
+      "symbol": "DTEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaF8C938647F517AEc81638B90313C414B3F71087",
+      "symbol": "DUKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdDbEF1639261daa6f4D629Bec8a5b9f831410CcE",
+      "symbol": "DYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd3a40e90234F9389a772868D3421ea4a26A048eA",
+      "symbol": "DTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD49E31A21201a5c45ab0e8C7c0982A6c6FE5D45C",
+      "symbol": "EWBCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8932858213007ADb2119FBddbAfcaDF330dD0FeB",
+      "symbol": "EGPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBca703C64f616A17b4f2763F34f93400Dbe20F17",
+      "symbol": "ETNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE3b2E4A76489d00905c48794A383b5C7ddD35a34",
+      "symbol": "ECLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7Ea34B6F09724b2D831b081bf495e33075721B81",
+      "symbol": "EIXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcbB0cd953871C8333f4b03Aa1966b4aBdF16aaF4",
+      "symbol": "EWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF5511D5C6453A9F9e8D98a7021dBd3f0Dc6cFb3A",
+      "symbol": "ELANx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7E495dEac439596903374651122DC3C0508b075c",
+      "symbol": "ELVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x19c41EA77b34BbDEe61c3A87A75D1ABDA2ED0be4",
+      "symbol": "LLYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x063eE3dFC43993dA6920d44b44348E6A283C6Bb4",
+      "symbol": "EMEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x53B4e3FbD431927e193ECe6318E445373E34D044",
+      "symbol": "EMRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd2DE202C1dbc8915AB431773D50A10a256Da9B6C",
+      "symbol": "EHCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEd579847e45B0c48cfd608Da829073B2F7e65Cf0",
+      "symbol": "UUUUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6F75AC3b1b6Fbe8Bb5F948e25aF03620f26Ae838",
+      "symbol": "XLEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe75AfF5123D9De91A1c27167C6C01B1f5b1eAb14",
+      "symbol": "ENHAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x450f1C155690A0F475F24c6f5fc685989A0dCB2a",
+      "symbol": "ENNHLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFBE44aFA5928D738c70198126E46EC7629E60d0C",
+      "symbol": "ENTGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x408c30D5a587Dc631af87245a01427D30860BeD5",
+      "symbol": "ETRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x46A42b582723E670D6ACcF11f745890379234B53",
+      "symbol": "EOGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDe9FF7E79882EF488f5872941885f026bC566B84",
+      "symbol": "EQTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x94d5E6D9d29CEd7bc1A1226A35D7A9A8354186c5",
+      "symbol": "EFXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xbb75CDd39E47a569e66162353544F86BCdFC4416",
+      "symbol": "EQIXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCEB3f01585a4b8763FD2635cfD25e8BBfBF67193",
+      "symbol": "EQHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x164514953addA392E2fa84F2b6dd38060b4E2D23",
+      "symbol": "ELSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAD2FEc6ba14a5b0b56f8aD7eFdcAf3629A03ffa3",
+      "symbol": "WTRGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBa0312639C8d17006a551Df6f47349739bF08D19",
+      "symbol": "ESSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8aB6a088c597F5cA7239AEA70E51a5ACe8228654",
+      "symbol": "EVRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8fDE03e768f5e610E6E248DB63456E1776D14B5d",
+      "symbol": "EGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6f881344528F4A7B2146ca97D4517353fef3e7C4",
+      "symbol": "EVRGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x982b371bF69683065f2A32a4CF785751272Aba9d",
+      "symbol": "Px",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x28A3983AfD8110a0e8143EF1f8A9EC23f4215EDD",
+      "symbol": "ESx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDa74BFE8D9B19FB3E5C5a7A827965735c5151a30",
+      "symbol": "EXELx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0a83469837Ac8993A9f4f6582dEB7dbF14e83F6d",
+      "symbol": "EXCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5590B5Ade4ad486f929D05c4Aecbc383D1210F55",
+      "symbol": "EXEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd725F3Cf4d1ADBa1BC0956689c64E8746a324CA3",
+      "symbol": "EXPDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4D6a39b08d2AbD3382b650117efA19741580D91d",
+      "symbol": "EXRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEEdb0273c5Af792745180e9fF568cD01550fFA13",
+      "symbol": "XOMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x310E9D4eFa5652e8E79a66f5563ad48B230a6024",
+      "symbol": "FFIVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa83697F63962E780246290460C841C3AfbeF6527",
+      "symbol": "FNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x98B69F6e1770d4F34EbfF27be8238849ce8E039d",
+      "symbol": "FDSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8b43fB77f5823f93470d37aC18909DEbEf93ffa5",
+      "symbol": "FICOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8D8595b2F7A8a402b021f4E3C5C8923eFfD3CB47",
+      "symbol": "FASTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0fF554272f98f63f53FBf51285c54dba55104f3b",
+      "symbol": "FDXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDc8c197c0C47649a5538f4E5969177A6B2DD8B0B",
+      "symbol": "FDXFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF4a34970405440b64AeE269A2B43A5041b5b61C8",
+      "symbol": "FERGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF51565240E667176c532DB4139386E6A6E506d99",
+      "symbol": "FAAAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x041895170558e9025F87815b8cE58b23Ce57AD88",
+      "symbol": "FNFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x41DBd486E11dc88aC498d740ed3D7A4985CE07f5",
+      "symbol": "FISx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x958454243c49831Ef9d1E2d8e3837aF75255C2C7",
+      "symbol": "FITBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAA05eff17Edb2a99Cf03e465fc3788ba273fAd98",
+      "symbol": "FCNCAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x14c94aE4FFC0f772e614461C8160EDbD055AE257",
+      "symbol": "FHNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x13a9f32457C6e921E5e2adAc1d98C86838d1A100",
+      "symbol": "FSLRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB934888CE2a1AC898E7C0d07C5720092596d5727",
+      "symbol": "FEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc930c017431CBb6DC3672389fc5779843804c71f",
+      "symbol": "FISVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD920C8ed3F6d7ADe6bBa3C336f47AEB57eF93E89",
+      "symbol": "FIVEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1F0211620dD867245f3BFcEB6b5FF8E0403877BF",
+      "symbol": "Fx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9A9A9463d115242FF134AD4bb0010A50Ca1bEFCb",
+      "symbol": "FTNTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB3a4F4325B9952804F5f0f74d1C65F4Cb84C42Eb",
+      "symbol": "FTVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa96d03Fe2479fEbC69535366933Ea053D5acF9dd",
+      "symbol": "YLDEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x35B8bBd1eB42bB2B5B4894D0Fe87b2812442e186",
+      "symbol": "IQMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x44314De3E69fd4C99fb638816B58ED2a85d466D9",
+      "symbol": "FLBLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7e8c89a9b9B85029caB43280AabBED600D7e8D36",
+      "symbol": "FSMLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb100ee83B2f3E591c84354db63850677925b704f",
+      "symbol": "BENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x368192fEC58e3150600A1409c631c77F45745BEc",
+      "symbol": "USPXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x16b8feF54489A0BEb2cf09F6F16e4Cd31aEE195a",
+      "symbol": "FLQMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x857a7d561D6A25a38013fC111332339b3eA520A0",
+      "symbol": "FRHCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9f37AEc0200892D5a9D612a7b5eC8F59C2719FAd",
+      "symbol": "FCXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x07576873F108B862663143628ae2437ef0f414dd",
+      "symbol": "FTAIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBaC2588D2272fF6E5826E2882042Fa2926039CBa",
+      "symbol": "VCXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf7F4fAC56f012dE7Dd6adFF54C761986B9E0655a",
+      "symbol": "GLXYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4d396C675aDa9F74B9c92276CFfd13A83B514093",
+      "symbol": "GENTEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE5f6d3b2405ABdfE6F660e63202B25D23763160d",
+      "symbol": "GMEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDF4B5995b9520F6D8420c1E2D527951d582d67BC",
+      "symbol": "GLPIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4AaFeAeeEA18DC613Be2EC9A057E64A1Df2CB6DD",
+      "symbol": "ITx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x450D36A2B13DF58f3ac374A4002dbcc177C99718",
+      "symbol": "GEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5b9dB83ed1Cae97d9F8D21eA8A11606664Da52f0",
+      "symbol": "GEHCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5FB4184F8B515B1C54d1baC839DCF81276d6b73e",
+      "symbol": "GEVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x704d21FBCb769e6Cb9F0ad9363c5Fd739be1424C",
+      "symbol": "GEELx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1c59e4c97303e0c28BC79f097287af89B754Cc63",
+      "symbol": "GENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdD9A9FEb64BE689810fb2Db010BA701bfe3AAF5d",
+      "symbol": "GNRCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE2Cb2Ebad874F7c8afAccF7b1341332FFA20BEab",
+      "symbol": "GDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcBC77Dc87548e75F2C1D823892fcbf6f49B81e40",
+      "symbol": "GISx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCEf8A7008310A15b1B1489D88b0E6fe51329b05a",
+      "symbol": "GMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x17b5845B2ca231D8C59696D2abD378E80234F25b",
+      "symbol": "GPCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x516Be05b00cc2f897FD3f8bBecb54990D206658B",
+      "symbol": "GFLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5BFF193f267052D62B2E1Cf319ce8305936b1f03",
+      "symbol": "GILDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa6c7e611dbf501C949bC80Fef3C55C6900463B83",
+      "symbol": "GPNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x89BAB39D627A9e34f0dc782C53457e80Ee8Fb9D9",
+      "symbol": "COPXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFe7B11D43cfD9fd6010f1b3F9cC86e5BCDb2bc78",
+      "symbol": "DAXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0E6607Ab45D2CA779068Cd6D9426C409773969FD",
+      "symbol": "URAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x477344c0F2973595693226568a89712A8bbdEd5F",
+      "symbol": "GFSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf0938B2DFEC267f439B55DFf0523FBe741F95B02",
+      "symbol": "GSATx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF0FD4D023af01085dfb52628A5317F4C35A5b8b9",
+      "symbol": "GLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9aAFe57ddA4f5DE83B644CBd97D2B45dc4E8672c",
+      "symbol": "GMEDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x63B0507283B2A58cE149396Afefc92fA38EA587C",
+      "symbol": "GDDYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2380F2673C640fB67E2d6B55B44C62F0E0e69DA9",
+      "symbol": "GLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3Ee7E9B3A992fD23CD1C363B0e296856B04ab149",
+      "symbol": "GSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe5756E8Ae45704384b39f58AA9b8be250a3A38bd",
+      "symbol": "GGGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x218f4CF85AC26909a1b2a37205bd054F7dd0c11f",
+      "symbol": "GHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7D72510babC131D74440392c0F249aAa2bEd3e7F",
+      "symbol": "GWREx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x19A04945109738C9b8F936b2e3277c82FeE707f3",
+      "symbol": "HAIDLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD31abff8c6C3975e40E44b0299B3d5b358aB0a82",
+      "symbol": "HAIERx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x371c1bFc134E750FE349000AeDDF4086C2227AB1",
+      "symbol": "HALx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCde01AF7fbE0d7B8526252320D7DBd183566297D",
+      "symbol": "HALOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x63fa75424A1Cc95bdfAF5AA652B70aB867c385D5",
+      "symbol": "HASx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x83a6f6065A096fA6e365d4d1fc136d5c09f4B2bF",
+      "symbol": "HCAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2b51b5162d39a20Ae5cA52B89E5D12526D63e4DC",
+      "symbol": "DOCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3965a40f56F166Bee144a110ffE44Ae452623e19",
+      "symbol": "HLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x88b195AB3DB3F3f6001ba231737041BF6A9ae94B",
+      "symbol": "HEIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7633948088F0C17AA60CA02F6920B9DCFE0f9F7E",
+      "symbol": "HNDLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9BcaaeAB34feF9BcFFC7a99c81c9bD15a2d299f1",
+      "symbol": "HPEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x23889FA78dA8e454E72F2B19Bd331d19a27040BF",
+      "symbol": "DINOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2cc707faBD22B802B205d7cB2FA792d12A5e19f0",
+      "symbol": "HLTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x55600dfB3943a2db1A49b250e1E9114E4AD2174f",
+      "symbol": "HIMSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x766b0CD6ED6D90B5d49d2c36a3761E9728501BA9",
+      "symbol": "HDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x62a48560861B0b451654bFffdb5be6E47aa8ff1B",
+      "symbol": "HONx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x09f7B7EB4256d96bE07F6bEc836Bc65eC5341317",
+      "symbol": "HKCGAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x64c1C1A6453Abb3ebBFC69e3E8f8e75953ABd46a",
+      "symbol": "HKEXCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf88b87D748005F91AF8CebeEb36Cd8982d1342B0",
+      "symbol": "HRZRBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x51494064481cBa017ba920bF1058933e7c6a1Bb4",
+      "symbol": "HRLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfCbD9B46E71B627798b5D175047f0C46d30006CF",
+      "symbol": "HSTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x013cd7eA7E427A7c57C9F3d5994E62873420FBeA",
+      "symbol": "HWMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x050FEC51850555731caF24831e3452293669e87a",
+      "symbol": "HPQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0e59950494C2ADcEa8B974cD6777379d9A758665",
+      "symbol": "HUBBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5b58319888C70eEC5880f513240B365243562df8",
+      "symbol": "HUBSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8D6911bBbaf793f7924bDeF62e96212cB27d0102",
+      "symbol": "HUMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDd21DaF8F0bf0a39c9a113a617D6AEe3fcAC6655",
+      "symbol": "HBANx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0062331A5A1627704B912Bc5299bb604EA3AB825",
+      "symbol": "HIIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x560deb3D70Ac90064fF809349cDf9A771a06fd36",
+      "symbol": "HUTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x634Fd9cDab5444813630b190EeA1F477FF367F4c",
+      "symbol": "Hx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4e89f60cCaBce537970902E9D47BF57076235749",
+      "symbol": "IEXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1FB76285f9c1a9410d4D7AFcdb57ad7C98d62c68",
+      "symbol": "IDXXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9A1C32B87D0367DaAC48f784E480E14D66CEA8E5",
+      "symbol": "IESCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa747Dd8021E8d40967b2e561CC8CCb12E4f629B9",
+      "symbol": "ITWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFBa79AF741b68C0be8479f1D081572081ce1C0e3",
+      "symbol": "ILMNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE0124233D9E93e85A687B6849711cF063cCe7E65",
+      "symbol": "INCYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x518b484d827cC7655eeC821d00cd2aE3EE4C958c",
+      "symbol": "ICBCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9E76eb9Ac9e3978A3E4608086E555d443f14e43C",
+      "symbol": "IRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x82843cA8e5ec457f4710Ef2d22Ff0993f49cF406",
+      "symbol": "INSMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf8A80D1cb9cFD70D03D655D9dF42339846F3B3C8",
+      "symbol": "INTCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8563a53804f4a195Fd2c960A8d5e16c997c394ab",
+      "symbol": "IBKRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDe916B8089Cbd5E52551Bd933c3eA2eA5C903465",
+      "symbol": "ICEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd9913208647671Fe0F48F7F260076B2C6F310Aac",
+      "symbol": "IBMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xDFaE653D721d8cBfb7ff7aB1dC56693CdFB480f5",
+      "symbol": "IFFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x192725363346a04B5aC64E7D379e57513cAA808A",
+      "symbol": "IPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x714b99933BA569e3982e4381990c354410f21A50",
+      "symbol": "INTUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2F8eb54f81898b40AdcF8ce3d415DDa9372015d7",
+      "symbol": "ISRGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb3c2E973d85deEc0ceeD18Fa13b02e6A1A1bb60c",
+      "symbol": "IVZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD14a389b92d2097046325935f2299b8613543b00",
+      "symbol": "INVHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7dCDBB780Db10a9A0F8d2a0b6ab00F02b1974DF4",
+      "symbol": "IONQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAd60f53050E65F8fe76ee9624e4f9e0F2C529d23",
+      "symbol": "IQVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfBfc1FD14EeC970276c8a3BF5e6131cD751cC0B9",
+      "symbol": "IRENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x25A98a66A3c667afD37ACa01fBA1583329FBF072",
+      "symbol": "IRMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2daFA4732c8c1b25701a33B05F10f437F9599326",
+      "symbol": "SGOVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xebb35d5b5Bf82203812e3C02797EF0cBDBb81146",
+      "symbol": "EWQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xeD2Bdd82366728C1F2A7E8B93C4dD4A58404BF65",
+      "symbol": "EWGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x299c95Eb52BFd5Bc98d924bCE17197b64864589B",
+      "symbol": "EWYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6c5287b4EA247031da9e375573E5D1c8A12938EE",
+      "symbol": "EWUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7B14968D19a6C051d6613716ea71f2DaDE46DB9c",
+      "symbol": "SOXXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4833e7f4f0460f4B72A3a5879A6C9841bCC5B58B",
+      "symbol": "SLVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x375B9F00A83132cABcDa7aBf2bfc87c14f7AC324",
+      "symbol": "ITAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2318c8A06A522572604fb0247827B8dd9C5681ce",
+      "symbol": "ITTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x72a639E1e2dfDAA828Abf13c8F2Ddb4bcf526EB0",
+      "symbol": "SJMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xA21A2C0d078507cF4cb67e06Deb301e8AD478770",
+      "symbol": "JTGEXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb7276F00D9CF51e52234f4Ea85AcCEC591A62AdE",
+      "symbol": "JBLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x10EF8902319697C91ff513eCe57c23996A5c254f",
+      "symbol": "JKHYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC895a27f05A15dB9B5aD980Ee669102160e4394F",
+      "symbol": "Jx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3bf2E3be4A829Bb3a5f5BE450AE4c8Eb3488da71",
+      "symbol": "JAAAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD62aE2C0FAd3D7eA3671514F0a8f0fCE31e0653e",
+      "symbol": "JBHTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB8F7522b9FCF732CbDFF64E9DfAc91054FB0A29D",
+      "symbol": "JDHLTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x069C5dCaCB4baB9F1c353B7A1dab50e7f2Ba57e1",
+      "symbol": "JDLOGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x215f08575c1033C171563E64923e70A050310055",
+      "symbol": "JEFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x97FcF4dD5275Ab0De96420CBe36E4C947D5d8edf",
+      "symbol": "JMKEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdb0482cfaD4789798623E64b15eebA01b16e917C",
+      "symbol": "JNJx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x958cDe73cA93020050C6Eb8677b98C141BB575b2",
+      "symbol": "JLLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD9FC3E075d45254a1D834fEa18AF8041207DeA0A",
+      "symbol": "JPMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE49922893496b17AC12Fdd7c74720a92010d889D",
+      "symbol": "JPSTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x920EcDf6CB715424FF6bd609744721E4A6baC0B3",
+      "symbol": "KVUEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x657b8c17c3FCe7B5c3390AEB41105544F1BD4481",
+      "symbol": "KDPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcbbDaB0EA8b230ddf66dAe0ea8b04a14d467FEd7",
+      "symbol": "KEYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9c65F20B3e47fF274b241f6577EcAFFA3e0Dc593",
+      "symbol": "KEYSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x518b9F5aA6e8cE40b0242f6C48E3947Cb4255f3A",
+      "symbol": "KMBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb8D2D59232de999CC07B99F119A4f155e067D049",
+      "symbol": "KIMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x52B950de3C686c464161D9Edc8EA9F877bD3997F",
+      "symbol": "KMIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAe50d2a8ceEE4C69c53266f0F966AfE481ab112d",
+      "symbol": "KKRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb7e2E3eF9F5c6b72a162FFc76382e4477A44D913",
+      "symbol": "KLACx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe89dE69F13e1e732b26d5ddA2c3f32d6011ec387",
+      "symbol": "KNXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0eBe5FAD0998765187FC695B75d4115c27C953A1",
+      "symbol": "KRAQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2efC8E610632CF9c483BE6628f674a3D08d37a7f",
+      "symbol": "KTOSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFA8a6a57Fc83e416cF45b04b7b92B4f48Da9e7B8",
+      "symbol": "KUAIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC90373be639c4E8F18cD983bA610f00bF162E4E0",
+      "symbol": "KUNLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe4c07cd434516BCa3eb7445F6Ca646f877682BFc",
+      "symbol": "LHXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4177D16A5d2465CF4bd52E07c1c56ab500243FD4",
+      "symbol": "LRCXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc15563BAb6e49aDdfe8A5fC80c2058d9f94D6860",
+      "symbol": "LAMRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6f6c13dB193BF319287922735510be16B595831b",
+      "symbol": "LAOPGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x13326EADD0F8323dDdF0522f4A71993bf21b0D05",
+      "symbol": "LVSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFe1b0ea3111e4FC3a0Eb89034C7cEA1482F95C62",
+      "symbol": "LSCCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x080Bce6bA1cbed26d071dF86EB4Cd3a627E283Dd",
+      "symbol": "LDOSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfBB16f9B1D1DE8a26220688Dbca936c05F5a67C2",
+      "symbol": "LENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfb7cbf1EC71E07f9EB2566B8Cb3bc43a528F18F1",
+      "symbol": "LIIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4efb7f42A381A115FE375438E85da301d6fd1b71",
+      "symbol": "DRSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF3D04BC45c5EF090b46CaBE374Ae73C45B70b415",
+      "symbol": "FWONKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFCD20501AF3268360625431aA677C2c8607A1067",
+      "symbol": "LECOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x15059c599C16Fd8f70B633Ade165502D6402CD49",
+      "symbol": "LINx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0D1B572CeC79716fB9356696bA0239c9ce48dc8e",
+      "symbol": "LYVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xbf3735196A77b62D0d9A52e2d3A70f667F76315a",
+      "symbol": "LMTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB6490a926382c1Dfa3BE7fDb4281B1c3080A501d",
+      "symbol": "Lx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x391470973aDBbBaB50Ec69BE24918CE6B84399d8",
+      "symbol": "LOWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x287021807476d1ae3DF547de9516314C98d96e75",
+      "symbol": "LPLAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAaA9cF4E9488F5eEF064B8CFac70f5FD857669dc",
+      "symbol": "LITEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x92A5476d0b1897Ef77dE0dea72e75C616B8b55D2",
+      "symbol": "MTBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8Cf75f3F4D179B6Bf28049CBb9181ce35b268A0F",
+      "symbol": "MTSIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9E90cE16085eA1C58ad8689948C071c8799Bcec5",
+      "symbol": "MDGLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x89D657e98e08C7585304024d5c786B96E8ed275c",
+      "symbol": "MANHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9D692bffEf6f6BedF4274053ff9998EFE3B2539E",
+      "symbol": "MARAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x358AAd57A91C3b78e6b07fE4d0f0f03D0F6Ac7e1",
+      "symbol": "MPCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5F46cEf6715bd8Fc87e66e6890488E5aF888F128",
+      "symbol": "MKLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb0c14176d72B47e962286da1Ce49D49996c5f0AC",
+      "symbol": "MARx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x01A1BDBB233f23aDBB259780E86448a88b9Ebfb0",
+      "symbol": "MRSHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5B95cAd920F52cA0bF8892Da1C7Fe8E3a9f7fFaE",
+      "symbol": "MLMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xeAAd46F4146Ded5a47B55AA7F6c48c191dEAEC88",
+      "symbol": "MRVLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5D8Ca21519abD2F3cD3CfcfE659B71d828357ad9",
+      "symbol": "MASx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCd1F04e13a903fc20840B6166610954BAa8BD533",
+      "symbol": "MTZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb365Cd2588065F522D379AD19e903304f6B622C6",
+      "symbol": "MAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5D0C5f0845c4B45C4A0C0E88463d3D09ce6fEF44",
+      "symbol": "MKCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x80A77a372c1e12AcCdA84299492f404902E2DA67",
+      "symbol": "MCDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xbaF3a0f945C0FE1963B80950486E0Ce4827B3A1E",
+      "symbol": "MCKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD5859517180e639d50003fDb434e690ab1FbD21B",
+      "symbol": "MDLNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3400F8B9852537Feadc778F66629d7b5002593e2",
+      "symbol": "MEDPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0588e851ec0418d660BeE81230d6c678dAF21d46",
+      "symbol": "MDTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0024Af2CA56e822AD487C0BEdC52A82028a55f86",
+      "symbol": "MEITx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x17D8186Ed8F68059124190D147174D0f6697dc40",
+      "symbol": "MRKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x96702be57Cd9777f835117a809C7124fe4ec989A",
+      "symbol": "METAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD5377B7aAaAd0651f92fc3CeBD504498f88B9a2D",
+      "symbol": "METx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCE3e6a3B988d27aEf0a68C34589dC06E3E2a07cC",
+      "symbol": "MTDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD67019C50D6C26DA108eB6327b100132177ceCCD",
+      "symbol": "MGMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc943E8d7c75ed4ab4e3F52Df0F0573b83DF5F046",
+      "symbol": "MCHPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf6a873BAe4Ba1B304e45dF52A4b7D176E1C6a8c4",
+      "symbol": "MUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5621737f42dAE558b81269FcB9E9E70c19Aa6b35",
+      "symbol": "MSFTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAE2f842EF90C0d5213259Ab82639D5BBF649b08E",
+      "symbol": "MSTRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4fE141616da62b8633efaC1935dD6662C25a6538",
+      "symbol": "MAAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8Fa39Ff32B316E2296630aA05BDD6A4a2e4b7598",
+      "symbol": "MIXUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xED78E87bE099A1ADF584BA5E41576786B1b490Af",
+      "symbol": "MKSIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8387d2580e874C07a4074EA1BB4355e2EAA513ce",
+      "symbol": "MMGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xeFD30445A4ec1f4b3E0a6f4d9bDbd215F805047F",
+      "symbol": "MRNAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc567Ec4e62c80Cc60454d24456E45de0abC36243",
+      "symbol": "MDLZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x94A984253ECD65C1faBD35DBA3CC6bCBc86B8795",
+      "symbol": "MDBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF78E8b9441FBBfB674d35101dF0658D88B3bb33F",
+      "symbol": "MPWRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x90424a0398141599a27cFF5938A6A721c51A09fC",
+      "symbol": "MCOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd8cD1c1FF337B2d4Dc61b70aA8006e0Eba401F58",
+      "symbol": "MSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x511570341Bb0077D837f734FF554c19c8e53dE57",
+      "symbol": "MSIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x75D3C07dCe9F1424Dce574f78242e7eF1696B8A2",
+      "symbol": "MPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9B58e45c3177e3466f57eF73e265Ad98Ac40f823",
+      "symbol": "MSCIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1a1A1459BEbBA0c9F64A9005fc056d258bb2F0E1",
+      "symbol": "MTRCPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4623De3596f4688cB5D1087F2E57efE36f81fD7c",
+      "symbol": "MLIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa753A7395cAe905Cd615Da0B82A53E0560f250af",
+      "symbol": "QQQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x378958e63e196e29047db1F9899B1c3b52375cfb",
+      "symbol": "NDAQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAC747963EF64d40608232b0daE40a67aaC2FC6A5",
+      "symbol": "NTRAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0361d9e8A923d0fe9B8877D9Bc9f38abfFb46F74",
+      "symbol": "NBISx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x662B4e85462D7a293B70d47292cD10113be6cf63",
+      "symbol": "NTAPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xA6a65AC27E76cD53cB790473E4345c46e5eBf961",
+      "symbol": "NFLXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBb398dd3eD4050D222e5853A9872646A81E8AfFe",
+      "symbol": "NBIXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x64E311e3De5b2bADC013e771Fa99ca0d51C5CC0e",
+      "symbol": "NYTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfb4129A6323223956f789108c16bE8Bd619eA17e",
+      "symbol": "NEMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc31bc46De7750a61DA61A16de55777C0ce2D62bE",
+      "symbol": "NWSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x44028A82cEad1efaF12C43DD41CAF14877872D84",
+      "symbol": "NWSAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x838724754537372051fCA62302E346355c7Cb4dC",
+      "symbol": "NEEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7c5e9e93eA0F8fE94ea94Eb6283f200bA0B72Be0",
+      "symbol": "NKEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8DF96a99d1d37C086Ec43A76ab01b0CE5B05a804",
+      "symbol": "NIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xeaF8166813d9739B6743e5156758ca0064969973",
+      "symbol": "NONGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x12E714e27ab36fc439971d2d66f641342eb33f4E",
+      "symbol": "NDSNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2aa0089f315dA3CDBb6D154B55F909d628C08eF8",
+      "symbol": "NSCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7AF65F7d62a3b518B59064a74143b3EE05c4e3E9",
+      "symbol": "NTRSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x95462C2233313D756FBfEB5f1FD0f7433aBD3E4C",
+      "symbol": "NOCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF9523E369c5f55ad72DbAA75B0a9b92B3D8b147e",
+      "symbol": "NVOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x43e9D4EB66e0a3Bf9f9CE65E71982ec3215406De",
+      "symbol": "NRGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xA529581a6542759BE4efE1ECfB9354D5796425d6",
+      "symbol": "NUEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF8228D64435B55687157a5C9b132642FE04aC381",
+      "symbol": "SMRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x12c9220C70d6997c0b23f6B0b98F29AE1C99e42d",
+      "symbol": "NTNXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc845b2894dBddd03858fd2D643B4eF725fE0849d",
+      "symbol": "NVDAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD580beC1Fa67535A889bb25114635d4F1e739ba3",
+      "symbol": "NVRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x04a396f4A6EB4c485512A2b53D444cF173CbDbA4",
+      "symbol": "ORLYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7758b37789015B5E8036e44F82De5f4871E648bB",
+      "symbol": "OXYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4b0eE7C047D43cA403239f28f42115bEdB7c0076",
+      "symbol": "OKLOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x46e75757Bdd40F3BE9f6bE392CB233e8772D946d",
+      "symbol": "OKTAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x488b7F10d6af0D5da18e758Bd138e82b079A17aD",
+      "symbol": "ODFLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2371b7E6c0A0F56Aa81792A1b8F3fdbAe6e8A3fb",
+      "symbol": "OHIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x648Face8dA5B4803ea902e74b5a41389a1D995EA",
+      "symbol": "OMCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8DD3d692A2fcfF0aec09EaFa7633f52c36a312FA",
+      "symbol": "ONx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x50343212d7AADd7a104dCc7Ed751514aA174D9dC",
+      "symbol": "ONDSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x70241e3DFDCe23110cF6557a4bF1682De4C19F44",
+      "symbol": "OKEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2641f4565926C1692B057Cc2D6Ef7eE5EE7049dD",
+      "symbol": "ONTOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xbEe6b69345F376598Fe16AbD5592c6F844825E66",
+      "symbol": "OPENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x548308E91ec9F285C7bFf05295baDBD56a6e4971",
+      "symbol": "ORCLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2cD4e4cC2ceA86E3f1Ac26dD4d4855D468833dD3",
+      "symbol": "OTISx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9f2327d8E3E6Db28AFC34cD9a46cFCFD3B014b37",
+      "symbol": "OVVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x16C283ac8F4789fB3d707308E69fd96Ade45837A",
+      "symbol": "OCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x649209bbB1B5b876C2aEB6cF7Fd46C1679BD4069",
+      "symbol": "PCARx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x705a0c4D463418bd371D496c447e6ec497A47876",
+      "symbol": "PKGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6d482CeC5f9dd1f05CCee9Fd3ff79B246170F8e2",
+      "symbol": "PLTRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe12BB32D77BE4DB10DDC82088b230D35d097E9C5",
+      "symbol": "PANWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8C0D35C89598dA21114d28248c0D1324Be04eCF0",
+      "symbol": "PHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcd3dA7bFcAf214CbAbb74fcF00D40952f83646e8",
+      "symbol": "PAYXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf706585e7e8900bE0267bEE3B9A2F70835EC6628",
+      "symbol": "PYPLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x665C220EcD70F390A61CB5149336461438C2827c",
+      "symbol": "PAGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5151C42f8cadf65f9fE16d90274BB721092dD2d7",
+      "symbol": "PENx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x36c424a6EC0e264b1616102Ad63eD2aD7857413e",
+      "symbol": "PEPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa77D88b4C383042b0C1DC4D72d9d2aB21E30d44a",
+      "symbol": "PFGCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x430bD46DeFC33D14EF23aE8ae4501871DB375959",
+      "symbol": "PRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1Ac765B5BEa23184802C7d2d497f7c33f1444A9e",
+      "symbol": "PFEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf2B72c4b56ddAD85216EB881186a6719e44008F0",
+      "symbol": "PCGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x02a6c1789c3B4FDb1a7a3DfA39F90e5d3c94F4F9",
+      "symbol": "PMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAdAd6f009a825C62FCA74a643addae151506593F",
+      "symbol": "PSXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB97b45Ec03FE0443E94E7d72512ad4dF120C33BE",
+      "symbol": "PICCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8bD17230466A8C04f569Da2d8EeEA6029E978A48",
+      "symbol": "PICOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x75Ed2324543A3A1D8e1B5339D91C2598CdFa1f94",
+      "symbol": "PNFPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9B258AD07b0E90fAACC0C6Bb10413e10A30bC4CB",
+      "symbol": "PNWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x85093041471382FE01517Ab00cE897d7189db5d3",
+      "symbol": "PINSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x536825370F1159cBA953055f5c2F16DDc7B5a348",
+      "symbol": "PLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd249B28FC6c3e4c8879B93ba38F19DCDebBe5141",
+      "symbol": "PNCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3A0a47A9C2713A7049d1052CC8EbD39c41570580",
+      "symbol": "POPMTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5866F125b00BF3D123586d26681362c110553262",
+      "symbol": "BPOPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAD019B4c76eC4EfEC0ffb81681dBf07391cD29f2",
+      "symbol": "PSBOCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf2C14cB87dD6D484e6298191F2bD0aa57f37ec60",
+      "symbol": "PWAHLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4520da6eAaAB5102167B95f639C21234d7CdA7b0",
+      "symbol": "PPGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc63d34F782216EeC696aDF8ea100f159d8F77d1f",
+      "symbol": "PPLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5bab03661F4ad8295dF74e914275B31A260E58A9",
+      "symbol": "PRADx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8941FCc07e74D6a29b083f066275A9404CD8378b",
+      "symbol": "PFGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa90424D5D3E770e8644103AB503ed775dD1318FD",
+      "symbol": "PGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x75b6DCD603314BCd8B3683E526d63193Cf7D7BAe",
+      "symbol": "PGRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x54FEfA2838f7Dc972B1A08b41A48328875C84abC",
+      "symbol": "PLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x42e49d4Da0B73EdCca7d12Ea35c2Ee136D9362af",
+      "symbol": "PRUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2EF2bA84fF90AfD78F6687d7072D624549C1DD22",
+      "symbol": "PTCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb069e78610b5b1aCc91B443B74A50a5E935d10f1",
+      "symbol": "PEGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7dcC5DFaE3e6fC34193D04276bD371701d09ED3F",
+      "symbol": "PSAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x841446D55449B4EF92FD6BAB70Fa6Ba69eC00BF1",
+      "symbol": "Qx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2D73ed3b4F20bd8f9Abe92786740bA79E9Fa0ef6",
+      "symbol": "QCOMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x90561f53a83D97C383E4842960969a6d9cfe1Ba9",
+      "symbol": "PWRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x14c7A3738Fd283e04D1082dB86f3410DE2354e2d",
+      "symbol": "DGXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x858364eFF838F2eFA51a6bA51Eb7e4A7697B3C2E",
+      "symbol": "RLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x53d229C54c35f8b77bDeB348e071dDAEAc74C9dc",
+      "symbol": "RJFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xADd72796327ebA25558Ee932BB4d39039C268A66",
+      "symbol": "RBAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x96306a74f357Aa25aa89BB2E6Cf90bD860481ADa",
+      "symbol": "Ox",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1FD2D7aDAc24B3f9552BC967bFFcDce3B92D31B8",
+      "symbol": "RCATx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x52cE422D81E62a2c4Bb87653D66F2235C73B152E",
+      "symbol": "RDDTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEdf9acF668012a016A5d614A638C17545102AEC5",
+      "symbol": "RRXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD1D32D11319471c4c0B00f95AD34cf0855184dD2",
+      "symbol": "REGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xA618682a3281073ACC2A15a09093682cB4134D7D",
+      "symbol": "REGNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x94335d09e6c8c72810012CDf123D050b4ee9876d",
+      "symbol": "RFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEF9A55161E5db35493E6d7f978d0E37fB96c0635",
+      "symbol": "RGAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7b2f4C88e5c990833e6c0AF33372F967af80FC83",
+      "symbol": "RSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x69f6cF3bFc4E038c4F303a7368542697FA4C62AE",
+      "symbol": "RNRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x24dDc68F76b8fFe95dD1f4763AED201A44A846D9",
+      "symbol": "RSGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xeb158D6532f16c3e6C137CEBfB47DcF7a706181a",
+      "symbol": "RMDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC6437A260BF2b7E9d9e402B2ef7E9a84d3622046",
+      "symbol": "QSRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa77D35039B95c50278477f393eB6c4edd3811dBb",
+      "symbol": "RVMDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5cEfF2729e1873d2d45e9e51745b91Ef8D14a405",
+      "symbol": "RVTYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6Ac47387f0a2798dF4C4eE5bb31ab9517ac97cb8",
+      "symbol": "RIOTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe6A12D72AB88191147158F0d4Cf3f614fC6441bC",
+      "symbol": "RIVNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE1385FDd5ffB10081Cd52C56584F25EFa9084015",
+      "symbol": "HOODx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5d8dA1417E3565eb02C9ca8cC588bE5D8F65b1c5",
+      "symbol": "RBLXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1f2C8792148e4DC81A86109504810f2d5f2F26e4",
+      "symbol": "BOTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE4F484E5cA6d6f06A5E5B8c9d2870921e8Fbc814",
+      "symbol": "ROKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x28999e33C4C3A4576F52A5311c860c7010fC6013",
+      "symbol": "ROIVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd00cbf0e9eb52A446814ff0BECf39d1cfD684A3d",
+      "symbol": "ROKUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x17D4C17b892B663b24DF264200434c28f6f5E5Ff",
+      "symbol": "ROLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0bF897240c444cEd24CF8E18cB76700b3596D944",
+      "symbol": "ROPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4b3f9028dD0D64D1857bdBab1a27314040cC7188",
+      "symbol": "ROSTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc78B78873a1fEBF6F511A336b15C08182BE67603",
+      "symbol": "RGLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4f59465F8a978B1212475f605B444B42f794BA91",
+      "symbol": "RPMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5884F1e7c69bE620F0c0ff218e43C9a898153b21",
+      "symbol": "RTXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9D45Fde5bB853066963884b2532204Ccf536965F",
+      "symbol": "RBRKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdadfb355c6110eda0908740d52c834d6C2BCDDc7",
+      "symbol": "IWMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x09AB6d34642BE26e346b52e392874150507F5CE9",
+      "symbol": "RYANx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAA28cB97D7f7E172f54deE950743886D2d65447d",
+      "symbol": "IJRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x09cb31401d8eb516794Ce8ec01457c4815e3F2E0",
+      "symbol": "SAIAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCa8dEAa2D80E6BFdB4581d34647EA73d9799c36D",
+      "symbol": "SAILx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4A4073f2EAF299A1be22254DCD2C41727F6F54a2",
+      "symbol": "CRMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x267a0a7Ddcf0a7802FeA1Cd806f4FFC311A3cfA9",
+      "symbol": "IOTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb63EFBc28860c8097e341DE1fCF59456161E9D98",
+      "symbol": "SNDKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF23685Ea434474bA360Aee965EBE8DA450DAaADf",
+      "symbol": "SNDSCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC26bc7f2fcC708d6678527672b65815AE83D8b05",
+      "symbol": "SBACx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF6D87E523512704C29E9b7cA3e9e6226bDCE3EA1",
+      "symbol": "SCHFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x095AeDA2e3A971AE4e283c557852cc1eee641547",
+      "symbol": "SEICx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa5B35B537cFa2BF7e14E5Bb7b97b37DB05E06c3b",
+      "symbol": "SREx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x860e267Ee6Db9D38256a46eABD56BF1f133CA4aE",
+      "symbol": "SMTCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x93132A761807f8DBD5D8C9b6d31f544d3dEb8e1d",
+      "symbol": "SCIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x47C789E2A8ED186ef3dfC91814e726126fdbeD60",
+      "symbol": "NOWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x242d8409e549F8127bA6E85d7BAD4A7Ce57a4423",
+      "symbol": "SHAZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x338791c58fdED314b81EAb139A1A2Fb7967D90d6",
+      "symbol": "SBETx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4d0ba049C430a7a80a61E7EBdF50b6dAac6c3Bd6",
+      "symbol": "SHEINx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5439Cb47D04b4952c909FB880516979a9F0a2066",
+      "symbol": "SZIGHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdFf1d0B8570df76e4fC8EfB87F3B6661159ac4D8",
+      "symbol": "SHWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1528C70F4F826222F58348873c5F535bfedE9b78",
+      "symbol": "SPGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCF7cFEd645F73ea1805711569Be794Dc04Ed6236",
+      "symbol": "SNBIOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6598634B4319841C72Ac6Ed9f868Ed99CCf24FD9",
+      "symbol": "SINOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEf949d91E6A952e1Cc1a57C0597ABC72BEf5fDF8",
+      "symbol": "SINOTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa1a7cf1BbAE3ec936Dd4ADbbCdcc6E799D663C7e",
+      "symbol": "SITCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x58100046a4Afcd4eE4faDbD4244f3f895a341c56",
+      "symbol": "SKHYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4c599685e1B7717f245B93C9e081Ed256D4781B3",
+      "symbol": "SMOIHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaf48E4c2B06BBB1605Ab1D4277d21c7A3DeF15E6",
+      "symbol": "SNAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x18af2B532AC2D9fD18E9099A57fa3585f4bfA931",
+      "symbol": "SNOWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcf8e8E4d348502D5Ab212cEAAa6062a6DE1a53e2",
+      "symbol": "SOFIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x180c8eB36138CdAA75D985D756005cD8344a042B",
+      "symbol": "SOLSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb5A30e0B5Aa1deF87C8c9ff28609cdE3A3f88753",
+      "symbol": "SGIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2e0fb57Bf21cc5e32D3C72f7Fdd4D0D23CA0f5F3",
+      "symbol": "SOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x59fb22B2eE80D5630DB4aeBb80Fac4a9A5fb778C",
+      "symbol": "SCCOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaBaa0db03EaB027bf40bC3242935395aa1F29dbb",
+      "symbol": "LUVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x90A2a4c76b5D8c0bc892A69EA28Aa775a8f2dD48",
+      "symbol": "SPYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x68fa48B1C2FE52b3D776E1953e0E782b5044Ce28",
+      "symbol": "SPCXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaE6D61508125bC541E367A6a8B1f594ecC42F557",
+      "symbol": "FEZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6b9Cca56e783d1345785E4aA1188Bbd673E911A2",
+      "symbol": "XOPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x93663705e383B3cd200607abD8fCf0A793a22738",
+      "symbol": "SSNCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x741DbF66898Cbcf7333b8304e3E107Bf431e661D",
+      "symbol": "SWKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5667C2D45ACb2933CE129B53615aAF17C69f262c",
+      "symbol": "SBUXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd5C4E1e5dB2b02d883E0AAFfb6F66f4925Bb9056",
+      "symbol": "STTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf6cD1a8591109a9BA85c8C5d05F025230a0583eb",
+      "symbol": "STLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcDF976c44CB357977712C362407a823825E33E2a",
+      "symbol": "STRLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb6cA5e1cDbE37d5b87ff92e424702A2Af803a54a",
+      "symbol": "SFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x38E0445308E7FcD5230F2DF6b52B36DD4FF313b6",
+      "symbol": "STRKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1Aad217B8F78dbA5E6693460e8470F8b1A3977f3",
+      "symbol": "STRCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7c7445A40926152B8d24aBDb9020e219d3D3380a",
+      "symbol": "SATAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x43bFa15DfC86cdC64c3c54E0232a03eF3E0225B3",
+      "symbol": "SYKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x89c87B91352E05C1a4DC917aa0790cEDe828C5c7",
+      "symbol": "SUIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0E49293c80cA713503dc37890164C0F8009ed178",
+      "symbol": "SUOPTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x39c31fC6038490eA4Bf8A21Ca18CD18F33B8d3FB",
+      "symbol": "SMCIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAb7371f7E002A77D40584B8C9F8615A081acbF31",
+      "symbol": "SWPRPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xa5F97DF7e8EcEb65C4b0Db66077D95035754A3E7",
+      "symbol": "SYFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0D2566eAD867F4883Cbd14B5e1Df4Bca17b30C77",
+      "symbol": "SNPSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x27fF2d53a2D8Bc9A28ADfA24c9E05C2fD415B7E1",
+      "symbol": "SYYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x68F3DDEE8BAE33691E7CD0372984fD857E842760",
+      "symbol": "TMUSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE7c7F0422ED5419608E7A95970D9D2462b591b65",
+      "symbol": "TROWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x05F7EF3228b53fF9feB2DbB7617989c1Ede6F7a8",
+      "symbol": "TEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3234421Fa54dDf0Eb750aE04680cc0c4d2DE2721",
+      "symbol": "TTWOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC5f341F934A35D5D086930586F2D75E1ed2939fF",
+      "symbol": "TLNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x433BffeD4600CB94852647ef05E4A962C2474E04",
+      "symbol": "TPRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC639a8265471ddDcB2d51521fDfCfd395D00c55f",
+      "symbol": "TRGPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4cbf89ED7Bb30b8a860fa86d3c96E9c72931299b",
+      "symbol": "TBLLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdE7367e2fd16A1b48e1db160104aDa7b0F990171",
+      "symbol": "SNXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x709635064d28BBABf37079f012529B8D239848C4",
+      "symbol": "TDYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfa15e42C18CF57aEEf4b1baC1CEE7754af7CFe42",
+      "symbol": "TCENTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x27052f2459D0892112cd597735D885bfEeC9dD88",
+      "symbol": "THCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x99A1a9BC796bAe48631a15B1C1889625C86B7b98",
+      "symbol": "TERx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC0c2150cf0870E2d7aBc7cDe17C20A542faFBB9B",
+      "symbol": "WULFx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0",
+      "symbol": "TSLAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCE6D41Dca96b4Ebe560721dF729dBcBa46a87AC7",
+      "symbol": "TXNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6C045BFd262bf5e5Af067bB5280E044BCbB574FD",
+      "symbol": "TPLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x013678d2039f27aC8531dd994411b6f6c502d889",
+      "symbol": "TXRHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAff0E5f513cD797561Ec8709e302De4e4da568e7",
+      "symbol": "TXTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd08e2086a3a2D49f0A7E7fc91A40a3D58e50CA4A",
+      "symbol": "CGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x40bF69F64ee34A535568bE85e80e126c4282EcF3",
+      "symbol": "CIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6655a43472C21583bd1590ab66fa670A27D7BB7e",
+      "symbol": "COOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x966A68d8093cfcCc6D6e43aCBFD19658A91Ec133",
+      "symbol": "ELx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE2A85396fe2C2Dc1ea57E97D93596334A40A8515",
+      "symbol": "HIGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc36C8893e54c9A0a1029FB981face1Fc5613b4E9",
+      "symbol": "HSYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x89270A1931dE4405db73E4364F2882B6f010c32b",
+      "symbol": "KHCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x53b3dbA374bf852A18Bc38CEb620b9F68abe0aB0",
+      "symbol": "KRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF7e82Dd4B9556Fd71735767A41672022445a760B",
+      "symbol": "TRVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb07F6ED1496Aa9bb751Dc3cB901328Dc08A64ac4",
+      "symbol": "DISx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x98FaE910aB2959a6Ca8cc2e9849Bdb29371D0ce9",
+      "symbol": "WRFHDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAF072F109A2C173D822a4fe9af311A1B18F83d19",
+      "symbol": "TMOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3a02C5276e33CDa437e8E8E8b6473620125C9607",
+      "symbol": "TNGYIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xCF1f5bE54CfcF61A79A427C92835AC043266dECd",
+      "symbol": "TJXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x47Ee09a9B5C7c98EB2768b91596bcAA2ba9DD2B8",
+      "symbol": "TOSTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD722AcD6Fd5006EF303107cB12d5930Da1F41803",
+      "symbol": "TOLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe95ab205e333443D7970336D5fD827eF9eD97608",
+      "symbol": "TONXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfDDDb57878eF9D6f681Ec4381DCB626b9E69AC86",
+      "symbol": "TQQQx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3216A28C44d87aa5006Db1C4b13B422C7826df88",
+      "symbol": "TSCOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAbc594305788DBa7Bb999d2998B9d15CB90737e2",
+      "symbol": "TWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb25199De75C08d844582C1fEF7369E590cd60E94",
+      "symbol": "TDGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2bbE8C4f883CdA87d86e158203a8160282781CD1",
+      "symbol": "TRUx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x79E58E2f38DbD6AC8f8f41763B077cE80421737c",
+      "symbol": "TRMBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8098C0b552d1f2E7F06E8f01106c7D631e5d98e9",
+      "symbol": "TFCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9e3bf4Ecfc44EeDD624F26656B6736a3F093b073",
+      "symbol": "TSMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe1c691E2366C26Ec357444DAAdDe253FbED85d70",
+      "symbol": "TTMIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcde92f3B3EBAB6c58cBbE18628033375ce0785F2",
+      "symbol": "TWLOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x04EE5c38cEB66133f7ec01401a7673b6475E950d",
+      "symbol": "TWSTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7e9D62B888F808182347eB734F3d1d252D595aA5",
+      "symbol": "TYLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xABd1Dc87e0Ddd489Cd260d5455941e380391194f",
+      "symbol": "TSNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xaD987735FB5f2D7B26c7cfd3b34A2D19F4f3c8E0",
+      "symbol": "UHALx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEfF3B7E357EAc03669CC75cceb148a5B3e28e7Fd",
+      "symbol": "USBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdb9783Ca04bBD64fe2c6d7B9503A979b3DE30729",
+      "symbol": "UBERx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x17EbF5Aef19876885F25A1531Aa3b97c8CF75FFc",
+      "symbol": "UIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x75d1977456F92C423B5930EA2A1f3806aecF2Cc7",
+      "symbol": "UDRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF0a2BfeA902fDE8c3B83B017CECcDe39D5428d34",
+      "symbol": "ULSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf5d233A5727267B6B1a685E450A18f4DBc182efc",
+      "symbol": "ULTAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x515B52734277509F1FA66AdF671532428f18f4DD",
+      "symbol": "UNPx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdA1E4f408Ab7563fDdD342d40247913585c14BC0",
+      "symbol": "QUREx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xdD9B0DF2A2F17e16f7d5f9dA87c0C03429c2437c",
+      "symbol": "UALx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xF19423deA91acE37FbA0eDD46A521Be6330b791a",
+      "symbol": "UPSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x96d62c35816809a4E7575BbfE3F8587444B7B286",
+      "symbol": "URIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3526cB34011B9Bbc0Ff5e60Ee1dc9D04ea0cC09F",
+      "symbol": "UTHRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x167A6375DA1eFc4a5BE0f470E73eCEfd66245048",
+      "symbol": "UNHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x1a65a334918c39c00e5aD99EBe936c1bD681D95E",
+      "symbol": "Ux",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7f599E426C11B810Ea2bdd887A6b279B7FF45507",
+      "symbol": "UNMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6e790c576444d788D33a57423368e080bD04a788",
+      "symbol": "USFDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6Ee270D24B593F85863E95B6a7dd916A5957719f",
+      "symbol": "USARx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x93ec0EBcE4e49122E5B646a9c9Da877CA1330A8C",
+      "symbol": "VLOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x06A0138F8c3e5110fd98e34a4473Fb08F1304b87",
+      "symbol": "MOOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x3a62B4259E5C2E2314E254B2C79ebaF5E57e8Cf3",
+      "symbol": "GDXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8D512a03600981B8e86556fd5C0FbDd726Fe1821",
+      "symbol": "SMHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x238C2306b77a0C33fF609e72F89bf7e1323A9999",
+      "symbol": "NLRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xbD730E618bcD88C82dDeE52e10275CF2f88A4777",
+      "symbol": "VTIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9337a8f11f777cDAa310B5682b09b44Ed8bdcbAD",
+      "symbol": "VGKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6e0AAfB414B620e096B9F7Fe85625D3E5cE41d3F",
+      "symbol": "VUGx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xFfAE0B911CB2cb7B49FD75011D99D137C040A9eF",
+      "symbol": "VOOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x91Ea54a8A5426c0A0bEA55968Dd71abcE7b92751",
+      "symbol": "VXUSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x6d5edEEbBc6A4099Eb8bb289EB3b80D799f7b28C",
+      "symbol": "VTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5f07e31067e20D6F192128Bd3c4aaE64a8ab01dD",
+      "symbol": "VEEVx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x9959A8191F52cb51c0D059c85FE5F6e4bb0cD6e0",
+      "symbol": "VTRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2038669C36cd84ef022a5f9a4748556A334069f1",
+      "symbol": "VLTOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x767761d9Ed36E645F2F686b51FF851299bD942FF",
+      "symbol": "VRSNx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x5774036AE3118d02756a44dCe5058648FFA1059e",
+      "symbol": "VRSKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf793CBC8E167b25050DD9543f5AE429095AD60f9",
+      "symbol": "VZx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc2451449A633Dc7ff2020f30b5BA4887B7214eB6",
+      "symbol": "VRTXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0A62dB029ab8dc0B49b3E8159431728DbD23c7BF",
+      "symbol": "VRTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2333814F24BDc4AEF83d7E833FFdFF2327BB2086",
+      "symbol": "VTRSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc7866e01c8a929b5Dd5A1e67512B2d27Faa4d121",
+      "symbol": "VICIx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x44E49ddE02c954cD9B67923af7B1070412e8f34e",
+      "symbol": "VIDAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2029c6790263c5cBadC90A60D8fDb7f77ec86559",
+      "symbol": "VIKx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf7D9260F004283C386ba5706EE035561560Ffa97",
+      "symbol": "VNOMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7F8ba411ECBC0A135d669d5EaE5D15b0Ca0b0ea1",
+      "symbol": "SPCEx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2363FD1235C1B6d3A5088DdF8dF3A0b3A30C5293",
+      "symbol": "Vx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE1435b2f302edf42AE84a306a5e1948b270B6CCb",
+      "symbol": "BITXx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xd77C9D0Dc1c37a6Cc8e9a8c2CBa1AB44C39BDC65",
+      "symbol": "VMCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x97DE0627fb50BFc50C00eC14FF90F5c3A0ca3cA1",
+      "symbol": "WPCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xb8004fd562BDd80f515a9E9D439F7804041A9bD4",
+      "symbol": "WRBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xBBD6381E94B0C1e036ab50Ae3271256BCa0c264e",
+      "symbol": "GWWx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x7AEfc9965699fBea943e03264d96e50CD4A97b21",
+      "symbol": "WMTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xc435b3C41AE56d9Bc57b8525F4d522C978F168e8",
+      "symbol": "WBDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x221bC716e3d7125ca6D8840CA9Ac30D9ca3832D4",
+      "symbol": "WMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x72b203cfDBcB3E54B03A98d854296B659d9C0776",
+      "symbol": "WATx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf9D8f6A1Aa9d5620142e001c9B38Ca8b360d3838",
+      "symbol": "WSOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xe73CCffE6e8f07993c33b50Dd4f118089f67a342",
+      "symbol": "WTSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x142bF1f505fed39338897BC9f165A1dD505d9f55",
+      "symbol": "Wx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEf9bD8f13eC8A9C8d251f42fCEEE75044476654d",
+      "symbol": "WECx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xAAb7F231396D7DF9C51337a555FA07E3df02A42D",
+      "symbol": "WFCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x03aA4399Fd8764e9f1A225dBa90bbFDf5102b630",
+      "symbol": "WELLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4BA21679Bd21A09141cc1DCF53f2aE4BE8cd3203",
+      "symbol": "WCCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xACa636EBA69011582eB6d2077436dD9bac27dcD8",
+      "symbol": "WSTx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD2E60293f29Dde3815c16C664dE722029e96E03A",
+      "symbol": "WDCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xeA67Afca23aF029936D819892611a7F2cf1c0710",
+      "symbol": "WABx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xD49d9E668d5d4fB9153EF2c656c10a994D7D8C4b",
+      "symbol": "WYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xcfcF754EB66751842A9794a487438ad4Bf883fdD",
+      "symbol": "WHGROx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x361bAb925519Badaaa405F0B1CB9D7797e7F3b1E",
+      "symbol": "WHRFRx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8Fda985C834cB85D0f964c683cF6281f84BeA5f1",
+      "symbol": "WMBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x186A131049b945Fe8eF62ddC245d60634c9c935c",
+      "symbol": "WSMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE61c8B12dAC2FB289822Fc4c1bAAA36d285BC148",
+      "symbol": "WWDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x8537107b02089E42E6761774cEf2264Da2018768",
+      "symbol": "WDAYx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x00CAfD59CDc7b742b0Cd1Fc326Abb5D23bbAA966",
+      "symbol": "WUXIBx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x2b507fb27f0626BFaB890a5CfB6e2443F2Eeb814",
+      "symbol": "WXXDCx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xC5aea4A8Ce7C9F679BB32033c35EBeb9CC2623C5",
+      "symbol": "XELx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfb4f81f511b40b80996062032260A539E60aDFc0",
+      "symbol": "XIAOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0D28Fa38C17A04b96f6356508874622053B9AfD4",
+      "symbol": "XPOx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x0Ca6992eF0b684eA09D99DaE60ACcfa4A9f794a9",
+      "symbol": "XYLx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xf946c949D70E6fB9245b708176E9060E05Cffd30",
+      "symbol": "YUMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xEE891968A2755AB5dd4c785A10BeeB08B395811c",
+      "symbol": "ZBRAx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xB80bB881a830a48a21c567183fe7F90d7aF9248C",
+      "symbol": "ZHAOMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x4E2c81fBA553e60238c2f568D82Ad30E1774069A",
+      "symbol": "ZJGLDx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x004De17F31EeC9B7f601B662f234c6e484dA8F77",
+      "symbol": "ZBHx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xE15F68fA7199200677e652eB7799B0521401a3E9",
+      "symbol": "ZTSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0x979Ce3d15b845E7471A667338b7122e12ab66B52",
+      "symbol": "ZMx",
+      "decimals": 18,
+      "rail": "xstocks"
+    },
+    {
+      "chainId": 196,
+      "token": "0xfbdB13EcA3C94c538d79a1cC3F309966920fB85b",
+      "symbol": "ZSx",
+      "decimals": 18,
+      "rail": "xstocks"
+    }
+  ]
+}

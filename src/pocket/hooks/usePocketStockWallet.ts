@@ -1,3 +1,6 @@
+import {executeStockGiftFunding} from '../api/pocketStockGiftExecution'
+import {stockGiftFundingReview,prepareStockGiftSettlement} from '../api/pocketStockGiftSettlement'
+import type {StockGiftIntent} from '../api/pocketStockGiftIntent'
 import {validateXPayBankCall,type XPayBankPayment,type XPayBankResponse} from '../lib/pocketXPayBankClient'
 import usePocketEmbeddedWallet from './usePocketEmbeddedWallet'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -5,7 +8,7 @@ import { useSendTransaction, useWallets } from '@privy-io/react-auth'
 import { getAddress, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from 'viem'
 import { stockSwapRequest } from '../api/pocketStockSwapClient'
 import { validateStockSwap, type StockSwapQuote } from '../lib/pocketXStocksSwap'
-import { settleXPaySourceProof, hasStockSubmission, readStockAttempts, STOCK_ATTEMPTS_UPDATED, readStockLast, readStockPending, runStockSubmission, settleStockPending, type StockPending, type StockTradeStage } from '../lib/pocketStockSubmission'
+import { settleStockGiftProof, settleXPaySourceProof, hasStockSubmission, readStockAttempts, STOCK_ATTEMPTS_UPDATED, readStockLast, readStockPending, runStockSubmission, settleStockPending, type StockPending, type StockTradeStage } from '../lib/pocketStockSubmission'
 import { ensurePocketXLayerWallet } from '../lib/pocketStockWalletNetwork'
 import { registerStockNotifications } from '../api/pocketStockNotificationsClient'
 import usePocketStockBalances from './usePocketStockBalances'
@@ -186,5 +189,42 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       })
     }finally{inFlight.current=false;if(mounted.current)setBusy(false)}
   }
-  return { attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
+  const signGift=async(intent:StockGiftIntent)=>{
+    if(!wallet||!address||inFlight.current||hasStockSubmission(ownerKey))throw Error('Wait for your current wallet submission to be checked.')
+    const review=stockGiftFundingReview(intent,address),key=ownerKey
+    const prior=readStockAttempts(key).filter(r=>r.gift?.id===intent.id&&r.gift.operation===intent.kind)
+    if(prior.some(r=>r.status==='pending'))throw Error('This gift transaction is still being checked.')
+    const confirmed=prior.find(r=>r.status==='confirmed'&&r.gift?.attemptId===intent.attemptId)
+    if(confirmed)return confirmed.hash
+    const current=()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}
+    const submit=async(call:{to:Address;data:Hex;value:0n},operation:'approval'|'funding'|'claim'|'refund')=>{
+      current();await ensurePocketXLayerWallet(()=>walletRef.current,address,current);current();if(hasStockSubmission(key))throw Error('A wallet submission is still being checked.');submitted=true
+      return runStockSubmission({key,kind:operation==='approval'?'approval':'gift',gift:{id:intent.id,attemptId:intent.attemptId,operation},
+        send:()=>sendTransaction({chainId:196,from:address,to:call.to,data:call.data,value:0n},{address,uiOptions:{showWalletUIs:false}}),
+        ...(operation==='approval'?{wait:(hash:Hex)=>stockClient.waitForTransactionReceipt({hash,timeout:45000})}:{}),
+        onPending:next=>{if(scope.current===key)setPending(next)},onUncertain:value=>{if(scope.current===key)setUncertain(value)}})
+    }
+    let submitted=false
+    inFlight.current=true;setBusy(true)
+    try{
+      if(!takePocketPaymentApproval()){await requestPocketPaymentApproval();if(!takePocketPaymentApproval())throw Error('Payment approval expired.')}
+      current()
+      if(intent.kind==='funding')return await executeStockGiftFunding(review,{client:stockClient,assertCurrent:current,now:()=>BigInt(Math.floor(Date.now()/1000)),approve:async()=>{},submit})
+      const call=await prepareStockGiftSettlement(intent,address,stockClient);current();return await submit(call,intent.kind)
+    }catch(reason){
+      if(!submitted)throw Object.assign(reason instanceof Error?reason:new Error('Gift approval did not finish.'),{giftDefinitelyNotSubmitted:true})
+      throw reason
+    }finally{inFlight.current=false;if(mounted.current)setBusy(false)}
+  }
+  const recoverGiftFunding=async(id:string)=>{
+    if(hasStockSubmission(ownerKey))return {retryAllowed:false}
+    const records=readStockAttempts(ownerKey).filter(r=>r.gift?.id===id)
+    if(!records.length||records.some(r=>r.status==='pending'))return {retryAllowed:false}
+    const funding=records.filter(r=>r.gift?.operation==='funding')
+    return {retryAllowed:funding.length?funding.every(r=>r.status==='failed'):records.some(r=>r.gift?.operation==='approval')}
+  }
+  const reconcileGift=(id:string,operation:'funding'|'claim'|'refund',hash:Hex)=>{
+    settleStockGiftProof(ownerKey,id,operation,hash);setPending(readStockPending(ownerKey));setUncertain(!!localStorage.getItem('pocket.xstocks.signing:'+ownerKey))
+  }
+  return { signGift, recoverGiftFunding, reconcileGift, attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
 }

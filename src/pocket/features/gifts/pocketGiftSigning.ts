@@ -1,3 +1,4 @@
+import {multiGiftClaimTypedData} from './pocketMultiGift'
 ﻿import { type Address, type Hex, getAddress, isAddress, keccak256, encodeAbiParameters } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 
@@ -33,3 +34,5 @@ export function giftClaimTypedData(input: {chainId: number; escrow: Address; gif
 export async function signGiftClaim(secret: string, input: Parameters<typeof giftClaimTypedData>[0]) {
   return capabilityAccount(secret).signTypedData(giftClaimTypedData(input))
 }
+
+export async function signMultiGiftClaim(secret:string,input:Parameters<typeof multiGiftClaimTypedData>[0]){return capabilityAccount(secret).signTypedData(multiGiftClaimTypedData(input))}

@@ -1,8 +1,10 @@
-﻿export const GIFT_NETWORKS = ['base', 'arbitrum', 'arc', 'polygon', 'ethereum', 'solana'] as const
+import {parseUnits} from 'viem'
+import type {MultiGiftAsset} from './pocketMultiGift'
+﻿export const GIFT_NETWORKS = ['base', 'arbitrum', 'arc', 'polygon', 'ethereum', 'solana', 'xlayer'] as const
 export type GiftNetwork = typeof GIFT_NETWORKS[number]
-export type GiftDraft = { amount: string; network: GiftNetwork; message: string; claims: number }
+export type GiftDraft = { asset?:MultiGiftAsset; amount: string; network: GiftNetwork; message: string; claims: number }
 export type GiftStatus = 'funding' | 'available' | 'claiming' | 'claimed' | 'expired' | 'refunding' | 'refunded'
-export type GiftView = { sender: string; amount: string; network: GiftNetwork; message: string; status: GiftStatus }
+export type GiftView = { asset?:MultiGiftAsset; maxClaims?:number; remainingClaims?:number; sender: string; amount: string; network: GiftNetwork; message: string; status: GiftStatus }
 
 // Six-decimal integer accounting. No float rounding or implicit amount correction.
 export function giftUnits(amount: string): bigint {
@@ -13,7 +15,8 @@ export function giftUnits(amount: string): bigint {
   return units
 }
 export function validateGiftDraft(draft: GiftDraft) {
-  const total = giftUnits(draft.amount)
+  const total = giftAssetUnits(draft.amount,draft.asset)
+  if(draft.network==='xlayer'&&draft.asset?.rail!=='xstocks'||draft.asset?.rail==='xstocks'&&draft.network!=='xlayer')throw Error('Gift asset and network do not match.')
   if (!GIFT_NETWORKS.includes(draft.network)) throw Error('Choose a supported network.')
   if (draft.message.length > 160) throw Error('Keep your message within 160 characters.')
   if (!Number.isSafeInteger(draft.claims) || draft.claims < 1 || draft.claims > 1000) throw Error('Choose between 1 and 1,000 recipients.')
@@ -44,4 +47,10 @@ export function giftStateCopy(status: GiftStatus) {
     claimed: 'This gift has already been claimed.', expired: 'This gift has expired.',
     refunding: 'This gift is being returned to its sender.', refunded: 'This gift was returned to its sender.',
   }[status]
+}
+
+export function giftAssetUnits(amount:string,asset?:MultiGiftAsset):bigint{
+ if(!asset)return giftUnits(amount)
+ if(asset.rail!=='xstocks'||asset.chainId!==196||!/^0x[0-9a-fA-F]{40}$/.test(asset.token)||/^0x0{40}$/.test(asset.token)||!Number.isInteger(asset.decimals)||asset.decimals<0||asset.decimals>36||!asset.symbol||! /^(?:0|[1-9][0-9]{0,38})(?:\.[0-9]+)?$/.test(amount)||(amount.split('.')[1]?.length||0)>asset.decimals)throw Error('Invalid stock gift quantity.')
+ const units=parseUnits(amount,asset.decimals);if(units<=0n||units>=(1n<<256n))throw Error('Invalid stock gift quantity.');return units
 }

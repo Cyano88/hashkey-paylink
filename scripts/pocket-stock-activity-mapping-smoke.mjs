@@ -7,3 +7,7 @@ const transfer={token:'fixture',symbol:'NVDAx',amount:'0.01',from:'sender',to:'r
 const inbox={notices:[{id:'deposit',hash:'deposit-hash',at:1,transfer},{id:'request-transfer',hash:'request-hash',at:2,transfer}],requests:[{id:'paid-request',txHash:'request-hash',status:'paid',direction:'outgoing',symbol:'NVDAx',amount:'0.01',at:2,senderPocketId:'1',payerPocketId:'2'}]}
 const rows=stockActivityRows(inbox,[],'recipient');assert.equal(rows.length,2);assert.equal(rows[0].direction,'in');assert.equal(rows[0].memo,'NVDAx received');assert.equal(rows[1].source,'request');assert.equal(rows[1].paycrestStatus,'paid');assert.equal(rows[1].direction,'in');assert.equal(rows.filter(r=>r.txHash==='request-hash').length,1)
 console.log('PASS: deposit remains incoming, paid request retains classification and its transfer is not duplicated')
+
+const gift={eventId:'gift',txHash:'deposit-hash',chain:'xlayer',source:'gift',assetSymbol:'NVDAx',amount:'0.01',direction:'in'}
+const giftRows=stockActivityRows(inbox,[],'recipient',[],[gift]);assert.equal(giftRows.filter(r=>r.txHash==='deposit-hash').length,1);assert.equal(giftRows.find(r=>r.txHash==='deposit-hash').source,'gift')
+console.log('PASS stock gift receipt suppresses its underlying token transfer without affecting other activity.')

@@ -1,12 +1,12 @@
 import PocketFlowHeader from '../../components/PocketFlowHeader'
 import {useEffect,useRef,useState} from 'react'
-import type {CircleEvmEmailSession} from '../../../lib/circleEvmEmailWallet'
+import type {GiftWalletSession} from '../../api/pocketGiftsClient'
 import {readPocketGift} from '../../api/pocketGiftsClient'
 import {PocketGiftLanding} from './PocketGiftExperience'
 import PocketGiftClaimFlow from './PocketGiftClaimFlow'
 import {parseGiftLink,type GiftView} from './pocketGift'
 
-type Props={inApp?:boolean;onDone?():void;onBack?():void;onOpenApp?():void;link:string;identityKey:string;authenticated:boolean;signIn():void;getAccessToken():Promise<string|null>;getSession():Promise<CircleEvmEmailSession>}
+type Props={inApp?:boolean;onDone?():void;onBack?():void;onOpenApp?():void;link:string;identityKey:string;authenticated:boolean;signIn():void;getAccessToken():Promise<string|null>;getSession():Promise<GiftWalletSession>}
 /** Integration surface. Capability stays in memory/URL; never localStorage or analytics. */
 export default function PocketGiftRedeem(props:Props){
  return <Redeem key={props.link} {...props}/>
