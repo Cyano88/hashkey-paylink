@@ -47,3 +47,21 @@ stored buyer and seller wallets belong to distinct enabled EMAIL users, but did
 not expose owner email addresses. No production link was changed. The local page
 now displays and records the returned Arc identity on a mismatch so it can be
 compared before any reconciliation or activation.
+
+## Confirmed mismatch cause and local fix
+
+Provider reads confirmed that the stored wallet and the login-returned wallet
+have the same Circle user ID. The stored wallet has the Pocket replacement
+reference prefix; the older returned wallet does not. The shared `listWallets`
+route unconditionally filters replacement references, explaining their absence.
+The database link is preserved.
+
+The local server now reads Circle's wallet inventory using the user's session
+token and the same live operator key as production, then requires the exact
+stored wallet through the existing strict selector. The operator credential is
+loaded into server memory from the verified Render service; it is never sent to
+the browser, logged or persisted. Other actions still use the existing production
+API. Generic discovery filters and production migration controls are unchanged.
+The four focused provider/selection tests cover authenticated read headers,
+replacement selection, missing sessions, provider rejection and wrong-wallet
+rejection. End-to-end email confirmation still requires user interaction.

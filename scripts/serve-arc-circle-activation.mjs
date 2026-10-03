@@ -6,6 +6,7 @@ import {build} from 'vite'
 import {nodePolyfills} from 'vite-plugin-node-polyfills'
 import {createPublicClient,http} from 'viem'
 import {selectActivationWallet} from './arc-circle-activation-selection.mjs'
+import {loadActivationCircleKey,readActivationCircleWallets} from './arc-circle-activation-provider.mjs'
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),host='127.0.0.1:4390',origin='http://'+host
 const record=JSON.parse(readFileSync(resolve(root,'.codex-temp/arc-circle-canary-wallets.json'),'utf8'))
@@ -13,6 +14,7 @@ const seller=record.wallets.find(wallet=>wallet.role==='seller')
 if(!seller||seller.blockchain!=='ARC'||seller.accountType!=='SCA')throw Error('Verified seller Circle wallet is required.')
 const journal=resolve(root,'.codex-temp/arc-circle-seller-activation.json')
 const expected={email:seller.email,walletId:seller.walletId,address:seller.address}
+const circleKey=await loadActivationCircleKey()
 const upstream='https://hashkey-paylink.onrender.com'
 const client=createPublicClient({transport:http('https://rpc.mainnet.arc.io',{timeout:15000,retryCount:1})})
 const bundle=await build({configFile:false,root,envFile:false,plugins:[nodePolyfills({globals:{Buffer:true,global:true,process:true},protocolImports:true})],define:{'import.meta.env':'{}'},logLevel:'error',build:{write:false,minify:true,lib:{entry:resolve(root,'scripts/arc-circle-activation-client.js'),name:'CircleActivation',formats:['iife']},rollupOptions:{output:{inlineDynamicImports:true}}}})
@@ -57,9 +59,11 @@ createServer(async(req,res)=>{
    try{writeFileSync(journal,JSON.stringify({status:'requesting',createdAt:new Date().toISOString(),walletId:seller.walletId,address:seller.address}),{flag:'wx'})}
    catch{reply(409,{ok:false,error:'Recover the existing activation request.'});return}
   }
-  const response=await fetch(upstream+'/api/circle-solana-email',{method:'POST',headers:{'Content-Type':'application/json'},body,signal:AbortSignal.timeout(30000)})
-  const data=await response.json()
-  if(request.action==='listWallets'&&response.ok&&data.ok!==false){
+  // Generic discovery hides Pocket replacement wallets, including activated
+  // linked wallets. Read the authenticated inventory here without that filter.
+  const response=request.action==='listWallets'?null:await fetch(upstream+'/api/circle-solana-email',{method:'POST',headers:{'Content-Type':'application/json'},body,signal:AbortSignal.timeout(30000)})
+  const data=response?await response.json():await readActivationCircleWallets(circleKey,request.userToken)
+  if(request.action==='listWallets'&&data.ok!==false){
    const selected=selectActivationWallet(data,expected)
    // Retain match diagnostics and Arc wallet identity metadata only, never
    // authentication material or full provider responses.
