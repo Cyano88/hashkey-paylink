@@ -5,7 +5,7 @@ import {formatUnits,parseUnits} from 'viem'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {CheckoutTrustLine,HashPayLinkCheckoutBrand} from '../components/CheckoutChrome'
 import {connectCircleEvmEmailWallet,executeCircleEvmEmailChallenge,type CircleEvmEmailSession} from '../lib/circleEvmEmailWallet'
-import {linkPocketWallet} from '../pocket/api/pocketWalletLinkClient'
+import {resolveArcTradeWalletSession} from '../lib/arcTradeWalletSession'
 import {boundedCheckoutRequest} from '../lib/xstocksAgreement/boundedRequest'
 import {tradeReturnUrl} from '../lib/xstocksAgreement/tradeReturn'
 import {TRADE_ACTION_LABELS,type TradeXLayerAction} from '../lib/xstocksAgreement/protocol'
@@ -69,9 +69,9 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
     const walletSession=await connectCircleEvmEmailWallet(email,'arc')
     if(parent.aborted)return
     const token=await getAccessToken();if(!token||parent.aborted)throw Error('Sign in again to continue.')
-    await linkPocketWallet({accessToken:token,network:'arc',circleUserToken:walletSession.userToken,wallet:walletSession.wallet})
+    const resolved=await resolveArcTradeWalletSession(walletSession,token,()=>!parent.aborted)
     if(parent.aborted)return
-    setSession(walletSession);await refresh(walletSession)
+    setSession(resolved);await refresh(resolved)
   }
   async function execute(operation:TradeXLayerAction,resume?:Execution){
     if(!session)throw Error('Connect your Arc wallet first.')
