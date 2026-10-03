@@ -7,7 +7,7 @@ export default function PocketMoveLanding() {
         <ArrowUpDown className="h-5 w-5" />
       </span>
       <h2 className="mt-4 text-lg font-black tracking-tight text-gray-950 dark:text-white">Choose how money moves</h2>
-      <p className="mt-2 max-w-xs text-sm leading-6 text-gray-500 dark:text-gray-400">Select USDC, Bank, or POS from the pinned switch above.</p>
+
     </div>
   )
 }

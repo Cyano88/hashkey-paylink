@@ -350,7 +350,7 @@ export default function PocketHomeControls({
             onConfirm={onBridge}
             labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Confirm move', pending: 'Preparing move', submitted: 'Move processing', successful: 'Sent' }}
           />
-          <p className="text-center text-[10px] leading-4 text-gray-500 dark:text-gray-400">Native USDC via Circle CCTP. Destination gas is handled by Circle; source network gas may apply.</p>
+          <p className="text-center text-[10px] leading-4 text-gray-500 dark:text-gray-400">Move USDC between networks. A fee may apply on the sending network.</p>
           {bridgeNotice && <p className={cn('text-center text-xs font-semibold', bridgeStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bridgeNotice}</p>}
           {bridgeError && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{bridgeError}</p>}
         </div>
@@ -383,7 +383,7 @@ export default function PocketHomeControls({
             <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-4 text-center dark:border-[#262626] dark:bg-white/[0.025]">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-500 dark:text-gray-400 shadow-sm dark:bg-white/[0.07]"><Activity className="h-[18px] w-[18px]" /></span>
               <p className="mt-3 text-sm font-bold text-gray-700 dark:text-gray-200">No wallet activity yet</p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Confirmed USDC deposits and sends will appear here and remain after refresh.</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Your USDC transfers appear here.</p>
             </div>
           ) : <div className="flex min-h-36 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-500 dark:text-gray-400" /></div>}
         </div>

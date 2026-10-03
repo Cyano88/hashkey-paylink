@@ -55,7 +55,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     if(!outstanding.length)return
     let cancelled = false, checking = false
     const check = async () => {
-      if (inFlight.current || checking || document.visibilityState === 'hidden') return
+      if (cancelled || inFlight.current || checking || document.visibilityState === 'hidden' || navigator.onLine === false) return
       checking = true
       try {
         for(const record of outstanding){try{const receipt=await stockClient.getTransactionReceipt({hash:record.hash});if(cancelled)return;const settled=settleStockPending(record,receipt.status==='success');setPending(current=>current?.hash===record.hash?settled:current);void refresh().catch(() => undefined)}catch{/* Retain unknown outcome. */}}
@@ -63,7 +63,8 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     }
     void check()
     const timer = window.setInterval(check, 15000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    window.addEventListener('focus', check); window.addEventListener('online', check); document.addEventListener('visibilitychange', check)
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', check); window.removeEventListener('online', check); document.removeEventListener('visibilitychange', check) }
   }, [pending?.hash, pending?.status, ownerKey, refresh,attempts])
   const connect = async () => {
     if(!authenticated||busy||setup.busy)return

@@ -78,7 +78,7 @@ function SignInCard() {
         <span>Sign in to Bills</span>
         <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5"><ArrowRight className="h-4 w-4" /></span>
       </PrivyConnectButton>
-      <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">Bill history, delivery status, and support stay connected to your Pocket account.</p>
+
     </div>
   )
 }
@@ -284,7 +284,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {isVerifiedBill && (
               <>
                 {!bills.verification ? (
-                  bills.verifyBusy ? <PocketLoadingField label={view === 'tv' ? 'Resolving smartcard' : 'Resolving meter'} /> : <p className="text-center text-[10px] font-medium text-gray-500 dark:text-gray-400">The customer name resolves automatically when the details are complete.</p>
+                  bills.verifyBusy ? <PocketLoadingField label={view === 'tv' ? 'Resolving smartcard' : 'Resolving meter'} /> : <p className="text-center text-[10px] font-medium text-gray-500 dark:text-gray-400">We�ll check the customer name before payment.</p>
                 ) : (
                   <PocketResolvedNameRow label="Customer name" name={bills.environment === 'sandbox' ? `Test ${view === 'tv' ? 'smartcard' : 'meter'}` : bills.verification.customerName || `${view === 'tv' ? 'Smartcard' : 'Meter'} confirmed`} detail={bills.environment !== 'sandbox' ? bills.verification.customerAddress : undefined} />
                 )}

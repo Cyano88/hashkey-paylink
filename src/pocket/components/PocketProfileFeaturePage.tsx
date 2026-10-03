@@ -79,7 +79,7 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
         <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Bank payout</p>
         <p className='mt-2 text-2xl font-black'>{new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)} USDC</p>
         <PocketLocalEquivalent amount={bank.maxUsdc} />
-        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Provider capacity per payout. Your verification allowance also applies.</p>
+        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Per-transfer limit. Your verification limit also applies.</p>
       </article>}
       <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={<>Up to {display.usdc(airtime.perPaymentNgn)} per payment</>} />
       <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />

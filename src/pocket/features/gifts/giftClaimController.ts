@@ -29,7 +29,7 @@ export function createGiftClaimFlow<Approval>(deps: {
         publish({ ...state, phase: 'unconfirmed', message: approvalInterrupted ? 'Wallet approval did not finish. Checking your gift automatically.' : 'Confirmation pending. This updates automatically.' })
       }
     } catch {
-      publish({ ...state, phase: 'unconfirmed', message: 'Reconnecting to confirm your gift automatically.' })
+      publish({ ...state, phase: 'unconfirmed', message: 'Could not check your claim. Retrying.' })
     }
   }
   return {

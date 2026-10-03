@@ -99,7 +99,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
       </div>
       <PocketStockTradeProgress progress={progress} />
       <button type="button" className={button} disabled={reconnectWallet || busy || quoting || !current || wallet.busy || wallet.uncertain || wallet.pending?.status === 'pending'} onClick={confirm}>{progress.stage === 'completed' ? 'Completed' : progress.stage === 'processing' || progress.stage === 'confirming' ? 'Processing...' : wallet.pending?.status === 'pending' ? 'Confirming...' : mode === 'buy' ? 'Buy ' + tokenOut.symbol : mode === 'sell' ? 'Sell ' + tokenIn.symbol : 'Swap ' + tokenIn.symbol + ' for ' + tokenOut.symbol}</button>
-    {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs text-amber-600">A submission needs review. Check Activity before another trade.</p>}
+    {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs text-amber-600">Check your pending trade in Activity before trading again.</p>}
     {reconnectWallet && <button type="button" onClick={() => window.location.reload()} className="mt-3 min-h-11 w-full text-xs font-bold">Reload Pocket</button>}
     {error && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
   </section>

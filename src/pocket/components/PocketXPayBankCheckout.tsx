@@ -137,7 +137,7 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
   <p className="text-sm font-semibold">{merchantName}</p>
   <PocketArcTokenPicker label="Pay with" value={token} excluded="" tokens={tokens} networkLabel="X Layer" clean disabled={busy||Boolean(payment&&payment.state!=='quoted')} onChange={t=>{setToken(t.address);requestKey.current=crypto.randomUUID();setPayment(null)}} discover={async()=>{throw Error('Choose an asset accepted by this merchant.')}}/>
   <label className="block text-xs text-gray-500">Amount in {currency}<input aria-label={'Amount in '+currency} className="mt-2 min-h-12 w-full rounded-xl bg-gray-100 px-3 text-base outline-none dark:bg-[#171717]" inputMode="decimal" value={amount} disabled={busy||Boolean(payment&&payment.state!=='quoted')} onChange={e=>{if(/^\d*(?:\.\d{0,2})?$/.test(e.target.value)){setAmount(e.target.value);requestKey.current=crypto.randomUUID();setPayment(null)}}}/></label>
-  <p className="text-xs leading-5 text-gray-500">Your selected asset is converted to USDC and bridged to Base for the merchant's bank payment. Any unused USDC stays in your wallet.</p>
+  <p className="text-xs leading-5 text-gray-500">Your asset is converted to USDC to pay the merchant�s bank account. Unused USDC stays in your wallet.</p>
   <button className={cta} disabled={busy||loading||!historyChecked||!wallet.address||(!payment&&(!amount||Boolean(resumeId)))} onClick={()=>payment?setSheet(true):void prepare()}>{payment?'Continue payment':'Continue'}</button>
   {!loading&&!historyChecked&&<button className="min-h-11 w-full text-xs font-semibold" onClick={()=>setReload(n=>n+1)}>Try again</button>}
   {error&&!sheet&&<p role="alert" className="text-xs text-red-500">{error}</p>}
