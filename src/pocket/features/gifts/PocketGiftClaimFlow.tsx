@@ -17,7 +17,7 @@ export default function PocketGiftClaimFlow(props:Props){
 }
 function Claim({link,gift,identityKey,getAccessToken,getSession,onDone,onConfirmed,onSuccessDone}:Props){
  const callbacks=useRef({getAccessToken,getSession,onConfirmed});callbacks.current={getAccessToken,getSession,onConfirmed}
- const [progress,setProgress]=useState<GiftClaimProgress>({phase:'ready',message:''})
+ const [progress,setProgress]=useState<GiftClaimProgress>({phase:'checking',message:'Checking your claim.'})
  const [flow,setFlow]=useState<ReturnType<typeof createGiftClaimFlow<GiftApproval>>|null>(null)
  useEffect(()=>{
   const parsed=parseGiftLink(link)
@@ -29,11 +29,11 @@ function Claim({link,gift,identityKey,getAccessToken,getSession,onDone,onConfirm
   const controller=createGiftClaimFlow({
    prepare:async()=>{session=await callbacks.current.getSession();return preparePocketGiftClaim({link,session,accessToken:await token()})},
    approve:async approval=>{try{sessionStorage.setItem(key,'1')}catch{};return approvePocketGift({approval,session:session!})},
-   status:async hash=>{const result=await readPocketGiftClaimStatus({id:parsed.id,accessToken:await token(),transactionHash:hash});if(result.status==='confirmed'&&result.transactionHash&&gift.asset){const stockSession=session||await callbacks.current.getSession();if(stockSession.chain==='xlayer')stockSession.reconcile(parsed.id,'claim',result.transactionHash)}return result},
+   status:async hash=>{if(!session)session=await callbacks.current.getSession();const result=await readPocketGiftClaimStatus({id:parsed.id,accessToken:await token(),transactionHash:hash});if(result.status==='confirmed'&&result.transactionHash&&gift.asset){const stockSession=session||await callbacks.current.getSession();if(stockSession.chain==='xlayer')stockSession.reconcile(parsed.id,'claim',result.transactionHash)}return result},
    changed:next=>{setProgress(next);if(next.phase==='confirmed')callbacks.current.onConfirmed?.();if(next.phase==='confirmed'||next.phase==='unavailable'||next.phase==='ready'){try{sessionStorage.removeItem(key)}catch{}}},
   })
   setFlow(controller)
-  try{if(sessionStorage.getItem(key))void controller.recheck()}catch{}
+  void controller.recheck()
   return()=>controller.dispose()
  },[link,identityKey])
  useGiftAutoRefresh(progress.phase==='unconfirmed',async()=>{await flow?.refresh()})

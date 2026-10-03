@@ -199,3 +199,17 @@ for(const unknown of [false,true]){
  if(results[0].status==='fulfilled')assert.equal(f.calls.length,0)
 }
 console.log('PASS gift draft deletion: owner-only, idempotent tombstone, no replay, funded/pending/unknown protected, atomic funding race.')
+{
+ const f=setup(),created=await f.service.create(f.alice,f.input),id=created.gift.id;f.setState('available')
+ assert.equal((await f.service.claimStatus(f.alice,id)).status,'creator')
+ await assert.rejects(()=>f.service.claimDetails(f.alice,id),/own gift/)
+ await assert.rejects(()=>f.service.authorize(f.alice,id,'claim','fixture'),/own gift/)
+ const originalWallet=f.deps.wallet;f.deps.wallet=async user=>user==='alias'?{id:'alias-wallet',address:addr(4)}:originalWallet(user)
+ await assert.rejects(()=>f.service.claimDetails({userId:'alias',handle:'alias'},id),/own gift/)
+ assert.equal((await f.service.claimStatus(f.bob,id)).retryAllowed,true)
+ const record=f.rows.get(id);record.version=2;record.maxClaims=2;record.amountPerClaim='50';record.claims={};record.settlements={[hash(1)]:{recipient:addr(5),hash:hash(7),at:Date.now()}};record.claimedCount=1
+ f.deps.accountId=()=>hash(2);const observe=f.deps.observe;f.deps.observe=async()=>({...await observe(),claimedCount:1})
+ assert.equal((await f.service.claimStatus(f.bob,id)).transactionHash,hash(7),'same wallet under another account is already settled')
+ await assert.rejects(()=>f.service.claimDetails(f.bob,id),/already claimed/)
+}
+console.log('PASS creator account and sender-wallet aliases cannot claim; returning recipients retain confirmed status while other slots remain.')

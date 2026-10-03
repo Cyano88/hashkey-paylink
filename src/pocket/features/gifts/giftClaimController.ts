@@ -2,7 +2,7 @@ import type { Hex } from 'viem'
 
 export type GiftClaimPhase = 'ready' | 'preparing' | 'approval' | 'checking' | 'unconfirmed' | 'confirmed' | 'unavailable'
 export type GiftClaimProgress = { phase: GiftClaimPhase; message: string; transactionHash?: Hex }
-export type GiftClaimResult = { status: 'confirmed' | 'claimed_elsewhere' | 'confirming' | 'funding' | 'available' | 'expired' | 'refunded'; transactionHash?: Hex; retryAllowed?: boolean }
+export type GiftClaimResult = { status: 'creator' | 'confirmed' | 'claimed_elsewhere' | 'confirming' | 'funding' | 'available' | 'expired' | 'refunded'; transactionHash?: Hex; retryAllowed?: boolean }
 
 /** One controller per gift and authenticated identity. Never automatically repeats approval. */
 export function createGiftClaimFlow<Approval>(deps: {
@@ -21,10 +21,10 @@ export function createGiftClaimFlow<Approval>(deps: {
       const result = await deps.status(state.transactionHash)
       if (result.status === 'confirmed' && /^0x[0-9a-fA-F]{64}$/.test(result.transactionHash || '')) {
         publish({ phase: 'confirmed', message: 'Gift claimed', transactionHash: result.transactionHash })
-      } else if (['claimed_elsewhere', 'expired', 'refunded'].includes(result.status)) {
-        publish({ phase: 'unavailable', message: result.status === 'claimed_elsewhere' ? 'This gift has already been claimed.' : result.status === 'expired' ? 'This gift has expired.' : 'This gift was returned to its sender.' })
+      } else if (['creator', 'claimed_elsewhere', 'expired', 'refunded'].includes(result.status)) {
+        publish({ phase: 'unavailable', message: result.status === 'creator' ? 'You cannot claim your own gift.' : result.status === 'claimed_elsewhere' ? 'This gift has already been claimed.' : result.status === 'expired' ? 'This gift has expired.' : 'This gift was returned to its sender.' })
       } else if (result.status === 'available' && result.retryAllowed === true) {
-        publish({ phase: 'ready', message: 'Your previous approval expired. You can claim again.' })
+        publish({ phase: 'ready', message: approvalInterrupted ? 'Your previous approval expired. You can claim again.' : '' })
       } else {
         publish({ ...state, phase: 'unconfirmed', message: approvalInterrupted ? 'Wallet approval did not finish. Checking your gift automatically.' : 'Confirmation pending. This updates automatically.' })
       }
