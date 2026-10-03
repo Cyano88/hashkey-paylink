@@ -1,4 +1,4 @@
-﻿import {giftAssetUnits} from './pocketGift'
+import {giftAssetUnits} from './pocketGift'
 import {formatUnits} from 'viem'
 import type {SavedGiftDraft} from './giftDraftVault'
 import type {GiftApproval} from '../../api/pocketGiftsClient'
@@ -14,7 +14,7 @@ export function createGiftFundingFlow(deps:{draft:SavedGiftDraft;save(draft:Save
   try{const result=await deps.status(draft.giftId);if(!active)return
    if(['available','claimed','expired','refunded','expired_unfunded'].includes(result))set({...state,phase:result as GiftFundingPhase,message:result==='expired_unfunded'?'This draft expired without funding. Create a new gift.':result==='available'?'Your gift is ready.':result==='claimed'?'Gift claimed.':result==='refunded'?'Gift refunded.':'Gift expired.'})
    else set({...state,phase:draft.approvalStarted?'unconfirmed':'review',message:draft.approvalStarted?'Confirmation pending. This updates automatically.':''})
-  }catch{set({...state,phase:'unconfirmed',message:'Your gift is saved. Reconnecting automatically.'})}
+  }catch{set({...state,phase:'unconfirmed',message:draft.approvalStarted?'Confirmation unavailable. Retrying.':'Could not check this draft. Retrying.'})}
  }
  return {get state(){return state},get draft(){return draft},async refresh(){
   if(!active||locked||state.phase!=='unconfirmed')return;locked=true
@@ -37,6 +37,6 @@ export function createGiftFundingFlow(deps:{draft:SavedGiftDraft;save(draft:Save
   if(!active||locked||state.phase!=='expired'||!draft.giftId||!deps.prepareRefund)return;locked=true
   try{set({...state,phase:'preparing',message:'Preparing your refund.'});await deps.security();if(!active)return;const approval=await deps.prepareRefund(draft.giftId);if(!active)return;set({...state,phase:'approval',message:'Confirm in your wallet.'});await deps.approve(approval);if(active)await status()}
   catch{await status()}finally{locked=false}
- },async recheck(){if(!active||locked)return;locked=true;try{await status();if(!active||state.phase!=='unconfirmed')return;if(draft.giftId&&draft.approvalStarted&&deps.recoverFunding){const recovered=await deps.recoverFunding(draft.giftId);if(!active)return;if(recovered.retryAllowed){const next={...draft,approvalStarted:false};await deps.save(next);draft=next}}await status()}catch{set({...state,phase:'unconfirmed',message:'Your gift is saved. Reconnecting automatically.'})}finally{locked=false}}}
+ },async recheck(){if(!active||locked)return;locked=true;try{await status();if(!active||state.phase!=='unconfirmed')return;if(draft.giftId&&draft.approvalStarted&&deps.recoverFunding){const recovered=await deps.recoverFunding(draft.giftId);if(!active)return;if(recovered.retryAllowed){const next={...draft,approvalStarted:false};await deps.save(next);draft=next}}await status()}catch{set({...state,phase:'unconfirmed',message:draft.approvalStarted?'Confirmation unavailable. Retrying.':'Could not check this draft. Retrying.'})}finally{locked=false}}}
 }
 export const giftUsdc=(units:string)=>formatUnits(BigInt(units),6)+' USDC'

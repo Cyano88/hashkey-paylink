@@ -15,3 +15,13 @@ await assert.rejects(()=>observeMultiGift({...rpc,readContract:async()=>{contrac
 assert.equal(contractReads,0,'orphaned cached receipts must be rejected before processing current state')
 await assert.rejects(()=>observeMultiGift(rpc,{...record,evidenceScanHash:undefined}),/evidence changed/)
 console.log('PASS multi-gift release preflight and cached evidence reorg guard: chain, code, treasury, EOA authority, catalogue, precision, fee, limits, confirmation depth and fail-closed cursor ancestry.')
+let giftStatus=0,logCalls=0
+const funded={version:2,deployment:d,giftId:hash(8),senderAddress:address(4),claimSigner:address(5),amountPerClaim:'1',maxClaims:2,expiresAt:'1000',feeUnits:'5000000000000000'}
+const observerRpc={...rpc,getBlockNumber:async()=>5001n,readContract:async input=>input.functionName==='gifts'?[funded.senderAddress,d.token,funded.claimSigner,1000000000000000000n,2,0,1000n,giftStatus]:rpc.readContract(input),getLogs:async({fromBlock,toBlock})=>{logCalls++;assert.ok(toBlock-fromBlock<100n,'X Layer log windows must contain at most 100 blocks');return []}}
+const absent=await observeMultiGift(observerRpc,funded)
+assert.equal(absent.state,'unfunded');assert.equal(absent.evidenceScanBlock,'5000');assert.equal(logCalls,0)
+giftStatus=1
+const active=await observeMultiGift(observerRpc,funded)
+assert.equal(active.state,'available');assert.equal(active.evidenceScanBlock,'100');assert.equal(logCalls,3)
+await assert.rejects(()=>observeMultiGift({...observerRpc,getBlock:async()=>({hash:hash(5),timestamp:100n})},{...funded,evidenceScanBlock:'5000',evidenceScanHash:hash(4)}),/evidence changed/)
+console.log('PASS unfunded cursor uses confirmed state without log scans; funded X Layer scans respect 100-block RPC limit.')

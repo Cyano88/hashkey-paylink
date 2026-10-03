@@ -1,4 +1,4 @@
-﻿import {keccak256,parseAbi,parseAbiItem,type PublicClient,type Hex} from 'viem'
+import {keccak256,parseAbi,parseAbiItem,type PublicClient,type Hex} from 'viem'
 import {GiftError,type GiftRecord,type GiftObservation} from './types.js'
 import {giftAssetUnits} from '../../../src/pocket/features/gifts/pocketGift.js'
 const abi=parseAbi(['function gifts(bytes32) view returns(address sender,address token,address claimSigner,uint128 amountPerClaim,uint32 maxClaims,uint32 claimed,uint64 expiresAt,uint8 status)','function treasury() view returns(address)','function claimAuthority() view returns(address)','function supportedToken(address) view returns(bool)','function PLATFORM_FEE_BPS() view returns(uint256)'])
@@ -16,7 +16,10 @@ export async function observeMultiGift(client:PublicClient,r:GiftRecord):Promise
  if(!code||keccak256(code)!==d.runtimeHash||!same(treasury,d.treasury)||!same(authority,d.claimAuthority)||!supported||fee!==25n)throw new GiftError(503,'Gift deployment verification failed.')
  const [sender,token,signer,per,count,claimed,expiry,status]=gift
  if(status>3||status!==0&&(!same(sender,r.senderAddress)||!same(token,d.token)||!same(signer,r.claimSigner)||per!==giftAssetUnits(r.amountPerClaim!,r.deployment.asset)||count!==r.maxClaims||claimed>count||expiry!==BigInt(r.expiresAt)))throw new GiftError(503,'Gift does not match its funded details.')
- const start=r.evidenceScanBlock?BigInt(r.evidenceScanBlock)+1n:BigInt(d.deploymentBlock),fromBlock=start>height?height:start,toBlock=fromBlock+1999n<height?fromBlock+1999n:height
+ // An absent gift has no prior events: this contract never resets a gift to status zero.
+ if(status===0){if(!block.hash||(await client.getBlock({blockNumber:height})).hash!==block.hash)throw new GiftError(503,'Gift confirmation changed.');return {state:'unfunded',blockNumber:height,blockHash:block.hash,timestamp:block.timestamp,evidenceScanBlock:String(height),evidenceScanHash:block.hash,claimedCount:0,settlements:{},refundUnits:'0'}}
+ const span=d.network==='xlayer'?99n:1999n
+ const start=r.evidenceScanBlock?BigInt(r.evidenceScanBlock)+1n:BigInt(d.deploymentBlock),fromBlock=start>height?height:start,toBlock=fromBlock+span<height?fromBlock+span:height
  const fundingEvent=parseAbiItem('event GiftFunded(bytes32 indexed giftId,address indexed sender,address indexed token,address claimSigner,uint128 amountPerClaim,uint32 maxClaims,uint256 platformFee,uint64 expiresAt)'),claimEvent=parseAbiItem('event GiftClaimed(bytes32 indexed giftId,bytes32 indexed accountId,address indexed recipient,uint256 amount,uint32 claimed)'),refundEvent=parseAbiItem('event GiftRefunded(bytes32 indexed giftId,address indexed sender,uint256 amount)')
  const [funds,claims,refunds]=await Promise.all([client.getLogs({address:d.escrow,event:fundingEvent,args:{giftId:r.giftId},fromBlock,toBlock,strict:true}),client.getLogs({address:d.escrow,event:claimEvent,args:{giftId:r.giftId},fromBlock,toBlock,strict:true}),client.getLogs({address:d.escrow,event:refundEvent,args:{giftId:r.giftId},fromBlock,toBlock,strict:true})])
  const result:GiftObservation={state:(['unfunded','available','claimed','refunded'] as const)[status],blockNumber:height,blockHash:block.hash!,timestamp:block.timestamp,evidenceScanBlock:String(toBlock),claimedCount:claimed,settlements:{},refundUnits:String(BigInt(count-claimed)*per)}
