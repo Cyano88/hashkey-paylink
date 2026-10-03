@@ -5,7 +5,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, ArrowUpRight, ChevronRight, Layers3, LogOut, Menu, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import ProjectOperations, { OperationsLoading, OperationsSignIn } from './DeveloperOperationsPage'
 import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
-import XStocksReviewOperationsPanel from '../components/XStocksReviewOperationsPanel'
+import TradeReviewOperationsPanel from '../components/TradeReviewOperationsPanel'
 import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
 import PocketTransactionOperationsPanel from '../components/PocketTransactionOperationsPanel'
 import { cn } from '../lib/utils'
@@ -117,7 +117,7 @@ export default function OperationsWorkspacePage() {
         </>}
         {section === 'projects' && <ProjectOperations workspaceId={workspace.id} />}
         {section === 'agreements' && <><ArcAgreementOperationsPanel workspaceId={workspace.id} /><details className={cn(card, 'mt-6 p-5')}><summary className="cursor-pointer text-sm font-semibold">Activation settings <span className="ml-2 font-normal text-gray-500">{session.arcActivationEnabled ? 'Global switch enabled' : 'Global activation paused'}</span></summary><ProjectOperations workspaceId={workspace.id} mode="agreements" arcActivationEnabled={session.arcActivationEnabled} /></details></>}
-        {section === 'trade-disputes' && <XStocksReviewOperationsPanel workspaceId={workspace.id} />}
+        {section === 'trade-disputes' && <TradeReviewOperationsPanel workspaceId={workspace.id} />}
         {section === 'support' && <PocketSupportOperationsPanel />}
         {section === 'transactions' && <PocketTransactionOperationsPanel />}
         {section === 'escalations' && <section className={cn(card, 'mt-7 max-w-3xl p-7')}><h2 className="font-semibold">Escalation connection not configured</h2><p className="mt-3 text-sm leading-7 text-gray-500">This product manages its own customer support. Its team will submit payment or escrow cases to Hash PayLink with the relevant evidence. That submission connection has not been built yet.</p><p className="mt-3 text-sm leading-7 text-gray-500">Existing agreement operations and Trade dispute review remain available in their sections. Customer inboxes are not connected here.</p></section>}

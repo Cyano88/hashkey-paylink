@@ -1,0 +1,319 @@
+{
+  "checkedAt": "2026-10-03T17:11:20.930Z",
+  "chainId": 5042,
+  "blockNumber": "24083220",
+  "blockHash": "0x97df23febf2cc68204d4d89ba10b319cb18f94868e987a46ecf5909cd1be65a0",
+  "sourceBinding": "Explorer fully verified source plus exact deployed-bytecode comparison with Arc RPC; no independent compiler reproduction",
+  "records": [
+    {
+      "address": "0x9C6E09bc32d1E012dCaA2623E66d2Cc9860C1AeD",
+      "name": "SingleOwnerMSCA",
+      "compiler": "v0.8.24+commit.e11b9ed9",
+      "explorerFullyVerified": true,
+      "runtimeHash": "0x60ecaaadc845f14626e77541b390bd36a7f5c35efdee5c30471f0eb08626019e",
+      "sources": [
+        {
+          "path": "src/msca/6900/v0.7/account/semi/SingleOwnerMSCA.sol",
+          "sha256": "e138c1a0545b45f78e21faf3a2ec25dd467967dc87331910e19c11e72c059c3a"
+        },
+        {
+          "path": "src/msca/6900/v0.7/libs/WalletStorageV1Lib.sol",
+          "sha256": "92cb05240179bc92afa6a8cfa4041310df8a048d200a5e48a03637c3429cfc06"
+        },
+        {
+          "path": "src/msca/6900/v0.7/common/Structs.sol",
+          "sha256": "cfc7e7ebc6a1a5222ba5713cee6055627922c33213ab4bf98fd958849adee775"
+        },
+        {
+          "path": "src/msca/6900/v0.7/managers/PluginManager.sol",
+          "sha256": "dc2e0518b05708028da822f53a11b11c869cdd5d8cb803b84b9b3c6f5796fe26"
+        },
+        {
+          "path": "src/utils/ExecutionUtils.sol",
+          "sha256": "7c2f84ccc9be770f05fb1c18942bf68094b552bc30883551bb7a9195cc87429c"
+        },
+        {
+          "path": "src/msca/6900/v0.7/interfaces/IAccountLoupe.sol",
+          "sha256": "dfd758d2797de2258ad08346badf2bb9c4849d04de9ab6be0789233f9becbe50"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/StorageSlot.sol",
+          "sha256": "b4a5fb7ab93bfeda06509eafbd5f71fde0e0de84b6d9129553bd535a42166c15"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/math/Math.sol",
+          "sha256": "9bccb9a7bb3e002983433f6d5a4f406dda9f5a3650dd7ac4b06ee5daaa923981"
+        },
+        {
+          "path": "src/msca/6900/v0.7/managers/PluginExecutor.sol",
+          "sha256": "b417634a00fa2b84e4342ac6458cee786bc0851e18793ab756a2a02a7faf3616"
+        },
+        {
+          "path": "src/common/Constants.sol",
+          "sha256": "fc38132f2b244ab9217569a384e24beeddfd60df613795badd474639bc3ea987"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol",
+          "sha256": "da01ed1f405af955a840cdbf698547faf0d607b49e338cdcad47ad615159d82f"
+        },
+        {
+          "path": "src/msca/6900/v0.7/common/Constants.sol",
+          "sha256": "a545e8e0c70d5f767c07efc9b813193888e313fabba53a739c28f8017ddf6050"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+          "sha256": "c252a1f695584c0eec845f7880602fcb1b57cfac2b9d3ee3b25a2e355e9a79f4"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/interfaces/IERC777Recipient.sol",
+          "sha256": "e81063f0b3e8200caeb744395da9e1aaae689f6720e99ccb043b3d7fdca080bf"
+        },
+        {
+          "path": "src/msca/6900/shared/common/Structs.sol",
+          "sha256": "b38943ad8c043c7648dad2fa2a9733cc768877a0978db7d7f1dd336c5aa5a54f"
+        },
+        {
+          "path": "src/msca/6900/v0.7/account/WalletStorageInitializable.sol",
+          "sha256": "5d00e978066fa06748975d9a2c432e5a4accff28f5c33c929eaacf2e228665e9"
+        },
+        {
+          "path": "src/msca/6900/shared/common/Errors.sol",
+          "sha256": "f7625fb181b9adf7869a6b4fb5f0a03093056cb3a21dd253b3e40e156f8a354e"
+        },
+        {
+          "path": "src/msca/6900/v0.7/account/BaseMSCA.sol",
+          "sha256": "764b070f71138d2c6aba5802694f553c44b49f448454108be3d3e3a790c7fbdf"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/Strings.sol",
+          "sha256": "0519199dbc635f98ce2e4537986604ee618bca665c65e9a1738702dfacf72010"
+        },
+        {
+          "path": "src/msca/6900/v0.7/interfaces/IStandardExecutor.sol",
+          "sha256": "c4346505b64a419ae8d425b3847d906b3f29a2496727a8613fa58af222a0f669"
+        },
+        {
+          "path": "src/erc712/BaseERC712CompliantAccount.sol",
+          "sha256": "7e897954b69e721c632236c96101d91babf57e8775df932391035353108a5a10"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/IPaymaster.sol",
+          "sha256": "14bfb45b3ade4fad4ae09a19c5270e00c75ed0d9d0bf15e0dd499371a111cd23"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol",
+          "sha256": "a44a901c06e11f4b5d2d03753d8552bf0ebc13ff5e880922c64704b12182589e"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/proxy/beacon/IBeacon.sol",
+          "sha256": "422eabc0e645e24c3a52898f6255b349323b013544a3ebdc4b2d3f7fc5bb7e9e"
+        },
+        {
+          "path": "src/msca/6900/v0.7/interfaces/IPluginManager.sol",
+          "sha256": "71d0c7c94034498f54c5feaf744524e3ad11d041cfce99e6b968ed5d3d6bee4c"
+        },
+        {
+          "path": "src/msca/6900/v0.7/libs/ExecutionHookLib.sol",
+          "sha256": "817e548837857fc4c2fe1f954d88a3b2e171bfef955ea4984583cc77ef8ed55d"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol",
+          "sha256": "8850e97f15234cf93d7d1828b6289aeda7fa7167b3550b2f2a9713c8e2cecc80"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/math/SignedMath.sol",
+          "sha256": "768c28e3a33c3312e57ae8a1caaec2893bc89ac6e386621de018f85e9a2d6e99"
+        },
+        {
+          "path": "src/msca/6900/v0.7/managers/StandardExecutor.sol",
+          "sha256": "56ef22cde4c835547425cd36f6bb917cd6f632ef6fdddf5e3889c795304451d9"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/introspection/ERC165Checker.sol",
+          "sha256": "9da537ebf9806d9b1a9e4cb07717352ce83ed48c4b8651047be957a3988f3aec"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
+          "sha256": "a8b7eafa0fdc7cb5a644c8c61a8e4c51e031d5e1e6f268f72dbe18b768ead56e"
+        },
+        {
+          "path": "src/msca/6900/v0.7/interfaces/IPlugin.sol",
+          "sha256": "59b7522dca887b2854543cbe8291edde03f5bde6ce8690e5ea71321c59676761"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/IStakeManager.sol",
+          "sha256": "6334881d2273350b92fd4b0ecabbed9a844ef5d114832097ecd2b631010b6033"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol",
+          "sha256": "40fcd99da0814312f0353417de64f70805f4cd7ec4cb4573c8b4c4d48540f562"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol",
+          "sha256": "06f97dfe27d09b478a1e82855ab57485b11ea68e3804b03e879f184bbc667fb7"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/interfaces/draft-IERC1822.sol",
+          "sha256": "7bfe4dbf903e34b1dc61da3e27c33d601dcc496dcaf989dc6d2af610e24a145f"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol",
+          "sha256": "bd1ed34d265d1bc68b59727e7a9abd2b6aef171f04239a119450dbb20d3d5334"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol",
+          "sha256": "ad84633afd30a71a888403875e2ca7db9e97499d258ccdd98f48dd7cea8229f5"
+        },
+        {
+          "path": "src/msca/6900/v0.7/interfaces/IPluginExecutor.sol",
+          "sha256": "bc5afe6e6f30dbdafc5c147c48f5a4ecc8c410bff373cf1aa301841c7cbcd333"
+        },
+        {
+          "path": "src/msca/6900/v0.7/libs/SelectorRegistryLib.sol",
+          "sha256": "18d8bbf589507d00818a132d78f869864cb48db36769c047037fd9eb3a8e0b51"
+        },
+        {
+          "path": "src/msca/6900/v0.7/common/PluginManifest.sol",
+          "sha256": "01f657b4f46c9fce9c613b52f0464554e8d78f84db1e4e1153faa99f31a8b9ac"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+          "sha256": "2fd5c641cf452efd15f784827cb2835664970d7fbc166bf80824ed27011cc374"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol",
+          "sha256": "07ae1ac964ab74dedada999e2dfc642031a6495469cffc0bf715daa4f1e4f904"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/IAccount.sol",
+          "sha256": "0c44401dd9df8d5b02d6a03170e163f2ca3434c382d41a31e022ceb789cf95ef"
+        },
+        {
+          "path": "src/common/Errors.sol",
+          "sha256": "35a0a8ec56fb09714e3ed4283ae1d567f6bbbdc53040bdd467a6ccafdd595248"
+        },
+        {
+          "path": "src/msca/6900/v0.7/libs/FunctionReferenceDLLLib.sol",
+          "sha256": "1fae5a54dbd53e385932a807811d0582d59ad6577c230d436a03c475bb598bca"
+        },
+        {
+          "path": "src/msca/6900/shared/libs/ValidationDataLib.sol",
+          "sha256": "ea652ebcd2423b17235b849f692973b8958491ecf87bd2ef59a2a6db0242bdb4"
+        },
+        {
+          "path": "src/msca/6900/shared/libs/AddressDLLLib.sol",
+          "sha256": "d9f007433f01ce8957449c29bdd07706a18f54d8c242f2d68602d7e82a21a70c"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/INonceManager.sol",
+          "sha256": "4a600598dca29462afaebf27de758c83344d9d9871a53c1cdbe448510491d0e3"
+        },
+        {
+          "path": "src/msca/6900/v0.7/libs/RepeatableFunctionReferenceDLLLib.sol",
+          "sha256": "48d281f29ed3e5820537f649bc4681fa90280892a9681a2fd5bb56ac116484bf"
+        },
+        {
+          "path": "lib/account-abstraction/contracts/interfaces/IAggregator.sol",
+          "sha256": "bc6df43d690bcaf2da8255748070e880eb7390e74ea98f6e36eb0a9f4b128ac1"
+        },
+        {
+          "path": "src/callback/DefaultCallbackHandler.sol",
+          "sha256": "b490df0d8cdac0ad9e7c725021254a45e27a8a1aa30fd48da5e16475412bdf72"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/interfaces/IERC1271.sol",
+          "sha256": "c222d6d35af16214627df99796551f94497c74662e94aa1e80ca5e211a751f61"
+        },
+        {
+          "path": "node_modules/@openzeppelin/contracts/utils/Address.sol",
+          "sha256": "b3710b1712637eb8c0df81912da3450da6ff67b0b3ed18146b033ed15b1aa3b9"
+        },
+        {
+          "path": "src/msca/6900/v0.7/libs/FunctionReferenceLib.sol",
+          "sha256": "b5aa131b4f611a71692dbf818e6e5e1383b0a99b1057aa9ff2fa801dc995376e"
+        }
+      ]
+    },
+    {
+      "address": "0x0000000071727de22e5e9d8baf0edac6f37da032",
+      "name": "EntryPoint",
+      "compiler": "v0.8.23+commit.f704f362",
+      "explorerFullyVerified": true,
+      "runtimeHash": "0x8db5ff695839d655407cc8490bb7a5d82337a86a6b39c3f0258aa6c3b582fc58",
+      "sources": [
+        {
+          "path": "contracts/core/EntryPoint.sol",
+          "sha256": "ddad73961da5bad85f0656d9c8e6e729d36a02854198765d335fb59205a55b9e"
+        },
+        {
+          "path": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+          "sha256": "8d0bac508a25133c9ff80206f65164cef959ec084645d1e7b06050c2971ae0fc"
+        },
+        {
+          "path": "@openzeppelin/contracts/utils/introspection/ERC165.sol",
+          "sha256": "99348354365cbdeb90157e2903334b861a00d69faab7720ae542d911d5c70d87"
+        },
+        {
+          "path": "@openzeppelin/contracts/utils/introspection/IERC165.sol",
+          "sha256": "07ae1ac964ab74dedada999e2dfc642031a6495469cffc0bf715daa4f1e4f904"
+        },
+        {
+          "path": "contracts/core/Helpers.sol",
+          "sha256": "4ec549dbe1685def37cbe8699eb5376ce4466dcd0c6ffffd7c0d7e0f7a5b89a3"
+        },
+        {
+          "path": "contracts/core/NonceManager.sol",
+          "sha256": "fbb29dadcaaa4df16a38d5bbe642737034b2a3b8318a7d8c75b4936892b10366"
+        },
+        {
+          "path": "contracts/core/SenderCreator.sol",
+          "sha256": "84b46309bf6d890c13362c9c449ff927fa72465741517fc405c8c24baae2d1a3"
+        },
+        {
+          "path": "contracts/core/StakeManager.sol",
+          "sha256": "56ef93b31c8fb80d1806c69aad5d65f86951df0b145664b5c49018958239b644"
+        },
+        {
+          "path": "contracts/core/UserOperationLib.sol",
+          "sha256": "43faeb07191dea518fe9dd1111b775911af572427c6d6a51bfa6cc4c5b08c9aa"
+        },
+        {
+          "path": "contracts/interfaces/IAccount.sol",
+          "sha256": "0c44401dd9df8d5b02d6a03170e163f2ca3434c382d41a31e022ceb789cf95ef"
+        },
+        {
+          "path": "contracts/interfaces/IAccountExecute.sol",
+          "sha256": "a96aabf8dcfa68a83325678e23200956c667a91ce448f2d63efb10ca947edc3e"
+        },
+        {
+          "path": "contracts/interfaces/IAggregator.sol",
+          "sha256": "bc6df43d690bcaf2da8255748070e880eb7390e74ea98f6e36eb0a9f4b128ac1"
+        },
+        {
+          "path": "contracts/interfaces/IEntryPoint.sol",
+          "sha256": "06f97dfe27d09b478a1e82855ab57485b11ea68e3804b03e879f184bbc667fb7"
+        },
+        {
+          "path": "contracts/interfaces/INonceManager.sol",
+          "sha256": "4a600598dca29462afaebf27de758c83344d9d9871a53c1cdbe448510491d0e3"
+        },
+        {
+          "path": "contracts/interfaces/IPaymaster.sol",
+          "sha256": "14bfb45b3ade4fad4ae09a19c5270e00c75ed0d9d0bf15e0dd499371a111cd23"
+        },
+        {
+          "path": "contracts/interfaces/IStakeManager.sol",
+          "sha256": "6334881d2273350b92fd4b0ecabbed9a844ef5d114832097ecd2b631010b6033"
+        },
+        {
+          "path": "contracts/interfaces/PackedUserOperation.sol",
+          "sha256": "40fcd99da0814312f0353417de64f70805f4cd7ec4cb4573c8b4c4d48540f562"
+        },
+        {
+          "path": "contracts/utils/Exec.sol",
+          "sha256": "8ccaa8a5230a7e7722d25f070ab6e1ce9ada315d9649da34cce3a061c1b985cc"
+        }
+      ]
+    }
+  ]
+}

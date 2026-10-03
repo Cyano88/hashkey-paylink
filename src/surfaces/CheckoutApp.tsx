@@ -14,6 +14,7 @@ const WalletSwapPage = lazy(() => import('../pages/WalletSwapPage'))
 const WalletConnectionPage = lazy(() => import('../pages/WalletConnectionPage'))
 const XStocksAgreementPage = lazy(() => import('../pages/XStocksAgreementPage'))
 const ArcAgreementPayerPage = lazy(() => import('../pages/ArcAgreementPayerPage'))
+const ArcTradeAgreementPage = lazy(() => import('../pages/ArcTradeAgreementPage'))
 const X402Receipt = lazy(() => import('../pages/X402Receipt'))
 const StreamPayApp = lazy(() => import('../../modules/streampay/src/StreamPayApp'))
 
@@ -29,7 +30,7 @@ export default function CheckoutApp() {
   if (path === '/stream' || path.startsWith('/stream/') || ['/recipient', '/creator', '/creator-admin', '/arena'].includes(path)) {
     return <Suspense fallback={null}><StreamPayApp /></Suspense>
   }
-  return <SolanaProvider><BrowserRouter><Suspense fallback={<p className="p-6 text-sm">Opening checkout…</p>}><Routes>
+  return <SolanaProvider><BrowserRouter><Suspense fallback={<div role="status" aria-label="Loading checkout" className="mx-auto max-w-md space-y-4 p-6"><div className="h-7 w-2/3 animate-pulse rounded-xl bg-gray-100 dark:bg-white/10" /><div className="h-32 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/10" /><div className="h-11 animate-pulse rounded-full bg-gray-100 dark:bg-white/10" /></div>}><Routes>
     <Route path="pocket/*" element={<ExternalRedirect origin="https://pocket.hashpaylink.com" stripPrefix="/pocket" />} />
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
     <Route path="developers" element={<ExternalRedirect origin="https://developer.hashpaylink.com" pathname="/" />} />
@@ -46,6 +47,7 @@ export default function CheckoutApp() {
       <Route path="wallet/swap/:sessionId" element={<WalletSwapPage />} />
       <Route path="wallet/connect/:connectionId" element={<WalletConnectionPage />} />
       <Route path="agreements/xstocks/:agreementId" element={<XStocksAgreementPage />} />
+      <Route path="agreements/trade/:agreementId" element={<ArcTradeAgreementPage />} />
       <Route path="agreements/:agreementId" element={<ArcAgreementPayerPage />} />
       <Route path="receipt/:activityId" element={<X402Receipt />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />

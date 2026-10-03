@@ -1,0 +1,73 @@
+{
+  "verified": true,
+  "checkedAt": "2026-10-03T13:06:51.154Z",
+  "chainId": 5042,
+  "transactionHash": "0x2e443edac412d7191a42a35cbe69b673db6d19aa5fdbb855a6394c8bc5b19bd3",
+  "calldataHash": "0xce6d02aea61cf7010d2cff71c6fab5f20f8883d342e70a648748b335896a6980",
+  "blockNumber": "24053982",
+  "blockHash": "0xe28fa461f28be3f8a607d15223f9406fa7a075984edc55f48205eee1928b0d01",
+  "headBlock": "24054246",
+  "confirmations": "265",
+  "factory": "0xA2214d8aE7be3092A9311BC155F9EdeaC6226651",
+  "token": "0x3600000000000000000000000000000000000000",
+  "tokenDecimals": 6,
+  "arbiter": "0x83C0608F4695e82b6658757f9a0B658001A73a73",
+  "expectedRuntimeHash": "0x909bacacc093cb04057b27eb7b21d6805b82cf7a40c6be6f8d04d59b56237c30",
+  "releaseCandidate": {
+    "policy": "trade-arc-usdc-v1",
+    "chainId": 5042,
+    "factory": "0xA2214d8aE7be3092A9311BC155F9EdeaC6226651",
+    "arbiter": "0x83C0608F4695e82b6658757f9a0B658001A73a73",
+    "factoryRuntimeHash": "0x909bacacc093cb04057b27eb7b21d6805b82cf7a40c6be6f8d04d59b56237c30",
+    "authority": {
+      "proxyRuntimeHash": "0x4e381985ca68b3e5d27b4425fa581c19cf33146d3f887a3cfca96f55528ea46f",
+      "singleton": "0xFf51A5898e281Db6DfC7855790607438dF2ca44b",
+      "singletonRuntimeHash": "0xdda019cbd7c867a533a2a86e5c53434fdc50b13122b5a5ddb4a8df61b31c20f2",
+      "owners": [
+        "0xaA6EE4589832Fb9FA49c27cB56CBcecf29B847c7",
+        "0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753"
+      ],
+      "threshold": 2,
+      "version": "1.5.0"
+    }
+  },
+  "sourceSha256": {
+    "src/TradeEscrowFactory.sol": "fb6f00b32caa2255c976b155458852a1783caf4a041d88b56c2c92a65598f1ca",
+    "src/TradeEscrow.sol": "6c48ad7936fd9a5326968523f167eb303baf7b654a9cbb59c93c82401c8c1151",
+    "@openzeppelin/contracts/token/ERC20/IERC20.sol": "6f2faae462e286e24e091d7718575179644dc60e79936ef0c92e2d1ab3ca3cee",
+    "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol": "471157c89111d7b9eab456b53ebe9042bc69504a64cb5cc980d38da9103379ae",
+    "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol": "912509e0e9bf74e0f8a8c92d031b5b26d2d35c6d4abf3f56251be1ea9ca946bf",
+    "@openzeppelin/contracts/utils/Address.sol": "b3710b1712637eb8c0df81912da3450da6ff67b0b3ed18146b033ed15b1aa3b9",
+    "@openzeppelin/contracts/utils/ReentrancyGuard.sol": "8d0bac508a25133c9ff80206f65164cef959ec084645d1e7b06050c2971ae0fc"
+  },
+  "compiler": {
+    "version": "0.8.24+commit.e11b9ed9",
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "viaIR": true,
+      "evmVersion": "paris",
+      "outputSelection": {
+        "*": {
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ],
+          "": [
+            "ast"
+          ]
+        }
+      }
+    }
+  },
+  "deploymentVerified": true,
+  "explorerSourceVerified": false,
+  "circleExecutionVerified": false,
+  "productionReady": false,
+  "fundingEnabled": false
+}
