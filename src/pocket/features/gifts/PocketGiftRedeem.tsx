@@ -6,7 +6,7 @@ import {PocketGiftLanding} from './PocketGiftExperience'
 import PocketGiftClaimFlow from './PocketGiftClaimFlow'
 import {parseGiftLink,type GiftView} from './pocketGift'
 
-type Props={inApp?:boolean;onDone?():void;onBack?():void;onOpenApp?():void;link:string;identityKey:string;authenticated:boolean;signIn():void;getAccessToken():Promise<string|null>;getSession():Promise<GiftWalletSession>}
+type Props={onGiftLoaded?(gift:GiftView):void;inApp?:boolean;onDone?():void;onBack?():void;onOpenApp?():void;link:string;identityKey:string;authenticated:boolean;signIn():void;getAccessToken():Promise<string|null>;getSession():Promise<GiftWalletSession>}
 /** Integration surface. Capability stays in memory/URL; never localStorage or analytics. */
 export default function PocketGiftRedeem(props:Props){
  return <Redeem key={props.link} {...props}/>
@@ -14,13 +14,13 @@ export default function PocketGiftRedeem(props:Props){
 function Redeem(props:Props){
  const {link,authenticated,identityKey}=props
  const [gift,setGift]=useState<GiftView|null>(null),[error,setError]=useState(''),[sheet,setSheet]=useState(false),[revision,setRevision]=useState(0)
- const wantsClaim=useRef(false)
+ const wantsClaim=useRef(false),onGiftLoaded=useRef(props.onGiftLoaded);onGiftLoaded.current=props.onGiftLoaded
  useEffect(()=>{
   let current=true
   const parsed=parseGiftLink(link)
   if(!parsed){setError('Open a valid Pocket gift link.');return}
   setError('')
-  void readPocketGift(parsed.id).then(value=>{if(current)setGift(value)}).catch(()=>{if(current)setError('This gift could not be loaded. Try again shortly.')})
+  void readPocketGift(parsed.id).then(value=>{if(current){setGift(value);onGiftLoaded.current?.(value)}}).catch(()=>{if(current)setError('This gift could not be loaded. Try again shortly.')})
   return()=>{current=false}
  },[link,revision])
  useEffect(()=>{if(authenticated&&wantsClaim.current){wantsClaim.current=false;setSheet(true)}if(!authenticated)setSheet(false)},[authenticated,identityKey])

@@ -29,8 +29,9 @@ import {requestPocketPaymentApproval} from '../lib/pocketPaymentApproval'
 import {isPocketNativeRuntime,POCKET_ROUTES} from '../lib/pocketRoutes'
 
 export default function PocketGiftSendPage(){
- const identity=usePocketIdentity(),navigate=useNavigate()
- if(!identity.ready)return <PocketGiftCreateSkeleton onBack={()=>navigate(POCKET_ROUTES.transfer)}/>
+ const identity=usePocketIdentity(),navigate=useNavigate(),[routeParams]=useSearchParams()
+ const returnPath=routeParams.get('rail')==='xstocks'?xStockPath('send'):POCKET_ROUTES.transfer
+ if(!identity.ready)return <PocketGiftCreateSkeleton onBack={()=>navigate(returnPath)}/>
  if(!identity.authenticated)return <main className="mx-auto max-w-md p-6"><PocketEmailLogin/></main>
  return <PocketPaymentSecurityGate email={identity.email} getAccessToken={identity.getAccessToken}><Sender key={identity.user!.id} owner={identity.user!.id} email={identity.email} getAccessToken={identity.getAccessToken}/></PocketPaymentSecurityGate>
 }
@@ -72,7 +73,7 @@ function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAcces
  const listOpen=params.get('view')==='gifts',archived=params.get('archived')==='1'
  const close=()=>{setSheet(false);setDraft(null);setRevision(n=>n+1)}
  const openSaved=(id:string)=>{if(busy||!vault)return;setError('');void vault.load(id).then(next=>{setState({phase:'preparing',message:'Checking your gift.'});setDraft(next);setSheet(true)}).catch(()=>setError('Gift recovery data could not be opened.'))}
- const back=()=>{if(!busy)navigate(POCKET_ROUTES.transfer)}
+ const back=()=>{if(!busy)navigate(stockRail?xStockPath('send'):POCKET_ROUTES.transfer)}
  if(loading&&!listOpen)return <PocketGiftCreateSkeleton onBack={back}/>
  if(!vault)return <main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm">Create gifts in the Pocket app.</p></main>
  return <div data-pocket-colour-scope={stockRail?'xstocks':'stablecoins'} className="min-h-[100dvh] bg-white text-gray-950 dark:bg-black dark:text-white">
