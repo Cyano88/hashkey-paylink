@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {readFileSync,writeFileSync} from 'node:fs'
 import {createPublicClient,http,encodeFunctionData,parseAbi,decodeEventLog,decodeFunctionData,keccak256,encodeAbiParameters,parseAbiParameters} from 'viem'
 import {loadActivationCircleKey} from './arc-circle-activation-provider.mjs'
-import {verifyArcTradeExecutionAccount,ARC_TRADE_ACCOUNT_ABI,ARC_TRADE_IMPLEMENTATION_SLOT} from '../api/trade-agreement/arc-execution.ts'
+import {verifyArcTradeExecution,verifyArcTradeExecutionAccount,ARC_TRADE_ACCOUNT_ABI,ARC_TRADE_IMPLEMENTATION_SLOT} from '../api/trade-agreement/arc-execution.ts'
 
 async function main(){
  const journal=JSON.parse(readFileSync('.codex-temp/arc-circle-seller-activation.json','utf8'))
@@ -32,7 +32,7 @@ async function main(){
  assert(Number(block.timestamp)*1000>=Date.parse(journal.createdAt)-60000,'Transaction predates activation request.')
  const previous=await client.getCode({address:seller.address,blockNumber:receipt.blockNumber-1n})
  assert(!previous||previous==='0x','Wallet was already deployed before this transaction.')
- const policy=JSON.parse(readFileSync('.codex-temp/arc-circle-runtime-candidate.json','utf8')).policyCandidate
+ let policy=JSON.parse(readFileSync('.codex-temp/arc-circle-runtime-candidate.json','utf8')).policyCandidate
  const token='0x3600000000000000000000000000000000000000'
  const data=encodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),functionName:'transfer',args:[seller.address,0n]})
  const entryPoint='0x0000000071727de22e5e9d8baf0edac6f37da032'
@@ -69,6 +69,9 @@ async function main(){
  const entryPointRuntimeHash=keccak256(await client.getCode({address:entryPoint,blockNumber:receipt.blockNumber}))
  assert.equal(keccak256(await client.getCode({address:entryPoint,blockNumber:head})),entryPointRuntimeHash)
  const verified={status:'confirmed',transactionHash:transaction.txHash,blockHash:receipt.blockHash,blockNumber:String(receipt.blockNumber),execution:'circle_user_operation_v07',userOperationHash,entryPoint,entryPointRuntimeHash}
+ policy={...policy,entryPointVersion:'0.7',entryPointRuntimeHash}
+ const shared=await verifyArcTradeExecution({call:{chainId:5042,account:seller.address,to:token,data,value:'0'},transactionHash:transaction.txHash,policy,preparedAfterBlock:receipt.blockNumber-1n},client)
+ assert.equal(shared.status,'confirmed');assert.equal(shared.userOperationHash,userOperationHash)
  await verifyArcTradeExecutionAccount(seller.address,policy,client)
  await verifyArcTradeExecutionAccount(buyer.address,policy,client)
  const transfers=receipt.logs.filter(log=>log.address.toLowerCase()===token.toLowerCase()).flatMap(log=>{
@@ -79,7 +82,7 @@ async function main(){
  assert.equal((await client.getTransactionReceipt({hash:transaction.txHash})).blockHash,receipt.blockHash)
  assert.equal((await client.getBlock({blockNumber:receipt.blockNumber})).hash,receipt.blockHash)
  assert.equal(await client.getChainId(),5042)
- const evidence={checkedAt:new Date().toISOString(),chainId:5042,wallet:seller.address,...verified,confirmations:String(await client.getBlockNumber()-receipt.blockNumber),providerState:transaction.state,zeroUsdcSelfTransfer:true,previouslyUndeployed:true,buyerAndSellerRuntimeMatch:true,policyCandidate:{...policy,entryPoint,entryPointRuntimeHash},productionVerifierSupportsObservedEntryPoint:false,implementationSourceReviewed:false,tradeFunded:false,productionReady:false}
+ const evidence={checkedAt:new Date().toISOString(),chainId:5042,wallet:seller.address,...verified,confirmations:String(await client.getBlockNumber()-receipt.blockNumber),providerState:transaction.state,zeroUsdcSelfTransfer:true,previouslyUndeployed:true,buyerAndSellerRuntimeMatch:true,policyCandidate:{...policy,entryPoint,entryPointRuntimeHash},productionVerifierSupportsObservedEntryPoint:true,implementationSourceReviewed:false,tradeFunded:false,productionReady:false}
  writeFileSync('.codex-temp/arc-circle-seller-activation-verified.json',JSON.stringify(evidence,null,2)+'\n')
  console.log(JSON.stringify(evidence))
 }

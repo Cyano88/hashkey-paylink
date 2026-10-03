@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import {keccak256} from 'viem'
+import {keccak256,decodeFunctionData,encodeFunctionResult,zeroAddress} from 'viem'
 import {inspectArcTradeRelease,preflightArcTradeRelease} from '../api/trade-agreement/arc-preflight.ts'
-import {ARC_TRADE_ENTRY_POINT} from '../api/trade-agreement/arc-execution.ts'
+import {ARC_TRADE_ENTRY_POINT,ARC_TRADE_ENTRY_POINT_V07,ARC_TRADE_WALLET_STATE_ABI} from '../api/trade-agreement/arc-execution.ts'
 import {MODULE_SENTINEL} from '../api/trade-agreement/arc-verification.ts'
 const addr=n=>'0x'+n.repeat(40),buyer=addr('1'),seller=addr('2'),factory=addr('3'),arbiter=addr('4'),singleton=addr('5'),implementation=addr('6'),usdc='0x3600000000000000000000000000000000000000'
 const code={factory:'0x6000',safe:'0x6001',singleton:'0x6002',wallet:'0x6003',implementation:'0x6004',entry:'0x6005'}
@@ -28,4 +28,19 @@ result=await run();assert.equal(result.checksPassed,true);assert.equal(result.pr
 for(const change of [{chain:196},{chain:5042002},{code:true},{decimals:18},{threshold:true},{modules:true},{implementation:addr('9')},{stale:true},{reorg:true}]){patch=change;blockReads=0;result=await run();assert.equal(result.checksPassed,false,JSON.stringify(change));assert.equal(result.productionReady,false)}
 patch={};for(const wallets of [[],[buyer,buyer],[factory,seller],['invalid',seller]]){const before=created;result=await inspectArcTradeRelease({manifest:{release,executionPolicy},wallets,reader,now:1000000});assert.equal(result.checksPassed,false);assert.equal(created,before)}
 result=await inspectArcTradeRelease({manifest:{release,executionPolicy},wallets:[buyer,seller],reader:()=>{throw Error('https://secret:password@rpc.invalid/private-key')}});assert.equal(JSON.stringify(result).includes('password'),false)
+patch={};const stateReads=[]
+const v07reader=()=>{
+ const r=reader(),getCode=r.getCode
+ r.getCode=async i=>i.address===addr('9')?'0x':i.address.toLowerCase()===ARC_TRADE_ENTRY_POINT_V07.toLowerCase()?code.entry:getCode(i)
+ r.call=async({to,data,blockNumber})=>{
+  stateReads.push(blockNumber);const {functionName}=decodeFunctionData({abi:ARC_TRADE_WALLET_STATE_ABI,data})
+  const ref={plugin:zeroAddress,functionId:0}
+  const result={getEntryPoint:ARC_TRADE_ENTRY_POINT_V07,getNativeOwner:addr('9'),getInstalledPlugins:patch.walletPlugin?[addr('8')]:[],getExecutionHooks:[],getPreValidationHooks:[[],[]],getExecutionFunctionConfig:{plugin:to,userOpValidationFunction:ref,runtimeValidationFunction:ref}}[functionName]
+  return {data:encodeFunctionResult({abi:ARC_TRADE_WALLET_STATE_ABI,functionName,result})}
+ };return r
+}
+const runV07=()=>inspectArcTradeRelease({manifest:{release,executionPolicy:{...executionPolicy,entryPointVersion:'0.7'}},wallets:[buyer,seller],reader:v07reader,now:1000000})
+assert.equal((await runV07()).checksPassed,true)
+assert(stateReads.includes(95n)&&stateReads.includes(100n));assert(stateReads.every(n=>n===95n||n===100n))
+patch={walletPlugin:true};assert.equal((await runV07()).checksPassed,false)
 console.log('Arc release preflight passed: inactive source gate, both block snapshots, exact factory/Safe/wallet checks, stale/reorg rejection, sanitized failures and no production authorization.')

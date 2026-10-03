@@ -43,6 +43,7 @@ export async function inspectArcTradeRelease(input:{manifest:Manifest;wallets:re
         getChainId:()=>reader.getChainId(),getBlockNumber:async()=>block.blockNumber,
         getBlock:i=>reader.getBlock(i),getCode:i=>reader.getCode(i),getStorageAt:i=>reader.getStorageAt(i),
         getTransaction:i=>reader.getTransaction(i),getTransactionReceipt:i=>reader.getTransactionReceipt(i),
+        ...(reader.call?{call:(i:{to:Address;data:`0x${string}`;blockNumber:bigint})=>reader.call!(i)}:{}),
       }
       stage='Circle wallet execution policy'
       for(const wallet of wallets)await verifyArcTradeExecutionAccount(wallet,executionPolicy,pinned)

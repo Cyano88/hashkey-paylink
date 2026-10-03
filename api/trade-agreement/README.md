@@ -89,6 +89,13 @@ modules, upgrade behavior and actual transaction envelope before selecting the
 production policy. `ARC_TRADE_EXECUTION_POLICY` remains null. No signing or
 broadcasting is performed by this module.
 
+The verifier now also supports explicitly policy-selected EntryPoint v0.7 packed
+operations. Its native wallet policy rejects plugins/hooks and checks the actual
+EntryPoint getter and EOA owner at the pinned block. The seller activation receipt
+has been replayed through this path. See
+`docs/audits/arc-circle-v07-execution-review-2026-10-03.md`; funded Trade behavior
+still requires the canary before production activation.
+
 `arc-execution-store.ts` provides durable reservation, challenge association,
 submission association and chain reconciliation using the existing transactional
 store. Concurrent retries retain one provider idempotency key and the original
