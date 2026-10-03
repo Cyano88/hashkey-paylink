@@ -282,3 +282,32 @@ under another project are rejected without changing the journal.
 This closes the earlier PostgreSQL journal concurrency validation gap. Provider
 and chain calls are absent from this test; it does not establish Circle or Arc
 mainnet readiness. Production release and execution-policy gates remain closed.
+
+## Arc Safe creation preparation - 2026-10-03
+
+The intended authority uses the two current XLayer Trade Safe owners, with a
+threshold of two. The XLayer Safe address itself had no code on Arc when checked;
+this does not migrate its contract or reuse its signing domain.
+
+Run `node --import tsx scripts/arc-trade-safe-plan.mjs owners.json plan.json`.
+The input contains `sourceSafe` (the source-pinned XLayer arbiter), `targetChainId`
+5042, `threshold` 2 and the two `owners`. The script rechecks the owner set and
+threshold against confirmed and latest XLayer state. It reads the official Safe
+1.5.0 registry pinned to commit `7b1fb6d615ab2d2999550ec9166554b180e813e5`,
+checks factory and singleton runtime hashes on Arc at both snapshots, and rejects
+contract-code signer addresses pending a separate cross-chain review.
+
+The initializer sets the exact owners and threshold, zero delegatecall target,
+empty setup data, zero fallback handler and no setup payment. A domain-specific
+deterministic salt identifies this Trade Safe. An Arc `eth_call` simulates proxy
+creation, and gas estimation checks readiness without sending a transaction.
+The output includes exact calldata, hashes, predicted proxy, chain/block evidence
+and estimated gas readiness for each owner. No private keys are read.
+
+The first live read-only run passed bytecode checks and creation simulation.
+Signing was unavailable because the browser connection returned `Transport
+closed`; no Safe was deployed. The local transaction record is
+`.codex-temp/arc-trade-safe-creation.json`. Refresh the plan before signing,
+then independently verify the transaction, created proxy, singleton, owner set,
+threshold, empty modules and nonce. Only verified deployment evidence may fill
+the Arc Trade release record. Funding remains disabled.
