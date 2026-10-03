@@ -16,15 +16,19 @@ It does not implement Work delivery semantics.
 - Read-only Arc transaction planning and simulation for all participant actions, including exact allowances and mutual split proposals.
 - Factory/USDC checks and two-signer Safe policy checks (proxy, singleton, owners, threshold and absence of modules). New-funding pause preserves participant recovery.
 - Production release remains null; no HTTP route signs or submits these candidate plans.
+- Hosted Arc Trade draft/read and authenticated participant endpoints are wired,
+  along with a Circle checkout page. Source release/execution policies remain
+  null, so new drafts and challenges are unavailable in the production defaults.
 - Pure binding construction is available for synthetic deployment rehearsal only;
   it does not authorize transactions or establish a verified deployment.
 
 ## Pending before enabling Arc
 
 The Arc Trade factory and on-chain two-signer authority must be verified.
-The hosted API, Circle participant-wallet/signing adapter, chain reconciliation,
-reviewer adapter, receipts and Stream checkout/UI routing must then be connected
-and exercised end to end. No new Arc HTTP checkout route is exposed by this increment.
+The hosted API, Circle participant-wallet/signing adapter and chain reconciliation
+have synthetic coverage. The verified deployment, reviewer adapter, receipts and
+Stream checkout/UI routing must be connected and exercised end to end before
+enabling new Arc Trade checkout.
 
 The existing XLayer dispute test is running in a separate session. Its final
 commit and evidence must be incorporated before the combined Trade baseline is
@@ -110,6 +114,53 @@ Primary references checked for event semantics, operation hashing and proxy slot
 - https://github.com/eth-infinitism/account-abstraction/blob/v0.6.0/contracts/interfaces/UserOperation.sol
 - https://eips.ethereum.org/EIPS/eip-1967
 
-Next: authenticated hosted endpoints and Circle challenge recovery, then Stream's
-two-rail payment selector. The separate XLayer dispute test and verified Arc Trade
-deployment are still required before enabling production.
+The subsequent hosted increment below supersedes this increment's endpoint TODO.
+The separate XLayer dispute test and verified Arc Trade deployment are still
+required before enabling production.
+
+## Hosted Circle increment - 2026-10-03
+
+Added `GET/POST /api/v2/trade-agreements` and participant-only
+`POST /api/v2/trade-agreements/participant`. Live human projects with the Arc
+Agreement capability and USDC settlement can query availability. Draft creation
+also requires both reviewed source policies and project/runtime activation.
+Developer credentials receive draft/read scopes only; participant routes reject
+API keys and verify the Hash PayLink account independently.
+
+Participants accept the exact consent hash using their server-linked Arc wallet.
+Fresh Circle session ownership is checked, links are re-read for migration races,
+and accepted wallet identities cannot be replaced. Both acceptances create the
+immutable binding. Challenge creation uses only a trusted planner call, verifies
+wallet execution bytecode/implementation before issuing, and reserves its payload
+and idempotency key before calling Circle. Provider timeouts retry that same key.
+
+Recovery obtains challenge and transaction identities from authenticated Circle
+reads. A provider transaction ID is pinned before its hash appears; changes or
+ambiguous correlations fail closed. Browser transaction hashes are ignored.
+Receipt-not-found and insufficient-confirmation outcomes retain the pending
+action. New-funding pauses preserve existing challenge recovery and participant
+recovery actions. Failed/expired provider challenges without a verifiable chain
+outcome remain reserved for review; automatic release of that slot is not enabled.
+
+`/agreements/trade/:agreementId` follows the existing Hash PayLink checkout chrome
+and Circle session flow. It includes exact terms, consent, action review, split
+proposal amounts/nonces, pending recovery and account-change cancellation. Circle
+session tokens remain in component memory. The shell and page use loading
+shimmers and support both themes. Payment success is read from the server/chain,
+never inferred from the SDK returning successfully.
+
+Validation: hosted authorization/recovery smoke; execution, journal, Arc planner
+and existing XLayer planner/hosted regressions; focused backend/frontend TypeScript
+checks; Vite build into an isolated temporary output. Local Playwright fixtures
+covered mobile dark/light layout, explicit confirmation, pending action controls,
+exact split review amounts and no horizontal overflow. Provider calls and wallet
+signing were mocked. No real Circle canary, mainnet deployment, PostgreSQL journal
+concurrency test or production rollout is claimed.
+
+Circle response shapes were checked against primary documentation:
+- https://developers.circle.com/api-reference/wallets/user-controlled-wallets/get-user-challenge
+- https://developers.circle.com/api-reference/wallets/user-controlled-wallets/get-transaction
+
+Next implementation work: versioned Arc reservations and the two-rail selector in
+standalone Hash PayStream, preserving legacy and existing stock reservations.
+Then reviewer/receipt integration and funded end-to-end release verification.

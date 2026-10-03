@@ -27,6 +27,7 @@ type Deps = {
 }
 const defaults:Deps = {read:readDurableJson,mutate:mutateDurableJson,uuid:randomUUID,now:()=>new Date()}
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i
+const providerUuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i
 const bytes32 = /^0x[a-f0-9]{64}$/i
 const actions = new Set(Object.keys(TRADE_ACTION_LABELS))
 function fail(message:string):never {throw Object.assign(Error(message),{status:409})}
@@ -38,7 +39,7 @@ const terminal = (entry:ArcTradeExecutionEntry)=>entry.status==='confirmed'||ent
 function canonical(input:Reservation):Reservation {
   storeKey(input.agreementId)
   if (!/^dev_[a-z0-9]{8,64}$/i.test(input.projectId) || !/^did:privy:[a-z0-9_-]{1,150}$/i.test(input.participantId)
-    || !uuid.test(input.walletId) || !uuid.test(input.requestId) || !bytes32.test(input.termsHash) || /^0x0{64}$/i.test(input.termsHash)
+    || !providerUuid.test(input.walletId) || !uuid.test(input.requestId) || !bytes32.test(input.termsHash) || /^0x0{64}$/i.test(input.termsHash)
     || !actions.has(input.action) || !/^(0|[1-9][0-9]{0,19})$/.test(input.preparedAfterBlock)) fail('Invalid Arc Trade execution reservation.')
   wrapArcTradeCall(input.call)
   return {
@@ -67,6 +68,16 @@ export function createArcTradeExecutionStore(overrides:Partial<Deps>={}) {
   }
   return {
     read,
+    async find(agreementId:string,projectId:string,requestId:string) {
+      const journal=await d.read(storeKey(agreementId))
+      if(journal && journal.projectId!==projectId)fail('Arc Trade action was not found.')
+      return journal?.entries.find(entry=>entry.requestId===requestId.toLowerCase())
+    },
+    async latest(agreementId:string,projectId:string) {
+      const journal=await d.read(storeKey(agreementId))
+      if(journal && journal.projectId!==projectId)fail('Arc Trade action was not found.')
+      return journal?.entries.at(-1)
+    },
     async reserve(input:Reservation) {
       const normalized=canonical(input)
       // The block bound is committed on the first reservation. A retry may have
@@ -90,7 +101,7 @@ export function createArcTradeExecutionStore(overrides:Partial<Deps>={}) {
       return result.entries.find(item=>item.requestId===normalized.requestId)!
     },
     async recordChallenge(input:{agreementId:string;projectId:string;requestId:string;challengeId:string}) {
-      if(!uuid.test(input.challengeId))fail('Invalid Arc Trade Circle challenge.')
+      if(!providerUuid.test(input.challengeId))fail('Invalid Arc Trade Circle challenge.')
       return update(input,(entry,journal)=>{
         if(journal.entries.some(other=>other.requestId!==entry.requestId && other.challengeId===input.challengeId.toLowerCase()))fail('Arc Trade challenge already belongs to another action.')
         if(entry.challengeId && entry.challengeId!==input.challengeId.toLowerCase())fail('Arc Trade Circle challenge changed. Review required.')
@@ -99,7 +110,7 @@ export function createArcTradeExecutionStore(overrides:Partial<Deps>={}) {
       })
     },
     async recordSubmission(input:{agreementId:string;projectId:string;requestId:string;transactionId:string;transactionHash:Hex}) {
-      if(!uuid.test(input.transactionId)||!bytes32.test(input.transactionHash)||/^0x0{64}$/i.test(input.transactionHash))fail('Invalid Arc Trade provider transaction.')
+      if(!providerUuid.test(input.transactionId)||!bytes32.test(input.transactionHash)||/^0x0{64}$/i.test(input.transactionHash))fail('Invalid Arc Trade provider transaction.')
       return update(input,(entry,journal)=>{
         if(journal.entries.some(other=>other.requestId!==entry.requestId && (other.transactionId===input.transactionId.toLowerCase() || other.transactionHash===input.transactionHash.toLowerCase())))fail('Arc Trade transaction already belongs to another action.')
         if(!entry.challengeId)fail('Recover the Arc Trade challenge before recording its transaction.')
@@ -107,6 +118,15 @@ export function createArcTradeExecutionStore(overrides:Partial<Deps>={}) {
           ||(entry.transactionHash && entry.transactionHash!==input.transactionHash.toLowerCase()))fail('Arc Trade provider transaction changed. Review required.')
         if(terminal(entry))return entry
         return {...entry,transactionId:input.transactionId.toLowerCase(),transactionHash:input.transactionHash.toLowerCase() as Hex,status:'submitted'}
+      })
+    },
+    async recordProviderTransaction(input:{agreementId:string;projectId:string;requestId:string;transactionId:string}) {
+      if(!providerUuid.test(input.transactionId))fail('Invalid Arc Trade provider transaction.')
+      return update(input,(entry,journal)=>{
+        if(!entry.challengeId)fail('Recover the Arc Trade challenge before recording its transaction.')
+        if(entry.transactionId && entry.transactionId!==input.transactionId.toLowerCase())fail('Arc Trade provider transaction changed. Review required.')
+        if(journal.entries.some(other=>other.requestId!==entry.requestId&&other.transactionId===input.transactionId.toLowerCase()))fail('Arc Trade transaction already belongs to another action.')
+        return {...entry,transactionId:input.transactionId.toLowerCase()}
       })
     },
     async reconcile(input:{agreementId:string;projectId:string;requestId:string;policy:ArcTradeExecutionPolicy;client:ArcTradeExecutionReader}) {

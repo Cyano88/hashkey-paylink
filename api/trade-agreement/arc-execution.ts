@@ -74,6 +74,20 @@ export type ArcTradeExecutionPolicy = {
 // Populate only after verifying the actual Circle wallet implementation and
 // EntryPoint on Arc. A candidate policy is not a production release.
 export const ARC_TRADE_EXECUTION_POLICY:ArcTradeExecutionPolicy|null = null
+export async function verifyArcTradeExecutionAccount(account:Address,policy:ArcTradeExecutionPolicy,client:ArcTradeExecutionReader) {
+  if(await client.getChainId()!==5042)throw Error('Arc Trade execution network mismatch.')
+  if(!hash(policy.walletRuntimeHash)||!hash(policy.walletImplementationRuntimeHash)||!hash(policy.entryPointRuntimeHash)
+    ||getAddress(policy.walletImplementation)===zeroAddress||getAddress(account)===zeroAddress)throw Error('Arc Trade execution policy is not verified.')
+  const blockNumber=await client.getBlockNumber({cacheTime:0}),block=await client.getBlock({blockNumber})
+  for(const [address,expected] of [[account,policy.walletRuntimeHash],[policy.walletImplementation,policy.walletImplementationRuntimeHash],[ARC_TRADE_ENTRY_POINT,policy.entryPointRuntimeHash]] as const){
+    const code=await client.getCode({address,blockNumber})
+    if(!code||code==='0x'||!equal(keccak256(code),expected))throw Error('Arc Trade execution runtime is not verified.')
+  }
+  const implementation=await client.getStorageAt({address:account,slot:ARC_TRADE_IMPLEMENTATION_SLOT,blockNumber})
+  if(!implementation||!/^0x0{24}[a-f0-9]{40}$/i.test(implementation)||!equal('0x'+implementation.slice(-40),policy.walletImplementation))throw Error('Arc Trade wallet implementation changed.')
+  const latest=await client.getBlock({blockNumber})
+  if(!block.hash||!latest.hash||!equal(block.hash,latest.hash)||await client.getChainId()!==5042)throw Error('Arc Trade wallet state changed during verification.')
+}
 export async function verifyArcTradeExecution(input:{
   call:ArcTradeExecutionCall; transactionHash:Hex; policy:ArcTradeExecutionPolicy; preparedAfterBlock:bigint;
 }, client:ArcTradeExecutionReader):Promise<ArcTradeExecutionResult> {
@@ -90,7 +104,7 @@ export async function verifyArcTradeExecution(input:{
     || tx.blockNumber === null || tx.blockHash === null || !hash(receipt.blockHash)
     || tx.blockNumber !== receipt.blockNumber || !equal(tx.blockHash,receipt.blockHash) || tx.value !== 0n)
     throw Error('Arc Trade transaction and receipt do not match.')
-  if (receipt.blockNumber < 0n || head < receipt.blockNumber + 5n) throw Error('Arc Trade execution is awaiting confirmations.')
+  if (receipt.blockNumber < 0n || head < receipt.blockNumber + 5n) throw Object.assign(Error('Arc Trade execution is awaiting confirmations.'),{code:'ARC_TRADE_EXECUTION_PENDING'})
   if (receipt.blockNumber <= input.preparedAfterBlock) throw Error('Arc Trade receipt predates the prepared action.')
   const block = await client.getBlock({blockNumber:receipt.blockNumber})
   if (!block.hash || !equal(block.hash,receipt.blockHash)) throw Error('Arc Trade receipt is not canonical.')

@@ -59,7 +59,7 @@ export function cliRequestScope(req: Partial<Pick<Request, 'method' | 'originalU
     if (req.method === 'POST' && !url.search && req.body?.action === undefined) return 'xstocks-agreement:create'
     return null
   }
-  if (url.pathname === '/api/v2/agreements') {
+  if (url.pathname === '/api/v2/agreements' || url.pathname === '/api/v2/trade-agreements') {
     if (req.method === 'GET') return 'agreement:read'
     // Draft creation only. Payer links, release requests and all nested signing routes stay excluded.
     if (req.method === 'POST' && !url.search && req.body?.action === undefined

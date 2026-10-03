@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {encodeAbiParameters,encodeEventTopics,encodeFunctionData,keccak256,parseAbi,parseAbiParameters,zeroAddress} from 'viem'
 import {getUserOperationHash} from 'viem/account-abstraction'
-import {ARC_TRADE_ACCOUNT_ABI,ARC_TRADE_ENTRY_POINT_ABI,ARC_TRADE_ENTRY_POINT,ARC_TRADE_EXECUTION_POLICY,ARC_TRADE_IMPLEMENTATION_SLOT,arcTradeUserOperationHash,verifyArcTradeExecution,wrapArcTradeCall} from '../api/trade-agreement/arc-execution.ts'
+import {ARC_TRADE_ACCOUNT_ABI,ARC_TRADE_ENTRY_POINT_ABI,ARC_TRADE_ENTRY_POINT,ARC_TRADE_EXECUTION_POLICY,ARC_TRADE_IMPLEMENTATION_SLOT,arcTradeUserOperationHash,verifyArcTradeExecution,verifyArcTradeExecutionAccount,wrapArcTradeCall} from '../api/trade-agreement/arc-execution.ts'
 const addr=n=>'0x'+n.repeat(40),h=n=>'0x'+n.repeat(64)
 const wallet=addr('1'),token=addr('2'),escrow=addr('3'),bundler=addr('4'),implementation=addr('5')
 const txHash=h('a'),blockHash=h('b'),code='0x6000',implementationCode='0x6001',entryPointCode='0x6002'
@@ -84,6 +84,11 @@ await rejects(()=>{bundled(op(encodeFunctionData({abi:ARC_TRADE_ACCOUNT_ABI,func
 await rejects(()=>{bundled(op(encodeFunctionData({abi:ARC_TRADE_ACCOUNT_ABI,functionName:'executeBatch',args:[[{target:token,value:0n,data},{target:escrow,value:0n,data}]]})))},/prepared call/)
 await rejects(()=>{bundled();tx.input=encodeFunctionData({abi:ARC_TRADE_ENTRY_POINT_ABI,functionName:'handleOps',args:[[op(),op()],bundler]})},/prepared call/)
 reset();await assert.rejects(()=>verify({preparedAfterBlock:100n}),/predates/)
+reset();await verifyArcTradeExecutionAccount(wallet,policy,client)
+changes.walletCode='0x6004';await assert.rejects(()=>verifyArcTradeExecutionAccount(wallet,policy,client),/runtime/)
+reset();changes.implementation='0x'+'0'.repeat(64);await assert.rejects(()=>verifyArcTradeExecutionAccount(wallet,policy,client),/implementation/)
+reset();changes.reorg=true;await assert.rejects(()=>verifyArcTradeExecutionAccount(wallet,policy,client),/changed during/)
+reset()
 await assert.rejects(()=>verify({call:{...call,chainId:196}}),/Invalid prepared/)
 await assert.rejects(()=>verify({policy:{...policy,walletRuntimeHash:'0x'}}),/policy/)
 console.log('Arc Trade execution smoke passed: exact calls, canonical confirmations, wallet implementation, EntryPoint operation success, stale receipts and tampering. Synthetic only; no signing or broadcast.')
