@@ -1,0 +1,32 @@
+{
+  "protocol": 2,
+  "network": "base",
+  "chainId": 8453,
+  "escrow": "0xa4df7dc962a278d1215b8b05255ea1bfd32a4c57",
+  "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "treasury": "0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753",
+  "claimAuthority": "0xdD4670dF8C8D9C0D64b0291b36990990743C3801",
+  "runtimeHash": "0x803bb469f00694a4a32eb20a64f24dde78f143891f59b66b56446e31f4ef13c3",
+  "deploymentBlock": "52122221",
+  "confirmations": 2,
+  "deploymentTransaction": "0x5f5f2b27784c5b1f540b27cbea607185e5e2818d387760862297fa71eae4cab4",
+  "circleContractId": "01a101ee-80e4-70cd-b6ab-a77808a0d962",
+  "circleTransactionId": "d89fa61c-e2e6-5f8f-aa26-32a5914debc2",
+  "deploymentIdempotencyKey": "6607e5da-5629-4907-8073-5d6858b6c0ca",
+  "blockHash": "0x7929383b2da6ff9b6aaa944bc6ff6d2722d76be658c39aca9641b933656d535a",
+  "paymaster": "0x7ceA357B5AC0639F89F9e378a1f03Aa5005C0a25",
+  "verification": {
+    "verified": true,
+    "network": "base",
+    "chainId": 8453,
+    "escrow": "0xa4df7dc962a278d1215b8b05255ea1bfd32a4c57",
+    "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "treasury": "0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753",
+    "authority": "0xdD4670dF8C8D9C0D64b0291b36990990743C3801",
+    "decimals": 6,
+    "feeBps": 25,
+    "maxRecipients": 1000,
+    "blockNumber": "52122360",
+    "blockHash": "0xf3dd325398c97b22ba52ef14bf152c8aad77eaa7dc1d2eb5d827d5049b4a58f4"
+  }
+}
