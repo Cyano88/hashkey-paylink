@@ -26,3 +26,10 @@
 - https://web3.okx.com/onchainos/dev-docs/wallet/balance-api-token-balances
 - https://web3.okx.com/onchainos/dev-docs/wallet/balance-api-all-token-balances
 - https://developers.circle.com/api-reference/wallets/user-controlled-wallets/list-wallet-balance
+
+## Release verification
+- Render deployment dep-db07upo473hc73ftn380 is live at commit 0c8e076a2ad226c79ac0eee875d83087ec90f8e4; hosted health returned HTTP 200.
+- Read-only deployed provider probes returned Circle and OKX sources with cache reuse; OKX snapshot had null block proof as intended for display estimates.
+- Android assembleDebug passed. APK SHA256: 0A6DADB0F3282B659BC7C3017EC277741407AD62C9C9335FA73CF196DBD8C9DB.
+- Installed with adb install -r on the connected Pixel; update time 2026-10-03 05:12:12. Original first-install time preserved. MainActivity launched and app process confirmed running.
+- No real-money transaction was signed as part of verification.

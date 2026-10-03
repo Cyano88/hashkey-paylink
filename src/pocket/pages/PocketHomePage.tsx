@@ -106,7 +106,7 @@ export default function PocketHomePage() {
         </button>)}
       </div><button type="button" aria-label={networkPage === 0 ? 'More networks' : 'Previous networks'} onClick={() => { const next = networkPage === 0 ? 1 : 0; setNetworkPage(next); setSelected(next === 1 ? 'polygon' : 'base') }} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-full"><ArrowRight className={cn('h-5 w-5 transition-transform', networkPage === 1 && 'rotate-180')} /></button></div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
-        {comingSoon ? <p className="text-sm font-semibold">Coming soon</p> : selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
+        {comingSoon ? <p className="text-sm font-semibold">Coming soon</p> : selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-detail-amount>{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden}</span><span className="absolute bottom-0.5 left-full ml-1 whitespace-nowrap text-[10px] font-medium tracking-normal opacity-50">USDC</span></span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
       </div>
     </section>
 

@@ -56,17 +56,16 @@ html.dark [data-pocket-sheet] { background-color: #121212; color: #fff; }
 .pocket-mode-pill button:focus-visible { outline:2px solid #3b82f6; outline-offset:3px; }
 @media(max-width:360px) { .pocket-mode-pill { width:160px; } .pocket-header-id button { font-size:9px; } }
 
-.pocket-mode-curtain { position:fixed; inset:0; z-index:120; display:grid; place-items:center; overflow:hidden; background:#fafafa; color:#09090b; animation:pocket-curtain-out 2200ms linear both; }
-.dark .pocket-mode-curtain { background:#050505; color:#fafafa; }
-.pocket-mode-brand { text-align:center; }
-.pocket-mode-wordmark { display:flex; align-items:center; justify-content:center; gap:10px; height:64px; }
-.pocket-mode-mark { display:block; animation:pocket-mark-resolve 800ms cubic-bezier(.22,1,.36,1) both; }
-.pocket-mode-name { overflow:hidden; font-size:38px; font-weight:750; letter-spacing:-1.5px; animation:pocket-name-reveal 950ms cubic-bezier(.22,1,.36,1) both; }
-.pocket-mode-brand p { margin:16px 0 0; color:#71717a; font-size:13px; font-weight:500; animation:pocket-caption-reveal 1100ms ease both; }
-.dark .pocket-mode-brand p { color:#a1a1aa; }
-@keyframes pocket-mark-resolve { 0% { opacity:0; transform:rotate(-135deg) scale(.45); } 30% { opacity:1; } 100% { transform:rotate(0) scale(1); } }
-@keyframes pocket-name-reveal { 0%,45% { opacity:0; max-width:0; transform:translateX(-8px); } 100% { opacity:1; max-width:150px; transform:translateX(0); } }
-@keyframes pocket-caption-reveal { 0%,65% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+.pocket-mode-curtain { position:fixed; inset:0; z-index:120; display:grid; place-items:center; overflow:hidden; background:#F5F5F7; color:#030712; animation:pocket-curtain-out 2200ms linear both; }
+.dark .pocket-mode-curtain { background:#000; color:#fff; }
+.pocket-mode-letters { display:flex; white-space:nowrap; font-size:clamp(20px,6.4vw,25px); font-weight:800; letter-spacing:-0.045em; }
+.pocket-mode-letters > span { display:inline-block; animation:pocket-mode-letter 320ms linear both; }
+@keyframes pocket-mode-letter {
+  0% { opacity: 0; transform: translateY(var(--letter-y)) rotate(var(--letter-turn)) scale(var(--letter-scale)); }
+  35% { opacity: 1; transform: translateY(calc(var(--letter-y) * -.22)) rotate(calc(var(--letter-turn) * -.25)) scale(1.12); }
+  68% { opacity: 1; transform: translateY(1px) rotate(0) scale(.97); }
+  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
 @keyframes pocket-curtain-out { 0%,86% { opacity:1; } 100% { opacity:0; visibility:hidden; } }
 .pocket-mode-content { animation:none; }
 [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] { z-index:50; }

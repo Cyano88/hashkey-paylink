@@ -21,11 +21,12 @@ const browser=await chromium.launch({channel:'chrome',headless:true});fs.mkdirSy
 try{for(const dark of [false,true])for(const width of [320,390,430]){
  const p=await browser.newPage({viewport:{width,height:844}}),errors=[];p.on('pageerror',e=>errors.push(e.message))
  await p.route('https://pocket.hashpaylink.com/**',r=>r.fulfill({contentType:'text/html',body:'<html class="'+(dark?'dark':'')+'"><style>html,body,#root{height:100%;margin:0}'+css+'</style><div id="root"></div></html>'}));await p.goto('https://pocket.hashpaylink.com/');await p.addScriptTag({content:bundle.outputFiles[0].text})
- await p.evaluate(()=>window.mount('stablecoins'));const card=p.locator('[data-pocket-balance-card]');await card.getByText('Total USDC',{exact:true}).waitFor();const baseline=await card.boundingBox()
- await p.evaluate(()=>window.mount('stocks'));await card.getByText('Total value',{exact:true}).waitFor();const stock=await card.boundingBox();assert.equal(stock.width,baseline.width);assert.equal(stock.height,baseline.height,JSON.stringify({width,dark,baseline,stock}))
+ await p.evaluate(()=>window.mount('stablecoins'));const card=p.locator('[data-pocket-balance-card]');await card.getByText('Total USDC',{exact:true}).waitFor();const baseline=await card.boundingBox();const checkCenters=async()=>{const offsets=await card.evaluate(c=>{const mid=e=>{const b=e.getBoundingClientRect();return b.x+b.width/2};return [...c.querySelectorAll('[data-pocket-total-amount],[data-pocket-detail-amount],p.uppercase,.leading-4')].map(e=>Math.abs(mid(e)-mid(c)))});assert.equal(offsets.length,4);assert.ok(offsets.every(v=>v<1),JSON.stringify({width,dark,offsets}))};await checkCenters();
+ await p.evaluate(()=>window.mount('stocks'));await card.getByText('Total value',{exact:true}).waitFor();const stock=await card.boundingBox();assert.equal(stock.width,baseline.width);assert.equal(stock.height,baseline.height,JSON.stringify({width,dark,baseline,stock}));await checkCenters()
+ const centers=await card.evaluate(c=>{const mid=e=>{const b=e.getBoundingClientRect();return b.x+b.width/2};return ['[data-pocket-total-amount]','[data-pocket-detail-amount]'].map(s=>Math.abs(mid(c.querySelector(s))-mid(c)))});assert.ok(centers.every(v=>v<1),JSON.stringify(centers));
  assert.match(await card.innerText(),/1,250/);assert.equal(await card.getByText('X Layer',{exact:true}).count(),0)
- await card.getByRole('button',{name:'Spendable. Show Stocks invested'}).click();assert.match(await card.innerText(),/730/)
- await card.getByRole('button',{name:'Stocks invested. Show Transaction fees'}).click();assert.match(await card.innerText(),/0.2/)
+ await card.getByRole('button',{name:'Spendable. Show Stocks invested'}).click();assert.match(await card.innerText(),/730/);await checkCenters()
+ await card.getByRole('button',{name:'Stocks invested. Show Transaction fees'}).click();assert.match(await card.innerText(),/0.2/);await checkCenters()
  assert.equal((await card.boundingBox()).height,baseline.height)
  await card.getByRole('button',{name:'Transaction fees. Show Spendable'}).click();assert.match(await card.innerText(),/500/)
  await card.getByRole('button',{name:'Hide balances'}).click();assert.doesNotMatch(await card.innerText(),/1,250|500/)
