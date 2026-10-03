@@ -4,6 +4,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pad } from 'viem'
+import { build } from 'esbuild'
+import { mkdir } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
 
 const root = await mkdtemp(join(tmpdir(), 'pocket-ng-pos-route-'))
 const originalFetch = globalThis.fetch
@@ -13,6 +16,7 @@ delete process.env.DATABASE_URL
 delete process.env.RENDER
 delete process.env.RENDER_SERVICE_ID
 delete process.env.RENDER_EXTERNAL_URL
+delete process.env.DATA_PATH
 process.env.NG_POS_STORE = join(root, 'ng-pos.json')
 process.env.PAYCREST_POS_STORE = join(root, 'paycrest.json')
 process.env.POCKET_PAYMENT_EXECUTION_STORE = join(root, 'executions.json')
@@ -23,6 +27,9 @@ process.env.PAYCREST_WEBHOOK_SECRET = 'isolated-webhook-secret'
 process.env.PRIVATE_RPC_URL = 'https://base-rpc.test'
 process.env.NG_POS_USDC_NGN_RATE = '1600'
 process.env.PAYCREST_RECONCILE_ATTEMPTS = '1'
+process.env.PRIVY_APP_ID = 'isolated-privy-app'
+process.env.PRIVY_APP_SECRET = 'isolated-privy-secret'
+globalThis.posRouteFixture = { verified: false, payer: 'did:privy:route-payer' }
 
 const merchantId = 'pos_route_merchant'
 const ownerId = 'did:privy:pos-route-owner'
@@ -74,24 +81,37 @@ function responseRecorder() {
   return { statusCode: 200, body: undefined, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } }
 }
 
-async function route(handler, body) {
+async function route(handler, body, expected = 200, token = 'fixture-payer-token') {
   const response = responseRecorder()
-  await handler({ method: 'POST', body, headers: { host: 'pay.example', 'x-forwarded-proto': 'https' } }, response)
-  assert.equal(response.statusCode, 200, JSON.stringify(response.body))
+  await handler({ method: 'POST', body, headers: { host: 'pay.example', 'x-forwarded-proto': 'https', ...(token ? { authorization: 'Bearer '+token } : {}) } }, response)
+  assert.equal(response.statusCode, expected, JSON.stringify(response.body))
   return response.body
 }
 
 try {
-  const [{ default: ngPosHandler }, { paycrestWebhookHandler }, { paymentExecutionRepository }] = await Promise.all([
-    import('../api/ng-pos.ts'), import('../api/paycrest-pos.ts'), import('../api/pocket/payment-execution-intents.ts'),
-  ])
+  // Mock external identity/verification evidence, retaining the route's real
+  // authentication gate, allowance policy, settlement and execution journal.
+  const mocks = {
+    '@privy-io/server-auth': `export class PrivyClient { async verifyAuthToken(token){if(token!=='fixture-payer-token')throw Object.assign(Error('Invalid token'),{status:401});return {userId:globalThis.posRouteFixture.payer}} async getUserById(){return {linkedAccounts:[]}} }`,
+    'kyc-level.js': `export const BASIC_DAILY_NGN=50000;export const advancedDailyNgn=()=>null;export const readPocketKycLevel=async()=>({level:globalThis.posRouteFixture.verified?'basic':'none'});export const requirePocketBasicKyc=async owner=>{if(owner!==globalThis.posRouteFixture.payer||!globalThis.posRouteFixture.verified)throw Object.assign(Error('Complete Basic verification.'),{status:403,code:'KYC_BASIC_REQUIRED'});return {level:'basic'}}`,
+  }
+  await mkdir('.codex-temp', { recursive: true })
+  const bundle = join(process.cwd(), '.codex-temp', 'ng-pos-settlement-route-fixture.mjs')
+  await build({stdin:{contents:`export {default as ngPosHandler} from './api/ng-pos.ts';export {paycrestWebhookHandler} from './api/paycrest-pos.ts';export {paymentExecutionRepository} from './api/pocket/payment-execution-intents.ts'`,resolveDir:process.cwd(),loader:'ts'},outfile:bundle,bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'identity-fixtures',setup(b){b.onResolve({filter:/.*/},a=>{const key=a.path.endsWith('/kyc-level.js')?'kyc-level.js':a.path;return mocks[key]?{path:key,namespace:'fixture'}:undefined});b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
+  const {ngPosHandler,paycrestWebhookHandler,paymentExecutionRepository}=await import(pathToFileURL(bundle).href)
   const quoted = await route(ngPosHandler, { action: 'quote', merchant_id: merchantId, settlement_type: 'INSTANT_FIAT', amount_currency: 'NGN', amount: '1600', network: 'base' })
   assert.equal(quoted.quote.amount_usdc, '1')
   assert.ok(quoted.quote.intent_id)
   assert.ok(quoted.quote.payment_execution_id)
   assert.equal((await paymentExecutionRepository.get(ownerId, quoted.quote.payment_execution_id)).state, 'prepared')
 
-  const ordered = await route(ngPosHandler, { action: 'createOfframpOrder', intent_id: quoted.quote.intent_id, refund_address: refundAddress, payer_wallet: refundAddress, payer_name: 'Test Payer' })
+  const orderInput={ action: 'createOfframpOrder', intent_id: quoted.quote.intent_id, refund_address: refundAddress, payer_wallet: refundAddress, payer_name: 'Test Payer' }
+  await route(ngPosHandler, orderInput, 401, null)
+  await route(ngPosHandler, orderInput, 401, 'invalid-token')
+  const denied=await route(ngPosHandler, orderInput, 403)
+  assert.equal(denied.code,'KYC_BASIC_REQUIRED')
+  globalThis.posRouteFixture.verified=true
+  const ordered = await route(ngPosHandler, orderInput)
   assert.equal(ordered.order.paycrest_order_id, 'paycrest-pos-route-order')
   assert.equal(ordered.payment_execution.id, quoted.quote.payment_execution_id)
   assert.equal(ordered.payment_execution.state, 'authorized')
@@ -117,4 +137,8 @@ try {
   await rm(root, { recursive: true, force: true })
 }
 
-console.log('Pocket ng-pos settlement route smoke test passed.')
+console.log('PASS POS route: missing/invalid payer authentication and missing Basic verification rejected; verified payer settlement, receipt registration and completed execution passed.')
+// The production route starts background reconciliation pollers. All assertions
+// and temporary-store cleanup above have completed; do not keep this isolated
+// smoke process alive to run production polling schedules.
+process.exit(0)

@@ -33,6 +33,13 @@ await assert.rejects(()=>service.mint('alice',r.id,'session'),/simulation unavai
 assert.equal(requests.length,0);assert.equal((await service.status('alice',r.id)).state,'attested');rejectSimulation=false
 await assert.rejects(()=>service.mint('alice',r.id,'session'),/response lost/)
 assert.equal((await service.mint('alice',r.id,'session')).challengeId,'challenge');assert.equal(requests[0],requests[1]);assert.equal(simulations,1)
-assert.equal((await service.status('alice',r.id,'session')).state,'completed')
+// Provider status may lag or contradict a broadcast. Missing canonical proof
+// must retain the same mint request, even when Circle reports failure.
+const originalReceipt=destClient.getTransactionReceipt
+destClient.getTransactionReceipt=async()=>{throw Object.assign(Error('not included'),{name:'TransactionReceiptNotFoundError'})}
+const failedWithHash=createXPayBridgeService({destination:destClient,challengeStatus:async()=>({status:'failed',txHash:mintHash})})
+assert.equal((await failedWithHash.status('alice',r.id,'session')).state,'mint_submitted')
+destClient.getTransactionReceipt=originalReceipt
+assert.equal((await failedWithHash.status('alice',r.id,'session')).state,'completed')
 assert.equal((await service.mint('alice',r.id,'session')).record.state,'completed');assert.equal(requests.length,2)
 console.log('PASS coordinator: low OKB leaves quote retryable, source proof to attestation, lost mint response reuses key without re-simulation, verified Base arrival, no terminal replay.')

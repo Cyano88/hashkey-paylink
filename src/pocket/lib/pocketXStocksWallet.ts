@@ -9,6 +9,8 @@ export type StockAsset = { symbol: string; name: string; address: string; icon: 
 export const stockAssets: StockAsset[] = catalogue.assets
 export const stockUsdc: StockAsset = { symbol: 'USDC', name: 'USD Coin', address: '0xB6CEceAB302E2E4948951eE7843FC24E92933061', icon: '' }
 export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '/brand/okb.png' }
+// OKX's native-token identifier for X Layer market-price requests.
+export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 export type StockHolding = { asset: StockAsset; units: bigint; decimals: number }
 export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; expiresAt: number }
 

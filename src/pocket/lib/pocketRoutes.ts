@@ -46,7 +46,7 @@ export function pocketApiUrl(path: string) {
 export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'undefined' ? '' : window.location.hostname)
 
 export type PocketRouteState =
-  | { section: 'xstocks'; view: 'home' | 'market' | 'activity' | 'portfolio' | 'account' | 'send' | 'receive' | 'trade' | 'request' | 'xpay' | 'notifications' | 'verify-name' }
+  | { section: 'xstocks'; view: 'home' | 'market' | 'activity' | 'portfolio' | 'account' | 'send' | 'receive' | 'trade' | 'swap' | 'request' | 'xpay' | 'notifications' | 'verify-name' }
   | { section: 'home'; view: 'xpay' | 'overview' | 'deposit' | 'send' | 'swap' | 'scan' | 'transfer' | 'receive' | 'pos-manage' }
   | { section: 'profile'; view: 'details' | 'verify-name' }
   | { section: 'notifications'; view: 'inbox' }
@@ -98,7 +98,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   const path = cleanPathname(pathname)
   if (path === '/xpay' || /^\/xpay\/checkout\/xp_[0-9a-f-]{36}$/.test(path)) return {section:'home',view:'xpay'}
   if (/^\/xpay\/[0-9a-f-]{36}$/.test(path)) return { section: 'xstocks', view: 'xpay' }
-  const stockView = path.match(/^\/xstocks\/(home|market|activity|portfolio|account|send|receive|trade|request|xpay|notifications|verify-name)$/)?.[1]
+  const stockView = path.match(/^\/xstocks\/(home|market|activity|portfolio|account|send|receive|trade|swap|request|xpay|notifications|verify-name)$/)?.[1]
   if (stockView) return { section: 'xstocks', view: stockView as Extract<PocketRouteState, { section: 'xstocks' }>['view'] }
   if (path === POCKET_ROUTES.home) return { section: 'home', view: 'overview' }
   if (path === POCKET_ROUTES.transfer) return { section: 'home', view: 'transfer' }

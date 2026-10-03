@@ -1,18 +1,19 @@
+import PocketStockBalanceCard from '../components/PocketStockBalanceCard'
+import {pocketStockBalanceValue} from '../lib/pocketStockBalanceValue'
 import PocketHomeAction from '../components/PocketHomeAction'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowLeftRight, ChevronRight, Deposit, Eye, EyeOff, History, RequestMoney, Search, Send, UserRound, Wallet } from '../components/PocketIcons'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, ArrowLeftRight, ChevronRight, Deposit, History, Search, Send, UserRound, Wallet } from '../components/PocketIcons'
 import { PocketSkeletonBar } from '../components/PocketContentSkeletons'
 import PocketRecentActivitySkeleton from '../components/PocketRecentActivitySkeleton'
 import PocketStockActivity from '../components/PocketStockActivity'
 import PocketStockTransferMenu from '../components/PocketStockTransferMenu'
 import PocketXPay from '../components/PocketXPay'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
-import { QrCode } from '../components/PocketIcons'
 import PocketStockTrade from '../components/PocketStockTrade'
 import PocketStockWalletActions from '../components/PocketStockWalletActions'
 import usePocketStockWallet from '../hooks/usePocketStockWallet'
-import { stockQuantity, stockUsdc, stockGasAsset } from '../lib/pocketXStocksWallet'
+import { stockQuantity, stockUsdc, stockGasAsset, stockGasPriceAddress } from '../lib/pocketXStocksWallet'
 import PocketStockNotifications from '../components/PocketStockNotifications'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import usePocketStockCurrency from '../hooks/usePocketStockCurrency'
@@ -65,29 +66,26 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
   useEffect(() => { setQuery('') }, [view])
   const list = view === 'home' ? featured : query.trim() ? filtered : ranking.symbols.flatMap(symbol => catalogue.assets.filter(a => a.symbol === symbol))
   const quoteAssets = selected ? [selected] : view === 'portfolio' || view === 'home' ? snapshot?.holdings.map(h => h.asset) || [] : view === 'market' ? list : []
-  const quotes = usePocketStockQuotes([...new Set([...quoteAssets.map(a => a.address), ...((view === 'home' || view === 'portfolio') && snapshot?.holdings.length ? [stockUsdc.address] : [])])])
+  const quotes = usePocketStockQuotes([...new Set([...quoteAssets.map(a => a.address), ...((view === 'home' || view === 'portfolio') && snapshot ? [stockUsdc.address,...(snapshot.gas>0n?[stockGasPriceAddress]:[])] : [])])])
   const displayQuotes = !selected && (view === 'home' || view === 'portfolio') ? quotes.displayQuotes : quotes.quotes
   const usdcRate = displayQuotes[stockUsdc.address.toLowerCase()]?.usd
   const displayStale = wallet.balanceStale || quotes.stale
   const lastObserved = Math.min(snapshot?.observedAt || Date.now(), ...Object.values(quotes.displayQuotes).map(q => q.fetchedAt))
   const showLastUpdated = displayStale && Date.now() - lastObserved >= 120_000
   const lastUpdated = 'Last updated ' + new Date(lastObserved).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
-  const stockTotal = snapshot?.complete && snapshot.holdings.every(h => !!displayQuotes[h.asset.address.toLowerCase()]) ? snapshot.holdings.reduce((sum, h) => sum + Number(stockQuantity(h.units, h.decimals)) * displayQuotes[h.asset.address.toLowerCase()].usd, 0) : null
-  const active: PocketNavTab = view === 'market' || view === 'trade' ? 'bills' : view === 'portfolio' ? 'profile' : view === 'activity' ? 'activity' : 'home'
+  const balanceValues=pocketStockBalanceValue(snapshot,displayQuotes)
+  const active: PocketNavTab = view === 'xpay' ? 'xpay' : view === 'portfolio' ? 'profile' : view === 'activity' ? 'activity' : 'home'
   const openAsset = (asset: Asset) => navigate(xStockPath('market') + '?asset=' + encodeURIComponent(asset.symbol))
   const isAction = ['send', 'receive', 'request'].includes(view)
   const actionLabel = view === 'send' ? 'Send stocks' : view === 'receive' ? 'Receive stocks' : 'Request stocks'
-  const balance = <section data-pocket-balance-card className="overflow-hidden rounded-[26px] bg-gray-950 px-5 py-5 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
-    <div className="flex items-center gap-2"><p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Total stock value</p><button type="button" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'} onClick={() => setBalanceVisible(current => { localStorage.setItem('pocket.balanceVisible', String(!current)); return !current })} className="flex h-8 w-8 items-center justify-center rounded-full">{balanceVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button aria-label="Scan to pay" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.scan + '?rail=xstocks')} className="ml-auto flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-2"><QrCode className="h-5 w-5" /><span className="text-[9px] font-semibold">Scan to pay</span></button></div>
-    {balanceVisible && stockTotal === null && ((!wallet.ready && !wallet.error) || (wallet.address && ((!snapshot && !wallet.error) || quotes.busy))) ? <span role="status" aria-label="Loading balances" className="mt-1 block h-10 w-44 animate-pulse rounded-xl bg-white/15 motion-reduce:animate-none dark:bg-gray-950/10" /> : balanceVisible && stockTotal === null ? <p className="mt-3 text-sm font-medium opacity-60">{wallet.ready && !wallet.address ? 'Open your XStocks wallet' : 'Balance unavailable'}</p>: <p className="mt-1 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tracking-tight">{balanceVisible ? stockTotal === null ? '—' : formatValue(stockTotal) : '....'} <span className="text-xs font-medium tracking-normal opacity-50">{stockCurrency.currency !== 'USDC' ? stockCurrency.currency : 'USD'}</span></p>}
-    <p className="mt-3 text-[11px] opacity-55">{wallet.address ? showLastUpdated ? lastUpdated : 'X Layer' : 'Open your XStocks wallet'}</p>
-  </section>
+  const balance = <PocketStockBalanceCard {...balanceValues} visible={balanceVisible} onToggle={()=>setBalanceVisible(current=>{localStorage.setItem('pocket.balanceVisible',String(!current));return !current})} onScan={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.scan+'?rail=xstocks')} loading={(!wallet.ready&&!wallet.error)||!!wallet.address&&((!snapshot&&!wallet.error)||quotes.busy)} walletMissing={wallet.ready&&!wallet.address} staleLabel={showLastUpdated?lastUpdated:undefined} localEquivalent={balanceValues.total!==null&&stockCurrency.currency!=='USDC'&&freshFx&&usdcRate?'~ '+new Intl.NumberFormat('en-NG',{style:'currency',currency:stockCurrency.currency,maximumFractionDigits:2}).format(balanceValues.total/usdcRate*freshFx):undefined}/>
   const market = <section className={card}>
     {view === 'home' && <div className="flex items-center justify-between"><h2 className="text-sm font-black">Stocks</h2><button type="button" onClick={() => navigate(xStockPath('market'))} className="flex min-h-11 items-center gap-1 text-[11px] font-bold text-gray-500">View all<ChevronRight className="h-3.5 w-3.5" /></button></div>}
     {view !== 'home' && <label className="flex items-center gap-2 rounded-xl bg-gray-100 px-3 dark:bg-white/[0.06]"><Search className="h-4 w-4 text-gray-400" /><input aria-label="Search stocks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, symbol or contract" className="min-h-11 min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>}
     <div className="mt-3 divide-y divide-gray-100 dark:divide-white/[0.05]">{list.map(asset => <AssetRow usdcRate={usdcRate} formatValue={formatValue} key={asset.symbol} asset={asset} quote={displayQuotes[asset.address.toLowerCase()]} busy={quotes.busy} quantity={view === 'home' ? (() => { const h = snapshot?.holdings.find(h => h.asset.address === asset.address); return h ? stockQuantity(h.units, h.decimals) : snapshot?.complete || (wallet.ready && !wallet.address) ? '0' : null })() : undefined} quantityLoading={view === 'home' && ((!wallet.ready && !wallet.error) || (!!wallet.address && !snapshot && !wallet.error))} onOpen={() => openAsset(asset)} />)}</div>
     {!list.length && <p role="status" className="py-10 text-center text-xs text-gray-400">No stocks match your search.</p>}
   </section>
+  if(view==='xpay'&&!params.get('merchant'))return <Navigate to={POCKET_BASE_PATH+'/xpay'} replace state={{xpayOrigin:'xstocks'}}/>
   return <PocketRouteShell fixedPage={view==='xpay'&&xpayFixed} active={active} onSelect={tab => navigate(xStockNavPath(tab))}>
     <div className={view==='xpay'&&xpayFixed?"pocket-stock-page flex min-h-0 flex-1 flex-col text-gray-950 dark:text-white":"pocket-stock-page space-y-5 text-gray-950 dark:text-white"}>
       {selected ? <>
@@ -97,9 +95,9 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
         <section className={card}><h2 className="text-sm font-bold">Asset details</h2><p className="mt-4 text-[10px] text-gray-400">X Layer contract</p><p className="mt-1 break-all font-mono text-[11px]">{selected.address}</p><a href={'https://www.oklink.com/x-layer/evm/token/' + selected.address} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center text-xs font-bold text-gray-500">View on explorer<ChevronRight className="ml-1 h-3.5 w-3.5" /></a></section>
       </> : view === 'home' ? <>
         {balance}
-        <section className="grid grid-cols-4 gap-2">{([{ label: 'Send', icon: Send, view: 'send' }, { label: 'Receive', icon: Deposit, view: 'receive' }, { label: 'Trade', icon: ArrowLeftRight, view: 'trade' }, { label: 'XPay', icon: RequestMoney, view: 'xpay' }] as const).map(action => <PocketHomeAction key={action.view} label={action.label} icon={<action.icon className="h-5 w-5" />} onClick={() => navigate(action.view==='xpay'?'/xpay':xStockPath(action.view),action.view==='xpay'?{state:{xpayOrigin:'xstocks'}}:undefined)} />)}</section>
+        <section className="grid grid-cols-4 gap-2">{([{ label: 'Send', icon: Send, view: 'send' }, { label: 'Receive', icon: Deposit, view: 'receive' }, { label: 'Buy / Sell', icon: ArrowLeftRight, view: 'trade' }, { label: 'Swap', icon: ArrowLeftRight, view: 'swap' }] as const).map(action => <PocketHomeAction key={action.view} label={action.label} icon={<action.icon className="h-5 w-5" />} onClick={() => navigate(xStockPath(action.view))} />)}</section>
         {market}
-      </> : view === 'xpay' ? <PocketXPay wallet={wallet} onLayoutChange={setXpayFixed} /> : view === 'trade' ? <><PocketFlowHeader title="Trade" onBack={()=>navigate(xStockPath('home'))}/><PocketStockTrade key={params.toString()} wallet={wallet} initialAsset={params.get('buy') || params.get('sell') || undefined} initialMode={params.has('sell') ? 'sell' : 'buy'} /></> : view === 'market' ? <>
+      </> : view === 'xpay' ? <PocketXPay wallet={wallet} onLayoutChange={setXpayFixed} /> : view === 'trade' || view === 'swap' ? <><PocketFlowHeader title={view === 'swap' ? 'Swap' : 'Buy / Sell'} onBack={()=>navigate(xStockPath('home'))}/><PocketStockTrade key={view+params.toString()} wallet={wallet} initialAsset={params.get('buy') || params.get('sell') || undefined} initialMode={view === 'swap' ? 'swap' : params.has('sell') ? 'sell' : 'buy'} /></> : view === 'market' ? <>
         {market}
       </> : view === 'portfolio' ? <>
         <section className={card}>

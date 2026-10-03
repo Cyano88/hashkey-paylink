@@ -1,4 +1,5 @@
 import {requirePocketBasicKyc} from './kyc-level.js'
+import {xpayStockHistory,xpayStockTotals} from '../../src/pocket/lib/pocketXPayStockHistory.js'
 import {retirePosQr} from './pos-retirement.js'
 import {UNIFIED_XPAY_KEY as KEY,readUnifiedXPayStore as read,type UnifiedXPayRecord as Record,type UnifiedXPayStore as Store} from './unified-xpay-store.js'
 import type {Request,Response} from 'express'
@@ -48,7 +49,8 @@ export default async function handler(req:Request,res:Response){
    const c=b.id?(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner):undefined
    if(b.id&&!c)return res.status(404).json({ok:false,error:'QR not found.'})
    const payments=(await Promise.all([listPocketUnifiedXPayPosPayments(owner,c?.id,c?.legacyDestinationIds),listPocketUnifiedXPayStockPayments(owner,c?.id,c?.legacyDestinationIds)])).flat().sort((a,b)=>b.createdAt-a.createdAt)
-   return res.json({ok:true,payments:payments.slice(0,200)})
+   const scoped=b.rail==='xstocks'?xpayStockHistory(payments):b.rail==='stablecoins'?payments.filter(p=>p.rail==='stablecoins'):payments
+   return res.json({ok:true,payments:scoped.slice(0,200),stockTotals:xpayStockTotals(scoped)})
   }
   if(b.action==='create'||b.action==='adopt'){
    const adopting=b.action==='adopt',destinations=adopting?await available(owner):[]

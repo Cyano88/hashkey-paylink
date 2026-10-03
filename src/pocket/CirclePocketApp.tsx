@@ -297,7 +297,7 @@ export default function CirclePocketApp() {
   else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>
   else if (route?.section === 'xstocks' && route.view === 'account') content = <PocketPageBoundary active="profile"><PocketProfilePage /></PocketPageBoundary>
   else if (route?.section === 'xstocks' && route.view === 'verify-name') content = <PocketPageBoundary active="profile"><PocketVerifyNamePage /></PocketPageBoundary>
-  else if (route?.section === 'xstocks' && route.view !== 'account' && route.view !== 'verify-name') content = <PocketPageBoundary active={route.view === 'portfolio' ? 'profile' : route.view === 'market' ? 'bills' : route.view === 'activity' ? 'activity' : 'home'}><PocketXStocksPage view={route.view} /></PocketPageBoundary>
+  else if (route?.section === 'xstocks' && route.view !== 'account' && route.view !== 'verify-name') content = <PocketPageBoundary active={route.view === 'portfolio' ? 'profile' : route.view === 'xpay' ? 'xpay' : route.view === 'activity' ? 'activity' : 'home'}><PocketXStocksPage view={route.view} /></PocketPageBoundary>
   else if (route?.section === 'home' && (route.view === 'transfer' || route.view === 'receive')) content = <PocketPageBoundary active="home"><PocketTransferMenuPage kind={route.view === 'transfer' ? 'send' : 'receive'} /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'xpay') content = <PocketPageBoundary active="home"><PocketUnifiedXPayPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'pos-manage') content = <PocketPageBoundary active="home"><PocketPosManagePage /></PocketPageBoundary>

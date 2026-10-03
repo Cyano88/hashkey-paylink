@@ -1,11 +1,11 @@
 import {useState} from 'react'
 import {Search} from './PocketIcons'
 import {stockAssets,stockUsdc,type StockBalanceSnapshot} from '../lib/pocketXStocksWallet'
-export default function PocketXPayAssetList({selected,onChange,disabled=false,snapshot,fits}:{selected:string[];onChange:(tokens:string[])=>void;disabled?:boolean;snapshot?:StockBalanceSnapshot|null;fits?:(address:string)=>boolean}){
+export default function PocketXPayAssetList({selected,onChange,disabled=false,snapshot,fits,stocksOnly=false}:{selected:string[];onChange:(tokens:string[])=>void;disabled?:boolean;snapshot?:StockBalanceSnapshot|null;fits?:(address:string)=>boolean;stocksOnly?:boolean}){
  const [query,setQuery]=useState('')
  const held=new Set(snapshot?.holdings.filter(h=>h.units>0n).map(h=>h.asset.address.toLowerCase())||[])
  if(snapshot?.cash&&snapshot.cash>0n)held.add(stockUsdc.address.toLowerCase())
- const assets=[stockUsdc,...stockAssets].sort((a,b)=>Number(held.has(b.address.toLowerCase()))-Number(held.has(a.address.toLowerCase())))
+ const assets=[...(!stocksOnly||selected.includes(stockUsdc.address.toLowerCase())?[stockUsdc]:[]),...stockAssets].sort((a,b)=>Number(held.has(b.address.toLowerCase()))-Number(held.has(a.address.toLowerCase())))
  const visible=assets.filter(a=>(a.name+' '+a.symbol+' '+a.address).toLowerCase().includes(query.trim().toLowerCase()))
  return <><label className="flex min-h-12 shrink-0 items-center gap-3 rounded-xl bg-gray-100 px-3 dark:bg-[#121212]"><Search className="h-4 w-4"/><input aria-label="Search accepted assets" placeholder="Search name or contract" value={query} onChange={e=>setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none"/></label><div aria-label="Accepted assets" className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain divide-y divide-gray-100 dark:divide-[#262626]">{visible.map(a=>{const address=a.address.toLowerCase(),checked=selected.includes(address);return <label key={address} className="flex min-h-16 items-center gap-3 py-2"><img src={a.icon||'/brand/usdc-circle-logo.png'} alt="" loading="lazy" className="h-8 w-8 rounded-full"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{a.name}</span><span className="text-xs text-gray-500">{a.symbol}</span></span><input aria-label={a.symbol} className="shrink-0 accent-black dark:accent-white" type="checkbox" checked={checked} disabled={disabled||(!checked&&!(fits?fits(address):selected.length<3))} onChange={e=>onChange(e.target.checked?[...selected,address]:selected.filter(t=>t!==address))}/></label>})}{!visible.length&&<p className="py-8 text-center text-xs text-gray-500">No supported assets match your search.</p>}</div></>
 }

@@ -4,7 +4,7 @@ fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
 './payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
 '../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
-'../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));return structuredClone(state)}`,
+'../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));globalThis.fixture.saved=state;return structuredClone(state)}`,
 './xstocks-wallet-owner.js':`export const verifyStockWalletOwner=async(owner,wallet)=>{if(globalThis.fixture.wallets[owner]!==wallet)throw Object.assign(Error('Wrong wallet'),{status:403})}`,
 './xstocks-notifications-store.js':`export const stockNoticeClient={getChainId:async()=>196,getLogs:async()=>globalThis.fixture.logs||[],getTransactionReceipt:async({hash})=>{if(!globalThis.fixture.receipts[hash])throw Error('pending');return globalThis.fixture.receipts[hash]},getBlock:async({blockNumber}={})=>({number:blockNumber||globalThis.fixture.head||100n,hash:'block',timestamp:BigInt(Math.floor(Date.now()/1000))})};export const stockNoticeAsset=async(token)=>({address:token,symbol:'NVDAx',decimals:18});export const mutateStockNotices=async fn=>fn({notices:{}});export const putStockNotice=()=>{}`,
 './xstocks-prices.js':`export const readStockMarketPrices=async tokens=>Object.fromEntries(tokens.map(t=>[t,{usd:200,fetchedAt:Date.now()}]))`
@@ -18,7 +18,10 @@ const from='0x'+'1'.repeat(40),to='0x'+'2'.repeat(40),token=stockAssets[0].addre
 globalThis.fixture={owner:'merchant',wallets:{merchant:to,payer:from},receipts:{}}
 const call=async(body,expected=200,headers={})=>{let status=200,result;await handler({method:'POST',body,headers},{setHeader(){},status(s){status=s;return this},json(data){result=data;return this},sendStatus(s){status=s}});assert.equal(status,expected,JSON.stringify(result));return result}
 await call({action:'merchant-save',wallet:from,name:'Fixture',tokens:[token]},403)
-const merchant=(await call({action:'merchant-save',wallet:to,name:'Fixture',tokens:[token]})).merchant
+await call({action:'merchant-save',wallet:to,name:'Fixture',tokens:[token]},409)
+// Create fixtures through terminal-issued setup, then model legacy unbound QRs.
+async function legacyMerchant(input){const key=input.key||'fixture-terminal-setup-'+input.name.replaceAll(' ','-');fixture.unified={checkouts:[{id:'xp_11111111-1111-4111-8111-111111111111',owner:'merchant',destinationIds:[],setupKeys:[{key,kind:'wallet'}]}]};const result=await call({...input,create:true,key});fixture.unified=undefined;return result}
+const merchant=(await legacyMerchant({action:'merchant-save',wallet:to,name:'Fixture',tokens:[token]})).merchant
 fixture.owner='payer'
 const body={action:'prepare',id:merchant.id,wallet:from,token,usd:'1.00',key:'fixture-unique-key-0001'}
 const p=(await call(body)).payment;assert.equal((await call(body)).payment.id,p.id)
@@ -38,7 +41,7 @@ fixture.head=140n;const recoveredHash='0x'+'b'.repeat(64);fixture.logs=[{args:{v
 console.log('PASS lost-hash chain recovery; server merchant ownership, idempotency, changed details rejection, authorize once, active-payment guard, ownership isolation, verified settlement, hash replay guard')
 
 fixture.owner='payer';const readyAfterDelete=(await call({...body,key:'fixture-unique-key-0003'})).payment;const pendingAfterDelete=(await call({...body,key:'fixture-unique-key-0004'})).payment;await call({action:'authorize',id:pendingAfterDelete.id});await call({action:'merchant-delete',id:merchant.id},404);fixture.owner='merchant';await call({action:'merchant-delete',id:merchant.id},403);
-const third=(await call({action:'merchant-save',create:true,wallet:to,name:'Second link',tokens:[token]})).merchant;assert.notEqual(third.id,merchant.id);assert.equal((await call({action:'mine'})).merchants.length,2);
+const third=(await legacyMerchant({action:'merchant-save',create:true,wallet:to,name:'Second link',tokens:[token]})).merchant;assert.notEqual(third.id,merchant.id);assert.equal((await call({action:'mine'})).merchants.length,2);
 await call({action:'merchant-delete',id:merchant.id},200,{'x-pocket-payment-approval':'single-use-fixture-merchant'});await call({action:'merchant',id:merchant.id},404);assert.equal((await call({action:'mine'})).merchants.length,1);assert.equal((await call({action:'mine'})).payments.length,4);await call({action:'merchant-delete',id:third.id},403,{'x-pocket-payment-approval':'single-use-fixture-merchant'});
 fixture.owner='payer';await call({...body,key:'fixture-unique-key-after-delete'},400);
 console.log('PASS independent reusable links; owner-only, one-time PIN approval deletion; deleted QR rejected; payment history retained')
@@ -71,7 +74,7 @@ try {
 
 fixture.owner='merchant';
 const setup={action:'merchant-save',create:true,key:'fixture-setup-key-001',wallet:to,name:'Unified setup',tokens:[token]};
-const setupMerchant=(await call(setup)).merchant;
+const setupMerchant=(await legacyMerchant(setup)).merchant;
 assert.equal((await call(setup)).merchant.id,setupMerchant.id);
 await call({...setup,name:'Changed'},409);
 assert.equal(setupMerchant.createKey,undefined);
@@ -90,3 +93,7 @@ await call({action:'authorize',id:unifiedPayment.id});
 assert.deepEqual((await listPocketUnifiedXPayStockPayments('merchant',unifiedId)).map(p=>p.id),[unifiedPayment.id]);
 assert.equal((await listPocketUnifiedXPayStockPayments('payer2',unifiedId)).length,0);
 console.log('PASS unified setup retries; QR binding, revision/deletion guards, immutable replay and owner-only history');
+assert.equal((await listPocketUnifiedXPayStockPayments('merchant',unifiedId))[0].rail,'xstocks');
+fixture.saved.payments[unifiedPayment.id].symbol='USDC';
+assert.equal((await listPocketUnifiedXPayStockPayments('merchant',unifiedId))[0].rail,'stablecoins');
+console.log('PASS direct USDC wallet receipts remain on the Stablecoins rail.');

@@ -21,7 +21,7 @@ export function xpayBankReceipt(p:XPayBankPayment):PaylinkReceipt{
 export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantName,assets,currency,onClose,resumeId}:{checkoutId:string;merchantId:string;merchantName:string;assets:string[];currency:string;onClose:()=>void;resumeId?:string}){
  const identity=usePocketIdentity(),{login}=usePrivy(),wallet=usePocketStockWallet()
  const tokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>assets.includes(t.symbol)&&t.symbol!=='OKB')
- const [token,setToken]=useState(''),[amount,setAmount]=useState(''),[payment,setPayment]=useState<XPayBankPayment|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[sheet,setSheet]=useState(false)
+ const [token,setToken]=useState(''),[amount,setAmount]=useState(''),[payment,setPayment]=useState<XPayBankPayment|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[historyChecked,setHistoryChecked]=useState(false),[reload,setReload]=useState(0),[error,setError]=useState(''),[sheet,setSheet]=useState(false)
  const key=identity.user?.id+':'+checkoutId+':'+merchantId,scope=useRef(key);scope.current=key
  const current=useRef(payment);current.current=payment
  const mounted=useRef(true),locked=useRef(false),session=useRef<CircleEvmEmailSession|null>(null),requestKey=useRef(crypto.randomUUID())
@@ -40,21 +40,36 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
  const request=async(body:Record<string,unknown>,approval?:{token:string;authorization:string})=>{const expected=scope.current;const r=await xpayBankRequest(identity.getAccessToken,body,approval);active(expected);return r}
  const reconcile=async(id:string)=>{
   let saved:{id?:string;hash?:string;stage?:string}={};try{saved=JSON.parse(localStorage.getItem(storage)||'{}')}catch{}
-  if(saved.id===id&&saved.hash&&['swap','bridge'].includes(saved.stage||''))await request({action:saved.stage==='swap'?'swapSubmitted':'bridgeSubmitted',id,hash:saved.hash})
-  const result=await request({action:'status',id,...(session.current?{circleUserToken:session.current.userToken}:{})});return adopt(result.payment)
+  const status=()=>request({action:'status',id,...(session.current?{circleUserToken:session.current.userToken}:{})})
+  let result=await status()
+  if(saved.id===id&&saved.hash&&['swap','bridge'].includes(saved.stage||'')){
+   const recorded=saved.stage==='swap'?result.payment.swapHash:result.payment.bridge?.burnHash
+   if(recorded&&recorded.toLowerCase()!==saved.hash.toLowerCase())throw Error('This saved transaction does not match the payment. Contact Pocket support.')
+   // A previous request may have succeeded even when its response was lost.
+   // Reconcile first: never replay a bridge submission after payout has begun.
+   if(!recorded){
+    await request({action:saved.stage==='swap'?'swapSubmitted':'bridgeSubmitted',id,hash:saved.hash})
+    result=await status()
+   }
+   // Clear only this acknowledged source reference, preserving another tab's evidence.
+   let latest:{id?:string;hash?:string;stage?:string}={};try{latest=JSON.parse(localStorage.getItem(storage)||'{}')}catch{}
+   if(latest.id===id&&latest.hash===saved.hash&&latest.stage===saved.stage)localStorage.setItem(storage,JSON.stringify({id}))
+  }
+  return adopt(result.payment)
  }
  useEffect(()=>{
-  session.current=null;current.current=null;setPayment(null);setError('');setSheet(false);setLoading(true)
+  session.current=null;current.current=null;setPayment(null);setError('');setSheet(false);setLoading(true);setHistoryChecked(false)
   let live=true
   if(!identity.authenticated){setLoading(false);return}
   void (resumeId?xpayBankRequest(identity.getAccessToken,{action:'status',id:resumeId}).then(r=>({payments:[r.payment]})):xpayBankRequest(identity.getAccessToken,{action:'list'})).then(result=>{
    if(!live)return
    const existing=result.payments?.find(p=>resumeId?p.id===resumeId:p.checkoutId===checkoutId&&p.merchantId===merchantId&&!['quoted','successful','refunded'].includes(p.state))
    if(resumeId&&!existing)setError('This payment is not available in your account.')
+   setHistoryChecked(true)
    if(existing){adopt(existing);setSheet(true);void reconcile(existing.id).catch(()=>undefined)}
   }).catch(()=>{if(live)setError('Could not check your existing payments. Try again before starting another.')}).finally(()=>{if(live)setLoading(false)})
   return()=>{live=false}
- },[key,identity.authenticated])
+ },[key,identity.authenticated,resumeId,reload])
  useEffect(()=>{
   if(!payment||['quoted','successful','refunded','failed'].includes(payment.state))return
   let stopped=false,reading=false
@@ -64,6 +79,7 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
  async function run(work:()=>Promise<void>){if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await work()}catch(e){if(mounted.current)setError(e instanceof Error?e.message:'This payment could not continue. Check its status.')}finally{locked.current=false;if(mounted.current)setBusy(false)}}
  async function unlock(){const expected=scope.current;const unlocked=await unlockPocketBaseWallet(identity);active(expected);session.current=unlocked.session;return unlocked.session}
  const prepare=()=>run(async()=>{
+  if(!historyChecked)throw Error('Check your existing payments before starting another.')
   if(!wallet.address)throw Error('Open your XStocks wallet before paying.')
   await unlock()
   const result=await request({action:'prepare',key:requestKey.current,checkoutId,merchantId,source:wallet.address,token,fiatAmount:amount})
@@ -122,13 +138,14 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
   <PocketArcTokenPicker label="Pay with" value={token} excluded="" tokens={tokens} networkLabel="X Layer" clean disabled={busy||Boolean(payment&&payment.state!=='quoted')} onChange={t=>{setToken(t.address);requestKey.current=crypto.randomUUID();setPayment(null)}} discover={async()=>{throw Error('Choose an asset accepted by this merchant.')}}/>
   <label className="block text-xs text-gray-500">Amount in {currency}<input aria-label={'Amount in '+currency} className="mt-2 min-h-12 w-full rounded-xl bg-gray-100 px-3 text-base outline-none dark:bg-[#171717]" inputMode="decimal" value={amount} disabled={busy||Boolean(payment&&payment.state!=='quoted')} onChange={e=>{if(/^\d*(?:\.\d{0,2})?$/.test(e.target.value)){setAmount(e.target.value);requestKey.current=crypto.randomUUID();setPayment(null)}}}/></label>
   <p className="text-xs leading-5 text-gray-500">Your selected asset is converted to USDC and bridged to Base for the merchant's bank payment. Any unused USDC stays in your wallet.</p>
-  <button className={cta} disabled={busy||loading||!wallet.address||(!payment&&(!amount||Boolean(resumeId)))} onClick={()=>payment?setSheet(true):void prepare()}>{payment?'Continue payment':'Continue'}</button>
+  <button className={cta} disabled={busy||loading||!historyChecked||!wallet.address||(!payment&&(!amount||Boolean(resumeId)))} onClick={()=>payment?setSheet(true):void prepare()}>{payment?'Continue payment':'Continue'}</button>
+  {!loading&&!historyChecked&&<button className="min-h-11 w-full text-xs font-semibold" onClick={()=>setReload(n=>n+1)}>Try again</button>}
   {error&&!sheet&&<p role="alert" className="text-xs text-red-500">{error}</p>}
   {sheet&&(terminal?<PocketPaymentSuccess receipt={xpayBankReceipt(payment)} onDone={onClose}/>:<PocketBottomSheet title="XPay" showCloseButton dismissOnBackdrop={false} dismissible={!busy} onClose={()=>setSheet(false)}>
    <h2 className="text-lg font-semibold">{payment?.merchantName}</h2>
    <p className="mt-4 text-2xl font-semibold">{formatStockQuantity(payment?.amount||'0')} {payment?.symbol}</p>
    <p className="mt-2 text-sm text-gray-500">{payment?.currency} {payment?.fiatAmount} to receive</p>
-   {payment&&<><p className="mt-2 text-xs text-gray-500">Payment and payout fees included · {formatUnits(BigInt(payment.fundingUnits),6)} USDC</p><p className="mt-1 text-xs text-gray-500">X Layer network fees are paid in OKB.</p><PocketXPayProgress progress={payment.progress}/></>}
+   {payment&&<><p className="mt-2 text-xs text-gray-500">Payment and payout fees included Â· {formatUnits(BigInt(payment.fundingUnits),6)} USDC</p><p className="mt-1 text-xs text-gray-500">X Layer network fees are paid in OKB.</p><PocketXPayProgress progress={payment.progress}/></>}
    {error&&<p role="alert" className="my-3 text-xs leading-5 text-gray-500">{error}</p>}
    {payment?.replacement?<><p className="my-3 text-xs text-gray-500">Updated total: {formatUnits(BigInt(payment.replacement.fundingUnits),6)} USDC. Your completed steps remain saved.</p><button className={cta} disabled={busy} onClick={()=>void acceptPayout()}>Confirm updated quote</button></>:quoteExpired?<button className={cta+' mt-5'} disabled={busy} onClick={()=>{requestKey.current=crypto.randomUUID();void prepare()}}>Update quote</button>:expired&&payment?.state!=='quoted'?<button className={cta+' mt-5'} disabled={busy} onClick={()=>void reviewPayout()}>Update quote</button>:<button className={cta+' mt-5'} disabled={busy} aria-busy={busy} onClick={()=>void drive()}>{busy&&<span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"/>}{busy||payment?.state==='quoted'?'Pay '+merchantName:error||payment?.state==='failed'?'Retry':'Continue payment'}</button>}
    {payment?.state==='quoted'&&!busy&&<button className="min-h-11 w-full text-xs text-gray-500" onClick={()=>{setSheet(false);setPayment(null);requestKey.current=crypto.randomUUID()}}>Edit amount</button>}

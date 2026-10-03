@@ -81,7 +81,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
   }
   if (!wallet.address) return <PocketStockWalletActions wallet={wallet} view="receive" />
   return <section className={card}>
-    <div className="mb-5 grid grid-cols-3 gap-2">{(['buy', 'sell', 'swap'] as const).map(value => <button key={value} type="button" disabled={busy || wallet.pending?.status==='pending'} aria-pressed={mode === value} onClick={() => setMode(value)} className={'min-h-10 rounded-full text-xs font-bold ' + (mode === value ? 'bg-gray-950 text-white dark:bg-black dark:text-white' : 'text-gray-400')}>{value === 'buy' ? 'Buy' : value === 'sell' ? 'Sell' : 'Swap'}</button>)}</div>
+    {initialMode !== 'swap' && <div className="mb-5 grid grid-cols-2 gap-2">{(['buy', 'sell'] as const).map(value => <button key={value} type="button" disabled={busy || wallet.pending?.status==='pending'} aria-pressed={mode === value} onClick={() => setMode(value)} className={'min-h-10 rounded-full text-xs font-bold ' + (mode === value ? 'bg-gray-950 text-white dark:bg-black dark:text-white' : 'text-gray-400')}>{value === 'buy' ? 'Buy' : 'Sell'}</button>)}</div>}
       {mode !== 'swap' ? <div className="mb-4"><p className="mb-2 text-xs text-gray-500">Stock</p>{picker('Select stock', chosen.address, '', true, t => setStock(t.symbol))}</div> : <div className="mb-4 grid grid-cols-2 gap-3">
         <div><p className="mb-2 text-xs text-gray-500">From</p>{picker('From asset', from, to, false, t => setFrom(t.address))}</div>
         <div><p className="mb-2 text-xs text-gray-500">To</p>{picker('To asset', to, from, false, t => setTo(t.address))}</div>

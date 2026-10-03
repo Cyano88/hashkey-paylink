@@ -27,16 +27,14 @@ export function createXPayBankHandler(overrides:Partial<typeof defaults>={}){
    const identity=await d.identity(req),owner=identity.userId,input=req.body
    if(!input||typeof input!=='object'||Array.isArray(input))fail('Invalid XPay request.')
    const action=text(input.action,40),session=()=>text(input.circleUserToken,8000),approval=()=>text(req.headers['x-pocket-payment-approval'],8000)
+   // New stock-funded bank payments are outside XPay's current scope.
+   // Keep status and recovery available for payments already authorized.
+   if(action==='prepare'||action==='approve')return res.status(409).json({ok:false,error:'Stock payments go directly to the merchant’s XStocks wallet. Use Stablecoins for bank payments.'})
    if(action==='list')return res.json({ok:true,payments:(await d.service.list(owner)).slice(-100).reverse().map(p=>publicXPayBankPayment(p))})
-   if(action==='prepare'){
-    const payment=await d.service.prepare(req,identity,{key:text(input.key,80),checkoutId:text(input.checkoutId,40),merchantId:text(input.merchantId,100),source:text(input.source,42),token:text(input.token,42),fiatAmount:text(input.fiatAmount,12)})
-    return res.json({ok:true,payment:publicXPayBankPayment(payment)})
-   }
    const id=text(input.id,80)
    let transaction:unknown,quote:unknown,challengeId:string|undefined,bridgePlan:unknown
    switch(action){
     case 'status':await d.service.status(owner,id,input.circleUserToken?session():undefined);break
-    case 'approve':await d.service.approve(owner,id,approval());break
     case 'swap':{
      const result=await d.service.authorizeSwap(owner,id)
      const call='approval' in result?result.approval:result.swap

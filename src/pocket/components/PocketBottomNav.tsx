@@ -1,4 +1,4 @@
-import { Home, Store, History, CreditCard, UserRound, TrendingUp, Wallet } from './PocketIcons'
+import { Home, Store, History, CreditCard, UserRound, Wallet } from './PocketIcons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isXStocksPath, xStockNavPath } from '../lib/pocketRail'
 
@@ -26,7 +26,7 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const stocks = rail ? rail==='xstocks' : isXStocksPath(pathname)
-  const visibleItems = stocks ? [items[0], { key: 'bills' as const, label: 'XStocks', icon: TrendingUp }, { key: 'activity' as const, label: 'Activity', icon: History }, { key: 'profile' as const, label: 'Portfolio', icon: Wallet }] : items
+  const visibleItems = stocks ? [items[0], items[1], { key: 'activity' as const, label: 'Activity', icon: History }, { key: 'profile' as const, label: 'Portfolio', icon: Wallet }] : items
   return (
     <nav
       aria-label="Pocket navigation"
@@ -47,7 +47,7 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
               aria-disabled={disabled || key === 'cards' || undefined}
               aria-current={selected ? 'page' : undefined}
               aria-label={key === 'cards' ? 'Cards coming soon' : undefined}
-              onClick={() => { if (key === 'cards') return; if (stocks) navigate(xStockNavPath(key)); else if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: 'stablecoins' } }); else onSelect(key) }}
+              onClick={() => { if (key === 'cards') return; if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: stocks ? 'xstocks' : 'stablecoins' } }); else if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected
