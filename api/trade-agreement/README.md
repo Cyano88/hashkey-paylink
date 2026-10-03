@@ -26,8 +26,9 @@ It does not implement Work delivery semantics.
 
 The Arc Trade factory and on-chain two-signer authority must be verified.
 The hosted API, Circle participant-wallet/signing adapter and chain reconciliation
-have synthetic coverage. The verified deployment, reviewer adapter, receipts and
-Stream checkout/UI routing must be connected and exercised end to end before
+have synthetic coverage. Stream checkout/UI routing is connected on its isolated
+Trade branch at `f9a112e`. The verified deployment, reviewer adapter and receipts
+must be connected and exercised end to end before
 enabling new Arc Trade checkout.
 
 The existing XLayer dispute test is running in a separate session. Its final
@@ -161,6 +162,35 @@ Circle response shapes were checked against primary documentation:
 - https://developers.circle.com/api-reference/wallets/user-controlled-wallets/get-user-challenge
 - https://developers.circle.com/api-reference/wallets/user-controlled-wallets/get-transaction
 
-Next implementation work: versioned Arc reservations and the two-rail selector in
-standalone Hash PayStream, preserving legacy and existing stock reservations.
-Then reviewer/receipt integration and funded end-to-end release verification.
+Stream's versioned Arc reservations and two-rail selector are implemented in
+`f9a112e`, preserving legacy and existing stock reservations. Its adapter, picker,
+HTTP routing, PostgreSQL concurrency and production build checks passed locally.
+Reviewer/receipt integration and funded end-to-end release verification remain.
+
+## Read-only release preflight
+
+Run `node --import tsx scripts/arc-trade-preflight.mjs` to inspect the source
+release gate. It currently reports the missing release, execution policy and
+participant wallets without making an RPC request. This is not a live deployment
+scan and does not prove that no candidate contracts exist on chain.
+
+Once reviewed deployment evidence exists, use `--wallets buyer,seller` for the
+source release, or `--candidate manifest.json --wallets buyer,seller` for a
+read-only candidate inspection. The candidate JSON contains `release` and
+`executionPolicy` with the types defined in `arc.ts` and `arc-execution.ts`.
+Use public wallet addresses only; no signing credentials are needed. A candidate
+file cannot replace the production source registry. The RPC uses the existing
+Arc mainnet configuration; its URL and provider errors are omitted from reports.
+
+The preflight pins factory, USDC, Safe and both wallet checks to the observed head
+and five blocks earlier. It rejects stale blocks, changed block hashes, wrong
+chain, bytecode, owners, threshold, modules or implementation. It never signs,
+broadcasts, writes a registry or enables a feature flag. Exit 0 means these
+inspection checks passed, 2 means blocked, and 1 means invalid invocation.
+`productionReady` remains false: reviewer/receipt integration, a real Circle
+lifecycle/recovery canary and the separate XLayer split evidence are still needed.
+
+Validation: `node --import tsx scripts/arc-trade-preflight-smoke.mjs`, existing Arc
+planner/execution regression scripts, and a focused TypeScript check. Synthetic
+tests cover both snapshots, source gating, invalid/missing wallets, altered Safe
+and wallet state, stale blocks, reorganizations and sanitized RPC errors.
