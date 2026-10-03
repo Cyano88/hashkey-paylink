@@ -233,3 +233,30 @@ fixtures verified desktop light and mobile dark review/receipt views with no
 horizontal overflow. All wallet signatures and transfers in these tests are
 synthetic. Real Circle/Safe execution, mainnet deployment and the separate final
 XLayer split evidence remain required before production activation.
+
+## Reviewer recovery baseline - 2026-10-03
+
+The separate operations session's `b7a4dd92a` is incorporated as `6861cbd46`,
+preserving the Trade network-switch busy guard. It adds gas estimation before
+send, explicit refusal handling and deliberate recovery of uncertain submissions.
+Arc uses the same submission helper with chain 5042 and its native USDC fee
+balance; XLayer retains chain 196 and OKB. An account/session change before send
+aborts without creating a pending marker. Generic errors, invalid transaction
+hashes and timeouts retain the marker; the client never automatically resends.
+
+Arc recovery revalidates all stored signatures, the decision/nonce, factory,
+Safe policy and dispute state. The operator must explicitly check reviewer
+wallet activity. A pending owner transaction blocks recovery. A successful
+recheck only unlocks another explicit review; it does not submit anything.
+
+The available other-session XLayer refund verification script was rerun read-only
+against its recorded transaction on 2026-10-03. It reported a successful fully
+confirmed full buyer refund with zero seller allocation. This is not evidence of
+a partial split. No final partial-split proof or verified Arc Trade deployment
+manifest was located in the inspected branches. Existing service-agreement
+deployment records do not satisfy the Arc Trade release gate.
+
+Passing validation: stock and Arc reviewer/submission smoke tests, wrong-chain
+and session-change rejection, pending-owner and corrupt-signature recovery
+rejection, focused TypeScript and production build. These do not establish a
+funded Arc canary. The requested deployment details remain an external input.

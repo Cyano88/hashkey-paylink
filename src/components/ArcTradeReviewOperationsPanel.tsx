@@ -5,6 +5,7 @@ import type {ArcTradeReceipt} from '../../api/trade-agreement/receipt'
 import { formatUnits } from 'viem'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import type { TradeXLayerStatus } from '../lib/xstocksAgreement/protocol'
+import {submitReviewerTransaction} from '../lib/xstocksAgreement/reviewerSubmission'
 
 type Review={agreement:{receipt?:ArcTradeReceipt;id:string;title:string;terms:{description:string;payment:{chainId:5042};trade?:{handover:string;location:string;returns:string}};evidence:Array<{hash:string;body:string;role:string}>};status:TradeXLayerStatus;reviewer:{address:string;owners:string[];threshold:number;nonce:string};decision:null|{id:string;buyerAmount:string;reason:string;approvedOwners:string[];stale:boolean};typedData?:Record<string,unknown>}
 type QueueItem={id:string;projectId:string;title:string;state:number|null;observedBlock:string|null}
@@ -17,6 +18,10 @@ export default function ArcTradeReviewOperationsPanel({workspaceId,onBusyChange}
  const [reference,setReference]=useState(''),[review,setReview]=useState<Review>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[amount,setAmount]=useState(''),[reason,setReason]=useState(''),[executeReview,setExecuteReview]=useState(false),[submitted,setSubmitted]=useState('')
  const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
  const actor=useRef(user?.id);actor.current=user?.id
+ const errorPanel=useRef<HTMLParagraphElement>(null)
+ useEffect(()=>{if(error){errorPanel.current?.scrollIntoView({block:'nearest'});errorPanel.current?.focus({preventScroll:true})}},[error])
+ const [walletActivityChecked,setWalletActivityChecked]=useState(false)
+ useEffect(()=>setWalletActivityChecked(false),[review?.decision?.id,submitted])
  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false)},[busy,onBusyChange])
  function assertSession(){if(!alive.current)throw Error('Reopen this case before continuing.')}
  const [cases,setCases]=useState<QueueItem[]>([]),[filter,setFilter]=useState<'disputed'|'all'>('disputed'),[cursor,setCursor]=useState<string|null>(null),[queueBusy,setQueueBusy]=useState(false),[queueError,setQueueError]=useState('')
@@ -58,9 +63,17 @@ export default function ArcTradeReviewOperationsPanel({workspaceId,onBusyChange}
   if(Number(await provider.request({method:'eth_chainId'}))!==5042)throw Error('Switch back to Arc before executing.')
   assertSession();if(prepared.transaction?.chainId!==5042||prepared.transaction?.to?.toLowerCase()!==review?.reviewer.address.toLowerCase())throw Error('Execution does not match this reviewer wallet.');
   setExecuteReview(false)
-  // No automated retry: a wallet timeout may follow a successful submission.
-  setSubmitted('pending');try{sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,'pending')}catch{throw Error('Unable to save transaction recovery state. No transaction was sent.')}
-  try{const hash=await provider.request({method:'eth_sendTransaction',params:[{chainId:'0x13b2',from:wallet.address,to:prepared.transaction.to,data:prepared.transaction.data,value:'0x0'}]}) as string;setSubmitted(hash);sessionStorage.setItem('hpl-review-submission:'+review!.decision!.id,hash);setNotice('Transaction submitted. Refresh the case to verify settlement.')}catch(e){if(Number((e as {code?:number})?.code)===4001){sessionStorage.removeItem('hpl-review-submission:'+review!.decision!.id);setSubmitted('');throw Error('Wallet request cancelled. No retry was sent.')}setError('Submission was not confirmed. Check the reviewer wallet activity and refresh this case before trying again.')}
+  await submitReviewerTransaction({provider,transaction:{chainId:'0x13b2',from:wallet.address,to:prepared.transaction.to,data:prepared.transaction.data,value:'0x0'},storage:sessionStorage,key:'hpl-review-submission:'+prepared.decisionId,onState:setSubmitted,beforeSend:assertSession})
+  setNotice('Transaction submitted. Refresh the case to verify settlement.')
+ }
+ async function recover(){
+  if(submitted!=='pending'||!walletActivityChecked||!review?.decision)throw Error('Check all reviewer wallets before continuing.')
+  const decisionId=review.decision.id
+  const checked=await api('recovery',{decisionId,walletActivityChecked:true})
+  assertSession();if(!checked.canReviewAgain||checked.decisionId!==decisionId)throw Error('Execution state could not be verified. Keep the case locked.')
+  sessionStorage.removeItem('hpl-review-submission:'+decisionId)
+  setSubmitted('');setWalletActivityChecked(false);setExecuteReview(false)
+  setNotice('The dispute and approvals were rechecked. No pending owner transaction was reported. Review execution again; nothing has been sent.')
  }
  const asset='USDC'
  const total=review?.status.amount?formatUnits(BigInt(review.status.amount),review.status.decimals??18):'0'
@@ -76,7 +89,7 @@ export default function ArcTradeReviewOperationsPanel({workspaceId,onBusyChange}
    {cursor&&<button className={secondary+' mt-3'} disabled={queueBusy} onClick={()=>void loadQueue(cursor)}>Load more</button>}
   </div>
   <form className="mt-6 flex flex-col items-end gap-3 sm:flex-row" onSubmit={e=>{e.preventDefault();void run(load)}}><label className="w-full text-sm">Agreement reference<input className={input} value={reference} onChange={e=>setReference(e.target.value)} placeholder="tag_…" disabled={busy}/></label><button className={button} disabled={busy||!reference.trim()}>Open case</button></form>
-  {error&&<p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}{notice&&<p role="status" className="mt-4 text-sm text-gray-600 dark:text-gray-300">{notice}</p>}
+  {error&&<p ref={errorPanel} tabIndex={-1} role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">{error}</p>}{notice&&<p role="status" className="mt-4 text-sm text-gray-600 dark:text-gray-300">{notice}</p>}
   {busy&&<div role="status" aria-label="Checking case" className="mt-4 h-3 animate-pulse rounded-full bg-gray-100 dark:bg-white/10"/>}
   {review&&<div className="mt-6 space-y-6">
    <div className="flex items-start justify-between gap-4"><div><h2 className="font-semibold">{review.agreement.title}</h2><p className="mt-1 text-sm text-gray-500">{stages[review.status.state??-1]||'Status unavailable'}</p></div><button className={secondary} disabled={busy} onClick={()=>void run(async()=>{setReview(await api('read',/^0x[a-f0-9]{64}$/i.test(submitted)?{transactionHash:submitted}:{}))})}>Refresh</button></div>
@@ -96,6 +109,7 @@ export default function ArcTradeReviewOperationsPanel({workspaceId,onBusyChange}
       {!ownerWallets.length&&<p className="text-xs text-gray-500">Connect one of the reviewer owner wallets shown above.</p>}
       {review.decision.approvedOwners.length>=review.reviewer.threshold&&!submitted&&<div className="rounded-xl border border-gray-200 p-4 dark:border-white/10">{!executeReview?<button className={button} disabled={busy} onClick={()=>setExecuteReview(true)}>Review execution</button>:<><p className="mb-3 text-sm">Execute the approved allocation on Arc. Settlement transfers the held USDC and is final. Network fees apply.</p>{ownerWallets.map(wallet=><button key={wallet.address} className={button} disabled={busy} onClick={()=>void run(()=>execute(wallet))}>Execute with {wallet.address.slice(0,6)}…</button>)}<button className={secondary} disabled={busy} onClick={()=>setExecuteReview(false)}>Cancel</button></>}</div>}
       {submitted&&<p className="break-all text-sm">{submitted==='pending'?'Check reviewer wallet activity before any retry.':'Submitted: '+submitted}</p>}
+      {submitted==='pending'&&<div className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-white/10"><label className="flex gap-3 text-sm"><input type="checkbox" checked={walletActivityChecked} onChange={event=>setWalletActivityChecked(event.target.checked)}/>I checked all reviewer wallets and there are no pending confirmation requests or transactions.</label><button className={secondary} disabled={busy||!walletActivityChecked} onClick={()=>void run(recover)}>Recheck before retry</button></div>}
      </>}
      {review.agreement.receipt&&<ArcTradeReceiptCard receipt={review.agreement.receipt}/>}
   </div>}

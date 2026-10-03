@@ -40,7 +40,7 @@ export function createArcReviewerHandler(overrides:Partial<typeof defaults>={}){
     return res.json({ok:true,...page})
    }
    if(typeof agreementId!=='string'||!/^tag_[a-f0-9]{64}$/.test(agreementId))throw failure('Enter a valid Agreement reference.',400)
-   if(!['read','prepare','sign','execution'].includes(action))throw failure('Unknown review action.',400)
+   if(!['read','prepare','sign','execution','recovery'].includes(action))throw failure('Unknown review action.',400)
    let record=await d.read<ArcHostedTrade>('hashpaylink:arc-hosted-trade:v1:'+agreementId)
    if(!record?.binding||typeof record.partnerId!=='string'||!/^dev_[a-z0-9]{8,64}$/i.test(record.partnerId)||record.terms.kind!=='trade'||record.binding.policy!=='trade-arc-usdc-v1'||record.binding.chainId!==5042)throw failure('This is not a supported Arc Trade.',404)
    d.scope(actor,req,'trade-disputes',record.partnerId)
@@ -86,7 +86,16 @@ export function createArcReviewerHandler(overrides:Partial<typeof defaults>={}){
    }
    let prepared:Awaited<ReturnType<typeof build>>|undefined,stale=false
    if(decision&&status.state===5){prepared=await build(decision);stale=prepared.digest!==decision.digest}
-   if(action==='sign'||action==='execution'){
+   const verifyApprovals=async()=>{
+    const verified=[] as {owner:string;signature:Hex}[]
+    if(!decision||!prepared||stale)return verified
+    for(const [owner,signature] of Object.entries(decision.signatures)){
+     if(!/^0x[0-9a-f]{130}$/i.test(signature)||!['1b','1c'].includes(signature.slice(-2).toLowerCase())||!owners.some(a=>a.toLowerCase()===owner)||(await recoverTypedDataAddress({...prepared.typedData,signature})).toLowerCase()!==owner)throw failure('Stored approval is invalid. Reopen the case for review.')
+     verified.push({owner,signature})
+    }
+    return verified
+   }
+   if(action==='sign'||action==='execution'||action==='recovery'){
     if(!decision||!prepared||stale||req.body.decisionId!==decision.id)throw failure('The reviewed decision changed. Refresh before signing.')
     if(action==='sign'){
      const signature=req.body.signature
@@ -95,12 +104,17 @@ export function createArcReviewerHandler(overrides:Partial<typeof defaults>={}){
      if(!owners.some(a=>a.toLowerCase()===owner))throw failure('The signature is not from a reviewer owner.',403)
      await recheck();decision=await d.mutate<Decision>(storageKey,current=>{if(!current||current.digest!==prepared!.digest)throw failure('Decision changed.');return {...current,signatures:{...current.signatures,[owner]:signature as Hex}}})
     }else{
-     const verified=[] as {owner:string;signature:Hex}[]
-     for(const [owner,signature] of Object.entries(decision.signatures)){
-      if(!owners.some(a=>a.toLowerCase()===owner)||(await recoverTypedDataAddress({...prepared.typedData,signature})).toLowerCase()!==owner)throw failure('Stored approval is invalid.')
-      verified.push({owner,signature})
-     }
+     const verified=await verifyApprovals()
      if(verified.length<threshold)throw failure('Both reviewer approvals are required.')
+     if(action==='recovery'){
+      if(req.body.walletActivityChecked!==true)throw failure('Check all reviewer wallets for pending requests and transactions first.',400)
+      const counts=await Promise.all(owners.map(async address=>{
+       const [confirmed,pending]=await Promise.all([client.getTransactionCount({address,blockTag:'latest'}),client.getTransactionCount({address,blockTag:'pending'})])
+       return {confirmed,pending}
+      }))
+      if(counts.some(value=>value.confirmed!==value.pending))throw failure('A reviewer wallet has a pending transaction. Wait before reviewing execution again.')
+      await recheck();return res.json({ok:true,decisionId:decision.id,canReviewAgain:true})
+     }
      const executor=String(req.body.executor||'').toLowerCase()
      if(!owners.some(a=>a.toLowerCase()===executor))throw failure('Connect a reviewer owner to execute.',403)
      const signatures=('0x'+verified.sort((a,b)=>a.owner.localeCompare(b.owner)).slice(0,threshold).map(v=>v.signature.slice(2)).join('')) as Hex
@@ -112,7 +126,8 @@ export function createArcReviewerHandler(overrides:Partial<typeof defaults>={}){
     }
    }
    if(action==='read'&&req.body.transactionHash&&!record.receipt)record={...record,receipt:await d.receipt(record,req.body.transactionHash)}
-   await recheck();const reply={ok:true,agreement:{id:agreementId,title:record.terms.title,terms:record.terms,evidence:record.evidence,receipt:record.receipt},status,reviewer:{address:safe,owners,threshold,nonce:nonce.toString()},decision:decision?{id:decision.id,buyerAmount:decision.buyerAmount,reason:decision.reason,createdAt:decision.createdAt,approvedOwners:Object.keys(decision.signatures),stale}:null,typedData:prepared&&!stale?prepared.typedData:undefined}
+   const approvedOwners=(await verifyApprovals()).map(value=>value.owner)
+   await recheck();const reply={ok:true,agreement:{id:agreementId,title:record.terms.title,terms:record.terms,evidence:record.evidence,receipt:record.receipt},status,reviewer:{address:safe,owners,threshold,nonce:nonce.toString()},decision:decision?{id:decision.id,buyerAmount:decision.buyerAmount,reason:decision.reason,createdAt:decision.createdAt,approvedOwners,stale}:null,typedData:prepared&&!stale?prepared.typedData:undefined}
    return res.json(JSON.parse(JSON.stringify(reply,(_,v)=>typeof v==='bigint'?v.toString():v)))
   }catch(error){const code=Number((error as {status?:number}).status)||503;return res.status(code).json({ok:false,error:code>=500?'Dispute review is temporarily unavailable. Retry after checking the payment status.':(error as Error).message})}
  }
