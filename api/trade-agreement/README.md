@@ -260,3 +260,25 @@ Passing validation: stock and Arc reviewer/submission smoke tests, wrong-chain
 and session-change rejection, pending-owner and corrupt-signature recovery
 rejection, focused TypeScript and production build. These do not establish a
 funded Arc canary. The requested deployment details remain an external input.
+
+## PostgreSQL action journal validation - 2026-10-03
+
+`node --import tsx scripts/arc-trade-postgres-smoke.mjs` now exercises the actual
+durable PostgreSQL adapter and Arc execution store with separate Node processes.
+It creates a fresh local PostgreSQL cluster on loopback port 55443, overrides the
+database connection for child processes, checks the database role/address, and
+stops only that cluster on completion. PostgreSQL 17 Windows binaries are used
+by default; `HASHPAYSTREAM_TEST_POSTGRES_BIN` can select their directory. Temporary
+cluster files are retained locally for diagnosis. No existing database is reused.
+
+Passing checks: four concurrent identical reservations produce one entry and one
+provider idempotency key; competing request IDs produce one winner; a restarted
+process retains the original key and chain-head bound; conflicting challenge IDs
+and transaction references cannot overwrite the winning response; late challenge
+responses cannot roll back submitted state. A forced database write failure rolls
+back the first-write placeholder as well as the action. Changed terms and reads
+under another project are rejected without changing the journal.
+
+This closes the earlier PostgreSQL journal concurrency validation gap. Provider
+and chain calls are absent from this test; it does not establish Circle or Arc
+mainnet readiness. Production release and execution-policy gates remain closed.
