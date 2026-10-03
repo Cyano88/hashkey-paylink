@@ -328,3 +328,24 @@ wallet responses retain a pending marker; no automatic resend is allowed.
 checks and rejection/duplicate handling. The live local page and payload returned
 HTTP 200. A user wallet signature and independent receipt verification are still
 required; running the local page alone does not deploy the Safe.
+
+## Arc Safe deployed and verified - 2026-10-03
+
+The user submitted creation through the local Rabby UI. Independent Arc RPC
+verification passed for transaction
+`0x0cdfff331bedeaa2e26f4180d72ce443dc20c94350c6df5b6c5c2c95e0b8c1bf`.
+The Safe is `0x83C0608F4695e82b6658757f9a0B658001A73a73`.
+Evidence is in `docs/audits/arc-trade-safe-deployment-2026-10-03.json`.
+
+`scripts/arc-trade-safe-verify.mjs` checks the exact sender, factory, zero value,
+creation calldata, successful canonical receipt and ProxyCreation event. At the
+receipt, confirmed-head and latest snapshots it checks dependency runtime hashes,
+proxy runtime consistency, singleton storage, the two intended owners, threshold
+two, version 1.5.0, nonce zero and no enabled modules. The proxy had no code in the
+preceding block. The first verification observed 281 confirmations. This verifier
+expects a newly created unused Safe; later Safe activity requires lifecycle-aware
+verification rather than changing historical deployment evidence.
+
+The prior pending-deployment statements above are historical. Safe creation is
+complete; the physical Trade factory has not yet been deployed against it. The
+Arc release/execution policies and public funding remain disabled.
