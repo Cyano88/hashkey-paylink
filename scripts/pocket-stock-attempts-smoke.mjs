@@ -11,3 +11,14 @@ await runStockSubmission({key,kind:'send',details:{...details,amount:'2'},...hoo
 let uncertain=false;await assert.rejects(runStockSubmission({key:'unknown',kind:'send',details,...hooks,onUncertain:v=>uncertain=v,send:async()=>{throw Error('Connection lost')}}));assert.equal(uncertain,true);assert.equal(readStockAttempts('unknown')[0].status,'pending')
 await assert.rejects(runStockSubmission({key:'cancelled',kind:'send',details,...hooks,send:async()=>{throw Object.assign(Error('Cancelled'),{code:4001})}}));assert.equal(readStockAttempts('cancelled')[0].status,'failed');assert.equal(hasStockSubmission('cancelled'),false)
 console.log('PASS XStocks timeout retains pending; new attempts are independent; old receipt cannot clear newer attempt; duplicate reuses hash without signing; unknown broadcast retained; explicit rejection clears lock.')
+let release;let calls=0
+const firstSigning=runStockSubmission({key:'concurrent',kind:'send',details,...hooks,send:async()=>{calls++;return await new Promise(resolve=>{release=resolve})}})
+await assert.rejects(runStockSubmission({key:'concurrent',kind:'gift',...hooks,send:async()=>{calls++;return {hash:hash2}}}),e=>e.transactionPending===true)
+assert.equal(calls,1);assert.equal(readStockAttempts('concurrent').length,1)
+await runStockSubmission({key:'other-wallet',kind:'send',details,...hooks,send:async()=>({hash:hash2})})
+release({hash});await firstSigning
+await runStockSubmission({key:'concurrent',kind:'send',details:{...details,amount:'2'},...hooks,send:async()=>{calls++;return{hash:hash2}}})
+assert.equal(calls,2,'a known pending hash does not block a different send')
+await assert.rejects(runStockSubmission({key:'unknown',kind:'gift',...hooks,send:async()=>{throw Error('must not sign')}}),e=>e.transactionPending===true)
+assert.equal(readStockAttempts('unknown').length,1,'unknown outcome stays intact without another attempt')
+console.log('PASS shared signing lock: concurrent screens blocked, other wallets independent, known-hash sends allowed, uncertain submissions retained.')

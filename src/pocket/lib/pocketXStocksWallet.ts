@@ -9,6 +9,8 @@ export type StockAsset = { symbol: string; name: string; address: string; icon: 
 export const stockAssets: StockAsset[] = catalogue.assets
 export const stockUsdc: StockAsset = { symbol: 'USDC', name: 'USD Coin', address: '0xB6CEceAB302E2E4948951eE7843FC24E92933061', icon: '' }
 export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '/brand/okb.png' }
+// OKX's native-token identifier for X Layer market-price requests.
+export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 export type StockHolding = { asset: StockAsset; units: bigint; decimals: number }
 export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; expiresAt: number }
 
@@ -21,10 +23,11 @@ export function stockAmountUnits(amount: string, decimals: number) {
 export async function assertStockChain() {
   if (await stockClient.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
 }
-export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; blockNumber: bigint; blockHash: Hex; fullScanAt: number; observedAt: number }
+export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; fullScanAt: number; observedAt: number } & ({source?:'rpc';blockNumber:bigint;blockHash:Hex}|{source:'okx';blockNumber:null;blockHash:null})
 const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
 const tokenDecimals = new Map<string, number>()
 export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot, signal?: AbortSignal, options?: { rpcUrl?: string; force?: boolean }): Promise<StockBalanceSnapshot> {
+  if (previous?.source === 'okx') previous = undefined
   const client = signal || options?.rpcUrl ? createPublicClient({ chain: pocketXLayer, transport: http(options?.rpcUrl || pocketXLayer.rpcUrls.default.http[0], { timeout: 15_000, retryCount: 0, fetchOptions: { signal } }) }) : stockClient
   if (await client.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
   const block = await client.getBlock({ blockTag: 'latest' })
@@ -38,11 +41,15 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   if (!full && previous) {
     // Re-read transfers across a short overlap to cover ordinary shallow reorganizations.
     const fromBlock = previous.blockNumber > 12n ? previous.blockNumber - 12n : 0n
-    const logs = (await Promise.all([
-      client.getLogs({ event: transferEvent, args: { from: owner }, fromBlock, toBlock: blockNumber }),
-      client.getLogs({ event: transferEvent, args: { to: owner }, fromBlock, toBlock: blockNumber }),
-    ])).flat()
-    const changed = new Set(logs.map(log => log.address.toLowerCase()))
+    const changed = new Set<string>()
+    for(let start=fromBlock;start<=blockNumber;start+=100n){
+      const end=start+99n<blockNumber?start+99n:blockNumber
+      const logs=(await Promise.all([
+        client.getLogs({event:transferEvent,args:{from:owner},fromBlock:start,toBlock:end}),
+        client.getLogs({event:transferEvent,args:{to:owner},fromBlock:start,toBlock:end}),
+      ])).flat()
+      for(const log of logs)changed.add(log.address.toLowerCase())
+    }
     assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase()))
   }
   const balances = assets.length ? await client.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []

@@ -1,0 +1,44 @@
+import {STOCK_SHARE_GIFT_ABI,STOCK_SHARE_TOKEN_ABI} from '../../../src/pocket/features/gifts/pocketStockShareGift.js'
+import {keccak256,parseAbi,parseAbiItem,type PublicClient,type Hex} from 'viem'
+import {GiftError,type GiftRecord,type GiftObservation} from './types.js'
+import {giftAssetUnits} from '../../../src/pocket/features/gifts/pocketGift.js'
+import {verifiedHintLogs} from './event-discovery.js'
+const abi=parseAbi(['function gifts(bytes32) view returns(address sender,address token,address claimSigner,uint128 amountPerClaim,uint32 maxClaims,uint32 claimed,uint64 expiresAt,uint8 status)','function treasury() view returns(address)','function claimAuthority() view returns(address)','function supportedToken(address) view returns(bool)','function PLATFORM_FEE_BPS() view returns(uint256)'])
+export async function observeStockShareGift(client:PublicClient,r:GiftRecord,discover?:(height:bigint)=>Promise<Hex[]>):Promise<GiftObservation>{
+ const d=r.deployment,same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase()
+ if(d.accounting!=='shares-v1'||d.network!=='xlayer'||r.version!==2||d.protocol!==2||!d.claimAuthority||!d.deploymentBlock||!Number.isSafeInteger(d.confirmations)||d.confirmations<2||await client.getChainId()!==d.chainId)throw new GiftError(503,'Multi-recipient gift deployment is unavailable.')
+ const head=await client.getBlockNumber({cacheTime:0}),height=head-BigInt(d.confirmations-1)
+ if(height<BigInt(d.deploymentBlock))throw new GiftError(503,'Gift deployment is still confirming.')
+ // Cached evidence is trusted only while its canonical ancestor remains unchanged.
+ if(r.evidenceScanBlock){
+  if(!r.evidenceScanHash||(await client.getBlock({blockNumber:BigInt(r.evidenceScanBlock)})).hash!==r.evidenceScanHash)throw new GiftError(503,'Gift evidence changed and needs reconciliation.')
+ }
+ const block=await client.getBlock({blockNumber:height})
+ const priorVerified=!!r.observedBlock&&!!r.observedBlockHash
+ if(priorVerified&&(await client.getBlock({blockNumber:BigInt(r.observedBlock!)})).hash!==r.observedBlockHash)throw new GiftError(503,'Gift evidence changed and needs reconciliation.')
+ const [code,treasury,authority,supported,fee,gift]=await Promise.all([client.getCode({address:d.escrow,blockNumber:height}),client.readContract({address:d.escrow,abi,functionName:'treasury',blockNumber:height}),client.readContract({address:d.escrow,abi,functionName:'claimAuthority',blockNumber:height}),client.readContract({address:d.escrow,abi,functionName:'supportedToken',args:[d.token],blockNumber:height}),client.readContract({address:d.escrow,abi,functionName:'PLATFORM_FEE_BPS',blockNumber:height}),client.readContract({address:d.escrow,abi,functionName:'gifts',args:[r.giftId],blockNumber:height})])
+ if(!code||keccak256(code)!==d.runtimeHash||!same(treasury,d.treasury)||!same(authority,d.claimAuthority)||!supported||fee!==25n)throw new GiftError(503,'Gift deployment verification failed.')
+ const [sender,token,signer,per,count,claimed,expiry,status]=gift
+ if(status>3||status!==0&&(!same(sender,r.senderAddress)||!same(token,d.token)||!same(signer,r.claimSigner)||per!==giftAssetUnits(r.amountPerClaim!,r.deployment.asset)||count!==r.maxClaims||claimed>count||expiry!==BigInt(r.expiresAt)))throw new GiftError(503,'Gift does not match its funded details.')
+ // An absent gift has no prior events: this contract never resets a gift to status zero.
+ if(status===0){if(!block.hash||(await client.getBlock({blockNumber:height})).hash!==block.hash)throw new GiftError(503,'Gift confirmation changed.');return {state:'unfunded',blockNumber:height,blockHash:block.hash,timestamp:block.timestamp,evidenceScanBlock:String(height),evidenceScanHash:block.hash,claimedCount:0,settlements:{},refundUnits:'0'}}
+ const [perShares,currentAmount,locked,held]=await Promise.all([client.readContract({address:d.escrow,abi:STOCK_SHARE_GIFT_ABI,functionName:'sharesPerClaim',args:[r.giftId],blockNumber:height}),client.readContract({address:d.escrow,abi:STOCK_SHARE_GIFT_ABI,functionName:'currentAmountPerClaim',args:[r.giftId],blockNumber:height}),client.readContract({address:d.escrow,abi:STOCK_SHARE_GIFT_ABI,functionName:'totalLockedShares',args:[d.token],blockNumber:height}),client.readContract({address:d.token,abi:STOCK_SHARE_TOKEN_ABI,functionName:'sharesOf',args:[d.escrow],blockNumber:height})])
+ if(perShares<=0n||held<locked||status===1&&locked<perShares*BigInt(count-claimed))throw new GiftError(503,'Gift share backing could not be verified.')
+ const span=d.network==='xlayer'?99n:1999n
+ const start=r.evidenceScanBlock?BigInt(r.evidenceScanBlock)+1n:BigInt(d.deploymentBlock),fromBlock=start>height?height:start,toBlock=fromBlock+span<height?fromBlock+span:height
+ const fundingEvent=parseAbiItem('event StockGiftFunded(bytes32 indexed giftId,address indexed sender,address indexed token,address claimSigner,uint128 requestedPerClaim,uint32 maxClaims,uint256 sharesPerClaim,uint256 feeShares,uint256 principalUnits,uint256 feeUnits,uint64 expiresAt)'),claimEvent=parseAbiItem('event StockGiftClaimed(bytes32 indexed giftId,bytes32 indexed accountId,address indexed recipient,uint256 shares,uint256 receivedUnits,uint32 claimed)'),refundEvent=parseAbiItem('event StockGiftRefunded(bytes32 indexed giftId,address indexed sender,uint256 shares,uint256 receivedUnits)')
+ const result:GiftObservation={currentAmountPerClaim:String(currentAmount),fundedUnits:priorVerified?r.fundedUnits:undefined,fundedFeeUnits:priorVerified?r.fundedFeeUnits:undefined,state:(['unfunded','available','claimed','refunded'] as const)[status],blockNumber:height,blockHash:block.hash!,timestamp:block.timestamp,evidenceScanBlock:String(toBlock),claimedCount:claimed,settlements:priorVerified?{...r.settlements}:{},refundUnits:priorVerified&&r.refundHash?r.refundUnits:undefined,...(priorVerified?{fundingHash:r.fundingHash,fundingAt:r.fundingAt,refundHash:r.refundHash,refundAt:r.refundAt}:{})}
+ const complete=()=>result.fundedUnits!==undefined&&result.fundedFeeUnits!==undefined&&!!result.fundingHash&&!!result.fundingAt&&Object.keys(result.settlements||{}).length===claimed&&(status!==3||!!result.refundHash&&!!result.refundAt)
+ const verifiedTime=async(log:{removed:boolean;blockNumber:bigint;blockHash:Hex})=>{if(log.removed)throw new GiftError(503,'Gift evidence changed.');const b=await client.getBlock({blockNumber:log.blockNumber});if(b.hash!==log.blockHash)throw new GiftError(503,'Gift evidence changed.');return Number(b.timestamp)*1000}
+ const consume=async(funds:any[],claims:any[],refunds:any[])=>{
+ for(const l of funds){const a=l.args;if(!same(a.sender,r.senderAddress)||!same(a.token,d.token)||!same(a.claimSigner,r.claimSigner)||a.requestedPerClaim!==giftAssetUnits(r.amountPerClaim!,r.deployment.asset)||a.maxClaims!==r.maxClaims||a.sharesPerClaim!==perShares||a.feeShares!==perShares*BigInt(count)*25n/10000n||a.expiresAt!==BigInt(r.expiresAt))throw new GiftError(503,'Gift funding evidence mismatch.');result.fundedUnits=String(a.principalUnits);result.fundedFeeUnits=String(a.feeUnits);result.fundingAt=await verifiedTime(l);result.fundingHash=l.transactionHash}
+ for(const l of claims){if(l.args.shares!==perShares||l.args.claimed<1||l.args.claimed>count)throw new GiftError(503,'Gift claim evidence mismatch.');result.settlements![l.args.accountId]={recipient:l.args.recipient,hash:l.transactionHash,at:await verifiedTime(l),amountUnits:String(l.args.receivedUnits),shares:String(l.args.shares)}}
+ for(const l of refunds){if(!same(l.args.sender,r.senderAddress)||l.args.shares!==BigInt(count-claimed)*perShares)throw new GiftError(503,'Gift refund evidence mismatch.');result.refundUnits=String(l.args.receivedUnits);result.refundAt=await verifiedTime(l);result.refundHash=l.transactionHash}
+ }
+ if(!complete()&&discover){const logs=await verifiedHintLogs(client,r,height,[fundingEvent,claimEvent,refundEvent],await discover(height).catch(()=>[]));await consume(logs.filter(l=>l.eventName==='StockGiftFunded'),logs.filter(l=>l.eventName==='StockGiftClaimed'),logs.filter(l=>l.eventName==='StockGiftRefunded'))}
+ if(!complete())await consume(...await Promise.all([client.getLogs({address:d.escrow,event:fundingEvent,args:{giftId:r.giftId},fromBlock,toBlock,strict:true}),client.getLogs({address:d.escrow,event:claimEvent,args:{giftId:r.giftId},fromBlock,toBlock,strict:true}),client.getLogs({address:d.escrow,event:refundEvent,args:{giftId:r.giftId},fromBlock,toBlock,strict:true})]))
+ const cursorHeight=complete()?height:toBlock
+ const cursor=await client.getBlock({blockNumber:cursorHeight});if(!cursor.hash)throw new GiftError(503,'Gift evidence is not confirmed.');result.evidenceScanBlock=String(cursorHeight);result.evidenceScanHash=cursor.hash
+ if(!block.hash||(await client.getBlock({blockNumber:height})).hash!==block.hash)throw new GiftError(503,'Gift confirmation changed.')
+ return result
+}

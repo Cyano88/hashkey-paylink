@@ -11,6 +11,7 @@ export function isOutgoingPosPurchase(row: PocketActivityRow): boolean {
 export function isIncomingPosPayment(row: PocketActivityRow): boolean {
   return row.direction !== 'out' && (
     ['pos', 'ngpos'].includes(String(row.source ?? '').toLowerCase())
+    || (row.direction === 'in' && String(row.source ?? '').toLowerCase() === 'xpay')
     || (row.direction === 'in' && String(row.settlementType ?? '').toLowerCase() === 'pos_payment')
   )
 }

@@ -31,3 +31,7 @@ console.log('PASS explicit server-authorized retry resets cancelled claim withou
 
 const automatic=setup();await automatic.flow.claim();const before=automatic.states.length;automatic.result={status:'confirmed',transactionHash:hash};await automatic.flow.refresh();assert.equal(automatic.flow.state.phase,'confirmed');assert.equal(automatic.approved,1);assert(!automatic.states.slice(before).some(s=>s.phase==='checking'))
 console.log('PASS automatic claim confirmation updates quietly without another wallet approval.')
+const creator=setup();creator.result={status:'creator'};await creator.flow.recheck();assert.equal(creator.flow.state.phase,'unavailable');await creator.flow.claim();assert.equal(creator.approved,0)
+const returning=setup();returning.result={status:'confirmed',transactionHash:hash};await returning.flow.recheck();await returning.flow.claim();assert.equal(returning.approved,0)
+const fresh=setup();fresh.result={status:'available',retryAllowed:true};await fresh.flow.recheck();assert.equal(fresh.flow.state.phase,'ready');assert.equal(fresh.approved,0)
+console.log('PASS initial recipient check blocks creators and repeat claim approval without blocking eligible recipients.')

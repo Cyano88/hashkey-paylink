@@ -1,0 +1,21 @@
+# Share-accounting stock gift replacement
+
+Status: implemented and tested; no production deployment or active stock-share pin yet. The existing Base contracts are unchanged.
+
+`PocketStockGiftEscrow` stores exact shares per recipient and total locked shares per token. It verifies sender and recipient share deltas for every transfer. Funding rounds the requested stock quantity down to transferable shares, leaves the remainder with the sender, and charges 25 bps on principal shares. Every recipient receives equal shares. Claims and refunds follow subsequent multiplier changes. Funding checks the quoted multiplier and caps the sender's actual nominal balance debit. No admin withdrawals or upgrades exist.
+
+Wallet execution derives calldata locally from a reviewed deployment, validates the share quote, and rejects a changed multiplier after approval. Claims/refunds verify backing. The separate observer checks canonical events, stores actual claim/refund credits and fee receipts, and exposes the current stock quantity. Legacy deployment pins remain available for old links. Once a share deployment is activated, new funding uses only its verified tokens and old drafts must be recreated; an old allowance does not authorize the new escrow.
+
+Validation: 42 selected gift contract/integration tests passed, including prior Base flows, rounding reproduction, equal-share funding, positive/negative rebases, partial refunds, 1,000 recipients, overlapping gifts, duplicate accounts/wallets, stale quotes, short transfers and failed payout rollback. Backend, provider-event and stock-flow smoke tests passed; focused TypeScript checks and mobile build passed. A broader invocation under the gift-only Hardhat configuration attempted unrelated non-gift tests and failed on missing non-gift artifacts; the selected gift suite is the applicable result.
+
+Read-only live NVDAx simulation at X Layer block 72282553 succeeded with replacement runtime overridden only for `eth_call`. No transaction was signed or broadcast. Multiplier: 1001701196801074000; shares per recipient: 9983016923544; fee shares: 49915084617; nominal allowance debit: 20049999999998 atoms. The old contract rejected the same requested gift because of a one-atom transfer delta.
+
+Unsigned deployment prepared for NVDAx only. Predicted address: 0xA2214d8aE7be3092A9311BC155F9EdeaC6226651 at deployment-wallet nonce 2. Constructor simulation succeeded; expected runtime hash: 0x050a4e29329f2e827eca3e93686b685d858bcfe5f19d04b4d0dc5c5efd2a7618. Current capped network fee estimate: 0.000053234502661725 OKB. The review page rechecks wallet, chain, nonce, fee and simulated runtime before the user signs. Public plan and review page remain local, outside source control.
+
+Remaining activation steps: user signs deployment; verify receipt, runtime, treasury, authority and token share API; add the reviewed `shares-v1` deployment pin; release the pinned client/server; fund a new small gift and verify real claims. Do not claim production funding or claim tests passed before these steps occur. Expand beyond NVDAx only after per-token share and transfer verification.
+
+## Deployment verified and pilot pin activated
+
+User-submitted transaction: 0xfac9ba1eddf0270493c8bb2f007173dc23891aa669bc1821d9fd996aac5e7e9d. Successful creation at 0xa2214d8ae7be3092a9311bc155f9edeac6226651, block 72283616, with 83 confirmations at initial verification. Exact sender, nonce, creation calldata, zero value, runtime hash, treasury, authority, fee and NVDAx quote matched the unsigned plan. Only NVDAx is pinned for the new pilot. All legacy stock deployment pins remain available to observe old links; old drafts cannot silently switch contracts.
+
+Native/client and server rollout are required before funding a fresh gift. Real gift funding, claims and refunds remain pending user interaction; deployment is not evidence that those end-to-end actions passed.

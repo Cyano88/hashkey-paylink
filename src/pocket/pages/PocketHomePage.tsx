@@ -80,22 +80,22 @@ export default function PocketHomePage() {
   return <PocketRouteShell active="home" onSelect={tab => open(navPath(tab))}>
     <PocketWalletUpdateCard key={email} notice={pocketWalletPreparationNotice(wallets.walletUpdate, wallets.wallets)} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
     <section data-pocket-balance-card className="overflow-hidden rounded-[26px] bg-gray-950 px-5 py-4 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+      <div className="relative">
+        <div className="min-w-0 text-center">
+          <div className="flex items-center justify-center px-12"><div className="relative">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 dark:text-gray-500">Total USDC</p>
-            <button type="button" onClick={toggleBalance} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>
+            <button type="button" onClick={toggleBalance} className="absolute left-full top-1/2 ml-1.5 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>
               {balanceVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             </button>
-          </div>
+          </div></div>
           <div className="mt-1.5">
-            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
+            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-total-amount>{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden}</span><span className="absolute bottom-1 left-full ml-1.5 whitespace-nowrap text-xs font-medium tracking-normal opacity-50">USDC</span></span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
-          {<div className="mt-1 flex h-4 items-center text-xs font-semibold tabular-nums leading-4 text-white/55 dark:text-gray-500">
+          {<div className="mt-1 flex h-4 items-center justify-center text-xs font-semibold tabular-nums leading-4 text-white/55 dark:text-gray-500">
             {!showNgn ? null : !balanceVisible ? (currency === 'NGN' ? '\u20a6' : 'USh ') + hidden : balancesVisible && fx.quote ? '~ ' + localCurrencyAmount(Math.round(displayTotal * fx.quote.rate), currency === 'UGX' ? 'UGX' : 'NGN') : !balancesVisible || fx.loading ? <span role="status" aria-label="Loading local equivalent" className="block h-3 w-24 animate-pulse rounded bg-white/10 motion-reduce:animate-none dark:bg-gray-950/[0.08]" /> : <span aria-label="Local equivalent temporarily unavailable">Rate unavailable</span>}
           </div>}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="absolute right-0 top-0 flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.scan)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><QrCode className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Scan</span></button>
         </div>
       </div>
@@ -106,7 +106,7 @@ export default function PocketHomePage() {
         </button>)}
       </div><button type="button" aria-label={networkPage === 0 ? 'More networks' : 'Previous networks'} onClick={() => { const next = networkPage === 0 ? 1 : 0; setNetworkPage(next); setSelected(next === 1 ? 'polygon' : 'base') }} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-full"><ArrowRight className={cn('h-5 w-5 transition-transform', networkPage === 1 && 'rotate-180')} /></button></div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
-        {comingSoon ? <p className="text-sm font-semibold">Coming soon</p> : selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
+        {comingSoon ? <p className="text-sm font-semibold">Coming soon</p> : selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-detail-amount>{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden}</span><span className="absolute bottom-0.5 left-full ml-1 whitespace-nowrap text-[10px] font-medium tracking-normal opacity-50">USDC</span></span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
       </div>
     </section>
 

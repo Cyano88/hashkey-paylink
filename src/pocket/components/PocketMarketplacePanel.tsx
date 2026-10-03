@@ -152,7 +152,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       {network === 'arc' ? (
         <div className="p-3.5">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Marketplace payments use mainnet App Pay</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Circle Gateway routes purchases from your unified mainnet balance. Arc Mainnet is not used for live purchases.</p>
+
           <button type="button" onClick={onUseBase} className="pocket-cta-primary mt-3 inline-flex w-full items-center justify-center gap-2 px-4 py-3"><ArrowRight className="h-4 w-4" /> Use mainnet App Pay</button>
         </div>
       ) : (
@@ -219,7 +219,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
             )) : snapshot && !snapshot.catalogAvailable ? (
               <p className="py-8 text-center text-xs text-gray-500 dark:text-gray-400">Catalog temporarily unavailable. Search again to retry.</p>
             ) : (
-              <p className="py-8 text-center text-xs text-gray-500 dark:text-gray-400">No one-tap Gateway services matched this search.</p>
+              <p className="py-8 text-center text-xs text-gray-500 dark:text-gray-400">No services found. Try another search.</p>
             )}
           </div>
 

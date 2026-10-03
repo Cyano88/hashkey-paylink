@@ -81,7 +81,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
   }
   if (!wallet.address) return <PocketStockWalletActions wallet={wallet} view="receive" />
   return <section className={card}>
-    <div className="mb-5 grid grid-cols-3 gap-2">{(['buy', 'sell', 'swap'] as const).map(value => <button key={value} type="button" disabled={busy || wallet.pending?.status==='pending'} aria-pressed={mode === value} onClick={() => setMode(value)} className={'min-h-10 rounded-full text-xs font-bold ' + (mode === value ? 'bg-gray-950 text-white dark:bg-black dark:text-white' : 'text-gray-400')}>{value === 'buy' ? 'Buy' : value === 'sell' ? 'Sell' : 'Swap'}</button>)}</div>
+    {initialMode !== 'swap' && <div className="mb-5 grid grid-cols-2 gap-2">{(['buy', 'sell'] as const).map(value => <button key={value} type="button" disabled={busy || wallet.pending?.status==='pending'} aria-pressed={mode === value} onClick={() => setMode(value)} className={'min-h-10 rounded-full text-xs font-bold ' + (mode === value ? 'bg-gray-950 text-white dark:bg-black dark:text-white' : 'text-gray-400')}>{value === 'buy' ? 'Buy' : 'Sell'}</button>)}</div>}
       {mode !== 'swap' ? <div className="mb-4"><p className="mb-2 text-xs text-gray-500">Stock</p>{picker('Select stock', chosen.address, '', true, t => setStock(t.symbol))}</div> : <div className="mb-4 grid grid-cols-2 gap-3">
         <div><p className="mb-2 text-xs text-gray-500">From</p>{picker('From asset', from, to, false, t => setFrom(t.address))}</div>
         <div><p className="mb-2 text-xs text-gray-500">To</p>{picker('To asset', to, from, false, t => setTo(t.address))}</div>
@@ -99,7 +99,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
       </div>
       <PocketStockTradeProgress progress={progress} />
       <button type="button" className={button} disabled={reconnectWallet || busy || quoting || !current || wallet.busy || wallet.uncertain || wallet.pending?.status === 'pending'} onClick={confirm}>{progress.stage === 'completed' ? 'Completed' : progress.stage === 'processing' || progress.stage === 'confirming' ? 'Processing...' : wallet.pending?.status === 'pending' ? 'Confirming...' : mode === 'buy' ? 'Buy ' + tokenOut.symbol : mode === 'sell' ? 'Sell ' + tokenIn.symbol : 'Swap ' + tokenIn.symbol + ' for ' + tokenOut.symbol}</button>
-    {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs text-amber-600">A submission needs review. Check Activity before another trade.</p>}
+    {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs text-amber-600">Check your pending trade in Activity before trading again.</p>}
     {reconnectWallet && <button type="button" onClick={() => window.location.reload()} className="mt-3 min-h-11 w-full text-xs font-bold">Reload Pocket</button>}
     {error && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
   </section>

@@ -119,7 +119,7 @@ export function PocketReceiveMethodPanel({
       )}
       {!canReceiveWithEmail && selectedNetwork === 'solana' && (
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          Circle Pocket receiving for Solana is not enabled here yet.
+          Receiving on Solana is not available here yet.
         </p>
       )}
     </div>

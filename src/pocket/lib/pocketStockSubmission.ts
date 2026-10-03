@@ -1,7 +1,7 @@
 import type { Hex } from 'viem'
 
 export type StockTradeStage = 'idle' | 'preparing' | 'processing' | 'confirming' | 'completed' | 'failed'
-export type StockPending = { id?:string; xpayPaymentId?:string; details?:{recipient:string;amount:string;symbol:string;at:number}; key: string; hash: Hex; kind?: 'approval' | 'trade' | 'send'; status: 'pending' | 'confirmed' | 'failed' }
+export type StockPending = { id?:string; gift?:{id:string;attemptId:string;operation:'approval'|'funding'|'claim'|'refund'}; xpayPaymentId?:string; details?:{recipient:string;amount:string;symbol:string;at:number}; key: string; hash: Hex; kind?: 'approval' | 'trade' | 'send' | 'gift'; status: 'pending' | 'confirmed' | 'failed' }
 export const signingKey = (key: string) => 'pocket.xstocks.signing:' + key
 const pendingKey = (key: string) => 'pocket.xstocks.pending:' + key
 export const STOCK_ATTEMPTS_UPDATED='pocket:stock-attempts-updated'
@@ -37,7 +37,7 @@ export function readStockPending(key: string): StockPending | null {
  if (/^0x[0-9a-f]{64}$/i.test(value)) return { key, hash: value as Hex, status: 'pending' }
  try {
   const saved = JSON.parse(value)
-  if (/^0x[0-9a-f]{64}$/i.test(saved.hash) && ['approval', 'trade', 'send'].includes(saved.kind)) return { ...saved, key, hash: saved.hash, kind: saved.kind, status: 'pending' }
+  if (/^0x[0-9a-f]{64}$/i.test(saved.hash) && ['approval', 'trade', 'send', 'gift'].includes(saved.kind)) return { ...saved, key, hash: saved.hash, kind: saved.kind, status: 'pending' }
  } catch { /* An unknown record never authorizes a retry. */ }
  return null
 }
@@ -61,14 +61,14 @@ export function settleStockPending(pending: StockPending, success: boolean): Sto
 }
 export async function runStockSubmission(options: {
  key: string; kind: NonNullable<StockPending['kind']>; xpayPaymentId?:string;
- details?:StockPending['details'];
+ gift?:StockPending['gift']; details?:StockPending['details'];
  send: () => Promise<{ hash: Hex }>;
  wait?: (hash: Hex) => Promise<{ status: string }>;
  onPending: (pending: StockPending) => void;
  onUncertain: (uncertain: boolean) => void;
  onSubmitted?: () => void;
 }) {
- const { key, kind, send, wait, onPending, onUncertain, onSubmitted, details, xpayPaymentId } = options
+ const { key, kind, send, wait, onPending, onUncertain, onSubmitted, details, xpayPaymentId, gift } = options
  const existing=details?readStockAttempts(key).find(r=>r.status==='pending'&&r.details?.recipient.toLowerCase()===details.recipient.toLowerCase()&&r.details?.amount===details.amount&&r.details?.symbol===details.symbol):undefined
  if(existing){
   onPending(existing)
@@ -78,10 +78,14 @@ export async function runStockSubmission(options: {
    return existing.hash
   } catch(reason){const error=stockSubmissionError(reason);if(readStockAttempts(key).some(r=>r.id===existing.id&&r.status==='pending'))Object.assign(error,{transactionPending:true,attemptId:existing.id});throw error}
  }
+ // Shared across hook instances: never start another signature while the
+ // previous submission has no known transaction hash. Known-hash attempts
+ // remain independently trackable and do not take this signing lock.
+ if(localStorage.getItem(signingKey(key))||readStockAttempts(key).some(r=>r.status==='pending'&&!r.hash))throw Object.assign(new Error('A payment is still being checked. View Activity before trying again.'),{transactionPending:true})
  const id=crypto.randomUUID()
- const draft:StockPending={key,kind,id,details,xpayPaymentId,hash:'' as Hex,status:'pending'}
- saveStockAttempt(draft)
+ const draft:StockPending={key,kind,id,details,xpayPaymentId,gift,hash:'' as Hex,status:'pending'}
  localStorage.setItem(signingKey(key), String(Date.now()))
+ try{saveStockAttempt(draft)}catch(reason){localStorage.removeItem(signingKey(key));throw reason}
  // Signing in progress is not an uncertain outcome. Only a rejected call with
  // an unknown broadcast outcome sets that warning.
  onUncertain(false)
@@ -90,7 +94,7 @@ export async function runStockSubmission(options: {
   const result = await send()
   if (!/^0x[0-9a-f]{64}$/i.test(result.hash)) throw Error('The wallet returned an invalid transaction reference.')
   hash = result.hash
-  const pending: StockPending = { key, kind, id, details, xpayPaymentId, hash, status: 'pending' }
+  const pending: StockPending = { key, kind, id, details, xpayPaymentId, gift, hash, status: 'pending' }
   saveStockAttempt(pending)
   localStorage.setItem(pendingKey(key), JSON.stringify(pending))
   localStorage.removeItem(signingKey(key))
@@ -121,4 +125,13 @@ export function settleXPaySourceProof(key:string,paymentId:string,hash:Hex){
  const r=matches[0]
  settleStockPending({...r,hash},true)
  if(!r.hash&&!readStockAttempts(key).some(other=>other.id!==r.id&&other.status==='pending'&&!other.hash))localStorage.removeItem(signingKey(key))
+}
+
+// Call only with a canonical gift receipt returned by the authenticated gift service.
+export function settleStockGiftProof(key:string,giftId:string,operation:'funding'|'claim'|'refund',hash:Hex){
+ if(!/^0x[0-9a-f]{64}$/i.test(hash))return
+ const matches=readStockAttempts(key).filter(r=>r.gift?.id===giftId&&r.gift.operation===operation&&r.status==='pending'&&(!r.hash||r.hash.toLowerCase()===hash.toLowerCase()))
+ if(matches.length!==1)return
+ const record=matches[0];settleStockPending({...record,hash},true)
+ if(!record.hash&&!readStockAttempts(key).some(r=>r.id!==record.id&&r.status==='pending'&&!r.hash))localStorage.removeItem(signingKey(key))
 }

@@ -7,7 +7,7 @@ const mocks={
 '../privy-circle-link.js':`export const verifiedPrivyUser=async()=>{if(!fixture.owner)throw Object.assign(Error('Sign in'),{status:401});return{userId:fixture.owner}}`,
 '../render-durable-store.js':`const stores=new Map();export const readDurableJson=async(k)=>structuredClone(stores.get(k));export const mutateDurableJson=async(k,fn)=>{const store=fn(structuredClone(stores.get(k)));stores.set(k,store);return structuredClone(store)}`,
 '../ng-pos.js':`export const ownedPosSetupKeys=async()=>fixture.keys||{};export const ownedPosSetupKey=async(owner,id)=>fixture.keys?.[id];export const ownsPocketPosQr=async(owner,id)=>owner==='merchant'&&id==='bank-1';export const listPocketUnifiedXPayPosPayments=async(owner,id)=>fixture.payments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayPosDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='bank'):[]`,
-'./xpay.js':`export const ownedStockSetupKeys=async()=>fixture.keys||{};export const ownedStockSetupKey=async(owner,id)=>fixture.keys?.[id];export const listPocketUnifiedXPayStockPayments=async()=>[];export const listPocketXPayStockDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='xstocks'):[]`,
+'./xpay.js':`export const ownedStockSetupKeys=async()=>fixture.keys||{};export const ownedStockSetupKey=async(owner,id)=>fixture.keys?.[id];export const listPocketUnifiedXPayStockPayments=async(owner,id)=>fixture.stockPayments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayStockDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='xstocks'):[]`,
 './payment-security.js':`export const consumePocketPaymentApproval=async()=>{const yes=fixture.approval;fixture.approval=false;return yes}`}
 await build({stdin:{contents:"export {default} from './api/pocket/unified-xpay';export {assertUnifiedXPayDestination,legacyXPayTerminal} from './api/pocket/unified-xpay-store'",resolveDir:process.cwd(),loader:'ts'},outfile:'.codex-temp/unified-xpay-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
 const {default:handler,assertUnifiedXPayDestination,legacyXPayTerminal}=await import('../.codex-temp/unified-xpay-test.mjs')
@@ -55,3 +55,15 @@ console.log('PASS separate terminals, no QR merging, dedicated setup ownership, 
 assert.equal(await legacyXPayTerminal('legacy'),legacy.id)
 assert.equal(await legacyXPayTerminal('bank-1'),a.id)
 console.log('PASS legacy QR alias is single-business only.')
+
+fixture.stockPayments=Array.from({length:205},(_,i)=>({id:'stock-'+i,owner:'merchant',checkoutId:b.id,rail:'xstocks',amount:'0.1',asset:'NVDAx',state:'successful',createdAt:i+10,network:'xlayer'}))
+fixture.stockPayments.push({id:'cash',owner:'merchant',checkoutId:b.id,rail:'xstocks',amount:'999',asset:'USDC',state:'successful',createdAt:999,network:'xlayer'})
+fixture.stockPayments.push({id:'other-owner',owner:'intruder',checkoutId:b.id,rail:'xstocks',amount:'999',asset:'NVDAx',state:'successful',createdAt:1000,network:'xlayer'})
+const stockHistory=await call({action:'history',id:b.id,rail:'xstocks'})
+assert.equal(stockHistory.payments.length,200)
+assert.ok(stockHistory.payments.every(p=>p.asset==='NVDAx'))
+assert.deepEqual(stockHistory.stockTotals,[{symbol:'NVDAx',amount:'20.5'}])
+const cashHistory=await call({action:'history',id:b.id,rail:'stablecoins'})
+assert.deepEqual(cashHistory.payments.map(p=>p.id),['payment-b'])
+assert.deepEqual(cashHistory.stockTotals,[])
+console.log('PASS rail-scoped history, owner isolation, cash exclusion and exact stock totals before the 200-row display limit.')

@@ -317,222 +317,222 @@ html.dark body::-webkit-scrollbar-thumb:hover {
 }
 
 /* ── Surfaces — 3-level hierarchy: page / card / input ─────────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-white           { background-color: #1e1e1e; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-50         { background-color: #252525; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-100        { background-color: #2a2a2a; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-200        { background-color: #383838; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-300        { background-color: #555555; }  /* inactive toggle tracks */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-white           { background-color: #1e1e1e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-50         { background-color: #252525; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-100        { background-color: #2a2a2a; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-200        { background-color: #383838; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-300        { background-color: #555555; }  /* inactive toggle tracks */
 
 /* Opacity variants — Tailwind treats e.g. bg-gray-50/60 as a separate class */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-50\/60     { background-color: #252525; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-50\/80     { background-color: #252525; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-blue-50\/60     { background-color: rgba(0, 113, 227, 0.10); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-violet-50\/60   { background-color: rgba(124, 58, 237, 0.10); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-violet-50\/40   { background-color: rgba(124, 58, 237, 0.10); }  /* Flexible Amount banner */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-emerald-50\/60  { background-color: rgba(16, 185, 129, 0.10); }  /* Monitoring USDC tag */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-50\/60     { background-color: #252525; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-50\/80     { background-color: #252525; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-blue-50\/60     { background-color: rgba(0, 113, 227, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-violet-50\/60   { background-color: rgba(124, 58, 237, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-violet-50\/40   { background-color: rgba(124, 58, 237, 0.10); }  /* Flexible Amount banner */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-emerald-50\/60  { background-color: rgba(16, 185, 129, 0.10); }  /* Monitoring USDC tag */
 
 /* Header / footer translucent backgrounds */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-white\/80       { background-color: rgba(18, 18, 18, 0.92); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-white\/50       { background-color: rgba(18, 18, 18, 0.50); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-gray-100\/80    { background-color: rgba(42, 42, 42, 0.80); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-white\/80       { background-color: rgba(18, 18, 18, 0.92); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-white\/50       { background-color: rgba(18, 18, 18, 0.50); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-gray-100\/80    { background-color: rgba(42, 42, 42, 0.80); }
 
 /* ── Payment card headerBg gradients — all 5 chain tints + success card ─────
    Each chain uses a light pastel gradient (from-blue-50 to-sky-50 etc).
    Override to a dark, subtly-tinted version so text stays readable.
 ──────────────────────────────────────────────────────────────────────────────── */
 /* Base (blue) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-blue-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-blue-50 {
   --tw-gradient-from: #0a1525;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(10,21,37,0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-sky-50   { --tw-gradient-to: #0a1a28; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-sky-50   { --tw-gradient-to: #0a1a28; }
 
 /* HashKey (amber/gold) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-amber-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-amber-50 {
   --tw-gradient-from: #1a1505;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(26,21,5,0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-yellow-50 { --tw-gradient-to: #1a1605; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-yellow-50 { --tw-gradient-to: #1a1605; }
 
 /* Arc (teal) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-teal-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-teal-50 {
   --tw-gradient-from: #001818;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(0,24,24,0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-cyan-50  { --tw-gradient-to: #001a1c; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-cyan-50  { --tw-gradient-to: #001a1c; }
 
 /* Solana (green) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-green-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-green-50 {
   --tw-gradient-from: #021a0e;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(2,26,14,0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-emerald-50 { --tw-gradient-to: #021a0e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-emerald-50 { --tw-gradient-to: #021a0e; }
 
 /* Success card (emerald → green) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-emerald-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-emerald-50 {
   --tw-gradient-from: #021a0e;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(2,26,14,0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-green-50 { --tw-gradient-to: #021a0e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-green-50 { --tw-gradient-to: #021a0e; }
 
 /* Underpayment card header (from-red-50 to-orange-50) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-red-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-red-50 {
   --tw-gradient-from: #200a0a;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(32,10,10,0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-orange-50 { --tw-gradient-to: #201008; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-orange-50 { --tw-gradient-to: #201008; }
 
 /* "Link Ready" panel (gray-50/80 → white) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .from-gray-50\/80 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .from-gray-50\/80 {
   --tw-gradient-from: rgba(37, 37, 37, 0.8);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(37, 37, 37, 0));
 }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .to-white { --tw-gradient-to: #1e1e1e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .to-white { --tw-gradient-to: #1e1e1e; }
 
 /* ── Borders ────────────────────────────────────────────────────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-gray-100    { border-color: #333333; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-gray-200    { border-color: #333333; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-gray-300    { border-color: #444444; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-white\/60   { border-color: rgba(255, 255, 255, 0.06); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-gray-100    { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-gray-200    { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-gray-300    { border-color: #444444; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-white\/60   { border-color: rgba(255, 255, 255, 0.06); }
 
 /* ── Dividers ───────────────────────────────────────────────────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
 
 /* ── Text — near-white hierarchy ───────────────────────────────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-900      { color: #eeeeee; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-800      { color: #e0e0e0; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-700      { color: #cccccc; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-600      { color: #aaaaaa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-500      { color: #888888; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-400      { color: #666666; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-gray-300      { color: #555555; }  /* unavailable chain pills */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-900      { color: #eeeeee; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-800      { color: #e0e0e0; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-700      { color: #cccccc; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-600      { color: #aaaaaa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-500      { color: #888888; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-400      { color: #666666; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-gray-300      { color: #555555; }  /* unavailable chain pills */
 
 /* Slate (used in platform fee row) */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-slate-400     { color: #666666; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-slate-500     { color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-slate-400     { color: #666666; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-slate-500     { color: #555555; }
 
 /* Hover / focus text */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .hover\:text-gray-600:hover  { color: #cccccc; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .hover\:text-gray-700:hover  { color: #cccccc; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .hover\:text-gray-800:hover  { color: #e0e0e0; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .hover\:text-gray-600:hover  { color: #cccccc; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .hover\:text-gray-700:hover  { color: #cccccc; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .hover\:text-gray-800:hover  { color: #e0e0e0; }
 
 /* ── Hover surfaces ─────────────────────────────────────────────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .hover\:bg-gray-50:hover      { background-color: rgba(255, 255, 255, 0.05); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .hover\:bg-gray-100:hover     { background-color: rgba(255, 255, 255, 0.07); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .hover\:border-gray-300:hover { border-color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .hover\:bg-gray-50:hover      { background-color: rgba(255, 255, 255, 0.05); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .hover\:bg-gray-100:hover     { background-color: rgba(255, 255, 255, 0.07); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .hover\:border-gray-300:hover { border-color: #555555; }
 
 /* ── Inputs & textareas ─────────────────────────────────────────────────────── */
 /* bg-transparent inputs (flex amount fields inside gradient header) stay transparent */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) textarea:not(.bg-transparent),
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) select {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) textarea:not(.bg-transparent),
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) select {
   background-color: #252525;
   color: #eeeeee;
   border-color: #333333;
 }
 
 /* Transparent inputs: keep bg clear but ensure text is readable */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) input.bg-transparent,
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) textarea.bg-transparent {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) input.bg-transparent,
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) textarea.bg-transparent {
   background-color: transparent !important;
   color: #eeeeee;
 }
 
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) input:focus:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) textarea:focus:not(.bg-transparent) {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) input:focus:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) textarea:focus:not(.bg-transparent) {
   background-color: #2a2a2a;
 }
 
 /* Focus border overrides for flex inputs */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .focus\:border-gray-500:focus { border-color: #555555; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .focus\:border-gray-400:focus { border-color: #444444; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .focus\:border-gray-500:focus { border-color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .focus\:border-gray-400:focus { border-color: #444444; }
 
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) input::placeholder,
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) textarea::placeholder { color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) input::placeholder,
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) textarea::placeholder { color: #555555; }
 
 /* ── Shadows ────────────────────────────────────────────────────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .shadow-card { box-shadow: 0 0 0 1px #333333, 0 4px 24px rgba(0,0,0,0.5); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .shadow-sm   { box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .shadow-md   { box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .shadow-card { box-shadow: 0 0 0 1px #333333, 0 4px 24px rgba(0,0,0,0.5); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .shadow-sm   { box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .shadow-md   { box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
 
 /* ── Coloured badge tints ───────────────────────────────────────────────────── */
 
 /* Blue */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-blue-50         { background-color: rgba(0, 113, 227, 0.12); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-blue-100        { background-color: rgba(0, 113, 227, 0.15); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-blue-100    { border-color: rgba(0, 113, 227, 0.25);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-blue-200    { border-color: rgba(0, 113, 227, 0.30);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-blue-800      { color: #93c5fd; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-blue-700      { color: #60a5fa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-blue-600      { color: #60a5fa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-blue-500      { color: #60a5fa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-blue-400      { color: #93c5fd; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-blue-50         { background-color: rgba(0, 113, 227, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-blue-100        { background-color: rgba(0, 113, 227, 0.15); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-blue-100    { border-color: rgba(0, 113, 227, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-blue-200    { border-color: rgba(0, 113, 227, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-blue-800      { color: #93c5fd; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-blue-700      { color: #60a5fa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-blue-600      { color: #60a5fa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-blue-500      { color: #60a5fa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-blue-400      { color: #93c5fd; }
 
 /* Purple */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-purple-50       { background-color: rgba(139, 92, 246, 0.12); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-purple-100  { border-color: rgba(139, 92, 246, 0.25);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-purple-200  { border-color: rgba(139, 92, 246, 0.30);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-purple-700    { color: #a78bfa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-purple-600    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-purple-50       { background-color: rgba(139, 92, 246, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-purple-100  { border-color: rgba(139, 92, 246, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-purple-200  { border-color: rgba(139, 92, 246, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-purple-700    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-purple-600    { color: #a78bfa; }
 
 /* Violet */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-violet-50       { background-color: rgba(124, 58, 237, 0.12); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-violet-100      { background-color: rgba(124, 58, 237, 0.15); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-violet-100  { border-color: rgba(124, 58, 237, 0.25);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-violet-200  { border-color: rgba(124, 58, 237, 0.30);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-violet-400  { border-color: rgba(139, 92, 246, 0.60);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-violet-700    { color: #a78bfa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-violet-600    { color: #a78bfa; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-violet-400    { color: #c4b5fd; }  /* Flexible Amount secondary text */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-violet-50       { background-color: rgba(124, 58, 237, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-violet-100      { background-color: rgba(124, 58, 237, 0.15); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-violet-100  { border-color: rgba(124, 58, 237, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-violet-200  { border-color: rgba(124, 58, 237, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-violet-400  { border-color: rgba(139, 92, 246, 0.60);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-violet-700    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-violet-600    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-violet-400    { color: #c4b5fd; }  /* Flexible Amount secondary text */
 
 /* Teal */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-teal-50         { background-color: rgba(0, 128, 128, 0.12); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-teal-100    { border-color: rgba(0, 128, 128, 0.25);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-teal-200    { border-color: rgba(0, 128, 128, 0.30);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-teal-700      { color: #2dd4bf; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-teal-600      { color: #2dd4bf; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-teal-50         { background-color: rgba(0, 128, 128, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-teal-100    { border-color: rgba(0, 128, 128, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-teal-200    { border-color: rgba(0, 128, 128, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-teal-700      { color: #2dd4bf; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-teal-600      { color: #2dd4bf; }
 
 /* Emerald */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-emerald-50      { background-color: rgba(16, 185, 129, 0.10); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-emerald-100 { border-color: rgba(16, 185, 129, 0.22);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.30);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-emerald-300 { border-color: rgba(16, 185, 129, 0.45);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-emerald-700   { color: #34d399; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-emerald-600   { color: #34d399; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-emerald-500   { color: #6ee7b7; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-emerald-400   { color: #6ee7b7; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-emerald-50      { background-color: rgba(16, 185, 129, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-emerald-100 { border-color: rgba(16, 185, 129, 0.22);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-emerald-300 { border-color: rgba(16, 185, 129, 0.45);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-emerald-700   { color: #34d399; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-emerald-600   { color: #34d399; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-emerald-500   { color: #6ee7b7; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-emerald-400   { color: #6ee7b7; }
 
 /* Green */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-green-50        { background-color: rgba(20, 241, 149, 0.08); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-green-100   { border-color: rgba(20, 241, 149, 0.15);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-green-200   { border-color: rgba(20, 241, 149, 0.22);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-green-700     { color: #4ade80; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-green-50        { background-color: rgba(20, 241, 149, 0.08); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-green-100   { border-color: rgba(20, 241, 149, 0.15);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-green-200   { border-color: rgba(20, 241, 149, 0.22);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-green-700     { color: #4ade80; }
 
 /* Amber */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-amber-50        { background-color: rgba(245, 158, 11, 0.10); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-amber-100       { background-color: rgba(245, 158, 11, 0.15); }  /* overpayment badge */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-amber-100   { border-color: rgba(245, 158, 11, 0.22);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-amber-200   { border-color: rgba(245, 158, 11, 0.28);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-amber-800     { color: #fde68a; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-amber-700     { color: #fcd34d; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-amber-600     { color: #fcd34d; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-amber-500     { color: #fbbf24; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-amber-50        { background-color: rgba(245, 158, 11, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-amber-100       { background-color: rgba(245, 158, 11, 0.15); }  /* overpayment badge */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-amber-100   { border-color: rgba(245, 158, 11, 0.22);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-amber-200   { border-color: rgba(245, 158, 11, 0.28);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-amber-800     { color: #fde68a; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-amber-700     { color: #fcd34d; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-amber-600     { color: #fcd34d; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-amber-500     { color: #fbbf24; }
 
 /* Red */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-red-50          { background-color: rgba(239, 68, 68, 0.10); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .bg-red-100         { background-color: rgba(239, 68, 68, 0.16); }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-red-100     { border-color: rgba(239, 68, 68, 0.22);     }  /* error state banner */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-red-200     { border-color: rgba(239, 68, 68, 0.28);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .border-red-300     { border-color: rgba(239, 68, 68, 0.45);     }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-red-800       { color: #fca5a5; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-red-700       { color: #f87171; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-red-600       { color: #f87171; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-red-500       { color: #f87171; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .text-red-400       { color: #fca5a5; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-red-50          { background-color: rgba(239, 68, 68, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .bg-red-100         { background-color: rgba(239, 68, 68, 0.16); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-red-100     { border-color: rgba(239, 68, 68, 0.22);     }  /* error state banner */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-red-200     { border-color: rgba(239, 68, 68, 0.28);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .border-red-300     { border-color: rgba(239, 68, 68, 0.45);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-red-800       { color: #fca5a5; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-red-700       { color: #f87171; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-red-600       { color: #f87171; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-red-500       { color: #f87171; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .text-red-400       { color: #fca5a5; }
 
 /* ── Gradient border — swap white fill for dark card surface ────────────────── */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-foundation-colour-scope])) .gradient-border {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .gradient-border {
   background: linear-gradient(#1e1e1e, #1e1e1e) padding-box,
     linear-gradient(135deg, #0071e3, #34aadc) border-box;
 }

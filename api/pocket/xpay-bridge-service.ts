@@ -87,7 +87,6 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
    }
    if(r.state==='mint_submitted'&&r.challengeId&&circleUserToken){
     const status=await d.challengeStatus({chain:'base',userToken:circleUserToken,walletId:r.plan.destinationWalletId!,walletAddress:r.plan.destination,challengeId:r.challengeId})
-    if(status.status==='failed')return d.journal.markMintFailed(owner,id,r.mintKey!)
     if(status.txHash){
      const receipt=await canonical(d.destination,8453,status.txHash as Hex);if(!receipt)return r
      const proof=validateXPayAttestation(r.message,r.plan)
@@ -95,6 +94,9 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
      if(receipt.status==='reverted')return d.journal.markMintFailed(owner,id,r.mintKey!)
      fail('Base receipt does not match this bridge. Your payment needs review.')
     }
+    // A provider failure label cannot override a broadcast: verify its receipt
+    // first, and retain pending state while canonical evidence is unavailable.
+    else if(status.status==='failed')return d.journal.markMintFailed(owner,id,r.mintKey!)
    }
    return r
   },
