@@ -1,3 +1,4 @@
+import PocketPosPaymentAction from '../pocket/components/PocketPosPaymentAction'
 import PocketKycPrompt from '../pocket/components/PocketKycPrompt'
 import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import usePocketSlowConfirmation from '../pocket/hooks/usePocketSlowConfirmation'
@@ -74,7 +75,7 @@ import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import CheckoutSteps from '../components/CheckoutSteps'
 import { CheckoutTrustLine as CheckoutPoweredByLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import UnifiedReceipt from '../components/UnifiedReceipt'
-import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
+import { type SlideActionStatus } from '../components/SlideAction'
 import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import PocketSelect from '../pocket/components/PocketSelect'
@@ -3397,6 +3398,11 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     successful: checkoutPresentation.successful,
     error: 'Payment failed',
   }
+  const pocketPosReviewRows: [string, string][] = [
+    ['Merchant', hostedMerchantName || memo || 'Merchant'], ['Network', meta.label],
+    ...(isNgPosPaycrestOfframp ? [['Merchant receives', (paycrestOrder?.fiat_currency || 'NGN')+' '+(paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt)] as [string,string]] : []),
+    ...(displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits),6)+' USDC'], ['Gas', formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' USDC'], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' USDC']] as [string,string][] : []),
+  ]
   function resetCheckoutError() {
     setPaymentAttemptStarted(false)
     setShowCheckButton(false)
@@ -5288,7 +5294,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 </div>
               )}
               {circleSmartAccount && circleEvmWalletUnlocked && (!circleWalletNeedsFunds || pocketMovePayExpected) && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
-                <SlideAction
+                <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                   status={checkoutSlideStatus}
                   disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                   onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCirclePasskeyPay}
@@ -5398,7 +5404,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                       </div>
                     )}
                     {circleSolanaSession && (!circleSolanaNeedsFunds || pocketMovePayExpected) ? (
-                      <SlideAction
+                      <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                         status={checkoutSlideStatus}
                         disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                         onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCircleSolanaEmailPay}
@@ -5509,7 +5515,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                   </div>
                 ) : !smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
               <div className="space-y-2">
-              <SlideAction
+              <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
@@ -5559,7 +5565,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             </div>
           ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
-              <SlideAction
+              <PocketPosPaymentAction pocket={Boolean(pocketScan)} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}

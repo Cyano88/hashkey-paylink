@@ -1,3 +1,5 @@
+import PocketConfirmationDetails from './PocketConfirmationDetails'
+import PocketSlideAction from './PocketSlideAction'
 import {xpayOrigin,xpayReturnPath} from '../lib/pocketXPayNavigation'
 import PocketXPayProgress from './PocketXPayProgress'
 import usePocketSlowConfirmation from '../hooks/usePocketSlowConfirmation'
@@ -102,7 +104,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
   if(scopeRef.current!==currentScope)return
   const data=await xpayRequest(getAccessToken,{action:'confirm',id:p.id,hash});adopt(data.payment);setUsd('');setReview(null)
  })
- const Surface=checkout?CheckoutSurface:PocketBottomSheet
+ const Surface=checkout&&!review?CheckoutSurface:PocketBottomSheet
  const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{xpayOrigin:xpayOrigin(location.state)}})}
  const assetTokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>merchant?.tokens.includes(t.address.toLowerCase()))
  const selected=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===token)
@@ -110,10 +112,15 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
   {!merchantId&&<PocketXPayLinks key={user?.id||'guest'} onLayoutChange={onLayoutChange} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
-  {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&slowConfirmation))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title="XPay" onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
-   <h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>
+  {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title={review?"Confirm payment":"XPay"} onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
+   {!review&&<h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
-    <p className="text-2xl font-bold">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-2 text-sm text-gray-500">${payment.usd} USD</p><p className="mb-6 mt-3 text-xs text-gray-400">Network fee · ≈ {formatStockQuantity(stockQuantity(review.fee,18))} OKB</p>{payment.status==='submitted'&&payment.hash&&<PocketXPayProgress progress={{payment:'submitted'}}/>}<button className={cta} aria-busy={busy} disabled={payment.status==='submitted'||busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onClick={quoteExpired?prepare:pay}>{busy&&<span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none"/>}{quoteExpired&&!busy?'Update payment amount':'Pay '+payment.merchantName}</button>{quoteExpired&&!busy&&<p role="status" className="mt-3 text-xs text-gray-500">This amount has expired. Update it, then review the new amount before paying.</p>}<button className="min-h-11 w-full text-xs text-gray-400" disabled={busy||payment.status==='submitted'} onClick={()=>{setPayment(null);setReview(null)}}>Edit amount</button>
+    <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[
+      ['Merchant',payment.merchantName],['Network','X Layer'],['Gas',formatStockQuantity(stockQuantity(review.fee,18))+' OKB'],
+    ]}/>
+    <div className="mt-5"><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy||wallet.busy?'pending':'idle'} disabled={payment.status==='submitted'||busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onConfirm={()=>void (quoteExpired?prepare():pay())} labels={{idle:quoteExpired?'Update payment amount':'Pay '+payment.merchantName,pending:'Processing',disabled:'Payment pending'}}/></div>
+    {quoteExpired&&!busy&&<p role="status" className="mt-3 text-xs text-gray-500">Price expired. Update the amount to continue.</p>}
+    <button className="min-h-11 w-full text-xs text-gray-400" disabled={busy||payment.status==='submitted'} onClick={()=>{setPayment(null);setReview(null)}}>Edit amount</button>
    </>:loading?<div aria-label="Loading merchant" className="h-40 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/10"/>:merchant?<>
     <p className="mb-4 text-xs text-gray-400">ID:{merchant.pocketId}</p><PocketArcTokenPicker label="Pay with" value={selected?.address||''} excluded="" tokens={assetTokens} disabled={busy} networkLabel="X Layer" clean initialLimit={100} onChange={t=>setToken(t.address.toLowerCase())} discover={async()=>{throw Error('Choose a stock accepted by this merchant.')}}/><label className="mt-4 block text-xs text-gray-400">Amount in USD<input aria-label="Amount in USD" className={input+' mt-2'} inputMode="decimal" value={usd} onChange={e=>setUsd(e.target.value)}/></label><button className={cta+' mt-5'} disabled={busy||!usd||!token||!wallet.address} onClick={prepare}>{busy?'Preparing…':'Continue'}</button>{!wallet.address&&<button className={cta+' mt-3'} onClick={wallet.connect} disabled={!wallet.ready||wallet.busy}>Open wallet</button>}
    </>:null}
