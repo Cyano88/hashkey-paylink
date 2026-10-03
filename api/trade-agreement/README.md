@@ -392,3 +392,26 @@ exist and passed deployment verification. Explorer source verification, reviewed
 Circle execution policy and funded lifecycle/recovery evidence remain outstanding;
 deployment is not approval for public funding. Source release and execution gates
 remain unchanged in this verification increment.
+
+## Explorer verification and Circle canary discovery - 2026-10-03
+
+The factory is fully source-verified on Arc's explorer. Evidence is saved in
+`docs/audits/arc-trade-explorer-verification-2026-10-03.json`. All seven published
+source files match the recorded normalized hashes; compiler version, optimization
+and deployed runtime were also checked. Recompiling the seven-file standard input
+locally produced byte-identical creation and runtime templates.
+
+`node --import tsx scripts/arc-trade-explorer-verify.mjs <Stream contracts directory>`
+checks those fingerprints before submission and verifies the explorer readback.
+The Windows HTTP helper handles the explorer's Node-client 403 response, exact
+`application/json` upload requirement (no charset suffix), and JSON responses sent
+as text. HTTP success alone does not count as accepted or verified source.
+
+The user selected two existing Pocket accounts and a 0.1 USDC principal for the
+funded canary. A read-only, two-account database lookup and authenticated Circle
+wallet reads confirmed both as live ARC SCA records. The buyer has deployed wallet
+code; the seller has no code yet. Account-specific evidence is kept only in local
+`.codex-temp/arc-circle-canary-wallets.json`, not committed. No transaction, wallet
+creation, token approval, transfer or database mutation was performed. Seller
+wallet initialization through Circle, wallet implementation review, authenticated
+participant challenges and funded lifecycle/recovery verification remain required.

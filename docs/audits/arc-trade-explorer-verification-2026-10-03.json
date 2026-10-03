@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "fullyVerified": true,
+  "checkedAt": "2026-10-03T13:36:20.303Z",
+  "chainId": 5042,
+  "factory": "0xA2214d8aE7be3092A9311BC155F9EdeaC6226651",
+  "url": "https://explorer.arc.io/address/0xA2214d8aE7be3092A9311BC155F9EdeaC6226651?tab=contract",
+  "compilerVersion": "0.8.24+commit.e11b9ed9",
+  "sourceFiles": 7,
+  "runtimeHash": "0x909bacacc093cb04057b27eb7b21d6805b82cf7a40c6be6f8d04d59b56237c30",
+  "submitted": false,
+  "fundingEnabled": false,
+  "productionReady": false
+}
