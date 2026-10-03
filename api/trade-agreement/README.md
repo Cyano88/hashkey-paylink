@@ -369,3 +369,26 @@ code, Safe state, immutable runtime, nonce, gas and account before requesting
 Rabby submission. It pins the expected nonce and prevents automatic retries.
 Successful simulation and mocked signing tests do not establish deployment:
 record and independently verify the returned transaction before pinning a release.
+
+## Trade factory deployed and verified - 2026-10-03
+
+The user submitted the prepared factory transaction through the local Rabby UI:
+`0x2e443edac412d7191a42a35cbe69b673db6d19aa5fdbb855a6394c8bc5b19bd3`.
+Factory: `0xA2214d8aE7be3092A9311BC155F9EdeaC6226651`.
+Dispute Safe: `0x83C0608F4695e82b6658757f9a0B658001A73a73`.
+
+`scripts/arc-trade-factory-verify.mjs` independently checked the successful
+canonical receipt, sender, nonce, zero value, creation transaction and exact
+calldata. The created address matches both the plan and sender/nonce derivation,
+with no factory code in the preceding block. At the receipt, confirmed-head and
+latest blocks, the production verifiers accepted the expected immutable runtime,
+official USDC and six decimals, factory arbiter, Safe proxy/singleton, two owners,
+threshold two, version and disabled modules. The first check observed 265
+confirmations. Evidence, compiler settings and source fingerprints are saved in
+`docs/audits/arc-trade-factory-deployment-2026-10-03.json`.
+
+The earlier undeployed-factory notes are historical. Both Arc contracts now
+exist and passed deployment verification. Explorer source verification, reviewed
+Circle execution policy and funded lifecycle/recovery evidence remain outstanding;
+deployment is not approval for public funding. Source release and execution gates
+remain unchanged in this verification increment.
