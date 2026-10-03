@@ -13,3 +13,9 @@ Read-only live NVDAx simulation at X Layer block 72282553 succeeded with replace
 Unsigned deployment prepared for NVDAx only. Predicted address: 0xA2214d8aE7be3092A9311BC155F9EdeaC6226651 at deployment-wallet nonce 2. Constructor simulation succeeded; expected runtime hash: 0x050a4e29329f2e827eca3e93686b685d858bcfe5f19d04b4d0dc5c5efd2a7618. Current capped network fee estimate: 0.000053234502661725 OKB. The review page rechecks wallet, chain, nonce, fee and simulated runtime before the user signs. Public plan and review page remain local, outside source control.
 
 Remaining activation steps: user signs deployment; verify receipt, runtime, treasury, authority and token share API; add the reviewed `shares-v1` deployment pin; release the pinned client/server; fund a new small gift and verify real claims. Do not claim production funding or claim tests passed before these steps occur. Expand beyond NVDAx only after per-token share and transfer verification.
+
+## Deployment verified and pilot pin activated
+
+User-submitted transaction: 0xfac9ba1eddf0270493c8bb2f007173dc23891aa669bc1821d9fd996aac5e7e9d. Successful creation at 0xa2214d8ae7be3092a9311bc155f9edeac6226651, block 72283616, with 83 confirmations at initial verification. Exact sender, nonce, creation calldata, zero value, runtime hash, treasury, authority, fee and NVDAx quote matched the unsigned plan. Only NVDAx is pinned for the new pilot. All legacy stock deployment pins remain available to observe old links; old drafts cannot silently switch contracts.
+
+Native/client and server rollout are required before funding a fresh gift. Real gift funding, claims and refunds remain pending user interaction; deployment is not evidence that those end-to-end actions passed.
