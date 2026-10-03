@@ -311,3 +311,20 @@ closed`; no Safe was deployed. The local transaction record is
 then independently verify the transaction, created proxy, singleton, owner set,
 threshold, empty modules and nonce. Only verified deployment evidence may fill
 the Arc Trade release record. Funding remains disabled.
+
+The existing local Rabby deployment UI was subsequently recovered, along with
+the saved owner mapping (Rabby and SafePal X1). `node scripts/serve-arc-safe-local.mjs`
+serves its adapted Safe-creation flow at `http://127.0.0.1:4388`. It reads the local
+creation plan, reuses the installed desktop deployment page's ethers bundle and
+styles, and stores returned transaction hashes locally for independent verification.
+It is loopback-only, checks Host and write Origin, and exposes no server signing
+route. Rabby requests creation; both owners are installed with threshold two.
+
+The browser decodes the exact initializer, rechecks account/chain, Safe dependency
+hashes, empty predicted address, live creation simulation, gas and balance before
+requesting a signature. The fee allowance is capped at 0.15 native USDC. Uncertain
+wallet responses retain a pending marker; no automatic resend is allowed.
+`node scripts/arc-safe-local-signer-smoke.mjs` passed mocked wallet tests for these
+checks and rejection/duplicate handling. The live local page and payload returned
+HTTP 200. A user wallet signature and independent receipt verification are still
+required; running the local page alone does not deploy the Safe.
