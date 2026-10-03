@@ -56,6 +56,13 @@ completed; this evidence does not declare the full product production-ready.
 
 ## Seller refund preparation
 
+The refund subsequently confirmed in transaction
+`0x894345295b85a20084bdf1019e210a5594f54551e67b5efba6f154b922b594e4`
+at block 24107842. Independent re-verification at block 24108204 confirmed state
+Refunded, exactly 100000 base units returned to the buyer, zero seller allocation,
+and zero escrow balance. `scripts/verify-arc-trade-canary-refund.mjs` repeats this
+check. This completes the local funding/refund canary, not hosted product testing.
+
 The local canary now permits seller-only `refundBySeller` from confirmed Funded
 state, using fixed server-owned evidence. The contract returns the entire
 principal to its immutable buyer; the browser cannot supply an amount, recipient

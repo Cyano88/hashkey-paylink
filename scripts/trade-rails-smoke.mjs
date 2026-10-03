@@ -18,8 +18,11 @@ assert.throws(()=>bindArcTradeTerms(id,terms,buyer,seller,100,{...release,chainI
 assert.throws(()=>bindArcTradeTerms('xag_'+'1'.repeat(64),terms,buyer,seller,100,release))
 assert.notEqual(binding.termsHash,bindArcTradeTerms(id,terms,buyer,seller,101,release).termsHash)
 assert.notEqual(binding.termsHash,bindArcTradeTerms(id,terms,buyer,seller,100,{...release,factory:'0x'+'66'.repeat(20)}).termsHash)
-assert.equal(arcTradeAvailability({HASHPAYLINK_TRADE_ARC_ENABLED:'true',HASHPAYLINK_TRADE_ARC_PROJECTS:'dev_1234567890'},'dev_1234567890').enabled,false)
-assert.throws(()=>prepareArcTradeBinding(id,terms,buyer,seller,100),/pending verification/)
+assert.equal(arcTradeAvailability({HASHPAYLINK_TRADE_ARC_ENABLED:'true',HASHPAYLINK_TRADE_ARC_PROJECTS:'dev_1234567890'},'dev_1234567890').enabled,true)
+assert.equal(arcTradeAvailability({},'dev_1234567890').enabled,false)
+assert.equal(arcTradeAvailability({HASHPAYLINK_TRADE_ARC_ENABLED:'true'},'dev_1234567890').enabled,false)
+assert.equal(arcTradeAvailability({HASHPAYLINK_TRADE_ARC_ENABLED:'true',HASHPAYLINK_TRADE_ARC_PROJECTS:'dev_other12345'},'dev_1234567890').enabled,false)
+assert.equal(prepareArcTradeBinding(id,terms,buyer,seller,100).factory,'0xA2214d8aE7be3092A9311BC155F9EdeaC6226651')
 const stock=JSON.parse(readFileSync('src/lib/xstocksAgreement/xStocksCatalog.json','utf8')).assets[0]
 const env={HASHPAYLINK_XSTOCKS_SHARE_ENABLED:'true',HASHPAYLINK_XSTOCKS_SHARE_FACTORY:'0x'+'55'.repeat(20),HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:'true',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}
 const stockBody={kind:'trade',stockCustody:'xstocks-shares-v2',title:body.title,description:body.description,amount:body.amount,paymentToken:stock.address,trade}

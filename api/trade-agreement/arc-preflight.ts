@@ -6,7 +6,7 @@ import {verifyArcTradeAuthority,verifyArcTradeFactory,type ArcTradeReader} from 
 
 export type ArcPreflightReader=ArcTradeReader & ArcTradeExecutionReader
 type Manifest={release:ArcTradeRelease|null;executionPolicy:ArcTradeExecutionPolicy|null}
-const remaining=['Reviewer and receipt production validation','Circle funded lifecycle and recovery canary','Final XLayer two-signer split evidence']
+const remaining=['Hash PayStream hosted Trade lifecycle and receipt validation','Reviewer production validation','Final XLayer two-signer split evidence']
 // An inspection result is never authorization to enable, sign or deploy.
 export async function inspectArcTradeRelease(input:{manifest:Manifest;wallets:readonly string[];reader:()=>ArcPreflightReader;now?:number}){
   const blockers:string[]=[]

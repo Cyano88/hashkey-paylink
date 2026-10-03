@@ -11,9 +11,21 @@ export type ArcTradeRelease = Readonly<{
   factoryRuntimeHash: `0x${string}`
   authority: Readonly<{proxyRuntimeHash: `0x${string}`; singleton: Address; singletonRuntimeHash: `0x${string}`; owners: readonly Address[]; threshold: 2; version: string}>
 }>
-// The service-agreement factory is not a Trade factory. Populate this only from
-// a separately verified Trade deployment; environment variables cannot replace it.
-export const ARC_TRADE_RELEASE: ArcTradeRelease | null = null
+// Verified Trade deployment; see docs/audits/arc-trade-factory-deployment-2026-10-03.json.
+// Environment flags and the project allowlist still control new funding.
+export const ARC_TRADE_RELEASE: ArcTradeRelease | null = {
+  policy: ARC_TRADE_POLICY, chainId: 5042,
+  factory: '0xA2214d8aE7be3092A9311BC155F9EdeaC6226651',
+  arbiter: '0x83C0608F4695e82b6658757f9a0B658001A73a73',
+  factoryRuntimeHash: '0x909bacacc093cb04057b27eb7b21d6805b82cf7a40c6be6f8d04d59b56237c30',
+  authority: {
+    proxyRuntimeHash: '0x4e381985ca68b3e5d27b4425fa581c19cf33146d3f887a3cfca96f55528ea46f',
+    singleton: '0xFf51A5898e281Db6DfC7855790607438dF2ca44b',
+    singletonRuntimeHash: '0xdda019cbd7c867a533a2a86e5c53434fdc50b13122b5a5ddb4a8df61b31c20f2',
+    owners: ['0xaA6EE4589832Fb9FA49c27cB56CBcecf29B847c7','0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'],
+    threshold: 2, version: '1.5.0',
+  },
+}
 
 function fail(message: string, status = 400): never { throw Object.assign(Error(message), { status }) }
 export function parseArcTradeCheckout(body: Record<string, unknown>) {

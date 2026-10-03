@@ -37,7 +37,7 @@ function bundled(operation=op()){
  return operation
 }
 async function rejects(change,pattern){reset();change();await assert.rejects(verify,pattern)}
-assert.equal(ARC_TRADE_EXECUTION_POLICY,null)
+assert.equal(ARC_TRADE_EXECUTION_POLICY.entryPointVersion,'0.7')
 assert.equal(ARC_TRADE_IMPLEMENTATION_SLOT.length,66)
 reset();assert.equal((await verify()).execution,'direct')
 receipt.status='reverted';assert.equal((await verify()).status,'reverted')

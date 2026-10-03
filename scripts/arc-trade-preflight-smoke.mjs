@@ -23,7 +23,8 @@ const reader=()=>{created++;return {
  call:async()=>{throw Error('Preflight must never simulate or send')},getTransaction:async()=>{throw Error('No transaction read expected')},getTransactionReceipt:async()=>{throw Error('No receipt read expected')},
 }}
 const run=()=>inspectArcTradeRelease({manifest:{release,executionPolicy},wallets:[buyer,seller],reader,now:1000000})
-let result=await preflightArcTradeRelease([],()=>{throw Error('source gate must avoid RPC')});assert.equal(result.checksPassed,false);assert.equal(result.productionReady,false);assert.equal(result.blockers.length,3)
+let result=await preflightArcTradeRelease([],()=>{throw Error('invalid wallets must avoid RPC')});assert.equal(result.checksPassed,false);assert.equal(result.productionReady,false);assert.equal(result.blockers.length,1)
+result=await inspectArcTradeRelease({manifest:{release:null,executionPolicy:null},wallets:[],reader});assert.equal(result.blockers.length,3)
 result=await run();assert.equal(result.checksPassed,true);assert.equal(result.productionReady,false);assert.equal(result.confirmedBlock,'95');assert.equal(result.headBlock,'100');assert.ok(reads.includes(95n)&&reads.includes(100n));assert.ok(reads.every(v=>v===95n||v===100n))
 for(const change of [{chain:196},{chain:5042002},{code:true},{decimals:18},{threshold:true},{modules:true},{implementation:addr('9')},{stale:true},{reorg:true}]){patch=change;blockReads=0;result=await run();assert.equal(result.checksPassed,false,JSON.stringify(change));assert.equal(result.productionReady,false)}
 patch={};for(const wallets of [[],[buyer,buyer],[factory,seller],['invalid',seller]]){const before=created;result=await inspectArcTradeRelease({manifest:{release,executionPolicy},wallets,reader,now:1000000});assert.equal(result.checksPassed,false);assert.equal(created,before)}

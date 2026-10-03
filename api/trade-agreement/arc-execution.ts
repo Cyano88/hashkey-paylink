@@ -85,9 +85,15 @@ export type ArcTradeExecutionPolicy = {
   walletRuntimeHash:Hex; entryPointRuntimeHash:Hex;
   walletImplementation:Address; walletImplementationRuntimeHash:Hex;
 }
-// Populate only after verifying the actual Circle wallet implementation and
-// EntryPoint on Arc. A candidate policy is not a production release.
-export const ARC_TRADE_EXECUTION_POLICY:ArcTradeExecutionPolicy|null = null
+// Source-reviewed Circle v0.7 implementation, verified by the mainnet funding
+// and full-refund canary. Project and runtime activation remain separate gates.
+export const ARC_TRADE_EXECUTION_POLICY:ArcTradeExecutionPolicy|null = {
+    "entryPointVersion":  "0.7",
+    "walletRuntimeHash":  "0xd09e34b2e51f09092e73e3ba1d520a42972496bf2a3bfdb22bb50b9729a9fd66",
+    "entryPointRuntimeHash":  "0x8db5ff695839d655407cc8490bb7a5d82337a86a6b39c3f0258aa6c3b582fc58",
+    "walletImplementation":  "0x9C6E09bc32d1E012dCaA2623E66d2Cc9860C1AeD",
+    "walletImplementationRuntimeHash":  "0x60ecaaadc845f14626e77541b390bd36a7f5c35efdee5c30471f0eb08626019e"
+}
 function policyEntryPoint(policy:ArcTradeExecutionPolicy):Address {
   if(policy.entryPointVersion==='0.7')return ARC_TRADE_ENTRY_POINT_V07
   if(policy.entryPointVersion===undefined||policy.entryPointVersion==='0.6')return ARC_TRADE_ENTRY_POINT

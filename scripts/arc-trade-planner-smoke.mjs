@@ -67,8 +67,8 @@ await assert.rejects(()=>plan({action:'proposeSettlement',settlement:{nonce:'2',
 await assert.rejects(()=>plan({action:'resolveDispute'}))
 for(const patch of [{latestState:2},{latestEscrow:zeroAddress},{state:5,latestNonce:3n}]){reset(patch);result=await plan();assert.equal(result.pending,true);assert.deepEqual(result.actions,[]);assert.equal(result.transaction,undefined)}
 reset({simulationFail:true});await assert.rejects(()=>plan({action:'approve'}),/Simulation reverted/)
-reset();assert.equal((await prepareArcTradeAction({binding,account:buyer,env:{},projectId:'dev_1234567890'})).enabled,false)
-await assert.rejects(()=>prepareArcTradeAction({binding,account:buyer,action:'fund',env:{HASHPAYLINK_TRADE_ARC_ENABLED:'true'},projectId:'dev_1234567890'}),/pending verification/)
+reset();await assert.rejects(()=>prepareArcTradeAction({binding,account:buyer,env:{},projectId:'dev_1234567890'}),/binding mismatch/)
+await assert.rejects(()=>prepareArcTradeAction({binding,account:buyer,action:'fund',env:{HASHPAYLINK_TRADE_ARC_ENABLED:'true'},projectId:'dev_1234567890'}),/binding mismatch/)
 await verifyArcTradeFactory(client,release,95n);await verifyArcTradeAuthority(client,release,95n)
 console.log('Arc planner passed: verified factory/USDC/Safe policy, exact approvals, confirmed-state checks, chain/role/term rejection, pause-safe recovery, exact split proposals, no reviewer bypass, simulation and inactive production gate.')
 for(const [state,actor,action,name,now] of [
