@@ -61,10 +61,12 @@ createServer(async(req,res)=>{
   const data=await response.json()
   if(request.action==='listWallets'&&response.ok&&data.ok!==false){
    const selected=selectActivationWallet(data,expected)
-   // Retain only match diagnostics, never authentication material or full
-   // provider responses. This distinguishes selection from identity failures.
+   // Retain match diagnostics and Arc wallet identity metadata only, never
+   // authentication material or full provider responses.
    const wallets=Array.isArray(data.wallets)?data.wallets:[]
-   writeFileSync(resolve(root,'.codex-temp/arc-circle-seller-wallet-check.json'),JSON.stringify({checkedAt:new Date().toISOString(),matched:selected.ok!==false,walletCount:wallets.length,arcWalletCount:wallets.filter(w=>w.blockchain==='ARC').length,idFound:wallets.some(w=>w.id===expected.walletId),addressFound:wallets.some(w=>typeof w.address==='string'&&w.address.toLowerCase()===expected.address.toLowerCase()),defaultMatched:data.wallet?.id===expected.walletId},null,2)+'\n')
+   const arcWallets=wallets.filter(w=>w.blockchain==='ARC').map(w=>({id:w.id,address:w.address,blockchain:w.blockchain,accountType:w.accountType,state:w.state,userId:w.userId}))
+   writeFileSync(resolve(root,'.codex-temp/arc-circle-seller-wallet-check.json'),JSON.stringify({checkedAt:new Date().toISOString(),matched:selected.ok!==false,walletCount:wallets.length,arcWalletCount:arcWallets.length,idFound:wallets.some(w=>w.id===expected.walletId),addressFound:wallets.some(w=>typeof w.address==='string'&&w.address.toLowerCase()===expected.address.toLowerCase()),defaultMatched:data.wallet?.id===expected.walletId,arcWallets},null,2)+'\n')
+   if(selected.ok===false)selected.error='Account reconciliation required. Circle returned '+arcWallets.length+' Arc wallet(s): '+arcWallets.map(w=>w.address).join(', ')+'. None uniquely matches the stored seller wallet. No activation was requested. Return to the chat; do not keep retrying.'
    reply(selected.ok===false?409:200,selected);return
   }
   if(request.action==='deployEvmWallet')save({status:response.ok&&data.challengeId?'challenge_issued':'provider_response_requires_review',createdAt:new Date().toISOString(),walletId:seller.walletId,address:seller.address,...(typeof data.challengeId==='string'?{challengeId:data.challengeId}:{})})

@@ -32,9 +32,18 @@ After a user-reported wallet mismatch, the local proxy now selects the exact
 linked wallet from the authenticated `listWallets` response instead of accepting
 the shared helper's first eligible Arc wallet. ID, address, ARC, SCA and LIVE must
 all match uniquely. Missing or ambiguous matches remain blocked. A local record
-retains only match booleans and wallet counts for account reconciliation.
+retains match booleans, wallet counts and allowlisted Arc wallet identity fields
+for account reconciliation, without session credentials or full provider responses.
 `node --test scripts/arc-circle-activation-selection.test.mjs` covers alternate
 default selection and rejects identity, network, account type, state and duplicate
 matches. A fresh provider and database read reconfirmed the linked seller wallet
 is LIVE but undeployed. The prior browser response was not retained, so the
 specific cause of that original mismatch remains unconfirmed pending login.
+
+The next authenticated lookup returned five wallets with exactly one Arc wallet;
+neither the expected wallet ID nor its address appeared. This rules out ordering
+as the explanation for that response. A provider owner lookup confirmed the
+stored buyer and seller wallets belong to distinct enabled EMAIL users, but did
+not expose owner email addresses. No production link was changed. The local page
+now displays and records the returned Arc identity on a mismatch so it can be
+compared before any reconciliation or activation.
