@@ -8,7 +8,7 @@ import { PocketPayerNetworkPanel } from '../move/PocketPayerNetworkPanel'
 import { GIFT_NETWORKS, validateGiftDraft, type GiftDraft, type GiftNetwork } from './pocketGift'
 export default function PocketGiftCreate({ onContinue, onBack, onYourGifts, networks = GIFT_NETWORKS, maxRecipients = 1, assets, stockSnapshot, stockBalancesLoading, stockBalanceStale }: { stockSnapshot?:StockBalanceSnapshot|null; stockBalancesLoading?:boolean; stockBalanceStale?:boolean; assets?:readonly MultiGiftAsset[]; maxRecipients?:number; onYourGifts?:()=>void; networks?: readonly GiftNetwork[]; onContinue: (draft: GiftDraft) => void; onBack: () => void }) {
   const [selectedToken,setSelectedToken]=useState(assets?.[0]?.token||'')
-  const selectedAsset=assets?.find(a=>a.token===selectedToken)
+  const selectedAsset=assets?.find(a=>a.token.toLowerCase()===selectedToken.toLowerCase())
   const [recipients,setRecipients]=useState('1')
   const [amount, setAmount] = useState(''), [network, setNetwork] = useState<GiftNetwork>(networks[0] || 'base'), [message, setMessage] = useState(''), [error, setError] = useState('')
   const draftValue=()=>{const claims=Number(recipients);if(!Number.isSafeInteger(claims)||claims<1||claims>Math.min(1000,maxRecipients))throw Error('Choose a supported number of recipients.');if(assets&&!selectedAsset)throw Error('Choose a stock.');const plan=multiGiftPlan(amount,claims,selectedAsset||{chainId:8453,token:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',symbol:'USDC',decimals:6,rail:'stablecoins'});return {amount:plan.total,network:selectedAsset?'xlayer' as const:network,message:message.trim(),claims,...(selectedAsset?{asset:selectedAsset}:{})}}
