@@ -15,13 +15,14 @@ import {ARC_TRADE_EXECUTION_POLICY,verifyArcTradeExecutionAccount,type ArcTradeE
 import {createArcTradeExecutionStore,type ArcTradeExecutionEntry} from './arc-execution-store.js'
 import {verifyArcTradeWallet,type ArcTradeWallet} from './arc-wallet.js'
 import {arcTradeProviderReference} from './arc-provider.js'
+import {recordArcTradeReceipt,type ArcTradeReceipt} from './receipt.js'
 
 type Role='customer'|'provider'
 export type ArcHostedTrade = {
   id:string;partnerId:string;walletAppId:string;digest:string;terms:ArcTradeTerms;
   participants:Record<Role,string>;accepted:Partial<Record<Role,ArcTradeWallet & {at:string}>>;
   binding?:ArcTradeBinding;observed?:Pick<ArcTradeStatus,'observedBlock'|'state'|'escrow'>;
-  evidence:Array<{hash:Hex;body:string;role:Role;at:string}>;createdAt:string;
+  evidence:Array<{hash:Hex;body:string;role:Role;at:string}>;createdAt:string;receipt?:ArcTradeReceipt;
 }
 type Deps={
   env:()=>NodeJS.ProcessEnv;hasStore:()=>boolean;now:()=>Date;
@@ -34,6 +35,7 @@ type Deps={
   executionPolicy:()=>ArcTradeExecutionPolicy|null;client:()=>ArcTradeExecutionReader;
   verifyExecutionAccount:typeof verifyArcTradeExecutionAccount;
   createChallenge:typeof createCircleArcUserContractChallenge;readChallenge:typeof readCircleArcUserChallenge;readTransaction:typeof readCircleArcUserTransaction;
+  receipt:typeof recordArcTradeReceipt;
 }
 function client():ArcTradeExecutionReader {
   const url=new URL(process.env.PRIVATE_RPC_URL_ARC_MAINNET||ARC_AGREEMENT_NETWORK.rpcUrl)
@@ -47,6 +49,7 @@ const defaults:Deps={
   read:readDurableJson,mutate:mutateDurableJson,journal:createArcTradeExecutionStore(),executionPolicy:()=>ARC_TRADE_EXECUTION_POLICY,client,
   verifyExecutionAccount:verifyArcTradeExecutionAccount,
   createChallenge:createCircleArcUserContractChallenge,readChallenge:readCircleArcUserChallenge,readTransaction:readCircleArcUserTransaction,
+  receipt:recordArcTradeReceipt,
 }
 function fail(status:number,message:string):never{throw Object.assign(Error(message),{status})}
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -56,7 +59,7 @@ function id(value:unknown):string{if(typeof value!=='string'||!/^tag_[a-f0-9]{64
 function replay(value:unknown):string{if(typeof value!=='string'||!/^[a-zA-Z0-9:_-]{16,128}$/.test(value))fail(400,'Use a 16-128 character idempotency key.');return value}
 function requestId(value:unknown):string{if(typeof value!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value))fail(400,'Invalid Trade action request ID.');return value.toLowerCase()}
 function roleFor(record:ArcHostedTrade,userId:string):Role{if(record.participants.customer===userId)return 'customer';if(record.participants.provider===userId)return 'provider';return fail(404,'Agreement not found.')}
-function view(record:ArcHostedTrade){return {id:record.id,projectId:record.partnerId,walletAppId:record.walletAppId,checkoutPath:`/agreements/trade/${record.id}`,terms:record.terms,consentHash:record.digest,accepted:Object.fromEntries(Object.entries(record.accepted).map(([role,wallet])=>[role,{address:wallet.address,at:wallet.at}])),binding:record.binding,observed:record.observed,evidence:record.evidence,createdAt:record.createdAt}}
+function view(record:ArcHostedTrade){return {id:record.id,projectId:record.partnerId,walletAppId:record.walletAppId,checkoutPath:`/agreements/trade/${record.id}`,terms:record.terms,consentHash:record.digest,accepted:Object.fromEntries(Object.entries(record.accepted).map(([role,wallet])=>[role,{address:wallet.address,at:wallet.at}])),binding:record.binding,observed:record.observed,evidence:record.evidence,createdAt:record.createdAt,receipt:record.receipt}}
 function executionView(entry:ArcTradeExecutionEntry|undefined,userId:string){return entry?{requestId:entry.requestId,operation:entry.action,status:entry.status,own:entry.participantId===userId,...(entry.participantId===userId?{challengeId:entry.challengeId,transactionHash:entry.transactionHash}:{}),result:entry.result}:undefined}
 function errorResponse(res:Response,error:unknown){const status=Number((error as {status?:number})?.status)||500;return res.status(status).json({ok:false,error:status>=500?'Trade service is temporarily unavailable. Retry the same action to recover.':(error as Error).message})}
 function activePolicy(policy:Awaited<ReturnType<Deps['project']>>){return !!policy&&policy.environment==='live'&&policy.checkoutMode==='human'&&policy.capabilities.includes('arc_agreements')&&policy.settlementMode==='usdc'}
@@ -147,6 +150,9 @@ export function createArcTradeHandlers(overrides:Partial<Deps>={}){
       const fundingEnabled=await enabled(record.partnerId)
       if(action==='read'){
         const execution=await d.journal.latest(record.id,record.partnerId)
+        if(!record.receipt&&execution?.status==='confirmed'&&execution.transactionHash&&['release','refund','missedDispatch','inspectionRelease','acceptSettlement'].includes(execution.action)){
+          try{record={...record,receipt:await d.receipt(record,execution.transactionHash)}}catch{/* Receipt verification is retried on refresh; never infer a payout from SDK completion. */}
+        }
         return res.json({ok:true,role,fundingEnabled,agreement:view(record),execution:executionView(execution,userId)})
       }
       const wallet=await d.wallet(userId,req.body?.circleUserToken)

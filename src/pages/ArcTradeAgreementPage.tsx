@@ -12,6 +12,7 @@ import {TRADE_ACTION_LABELS,type TradeXLayerAction} from '../lib/xstocksAgreemen
 import {PRIVY_APP_ID} from '../lib/authMode'
 import type {ArcHostedTrade} from '../../api/trade-agreement/arc-http'
 import type {ArcTradeStatus} from '../../api/trade-agreement/arc-planner'
+import ArcTradeReceiptCard from '../components/ArcTradeReceiptCard'
 
 type Execution={requestId:string;operation:TradeXLayerAction;status:'reserved'|'challenge_issued'|'submitted'|'confirmed'|'reverted';own:boolean;challengeId?:string;transactionHash?:string}
 type Reply={ok:true;role:'customer'|'provider';fundingEnabled:boolean;agreement:ArcHostedTrade & {consentHash:string};status?:ArcTradeStatus;execution?:Execution;pending?:boolean}
@@ -128,6 +129,7 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
         {['acceptSettlement','withdrawSettlement'].includes(selected)&&reviewedSettlement&&<p className='text-sm'>Buyer refund: {formatUnits(BigInt(reviewedSettlement.buyerAmount),6)} USDC. The remainder goes to the seller.</p>}
         <p className='text-xs text-gray-500'>Review this action before confirming in your wallet.</p><button className={button} disabled={busy} onClick={()=>void run(()=>execute(selected))}>Continue to wallet confirmation</button><button className={secondary} disabled={busy||!!retryAction.current} onClick={()=>setSelected(undefined)}>Back</button>
       </div>}
+      {agreement.receipt&&<ArcTradeReceiptCard receipt={agreement.receipt}/>}
       <button className={secondary+' mt-5'} disabled={busy} onClick={()=>void run(()=>refresh())}>Refresh agreement</button>
       {returnTo&&<a className={secondary+' mt-3 block text-center'} href={returnTo}>Return to trade</a>}
     </>}

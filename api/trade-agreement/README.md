@@ -27,8 +27,8 @@ It does not implement Work delivery semantics.
 The Arc Trade factory and on-chain two-signer authority must be verified.
 The hosted API, Circle participant-wallet/signing adapter and chain reconciliation
 have synthetic coverage. Stream checkout/UI routing is connected on its isolated
-Trade branch at `f9a112e`. The verified deployment, reviewer adapter and receipts
-must be connected and exercised end to end before
+Trade branch at `f9a112e`. The reviewer and receipts increment below adds their
+adapters. The verified deployment and all adapters must be exercised end to end before
 enabling new Arc Trade checkout.
 
 The existing XLayer dispute test is running in a separate session. Its final
@@ -165,7 +165,7 @@ Circle response shapes were checked against primary documentation:
 Stream's versioned Arc reservations and two-rail selector are implemented in
 `f9a112e`, preserving legacy and existing stock reservations. Its adapter, picker,
 HTTP routing, PostgreSQL concurrency and production build checks passed locally.
-Reviewer/receipt integration and funded end-to-end release verification remain.
+Reviewer/receipt production validation and funded end-to-end release verification remain.
 
 ## Read-only release preflight
 
@@ -187,10 +187,49 @@ and five blocks earlier. It rejects stale blocks, changed block hashes, wrong
 chain, bytecode, owners, threshold, modules or implementation. It never signs,
 broadcasts, writes a registry or enables a feature flag. Exit 0 means these
 inspection checks passed, 2 means blocked, and 1 means invalid invocation.
-`productionReady` remains false: reviewer/receipt integration, a real Circle
+`productionReady` remains false: reviewer/receipt production validation, a real Circle
 lifecycle/recovery canary and the separate XLayer split evidence are still needed.
 
 Validation: `node --import tsx scripts/arc-trade-preflight-smoke.mjs`, existing Arc
 planner/execution regression scripts, and a focused TypeScript check. Synthetic
 tests cover both snapshots, source gating, invalid/missing wallets, altered Safe
 and wallet state, stale blocks, reorganizations and sanitized RPC errors.
+
+## Project-scoped review and receipts increment
+
+`POST /api/arc-trade-review?workspace=...` uses the existing `trade-disputes`
+email/section/project authorization. The operations workspace offers separate
+USDC-on-Arc and xStocks-on-XLayer views. Stock review endpoints and decisions keep
+their existing identifiers. Switching networks is disabled during a review action.
+
+Arc decision storage is separate and its Safe typed data binds chain 5042, the
+reviewed arbiter, escrow, exact six-decimal buyer allocation, reason hash and Safe
+nonce. The adapter verifies the factory and source-pinned Safe bytecode, owners,
+threshold and disabled modules at confirmed and latest state. It rechecks nonce,
+escrow state and the canonical block before returning. Execution requires two
+distinct owner signatures and a successful exact-call simulation. The server
+never broadcasts; the reviewer explicitly confirms with their external wallet.
+The source release remains null, so production decisions cannot be prepared yet.
+
+Settlement receipts require a canonical successful transaction, five subsequent
+blocks, a matching terminal escrow event and the exact official-USDC transfers
+to buyer and seller. Pending, reverted, wrong-token, duplicate or mismatched
+events are rejected. Receipt storage is immutable and tied to project, agreement
+and terms. Confirmed participant journal references retry receipt verification on
+read; browser-provided participant hashes are ignored. Reviewer refresh uses its
+saved submission hash only as a locator and runs the same on-chain verification.
+If that browser reference is lost, an authorized operator can supply the verified
+transaction reference to the scoped `read` action. There is no chain-wide event
+indexer or automated resubmission in this increment.
+
+Participants, scoped operations and developer reads can see the stored receipt.
+The participant and operations UI show exact buyer/seller amounts and provide a
+JSON download. Cancelled unfunded agreements do not receive payment receipts.
+
+Validation: Arc reviewer/queue/receipt and participant receipt-retry smoke tests;
+existing stock reviewer/queue regressions; focused TypeScript checks (`noImplicitAny`
+disabled because of an untyped dependency); production Vite build. Local Playwright
+fixtures verified desktop light and mobile dark review/receipt views with no
+horizontal overflow. All wallet signatures and transfers in these tests are
+synthetic. Real Circle/Safe execution, mainnet deployment and the separate final
+XLayer split evidence remain required before production activation.

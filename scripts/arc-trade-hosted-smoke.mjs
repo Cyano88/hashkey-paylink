@@ -65,6 +65,16 @@ providerPatch={};client.getBlockNumber=async()=>106n
 const recovered=await invoke(handlers.participant,{...base,action:'recover',requestId,transactionHash:h('f')});assert.equal(recovered.status,200);assert.equal(recovered.payload.execution.status,'confirmed');assert.equal(recovered.payload.execution.transactionHash,transactionHash);assert.equal(recovered.payload.fundingEnabled,false)
 assert.equal((await journal.find(agreement.id,policy.partnerId,requestId)).transactionHash,transactionHash)
 assert.ok(!JSON.stringify([...rows.values()]).includes('circle-session'))
+// Receipt recovery uses the confirmed journal hash, never a browser claim.
+let receiptAttempts=0
+const receiptHandlers=createArcTradeHandlers({...deps,journal:{...journal,latest:async()=>({...await journal.find(agreement.id,policy.partnerId,requestId),action:'release'})},receipt:async(record,hash)=>{
+ assert.equal(record.id,agreement.id);assert.equal(hash,transactionHash);receiptAttempts++
+ if(receiptAttempts===1)throw Error('Temporary receipt read failure')
+ return {id:'trc_'+'a'.repeat(64),agreementId:record.id,transactionHash:hash}
+}})
+assert.equal((await invoke(receiptHandlers.participant,{...base,action:'read',transactionHash:h('f')})).payload.agreement.receipt,undefined)
+assert.equal((await invoke(receiptHandlers.participant,{...base,action:'read',transactionHash:h('f')})).payload.agreement.receipt.transactionHash,transactionHash)
+actor='did:privy:stranger';assert.equal((await invoke(receiptHandlers.participant,{...base,action:'read'})).status,404);assert.equal(receiptAttempts,2);actor=buyer
 // Production deployment/policy gates cannot be enabled by request data.
 const {availability,executionPolicy:ignored,...closedDeps}=deps
 env.HASHPAYLINK_TRADE_ARC_ENABLED='true';project=policy
