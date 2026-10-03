@@ -1,6 +1,9 @@
 ﻿import assert from 'node:assert/strict'
 import {createGiftDraftVault} from '../src/pocket/features/gifts/giftDraftVault.ts'
-import {createGiftFundingFlow} from '../src/pocket/features/gifts/giftFundingController.ts'
+import {createGiftFundingFlow,giftFundingFailure} from '../src/pocket/features/gifts/giftFundingController.ts'
+assert.equal(giftFundingFailure(new Error('Add OKB to cover this gift transaction.')),'Add OKB to cover this gift transaction.')
+assert.equal(giftFundingFailure(new Error('RPC internal details must not reach the UI')),'Gift not funded. Try again.')
+assert.equal(giftFundingFailure({cause:{cause:{data:'0xf729790c'}}}),'Stock gift funding is unavailable.')
 const secrets=new Map(),index=new Map()
 const secretStore={put:async(k,v)=>secrets.set(k,v),get:async k=>secrets.get(k)||null}
 const indexStore={getItem:k=>index.get(k)||null,setItem:(k,v)=>index.set(k,v)}
