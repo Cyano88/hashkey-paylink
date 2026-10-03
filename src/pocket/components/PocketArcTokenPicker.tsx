@@ -5,7 +5,7 @@ import { Check, ChevronDown, Search } from './PocketIcons'
 import { XMarkIcon as X } from '@heroicons/react/24/outline'
 import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 
-export type ArcPickerToken = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string; logoURI?: string }
+export type ArcPickerToken = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string; logoURI?: string; priceLabel?: string; holdingLabel?: string; holdingValueLabel?: string }
 function TokenImage({ token, small = false }: { token: ArcPickerToken; small?: boolean }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [token.logoURI])
@@ -14,8 +14,8 @@ function TokenImage({ token, small = false }: { token: ArcPickerToken; small?: b
   </span>
 }
 
-type Props = { networkLabel?: string; clean?: boolean; initialLimit?: number; balancesLoading?: boolean; label: string; value: string; tokens: ArcPickerToken[]; excluded: string; disabled?: boolean; onChange(token: ArcPickerToken): void; discover(address: string): Promise<ArcPickerToken> }
-export default function PocketArcTokenPicker({ label, value, tokens, excluded, disabled, onChange, discover, networkLabel = 'Arc', clean = false, initialLimit = 12, balancesLoading = false }: Props) {
+type Props = { onVisibleTokensChange?(addresses:string[]):void; resultLimit?:number; networkLabel?: string; clean?: boolean; initialLimit?: number; balancesLoading?: boolean; label: string; value: string; tokens: ArcPickerToken[]; excluded: string; disabled?: boolean; onChange(token: ArcPickerToken): void; discover(address: string): Promise<ArcPickerToken> }
+export default function PocketArcTokenPicker({ label, value, tokens, excluded, disabled, onChange, discover, networkLabel = 'Arc', clean = false, initialLimit = 12, balancesLoading = false, onVisibleTokensChange, resultLimit = Infinity }: Props) {
   const [open, setOpen] = useState(false)
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
@@ -29,7 +29,10 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
   const normalized = query.trim().toLowerCase()
   const available = tokens.filter(t => t.address.toLowerCase() !== excluded.toLowerCase())
   const filtered = available.filter(t => !normalized || [t.symbol, t.name, t.address].some(v => v.toLowerCase().includes(normalized)))
-  const listed = normalized ? filtered : [...available].sort((a, b) => Number(Number(b.balance) > 0) - Number(Number(a.balance) > 0)).slice(0, initialLimit)
+  const listed = normalized ? filtered.slice(0,resultLimit) : [...available].sort((a, b) => Number(Number(b.balance) > 0) - Number(Number(a.balance) > 0)).slice(0, initialLimit)
+  const visibleKey=(open?listed.map(t=>t.address):[value]).filter(Boolean).join(',')
+  const visibleCallback=useRef(onVisibleTokensChange);visibleCallback.current=onVisibleTokensChange
+  useEffect(()=>{visibleCallback.current?.(visibleKey?visibleKey.split(','):[])},[visibleKey])
   useEffect(() => {
     if (!open) return
     const previous = document.body.style.overflow
@@ -71,9 +74,10 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
         <div className="min-h-0 overflow-y-auto overscroll-contain">
           {[...listed, ...(found ? [found] : [])].map(token => <button type="button" key={token.address} onClick={() => select(token)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5">
             <TokenImage token={token} />
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{token.symbol}</span><span className="block truncate text-xs text-gray-500 dark:text-gray-400">{token.name}</span>{normalized.startsWith('0x') && <span className="block break-all text-[10px] text-gray-500 dark:text-gray-400">{token.address}</span>}</span>
-            {balancesLoading ? <PocketSkeletonBar className="h-3 w-14" /> : <span className="max-w-24 truncate text-xs tabular-nums">{token.balance ?? '—'}</span>}{token.address.toLowerCase() === value.toLowerCase() && <Check className="h-4 w-4 shrink-0" />}
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{token.symbol}</span><span className="block truncate text-xs text-gray-500 dark:text-gray-400">{token.name}</span>{token.priceLabel&&<span className="block text-xs text-gray-500 dark:text-gray-400">{token.priceLabel}</span>}{normalized.startsWith('0x') && <span className="block break-all text-[10px] text-gray-500 dark:text-gray-400">{token.address}</span>}</span>
+            {balancesLoading ? <PocketSkeletonBar className="h-3 w-14" /> : <span className="max-w-36 text-right text-xs tabular-nums"><span className="block">{token.holdingLabel ?? token.balance ?? 'Unavailable'}</span>{token.holdingValueLabel&&<span className="mt-1 block text-gray-500 dark:text-gray-400">{token.holdingValueLabel}</span>}</span>}{token.address.toLowerCase() === value.toLowerCase() && <Check className="h-4 w-4 shrink-0" />}
           </button>)}
+          {normalized&&filtered.length>resultLimit&&<p className="py-3 text-xs text-gray-500">Refine your search to see more stocks.</p>}
           {loading && <p role="status" className="py-6 text-center text-xs text-gray-500 dark:text-gray-400">Looking up token…</p>}
           {error && <p role="alert" className="py-4 text-xs text-red-600">{error}</p>}
           {!listed.length && !found && !loading && !error && <p className="py-6 text-center text-xs text-gray-500 dark:text-gray-400">No matching token. Search by name or contract.</p>}

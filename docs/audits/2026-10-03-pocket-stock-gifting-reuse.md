@@ -152,3 +152,9 @@ Inspected the actual Pixel at 1280x2856. The stock gift page was grey below a bl
 Gift menu rows now render synchronously on both rails rather than waiting for authenticated gift configuration. Funding and pilot checks remain in the gift page and server. Verified send/receive menu visibility and route navigation with all browser network requests blocked. Stock send-gift shows Gas + Fee, stock claim shows Gas, and Stablecoins send-gift shows Fee. Existing X Layer address Gas label remains.
 
 Focused TypeScript checks and the native build passed. Updated Pixel using install -r, preserving app data. Actual device captures show both gift menu labels, the corrected X Layer logo and matched dark backgrounds. No gift approval, funding or claim was submitted. Base multi-recipient deployment remains unsigned and gated.
+
+## Gift picker holdings and price wiring
+
+Corrected an implementation omission: the gift form previously built stock catalogue entries without a wallet snapshot, then forced every balance to null. The sender now passes its existing account-scoped display snapshot to the gift picker. The picker reuses cached stock quotes, shows quantity held, per-token USD price and approximate holding value, sorts positive holdings first, and distinguishes zero from unavailable data. Stale display data is labelled last known. Price requests cover the selected token and up to 30 picker results, using the existing shared cache. Transaction validation remains unchanged.
+
+Verified with a browser test covering holding precision, per-token and holding valuation, zero versus incomplete-snapshot holdings, absent quotes and requested-token bounds. Shared gift-form regression and focused TypeScript checks passed. Native build passed, installed with adb install -r, and inspected the actual Pixel picker: held stock appears first with quantity and price, unheld rows show zero and current prices. No financial action was submitted.
