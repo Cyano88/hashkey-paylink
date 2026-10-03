@@ -65,3 +65,24 @@ API. Generic discovery filters and production migration controls are unchanged.
 The four focused provider/selection tests cover authenticated read headers,
 replacement selection, missing sessions, provider rejection and wrong-wallet
 rejection. End-to-end email confirmation still requires user interaction.
+
+## Activation independently confirmed
+
+Transaction `0x4dc6323f73d2f78f77c1cd6f90d2c77c8e6b7ad9aaecd20a9d5570bce894fb4b`
+deployed the seller wallet on Arc mainnet at block 24071510. Circle reports
+COMPLETE. The verifier checked absence of code at the preceding block, successful
+receipt, canonical block, exact packed operation and zero-USDC self-transfer,
+matching AccountDeployed/UserOperationEvent hashes and successful operation,
+and buyer/seller runtime and implementation equality. No nonzero USDC transfer
+from the seller appears in the receipt. This is activation, not Trade funding.
+
+Run `node --import tsx scripts/verify-arc-circle-activation.mjs` for the read-only
+provider and RPC check. Operational evidence remains under `.codex-temp`.
+
+The actual transaction uses EntryPoint v0.7 at
+`0x0000000071727de22e5e9d8baf0edac6f37da032`; the current production Trade verifier
+is v0.6-specific. The local activation verifier uses the official v0.7
+[packed structure](https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/interfaces/PackedUserOperation.sol)
+and [hash encoding](https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol).
+Production receipt support must be updated and tested, and implementation source
+review completed, before enabling the Trade policy and funding the canary.
