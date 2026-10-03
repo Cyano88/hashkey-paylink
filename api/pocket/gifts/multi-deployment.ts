@@ -1,5 +1,6 @@
-import {STOCK_GIFT_DEPLOYMENTS} from '../../../src/pocket/lib/pocketGiftDeployments.js'
-export const stockGiftDeployments=():GiftDeployment[]=>STOCK_GIFT_DEPLOYMENTS.map(p=>({protocol:2,network:'xlayer',chainId:196,escrow:p.escrow,token:p.asset.token,treasury:p.treasury,claimAuthority:p.authority,runtimeHash:p.runtimeHash,deploymentBlock:p.deploymentBlock,confirmations:p.confirmations,asset:p.asset}))
+import {STOCK_GIFT_DEPLOYMENTS,STOCK_SHARE_GIFT_DEPLOYMENTS} from '../../../src/pocket/lib/pocketGiftDeployments.js'
+export const activeStockGiftDeployments=():GiftDeployment[]=>stockGiftDeployments().filter(d=>STOCK_SHARE_GIFT_DEPLOYMENTS.length?d.accounting==='shares-v1':!d.accounting)
+export const stockGiftDeployments=():GiftDeployment[]=>STOCK_GIFT_DEPLOYMENTS.map(p=>({...(p.accounting?{accounting:p.accounting}:{}),protocol:2,network:'xlayer',chainId:196,escrow:p.escrow,token:p.asset.token,treasury:p.treasury,claimAuthority:p.authority,runtimeHash:p.runtimeHash,deploymentBlock:p.deploymentBlock,confirmations:p.confirmations,asset:p.asset}))
 import {isAddress,type Hex} from 'viem'
 import {privateKeyToAccount} from 'viem/accounts'
 import {multiGiftAccountId} from './multi-authorization.js'
@@ -13,6 +14,6 @@ export function validateMultiGiftDeployment(d:GiftDeployment){
 }
 let cachedAuthority:ReturnType<typeof privateKeyToAccount>|undefined,cachedAuthorityKey:string|undefined
 function authority(){const key=process.env.POCKET_MULTI_GIFT_AUTHORITY_KEY;if(!key||!/^0x[0-9a-fA-F]{64}$/.test(key))throw new GiftError(503,'Gift authorization unavailable.');if(cachedAuthorityKey!==key){cachedAuthority=privateKeyToAccount(key as Hex);cachedAuthorityKey=key}return cachedAuthority!}
-export function multiGiftDeployment(network:GiftNetwork,token?:string){const d=network==='xlayer'?stockGiftDeployments().find(d=>d.token.toLowerCase()===token?.toLowerCase()):MULTI_GIFT_DEPLOYMENTS[network];if(!d)return;validateMultiGiftDeployment(d);try{if(authority().address.toLowerCase()!==d.claimAuthority!.toLowerCase()||!/^[a-f0-9]{64}$/i.test(process.env.POCKET_MULTI_GIFT_IDENTITY_KEY||''))return;return d}catch{return}}
+export function multiGiftDeployment(network:GiftNetwork,token?:string){const d=network==='xlayer'?activeStockGiftDeployments().find(d=>d.token.toLowerCase()===token?.toLowerCase()):MULTI_GIFT_DEPLOYMENTS[network];if(!d)return;validateMultiGiftDeployment(d);try{if(authority().address.toLowerCase()!==d.claimAuthority!.toLowerCase()||!/^[a-f0-9]{64}$/i.test(process.env.POCKET_MULTI_GIFT_IDENTITY_KEY||''))return;return d}catch{return}}
 export const multiGiftIdentity=(id:Hex,user:string)=>multiGiftAccountId(process.env.POCKET_MULTI_GIFT_IDENTITY_KEY||'',id,user)
 export async function signMultiGiftAccount(data:ReturnType<typeof multiGiftClaimTypedData>){const d=[...Object.values(MULTI_GIFT_DEPLOYMENTS),...stockGiftDeployments()].find(d=>d.chainId===data.domain.chainId&&d.escrow.toLowerCase()===data.domain.verifyingContract.toLowerCase());if(!d||!multiGiftDeployment(d.network,d.token))throw new GiftError(503,'Gift authorization unavailable.');return authority().signTypedData(data)}

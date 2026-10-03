@@ -76,7 +76,7 @@ export async function readPocketGift(id:string,fetcher:typeof fetch=fetch):Promi
  if(!response.ok||!data?.ok||!gift||gift.id!==id||typeof gift.sender!=='string'||typeof gift.message!=='string'||gift.message.length>160||!['base','arbitrum','arc','polygon','ethereum','xlayer'].includes(gift.network)||!['funding','available','claimed','expired','refunded'].includes(gift.status)||typeof gift.amount!=='string')throw Error('This gift could not be loaded. Try again shortly.')
  const {giftAssetUnits}=await import('../features/gifts/pocketGift')
  if(gift.network==='xlayer'&&(!gift.asset||gift.version!==2)||gift.network!=='xlayer'&&gift.asset)throw Error('Invalid gift asset.')
- giftAssetUnits(gift.amount,gift.asset)
+ if(!(gift.network==='xlayer'&&gift.amount==='0'))giftAssetUnits(gift.amount,gift.asset)
  if(gift.version===2&&(!Number.isSafeInteger(gift.maxClaims)||gift.maxClaims<1||gift.maxClaims>1000||!Number.isSafeInteger(gift.remainingClaims)||gift.remainingClaims<0||gift.remainingClaims>gift.maxClaims))throw Error('Invalid gift claim count.');
  return {...(gift.asset?{asset:gift.asset}:{}),...(gift.version===2?{maxClaims:gift.maxClaims,remainingClaims:gift.remainingClaims}:{}),sender:gift.sender,amount:gift.amount,message:gift.message,network:gift.network,status:gift.status}
 }

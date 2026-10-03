@@ -14,7 +14,10 @@ async function main(){
  const tokens=input.tokens?.map(t=>getAddress(t))
  if(!Array.isArray(tokens)||!tokens.length||new Set(tokens.map(t=>t.toLowerCase())).size!==tokens.length)throw Error('Choose unique reviewed tokens.')
  if(tokens.some(t=>input.network==='xlayer'?!catalogue.assets.some(a=>a.address.toLowerCase()===t.toLowerCase()):t.toLowerCase()!=='0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'))throw Error('Token is outside the Pocket catalogue.')
- const artifactPath=resolve('contracts/artifacts-gifts/contracts/gifts/PocketMultiGiftEscrow.sol/PocketMultiGiftEscrow.json')
+ const shareAccounting=input.accounting==='shares-v1'
+ if(input.accounting!==undefined&&!shareAccounting||shareAccounting&&input.network!=='xlayer')throw Error('Unsupported accounting.')
+ const contractName=shareAccounting?'PocketStockGiftEscrow':'PocketMultiGiftEscrow'
+ const artifactPath=resolve('contracts/artifacts-gifts/contracts/gifts/'+contractName+'.sol/'+contractName+'.json')
  const artifact=JSON.parse(await readFile(artifactPath,'utf8')),debug=JSON.parse(await readFile(artifactPath.replace(/\.json$/,'.dbg.json'),'utf8'))
  const build=JSON.parse(await readFile(resolve(dirname(artifactPath),debug.buildInfo),'utf8'))
  for(const [name,source] of Object.entries(build.input.sources)){
@@ -32,6 +35,14 @@ async function main(){
  await Promise.all(Array.from({length:8},async()=>{while(nextToken<tokens.length){const index=nextToken++,token=tokens[index]
   const [code,decimals]=await Promise.all([client.getCode({address:token}),client.readContract({address:token,abi:tokenAbi,functionName:'decimals'})])
   if(!code||code==='0x'||!Number.isInteger(decimals)||decimals<0||decimals>36||chainId===8453&&decimals!==6)throw Error('Invalid token code or precision: '+token)
+  if(shareAccounting){
+   const shareAbi=parseAbi(['function getCurrentMultiplier() view returns(uint256,uint256,uint256)','function getSharesByUnderlyingAmount(uint256) view returns(uint256)','function getUnderlyingAmountByShares(uint256) view returns(uint256)','function sharesOf(address) view returns(uint256)'])
+   const amount=10n**BigInt(decimals),[multiplier]=await client.readContract({address:token,abi:shareAbi,functionName:'getCurrentMultiplier'})
+   const shares=await client.readContract({address:token,abi:shareAbi,functionName:'getSharesByUnderlyingAmount',args:[amount]})
+   const represented=await client.readContract({address:token,abi:shareAbi,functionName:'getUnderlyingAmountByShares',args:[shares]})
+   await client.readContract({address:token,abi:shareAbi,functionName:'sharesOf',args:[input.deployer]})
+   if(multiplier<=0n||shares<=0n||represented>amount)throw Error('Invalid token share API: '+token)
+  }
   assets[index]={chainId,token,symbol:chainId===8453?'USDC':catalogue.assets.find(a=>a.address.toLowerCase()===token.toLowerCase()).symbol,decimals,rail:chainId===196?'xstocks':'stablecoins'}
   checked++;if(checked%100===0)console.log(JSON.stringify({tokensVerified:checked,total:tokens.length}))
  }}))
@@ -41,7 +52,7 @@ async function main(){
  const [gas,gasPrice,balance,simulation]=await Promise.all([client.estimateGas({account:input.deployer,data,value:0n}),client.getGasPrice(),client.getBalance({address:input.deployer}),client.call({account:input.deployer,data,value:0n})])
  if(!simulation.data||simulation.data==='0x')throw Error('Constructor simulation returned no runtime.')
  const maxGas=(gas*120n+99n)/100n,maximumNetworkFee=maxGas*gasPrice
- const plan={status:'unsigned_requires_review',network:input.network,chainId,deployer:getAddress(input.deployer),treasury:getAddress(input.treasury),authority:getAddress(input.authority),assets,predictedEscrow,nonce,compiler:build.solcLongVersion,compilerSettings:build.input.settings,creationCodeHash:keccak256(artifact.bytecode),deploymentDataHash:keccak256(data),simulatedRuntimeHash:keccak256(simulation.data),transaction:{chainId,nonce,data,value:'0',gas:String(maxGas),gasPrice:String(gasPrice)},maximumNetworkFee:String(maximumNetworkFee),deployerHasFeeBalance:balance>=maximumNetworkFee,generatedAt:new Date().toISOString(),remainingChecks:['Recheck nonce, gas and constructor simulation immediately before signing.','Provision dedicated authority and stable identity secret in the server secret store.','Verify the deployed receipt, runtime and each token before pinning the manifest.','Verify token transfer restrictions and native funding, claim, refund and interruption recovery before activation.']}
+ const plan={...(shareAccounting?{accounting:'shares-v1'}:{}),status:'unsigned_requires_review',network:input.network,chainId,deployer:getAddress(input.deployer),treasury:getAddress(input.treasury),authority:getAddress(input.authority),assets,predictedEscrow,nonce,compiler:build.solcLongVersion,compilerSettings:build.input.settings,creationCodeHash:keccak256(artifact.bytecode),deploymentDataHash:keccak256(data),simulatedRuntime:simulation.data,simulatedRuntimeHash:keccak256(simulation.data),transaction:{chainId,nonce,data,value:'0',gas:String(maxGas),gasPrice:String(gasPrice)},maximumNetworkFee:String(maximumNetworkFee),deployerHasFeeBalance:balance>=maximumNetworkFee,generatedAt:new Date().toISOString(),remainingChecks:['Recheck nonce, gas and constructor simulation immediately before signing.','Provision dedicated authority and stable identity secret in the server secret store.','Verify the deployed receipt, runtime and each token before pinning the manifest.','Verify token transfer restrictions and native funding, claim, refund and interruption recovery before activation.']}
  await writeFile(outputPath,JSON.stringify(plan,null,2)+'\n',{flag:'wx'})
  console.log(JSON.stringify({written:outputPath,network:plan.network,predictedEscrow,tokens:assets.length,deployerHasFeeBalance:plan.deployerHasFeeBalance,signed:false,broadcast:false}))
 }

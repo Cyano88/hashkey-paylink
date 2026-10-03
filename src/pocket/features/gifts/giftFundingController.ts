@@ -6,7 +6,7 @@ export function giftFundingFailure(reason:unknown){
  let cause=reason
  for(let depth=0;cause&&depth<8;depth++){const error=cause as {data?:unknown;cause?:unknown};if(error.data==='0xf729790c')return 'Stock gift funding is unavailable.';cause=error.cause}
  const message=reason instanceof Error?reason.message:''
- return ['Add OKB to cover this gift transaction.','Not enough stock for the gift and creation fee.','Your Pocket account changed.','Stock details changed. Review the gift again.','Stock gift contract could not be verified.','X Layer could not be verified.'].includes(message)?message:'Gift not funded. Try again.'
+ return ['Create a new stock gift to use the updated contract.','Stock gift quote changed. Review the gift again.','Add OKB to cover this gift transaction.','Not enough stock for the gift and creation fee.','Your Pocket account changed.','Stock details changed. Review the gift again.','Stock gift contract could not be verified.','X Layer could not be verified.'].includes(message)?message:'Gift not funded. Try again.'
 }
 export type GiftFundingReview={id:string;principal:string;platformFee:string;totalDebit:string}
 export type GiftFundingPhase='draft'|'review'|'preparing'|'approval'|'checking'|'unconfirmed'|'available'|'claimed'|'expired'|'refunded'|'expired_unfunded'

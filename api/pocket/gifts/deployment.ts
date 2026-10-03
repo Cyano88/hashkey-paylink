@@ -20,6 +20,6 @@ export async function verifyBaseGiftDeployment(client:PublicClient,value:GiftDep
 // pinned execution field explicitly; serialized object order is not identity.
 export function sameGiftDeployment(expected:GiftDeployment,stored:GiftDeployment){
  if(!expected||!stored)return false
- const fields=['network','chainId','escrow','token','treasury','runtimeHash','deploymentBlock','confirmations','protocol','claimAuthority'] as const
+ const fields=['accounting','network','chainId','escrow','token','treasury','runtimeHash','deploymentBlock','confirmations','protocol','claimAuthority'] as const
  return fields.every(field=>expected[field]===stored[field])&&(['chainId','token','symbol','decimals','rail'] as const).every(field=>expected.asset?.[field]===stored.asset?.[field])
 }
