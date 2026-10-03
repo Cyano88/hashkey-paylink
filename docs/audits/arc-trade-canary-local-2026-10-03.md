@@ -38,3 +38,17 @@ Checks: focused intent tests and read-only HTTP restrictions; existing planner a
 execution tests cover chain simulations/receipt tampering. Email approval and the
 funded lifecycle require human interaction and are not claimed by these checks.
 Operational plan, wallet identities and journals stay untracked in `.codex-temp`.
+
+## Funding verified
+
+The 0.10 USDC canary reached Funded on Arc mainnet. Transaction
+`0xcef3304c273d96a3092b229203afe5619002ec2f32c945765ea8348cebe5dd78`
+at block 24094299 passed the shared v0.7 execution verifier. A fresh read at block
+24094830 confirmed the exact immutable terms, Funded state and 100000 USDC base
+units in escrow `0x28f45A2C318857c048d14e71ACD0318A8aF9A1c9`. The receipt contains
+the exact buyer-to-escrow 100000-unit transfer. Creation, seller acceptance,
+approval and funding are recorded as confirmed in the local journal.
+
+`node --import tsx scripts/verify-arc-trade-canary-funding.mjs` repeats these
+read-only checks while the escrow remains Funded. Recovery/refund has not yet
+completed; this evidence does not declare the full product production-ready.
