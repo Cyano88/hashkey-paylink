@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url'
 import {build} from 'vite'
 import {nodePolyfills} from 'vite-plugin-node-polyfills'
 import {createPublicClient,http} from 'viem'
+import {selectActivationWallet} from './arc-circle-activation-selection.mjs'
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),host='127.0.0.1:4390',origin='http://'+host
 const record=JSON.parse(readFileSync(resolve(root,'.codex-temp/arc-circle-canary-wallets.json'),'utf8'))
@@ -58,6 +59,14 @@ createServer(async(req,res)=>{
   }
   const response=await fetch(upstream+'/api/circle-solana-email',{method:'POST',headers:{'Content-Type':'application/json'},body,signal:AbortSignal.timeout(30000)})
   const data=await response.json()
+  if(request.action==='listWallets'&&response.ok&&data.ok!==false){
+   const selected=selectActivationWallet(data,expected)
+   // Retain only match diagnostics, never authentication material or full
+   // provider responses. This distinguishes selection from identity failures.
+   const wallets=Array.isArray(data.wallets)?data.wallets:[]
+   writeFileSync(resolve(root,'.codex-temp/arc-circle-seller-wallet-check.json'),JSON.stringify({checkedAt:new Date().toISOString(),matched:selected.ok!==false,walletCount:wallets.length,arcWalletCount:wallets.filter(w=>w.blockchain==='ARC').length,idFound:wallets.some(w=>w.id===expected.walletId),addressFound:wallets.some(w=>typeof w.address==='string'&&w.address.toLowerCase()===expected.address.toLowerCase()),defaultMatched:data.wallet?.id===expected.walletId},null,2)+'\n')
+   reply(selected.ok===false?409:200,selected);return
+  }
   if(request.action==='deployEvmWallet')save({status:response.ok&&data.challengeId?'challenge_issued':'provider_response_requires_review',createdAt:new Date().toISOString(),walletId:seller.walletId,address:seller.address,...(typeof data.challengeId==='string'?{challengeId:data.challengeId}:{})})
   reply(response.status,data)
  }catch{reply(503,{ok:false,error:'Activation service unavailable. If a request was started, return to the chat for recovery.'})}

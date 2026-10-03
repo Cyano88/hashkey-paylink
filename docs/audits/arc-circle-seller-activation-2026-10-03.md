@@ -27,3 +27,14 @@ transaction, chain, wallet implementation and expected runtime before proceeding
 `node scripts/check-arc-circle-activation.mjs` checks HTTP delivery and rejects
 wrong Host, Origin, action, chain, email and wallet without sending an OTP or
 activation request. Browser OTP and approval remain to be exercised by the user.
+
+After a user-reported wallet mismatch, the local proxy now selects the exact
+linked wallet from the authenticated `listWallets` response instead of accepting
+the shared helper's first eligible Arc wallet. ID, address, ARC, SCA and LIVE must
+all match uniquely. Missing or ambiguous matches remain blocked. A local record
+retains only match booleans and wallet counts for account reconciliation.
+`node --test scripts/arc-circle-activation-selection.test.mjs` covers alternate
+default selection and rejects identity, network, account type, state and duplicate
+matches. A fresh provider and database read reconfirmed the linked seller wallet
+is LIVE but undeployed. The prior browser response was not retained, so the
+specific cause of that original mismatch remains unconfirmed pending login.
