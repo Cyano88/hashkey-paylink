@@ -25,3 +25,11 @@ Outstanding before a whole-app release sign-off:
 The submission helper now checks the persisted signing marker and pending no-hash attempts before creating a new attempt. The marker is acquired before notifying subscribers of a saved draft. This protects multiple hook instances in the same Pocket runtime. It is not a cross-device or cross-tab distributed lock.
 
 Regression tests verify simultaneous hook calls cannot sign twice, other wallet scopes remain independent, a different send is allowed after a known hash, an unknown outcome is retained, and ordinary send/gift recovery does not resubmit. The stricter trade/gift checks and provider nonce behavior are unchanged.
+
+## Swap, bridge and sheet follow-up
+
+- Arc pending swaps now check their existing status while the screen is visible and online. Automatic checks do not open wallet authorization or execute a swap. Overlapping checks are suppressed; requests time out after 15 seconds. Known completed and not-submitted results clear the old pending view.
+- A quote that expires during wallet preparation stops execution and requests an updated quote. Arc fee and minimum-received details remain available in an expandable row.
+- Bridge confirmation compares the refreshed quote with the reviewed route, recipient, amount, total debit and minimum output. A changed route or worse cost/output requires review before wallet submission. Owner changes invalidate the displayed quote.
+- Gift claim success uses the shared transaction sheet. XStocks send confirmation uses the common title and action spacing. Buy, sell, swap and bridge retain their existing layouts.
+- This does not establish the cause of every reported stale wallet screen. A live reproduction of the user's exact Arc screen and interrupted no-hash provider recovery remains outstanding.

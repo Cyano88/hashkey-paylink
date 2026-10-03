@@ -1,3 +1,4 @@
+import {bridgeQuoteNeedsReview} from '../lib/pocketBridgeQuoteReview'
 import { pocketBridgeDestinations } from '../lib/pocketBridgeNetworks'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { bridgeCircleEvmEmailWallet, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
@@ -55,14 +56,14 @@ export default function usePocketBridgeController(input: {
     if (locked.current) return
     setDestinationState(current => destinations.includes(current) ? current : destinations[0])
     setAmount(''); setStatus('idle'); setError(''); setNotice('')
-  }, [input.source])
+  }, [input.source, input.owner])
   const assertNewTransfer = useCallback(() => {
     const match = ambiguousMatchingBridge(readPocketBridgeTransfers(input.owner, localStorage), input.source, destination, amount)
     if (match) throw new Error('An earlier bridge for this amount and route has an unknown result. Check it in Activity before repeating it.')
   }, [input.owner, input.source, destination, amount])
   const refreshQuote = useCallback(async () => {
     const version = ++quoteVersion.current
-    if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || input.source === destination) { setQuote(null); return null }
+    if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || input.source === destination) { setQuote(null); setStatus('idle'); return null }
     setStatus('quoting'); setError('')
     try {
       const accessToken = await input.getAccessToken()
@@ -99,8 +100,11 @@ export default function usePocketBridgeController(input: {
     setError(''); setNotice('')
     try {
       assertNewTransfer()
+      if(!quote)throw new Error('Review a quote before continuing.')
+      const reviewed=quote
       const fresh = await refreshQuote()
       if (!fresh) return
+      if(bridgeQuoteNeedsReview(reviewed,fresh))throw new Error('Quote changed. Review the updated amount and fee.')
       if (Number(fresh.total) > input.sourceBalance) throw new Error('Amount plus network fee is higher than your available balance.')
       const sourceWallet = input.wallets[input.source] ?? await input.ensureWallet(input.source)
       const destinationWallet = input.wallets[destination] ?? await input.ensureWallet(destination)
@@ -136,6 +140,6 @@ export default function usePocketBridgeController(input: {
         input.onActivity()
       }
     } finally { locked.current = false; setSubmitting(false) }
-  }, [amount, destination, input, assertNewTransfer, refreshQuote])
+  }, [amount, destination, input, assertNewTransfer, refreshQuote, quote])
   return { destinations, destination, setDestination, amount, setAmount: updateAmount, quote, status, error, notice, refreshQuote, bridge, submitting }
 }
