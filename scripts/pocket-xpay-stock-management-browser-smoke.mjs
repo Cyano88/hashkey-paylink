@@ -56,6 +56,7 @@ try{for(const dark of [false,true]){
  assert.equal(await page.getByRole('button',{name:'Bank transfers & bills'}).count(),0)
  assert.equal(actions.some(a=>['create','adopt','delete'].includes(a.action)),false)
  assert.deepEqual(errors,[])
+ terminal.destinations.push({id:'stablecoins',name:'Test shop',kind:'stablecoins',currency:'USDC',assets:['USDC'],networks:['base','arbitrum'],revision:'1'})
  // Public bank checkout uses the existing Base USDC POS route directly.
  await page.addInitScript(()=>{window.publicFixture=true})
  await page.route('https://app.hashpaylink.com/**',r=>r.fulfill({contentType:'text/html',body:'Existing bank checkout'}))
@@ -63,6 +64,8 @@ try{for(const dark of [false,true]){
  await page.getByRole('button',{name:'Continue',exact:true}).click();await page.waitForURL('https://app.hashpaylink.com/pos/ng?**')
  assert.equal(new URL(page.url()).searchParams.get('xpay_checkout_id'),terminal.id)
  assert.equal(actions.some(a=>a.action==='prepare'),false)
+ await page.goto('https://pocket.hashpaylink.com/xpay/checkout/'+terminal.id);await page.addScriptTag({content:bundle.outputFiles[0].text});await page.getByText('USDC on Stablecoins',{exact:true}).click();await page.getByRole('button',{name:'Receiving network',exact:true}).click();await page.getByRole('option').filter({hasText:'Arbitrum'}).click();await page.getByRole('button',{name:'Continue',exact:true}).click();await page.waitForURL('https://app.hashpaylink.com/pos/ng?**');assert.equal(new URL(page.url()).searchParams.get('n'),'arbitrum');assert.equal(new URL(page.url()).searchParams.get('merchant_id'),'stablecoins');assert.equal(new URL(page.url()).searchParams.get('xpay_checkout_id'),terminal.id)
+
  await page.close()
 }
 console.log('PASS XStocks manages existing terminals only, stock configuration preserves bank/QR, scoped receipts/totals, no second creator, and bank checkout uses Stablecoins without conversion in both themes.')

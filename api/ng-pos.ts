@@ -74,6 +74,7 @@ type MerchantProfile = {
   bank_account_name?: string
   circle_smart_wallet_address: string
   solana_wallet_address?: string
+  network_wallets?: Partial<Record<PosNetwork,string>>
   supported_networks?: PosNetwork[]
   kyc_status: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'RESTRICTED'
   settlement_enabled: boolean
@@ -319,6 +320,7 @@ async function publicMerchant(merchant: MerchantProfile) {
     circle_smart_wallet_address: merchant.circle_smart_wallet_address,
     solana_wallet_address: merchant.solana_wallet_address,
     supported_networks: merchantNetworks(merchant),
+    network_wallets: merchant.network_wallets,
     bank_configured: Boolean(merchant.encrypted_bank_details),
     bank_name: merchant.bank_name,
     bank_last4: merchant.bank_last4,
@@ -450,7 +452,9 @@ function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwor
   } else if (network === 'solana') {
     params.set('s', merchant.solana_wallet_address ?? '')
   } else {
-    params.set('e', merchant.circle_smart_wallet_address)
+    const recipient=merchant.network_wallets?merchant.network_wallets[network]:merchant.circle_smart_wallet_address
+    if(!recipient||!isAddress(recipient))throw ngPosRequestError(409,'Merchant wallet is unavailable on this network.')
+    params.set('e', recipient)
   }
   params.set('m', merchant.display_name)
   params.set('fiat_currency', pocketFiatCurrency(merchant.country))
@@ -760,7 +764,7 @@ export async function verifyNgPosBankAccount(body: Record<string, unknown>) {
   return { account_name: accountName, bank_code: resolvedBankCode }
 }
 
-export async function createNgPosMerchant(req: Request, body: Record<string, unknown> = req.body ?? {}) {
+export async function createNgPosMerchant(req: Request, body: Record<string, unknown> = req.body ?? {}, verifiedNetworkWallets?: Partial<Record<PosNetwork,string>>) {
   if (body.country !== undefined && body.country !== 'NG' && body.country !== 'UG') throw ngPosRequestError(400, 'Unsupported payout country.')
   const country = body.country === 'UG' ? 'UG' : 'NG'
   const currency = pocketFiatCurrency(country)
@@ -837,6 +841,7 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
     circle_smart_wallet_address: wallet,
     solana_wallet_address: needsSolanaWallet ? solanaWallet : undefined,
     supported_networks: supportedNetworks,
+    ...(verifiedNetworkWallets?{network_wallets:verifiedNetworkWallets}:{}),
     kyc_status: 'UNVERIFIED',
     settlement_enabled: true,
     source: 'pos',
@@ -1532,8 +1537,8 @@ export async function listPocketBankRecipients(ownerId: string) {
 export async function listPocketXPayPosDestinations(owner:string) {
  const [store,retired]=await Promise.all([readStore(),readPosRetirements()])
  return Object.values(store.merchants).filter(m=>m.owner_id===owner&&m.source==='pos'&&!retired[m.merchant_id]&&m.settlement_enabled&&m.kyc_status!=='RESTRICTED').flatMap(m=>{
-  try { resolvePocketPosCheckout(m,'https://app.hashpaylink.com/pos/ng?merchant_id='+encodeURIComponent(m.merchant_id)) } catch { return [] }
-  return [{id:m.merchant_id,name:m.display_name,kind:m.payout_preference==='INSTANT_FIAT'?'bank' as const:'stablecoins' as const,currency:m.payout_preference==='INSTANT_FIAT'?(m.country==='UG'?'UGX':'NGN'):'USDC',assets:['USDC'],revision:m.updated_at}]
+  try { resolvePocketPosCheckout(m,'https://app.hashpaylink.com/pos/ng?merchant_id='+encodeURIComponent(m.merchant_id)+'&n='+encodeURIComponent(m.supported_networks?.[0]||'base')) } catch { return [] }
+  return [{id:m.merchant_id,name:m.display_name,kind:m.payout_preference==='INSTANT_FIAT'?'bank' as const:'stablecoins' as const,currency:m.payout_preference==='INSTANT_FIAT'?(m.country==='UG'?'UGX':'NGN'):'USDC',assets:['USDC'],networks:m.payout_preference==='INSTANT_FIAT'?['base']:normalizePosNetworks(m.supported_networks),revision:m.updated_at}]
  })
 }
 

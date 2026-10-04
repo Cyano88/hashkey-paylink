@@ -91,6 +91,8 @@ const HAS_DURABLE_STORE = hasRenderDurableStore()
 type NgPosMerchantRecord = {
   merchant_id: string
   circle_smart_wallet_address?: string
+  network_wallets?: Record<string,string>
+  supported_networks?: string[]
 }
 
 type NgPosStore = {
@@ -264,6 +266,7 @@ function preferredAmount(amount: string, requestedAmount: string) {
 }
 
 async function expectedNgPosRecipient(input: {
+  chain: string
   source: string
   merchantId: string
   settlementType: string
@@ -281,7 +284,10 @@ async function expectedNgPosRecipient(input: {
   const store = await readNgPosStore()
   const merchant = store.merchants?.[input.merchantId]
   if (!merchant?.circle_smart_wallet_address) throw new Error('Merchant USDC wallet is not available for receipt verification.')
-  return { recipient: merchant.circle_smart_wallet_address, minAmount: '' }
+  if(merchant.supported_networks&&!merchant.supported_networks.includes(input.chain))throw Error('Merchant does not accept this network.')
+  const recipient=merchant.network_wallets?merchant.network_wallets[input.chain]:merchant.circle_smart_wallet_address
+  if(!recipient)throw Error('Merchant wallet is unavailable on this network.')
+  return { recipient, minAmount: '' }
 }
 
 export function paymentReceiptId(eventId: string, txHash: string) {
@@ -538,7 +544,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       throw paymentError('Payment is below requested amount.', 409)
     }
     try {
-      const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId })
+      const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId, chain:evmChain })
       await verifyEvmUsdcTransfer({
         chain: evmChain,
         txHash,
