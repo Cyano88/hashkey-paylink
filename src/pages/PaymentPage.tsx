@@ -1,3 +1,5 @@
+import PocketMerchantPaymentForm from '../pocket/components/PocketMerchantPaymentForm'
+import PocketBottomSheet from '../pocket/components/PocketBottomSheet'
 import PocketFundingAction from '../pocket/components/PocketFundingAction'
 import {fundingShortfall} from '../pocket/lib/pocketFundingShortfall'
 import usePocketWalletController from '../pocket/controllers/usePocketWalletController'
@@ -350,7 +352,12 @@ function trustedPolydeskOrigin(raw: string) {
   return ''
 }
 
-export default function PaymentPage({ pocketScan }: { pocketScan?: { params: string; onBack(): void } } = {}) {
+type PocketPaymentContext = {params:string;onBack():void;native?:boolean;merchantName?:string;verify?:()=>Promise<void>}
+export function PocketMerchantPayment({params,onBack,merchantName,verify}:{params:string;onBack:()=>void;merchantName:string;verify:()=>Promise<void>}){
+ return <ActivePaymentPage pocketScan={{params,onBack,merchantName,verify,native:true}}/>
+}
+
+export default function PaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext } = {}) {
   const [routeParams] = useSearchParams()
   const params = pocketScan ? new URLSearchParams(pocketScan.params) : routeParams
   if (isRetiredAssistantCheckout(params)) {
@@ -363,7 +370,7 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: { params: str
   return <ActivePaymentPage pocketScan={pocketScan} />
 }
 
-function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBack(): void } } = {}) {
+function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext } = {}) {
   const [routeParams] = useSearchParams()
   const searchParams = useMemo(() => pocketScan ? new URLSearchParams(pocketScan.params) : routeParams, [pocketScan?.params, routeParams])
   const checkoutPresentation = hostedCheckoutPresentation(resolveHostedCheckoutKind(searchParams))
@@ -2724,7 +2731,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     await tryCirclePaymasterTransfer(sponsoredRecipientUnits, sponsoredTreasuryUnits, { surfaceUnavailable: true })
   }
 
-  async function prepareNgPosPaycrestOrder(session: CircleEvmEmailSession) {
+  async function prepareNgPosPaycrestOrder(session: CircleEvmEmailSession, reviewOnly = false) {
     if (!isNgPosPaycrestOfframp) return null
     if (!pocketScan && paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return paycrestOrder
     let settlementIntentId = paycrestOrder?.intent_id || ngPosPaycrestIntentId
@@ -2781,7 +2788,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       setPaycrestOrder(data.order)
       setPaycrestStatusText('Payout ready. Confirm the recipient, then pay.')
       await refetchCircleWalletBalance()
-      return needsReview ? null : data.order
+      return needsReview && !reviewOnly ? null : data.order
     } catch (err) {
       setPaycrestStatusText('')
       setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare Naira payout.'))
@@ -3888,6 +3895,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
   // ────────────────────────────────────────────────────────────────────────────
+  if (!isValidParams && pocketScan?.native) return <PocketBottomSheet title="XPay" onClose={pocketScan.onBack}><p role="alert" className="py-5 text-center text-sm">Payment details are unavailable. Reopen XPay.</p></PocketBottomSheet>
   if (!isValidParams) {
     return (
       <>
@@ -3931,6 +3939,33 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
     return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
+  }
+
+  if (pocketScan?.native) {
+    const prepare = async () => {
+      await pocketScan.verify?.()
+      if (!privyAuthenticated || !privyEmail) throw Error('Sign in to Pocket again.')
+      setCirclePasskeyError(null); setCircleSolanaError(null)
+      const wallet = await checkoutWalletController.ensureWallet(chain)
+      if (!wallet) throw Error('Could not open your Pocket wallet. Try again.')
+      if (chain === 'solana') {
+        const session = await checkoutWalletController.getSolanaSession(wallet.address)
+        setCircleSolanaSession(session); setCircleSolanaAddress(session.wallet.address)
+      } else {
+        const session = await checkoutWalletController.getEvmSession(chain, wallet.address)
+        setCircleEvmEmailSession(session); setCircleSmartAccount(session.wallet.address)
+        if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session, true)) throw Error('Could not prepare this bank payment. Try again.')
+      }
+      setFeeQuoteRefresh(value => value + 1)
+    }
+    const nativeBusy = isWalletPending || isConfirming || Boolean(txHash) || circleEvmAcceptedPending || pocketMovePayBusy
+    const ready = Boolean(displayedPaymentQuote) && !paymentQuoteLoading && !paymentAmountBlocked && !pocketCheckoutRouting && !pocketMovePayWaiting && !pocketMovePayRetryBlocked && !pocketRouteInsufficient && !circleEvmWalletChecking && !circleSolanaWalletChecking
+    return <PocketMerchantPaymentForm merchant={pocketScan.merchantName || memo || 'Merchant'} network={chain} networkLabel={consumerNetworkName}
+      amount={isFlex ? (fxInputMode === 'local' ? localAmt : flexAmt) : effectiveAmt} currency={isFlex && fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset} fixedAmount={!isFlex}
+      onAmountChange={value=>{if(isNgPosPaycrestOfframp)setPaycrestOrder(null);if(fxInputMode==='local')setLocalAmt(value);else setFlexAmt(value);setCirclePasskeyError(null);setCircleSolanaError(null)}} requiresName={requiresAttendeeName} name={attendeeName} onNameChange={setAttendeeName}
+      paymentAmount={String(payableAmt || '0')+' '+meta.asset} rows={pocketPosReviewRows} funding={pocketFunding}
+      error={circlePasskeyError || circleSolanaError || paymentQuoteError || pocketMovePayError || collectionError || ''} ready={ready} busy={nativeBusy} prepare={prepare} onClose={pocketScan.onBack}
+      confirm={async()=>{await pocketScan.verify?.();if(!ready)throw Error('Review the current payment details.');if(pocketMovePayReady)await handlePocketMoveAndPay();else if(chain==='solana')await handleCircleSolanaEmailPay();else await handleCirclePasskeyPay()}}/>
   }
 
   if (!pocketScan && isConfirmed && !isWalletManagerFunding) {

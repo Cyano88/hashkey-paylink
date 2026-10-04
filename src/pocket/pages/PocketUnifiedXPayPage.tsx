@@ -1,3 +1,4 @@
+import type {PocketNetwork} from '../lib/pocketSchemas'
 import PocketSelect from '../components/PocketSelect'
 import PocketXPayUsdcSetup from '../components/PocketXPayUsdcSetup'
 import PocketKycPrompt from '../components/PocketKycPrompt'
@@ -28,6 +29,7 @@ import {isPocketNativeRuntime,pocketApiUrl,POCKET_BASE_PATH,POCKET_ROUTES} from 
 import {requestPocketPaymentApproval,takePocketPaymentApproval} from '../lib/pocketPaymentApproval'
 import {downloadPocketQr} from '../lib/pocketQrDownload'
 import {validateXPayDestinations,xpayDestinationDetail,type XPayCheckout,type XPayDestination} from '../lib/pocketUnifiedXPay'
+const NativePayment=lazy(()=>import('../components/PocketXPayNativePayment'))
 const BankCheckout=lazy(()=>import('../components/PocketXPayBankCheckout'))
 const BankSetup=lazy(()=>import('../components/PocketUnifiedXPaySetup').then(m=>({default:m.XPayBankSetup})))
 const WalletSetup=lazy(()=>import('../components/PocketUnifiedXPaySetup').then(m=>({default:m.XPayWalletSetup})))
@@ -47,6 +49,7 @@ export default function PocketUnifiedXPayPage({publicCheckout=false}:{publicChec
  const [reload,setReload]=useState(0)
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState('')
  const [checkouts,setCheckouts]=useState<XPayCheckout[]>([]),[destinations,setDestinations]=useState<XPayDestination[]>([]),[selected,setSelected]=useState<XPayCheckout|null>(null)
+ const [nativePayment,setNativePayment]=useState<{destination:XPayDestination;network:PocketNetwork}|null>(null)
  const [payNetwork,setPayNetwork]=useState(location.state?.xpayNetwork||'')
  const [creating,setCreating]=useState(false),[name,setName]=useState(''),[ids,setIds]=useState<string[]>([]),[payDestination,setPayDestination]=useState(''),[deleting,setDeleting]=useState(false)
  const stockManagement=!checkoutId&&xpayOrigin(location.state)==='xstocks'
@@ -85,8 +88,9 @@ export default function PocketUnifiedXPayPage({publicCheckout=false}:{publicChec
  const pay=()=>{const d=selected?.destinations.find(d=>d.id===payDestination);if(!d)return;
   const tag='xpay_checkout_id='+encodeURIComponent(selected!.id)
   const network=d.networks?.includes(payNetwork)?payNetwork:d.networks?.[0]||'base'
+  if(isPocketNativeRuntime()&&d.kind!=='xstocks'){setNativePayment({destination:d,network:network as PocketNetwork});return}
   const url=d.kind==='xstocks'?'https://pocket.hashpaylink.com/xpay/'+d.id+'?'+tag:'https://app.hashpaylink.com/pos/ng?merchant_id='+encodeURIComponent(d.id)+'&n='+encodeURIComponent(network)+'&'+tag
-  if(isPocketNativeRuntime())navigate(d.kind==='xstocks'?'/xstocks/xpay?merchant='+encodeURIComponent(d.id)+'&'+tag:'/home/scan?code='+encodeURIComponent(url),{state:{xpayOrigin:xpayOrigin(location.state),xpayReturnTo:location.pathname,xpayCheckout:selected,xpayDestination:d.id,xpayNetwork:network}});else window.location.assign(url)
+  if(isPocketNativeRuntime())navigate('/xstocks/xpay?merchant='+encodeURIComponent(d.id)+'&'+tag,{state:{xpayOrigin:xpayOrigin(location.state),xpayReturnTo:location.pathname,xpayCheckout:selected,xpayDestination:d.id,xpayNetwork:network}});else window.location.assign(url)
  }
  const origin=xpayOrigin(location.state),home=xpayHome(location.state)
  const exit=()=>navigate(xpayReturnPath(location.state,home),{state:{xpayOrigin:origin},replace:true})
@@ -136,6 +140,7 @@ export default function PocketUnifiedXPayPage({publicCheckout=false}:{publicChec
    <section aria-label="XPay QRs" className="divide-y divide-gray-100 dark:divide-[#262626]">{checkouts.map(c=><button key={c.id} className="flex min-h-20 w-full items-center gap-4 py-4 text-left" onClick={()=>{setCopied(false);setSelected(c)}}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><QrCode className="h-5 w-5"/></span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</span><ChevronRight className="h-4 w-4 shrink-0 text-gray-500"/></button>)}{loose.map(d=><button key={d.id} className="flex min-h-20 w-full items-center gap-4 py-4 text-left" onClick={()=>void adoptLegacy(d)}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><QrCode className="h-5 w-5"/></span><span className="min-w-0 flex-1 truncate text-sm font-semibold">{d.name}</span><ChevronRight className="h-4 w-4 shrink-0 text-gray-500"/></button>)}</section>
    {!checkouts.length&&!loose.length&&!error&&<p className="py-8 text-center text-xs text-gray-500">{stockManagement?'Create your business QR in XPay under Stablecoins, then enable stock payments here.':'Your saved QRs will appear here. Tap + to create one.'}</p>}
   </>}
+  {nativePayment&&selected&&<Suspense fallback={<PocketBottomSheet title="XPay" onClose={()=>setNativePayment(null)}><p role="status">Preparing payment...</p></PocketBottomSheet>}><NativePayment key={identity.user?.id+':'+selected.id+':'+nativePayment.destination.id+':'+nativePayment.network} checkoutId={selected.id} destination={nativePayment.destination} network={nativePayment.network} onClose={()=>setNativePayment(null)}/></Suspense>}
   {error&&<p role="alert" className="text-xs text-red-500">{error}</p>}{error&&!busy&&!selected&&!creating&&!setup&&<button className="min-h-11 w-full text-xs font-semibold" onClick={()=>setReload(n=>n+1)}>Try again</button>}
   {deleting&&<PocketBottomSheet title="Delete QR" showCloseButton dismissOnBackdrop={false} dismissible={!busy} onClose={()=>setDeleting(false)}><h2 className="text-lg font-semibold">Delete this QR?</h2><p className="my-4 text-sm text-gray-500">New scans will stop working. Existing payments and receipts remain available.</p><button className={cta} disabled={busy} onClick={()=>void remove()}>{busy?'Confirming\u2026':'Delete QR'}</button></PocketBottomSheet>}
  </>
