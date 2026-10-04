@@ -41,6 +41,8 @@ export default function PocketNativeBridge() {
   const {theme}=useTheme()
   useEffect(()=>{if(isPocketNativeRuntime())void PocketInsets.setPocketTheme({dark:theme==='dark'}).catch(()=>undefined)},[theme])
   const navigate = useNavigate()
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
   const location = useLocation()
   const currentPath = useRef(location.pathname)
   currentPath.current = location.pathname
@@ -53,14 +55,14 @@ export default function PocketNativeBridge() {
       dispatchPocketNativeBack({
         atHome: ['/', '/home', '/xstocks/home'].includes(path),
         canGoBack,
-        back: () => navigate(-1),
-        home: () => navigate(POCKET_BASE_PATH + '/home', { replace: true }),
+        back: () => navigateRef.current(-1),
+        home: () => navigateRef.current(POCKET_BASE_PATH + '/home', { replace: true }),
         minimize: () => { void CapacitorApp.minimizeApp() },
       })
     })
     void listener.then(handle => { if (disposed) void handle.remove(); else remove = () => handle.remove() }).catch(() => undefined)
     return () => { disposed = true; if (remove) void remove().catch(() => undefined) }
-  }, [navigate])
+  }, [])
   const [online, setOnline] = useState(true)
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export default function PocketNativeBridge() {
     }))
     listeners.push(CapacitorApp.addListener('appUrlOpen', event => {
       const destination = nativePocketDestination(event.url)
-      if (destination) navigate(destination)
+      if (destination) navigateRef.current(destination)
     }))
     listeners.push(CapacitorApp.addListener('appStateChange', state => {
       if (state.isActive) {
@@ -113,7 +115,7 @@ export default function PocketNativeBridge() {
 
     void CapacitorApp.getLaunchUrl().then(result => {
       const destination = result?.url ? nativePocketDestination(result.url) : ''
-      if (destination) navigate(destination, { replace: true })
+      if (active && destination) navigateRef.current(destination, { replace: true })
     }).catch(() => undefined)
 
     return () => {
@@ -125,7 +127,7 @@ export default function PocketNativeBridge() {
       themeObserver.disconnect()
       for (const listener of listeners) void listener.then(handle => handle.remove()).catch(() => undefined)
     }
-  }, [navigate])
+  }, [])
 
   if (!isPocketNativeRuntime() || online) return null
   return (

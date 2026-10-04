@@ -32,7 +32,7 @@ export default function PocketMerchantPaymentForm({merchant,paymentAmount,rows,f
   <div className="mt-5"><PocketFundingAction {...funding} locked={disabled||funding.locked}>
    {review?<>
     <PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} disabled={disabled||!prepared||!ready} status={busy?'pending':'idle'} labels={{idle:'Confirm payment',disabled:preparing?'Preparing payment...':'Preparing payment',pending:'Processing'}} onConfirm={()=>void run(confirm)}/>
-    {!disabled&&(message||!prepared||!ready)&&<button type="button" className="mt-2 min-h-11 w-full text-xs font-semibold" onClick={()=>void run(prepareReview)}>Try again</button>}
+    {!disabled&&Boolean(message)&&<button type="button" className="mt-2 min-h-11 w-full text-xs font-semibold" onClick={()=>void run(prepareReview)}>Try again</button>}
    </>:<button type="button" className="pocket-cta-primary w-full" disabled={disabled||!valid} onClick={()=>{setReview(true);void run(prepareReview)}}>Continue</button>}
   </PocketFundingAction></div>
  </PocketBottomSheet>
