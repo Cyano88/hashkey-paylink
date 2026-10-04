@@ -118,14 +118,14 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
   useEffect(()=>{
     if(!session||attention)return
     let disposed=false,timer:ReturnType<typeof setTimeout>,failures=0,pendingId='',pendingSince=0
-    const schedule=(ms:number)=>{if(!disposed)timer=setTimeout(()=>void tick(),ms)}
+    const schedule=(ms:number)=>{clearTimeout(timer);if(!disposed)timer=setTimeout(()=>void tick(),ms)}
     const tick=async()=>{
       const current=snapshot.current
       if(disposed)return
       if(document.hidden||!navigator.onLine||locked.current||current.selected&&!current.reply?.execution){schedule(5000);return}
       const previous=current.reply?.execution,pending=!!previous&&!terminal(previous)
       if(current.selected&&!pending){schedule(5000);return}
-      if(!pending&&current.reply?.status?.state!==undefined&&current.reply.status.state>=6&&current.reply.agreement.receipt)return
+      if(!pending&&current.reply?.status?.state!==undefined&&current.reply.status.state>=6&&(current.reply.status.state===9||current.reply.agreement.receipt))return
       locked.current=true;setChecking(true)
       let delay=pending?5000:20000
       try{
