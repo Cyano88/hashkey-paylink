@@ -25,12 +25,12 @@ import type usePocketStockWallet from '../hooks/usePocketStockWallet'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { xStockPath } from '../lib/pocketRail'
 const card='rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262626] dark:bg-[#121212]'
-const cta='min-h-12 w-full rounded-xl bg-black px-5 text-xs font-bold text-white disabled:opacity-40 dark:bg-black dark:text-white'
+const cta='pocket-cta-primary w-full'
 const input='min-h-12 w-full rounded-xl bg-gray-100 px-3 text-sm outline-none dark:bg-white/10'
 export function xpayReceipt(p:XPayPayment):PaylinkReceipt{return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:'XPay payment',amount:p.amount,asset:p.symbol,createdAt:p.createdAt,source:'xpay',recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:'Pocket',brandKind:'pocket'}}
 function CheckoutSurface({children}:ComponentProps<typeof PocketBottomSheet>){return <section className="rounded-3xl border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-[#121212]">{children}</section>}
-export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
- const {user,getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
+export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext}:{paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
+ const {user,getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=paymentContext?.merchantId||params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
  const scope=(user?.id||'')+':'+(wallet.address||''),storageKey='pocket.xpay.active:'+scope
  const scopeRef=useRef(scope);scopeRef.current=scope
  const [merchants,setMerchants]=useState<XPayMerchant[]>([])
@@ -49,7 +49,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
   let cancelled=false;setLoading(true);setError('');setMerchant(null);setPayment(null);setReview(null);setOpen(!!merchantId)
   void xpayRequest(getAccessToken,merchantId?{action:'merchant',id:merchantId}:{action:'mine'}).then(async data=>{
    if(cancelled)return
-   if(data.terminalId&&!params.get('xpay_checkout_id')&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId)){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:location.state});return}
+   if(data.terminalId&&!paymentContext?.checkoutId&&!params.get('xpay_checkout_id')&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId)){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:location.state});return}
    setMerchants(data.merchants||(data.merchant?[data.merchant]:[]));setMerchant(data.merchant);setToken(data.merchant?.tokens[0]||'');setPayments(data.payments||[])
    let saved:{id?:string;hash?:string}={};try{saved=JSON.parse(localStorage.getItem(storageKey)||'{}')}catch{}
    const recovered=data.payments?.find(p=>p.payer.toLowerCase()===wallet.address?.toLowerCase()&&p.status==='submitted')
@@ -80,7 +80,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
  const prepare=()=>run(async()=>{
   if(!wallet.address||!merchant)throw Error('Open your XStocks wallet first.')
   const currentScope=scope
-  const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID(),checkoutId:new URLSearchParams(location.search).get('xpay_checkout_id')||undefined})
+  const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID(),checkoutId:paymentContext?.checkoutId||new URLSearchParams(location.search).get('xpay_checkout_id')||undefined})
   if(scopeRef.current!==currentScope)return
   const asset=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===data.payment.token)!
   const transfer=await prepareStockTransfer(wallet.address,asset,data.payment.recipient,data.payment.amount)
@@ -108,7 +108,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
   const data=await xpayRequest(getAccessToken,{action:'confirm',id:p.id,hash});adopt(data.payment);setUsd('');setReview(null)
  })
  const Surface=checkout&&!review?CheckoutSurface:PocketBottomSheet
- const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{...location.state,xpayOrigin:xpayOrigin(location.state)}})}
+ const close=()=>{if(paymentContext){paymentContext.onClose();return}if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{...location.state,xpayOrigin:xpayOrigin(location.state)}})}
  const assetTokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>merchant?.tokens.includes(t.address.toLowerCase()))
  const selected=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===token)
  const fundingAsset=fundingShortfall(error,selected?.symbol||'USDC')
@@ -116,9 +116,9 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
-  {merchantId&&<PocketXPayCheckoutBackdrop/>}
+  {merchantId&&!paymentContext&&<PocketXPayCheckoutBackdrop/>}
   {!merchantId&&<PocketXPayLinks key={user?.id||'guest'} onLayoutChange={onLayoutChange} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
-  {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title={review?"Confirm payment":"XPay"} onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
+  {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title={review?"Confirm payment":"XPay"} onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}><div className={review?undefined:"min-h-72"}>
    {!review&&<h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
     <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[
@@ -131,7 +131,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
     <p className="mb-4 text-xs text-gray-400">ID:{merchant.pocketId}</p><PocketArcTokenPicker label="Pay with" value={selected?.address||''} excluded="" tokens={assetTokens} disabled={busy} networkLabel="X Layer" clean initialLimit={100} onChange={t=>setToken(t.address.toLowerCase())} discover={async()=>{throw Error('Choose a stock accepted by this merchant.')}}/><label className="mt-4 block text-xs text-gray-400">Amount in USD<input aria-label="Amount in USD" className={input+' mt-2'} inputMode="decimal" value={usd} onChange={e=>setUsd(e.target.value)}/></label><PocketFundingAction {...fundingProps}><button className={cta+' mt-5'} disabled={busy||!usd||!token||!wallet.address} onClick={prepare}>{busy?'Preparing…':'Continue'}</button></PocketFundingAction>{!wallet.address&&<button className={cta+' mt-3'} onClick={wallet.connect} disabled={!wallet.ready||wallet.busy}>Open wallet</button>}
    </>:null}
    {!fundingAsset&&error&&<p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
-  </Surface>)}
+  </div></Surface>)}
   {!open&&error&&<p role="alert" className="mt-4 text-xs text-red-500">{error}</p>}
  </>
 }
