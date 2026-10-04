@@ -51,8 +51,8 @@ export default function PocketDepositPage({initialNetwork,initialAsset='USDC',em
   if (authenticated && !wallets.resolved) return <PocketLoadingState active="home" />
   const content = <>
     <PocketFlowHeader centered title={'Deposit '+initialAsset} onBack={onBack || (() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive))} />
-    <section className="rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-      <PocketSelect ariaLabel="Deposit network" value={selected?network:''} initialOpen layer={embedded?170:85} onDismiss={()=>{if(!selected)(onBack||(()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.receive)))()}} placeholder="Select network" options={NETWORKS.filter(n=>initialAsset==='USDC'||n.key===initialNetwork).map(n=>({value:n.key,label:n.label}))} onChange={value=>{setNetwork(value as DepositNetwork);setSelected(true);setCopied(false);setDepositError('')}}/>
+    <section className="space-y-5">
+      <PocketSelect ariaLabel="Deposit network" value={selected?network:''} initialOpen={embedded} buttonClassName="min-h-14 rounded-xl border-gray-100 bg-white px-4 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none" layer={embedded?170:85} onDismiss={()=>{if(embedded&&!selected)(onBack||(()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.receive)))()}} placeholder="Select network" options={NETWORKS.filter(n=>initialAsset==='USDC'||n.key===initialNetwork).map(n=>({value:n.key,label:n.label}))} onChange={value=>{setNetwork(value as DepositNetwork);setSelected(true);setCopied(false);setDepositError('')}}/>
       {selected && (wallet?.address ? <div className="mt-7 text-center">
         <div className="mx-auto w-fit rounded-[24px] bg-white p-4"><QRCodeSVG value={wallet.address} size={200} /></div>
         <p className="mt-5 break-all text-xs font-semibold leading-5 text-gray-600 dark:text-gray-300">{wallet.address}</p>
