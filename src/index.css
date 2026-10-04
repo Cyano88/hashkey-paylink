@@ -1086,9 +1086,9 @@ html[data-pocket-runtime='native'] body:has([data-pocket-sheet])::before {
 
 /* Pocket controls: one primary action treatment in both themes. */
 :root {
-  --pocket-action-bg: #111111;
+  --pocket-action-bg: #262626;
   --pocket-action-text: #ffffff;
-  --pocket-action-hover: #262626;
+  --pocket-action-hover: #404040;
   --pocket-control-border: #d1d5db;
   --pocket-focus: #6b7280;
 }
