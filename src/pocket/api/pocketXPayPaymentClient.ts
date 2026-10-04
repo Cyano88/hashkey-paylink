@@ -3,7 +3,19 @@ import type {XPayDestination} from '../lib/pocketUnifiedXPay'
 import type {PocketNetwork} from '../lib/pocketSchemas'
 
 export async function readPocketXPayPayment({checkoutId,destination,network,signal,fetcher=fetch}:{checkoutId:string;destination:Pick<XPayDestination,'id'|'kind'|'revision'>;network:PocketNetwork;signal?:AbortSignal;fetcher?:typeof fetch}){
- const read=async(path:string)=>{const r=await fetcher(pocketApiUrl(path),{cache:'no-store',signal});const data=await r.json();if(!r.ok||!data.ok)throw Error(typeof data.error==='string'?data.error:'Payment unavailable. Try again.');return data}
+ // Only these read-only lookups may retry. Never replay payment execution.
+ const read=async(path:string)=>{
+  for(let attempt=0;;attempt++){
+   if(signal?.aborted)throw new DOMException('The operation was aborted.','AbortError')
+   const r=await fetcher(pocketApiUrl(path),{cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)})
+   const data=await r.json().catch(()=>null)
+   const temporarilyUnavailable=!data||[408,502,503,504].includes(r.status)
+   if(temporarilyUnavailable&&attempt===0)continue
+   if(!r.ok||!data?.ok)throw Error(typeof data?.error==='string'?data.error:'Could not verify this payment. Please try again.')
+   return data
+  }
+ }
+
  const terminal=await read('/api/pocket/xpay?id='+encodeURIComponent(checkoutId))
  const current=terminal.checkout?.destinations?.find((d:XPayDestination)=>d.id===destination.id)
  if(terminal.checkout?.id!==checkoutId||!current||current.kind!==destination.kind||current.revision!==destination.revision||current.kind==='xstocks'||(current.kind==='bank'?network!=='base':!current.networks?.includes(network)))throw Error('Payment options changed. Reopen XPay.')

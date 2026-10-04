@@ -11,3 +11,18 @@ await assert.rejects(check('base','stablecoins',t=>t.checkout.destinations[0].re
 await assert.rejects(check('base','stablecoins',(t,p)=>p.paymentUrl=p.paymentUrl.replace('merchant=merchant','merchant=other')),/changed/)
 await assert.rejects(check('base','stablecoins',(t,p)=>p.paymentUrl=p.paymentUrl.replace('n=base','n=arbitrum')),/changed/)
 console.log('PASS native merchant resolution: six networks, bank Base, stale terminal/revision and mismatched merchant/network rejected')
+
+const destination={id:'merchant',kind:'stablecoins',revision:'r1',networks:['base']}
+const terminal={ok:true,checkout:{id:'terminal',name:'Test shop',destinations:[destination]}}
+const payment={ok:true,paymentUrl:'/pay?src=ngpos&merchant=merchant&n=base&settlement=keep_crypto'}
+for(const failure of [new Response('<!DOCTYPE html><html>Unavailable</html>',{headers:{'content-type':'text/html'}}),new Response(JSON.stringify({error:'Unavailable'}),{status:503})]){
+ let calls=0
+ const result=await readPocketXPayPayment({checkoutId:'terminal',destination,network:'base',fetcher:async()=>++calls===1?failure:new Response(JSON.stringify(calls===2?terminal:payment))})
+ assert.equal(result.merchant,'Test shop');assert.equal(calls,3)
+}
+let calls=0
+await assert.rejects(readPocketXPayPayment({checkoutId:'terminal',destination,network:'base',fetcher:async()=>{calls++;return new Response('<!DOCTYPE html>')}}),/Could not verify this payment/)
+assert.equal(calls,2)
+const abort=new AbortController();abort.abort()
+await assert.rejects(readPocketXPayPayment({checkoutId:'terminal',destination,network:'base',signal:abort.signal,fetcher:async()=>{throw Error('Must not fetch')}}),{name:'AbortError'})
+console.log('PASS temporary HTML and 503 recovery, bounded retries, clear persistent error and cancellation')
