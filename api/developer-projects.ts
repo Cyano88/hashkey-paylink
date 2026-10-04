@@ -1032,6 +1032,21 @@ export async function resolveDeveloperProjectPolicy(
   return developerGeneralProjectPolicyFromStore(await defaults.read(STORE_KEY), projectId, environment, secret)
 }
 
+// Hosted Trade authenticates developer requests with scoped keys separately.
+// Participant recovery and project eligibility must not require a general key.
+export function arcTradeProjectPolicyFromStore(store:DeveloperStore|undefined,projectId:string,environment:DeveloperEnvironment,secret:string):DeveloperCheckoutPolicy|null {
+  const project=store?.projects?.[projectId]
+  if(environment!=='live'||!project||projectCheckoutMode(project)!=='human'||project.settlementMode!=='usdc'
+    ||!project.capabilities?.includes('arc_agreements')||project.arcMainnetChainId!==5042
+    ||!project.networks.includes('arc')||!project.recipients.arc||!project.webhookUrl||!project.webhookSecretCipher)return null
+  return policyForDeveloperProject(project,'live',secret)
+}
+export async function resolveArcTradeProjectPolicy(projectId:string,environment:DeveloperEnvironment):Promise<DeveloperCheckoutPolicy|null>{
+  const secret=defaults.portalSecret()
+  if(!defaults.hasStore()||secret.length<32)return null
+  return arcTradeProjectPolicyFromStore(await defaults.read(STORE_KEY),projectId,environment,secret)
+}
+
 export function developerWebhookSignature(signingSecret: string, timestamp: string, rawBody: string) {
   return createHmac('sha256', signingSecret).update(`${timestamp}.${rawBody}`).digest('hex')
 }
