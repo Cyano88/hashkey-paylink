@@ -1,13 +1,13 @@
 import {createHash} from 'node:crypto'
 import type {Request,Response} from 'express'
-import {createPublicClient,defineChain,getAddress,http,keccak256,stringToHex,type Address,type Hex} from 'viem'
+import {keccak256,stringToHex,type Address,type Hex} from 'viem'
+import {arcTradeClient} from './arc-client.js'
 import {assertLiveDeveloperRequest} from '../developer-environment.js'
 import {resolveDeveloperApiKeyPolicy,resolveArcTradeProjectPolicy as resolveDeveloperProjectPolicy} from '../developer-projects.js'
 import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {verifiedPrivyUser} from '../privy-circle-link.js'
 import {createCircleArcUserContractChallenge,readCircleArcUserChallenge,readCircleArcUserTransaction} from '../circle-solana-email.js'
 import {agreementPrivyAuthority} from '../xstocks-agreement/authority.js'
-import {ARC_AGREEMENT_NETWORK} from '../arc-agreement-config.js'
 import {TRADE_ACTION_LABELS,type TradeXLayerAction} from '../../src/lib/xstocksAgreement/protocol.js'
 import {arcTradeAvailability,parseArcTradeCheckout,prepareArcTradeBinding,type ArcTradeTerms} from './arc.js'
 import {prepareArcTradeAction,type ArcTradeBinding,type ArcTradeStatus} from './arc-planner.js'
@@ -38,10 +38,7 @@ type Deps={
   receipt:typeof recordArcTradeReceipt;
 }
 function client():ArcTradeExecutionReader {
-  const url=new URL(process.env.PRIVATE_RPC_URL_ARC_MAINNET||ARC_AGREEMENT_NETWORK.rpcUrl)
-  if(url.protocol!=='https:'||url.username||url.password)throw Error('Invalid Arc Trade RPC configuration.')
-  const chain=defineChain({id:5042,name:'Arc',nativeCurrency:{name:'USDC',symbol:'USDC',decimals:18},rpcUrls:{default:{http:[url.toString()]}}})
-  return createPublicClient({chain,transport:http(url.toString(),{timeout:15000,retryCount:1})}) as unknown as ArcTradeExecutionReader
+  return arcTradeClient() as unknown as ArcTradeExecutionReader
 }
 const defaults:Deps={
   env:()=>process.env,hasStore:hasRenderDurableStore,now:()=>new Date(),policy:resolveDeveloperApiKeyPolicy,project:resolveDeveloperProjectPolicy,
