@@ -40,6 +40,8 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
   const [reply,setReply]=useState<Reply>(),[session,setSession]=useState<CircleEvmEmailSession>(),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   const [selected,setSelected]=useState<TradeXLayerAction>(),[note,setNote]=useState(''),[buyerAmount,setBuyerAmount]=useState('')
   const [reviewedSettlement,setReviewedSettlement]=useState<ArcTradeStatus['settlement']>()
+  const [checking,setChecking]=useState(false),[walletOpen,setWalletOpen]=useState(false),[attention,setAttention]=useState<'resume'|'retry'>()
+  const snapshot=useRef({reply,session,selected});snapshot.current={reply,session,selected}
   const lifetime=useRef(new AbortController()),locked=useRef(false),retryAction=useRef<{requestId:string;operation:TradeXLayerAction}>()
   const post=useCallback(async(body:Record<string,unknown>,walletSession?:CircleEvmEmailSession):Promise<Reply>=>{
     const parent=lifetime.current.signal
@@ -53,7 +55,7 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
       return result as Reply
     })
     if(parent.aborted)throw Error('Your account changed. Reopen the Trade agreement.')
-    setReply(current=>({...data,status:data.status??(body.action==='read'?undefined:current?.status),execution:Object.hasOwn(data,'execution')?data.execution:current?.execution}))
+    setReply(current=>({...data,status:data.status??(current?.agreement.binding?.termsHash===data.agreement.binding?.termsHash?current?.status:undefined),execution:Object.hasOwn(data,'execution')?data.execution:current?.execution}))
     return data
   },[agreementId,getAccessToken])
   useEffect(()=>{
@@ -61,7 +63,7 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
     void post({action:'read'}).catch(error=>{if(!lifetime.current.signal.aborted)setError(error.message)})
     return()=>{lifetime.current.abort()}
   },[post])
-  async function run(task:()=>Promise<void>){if(locked.current)return;locked.current=true;setBusy(true);setError('');try{await task()}catch(error){if(!lifetime.current.signal.aborted)setError((error as Error).message)}finally{if(!lifetime.current.signal.aborted){locked.current=false;setBusy(false)}}}
+  async function run(task:()=>Promise<void>){if(locked.current)return;locked.current=true;setBusy(true);setAttention(undefined);setError('');try{await task()}catch(error){if(!lifetime.current.signal.aborted){setError((error as Error).message);setAttention('retry')}}finally{if(!lifetime.current.signal.aborted){locked.current=false;setBusy(false)}}}
   async function refresh(walletSession=session){const next=await post({action:'read'});if(walletSession&&next.agreement.binding)await post({action:'prepare'},walletSession)}
   async function connect(){
     const parent=lifetime.current.signal,email=user?.email?.address
@@ -93,12 +95,69 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
     if(terminal(execution)){retryAction.current=undefined;setSelected(undefined);await refresh();return}
     if(!execution.challengeId)throw Error('The Circle confirmation is unavailable. Retry the same action.')
     if(lifetime.current.signal.aborted)return
-    await executeCircleEvmEmailChallenge({session,challengeId:execution.challengeId})
+    setWalletOpen(true)
+    try{await executeCircleEvmEmailChallenge({session,challengeId:execution.challengeId})}finally{if(!lifetime.current.signal.aborted)setWalletOpen(false)}
     if(lifetime.current.signal.aborted)return
-    const recovered=await post({action:'recover',requestId:pending.requestId},session)
-    if(terminal(recovered.execution)){retryAction.current=undefined;setSelected(undefined)}
+    try{
+      const recovered=await post({action:'recover',requestId:pending.requestId},session)
+      if(terminal(recovered.execution)){retryAction.current=undefined;setSelected(undefined)}
+    }catch{/* The saved action is recovered by the bounded automatic checks. */}
   }
-  async function recover(){if(!session||!reply?.execution?.own)throw Error('Connect the wallet that started this action.');const next=await post({action:'recover',requestId:reply.execution.requestId},session);if(terminal(next.execution)){retryAction.current=undefined;setSelected(undefined)}}
+  // A retry always reads the existing journal first. Never reopen a wallet
+  // challenge merely because an SDK callback or status request timed out.
+  async function retry(){
+    const next=await post({action:'read'})
+    if(session&&next.execution?.own&&!terminal(next.execution)){
+      if(!next.execution.challengeId){await execute(next.execution.operation,next.execution);return}
+      const recovered=await post({action:'recover',requestId:next.execution.requestId},session)
+      if(terminal(recovered.execution)){retryAction.current=undefined;setSelected(undefined);await refresh();return}
+      if(recovered.execution?.status==='challenge_issued'){if(attention==='resume')await execute(recovered.execution.operation,recovered.execution);else setAttention('resume')}
+    }else if(retryAction.current&&session){await execute(retryAction.current.operation)}
+    else await refresh()
+  }
+  useEffect(()=>{
+    if(!session||attention)return
+    let disposed=false,timer:ReturnType<typeof setTimeout>,failures=0,pendingId='',pendingSince=0
+    const schedule=(ms:number)=>{clearTimeout(timer);if(!disposed)timer=setTimeout(()=>void tick(),ms)}
+    const tick=async()=>{
+      const current=snapshot.current
+      if(disposed)return
+      if(document.hidden||!navigator.onLine||locked.current||current.selected&&!current.reply?.execution){schedule(5000);return}
+      const previous=current.reply?.execution,pending=!!previous&&!terminal(previous)
+      if(current.selected&&!pending){schedule(5000);return}
+      if(!pending&&current.reply?.status?.state!==undefined&&current.reply.status.state>=6&&(current.reply.status.state===9||current.reply.agreement.receipt))return
+      locked.current=true;setChecking(true)
+      let delay=pending?5000:20000
+      try{
+        const next=pending&&previous.own&&previous.challengeId
+          ?await post({action:'recover',requestId:previous.requestId},session)
+          :await post({action:'read'})
+        if(disposed)return
+        const execution=next.execution
+        if(execution&&!terminal(execution)){
+          setSelected(undefined)
+          if(pendingId!==execution.requestId){pendingId=execution.requestId;pendingSince=Date.now()}
+          if(execution.own&&(!execution.challengeId||Date.now()-pendingSince>=90000)){
+            setAttention(execution.status==='submitted'?'retry':'resume');return
+          }
+          delay=5000
+        }else{
+          pendingId='';retryAction.current=undefined
+          if(pending)setSelected(undefined)
+          if(next.agreement.binding&&!next.status)await post({action:'prepare'},session)
+        }
+        failures=0;setError('')
+      }catch(error){
+        if(disposed)return
+        failures++;delay=Math.min(30000,5000*2**failures)
+        if(failures>=3){setError((error as Error).message);setAttention('retry');return}
+      }finally{locked.current=false;if(!disposed)setChecking(false)}
+      schedule(delay)
+    }
+    const wake=()=>{if(!document.hidden&&navigator.onLine){clearTimeout(timer);schedule(500)}}
+    schedule(1000);document.addEventListener('visibilitychange',wake);window.addEventListener('online',wake)
+    return()=>{disposed=true;clearTimeout(timer);document.removeEventListener('visibilitychange',wake);window.removeEventListener('online',wake)}
+  },[session,post,attention])
   const agreement=reply?.agreement,execution=reply?.execution,pending=!!execution&&!terminal(execution),status=reply?.status
   return <>
     {!agreement&&!error&&<Skeleton/>}
@@ -120,18 +179,24 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
       {status?.fundingIssue&&<p className='mt-2 text-sm text-gray-500'>{status.fundingIssue}</p>}
       {!session?<button className={button+' mt-5'} disabled={busy} onClick={()=>void run(connect)}>Connect Arc wallet</button>:<p className='mt-4 text-xs text-gray-500'>Arc wallet connected</p>}
       {session&&!agreement.accepted[reply.role]&&<button className={button+' mt-4'} disabled={busy||!reply.fundingEnabled} onClick={()=>void run(async()=>{await post({action:'accept_terms',consentHash:agreement.consentHash},session);await refresh()})}>Accept these Trade terms</button>}
-      {pending&&<div className='mt-5 space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/15'><p className='text-sm'>{TRADE_ACTION_LABELS[execution.operation]} · {execution.status==='reserved'?'Confirmation pending':execution.status==='submitted'?'Checking on-chain confirmation':'Awaiting wallet confirmation'}</p>{execution.own?<><button className={secondary} disabled={busy||!session} onClick={()=>void run(recover)}>Check action status</button>{execution.status!=='submitted'&&<button className={button} disabled={busy||!session} onClick={()=>void run(()=>execute(execution.operation,execution))}>Resume confirmation</button>}</>:<p className='text-xs text-gray-500'>The other participant has an action in progress.</p>}</div>}
-      {execution?.status==='reverted'&&<p className='mt-3 text-sm' role='status'>The last action failed on-chain. Refresh the agreement before trying again.</p>}
-      {session&&!pending&&!selected&&<div className='mt-4 space-y-2'>{status?.actions.map(action=><button key={action} className={secondary} disabled={busy||status.pending} onClick={()=>{setNote('');setBuyerAmount('');setReviewedSettlement(status.settlement?{...status.settlement}:undefined);setSelected(action)}}>{TRADE_ACTION_LABELS[action]}</button>)}</div>}
-      {selected&&!pending&&<div className='mt-5 space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/15'><h2 className='font-semibold'>{TRADE_ACTION_LABELS[selected]}</h2>
+      {pending&&<div className='mt-5 space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/15'>
+        <p className='text-sm'>{TRADE_ACTION_LABELS[execution.operation]}</p>
+        {session&&!attention&&<button className={button} disabled aria-live='polite' aria-busy='true'>{walletOpen?'Confirm in your wallet...':execution.own?'Checking...':'Waiting for the other participant...'}</button>}
+        {attention&&<p className='text-sm text-gray-500'>{attention==='resume'?'Wallet confirmation still needs your attention.':'Confirmation is taking longer than expected. Your existing action is saved.'}</p>}
+      </div>}
+      {execution?.status==='reverted'&&<p className='mt-3 text-sm' role='status'>The last action failed on-chain. No successful payment was confirmed.</p>}
+      {session&&!pending&&!selected&&<div className='mt-4 space-y-2'>{status?.actions.filter(action=>action!=='cancel').map(action=><button key={action} className={button} disabled={busy||checking||!!attention||status.pending} onClick={()=>{setNote('');setBuyerAmount('');setReviewedSettlement(status.settlement?{...status.settlement}:undefined);setSelected(action)}}>{TRADE_ACTION_LABELS[action]}</button>)}{status?.actions.includes('cancel')&&<details className='pt-2 text-sm text-gray-500'><summary className='cursor-pointer py-2'>More options</summary><button className={secondary+' mt-2'} disabled={busy||checking||!!attention||status.pending} onClick={()=>setSelected('cancel')}>Cancel unpaid escrow</button></details>}</div>}
+      {selected&&!pending&&!attention&&<div className='mt-5 space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/15'><h2 className='font-semibold'>{TRADE_ACTION_LABELS[selected]}</h2>
         {['dispatch','refund','dispute','proposeSettlement'].includes(selected)&&<label className='block text-sm'>Note or evidence<textarea className={input+' mt-2'} value={note} maxLength={2000} onChange={event=>setNote(event.target.value)} /></label>}
         {selected==='proposeSettlement'&&<label className='block text-sm'>Buyer refund (USDC)<input className={input+' mt-2'} inputMode='decimal' value={buyerAmount} onChange={event=>setBuyerAmount(event.target.value)}/></label>}
         {['acceptSettlement','withdrawSettlement'].includes(selected)&&reviewedSettlement&&<p className='text-sm'>Buyer refund: {formatUnits(BigInt(reviewedSettlement.buyerAmount),6)} USDC. The remainder goes to the seller.</p>}
-        <p className='text-xs text-gray-500'>Review this action before confirming in your wallet.</p><button className={button} disabled={busy} onClick={()=>void run(()=>execute(selected))}>Continue to wallet confirmation</button><button className={secondary} disabled={busy||!!retryAction.current} onClick={()=>setSelected(undefined)}>Back</button>
+        <p className='text-xs text-gray-500'>Review this action before confirming in your wallet.</p><button className={button} disabled={busy||checking} onClick={()=>void run(()=>execute(selected))}>{busy?(walletOpen?'Confirm in your wallet...':'Checking...'):'Continue to wallet confirmation'}</button><button className={secondary} disabled={busy||!!retryAction.current} onClick={()=>setSelected(undefined)}>Back</button>
       </div>}
       {agreement.receipt&&<ArcTradeReceiptCard receipt={agreement.receipt}/>}
-      <button className={secondary+' mt-5'} disabled={busy} onClick={()=>void run(()=>refresh())}>Refresh agreement</button>
-      {returnTo&&<a className={secondary+' mt-3 block text-center'} href={returnTo}>Return to trade</a>}
+      {session&&!pending&&!selected&&status?.state===1&&reply.role==='provider'&&<p className='mt-4 text-sm text-gray-500' role='status'>Waiting for the buyer to pay. This page updates automatically.</p>}
+      {checking&&!pending&&<p className='mt-4 text-sm text-gray-500' role='status'>Checking...</p>}
+      {attention&&session&&<button className={button+' mt-5'} disabled={busy} onClick={()=>void run(retry)}>{busy?'Checking...':attention==='resume'?'Continue wallet confirmation':'Try again'}</button>}
+      {returnTo&&<a className='mx-auto mt-4 block w-fit py-2 text-sm text-gray-500 underline' href={returnTo}>Return to trade</a>}
     </>}
     {busy&&<div className='mt-4 h-2 animate-pulse rounded-full bg-gray-100 dark:bg-white/10' role='status' aria-label='Updating Trade agreement'/>}
     {error&&<div className='mt-4'><p className='text-sm text-red-600 dark:text-red-400' role='alert'>{error}</p>{!agreement&&<button className={secondary+' mt-3'} disabled={busy} onClick={()=>void run(()=>refresh())}>Try again</button>}</div>}
