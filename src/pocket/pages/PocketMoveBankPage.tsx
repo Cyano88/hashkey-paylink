@@ -1,3 +1,5 @@
+import PocketFundingAction from '../components/PocketFundingAction'
+import {fundingShortfall} from '../lib/pocketFundingShortfall'
 import { RectangleStackIcon } from '@heroicons/react/24/outline'
 import PocketFiatUsdcEstimate from '../components/PocketFiatUsdcEstimate'
 import PocketBankKycBoundary from '../components/PocketBankKycBoundary'
@@ -340,10 +342,10 @@ function PocketMoveBankContent() {
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
                   </p>
-                ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Continue</button>}
+                ) : <PocketFundingAction asset={bankLiquidity.insufficient?'USDC':fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();await bankLiquidity.recheckFunding()}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Continue</button></PocketFundingAction>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && ['moving', 'waiting', 'reconciling'].includes(bankLiquidity.status) && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
-                {!reviewOpen && !recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
+                {!reviewOpen && !recoveredPayout && !fundingShortfall(direct.error) && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
               </div>
             </div>}
 
@@ -385,7 +387,7 @@ function PocketMoveBankContent() {
         <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' USDC' : reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
           ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
-<PocketSlideAction onApprovalBusyChange={setApprovalBusy}
+<PocketFundingAction asset={bankLiquidity.insufficient?'USDC':fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();await bankLiquidity.recheckFunding();setReviewOpen(false)}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><PocketSlideAction onApprovalBusyChange={setApprovalBusy}
                   status={directSlideStatus}
                   disabled={!direct.canSubmit}
                   onPrepare={direct.prepareApproval}
@@ -397,9 +399,9 @@ function PocketMoveBankContent() {
                     submitted: direct.status === 'route-review' ? 'USDC move confirming' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
                     successful: 'Sent',
                   }}
-                />
+                /></PocketFundingAction>
 
-        {direct.error && <p role="alert" className="mt-3 text-center text-xs text-red-500">{direct.error}</p>}
+        {!fundingShortfall(direct.error) && direct.error && <p role="alert" className="mt-3 text-center text-xs text-red-500">{direct.error}</p>}
         {bankLiquidity.notice && directLocked && ['moving', 'waiting', 'reconciling'].includes(bankLiquidity.status) && <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
       </PocketBottomSheet>}
       {mode === 'withdraw' && bankReceipt && (

@@ -1,3 +1,5 @@
+import PocketFundingAction from './PocketFundingAction'
+import {fundingShortfall} from '../lib/pocketFundingShortfall'
 import PocketXPayCheckoutBackdrop from './PocketXPayCheckoutBackdrop'
 import PocketConfirmationDetails from './PocketConfirmationDetails'
 import PocketSlideAction from './PocketSlideAction'
@@ -109,6 +111,8 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
  const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{...location.state,xpayOrigin:xpayOrigin(location.state)}})}
  const assetTokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>merchant?.tokens.includes(t.address.toLowerCase()))
  const selected=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===token)
+ const fundingAsset=fundingShortfall(error,selected?.symbol||'USDC')
+ const fundingProps={asset:fundingAsset,network:'xlayer' as const,address:wallet.address,locked:busy||wallet.busy||payment?.status==='submitted'||wallet.uncertain,onReturn:async()=>{await wallet.refresh();setError('');setReview(null);setPayment(null)},onCancel:()=>{setError('');setReview(null);setPayment(null);setUsd('')}}
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
@@ -120,13 +124,13 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
     <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[
       ['Merchant',payment.merchantName],['Network','X Layer'],['Gas',formatStockQuantity(stockQuantity(review.fee,18))+' OKB'],
     ]}/>
-    <div className="mt-5"><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy||wallet.busy?'pending':'idle'} disabled={payment.status==='submitted'||busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onConfirm={()=>void (quoteExpired?prepare():pay())} labels={{idle:quoteExpired?'Update payment amount':'Pay '+payment.merchantName,pending:'Processing',disabled:'Payment pending'}}/></div>
+    <div className="mt-5"><PocketFundingAction {...fundingProps}><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy||wallet.busy?'pending':'idle'} disabled={payment.status==='submitted'||busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onConfirm={()=>void (quoteExpired?prepare():pay())} labels={{idle:quoteExpired?'Update payment amount':'Pay '+payment.merchantName,pending:'Processing',disabled:'Payment pending'}}/></PocketFundingAction></div>
     {quoteExpired&&!busy&&<p role="status" className="mt-3 text-xs text-gray-500">Price expired. Update the amount to continue.</p>}
     <button className="min-h-11 w-full text-xs text-gray-400" disabled={busy||payment.status==='submitted'} onClick={()=>{setPayment(null);setReview(null)}}>Edit amount</button>
    </>:loading?<div aria-label="Loading merchant" className="h-40 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/10"/>:merchant?<>
-    <p className="mb-4 text-xs text-gray-400">ID:{merchant.pocketId}</p><PocketArcTokenPicker label="Pay with" value={selected?.address||''} excluded="" tokens={assetTokens} disabled={busy} networkLabel="X Layer" clean initialLimit={100} onChange={t=>setToken(t.address.toLowerCase())} discover={async()=>{throw Error('Choose a stock accepted by this merchant.')}}/><label className="mt-4 block text-xs text-gray-400">Amount in USD<input aria-label="Amount in USD" className={input+' mt-2'} inputMode="decimal" value={usd} onChange={e=>setUsd(e.target.value)}/></label><button className={cta+' mt-5'} disabled={busy||!usd||!token||!wallet.address} onClick={prepare}>{busy?'Preparing…':'Continue'}</button>{!wallet.address&&<button className={cta+' mt-3'} onClick={wallet.connect} disabled={!wallet.ready||wallet.busy}>Open wallet</button>}
+    <p className="mb-4 text-xs text-gray-400">ID:{merchant.pocketId}</p><PocketArcTokenPicker label="Pay with" value={selected?.address||''} excluded="" tokens={assetTokens} disabled={busy} networkLabel="X Layer" clean initialLimit={100} onChange={t=>setToken(t.address.toLowerCase())} discover={async()=>{throw Error('Choose a stock accepted by this merchant.')}}/><label className="mt-4 block text-xs text-gray-400">Amount in USD<input aria-label="Amount in USD" className={input+' mt-2'} inputMode="decimal" value={usd} onChange={e=>setUsd(e.target.value)}/></label><PocketFundingAction {...fundingProps}><button className={cta+' mt-5'} disabled={busy||!usd||!token||!wallet.address} onClick={prepare}>{busy?'Preparing…':'Continue'}</button></PocketFundingAction>{!wallet.address&&<button className={cta+' mt-3'} onClick={wallet.connect} disabled={!wallet.ready||wallet.busy}>Open wallet</button>}
    </>:null}
-   {error&&<p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
+   {!fundingAsset&&error&&<p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
   </Surface>)}
   {!open&&error&&<p role="alert" className="mt-4 text-xs text-red-500">{error}</p>}
  </>

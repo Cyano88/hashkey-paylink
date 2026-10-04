@@ -1,3 +1,5 @@
+import PocketFundingAction from './PocketFundingAction'
+import {fundingShortfall,amountExceedsBalance} from '../lib/pocketFundingShortfall'
 import { pocketIdInput } from '../lib/pocketId'
 import PocketConfirmationDetails from './PocketConfirmationDetails'
 import PocketSlideAction from './PocketSlideAction'
@@ -39,6 +41,8 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
   useEffect(() => { setReview(null); setReviewOpen(false); setError('') }, [symbol, recipient, amount, wallet.address, view])
   const tokens = stockPickerTokens(wallet.displaySnapshot || wallet.snapshot)
   const assetPicker = <PocketArcTokenPicker label="Asset to send" value={asset.address} excluded="" tokens={tokens} disabled={busy || wallet.busy} networkLabel="X Layer" clean initialLimit={100} balancesLoading={!wallet.displaySnapshot && !wallet.snapshot && !wallet.error} onChange={t => {setSymbol(t.symbol);setRequestSent(false)}} discover={async () => {throw Error('This contract is not in the supported XStocks list.')}} />
+  const fundingAsset = fundingShortfall(error||wallet.actionError,asset.symbol) || (amountExceedsBalance(amount,tokens.find(t=>t.address===asset.address)?.balance,!wallet.balanceStale&&!wallet.balanceError) ? asset.symbol : null)
+  const fundingProps={asset:fundingAsset,network:'xlayer' as const,address:wallet.address,locked:busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending',onReturn:async()=>{await wallet.refresh();setError('');setReview(null);setReviewOpen(false)},onCancel:()=>{setAmount('');setRecipient('');setReview(null);setReviewOpen(false);setError('')}}
   const pending = wallet.uncertain
   const prepare = async () => {
     if (!wallet.address || busy) return
@@ -79,19 +83,19 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
       <div className="mb-4"><p className="mb-2 text-[11px] text-gray-400">Asset</p>{assetPicker}<p className="mt-2 text-[11px] text-gray-400">{wallet.balanceStale ? 'Last known' : 'Available'} - {tokens.find(t => t.address === asset.address)?.balance == null ? '\u2014' : formatStockQuantity(tokens.find(t => t.address === asset.address)!.balance!)} {asset.symbol}</p></div>
       <label className="mb-4 block text-[11px] text-gray-400">Recipient<input className={field + ' mt-2'} autoComplete="off" spellCheck={false} placeholder="0x..." value={recipient} onChange={e => setRecipient(e.target.value)} /></label>
       <label className="mb-5 block text-[11px] text-gray-400">Amount<input className={field + ' mt-2'} inputMode="decimal" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} /></label>
-      <button type="button" className={button} disabled={busy || wallet.busy || pending || !recipient || !amount || reviewOpen || resultOpen} onClick={()=>void prepare()}>Review send</button>
+      <PocketFundingAction {...fundingProps}><button type="button" className={button} disabled={busy || wallet.busy || pending || !recipient || !amount || reviewOpen || resultOpen} onClick={()=>void prepare()}>Review send</button></PocketFundingAction>
     </>}
     {reviewOpen && !resultOpen && <PocketBottomSheet title="Confirm send" showCloseButton dismissOnBackdrop={false} dismissible={!busy && !wallet.busy} onClose={()=>{setReviewOpen(false);setReview(null)}}>
       <PocketConfirmationDetails amount={(review?.amount || amount) + ' ' + (review?.asset.symbol || asset.symbol)} rows={[
         ['Wallet address', <span className="break-all">{review?.recipient || recipient}</span>], ['Network', 'X Layer'], ...(review ? [['Gas estimate', stockQuantity(review.fee, 18) + ' OKB'] as [string,string]] : []),
       ]} />
-      <div className="mt-5"><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy || wallet.busy ? 'pending' : 'idle'} disabled={pending || !review} onConfirm={()=>void send()} labels={{idle:'Confirm send',disabled:'Transaction pending',pending:review?'Sending':'Checking fees'}} /></div>
-      {error && <p role="alert" className="mt-3 text-xs text-red-500">{error}</p>}
+      <div className="mt-5"><PocketFundingAction {...fundingProps}><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy || wallet.busy ? 'pending' : 'idle'} disabled={pending || !review} onConfirm={()=>void send()} labels={{idle:'Confirm send',disabled:'Transaction pending',pending:review?'Sending':'Checking fees'}} /></PocketFundingAction></div>
+      {!fundingAsset && error && <p role="alert" className="mt-3 text-xs text-red-500">{error}</p>}
     </PocketBottomSheet>}
     {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs leading-5 text-amber-600">Check this transfer in Activity before sending again.</p>}
     {wallet.pending?.status === 'pending' && <a className="mt-5 block break-all text-xs text-gray-500" href={'https://www.oklink.com/x-layer/tx/' + wallet.pending.hash} target="_blank" rel="noreferrer">Transfer pending - View transaction</a>}
     {reconnectWallet && <button type="button" onClick={() => window.location.reload()} className="mt-3 min-h-11 w-full text-xs font-bold">Reload Pocket</button>}
-    {!reviewOpen && !resultOpen && (error || wallet.actionError) && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error || wallet.actionError}</p>}
+    {!fundingAsset && !reviewOpen && !resultOpen && (error || wallet.actionError) && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error || wallet.actionError}</p>}
     {wallet.balanceError && <p role="status" className="mt-3 text-xs text-gray-500">Could not update your balance. <button type="button" className="underline" disabled={busy || wallet.busy} onClick={()=>void wallet.refresh()}>Retry</button></p>}
   </section>
 }

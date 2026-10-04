@@ -358,6 +358,7 @@ export default function usePocketPaymentLiquidityController(input: {
     checking: status === 'checking',
     busy: status === 'checking' || status === 'moving' || status === 'waiting' || status === 'reconciling',
     insufficient: route?.kind === 'insufficient',
+    recheckFunding: async () => { const result=await inspect();setRoute(result.route);setWallets(result.wallets);setError('');setStatus(result.route.kind==='insufficient'?'idle':'ready') },
     prepareLiquidity,
     ensureLiquidity,
   }

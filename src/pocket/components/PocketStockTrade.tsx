@@ -1,3 +1,5 @@
+import PocketFundingAction from './PocketFundingAction'
+import {fundingShortfall,amountExceedsBalance} from '../lib/pocketFundingShortfall'
 import { useEffect, useRef, useState } from 'react'
 import type usePocketStockWallet from '../hooks/usePocketStockWallet'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -67,6 +69,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
     return () => { window.clearInterval(timer); window.clearInterval(refresh) }
   }, [])
   const tokens = stockPickerTokens(wallet.displaySnapshot || wallet.snapshot)
+  const fundingAsset=fundingShortfall(error,tokenIn.symbol)||(amountExceedsBalance(amount,tokens.find(t=>t.address===tokenIn.address)?.balance,!wallet.balanceStale&&!wallet.balanceError)?tokenIn.symbol:null)
   const picker = (label: string, value: string, excluded: string, stocksOnly: boolean, change: (token: ArcPickerToken) => void) => <PocketArcTokenPicker label={label} value={value} excluded={excluded} tokens={stocksOnly ? tokens.filter(t => stockAssets.some(a => a.address === t.address)) : tokens} disabled={busy || wallet.busy} networkLabel="X Layer" clean initialLimit={100} balancesLoading={!wallet.displaySnapshot && !wallet.snapshot && !wallet.error} onChange={change} discover={async () => { throw Error('This contract is not in the supported XStocks list.') }} />
   const confirm = async () => {
     if (!current || busy || quoting || current.quote.expiresAt <= Date.now()) return
@@ -98,9 +101,9 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
         </> : quoting ? <div role="status" aria-label="Getting estimate" className="space-y-2 py-1"><PocketSkeletonBar className="h-3 w-36" /><PocketSkeletonBar className="h-2.5 w-24" /></div> : null}
       </div>
       <PocketStockTradeProgress progress={progress} />
-      <button type="button" className={button} disabled={reconnectWallet || busy || quoting || !current || wallet.busy || wallet.uncertain || wallet.pending?.status === 'pending'} onClick={confirm}>{progress.stage === 'completed' ? 'Completed' : progress.stage === 'processing' || progress.stage === 'confirming' ? 'Processing...' : wallet.pending?.status === 'pending' ? 'Confirming...' : mode === 'buy' ? 'Buy ' + tokenOut.symbol : mode === 'sell' ? 'Sell ' + tokenIn.symbol : 'Swap ' + tokenIn.symbol + ' for ' + tokenOut.symbol}</button>
+      <PocketFundingAction asset={fundingAsset} network="xlayer" address={wallet.address} locked={busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onReturn={async()=>{await wallet.refresh();setError('');setReview(null);setRevision(n=>n+1)}} onCancel={()=>{setAmount('');setReview(null);setError('')}}><button type="button" className={button} disabled={reconnectWallet || busy || quoting || !current || wallet.busy || wallet.uncertain || wallet.pending?.status === 'pending'} onClick={confirm}>{progress.stage === 'completed' ? 'Completed' : progress.stage === 'processing' || progress.stage === 'confirming' ? 'Processing...' : wallet.pending?.status === 'pending' ? 'Confirming...' : mode === 'buy' ? 'Buy ' + tokenOut.symbol : mode === 'sell' ? 'Sell ' + tokenIn.symbol : 'Swap ' + tokenIn.symbol + ' for ' + tokenOut.symbol}</button></PocketFundingAction>
     {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs text-amber-600">Check your pending trade in Activity before trading again.</p>}
     {reconnectWallet && <button type="button" onClick={() => window.location.reload()} className="mt-3 min-h-11 w-full text-xs font-bold">Reload Pocket</button>}
-    {error && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
+    {!fundingAsset && error && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
   </section>
 }

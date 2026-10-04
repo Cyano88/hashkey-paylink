@@ -231,6 +231,7 @@ export default function usePocketWithdrawalController({
   },[owner,address,allowLegacyOperation,amount,balance,chargeFees,feeQuote,getAccessToken,clearExternalError,ensureWallet,getEvmSession,getSolanaSession,network,onActivity,operationContext,refreshBalances,wallet])
 
   return {
+    recheckFunding: async () => { await refreshBalances(); setFeeQuote(null); setError('') },
     reset,
     reference: txHash || submissionReference,
     feePreview,

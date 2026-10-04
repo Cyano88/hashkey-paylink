@@ -1,3 +1,5 @@
+import PocketFundingAction from '../../components/PocketFundingAction'
+import {fundingShortfall} from '../../lib/pocketFundingShortfall'
 import PocketCountrySelect from '../../components/PocketCountrySelect'
 import type { PocketPaymentFunding } from '../../lib/pocketPaymentFunding'
 import {BILL_COUNTRIES,normalizeUgandaPhone,type PocketBillCountry} from '../../lib/pocketBillCountry'
@@ -34,6 +36,7 @@ type PocketBillsPanelProps = {
   baseBalance: number
   walletBusy: boolean
   onOpenWallet: () => void
+  onFundingReturn?:()=>Promise<unknown>
   onPreparePayment?: () => Promise<void>
   paymentRouting?: {
     status: 'idle' | 'checking' | 'ready' | 'moving' | 'waiting' | 'reconciling' | 'arrived'
@@ -83,7 +86,7 @@ function SignInCard() {
   )
 }
 
-export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, onPreparePayment, paymentRouting }: PocketBillsPanelProps) {
+export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, onPreparePayment, onFundingReturn, paymentRouting }: PocketBillsPanelProps) {
   const [resultDismissed, setResultDismissed] = useState(false)
   const [dataNumberRequired, setDataNumberRequired] = useState(false)
   const dataPhoneValid = bills.country==='UG'?!!normalizeUgandaPhone(bills.phone):/^0\d{10}$/.test(normalizeNigerianMobileNumber(bills.phone))
@@ -325,8 +328,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                       {Number(bills.intent.platformFeeUsdc || '0') > 0 && <div className="flex justify-between gap-3"><span className="text-gray-500">Platform fee</span><span className="font-semibold tabular-nums">{bills.intent.platformFeeUsdc} USDC</span></div>}
                       <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</span></div>
                     </div>
-                    {bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
-                    <PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
+                    {!fundingShortfall(bills.error) && bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
+                    <PocketFundingAction asset={paymentRouteInsufficient?'USDC':fundingShortfall(bills.error)} network="base" locked={slideStatus!=='idle'||approvalBusy} onReturn={async()=>{await onFundingReturn?.()}} onCancel={()=>bills.dismiss()}><PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
                       status={slideStatus}
                       disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
                       onPrepare={onPreparePayment}
@@ -344,8 +347,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                         submitted: paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling' ? 'USDC move confirming' : bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
                         successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
                       }}
-                    />
-                    {paymentRouting?.notice && bills.status === 'ready' && (
+                    /></PocketFundingAction>
+                    {!paymentRouteInsufficient && paymentRouting?.notice && bills.status === 'ready' && (
                       <p className="px-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">{paymentRouting.notice}</p>
                     )}
                 </>

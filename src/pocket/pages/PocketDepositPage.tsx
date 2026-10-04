@@ -1,3 +1,4 @@
+import PocketSelect from '../components/PocketSelect'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
@@ -10,7 +11,7 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
-import { cn } from '../../lib/utils'
+
 
 type DepositNetwork = 'base' | 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon'
 const NETWORKS = [
@@ -29,33 +30,37 @@ function navPath(tab: PocketNavTab) {
   return POCKET_ROUTES.home
 }
 
-export default function PocketDepositPage() {
+export default function PocketDepositPage({initialNetwork,initialAsset='USDC',embedded=false,onBack}:{initialNetwork?:DepositNetwork;initialAsset?:string;embedded?:boolean;onBack?:()=>void}={}) {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const [network, setNetwork] = useState<DepositNetwork>(() => {
-    const saved = window.localStorage.getItem('pocket.home.network')
+    const saved = initialNetwork || window.localStorage.getItem('pocket.home.network')
     return saved === 'ethereum' || saved === 'polygon' || saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
   })
+  const [selected,setSelected]=useState(false)
+  const [depositError,setDepositError]=useState('')
   const [opening, setOpening] = useState(false)
   const [copied, setCopied] = useState(false)
   const onWalletReady = useCallback((key: DepositNetwork, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => wallets.setWallets(current => ({ ...current, [key]: wallet })), [wallets.setWallets])
   const controller = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const wallet = wallets.wallets[network]
   useEffect(() => { window.localStorage.setItem('pocket.home.network', network) }, [network])
-  const openWallet = async () => { setOpening(true); try { await controller.ensureWallet(network) } finally { setOpening(false) } }
-  const copy = async () => { if (!wallet?.address) return; await navigator.clipboard.writeText(wallet.address); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
+  const openWallet = async () => { setOpening(true); try { await controller.ensureWallet(network) } catch {setDepositError('Could not open wallet. Try again.')} finally { setOpening(false) } }
+  const copy = async () => { if (!wallet?.address) return; try { await navigator.clipboard.writeText(wallet.address); setCopied(true); window.setTimeout(() => setCopied(false), 1200) } catch { setDepositError('Could not copy address. Try again.') } }
   if (authenticated && !wallets.resolved) return <PocketLoadingState active="home" />
-  return <PocketRouteShell active="home" onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
-    <PocketFlowHeader centered title="Deposit USDC" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive)} />
+  const content = <>
+    <PocketFlowHeader centered title={'Deposit '+initialAsset} onBack={onBack || (() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive))} />
     <section className="rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-      <div className="grid grid-cols-4 gap-3">{NETWORKS.map(item => <button key={item.key} type="button" onClick={() => setNetwork(item.key)} className={cn('flex min-h-14 items-center justify-center rounded-2xl border transition', network === item.key ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-100 dark:border-[#262626]')} aria-label={'Deposit on ' + item.label}><img src={item.logo} alt="" className={cn('h-7 w-7 rounded-md object-cover grayscale contrast-200', item.dark && 'invert', network !== item.key && 'dark:invert')} /></button>)}</div>
-      {wallet?.address ? <div className="mt-7 text-center">
-        <div className="mx-auto w-fit rounded-[24px] bg-white p-4"><QRCodeSVG value={wallet.address} size={164} /></div>
+      <PocketSelect ariaLabel="Deposit network" value={selected?network:''} initialOpen layer={embedded?170:85} onDismiss={()=>{if(!selected)(onBack||(()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.receive)))()}} placeholder="Select network" options={NETWORKS.filter(n=>initialAsset==='USDC'||n.key===initialNetwork).map(n=>({value:n.key,label:n.label}))} onChange={value=>{setNetwork(value as DepositNetwork);setSelected(true);setCopied(false);setDepositError('')}}/>
+      {selected && (wallet?.address ? <div className="mt-7 text-center">
+        <div className="mx-auto w-fit rounded-[24px] bg-white p-4"><QRCodeSVG value={wallet.address} size={200} /></div>
         <p className="mt-5 break-all text-xs font-semibold leading-5 text-gray-600 dark:text-gray-300">{wallet.address}</p>
         <button type="button" onClick={() => void copy()} className="pocket-cta-primary mt-5 inline-flex items-center justify-center gap-2 px-6">{copied ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy address'}</button>
-        <p className="mt-4 text-[10px] leading-4 text-gray-500 dark:text-gray-400">Send only native USDC on {NETWORKS.find(item => item.key === network)?.label} to this address.</p>
-      </div> : <button type="button" onClick={() => void openWallet()} disabled={opening} className="pocket-cta-primary mt-7 flex w-full items-center justify-center gap-2">{opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}Open deposit wallet</button>}
+        <p className="mt-4 text-[10px] leading-4 text-gray-500 dark:text-gray-400">Send {initialAsset} on {NETWORKS.find(item => item.key === network)?.label} to this address.</p>
+      </div> : <button type="button" onClick={() => void openWallet()} disabled={opening} className="pocket-cta-primary mt-7 flex w-full items-center justify-center gap-2">{opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}Open deposit wallet</button>)}
+      {depositError&&<p role="alert" className="mt-4 text-center text-xs text-gray-500">{depositError}</p>}
     </section>
-  </PocketRouteShell>
+  </>
+  return embedded ? content : <PocketRouteShell active="home" onSelect={tab=>navigate(POCKET_BASE_PATH+navPath(tab))}>{content}</PocketRouteShell>
 }

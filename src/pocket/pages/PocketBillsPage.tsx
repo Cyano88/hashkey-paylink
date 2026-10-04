@@ -146,6 +146,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
           await paymentLiquidity.prepareLiquidity()
           await bills.preparePaymentApproval()
         }}
+        onFundingReturn={async()=>{await wallets.refreshBalances();await paymentLiquidity.recheckFunding()}}
         paymentRouting={{
           status: paymentLiquidity.status,
           notice: paymentLiquidity.notice,
