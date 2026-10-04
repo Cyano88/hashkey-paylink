@@ -1,4 +1,5 @@
-import { createPublicClient, defineChain, http, encodeAbiParameters, encodeFunctionData, keccak256, stringToHex, zeroAddress, type Address, type Hex } from 'viem'
+import { encodeAbiParameters, encodeFunctionData, keccak256, stringToHex, zeroAddress, type Address, type Hex } from 'viem'
+import {arcTradeClient} from './arc-client.js'
 import { ARC_AGREEMENT_NETWORK } from '../arc-agreement-config.js'
 import { ARC_TRADE_POLICY, ARC_TRADE_RELEASE, arcTradeAvailability, type ArcTradeRelease, type bindArcTradeTerms } from './arc.js'
 import { ARC_TRADE_FACTORY_ABI, address, unsigned, verifyArcTradeFactory, verifyArcTradeAuthority, type ArcTradeReader } from './arc-verification.js'
@@ -21,10 +22,7 @@ export async function prepareArcTradeAction(input: Plan & {env:NodeJS.ProcessEnv
     if (input.action) throw Object.assign(Error('Arc Trade deployment is pending verification.'),{status:409})
     return {enabled:false,actions:[],fundingIssue:'Arc Trade deployment is pending verification.'}
   }
-  const rpc = new URL(input.env.PRIVATE_RPC_URL_ARC_MAINNET || ARC_AGREEMENT_NETWORK.rpcUrl)
-  if (rpc.protocol !== 'https:' || rpc.username || rpc.password) throw Error('Invalid Arc Trade RPC configuration.')
-  const chain=defineChain({id:5042,name:'Arc',nativeCurrency:{name:'USDC',symbol:'USDC',decimals:18},rpcUrls:{default:{http:[rpc.toString()]}}})
-  const client = createPublicClient({chain,transport:http(rpc.toString(),{timeout:15000,retryCount:1})})
+  const client = arcTradeClient(input.env)
   return planArcTradeCandidate({...input,fundingEnabled:arcTradeAvailability(input.env,input.projectId).enabled},client as ArcTradeReader,ARC_TRADE_RELEASE)
 }
 // Read/simulate only. Injectable reviewed candidate and reader support isolated
