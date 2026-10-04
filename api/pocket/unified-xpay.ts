@@ -1,3 +1,4 @@
+import {isValidSolanaAddress} from '../../src/lib/solanaAddress.js'
 import {isAddress} from 'viem'
 import {requirePocketBasicKyc} from './kyc-level.js'
 import {xpayStockHistory,xpayStockTotals} from '../../src/pocket/lib/pocketXPayStockHistory.js'
@@ -88,14 +89,14 @@ export default async function handler(req:Request,res:Response){
   if(b.action==='setup-usdc'){
    if(!await ownsTerminalSetupKey(owner,String(b.key||''),'stablecoins'))return res.status(409).json({ok:false,error:'Reopen USDC setup for this terminal.'})
    const networks=b.networks
-   if(!Array.isArray(networks)||!networks.length||networks.length>3||new Set(networks).size!==networks.length||networks.some(n=>!['base','arbitrum','arc'].includes(n)))return res.status(400).json({ok:false,error:'Choose supported receiving networks.'})
+   if(!Array.isArray(networks)||!networks.length||networks.length>6||new Set(networks).size!==networks.length||networks.some(n=>!['base','arbitrum','arc','ethereum','polygon','solana'].includes(n)))return res.status(400).json({ok:false,error:'Choose supported receiving networks.'})
    const terminal=(await read()).checkouts.find(c=>c.owner===owner&&!c.deletedAt&&c.setupKeys?.some(k=>k.key===b.key&&k.kind==='stablecoins'))!
    const wallets:{[network:string]:string}={}
-   for(const network of networks){const link=await readCircleLink(circleLinkKey(owner,network,'payment'));if(!link||link.privyUserId!==owner||link.chain!==network||!link.circleWalletId||!isAddress(link.circleWalletAddress))return res.status(409).json({ok:false,error:'Open your '+network+' wallet in Pocket before enabling it.'});wallets[network]=link.circleWalletAddress}
-   const result=await createNgPosMerchant(Object.assign(Object.create(req),{headers:{...req.headers,'idempotency-key':b.key}}) as Request,{display_name:terminal.name,payout_preference:'KEEP_CRYPTO',supported_networks:networks,circle_smart_wallet_address:wallets[networks[0]]},wallets)
+   for(const network of networks){const link=await readCircleLink(circleLinkKey(owner,network,'payment'));if(!link||link.privyUserId!==owner||link.chain!==network||!link.circleWalletId||!(network==='solana'?isValidSolanaAddress(link.circleWalletAddress):isAddress(link.circleWalletAddress)))return res.status(409).json({ok:false,error:'Open your '+network+' wallet in Pocket before enabling it.'});wallets[network]=link.circleWalletAddress}
+   const result=await createNgPosMerchant(Object.assign(Object.create(req),{headers:{...req.headers,'idempotency-key':b.key}}) as Request,{display_name:terminal.name,payout_preference:'KEEP_CRYPTO',supported_networks:networks,circle_smart_wallet_address:wallets[networks.find(n=>n!=='solana')]||'',solana_wallet_address:wallets.solana},wallets)
    if(!('merchant' in result)||!result.merchant)throw Error('Receiving setup returned no merchant.')
    const merchant=result.merchant as {merchant_id:string;supported_networks:string[];network_wallets?:{[network:string]:string}}
-   if(JSON.stringify(merchant.supported_networks)!==JSON.stringify(networks)||networks.some(n=>merchant.network_wallets?.[n]?.toLowerCase()!==wallets[n].toLowerCase()))return res.status(409).json({ok:false,error:'This setup was already saved with different wallets. Reopen USDC setup.'})
+   if(JSON.stringify(merchant.supported_networks)!==JSON.stringify(networks)||networks.some(n=>(n==='solana'?merchant.network_wallets?.[n]!==wallets[n]:merchant.network_wallets?.[n]?.toLowerCase()!==wallets[n].toLowerCase())))return res.status(409).json({ok:false,error:'This setup was already saved with different wallets. Reopen USDC setup.'})
    return res.json({ok:true,merchant})
   }
   if(b.action==='configure'){

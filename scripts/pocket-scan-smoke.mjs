@@ -32,3 +32,11 @@ const mapped={...merchant,network_wallets:{base:'0x'+'3'.repeat(40),arbitrum:'0x
 const mappedParams=new URL(resolvePocketPosCheckout(mapped,url+'&n=arbitrum&e=0x'+'9'.repeat(40)).paymentUrl,'https://app.hashpaylink.com').searchParams;
 assert.equal(mappedParams.get('e'),mapped.network_wallets.arbitrum);assert.equal(mappedParams.get('n'),'arbitrum');assert.throws(()=>resolvePocketPosCheckout(mapped,url+'&n=arc'));
 console.log('PASS selected network binds its configured wallet; QR recipient injection and missing network mappings cannot redirect funds.');
+for(const network of ['ethereum','polygon','solana']){
+ const address=network==='solana'?'11111111111111111111111111111111':'0x'+'5'.repeat(40);
+ const extra={...merchant,supported_networks:[network],circle_smart_wallet_address:network==='solana'?'':merchant.circle_smart_wallet_address,solana_wallet_address:network==='solana'?address:undefined,network_wallets:{[network]:address}};
+ const params=new URL(resolvePocketPosCheckout(extra,url+'&n='+network+'&e=wrong&s=wrong').paymentUrl,'https://app.hashpaylink.com').searchParams;
+ assert.equal(params.get('n'),network);assert.equal(params.get(network==='solana'?'s':'e'),address);
+ assert.throws(()=>resolvePocketPosCheckout({...extra,network_wallets:{}},url+'&n='+network));
+}
+console.log('PASS Ethereum, Polygon and Solana select only the stored network wallet, including Solana-only merchants.');

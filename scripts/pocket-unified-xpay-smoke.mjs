@@ -76,3 +76,9 @@ await call({action:'setup-usdc',key,networks:['base','arbitrum'],wallet:'0x'+'9'
 fixture.destinations.push({id:'usdc-1',name:'USDC shop',kind:'stablecoins',currency:'USDC',assets:['USDC'],networks:['base','arbitrum'],revision:'1'});fixture.keys['usdc-1']=key;fixture.approval=true;const attached=await call(config(stable.id,0,['usdc-1']));assert.equal(attached.checkout.id,stable.id);assert.deepEqual(attached.checkout.destinations[0].networks,['base','arbitrum']);
 fixture.owner='intruder';await call({action:'setup-usdc',key,networks:['base']},409);
 console.log('PASS Stablecoins setup uses server-linked per-network wallets, rejects unsupported/unlinked networks and foreign setup keys, and preserves terminal identity.');
+fixture.owner='merchant';const extraTerminal=(await call({action:'create',key:'all-networks-setup-01',name:'All networks'})).checkout;const extraKey=(await call({action:'begin-setup',id:extraTerminal.id,kind:'stablecoins'})).key;
+for(const network of ['arc','ethereum','polygon','solana'])fixture.links['merchant:'+network]={privyUserId:'merchant',chain:network,circleWalletId:network+'-wallet',circleWalletAddress:network==='solana'?'11111111111111111111111111111111':'0x'+'3'.repeat(40)};
+await call({action:'setup-usdc',key:extraKey,networks:['solana']});assert.equal(fixture.created.body.circle_smart_wallet_address,'');assert.equal(fixture.created.body.solana_wallet_address,fixture.links['merchant:solana'].circleWalletAddress);
+await call({action:'setup-usdc',key:extraKey,networks:['base','arbitrum','arc','ethereum','polygon','solana']});assert.equal(Object.keys(fixture.created.wallets).length,6);
+fixture.links['merchant:solana'].circleWalletAddress='not-a-wallet';await call({action:'setup-usdc',key:extraKey,networks:['solana']},409);
+console.log('PASS six receiving networks, Solana-only configuration, and invalid Solana wallet rejection.');

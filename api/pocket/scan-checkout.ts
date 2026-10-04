@@ -1,3 +1,4 @@
+import {isValidSolanaAddress} from '../../src/lib/solanaAddress.js'
 import { isAddress } from 'viem'
 import { parsePocketScanCode } from '../../src/pocket/lib/pocketScanCode.js'
 type Merchant = {country?:string;merchant_id:string;display_name:string;payout_preference:string;settlement_enabled:boolean;source?:string;kyc_status?:string;circle_smart_wallet_address:string;solana_wallet_address?:string;supported_networks?:string[];network_wallets?:Record<string,string>;encrypted_bank_details?:unknown;bank_name?:string;bank_last4?:string;bank_account_name?:string}
@@ -11,10 +12,9 @@ export function resolvePocketPosCheckout(merchant:Merchant, raw:string, intent?:
  if(!fiat&&merchant.payout_preference!=='KEEP_CRYPTO')throw Error('Unsupported merchant settlement.')
  if(fiat&&!merchant.encrypted_bank_details)throw Error('Merchant bank settlement is unavailable.')
  const network=fiat?'base':input.get('n')||input.get('net')||merchant.supported_networks?.[0]||'base'
- if(!['base','arbitrum','arc'].includes(network)||!(merchant.supported_networks||['base']).includes(network))throw Error('This network is not supported by the merchant.')
- if(!fiat && (network==='solana' ? !merchant.solana_wallet_address : !isAddress(merchant.circle_smart_wallet_address)))throw Error('Merchant payment wallet is unavailable.')
- const recipient=merchant.network_wallets?merchant.network_wallets[network]:merchant.circle_smart_wallet_address
- if(!fiat&&!isAddress(recipient||''))throw Error('Merchant payment wallet is unavailable.')
+ if(!['base','arbitrum','arc','ethereum','polygon','solana'].includes(network)||!(merchant.supported_networks||['base']).includes(network))throw Error('This network is not supported by the merchant.')
+ const recipient=merchant.network_wallets?merchant.network_wallets[network]:network==='solana'?merchant.solana_wallet_address:merchant.circle_smart_wallet_address
+ if(!fiat&&!(network==='solana'?isValidSolanaAddress(recipient||''):isAddress(recipient||'')))throw Error('Merchant payment wallet is unavailable.')
  const amount=(value:string|null,decimals:number)=>{
   if(!value)return ''
   if(!new RegExp('^(?:0|[1-9][0-9]{0,9})(?:\\.[0-9]{1,'+decimals+'})?$').test(value)||Number(value)<=0)throw Error('This checkout amount is invalid.')
@@ -31,6 +31,6 @@ export function resolvePocketPosCheckout(merchant:Merchant, raw:string, intent?:
  const params=new URLSearchParams({src:'ngpos',merchant:merchant.merchant_id,m:merchant.display_name,n:network,settlement:fiat?'instant_fiat':'keep_crypto'})
  if(fixed){if(usdc)params.set('a',usdc);if(ngn)params.set('ngn',ngn)}else params.set('f','1')
  if(fiat){params.set('offramp','paycrest');params.set('fx',fiatCurrency);params.set('fiat_currency',fiatCurrency);params.set('fs','1');if(intentId)params.set('intent',intentId);if(merchant.bank_name)params.set('bank',merchant.bank_name);if(merchant.bank_last4)params.set('acct','****'+merchant.bank_last4);if(merchant.bank_account_name)params.set('acctName',merchant.bank_account_name)}
- else params.set(network==='solana'?'s':'e',network==='solana'?merchant.solana_wallet_address!:recipient!)
+ else params.set(network==='solana'?'s':'e',recipient!)
  return {merchantName:merchant.display_name,settlement:fiat?fiatCurrency:'USDC',paymentUrl:'/pay?'+params.toString()}
 }

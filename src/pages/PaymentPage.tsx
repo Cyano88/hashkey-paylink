@@ -1,3 +1,4 @@
+import usePocketWalletController from '../pocket/controllers/usePocketWalletController'
 import PocketXPayCheckoutBackdrop from '../pocket/components/PocketXPayCheckoutBackdrop'
 import PocketPosPaymentAction from '../pocket/components/PocketPosPaymentAction'
 import PocketKycPrompt from '../pocket/components/PocketKycPrompt'
@@ -138,10 +139,10 @@ const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
 const HOSTED_CHECKOUT_CHAINS: ChainKey[] = ['base', 'arbitrum', 'arc']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
-type SupportedEvmPayChain = 'base' | 'arc' | 'arbitrum'
+type SupportedEvmPayChain = Exclude<ChainKey, 'solana'>
 
 function isSupportedEvmPayChain(value: ChainKey): value is SupportedEvmPayChain {
-  return value === 'base' || value === 'arc' || value === 'arbitrum'
+  return value === 'base' || value === 'arc' || value === 'arbitrum' || value === 'ethereum' || value === 'polygon'
 }
 
 function CheckoutTrustLine() {
@@ -483,8 +484,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
     if (isWalletManagerFundingLink) return walletManagerFundingChain
-    if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
-    if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana') return legacyChain
+    if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum' || netParam === 'ethereum' || netParam === 'polygon') return netParam
+    if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana' || legacyChain === 'ethereum' || legacyChain === 'polygon') return legacyChain
     if (isValidSolanaAddress(resolvedSolana) && !hasEvmRecipient) return 'solana'
     return 'base'
   })
@@ -808,6 +809,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
   const { wallets: privyWallets } = useWallets()
   const privyEmail = emailFromPrivyUser(privyUser).toLowerCase()
+  const checkoutWalletController=usePocketWalletController({authenticated:privyAuthenticated,email:privyEmail,getAccessToken})
   const previousPrivySessionRef = useRef({ authenticated: privyAuthenticated, email: privyEmail })
   const connectedPrivyWallet = PRIVY_AUTH_ENABLED && address
     ? privyWallets.find(wallet => wallet.address?.toLowerCase() === address.toLowerCase())
@@ -815,7 +817,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const hasExternalPrivyEvmWallet = !!connectedPrivyWallet && connectedPrivyWallet.walletClientType !== 'privy'
   const isPrivyEmbeddedWalletConnected = connectedPrivyWallet?.walletClientType === 'privy'
   const { data: walletClient }   = useWalletClient({
-    chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
+    chainId: CHAIN_META[chain === 'solana' ? 'base' : chain].chainId,
   })
 
   const {
@@ -883,7 +885,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const { isLoading: isCirclePaymasterConfirming, isSuccess: isCirclePaymasterConfirmed } =
     useWaitForTransactionReceipt({
       hash: circlePaymasterTxHash ?? undefined,
-      chainId: chain === 'base' ? CHAIN_META.base.chainId : chain === 'arc' ? CHAIN_META.arc.chainId : chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
+      chainId: CHAIN_META[chain === 'solana' ? 'base' : chain].chainId,
     })
   const {
     data: basePaymasterStatus,
@@ -921,65 +923,41 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const { signTypedDataAsync, isPending: isSignPending, reset: resetPermitSign } = useSignTypedData()
 
   const { data: permitNonce } = useReadContract({
-    address: chain === 'base'
-      ? CHAIN_META.base.tokenAddress
-      : chain === 'arbitrum'
-      ? CHAIN_META.arbitrum.tokenAddress
-      : CHAIN_META.arc.tokenAddress,
+    address: CHAIN_META[chain === 'solana' ? 'base' : chain].tokenAddress,
     abi: NONCES_ABI,
     functionName: 'nonces',
     args: [address ?? '0x0000000000000000000000000000000000000000'],
-    chainId: (chain === 'base'
-      ? CHAIN_META.base.chainId
-      : chain === 'arbitrum'
-      ? CHAIN_META.arbitrum.chainId
-      : CHAIN_META.arc.chainId) as number,
-    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
+    chainId: (CHAIN_META[chain === 'solana' ? 'base' : chain].chainId) as number,
+    query: { enabled: isSupportedEvmPayChain(chain) && !!address },
   })
-  const permitTokenAddress = chain === 'base'
-    ? CHAIN_META.base.tokenAddress
-    : chain === 'arbitrum'
-    ? CHAIN_META.arbitrum.tokenAddress
-    : CHAIN_META.arc.tokenAddress
-  const permitChainId = (chain === 'base'
-    ? CHAIN_META.base.chainId
-    : chain === 'arbitrum'
-    ? CHAIN_META.arbitrum.chainId
-    : CHAIN_META.arc.chainId) as number
+  const permitTokenAddress = CHAIN_META[chain === 'solana' ? 'base' : chain].tokenAddress
+  const permitChainId = (CHAIN_META[chain === 'solana' ? 'base' : chain].chainId) as number
   const { data: permitTokenName } = useReadContract({
     address: permitTokenAddress,
     abi: ERC20_PERMIT_DOMAIN_ABI,
     functionName: 'name',
     chainId: permitChainId,
-    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
+    query: { enabled: isSupportedEvmPayChain(chain) && !!address },
   })
   const { data: permitTokenVersion } = useReadContract({
     address: permitTokenAddress,
     abi: ERC20_PERMIT_DOMAIN_ABI,
     functionName: 'version',
     chainId: permitChainId,
-    query: { enabled: (chain === 'base' || chain === 'arc' || chain === 'arbitrum') && !!address },
+    query: { enabled: isSupportedEvmPayChain(chain) && !!address },
   })
   const {
     data: circleWalletBalance,
     isFetching: isCircleWalletBalanceFetching,
     refetch: refetchCircleWalletBalance,
   } = useReadContract({
-    address: chain === 'arc'
-      ? CHAIN_META.arc.tokenAddress
-      : chain === 'arbitrum'
-      ? CHAIN_META.arbitrum.tokenAddress
-      : CHAIN_META.base.tokenAddress,
+    address: CHAIN_META[chain === 'solana' ? 'base' : chain].tokenAddress,
     abi: ERC20_BALANCE_OF_ABI,
     functionName: 'balanceOf',
     args: [circleSmartAccount ?? '0x0000000000000000000000000000000000000000'],
-    chainId: chain === 'arc'
-      ? CHAIN_META.arc.chainId
-      : chain === 'arbitrum'
-      ? CHAIN_META.arbitrum.chainId
-      : CHAIN_META.base.chainId,
+    chainId: CHAIN_META[chain === 'solana' ? 'base' : chain].chainId,
     query: {
-      enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arc' || chain === 'arbitrum'),
+      enabled: !!circleSmartAccount && isSupportedEvmPayChain(chain),
       refetchInterval: 30_000,
       refetchIntervalInBackground: false,
       staleTime: 15_000,
@@ -1039,11 +1017,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // ── Derived ───────────────────────────────────────────────────────────────
   const isEvmChain    = chain !== 'solana'
   const meta          = CHAIN_META[chain]
-  const targetChainId =
-    chain === 'base'     ? CHAIN_META.base.chainId     :
-    chain === 'arc'      ? CHAIN_META.arc.chainId      :
-    chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId :
-    CHAIN_META.base.chainId
+  const targetChainId = CHAIN_META[chain === 'solana' ? 'base' : chain].chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
   const hashPaylinkFeeBps = isNgPosPaycrestOfframp || isBankSendPayment ? 0 : PLATFORM_FEE_BPS
   const feeAmount        = (parseFloat(payableAmt) || 0) * (hashPaylinkFeeBps / 10_000)
@@ -1067,7 +1041,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const showCirclePasskeyPay = canUseCirclePasskeyPayments(chain)
   const showCircleEmailPay = showCircleEvmEmailPay || showCirclePasskeyPay
   const showCircleSolanaEmailPay = chain === 'solana' && canUseCircleSolanaEmailWallet()
-  const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+  const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && isSupportedEvmPayChain(chain)
   const usePrivyCircleSolanaCheckout = PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay && chain === 'solana'
   const showLegacyCircleEmailPay = !PRIVY_AUTH_ENABLED && showCircleEmailPay
   const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && (!!pocketScan || !hasExternalPrivyEvmWallet)
@@ -1137,7 +1111,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
 
   const walletConnectBlocked = isNgPosPaycrestOfframp || (smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED)
   const grossUpPlatformCharges = true
-  const grossUpEvmPlatformCharges = grossUpPlatformCharges && (chain === 'base' || chain === 'arc' || chain === 'arbitrum')
+  const grossUpEvmPlatformCharges = grossUpPlatformCharges && isSupportedEvmPayChain(chain)
   const grossUpSolanaPlatformCharges = grossUpPlatformCharges && chain === 'solana'
   const quotedPayoutId = paycrestOrder?.intent_id || ngPosPaycrestIntentId || undefined
   const circleQuoteNeeded = Boolean(circleEvmEmailSession && activeRecipient && payableAmt && !isBankSendPayment && (!isNgPosPaycrestOfframp || quotedPayoutId))
@@ -1522,7 +1496,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         if (!token) throw new Error('Privy session is not ready yet. Sign in again and retry.')
         const linked = await readPocketWallet({
           accessToken: token,
-          network: chain as 'base' | 'arbitrum' | 'arc',
+          network: chain as SupportedEvmPayChain,
         })
         if (cancelled) return
         if (linked?.wallet.address) {
@@ -1683,7 +1657,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   useEffect(() => {
     if (payMode !== 'direct') return
     if (!isSupportedEvmPayChain(chain)) return
-    const factoryAddr = FACTORY_V2_ADDRESSES[chain]
+    const factoryAddr = chain==='base'||chain==='arbitrum'||chain==='arc' ? FACTORY_V2_ADDRESSES[chain] : undefined
     if (!factoryAddr) {
       setDirectError('Direct payment is not configured for this network.')
       setDirectStatus('error')
@@ -2258,10 +2232,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     directRelayedRef.current = false
     if (directPollRef.current) { clearInterval(directPollRef.current); directPollRef.current = null }
     if (isConnected && isSupportedEvmPayChain(c)) {
-      const cid =
-        c === 'base'    ? CHAIN_META.base.chainId    :
-        c === 'arc'     ? CHAIN_META.arc.chainId     :
-        CHAIN_META.arbitrum.chainId
+      const cid = CHAIN_META[c].chainId
       switchChain({ chainId: cid })
     }
   }
@@ -2336,7 +2307,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       setBasePaymasterError('Use your Pocket wallet to approve this payment.')
       return
     }
-    if (chain === 'arbitrum') { setCirclePaymasterError('Use your Pocket wallet to approve this payment.'); return }
+    if (chain === 'arbitrum' || chain === 'ethereum' || chain === 'polygon') { setCirclePaymasterError('Use your Pocket wallet to approve this payment.'); return }
     if (!activeRecipient) return
     if (!await lockHostedCheckoutNetwork()) return
     setPaymentAttemptStarted(true)
@@ -2925,17 +2896,21 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         let session = circleEvmEmailSession
         if (!session || session.chain !== chain) {
           wasConnecting = true
-          session = await connectCircleEvmEmailWallet(email, chain)
+          if(chain==='ethereum'||chain==='polygon'){
+            const wallet=await checkoutWalletController.ensureWallet(chain)
+            if(!wallet)throw Error('Open your '+CHAIN_META[chain].label+' wallet in Pocket first.')
+            session=await checkoutWalletController.getEvmSession(chain,wallet.address)
+          }else session = await connectCircleEvmEmailWallet(email, chain)
           if (isConnected) disconnectEvm()
           setCircleEvmEmailSession(session)
           setCircleSmartAccount(session.wallet.address)
-          if (PRIVY_AUTH_ENABLED && privyAuthenticated && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')) {
+          if (PRIVY_AUTH_ENABLED && privyAuthenticated && isSupportedEvmPayChain(chain)) {
             try {
               const token = await getAccessToken()
               if (token) {
                 const linkedSession=session
                 const productionWallets = linkedSession.productionEvmTopology?.wallets
-                const linkTargets = chain !== 'arc' && productionWallets?.base && productionWallets.arbitrum
+                const linkTargets = (chain === 'base'||chain === 'arbitrum') && productionWallets?.base && productionWallets.arbitrum
                   ? ([
                       ['base', productionWallets.base],
                       ['arbitrum', productionWallets.arbitrum],
@@ -3122,7 +3097,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         return
       }
     }
-    const meta_       = chain === 'arc' ? CHAIN_META.arc : chain === 'arbitrum' ? CHAIN_META.arbitrum : CHAIN_META.base
+    const meta_       = CHAIN_META[chain === 'solana' ? 'base' : chain]
     const tokenAddress = meta_.tokenAddress
     const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
     const totalUnits   = parseUnits(effectiveAmt || '0', meta_.decimals)
@@ -3135,7 +3110,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       requiredUnits,
     } = evmPaymentBreakdown(totalUnits, meta_.decimals)
     try {
-      const tokenClient = EVM_CLIENTS[chain as 'base' | 'arc' | 'arbitrum']
+      const tokenClient = EVM_CLIENTS[chain as SupportedEvmPayChain]
       const payerBalance = await tokenClient.readContract({
         address: tokenAddress,
         abi: ERC20_BALANCE_OF_ABI,
@@ -3156,7 +3131,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     let livePermitNonce = permitNonce
     if (!livePermitName || !livePermitVersion || livePermitNonce == null) {
       try {
-        const tokenClient = EVM_CLIENTS[chain as 'base' | 'arc' | 'arbitrum']
+        const tokenClient = EVM_CLIENTS[chain as SupportedEvmPayChain]
         const [name, version, freshNonce] = await Promise.all([
           tokenClient.readContract({
             address: tokenAddress,

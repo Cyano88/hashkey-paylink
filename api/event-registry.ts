@@ -1,3 +1,5 @@
+import {verifySolanaUsdcTransfer} from './solana-usdc-transfer-verify.js'
+import {isValidSolanaAddress} from '../src/lib/solanaAddress.js'
 import {assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
 import { isAddress } from 'viem'
 import type { Request, Response } from 'express'
@@ -90,6 +92,7 @@ const HAS_DURABLE_STORE = hasRenderDurableStore()
 
 type NgPosMerchantRecord = {
   merchant_id: string
+  solana_wallet_address?: string
   circle_smart_wallet_address?: string
   network_wallets?: Record<string,string>
   supported_networks?: string[]
@@ -155,10 +158,11 @@ function mergeRegistryRecords(...records: Record<string, PaymentEntry[]>[]) {
   for (const record of records) {
     for (const [eventId, entries] of Object.entries(record ?? {})) {
       const existing = merged[eventId] ?? []
-      const byTx = new Map(existing.map(entry => [entry.txHash.toLowerCase(), entry]))
+      const byTx = new Map(existing.map(entry => [(entry.chain==='solana'?entry.txHash:entry.txHash.toLowerCase()), entry]))
       for (const entry of entries ?? []) {
-        byTx.set(entry.txHash.toLowerCase(), {
-          ...(byTx.get(entry.txHash.toLowerCase()) ?? {}),
+        const key=entry.chain==='solana'?entry.txHash:entry.txHash.toLowerCase()
+        byTx.set(key, {
+          ...(byTx.get(key) ?? {}),
           ...entry,
         })
       }
@@ -273,7 +277,7 @@ async function expectedNgPosRecipient(input: {
   intentId: string
 }) {
   if (input.source !== 'ngpos' && input.source !== 'bank-receive') throw new Error('Unsupported receipt source.')
-  if (input.settlementType === 'INSTANT_FIAT') {
+  if (input.settlementType.toUpperCase() === 'INSTANT_FIAT') {
     if (!input.intentId) throw new Error('Naira payout receipt requires an offramp intent.')
     const order = await getPaycrestPosOrder(input.intentId)
     if (!order?.receive_address) throw new Error('Paycrest order is not ready for receipt verification.')
@@ -283,9 +287,9 @@ async function expectedNgPosRecipient(input: {
   if (!input.merchantId) throw new Error('Merchant id is required for receipt verification.')
   const store = await readNgPosStore()
   const merchant = store.merchants?.[input.merchantId]
-  if (!merchant?.circle_smart_wallet_address) throw new Error('Merchant USDC wallet is not available for receipt verification.')
+  if (!merchant) throw new Error('Merchant USDC wallet is not available for receipt verification.')
   if(merchant.supported_networks&&!merchant.supported_networks.includes(input.chain))throw Error('Merchant does not accept this network.')
-  const recipient=merchant.network_wallets?merchant.network_wallets[input.chain]:merchant.circle_smart_wallet_address
+  const recipient=merchant.network_wallets?merchant.network_wallets[input.chain]:input.chain==='solana'?merchant.solana_wallet_address:merchant.circle_smart_wallet_address
   if(!recipient)throw Error('Merchant wallet is unavailable on this network.')
   return { recipient, minAmount: '' }
 }
@@ -299,7 +303,7 @@ export function isPaymentReceiptIdAuthentic(receiptId: string) {
 }
 
 function archiveKey(entry: PaymentEntry) {
-  return `${entry.eventId}:${entry.txHash}`.toLowerCase()
+  return entry.chain==='solana'?`${entry.eventId}:${entry.txHash}`:`${entry.eventId}:${entry.txHash}`.toLowerCase()
 }
 
 function archiveMetadata(entry: PaymentEntry, customerWallet: string) {
@@ -409,10 +413,10 @@ export async function listRegisteredPaymentsForEventIds(eventIds: string[]): Pro
 
 // Only new receipts with an on-chain verified sender are eligible as payer purchases.
 export async function listRegisteredPosPurchases(walletAddresses:string[]):Promise<PaymentEntry[]> {
- const addresses=new Set(walletAddresses.filter(address=>isAddress(address)).map(a=>a.toLowerCase()))
+ const addresses=new Set(walletAddresses.filter(address=>isAddress(address)||isValidSolanaAddress(address)).map(a=>isAddress(a)?a.toLowerCase():a))
  if(!addresses.size)return []
  await hydrateRegistry()
- return [...registry.values()].flat().filter(entry=>entry.source==='ngpos'&&!!entry.verifiedPayer&&addresses.has(entry.verifiedPayer)&&/^0x[a-fA-F0-9]{64}$/.test(entry.txHash)).sort((a,b)=>b.ts-a.ts).slice(0,100)
+ return [...registry.values()].flat().filter(entry=>entry.source==='ngpos'&&!!entry.verifiedPayer&&addresses.has(entry.verifiedPayer)&&(entry.chain==='solana'?/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(entry.txHash):/^0x[a-fA-F0-9]{64}$/.test(entry.txHash))).sort((a,b)=>b.ts-a.ts).slice(0,100)
 }
 
 function paymentError(message: string, status = 400) {
@@ -532,8 +536,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       throw paymentError('Verified on-chain transaction is required for this receipt.', 400)
     }
     const evmChain = normalizeEvmUsdcChain(chain)
-    if (!evmChain) {
-      throw paymentError('Verified EVM USDC transaction is required for this receipt.', 400)
+    if (!evmChain && !(chain==='solana'&&source==='ngpos'&&settlementType.toUpperCase()==='KEEP_CRYPTO')) {
+      throw paymentError('This receipt network is unavailable.', 400)
     }
     const amountNum = Number.parseFloat(amount)
     const requestedNum = Number.parseFloat(requestedAmount)
@@ -544,9 +548,10 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       throw paymentError('Payment is below requested amount.', 409)
     }
     try {
-      const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId, chain:evmChain })
-      await verifyEvmUsdcTransfer({
-        chain: evmChain,
+      const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId, chain:evmChain || chain })
+      if(chain==='solana')await verifySolanaUsdcTransfer({txHash,payer,recipient:expected.recipient,minAmount:expected.minAmount||preferredAmount(amount,requestedAmount)})
+      else await verifyEvmUsdcTransfer({
+        chain: evmChain!,
         txHash,
         recipient: expected.recipient,
         ...(isAddress(payer)?{payer}:{}),
@@ -605,13 +610,13 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
   const isDupe = txHash.startsWith('manual_')
     ? entries.some(e => e.payer.toLowerCase() === payer.toLowerCase())
-    : entries.some(e => e.txHash.toLowerCase() === txHash.toLowerCase())
+    : entries.some(e => e.chain===chain && (chain==='solana'?e.txHash===txHash:e.txHash.toLowerCase()===txHash.toLowerCase()))
   if (isDupe) {
-    const previous=entries.find(e=>e.txHash.toLowerCase()===txHash.toLowerCase())
+    const previous=entries.find(e=>e.chain===chain && (chain==='solana'?e.txHash===txHash:e.txHash.toLowerCase()===txHash.toLowerCase()))
     if(xpayCheckoutId&&previous?.xpayCheckoutId&&previous.xpayCheckoutId!==xpayCheckoutId)throw paymentError('Payment already belongs to another QR.',409)
     const duplicate = txHash.startsWith('manual_')
       ? entries.find(e => e.payer.toLowerCase() === payer.toLowerCase())
-      : entries.find(e => e.txHash.toLowerCase() === txHash.toLowerCase())
+      : previous
     const result = {
       ok: true,
       duplicate: true,
@@ -623,7 +628,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     return result
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
-  if(source==='ngpos' && isAddress(payer))entry.verifiedPayer=payer.toLowerCase()
+  if(source==='ngpos' && (isAddress(payer)||chain==='solana'&&isValidSolanaAddress(payer)))entry.verifiedPayer=chain==='solana'?payer:payer.toLowerCase()
   if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source
   if (merchantId) entry.merchantId = merchantId

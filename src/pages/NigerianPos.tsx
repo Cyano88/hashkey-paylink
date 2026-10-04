@@ -5,17 +5,19 @@ import { ArrowLeft, ArrowRight, Banknote, CheckCircle2, Copy, LayoutDashboard, L
 import { cn } from '../lib/utils'
 
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
-type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
 
 const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
   arc: 'Arc Mainnet',
   solana: 'Solana',
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
 }
 
 function supportedMerchantNetworks(value: unknown): PosNetwork[] {
-  const allowed: PosNetwork[] = ['base', 'arbitrum', 'arc', 'solana']
+  const allowed: PosNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
   const raw = Array.isArray(value) ? value : ['base']
   const selected = raw.filter((item): item is PosNetwork => allowed.includes(item as PosNetwork))
   return selected.length ? Array.from(new Set(selected)) : ['base']

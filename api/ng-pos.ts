@@ -45,10 +45,10 @@ const INTERNAL_EVM_RECIPIENT = (process.env.PAYCREST_POS_EVM_ADDRESS ?? process.
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
-type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
 type BankSendNetwork = 'base' | 'polygon'
 
-const POS_NETWORKS: PosNetwork[] = ['base', 'arbitrum', 'arc', 'solana']
+const POS_NETWORKS: PosNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
 const BANK_SEND_NETWORKS: BankSendNetwork[] = ['base', 'polygon']
 
 type EncryptedBankDetails = {
