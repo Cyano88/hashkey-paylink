@@ -4,6 +4,8 @@ let calls=0
 const ok=()=>new Response(JSON.stringify({ok:true,checkouts:[],destinations:[]}))
 globalThis.fetch=async()=>++calls===1?new Response('<html>Bad gateway</html>',{status:502}):ok()
 assert.equal((await readXPayJson('https://fixture.invalid',{},true)).ok,true);assert.equal(calls,2)
+calls=0;globalThis.fetch=async()=>++calls===1?new Response('<!DOCTYPE html>Temporary page',{status:200}):ok()
+assert.equal((await readXPayJson('https://fixture.invalid',{},true)).ok,true);assert.equal(calls,2)
 calls=0;globalThis.fetch=async()=>{calls++;return new Response('<html>Bad gateway</html>',{status:502})}
 await assert.rejects(readXPayJson('https://fixture.invalid',{},true),/temporarily unavailable/);assert.equal(calls,2)
 calls=0;await assert.rejects(readXPayJson('https://fixture.invalid',{method:'POST'}),/temporarily unavailable/);assert.equal(calls,1)
