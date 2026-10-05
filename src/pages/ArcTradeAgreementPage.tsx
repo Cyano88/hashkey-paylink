@@ -6,6 +6,7 @@ import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {CheckoutTrustLine,HashPayLinkCheckoutBrand} from '../components/CheckoutChrome'
 import {connectCircleEvmEmailWallet,executeCircleEvmEmailChallenge,type CircleEvmEmailSession} from '../lib/circleEvmEmailWallet'
 import {resolveArcTradeWalletSession} from '../lib/arcTradeWalletSession'
+import {clearArcTradeSession,restoreArcTradeSession,saveArcTradeSession} from '../lib/arcTradeSessionPersistence'
 import {boundedCheckoutRequest} from '../lib/xstocksAgreement/boundedRequest'
 import {tradeReturnUrl} from '../lib/xstocksAgreement/tradeReturn'
 import {TRADE_ACTION_LABELS,type TradeXLayerAction} from '../lib/xstocksAgreement/protocol'
@@ -32,7 +33,7 @@ export default function ArcTradeAgreementPage(){
       {!ready?<Skeleton/>:!authenticated?<><h1 className='mt-3 text-xl font-semibold'>Review your Trade agreement</h1><p className='mb-5 mt-2 text-sm text-gray-500'>Sign in to Hash PayLink to continue.</p><PocketEmailLogin context='agreement'/></>:<Connected key={`${user?.id}:${agreementId}`} agreementId={agreementId} returnTo={tradeReturnUrl(params.get('returnTo'))}/>}
     </div>
     <CheckoutTrustLine provider='hashpaylink'/>
-    {authenticated&&<button type='button' className='mx-auto mt-3 block min-h-11 text-xs text-gray-500 underline' onClick={()=>void logout()}>Switch account</button>}
+    {authenticated&&<button type='button' className='mx-auto mt-3 block min-h-11 text-xs text-gray-500 underline' onClick={()=>{if(user?.id&&user.email?.address)clearArcTradeSession({userId:user.id,email:user.email.address,walletAppId:PRIVY_APP_ID});void logout()}}>Switch account</button>}
   </section>
 }
 function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string}){
@@ -41,6 +42,7 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
   const [selected,setSelected]=useState<TradeXLayerAction>(),[note,setNote]=useState(''),[buyerAmount,setBuyerAmount]=useState('')
   const [reviewedSettlement,setReviewedSettlement]=useState<ArcTradeStatus['settlement']>()
   const [checking,setChecking]=useState(false),[walletOpen,setWalletOpen]=useState(false),[attention,setAttention]=useState<'resume'|'retry'>()
+  const [restoring,setRestoring]=useState(true),[restoreFailed,setRestoreFailed]=useState(false),[restoreAttempt,setRestoreAttempt]=useState(0)
   const snapshot=useRef({reply,session,selected});snapshot.current={reply,session,selected}
   const lifetime=useRef(new AbortController()),locked=useRef(false),retryAction=useRef<{requestId:string;operation:TradeXLayerAction}>()
   const post=useCallback(async(body:Record<string,unknown>,walletSession?:CircleEvmEmailSession):Promise<Reply>=>{
@@ -60,9 +62,22 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
   },[agreementId,getAccessToken])
   useEffect(()=>{
     lifetime.current=new AbortController()
-    void post({action:'read'}).catch(error=>{if(!lifetime.current.signal.aborted)setError(error.message)})
+    const parent=lifetime.current.signal
+    locked.current=true;setRestoring(true);setRestoreFailed(false);setError('')
+    void (async()=>{
+      const next=await post({action:'read'})
+      if(!user?.id||!user.email?.address)return
+      const restored=await boundedCheckoutRequest(parent,async signal=>{
+        const token=await getAccessToken()
+        if(!token)throw Error('Sign in again to restore your Arc wallet.')
+        return restoreArcTradeSession({userId:user.id,email:user.email!.address,walletAppId:PRIVY_APP_ID},token,()=>!parent.aborted&&!signal.aborted,next.agreement.accepted[next.role])
+      })
+      if(parent.aborted||!restored)return
+      setSession(restored)
+      if(next.agreement.binding)await post({action:'prepare'},restored)
+    })().catch(error=>{if(!parent.aborted){setError(error.message);setRestoreFailed(true)}}).finally(()=>{if(!parent.aborted){locked.current=false;setRestoring(false)}})
     return()=>{lifetime.current.abort()}
-  },[post])
+  },[post,getAccessToken,user?.id,user?.email?.address,restoreAttempt])
   async function run(task:()=>Promise<void>){if(locked.current)return;locked.current=true;setBusy(true);setAttention(undefined);setError('');try{await task()}catch(error){if(!lifetime.current.signal.aborted){setError((error as Error).message);setAttention('retry')}}finally{if(!lifetime.current.signal.aborted){locked.current=false;setBusy(false)}}}
   async function refresh(walletSession=session){const next=await post({action:'read'});if(walletSession&&next.agreement.binding)await post({action:'prepare'},walletSession)}
   async function connect(){
@@ -73,6 +88,7 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
     const token=await getAccessToken();if(!token||parent.aborted)throw Error('Sign in again to continue.')
     const resolved=await resolveArcTradeWalletSession(walletSession,token,()=>!parent.aborted)
     if(parent.aborted)return
+    if(user?.id)saveArcTradeSession({userId:user.id,email,walletAppId:PRIVY_APP_ID},resolved)
     setSession(resolved);await refresh(resolved)
   }
   async function execute(operation:TradeXLayerAction,resume?:Execution){
@@ -177,7 +193,7 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
       <p className='mt-5 text-sm font-semibold' role='status'>{status?.state!==undefined?states[status.state]:(agreement.binding?'Both participants accepted the terms':'Awaiting both participants’ acceptance')}</p>
       {!reply.fundingEnabled&&<p className='mt-3 text-sm text-gray-500'>New Arc Trade payments are unavailable. Existing actions can still be checked and recovered.</p>}
       {status?.fundingIssue&&<p className='mt-2 text-sm text-gray-500'>{status.fundingIssue}</p>}
-      {!session?<button className={button+' mt-5'} disabled={busy} onClick={()=>void run(connect)}>Connect Arc wallet</button>:<p className='mt-4 text-xs text-gray-500'>Arc wallet connected</p>}
+      {!session?<button className={button+' mt-5'} disabled={busy||restoring} aria-busy={restoring} onClick={()=>restoreFailed?setRestoreAttempt(value=>value+1):void run(connect)}>{restoring?'Restoring Arc wallet...':restoreFailed?'Retry wallet connection':'Connect Arc wallet'}</button>:<p className='mt-4 text-xs text-gray-500'>Arc wallet connected</p>}
       {session&&!agreement.accepted[reply.role]&&<button className={button+' mt-4'} disabled={busy||!reply.fundingEnabled} onClick={()=>void run(async()=>{await post({action:'accept_terms',consentHash:agreement.consentHash},session);await refresh()})}>Accept these Trade terms</button>}
       {pending&&<div className='mt-5 space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/15'>
         <p className='text-sm'>{TRADE_ACTION_LABELS[execution.operation]}</p>

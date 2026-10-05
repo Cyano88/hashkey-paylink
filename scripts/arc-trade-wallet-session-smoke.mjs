@@ -12,6 +12,7 @@ await assert.rejects(()=>resolveArcTradeWalletSession(session,'fixture',()=>true
 await assert.rejects(()=>resolveArcTradeWalletSession(session,'fixture',()=>true,{...deps,restore:async()=>{throw Error('ownership rejected')}}),/ownership rejected/)
 assert.equal(links,0)
 linked=null;await resolveArcTradeWalletSession(session,'fixture',()=>true,deps);assert.equal(links,1)
+linked=null;await assert.rejects(()=>resolveArcTradeWalletSession(session,'fixture',()=>true,deps,{allowLink:false}),/Reconnect/);assert.equal(links,1)
 await assert.rejects(()=>resolveArcTradeWalletSession(session,'fixture',()=>false,deps),/closed/)
 reads=0;await assert.rejects(()=>resolveArcTradeWalletSession(session,'fixture',()=>true,{...deps,read:async()=>++reads===1?{wallet:old}:{wallet}}),/changed/)
 assert.equal(links,1)

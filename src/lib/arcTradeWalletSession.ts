@@ -2,10 +2,11 @@ import type {CircleEvmEmailSession} from './circleEvmEmailWallet'
 import {readPocketWallet,linkPocketWallet} from '../pocket/api/pocketWalletLinkClient'
 
 const defaults={read:readPocketWallet,restore:async(session:CircleEvmEmailSession,token:string)=>(await import('./circleEvmEmailWallet')).restoreActivatedCircleEvmSession(session,token),link:linkPocketWallet}
-export async function resolveArcTradeWalletSession(session:CircleEvmEmailSession,accessToken:string,active:()=>boolean=()=>true,deps=defaults){
+export async function resolveArcTradeWalletSession(session:CircleEvmEmailSession,accessToken:string,active:()=>boolean=()=>true,deps=defaults,options:{allowLink?:boolean}={}){
  const check=()=>{if(!active())throw Error('Wallet connection was closed.')}
  check()
  const linked=await deps.read({accessToken,network:'arc'})
+ if(!linked&&options.allowLink===false)throw Error('Reconnect your Arc wallet to verify its account link.')
  const matches=(wallet:typeof session.wallet)=>wallet.blockchain==='ARC'&&(!linked||(wallet.id===linked.wallet.id&&wallet.address.toLowerCase()===linked.wallet.address.toLowerCase()))
  let resolved=session
  if(linked&&!matches(resolved.wallet))resolved=await deps.restore(session,accessToken)

@@ -234,6 +234,14 @@ function readCachedCircleDeviceId(appId: string) {
   }
 }
 
+// Restore against the currently configured Circle app and this browser's
+// registered device; reading this identity never opens OTP or creates a wallet.
+export async function circleEvmEmailSessionIdentity(chain: Exclude<ChainKey, 'solana'>) {
+  await runtimePublicConfig()
+  const appId = await appIdForChainAsync(chain)
+  return { appId, deviceId: appId ? readCachedCircleDeviceId(appId) : null }
+}
+
 function cacheCircleDeviceId(appId: string, deviceId: string) {
   try {
     window.localStorage.setItem(circleDeviceIdStorageKey(appId), deviceId)
