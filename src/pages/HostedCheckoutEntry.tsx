@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle, Loader2 } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import BrowserPaymentResult from '../components/BrowserPaymentResult'
 const StockCheckout = lazy(()=>import('../pocket/pages/PocketXPayCheckoutPage'))
@@ -14,6 +14,7 @@ type HostedCheckoutLookup = {
 }
 
 export default function HostedCheckoutEntry() {
+  const navigate = useNavigate()
   const { checkoutId = '' } = useParams()
   const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
   const [error, setError] = useState('')
@@ -32,17 +33,17 @@ export default function HostedCheckoutEntry() {
         if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This checkout could not be opened.')
         }
-        if (!cancelled) window.location.replace(body.paymentUrl)
+        if (!cancelled) navigate(body.paymentUrl, { replace: true })
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : 'This checkout could not be opened.')
       }
     }
     void openCheckout()
     return () => { cancelled = true }
-  }, [attemptId, checkoutId])
+  }, [attemptId, checkoutId, navigate])
 
   if(stock?.checkout)return stock.checkout.status==='paid'
-    ? <BrowserPaymentResult state="successful" amount={stock.checkout.amount+' '+stock.checkout.asset} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
+    ? <BrowserPaymentResult fullScreen state="successful" amount={stock.checkout.amount+' '+stock.checkout.asset} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
     : <Suspense fallback={<p role="status">Opening payment...</p>}><StockCheckout merchantOverride={checkoutId}/></Suspense>
   return (
     <div className="mx-auto w-full max-w-sm">

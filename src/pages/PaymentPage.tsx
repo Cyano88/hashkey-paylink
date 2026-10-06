@@ -3359,6 +3359,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const browserPaymentFlow = !pocketScan && !isBankSendPayment
+  const fullScreenHumanCheckout = browserPaymentFlow && !isPolymarketFunding && !isAgentOrWalletFunding
   const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled')
   const checkoutSlideStatus: SlideActionStatus = (pocketScan || browserPaymentFlow ? pocketScanDelivered : isConfirmed)
     ? 'successful'
@@ -3902,7 +3903,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   if (!isValidParams) {
     return (
       <>
-      {!pocketScan && <HashPayLinkCheckoutBrand />}
+      {!pocketScan && (fullScreenHumanCheckout ? <p className="mb-8 text-center text-sm font-bold">Pay with Pocket</p> : <HashPayLinkCheckoutBrand />)}
       <div className="mx-auto max-w-md animate-fade-in">
         <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-card">
           <div className="bg-red-50 p-8 text-center">
@@ -3975,7 +3976,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const failed = isEvmReverted || isBasePaymasterFailed
     const state = checkoutCompletion({transferConfirmed:isConfirmed,checkoutVerified:!isHostedCheckout||hostedConfirmationStatus==='verified',payoutSettled:!isNgPosPaycrestOfframp||paycrestOrder?.status==='settled',fundingComplete:!isPolymarketBridge||polymarketBridgeComplete,reverted:failed})
     const receipt = paymentReceipt ? { ...paymentReceipt, status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
-    return <><HashPayLinkCheckoutBrand/><BrowserPaymentResult
+    return <><HashPayLinkCheckoutBrand/><BrowserPaymentResult fullScreen={fullScreenHumanCheckout}
       state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={String(payableAmt)+' '+meta.asset} receipt={receipt}
       statusLabel={state==='successful' && (isPolymarketFunding||isAgentOrWalletFunding) ? 'Funded' : undefined}
       detail={failed ? 'The transaction failed. Check its status before starting another payment.' : isPolymarketBridge ? 'Waiting for funds to reach your Polymarket account. Do not pay again.' : isHostedNairaSettlement && hostedConfirmationStatus === 'processing' || isNgPosPaycrestOfframp && isConfirmed ? 'USDC confirmed. Bank delivery is processing.' : 'Waiting for payment verification. Do not pay again.'}
@@ -4039,7 +4040,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
 
     return (
       <>
-      {!pocketScan && <HashPayLinkCheckoutBrand />}
+      {!pocketScan && (fullScreenHumanCheckout ? <p className="mb-8 text-center text-sm font-bold">Pay with Pocket</p> : <HashPayLinkCheckoutBrand />)}
       <div className="mx-auto max-w-md animate-scale-in">
         {!pocketScan && showNativePocketBack && (
           <a
@@ -4378,12 +4379,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   //  MAIN PAYMENT UI
   // ────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-md animate-slide-up">
+    <div className={fullScreenHumanCheckout ? "fixed inset-0 z-[60] overflow-y-auto bg-white px-5 py-8 text-gray-950 dark:bg-black dark:text-white [&>div]:mx-auto [&>div]:max-w-md" : "mx-auto max-w-md animate-slide-up"}>
       <PocketKycPrompt />
       {collectionError && <p role="alert" className="mb-4 rounded-2xl bg-gray-100 p-4 text-sm dark:bg-black">{collectionError}</p>}
-      {!pocketScan && <HashPayLinkCheckoutBrand />}
+      {!pocketScan && (fullScreenHumanCheckout ? <p className="mb-8 text-center text-sm font-bold">Pay with Pocket</p> : <HashPayLinkCheckoutBrand />)}
       <div
-        className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
+        className={fullScreenHumanCheckout ? "overflow-visible bg-white dark:bg-black" : "overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"}
         style={browserPaymentFlow ? { boxShadow: 'none' } : { boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
       >
         {pocketScan ? null : isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isHostedService ? (
@@ -4420,7 +4421,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
-        <div className={cn('border-b border-gray-100 bg-gradient-to-br text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2 p-3' : 'mt-3 p-4', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
+        <div className={cn('border-b border-gray-100 bg-gradient-to-br text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2 p-3' : 'mt-3 p-4', !fullScreenHumanCheckout && meta.headerBg, !fullScreenHumanCheckout && 'dark:from-gray-800 dark:to-gray-900')}>
           {isWalletManagerFunding && isConfirmed ? (
             <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
               <div className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
@@ -4475,7 +4476,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   )}
                 </div>
               ) : (
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isNgPosPaycrestOfframp ? 'POS payment' : 'Enter Amount'}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isNgPosPaycrestOfframp ? 'POS payment' : fullScreenHumanCheckout ? 'Amount' : 'Enter Amount'}</p>
               )}
 
               {/* Input centered exactly under label; asset label floats right via absolute */}
@@ -5326,7 +5327,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                 </div>
               )}
               {pocketScan&&pocketFunding.asset&&!pocketFunding.locked?<PocketFundingAction {...pocketFunding}>{null}</PocketFundingAction>:circleSmartAccount && circleEvmWalletUnlocked && (!circleWalletNeedsFunds || pocketMovePayExpected) && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
-                <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+                <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                   status={checkoutSlideStatus}
                   disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                   onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCirclePasskeyPay}
@@ -5436,7 +5437,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                       </div>
                     )}
                     {pocketScan&&pocketFunding.asset&&!pocketFunding.locked?<PocketFundingAction {...pocketFunding}>{null}</PocketFundingAction>:circleSolanaSession && (!circleSolanaNeedsFunds || pocketMovePayExpected) ? (
-                      <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+                      <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                         status={checkoutSlideStatus}
                         disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                         onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCircleSolanaEmailPay}
@@ -5547,7 +5548,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   </div>
                 ) : !smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
               <div className="space-y-2">
-              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
@@ -5597,7 +5598,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             </div>
           ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
-              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
@@ -5661,7 +5662,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         </div>
       )}
 
-      <CheckoutSteps steps={compactCheckoutSteps} className={cn(isNgPosPaycrestOfframp ? 'mt-4' : 'mt-10', 'animate-fade-in')} />
+      {!fullScreenHumanCheckout && <CheckoutSteps steps={compactCheckoutSteps} className={cn(isNgPosPaycrestOfframp ? 'mt-4' : 'mt-10', 'animate-fade-in')} />}
       <CheckoutPoweredByLine />
     </div>
   )

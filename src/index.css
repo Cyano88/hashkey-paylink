@@ -1182,3 +1182,8 @@ html.dark body [data-pocket-sheet].pocket-sheet-surface :is(
 html.dark body [data-pocket-receipt] { background-color: #000; }
 html.dark body [data-pocket-receipt] [data-receipt-paper],
 html.dark body [data-pocket-receipt] [data-receipt-paper] article { background-color: #0d0d0d; }
+
+/* Full-page human checkout keeps Pocket controls without a partial-height sheet. */
+.pocket-fullscreen-checkout { padding: 0 !important; background: white !important; align-items: stretch !important; }
+.pocket-fullscreen-checkout > [data-pocket-sheet] { min-height: 100dvh; max-height: 100dvh; max-width: none; border: 0; border-radius: 0; padding: max(2rem, var(--pocket-safe-top)) max(1.25rem, calc((100vw - 440px) / 2)) max(2rem, var(--pocket-safe-bottom)); }
+.dark .pocket-fullscreen-checkout { background: #000 !important; }

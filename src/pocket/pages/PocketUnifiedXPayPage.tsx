@@ -1,5 +1,5 @@
+import PocketPaymentChoices from '../components/PocketPaymentChoices'
 import type {PocketNetwork} from '../lib/pocketSchemas'
-import PocketSelect from '../components/PocketSelect'
 import PocketXPayUsdcSetup from '../components/PocketXPayUsdcSetup'
 import PocketKycPrompt from '../components/PocketKycPrompt'
 import PocketActivityPanel from '../features/activity/PocketActivityPanel'
@@ -28,7 +28,7 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import {isPocketNativeRuntime,pocketApiUrl,POCKET_BASE_PATH,POCKET_ROUTES} from '../lib/pocketRoutes'
 import {requestPocketPaymentApproval,takePocketPaymentApproval} from '../lib/pocketPaymentApproval'
 import {downloadPocketQr} from '../lib/pocketQrDownload'
-import {validateXPayDestinations,xpayDestinationDetail,type XPayCheckout,type XPayDestination} from '../lib/pocketUnifiedXPay'
+import {validateXPayDestinations,type XPayCheckout,type XPayDestination} from '../lib/pocketUnifiedXPay'
 const NativeStockPayment=lazy(()=>import('../components/PocketXPayNativeStockPayment'))
 const NativePayment=lazy(()=>import('../components/PocketXPayNativePayment'))
 const BankCheckout=lazy(()=>import('../components/PocketXPayBankCheckout'))
@@ -109,8 +109,7 @@ export default function PocketUnifiedXPayPage({publicCheckout=false}:{publicChec
   </>:setup?<Suspense fallback={<PocketRecentActivitySkeleton/>}>{setup==='stablecoins'?<PocketXPayUsdcSetup key={setupKey} initialNetworks={selected?.destinations.find(d=>d.id===setupReplace)?.networks} onSave={async networks=>{const result=await request({action:'setup-usdc',key:setupKey,networks});await setupDone(result.merchant.merchant_id)}}/>:setup==='bank'?<BankSetup key={setupKey} setupKey={setupKey} name={selected?.name||name} onCreated={setupDone}/>:<WalletSetup stocksOnly={stockManagement} key={setupKey} setupKey={setupKey} initialAssets={selected?.destinations.find(d=>d.id===setupReplace)?.assets||[]} name={selected?.name||name} reservedAssets={(selected?.destinations||[]).filter(d=>d.kind!=='xstocks').flatMap(d=>d.assets)} onCreated={setupDone}/>}</Suspense>:loading?<PocketRecentActivitySkeleton/>:checkoutId&&selected?<>
    <h2 className="text-center text-lg font-semibold">{selected.name}</h2>
    <p className="text-center text-xs text-gray-500">Choose how to pay</p>
-   {selected.destinations.map(d=><label key={d.id} className="flex min-h-20 items-center gap-3 py-3"><input className="shrink-0 accent-black dark:accent-white" type="radio" name="destination" checked={payDestination===d.id} onChange={()=>setPayDestination(d.id)}/><span><span className="block text-sm font-semibold">{d.kind==='bank'?'Bank or mobile money':d.kind==='xstocks'?'XStocks & USDC on X Layer':'USDC on Stablecoins'}</span><span className="mt-1 block text-xs text-gray-500">{xpayDestinationDetail(d)}</span><span className="mt-2 flex gap-2">{d.assets.map(symbol=>{const asset=[stockUsdc,...stockAssets].find(a=>a.symbol===symbol);return asset?<img key={symbol} src={asset.icon||(symbol==='USDC'?'/brand/usdc-circle-logo.png':undefined)} alt={symbol} className="h-6 w-6 rounded-full"/>:null})}</span></span></label>)}
-   {selected.destinations.find(d=>d.id===payDestination)?.kind==='stablecoins'&&<PocketSelect ariaLabel="Receiving network" value={selected.destinations.find(d=>d.id===payDestination)?.networks?.includes(payNetwork)?payNetwork:selected.destinations.find(d=>d.id===payDestination)?.networks?.[0]||'base'} options={(selected.destinations.find(d=>d.id===payDestination)?.networks||['base']).map(value=>({value,label:value==='arbitrum'?'Arbitrum':value==='arc'?'Arc':value==='ethereum'?'Ethereum':value==='polygon'?'Polygon':value==='solana'?'Solana':'Base'}))} onChange={setPayNetwork}/>}
+   <PocketPaymentChoices destinations={selected.destinations} value={payDestination} onChange={setPayDestination} network={payNetwork} onNetworkChange={setPayNetwork}/>
    <button className={cta} onClick={()=>pay()} disabled={!payDestination}>Continue</button><PocketGetApp/>
   </>:creating?<>
    <div className="min-h-0 flex-1"><label className="block text-xs font-semibold">Business name<input aria-label="Business name" className="mt-2 min-h-12 w-full rounded-xl bg-gray-100 px-3 text-sm dark:bg-[#121212]" maxLength={60} value={name} onChange={e=>{setName(e.target.value);createKey.current=crypto.randomUUID()}}/></label></div>

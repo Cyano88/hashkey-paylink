@@ -3,7 +3,8 @@ import PocketTransactionSheet, { type PocketTransactionState } from '../pocket/c
 import type { PaylinkReceipt } from '../lib/paymentReceiptPdf'
 
 /** Browser shell around Pocket's result. Return URLs must already be server-verified. */
-export default function BrowserPaymentResult({ state, amount, merchant, receipt, detail, returnUrl, returnLabel = 'Return to merchant', statusLabel, onCheckStatus }: {
+export default function BrowserPaymentResult({ fullScreen = false, state, amount, merchant, receipt, detail, returnUrl, returnLabel = 'Return to merchant', statusLabel, onCheckStatus }: {
+  fullScreen?: boolean
   returnLabel?: string
   statusLabel?: string
   state: PocketTransactionState
@@ -14,7 +15,7 @@ export default function BrowserPaymentResult({ state, amount, merchant, receipt,
   returnUrl?: string
   onCheckStatus?: () => void
 }) {
-  return <PocketBottomSheet desktopCentered title="Payment status" dismissible={false} showCloseButton={false} onClose={() => {}}>
+  return <PocketBottomSheet fullScreen={fullScreen} desktopCentered title="Payment status" dismissible={false} showCloseButton={false} onClose={() => {}}>
     <p className="mb-5 text-center text-sm font-semibold">{merchant}</p>
     <PocketTransactionSheet inline embedded title="Payment" state={state} statusLabel={statusLabel} amount={amount} receipt={receipt} detail={detail} onDone={() => {}} />
     {state === 'pending' && onCheckStatus && <button type="button" className="pocket-cta-secondary mt-4 w-full" onClick={onCheckStatus}>Check payment status</button>}

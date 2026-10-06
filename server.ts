@@ -1,3 +1,4 @@
+import foodDemoHandler from './api/food-demo.js'
 import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
 import {drainPocketGifts} from './api/pocket/gifts/worker.js'
 import { createStockWalletSessionHandlers } from './api/stock-wallet-account.js'
@@ -509,6 +510,7 @@ app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayH
 app.all('/api/v2/cli/keys', strictLimiter, developerCliKeysHandler)
 app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
 app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
+app.all('/api/demo/food/orders', strictLimiter, foodDemoHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts/stock-swap', strictLimiter, hostedStockCheckoutSwapHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)

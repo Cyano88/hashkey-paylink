@@ -6,6 +6,8 @@ import ExternalRedirect from './ExternalRedirect'
 const PublicPosCheckoutPage = lazy(() => import('../pages/PublicPosCheckoutPage'))
 const UnifiedXPayCheckout = lazy(() => import('../pocket/pages/PocketUnifiedXPayPage'))
 const XPayCheckout = lazy(() => import('../pocket/pages/PocketXPayCheckoutPage'))
+const PocketOrderCheckoutPage = lazy(() => import('../pages/PocketOrderCheckoutPage'))
+const FoodDemoPage = lazy(() => import('../pages/FoodDemoPage'))
 const PaymentPage = lazy(() => import('../pages/PaymentPage'))
 const HostedCheckoutEntry = lazy(() => import('../pages/HostedCheckoutEntry'))
 const AgentCheckoutPage = lazy(() => import('../pages/AgentCheckoutPage'))
@@ -35,6 +37,8 @@ export default function CheckoutApp() {
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
     <Route path="developers" element={<ExternalRedirect origin="https://developer.hashpaylink.com" pathname="/" />} />
     <Route path="admin/*" element={<ExternalRedirect origin="https://developer.hashpaylink.com" />} />
+    <Route path="demo/food" element={<FoodDemoPage />} />
+    <Route path="pay/order/:orderId" element={<PocketOrderCheckoutPage />} />
     <Route element={<SurfaceLayout />}>
       <Route index element={<CheckoutHome />} />
       <Route path="pos/ng" element={<PublicPosCheckoutPage />} />

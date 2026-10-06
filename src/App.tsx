@@ -52,6 +52,7 @@ export default function App() {
     <Route element={<SurfaceLayout />}>
 
       <Route path="pocket/*" element={<PocketLegacyEntry />} />
+      <Route path="demo/food" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="pay" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="pay/c/:checkoutId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="pay/a/:checkoutId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />

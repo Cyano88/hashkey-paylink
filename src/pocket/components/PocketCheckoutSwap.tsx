@@ -16,7 +16,7 @@ export default function PocketCheckoutSwap({ checkoutId, asset, onClose }: { che
   }, [checkoutId])
   const wallet = usePocketStockWallet({ swapRequest: request })
   const locked = wallet.busy || wallet.uncertain || wallet.pending?.status === 'pending'
-  return <PocketBottomSheet title="Convert before payment" showCloseButton dismissible={!locked} dismissOnBackdrop={false} onClose={onClose}>
+  return <PocketBottomSheet fullScreen title="Convert before payment" showCloseButton dismissible={!locked} dismissOnBackdrop={false} onClose={onClose}>
     <p className="mb-4 text-sm text-gray-500">Approve the conversion first. Then return to review and approve your merchant payment.</p>
     <PocketStockTrade wallet={wallet} initialMode="swap" fixedOutputAsset={asset} swapRequest={request} />
     <button type="button" disabled={locked} className="pocket-cta-secondary mt-4 w-full" onClick={onClose}>Back to payment</button>

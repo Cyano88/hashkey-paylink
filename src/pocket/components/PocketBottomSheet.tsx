@@ -4,7 +4,7 @@ import { X } from './PocketIcons'
 import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 import { isPocketNativeRuntime } from '../lib/pocketRoutes'
 
-export default function PocketBottomSheet({ title, onClose, children, dismissible = true, showCloseButton = dismissible, dismissOnBackdrop = true, layer = 85, headerLabel, desktopCentered = !isPocketNativeRuntime() }: { desktopCentered?: boolean; headerLabel?: string; title: string; onClose: () => void; children: ReactNode; dismissible?: boolean; showCloseButton?: boolean; dismissOnBackdrop?: boolean; layer?:number }) {
+export default function PocketBottomSheet({ title, onClose, children, dismissible = true, showCloseButton = dismissible, dismissOnBackdrop = true, layer = 85, headerLabel, fullScreen = false, desktopCentered = !isPocketNativeRuntime() }: { fullScreen?: boolean; desktopCentered?: boolean; headerLabel?: string; title: string; onClose: () => void; children: ReactNode; dismissible?: boolean; showCloseButton?: boolean; dismissOnBackdrop?: boolean; layer?:number }) {
   const root = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
   const canDismiss = useRef(dismissible)
@@ -40,12 +40,12 @@ export default function PocketBottomSheet({ title, onClose, children, dismissibl
       if (previous?.isConnected) previous.focus()
     }
   }, [])
-  return createPortal(<div style={{zIndex:layer}} className={`fixed inset-0 z-[85] flex items-end justify-center bg-black/40 px-0 pt-[max(1rem,var(--pocket-safe-top))] ${desktopCentered ? 'sm:items-center sm:p-6' : ''}`} onClick={event => { if (event.target === event.currentTarget && dismissible && dismissOnBackdrop) onClose() }}>
+  return createPortal(<div style={{zIndex:layer}} className={`${fullScreen ? "pocket-fullscreen-checkout" : ""} fixed inset-0 z-[85] flex items-end justify-center bg-black/40 px-0 pt-[max(1rem,var(--pocket-safe-top))] ${desktopCentered ? 'sm:items-center sm:p-6' : ''}`} onClick={event => { if (event.target === event.currentTarget && dismissible && dismissOnBackdrop) onClose() }}>
     <div data-pocket-sheet ref={root} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className={`pocket-sheet-surface font-sans relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] border border-gray-100 bg-white px-5 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-4 text-gray-950 outline-none dark:border-[#262626] dark:bg-black dark:text-white ${desktopCentered ? 'sm:rounded-[28px] sm:p-6' : ''}`}>
-      {headerLabel ? <div data-pocket-sheet-header className="relative mb-4 flex h-5 items-center justify-center">
+      {!fullScreen && (headerLabel ? <div data-pocket-sheet-header className="relative mb-4 flex h-5 items-center justify-center">
         <div aria-hidden="true" className="h-1 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
         <p className="absolute right-0 max-w-[42%] truncate text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{headerLabel}</p>
-      </div> : <div aria-hidden="true" className="mx-auto mb-6 h-1 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />}
+      </div> : <div aria-hidden="true" className="mx-auto mb-6 h-1 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />)}
       {showCloseButton && <button type="button" aria-label="Close" disabled={!dismissible} onClick={onClose} className="absolute right-3 top-3 flex disabled:opacity-40 h-10 w-10 items-center justify-center rounded-full"><X className="h-5 w-5" /></button>}
       {children}
     </div>
