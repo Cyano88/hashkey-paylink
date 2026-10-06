@@ -1185,5 +1185,9 @@ html.dark body [data-pocket-receipt] [data-receipt-paper] article { background-c
 
 /* Full-page human checkout keeps Pocket controls without a partial-height sheet. */
 .pocket-fullscreen-checkout { padding: 0 !important; background: white !important; align-items: stretch !important; }
-.pocket-fullscreen-checkout > [data-pocket-sheet] { min-height: 100dvh; max-height: 100dvh; max-width: none; border: 0; border-radius: 0; padding: max(2rem, var(--pocket-safe-top)) max(1.25rem, calc((100vw - 440px) / 2)) max(2rem, var(--pocket-safe-bottom)); }
+.pocket-fullscreen-checkout > [data-pocket-sheet] { min-height: 100dvh; max-height: 100dvh; width: 100%; max-width: none; border: 0; border-radius: 0; padding: max(2rem, var(--pocket-safe-top)) 1.25rem max(2rem, var(--pocket-safe-bottom)); }
 .dark .pocket-fullscreen-checkout { background: #000 !important; }
+@media (min-width: 640px) {
+  .pocket-fullscreen-checkout { align-items: center !important; padding: 24px !important; }
+  .pocket-fullscreen-checkout > [data-pocket-sheet] { min-height: 0; max-height: calc(100dvh - 48px); max-width: 448px; padding: 32px 24px; border: 1px solid var(--pocket-sheet-border, #e5e7eb); border-radius: 24px; }
+}

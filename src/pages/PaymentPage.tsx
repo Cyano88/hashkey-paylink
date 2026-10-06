@@ -77,7 +77,8 @@ import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
 import { hostedCheckoutPresentation, resolveHostedCheckoutKind } from '../lib/hostedCheckout'
-import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
+import {saveCheckoutCircleSession,restoreCheckoutCircleSession,clearCheckoutCircleSession} from '../lib/checkoutCircleSession'
+import { PRIVY_AUTH_ENABLED, PRIVY_APP_ID } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import CheckoutSteps from '../components/CheckoutSteps'
@@ -821,6 +822,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const { wallets: privyWallets } = useWallets()
   const privyEmail = emailFromPrivyUser(privyUser).toLowerCase()
   const checkoutWalletController=usePocketWalletController({authenticated:privyAuthenticated,email:privyEmail,getAccessToken})
+  const checkoutIdentityRef=useRef(privyUser?.id);checkoutIdentityRef.current=privyAuthenticated?privyUser?.id:undefined
+  useEffect(()=>{checkoutIdentityRef.current=privyAuthenticated?privyUser?.id:undefined;return()=>{checkoutIdentityRef.current=undefined}},[privyAuthenticated,privyUser?.id])
+  const previousCheckoutOwnerRef=useRef<{userId:string;email:string;walletAppId:string}|null>(null)
+  useEffect(()=>{const previous=previousCheckoutOwnerRef.current;if(previous&&(!privyAuthenticated||previous.userId!==privyUser?.id)){clearCheckoutCircleSession(previous);setCircleEvmEmailSession(null)}previousCheckoutOwnerRef.current=privyAuthenticated&&privyUser?.id?{userId:privyUser.id,email:privyEmail,walletAppId:PRIVY_APP_ID||''}:null},[privyAuthenticated,privyUser?.id,privyEmail])
   const previousPrivySessionRef = useRef({ authenticated: privyAuthenticated, email: privyEmail })
   const connectedPrivyWallet = PRIVY_AUTH_ENABLED && address
     ? privyWallets.find(wallet => wallet.address?.toLowerCase() === address.toLowerCase())
@@ -2907,12 +2912,20 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (showCircleEvmEmailPay) {
         let session = circleEvmEmailSession
         if (!session || session.chain !== chain) {
+          session=null
           wasConnecting = true
           if(chain==='ethereum'||chain==='polygon'){
             const wallet=await checkoutWalletController.ensureWallet(chain)
             if(!wallet)throw Error('Open your '+CHAIN_META[chain].label+' wallet in Pocket first.')
             session=await checkoutWalletController.getEvmSession(chain,wallet.address)
-          }else session = await connectCircleEvmEmailWallet(email, chain)
+          }else {
+            const renewalChain=chain==='base'||chain==='arbitrum'||chain==='arc'?chain:null
+            const retain=isHostedCheckout&&!isPolymarketFunding&&!isAgentOrWalletFunding&&!pocketScan&&privyAuthenticated&&privyUser?.id&&(chain==='base'||chain==='arbitrum'||chain==='arc')
+            const owner=retain?{userId:privyUser!.id,email:privyEmail,walletAppId:PRIVY_APP_ID||''}:null
+            if(owner&&renewalChain){const token=await getAccessToken();if(!token)throw Error('Sign in to Pocket before continuing.');const linked=await readPocketWallet({accessToken:token,network:renewalChain});if(linked&&isAddress(linked.wallet.address))session=await restoreCheckoutCircleSession(owner,token,renewalChain,{...linked.wallet,address:linked.wallet.address},()=>checkoutIdentityRef.current===owner.userId)||null}
+            if(!session)session=await connectCircleEvmEmailWallet(email,chain)
+            if(owner){if(checkoutIdentityRef.current!==owner.userId)throw Error('Your signed-in account changed.');saveCheckoutCircleSession(owner,session)}
+          }
           if (isConnected) disconnectEvm()
           setCircleEvmEmailSession(session)
           setCircleSmartAccount(session.wallet.address)
