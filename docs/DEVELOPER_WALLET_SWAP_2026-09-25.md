@@ -1,5 +1,9 @@
 # Shared wallet Swap
 
+## Provider setup for custom integrations
+
+See [Wallet Setup](/docs/wallets#xlayer-provider-setup) for obtaining your own OKX Onchain OS API credentials and X Layer RPC when building a direct provider integration. Market data and read-only balances do not authorize swaps. Hosted Hash PayLink Swap sessions below use managed providers and a scoped Hash PayLink key, not developer-supplied OKX credentials. Checkout and Agreements do not enable Swap automatically. New project setup focuses on X Layer; existing Arc Swap configurations remain supported.
+
 Hash PayStream Home exposes Send, Receive, Swap, xStocks. Swap offers USDC on Arc and xStocks on X Layer. It opens a project-bound Hash PayLink wallet session; no signing is added to the Hash PayStream embedded Privy wallet. A connected Hash PayLink wallet is a separate wallet authority; connection does not move or merge balances.
 
 ## Builder API

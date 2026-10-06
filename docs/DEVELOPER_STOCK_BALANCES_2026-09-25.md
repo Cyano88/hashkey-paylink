@@ -1,5 +1,9 @@
 # Developer stock balances
 
+## Provider setup for your own interface
+
+See the developer-facing [Wallet Setup](/docs/wallets#xlayer-provider-setup) and [Environment Variables](/docs/environment) pages. Developers implementing their own balance cards and xStocks pricing should obtain their own OKX Onchain OS credentials and X Layer RPC. Balances are read-only, prices are indicative market data, and Swap requires separate permission and customer approval. This endpoint uses Hash PayLink-managed providers and does not require customers to submit OKX credentials or RPC settings.
+
 POST /api/v2/wallets/stocks/balances uses an active live developer key with wallet:stocks:read. Body: { wallet: EVM_ADDRESS }. This is a read-only query of public X Layer holdings. It does not establish wallet ownership or grant signing; builders authenticate their own users and select verified wallets before forwarding requests.
 
 Reuses Pocket readServerStockBalances and readStockMarketPrices, with project-qualified caching. Response includes chainId 196, wallet, holdings with exact units/balance, observedAt, complete, stale, pricingComplete and estimatedValueUsd. Cash and gas are excluded from stocks value. Incomplete or stale holdings or missing prices produce a null total, never a false zero. Values are market estimates, not guaranteed proceeds.

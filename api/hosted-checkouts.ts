@@ -1,3 +1,4 @@
+import hostedStockCheckoutsHandler, { isStockCheckoutId } from './hosted-stock-checkouts.js'
 import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
@@ -480,6 +481,9 @@ export async function markHostedCheckoutPaid(input: {
     if (!record || !integrityValid(record, secret)) {
       throw new Error('Hosted checkout is invalid.')
     }
+    if (!record.flexible && hostedCheckoutAmountUnits(amount) !== hostedCheckoutAmountUnits(record.amount)) {
+      throw new Error('Hosted checkout payment must match the exact requested amount.')
+    }
     const paymentOptions = hostedCheckoutPaymentOptions(record)
     const selectedNetwork = requestedNetwork || (paymentOptions.length === 1 ? paymentOptions[0].network : '')
     if (!hostedCheckoutPaymentOption(record, selectedNetwork)) throw new Error('Hosted checkout payment network is invalid.')
@@ -893,6 +897,8 @@ function hostedCheckoutUiUrl(record: CheckoutRecord) {
 
 export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
+    if (req.body?.rail === 'xlayer' && verifiedProviderRouting.has(req)) return res.status(400).json({ok:false,error:'Account funding does not support X Layer stock checkout.'})
+    if (isStockCheckoutId(req.query?.id) || req.body?.rail === 'xlayer') return hostedStockCheckoutsHandler(req, res)
     res.setHeader('Cache-Control', 'no-store')
     try {
       assertLiveDeveloperRequest(req)
@@ -989,6 +995,10 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     }
 
     const kind = clean(req.body?.kind, 40)
+    // Stock checkout must not silently fall through to the USDC execution path.
+    if (req.body?.asset !== undefined && (typeof req.body.asset !== 'string' || req.body.asset.trim().toUpperCase() !== 'USDC')) {
+      return res.status(400).json({ ok: false, error: 'This checkout route currently accepts USDC only. Stock checkout is not enabled.' })
+    }
     const checkoutMode = (clean(req.body?.checkoutMode, 20).toLowerCase() || 'human') as HostedCheckoutMode
     const requestedAgenticType = clean(req.body?.agenticType, 40).toLowerCase()
     const agenticType = requestedAgenticType as HostedCheckoutAgenticType

@@ -31,7 +31,7 @@ export function projectActivitySnapshots(source: JournalSource, store: unknown):
       result.push({projectId:r.partnerId,environment:'live',product,recordId,event,occurredAt:date.toISOString(),details})
     }
     if (source === 'checkout') {
-      const common = {...fields(r,['amount','network','expiresAt']), asset:'USDC', mode:r.checkoutMode === 'agentic' ? 'agentic' : 'human', ...fields(r.providerFunding??{},['requestId'])}
+      const common = {...fields(r,['amount','network','expiresAt']), asset:text(r.asset)||'USDC', ...fields(r.token??{},['address','decimals']), mode:r.checkoutMode === 'agentic' ? 'agentic' : 'human', ...fields(r.providerFunding??{},['requestId'])}
       add('checkout.created',r.createdAt,common)
       for (const a of r.paymentAttempts??[]) {
         add(a.status==='paid' && a.referenceType==='circle_gateway_transfer' ? 'checkout.payment_accepted' : `checkout.${text(a.status)}`,a.updatedAt??a.createdAt,{...common,...fields(a,['id','amount','network','referenceType','transaction','receiptId']),evidence:'payment_attempt'})

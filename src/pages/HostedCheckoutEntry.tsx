@@ -1,18 +1,23 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
+import BrowserPaymentResult from '../components/BrowserPaymentResult'
+const StockCheckout = lazy(()=>import('../pocket/pages/PocketXPayCheckoutPage'))
 
 type HostedCheckoutLookup = {
   ok?: boolean
   paymentUrl?: string
   error?: string
+  returnUrl?:string
+  checkout?:{id:string;stockCheckout?:boolean;status:string;amount:string;asset:string;merchantName:string}
 }
 
 export default function HostedCheckoutEntry() {
   const { checkoutId = '' } = useParams()
   const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
   const [error, setError] = useState('')
+  const [stock, setStock] = useState<HostedCheckoutLookup|null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -20,6 +25,10 @@ export default function HostedCheckoutEntry() {
       try {
         const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}`, { cache: 'no-store' })
         const body = await response.json().catch(() => undefined) as HostedCheckoutLookup | undefined
+        if(response.ok&&body?.ok&&body.checkout?.stockCheckout&&body.checkout.id===checkoutId&&/^chkx_[a-f0-9]{24}$/.test(checkoutId)){
+          if(!cancelled)setStock(body)
+          return
+        }
         if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This checkout could not be opened.')
         }
@@ -32,6 +41,9 @@ export default function HostedCheckoutEntry() {
     return () => { cancelled = true }
   }, [attemptId, checkoutId])
 
+  if(stock?.checkout)return stock.checkout.status==='paid'
+    ? <BrowserPaymentResult state="successful" amount={stock.checkout.amount+' '+stock.checkout.asset} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
+    : <Suspense fallback={<p role="status">Opening payment...</p>}><StockCheckout merchantOverride={checkoutId}/></Suspense>
   return (
     <div className="mx-auto w-full max-w-sm">
       <HashPayLinkCheckoutBrand />

@@ -77,6 +77,10 @@ if (previousSingleKey === undefined) delete process.env.HASH_PAYLINK_PARTNER_API
 else process.env.HASH_PAYLINK_PARTNER_API_KEY = previousSingleKey
 
 assert.equal((await request(handler, 'POST', { body: valid, headers: {} })).statusCode, 401)
+const stockRejected = await request(handler, 'POST', { body: { ...valid, asset: 'NVDAx' }, headers })
+assert.equal(stockRejected.statusCode, 400)
+assert.match(stockRejected.body.error, /USDC only/)
+assert.equal(createdCount, 0, 'unsupported stock requests must not create USDC checkouts')
 assert.equal((await request(handler, 'POST', { body: { ...valid, returnUrl: 'https://evil.example' }, headers })).statusCode, 400)
 assert.equal((await request(handler, 'POST', { body: { ...valid, kind: 'pos' }, headers })).statusCode, 400)
 assert.equal((await request(handler, 'POST', { body: { ...valid, returnUrl: '' }, headers: { ...headers, 'idempotency-key': 'partner:order:no-return' } })).statusCode, 400)
@@ -219,6 +223,16 @@ assert.equal((await request(handler, 'POST', {
   query: { id: multiCreated.body.checkoutId, attempt: multiCreated.body.paymentAttemptId, action: 'select-network' },
   body: { network: 'base' },
 })).statusCode, 409)
+for (const amount of ['0.023999', '0.024001']) {
+  await assert.rejects(markHostedCheckoutPaid({
+    id: multiCreated.body.checkoutId,
+    txHash: `0x${'d'.repeat(64)}`,
+    payer: '0x2222222222222222222222222222222222222222',
+    amount,
+    confirmedAt: '2026-07-19T12:30:00.000Z',
+    network: 'arbitrum',
+  }, dependencies), /exact requested amount/)
+}
 await markHostedCheckoutPaid({
   id: multiCreated.body.checkoutId,
   txHash: `0x${'d'.repeat(64)}`,

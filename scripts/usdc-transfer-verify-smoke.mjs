@@ -53,6 +53,20 @@ assert.equal(verified.amountUnits, amountUnits.toString())
 assert.equal(verified.amount, formatUnits(amountUnits, 6))
 assert.equal(verified.confirmedAt, new Date(Number(BigInt(blockTimestamp) * 1_000n)).toISOString())
 
+const exactInput = { chain: 'base', txHash, payer, recipient, minAmount: amount, exactAmount: true }
+assert.equal((await verifyEvmUsdcTransfer(exactInput)).amountUnits, amountUnits.toString())
+nextReceipt.logs[0].data = `0x${(amountUnits + 1n).toString(16)}`
+await assert.rejects(verifyEvmUsdcTransfer(exactInput), /exactly/)
+nextReceipt.logs[0].data = `0x${(amountUnits - 1n).toString(16)}`
+await assert.rejects(verifyEvmUsdcTransfer(exactInput), /exactly/)
+nextReceipt = receipt('0x1')
+nextReceipt.logs.push({ ...nextReceipt.logs[0], data: '0x1' })
+await assert.rejects(verifyEvmUsdcTransfer(exactInput), /exactly/)
+nextReceipt = receipt('0x1')
+nextReceipt.logs[0].removed = true
+await assert.rejects(verifyEvmUsdcTransfer(exactInput), /removed/)
+nextReceipt = receipt('0x1')
+
 blockTimestamp = `0x${(BigInt(Math.floor(Date.parse(createdAt) / 1_000)) - 1n).toString(16)}`
 await assert.rejects(
   verifyEvmUsdcTransfer({ chain: 'base', txHash, payer, recipient, minAmount: amount, notBefore: createdAt, notAfter: expiry }),

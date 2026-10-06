@@ -4,6 +4,9 @@ import {resolvePocketPosCheckout} from '../api/pocket/scan-checkout.ts'
 const url='https://app.hashpaylink.com/pay?src=ngpos&merchant=pos_example&f=1'
 assert.equal(parsePocketScanCode(url).kind,'pos')
 assert.equal(parsePocketScanCode('https://app.hashpaylink.com/pay/c/chk_abcdefgh').kind,'checkout')
+assert.equal(parsePocketScanCode('https://app.hashpaylink.com/pay/c/chkx_'+'a'.repeat(24)).kind,'checkout')
+assert.equal(parsePocketScanCode('https://pocket.hashpaylink.com/xpay/chkx_'+'a'.repeat(24)).kind,'xpay')
+assert.throws(()=>parsePocketScanCode('https://app.hashpaylink.com/pay/c/chkx_short'))
 assert.ok(pocketScanDestination(url).startsWith('/home/scan?code='))
 for(const raw of ['javascript:alert(1)','https://evil.invalid/pay?src=ngpos&merchant=x','https://app.hashpaylink.com.evil.invalid/pay?src=ngpos&merchant=x','https://evil@app.hashpaylink.com/pay?src=ngpos&merchant=x','http://app.hashpaylink.com/pay?src=ngpos&merchant=x',url+'&merchant=other','https://app.hashpaylink.com/pay?e=0x123',url+'#redirect','https://app.hashpaylink.com:444/pay?src=ngpos&merchant=x'])assert.throws(()=>parsePocketScanCode(raw))
 const merchant={merchant_id:'pos_example',display_name:'Verified shop',source:'pos',payout_preference:'KEEP_CRYPTO',settlement_enabled:true,circle_smart_wallet_address:'0x'+'1'.repeat(40),supported_networks:['base','arbitrum','arc']}

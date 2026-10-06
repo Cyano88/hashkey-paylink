@@ -3,7 +3,7 @@ import { hasRenderDurableStore, queryDurablePostgres } from '../render-durable-s
 
 export type PocketMoneyRail = 'bank_payout' | 'bill_payment' | 'pos_settlement' | 'wallet_bridge' | 'wallet_transfer' | 'hosted_checkout' | 'service_funding'
 export type PocketMoneyLedgerInput = {
-  eventKey?: string; ownerId: string; executionId: string; rail: PocketMoneyRail; state: string; asset: 'USDC'; amount: string
+  eventKey?: string; ownerId: string; executionId: string; rail: PocketMoneyRail; state: string; asset: string; amount: string
   sourceNetwork: string; settlementNetwork: string; resourceId?: string; providerReference?: string; transactionHash?: string
   failureCode?: string; metadata: Record<string, string>; recordedAt?: number
 }

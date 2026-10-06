@@ -180,6 +180,8 @@ import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-
 import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
 import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
+import {drainStockCheckoutWebhooks} from './api/hosted-stock-checkouts.js'
+import hostedStockCheckoutSwapHandler from './api/hosted-stock-checkout-swap.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
 import developerCliProjectHandler from './api/developer-cli-project.js'
 import developerCliAuthHandler from './api/developer-cli-auth.js'
@@ -508,6 +510,7 @@ app.all('/api/v2/cli/keys', strictLimiter, developerCliKeysHandler)
 app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
 app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
+app.post('/api/v2/checkouts/stock-swap', strictLimiter, hostedStockCheckoutSwapHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/funding/polymarket/checkouts', strictLimiter, polymarketFundingCheckoutsHandler)
@@ -606,6 +609,7 @@ app.listen(PORT, () => {
 })
 
 const hostedCheckoutOutboxTimer = setInterval(() => {
+  void drainStockCheckoutWebhooks().catch(()=>console.warn('[stock-checkout] webhook delivery deferred'))
   void drainHostedCheckoutWebhookOutbox().catch(error => {
     console.error('[developer-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))
   })

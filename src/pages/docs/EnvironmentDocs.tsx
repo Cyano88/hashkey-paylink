@@ -10,6 +10,17 @@ export default function EnvironmentDocs() {
 
       <InfoBox type="warning">Never commit private keys, API keys, handoff files, or local environment files. Use Render environment variables for production secrets.</InfoBox>
 
+      <Section title="Developer-owned OKX and X Layer integration">
+        <p>If you build your own balances, prices or swaps, obtain your own OKX Onchain OS credentials and X Layer RPC. Follow <a className="underline" href="/docs/wallets#xlayer-provider-setup">Wallet Setup</a> for provider links, access boundaries and customer approval.</p>
+        <p>These names are an example for your backend (and match Pocket’s provider adapter). Hash PayLink’s hosted endpoints manage their own providers; these are not required project settings for hosted API customers.</p>
+        <Table headers={['Variable', 'Required', 'Description']} rows={[
+          ['OKX_DEX_API_KEY', 'Direct OKX integration', 'Your OKX Onchain OS API key; confirm access to the APIs you use.'],
+          ['OKX_DEX_SECRET_KEY', 'Direct OKX integration', 'Server-only secret for request signing.'],
+          ['OKX_DEX_PASSPHRASE', 'Direct OKX integration', 'Server-only passphrase created with the API key.'],
+          ['XLAYER_RPC_URL', 'Your own X Layer chain reads', 'Your production RPC endpoint for chain 196; keep provider credentials server-side.'],
+        ]} />
+      </Section>
+
       <Section title="Core app">
         <Table
           headers={['Variable', 'Required', 'Description']}
@@ -42,6 +53,8 @@ export default function EnvironmentDocs() {
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
+            ['HASHPAYLINK_XSTOCKS_CHECKOUT_ENABLED', 'Operator: gated X Layer checkout', 'Set to true only after release validation; disabled by default.'],
+            ['HASHPAYLINK_XSTOCKS_CHECKOUT_PROJECTS', 'Operator: gated X Layer checkout', 'Comma-separated project ids approved for activation. Both this list and the enable flag are required.'],
             ['HOSTED_CHECKOUT_SIGNING_SECRET', 'Partner checkout API', 'Server-only random secret of at least 32 characters used to protect immutable checkout intents.'],
             ['HASH_PAYLINK_PARTNER_API_KEYS', 'Partner checkout API', 'Server-only JSON map of API keys to partner ids and exact allowlisted return origins.'],
             ['DEVELOPER_PORTAL_SECRET', 'Self-serve developer API', 'Random server-only secret of at least 32 characters used to hash generated API keys and encrypt sensitive project configuration.'],

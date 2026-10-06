@@ -17,6 +17,7 @@ const USDC_TOKENS = {
 export type EvmUsdcChain = keyof typeof USDC_TOKENS
 
 type TxReceiptLog = {
+  removed?: boolean
   address?: string
   topics?: string[]
   data?: `0x${string}`
@@ -153,11 +154,11 @@ async function findBaseBlockscoutUsdcTransfer(input: {
       if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) continue
       const verified = await verifyEvmUsdcTransfer({
         chain: 'base', txHash, payer: input.payer, recipient: input.recipient,
-        minAmount: input.minAmount, notBefore: input.notBefore, notAfter: input.notAfter,
+        minAmount: input.minAmount, exactAmount: input.exactAmount, notBefore: input.notBefore, notAfter: input.notAfter,
       })
       return {
         txHash: txHash as `0x${string}`,
-        amountUnits: amountUnits.toString(),
+        amountUnits: verified.amountUnits,
         amount: verified.amount,
         blockNumber: item.block_number == null ? null : String(item.block_number),
         logIndex: item.log_index ?? null,
@@ -278,6 +279,7 @@ export async function verifyEvmUsdcTransfer(input: {
   payer?: string
   recipient: string
   minAmount: string
+  exactAmount?: boolean
   notBefore?: string
   notAfter?: string
   confirmation?: 'finalized' | 'base-included'
@@ -354,8 +356,9 @@ export async function verifyEvmUsdcTransfer(input: {
     if (payerTopic && topics[1] !== payerTopic) continue
     if (topics[2] !== recipientTopic) continue
     const value = usdcEventUnits(input.chain, log.data)
-    if (value > matchedUnits) matchedUnits = value
-    if (value >= minUnits) {
+    if (log.removed) throw new Error('Payment transfer log was removed.')
+    matchedUnits += value
+    if (!input.exactAmount && value >= minUnits) {
       return {
         ok: true,
         amountUnits: value.toString(),
@@ -365,5 +368,9 @@ export async function verifyEvmUsdcTransfer(input: {
     }
   }
 
-  throw new Error(`No matching USDC transfer to recipient for at least ${input.minAmount} USDC.`)
+  if (input.exactAmount && matchedUnits === minUnits) {
+    return { ok: true, amountUnits: matchedUnits.toString(), amount: formatUnits(matchedUnits, 6), confirmedAt }
+  }
+
+  throw new Error(`No matching USDC transfer to recipient for ${input.exactAmount ? 'exactly' : 'at least'} ${input.minAmount} USDC.`)
 }

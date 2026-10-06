@@ -6,18 +6,16 @@ import {
   ChevronDown,
   Copy,
   Loader2,
-  Lock,
   RefreshCw,
 } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
-import CheckoutSteps from '../components/CheckoutSteps'
+import { useParams } from 'react-router-dom'
 import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
-import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
-import UnifiedReceipt from '../components/UnifiedReceipt'
+import { type SlideActionStatus } from '../components/SlideAction'
+import PocketPosPaymentAction from '../pocket/components/PocketPosPaymentAction'
+import BrowserPaymentResult from '../components/BrowserPaymentResult'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { copyToClipboard } from '../lib/utils'
 import { PocketPillMark } from '../pocket/components/CPurseIcon'
-import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import usePocketX402Controller from '../pocket/controllers/usePocketX402Controller'
 import usePocketIdentity from '../pocket/hooks/usePocketIdentity'
 import { createPocketIdempotencyKey } from '../pocket/lib/pocketSchemas'
@@ -299,35 +297,15 @@ export default function AgentCheckoutPage() {
     proof: { receiptHash: receiptReference },
   }
 
-  if (checkout.status === 'paid') {
-    return (
-      <CheckoutShell>
-        <div className="px-6 pb-6 pt-5">
-          <div className="py-8 text-center">
-            <PocketStatusCheck className="mx-auto h-12 w-12" />
-            <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Payment confirmed</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-gray-950 dark:text-white">{checkout.amount} USDC sent</h1>
-            <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{checkout.merchantName} can now deliver {checkout.title.toLowerCase()}.</p>
-          </div>
-          <UnifiedReceipt receipt={canonicalReceipt || agentReceipt} compact />
-          {lookup?.returnUrl ? (
-            <a href={lookup.returnUrl} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-black dark:bg-white dark:text-gray-950">
-              Continue to {checkout.merchantName} <ArrowRight className="h-4 w-4" />
-            </a>
-          ) : (
-            <Link to="/" className="mt-3 flex h-11 w-full items-center justify-center rounded-full bg-gray-950 px-5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Done</Link>
-          )}
-          <p className="mt-4 inline-flex w-full items-center justify-center gap-1 text-[10px] font-medium text-gray-400">
-            <span>Secure</span>
-            <Lock className="h-2.5 w-2.5" strokeWidth={1.8} />
-          </p>
-        </div>
-      </CheckoutShell>
-    )
+  if (checkout.status === 'paid' || checkout.status === 'processing' || payStatus === 'submitted') {
+    const paid = checkout.status === 'paid'
+    return <BrowserPaymentResult state={paid ? 'successful' : 'pending'} merchant={checkout.merchantName} amount={checkout.amount+' USDC'}
+      receipt={paid ? canonicalReceipt || agentReceipt : null} returnUrl={lookup?.returnUrl}
+      detail="Waiting for verified payment status. Do not pay again."
+      onCheckStatus={() => setRefreshKey(value => value + 1)} />
   }
-
   return (
-    <CheckoutShell footer={<CheckoutSteps steps={['Sign in', 'Review payment', 'Slide to pay']} />}>
+    <CheckoutShell>
       <div className="px-5 pb-5 pt-4">
         <div className="pb-5 pt-5 text-center">
           <div className="flex items-center justify-center gap-2">
@@ -458,12 +436,12 @@ export default function AgentCheckoutPage() {
                 {(x402.activationError || x402.error) && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{x402.activationError || x402.error}</p>}
               </div>
             ) : (
-              <SlideAction
+              <PocketPosPaymentAction pocket={false} webReview amount={checkout.amount+' USDC'} rows={[["Merchant",checkout.merchantName],["Network",network],["Total",checkout.amount+" USDC"]]}
                 status={payStatus}
                 disabled={!gatewayEnough}
                 onConfirm={() => void payCheckout()}
                 labels={{
-                  idle: `Slide to pay ${checkout.amount} USDC`,
+                  idle: `Confirm payment ${checkout.amount} USDC`,
                   pending: 'Confirming with Circle',
                   submitted: 'Payment submitted',
                   successful: 'Payment successful',

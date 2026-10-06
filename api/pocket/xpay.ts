@@ -1,9 +1,11 @@
 import {ownsTerminalSetupKey,legacyXPayTerminal,assertUnifiedXPayDestination} from './unified-xpay-store.js'
+import { isStockCheckoutId, readStockCheckout, settleStockCheckout, assertStockCheckoutPayable } from '../hosted-stock-checkouts.js'
+import { exactTokenTransfer } from '../exact-token-transfer.js'
 import type {XPayHistoryEntry} from '../../src/pocket/lib/pocketUnifiedXPay.js'
 ﻿import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval } from './payment-security.js'
 import { randomUUID } from 'node:crypto'
-import { decodeEventLog, formatUnits, parseUnits, type Hex } from 'viem'
+import { formatUnits, parseUnits, type Hex } from 'viem'
 import { verifiedPrivyUser, localCurrencyProfileRepository } from '../local-currency-profile.js'
 import { mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import { verifyStockWalletOwner } from './xstocks-wallet-owner.js'
@@ -14,7 +16,7 @@ import { readStockMarketPrices } from './xstocks-prices.js'
 import type { XPayMerchant, XPayPayment } from '../../src/pocket/lib/pocketXPay.js'
 const KEY='hashpaylink:pocket-xpay:v1'
 type Merchant=XPayMerchant&{owner:string;createKey?:string}
-type Payment=XPayPayment&{owner:string;merchantOwner:string;units:string;authorizedAt?:number;authorizedBlock?:string;scanBlock?:string;blockNumber?:string;blockHash?:string}
+type Payment=XPayPayment&{owner:string;merchantOwner:string;units:string;authorizedAt?:number;authorizedBlock?:string;scanBlock?:string;blockNumber?:string;blockHash?:string;confirmedAt?:string;checkoutSynced?:boolean}
 type Store={merchants:Record<string,Merchant>;payments:Record<string,Payment>;hashes:Record<string,string>}
 const normalize=(s?:Store):Store=>({merchants:s?.merchants||{},payments:s?.payments||{},hashes:s?.hashes||{}})
 const read=async()=>normalize(await readDurableJson<Store>(KEY))
@@ -24,6 +26,20 @@ const supported=new Set([stockUsdc,...stockAssets].map(a=>a.address.toLowerCase(
 const publicMerchant=({owner,createKey,...m}:Merchant)=>m
 const publicPayment=({owner,merchantOwner,units,authorizedAt,authorizedBlock,scanBlock,blockHash,blockNumber,...p}:Payment)=>p
 const event=parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
+async function checkoutMerchant(id:string,readOnly=false):Promise<Merchant|undefined>{
+ if(!isStockCheckoutId(id))return undefined
+ const r=await readStockCheckout(id,readOnly)
+ if(!r||(!readOnly&&r.payment))fail('This checkout is unavailable or already paid.',409)
+ if(!readOnly)await assertStockCheckoutPayable(r)
+ return {id:r.id,owner:r.ownerId,pocketId:'',name:r.merchantName,wallet:r.recipient,tokens:[r.token.address.toLowerCase()],fixedAmount:r.amount,expiresAt:Date.parse(r.expiresAt),swapEnabled:r.swapEnabled,updatedAt:Date.parse(r.createdAt)}
+}
+async function syncStockPayment(p:Payment){
+ if(!isStockCheckoutId(p.merchantId)||p.status!=='paid'||p.checkoutSynced)return p
+ if(!p.hash||!p.confirmedAt)fail('Payment confirmation is still being recorded.',503)
+ await settleStockCheckout({id:p.merchantId,token:p.token,units:p.units,recipient:p.recipient,payer:p.payer,hash:p.hash,confirmedAt:p.confirmedAt,paymentId:p.id})
+ const result=await mutate(s=>{s.payments[p.id].checkoutSynced=true})
+ return result.payments[p.id]
+}
 export function xpayUnits(usd:string,price:number,decimals:number){
  if(!/^(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(usd)||Number(usd)<=0||Number(usd)>100000)fail('Enter a USD amount between 0.01 and 100,000.')
  if(!Number.isFinite(price)||price<=0)fail('Price unavailable.')
@@ -33,10 +49,11 @@ export function xpayUnits(usd:string,price:number,decimals:number){
 export function verifyXPayTransfer(p:Pick<Payment,'payer'|'recipient'|'token'|'units'|'authorizedAt'>,receipt:{status:string;logs:readonly any[]},timestamp:number){
  if(receipt.status!=='success')return false
  if(!p.authorizedAt||timestamp<p.authorizedAt-5000)return false
- return receipt.logs.some(log=>{if(log.address.toLowerCase()!==p.token.toLowerCase())return false;try{const d=decodeEventLog({abi:[event],data:log.data,topics:log.topics});return d.args.from.toLowerCase()===p.payer.toLowerCase()&&d.args.to.toLowerCase()===p.recipient.toLowerCase()&&String(d.args.value)===p.units}catch{return false}})
+ return exactTokenTransfer(p,receipt)
 }
 async function observe(p:Payment){
- if(p.status==='paid'||p.status==='failed')return p
+ if(p.status==='paid'||p.status==='failed')return syncStockPayment(p)
+ if(await stockNoticeClient.getChainId()!==196)fail('X Layer unavailable.',503)
  if(!p.hash&&p.authorizedBlock){
   const head=await stockNoticeClient.getBlock(),start=BigInt(p.scanBlock||p.authorizedBlock)+1n
   if(Date.now()-Number(head.timestamp)*1000>60000||head.number<start+2n)return p
@@ -46,7 +63,6 @@ async function observe(p:Payment){
   p=updated.payments[p.id]
  }
  if(!p.hash)return p
- if(await stockNoticeClient.getChainId()!==196)fail('X Layer unavailable.',503)
  const receipt=await stockNoticeClient.getTransactionReceipt({hash:p.hash as Hex}).catch(()=>null)
  if(!receipt)return p
  const [block,head]=await Promise.all([stockNoticeClient.getBlock({blockNumber:receipt.blockNumber}),stockNoticeClient.getBlock()])
@@ -55,8 +71,8 @@ async function observe(p:Payment){
  // A reverted transaction cannot pay; a successful but unrelated hash is never a receipt.
  const matches=verifyXPayTransfer(p,receipt,Number(block.timestamp)*1000)
  if(receipt.status==='success'&&!matches)fail('This transaction does not match the merchant payment.',409)
- const result=await mutate(s=>{const current=s.payments[p.id];if(!current||current.hash!==p.hash)return;current.status=matches?'paid':'failed';current.updatedAt=Date.now();current.blockNumber=String(receipt.blockNumber);current.blockHash=receipt.blockHash})
- const paid=result.payments[p.id]
+ const result=await mutate(s=>{const current=s.payments[p.id];if(!current||current.hash!==p.hash)return;current.status=matches?'paid':'failed';current.updatedAt=Date.now();current.blockNumber=String(receipt.blockNumber);current.blockHash=receipt.blockHash;current.confirmedAt=new Date(Number(block.timestamp)*1000).toISOString()})
+ const paid=await syncStockPayment(result.payments[p.id])
  if(paid.status==='paid'){
   const log=receipt.logs.find(log=>verifyXPayTransfer(paid,{status:'success',logs:[log]},Number(block.timestamp)*1000))
   if(log?.logIndex!=null)await mutateStockNotices(s=>{for(const owner of [paid.owner,paid.merchantOwner])putStockNotice(s,{id:owner+':transfer:'+paid.hash+':'+log.logIndex+':'+(owner===paid.owner?'out':'in'),owner,title:owner===paid.owner?'XPay payment sent':'XPay payment received',body:paid.amount+' '+paid.symbol,at:paid.updatedAt,hash:paid.hash})})
@@ -67,8 +83,8 @@ export default async function handler(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store')
  try{
   if(req.method==='GET'){
-   const id=String(req.query?.id||'');if(!/^[0-9a-f-]{36}$/.test(id))fail('Invalid XPay link.',400)
-   const merchant=(await read()).merchants[id];if(!merchant||merchant.deletedAt)fail('This XPay link is unavailable.',404)
+   const id=String(req.query?.id||'');if(!/^[0-9a-f-]{36}$/.test(id)&&!isStockCheckoutId(id))fail('Invalid XPay link.',400)
+   const merchant=(await read()).merchants[id]||await checkoutMerchant(id,true);if(!merchant||merchant.deletedAt)fail('This XPay link is unavailable.',404)
    return res.json({ok:true,terminalId:await legacyXPayTerminal(id,merchant.createKey),merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
@@ -94,31 +110,32 @@ export default async function handler(req:Request,res:Response){
    return res.json({ok:true})
   }
   if(action==='merchant'||action==='mine'){
-   const s=await read(),merchant=action==='mine'?Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt):s.merchants[String(b.id||'')]
+   const s=await read(),merchant=action==='mine'?Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt):s.merchants[String(b.id||'')]||await checkoutMerchant(String(b.id||''),true)
    if((!merchant||merchant.deletedAt)&&action!=='mine')fail('This XPay merchant is unavailable.',404)
-   return res.json({ok:true,terminalId:action==='merchant'&&merchant?await legacyXPayTerminal(merchant.id,merchant.createKey):undefined,merchant:merchant?publicMerchant(merchant):null,merchants:action==='mine'?Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(publicMerchant):undefined,payments:action==='mine'?Object.values(s.payments).filter(p=>p.owner===owner||p.merchantOwner===owner).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):undefined})
+   return res.json({ok:true,terminalId:action==='merchant'&&merchant?await legacyXPayTerminal(merchant.id,merchant.createKey):undefined,merchant:merchant?publicMerchant(merchant):null,merchants:action==='mine'?Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(publicMerchant):undefined,payments:action==='mine'?Object.values(s.payments).filter(p=>p.owner===owner||p.merchantOwner===owner).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):merchant&&isStockCheckoutId(merchant.id)?Object.values(s.payments).filter(p=>p.owner===owner&&p.merchantId===merchant.id).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):undefined})
   }
   if(action==='prepare'){
    const payer=String(b.wallet||'');await verifyStockWalletOwner(owner,payer)
    const id=String(b.id||''),token=String(b.token||'').toLowerCase(),usd=String(b.usd||''),key=String(b.key||'')
    if(!/^[a-zA-Z0-9-]{16,80}$/.test(key))fail('Invalid payment reference.')
-   const s=await read(),m=s.merchants[id];if(!m||m.deletedAt||!m.tokens.includes(token))fail('Choose a stock accepted by this merchant.')
+   const s=await read(),m=s.merchants[id]||await checkoutMerchant(id);if(!m||m.deletedAt||!m.tokens.includes(token))fail('Choose a stock accepted by this merchant.')
    const checkoutId=b.checkoutId?String(b.checkoutId):undefined
    if(!checkoutId&&await legacyXPayTerminal(id,m.createKey))fail('Reopen this QR to use the business terminal.',409)
    if(checkoutId)await assertUnifiedXPayDestination(checkoutId,id,String(m.updatedAt))
    if(m.owner===owner||m.wallet.toLowerCase()===payer.toLowerCase())fail('You cannot pay your own XPay QR.')
-   await verifyStockWalletOwner(m.owner,m.wallet)
+   if(!isStockCheckoutId(id))await verifyStockWalletOwner(m.owner,m.wallet)
    const asset=await stockNoticeAsset(token),prices=await readStockMarketPrices([token]),price=prices[token]
    if(!price||Date.now()-price.fetchedAt>=60000)fail('A fresh stock price is unavailable. Try again.',503)
-   const units=xpayUnits(usd,price.usd,asset.decimals),now=Date.now()
+   const units=m.fixedAmount?parseUnits(m.fixedAmount,asset.decimals):xpayUnits(usd,price.usd,asset.decimals),now=Date.now()
    let payment:Payment|undefined
    await mutate(s=>{
     const prior=Object.values(s.payments).find(p=>p.owner===owner&&p.key===key)
-    if(prior){if(prior.checkoutId!==checkoutId||prior.merchantId!==id||prior.token!==token||prior.usd!==usd||prior.payer.toLowerCase()!==payer.toLowerCase())fail('Payment details changed.',409);payment=prior;return}
+    if(prior){if(prior.checkoutId!==checkoutId||prior.merchantId!==id||prior.token!==token||(!m.fixedAmount&&prior.usd!==usd)||prior.payer.toLowerCase()!==payer.toLowerCase())fail('Payment details changed.',409);payment=prior;return}
     if(Object.values(s.payments).some(p=>p.owner===owner&&p.status==='submitted'))fail('Your previous XPay payment needs confirmation. Open XPay to check it.',409)
     if(Object.values(s.payments).filter(p=>p.owner===owner&&p.createdAt>now-86400000).length>=100)fail('Daily payment limit reached.',429)
-    const current=s.merchants[id];if(!current||current.deletedAt||current.updatedAt!==m.updatedAt)fail('Merchant settings changed. Review again.',409)
-    payment={id:randomUUID(),checkoutId,key,owner,merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:now+5*60_000}
+    const current=s.merchants[id]||(isStockCheckoutId(id)?m:undefined);if(!current||current.deletedAt||current.updatedAt!==m.updatedAt)fail('Merchant settings changed. Review again.',409)
+    if(isStockCheckoutId(id)&&Object.values(s.payments).some(p=>p.merchantId===id&&['submitted','paid'].includes(p.status)))fail('This checkout already has a payment in progress.',409)
+    payment={id:randomUUID(),checkoutId,key,owner,merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd:m.fixedAmount?(Number(m.fixedAmount)*price.usd).toFixed(2):usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:Math.min(now+5*60_000,m.expiresAt||Infinity)}
     s.payments[payment.id]=payment
    })
    return res.json({ok:true,payment:publicPayment(payment!)})
@@ -130,7 +147,8 @@ export default async function handler(req:Request,res:Response){
    if(await stockNoticeClient.getChainId()!==196)fail('X Layer unavailable.',503)
    if(p.checkoutId){const merchant=s.merchants[p.merchantId];await assertUnifiedXPayDestination(p.checkoutId,p.merchantId,String(merchant?.updatedAt))}
    const head=await stockNoticeClient.getBlock();if(Date.now()-Number(head.timestamp)*1000>60000)fail('X Layer unavailable.',503)
-   const updated=await mutate(s=>{const p=s.payments[id],m=s.merchants[p.merchantId];if(p.status!=='ready'||p.expiresAt<=Date.now())fail('This payment needs a new review or is already submitted.',409);if(!m||m.deletedAt||!m.tokens.includes(p.token)||m.wallet.toLowerCase()!==p.recipient.toLowerCase())fail('Merchant settings changed. Review again.',409);if(Object.values(s.payments).some(other=>other.id!==id&&other.owner===owner&&other.status==='submitted'))fail('An earlier payment needs confirmation.',409);p.status='submitted';p.authorizedBlock=String(head.number);p.authorizedAt=Date.now();p.updatedAt=Date.now()})
+   const virtual=await checkoutMerchant(p.merchantId)
+   const updated=await mutate(s=>{const p=s.payments[id],m=s.merchants[p.merchantId]||virtual;if(p.status!=='ready'||p.expiresAt<=Date.now())fail('This payment needs a new review or is already submitted.',409);if(!m||m.deletedAt||!m.tokens.includes(p.token)||m.wallet.toLowerCase()!==p.recipient.toLowerCase())fail('Merchant settings changed. Review again.',409);if(Object.values(s.payments).some(other=>other.id!==id&&other.owner===owner&&other.status==='submitted'))fail('An earlier payment needs confirmation.',409);if(isStockCheckoutId(p.merchantId)&&Object.values(s.payments).some(other=>other.id!==id&&other.merchantId===p.merchantId&&['submitted','paid'].includes(other.status)))fail('This checkout already has a payment in progress.',409);p.status='submitted';p.authorizedBlock=String(head.number);p.authorizedAt=Date.now();p.updatedAt=Date.now()})
    return res.json({ok:true,payment:publicPayment(updated.payments[id])})
   }
   if(action==='confirm'){
@@ -144,7 +162,7 @@ export default async function handler(req:Request,res:Response){
 }
 
 let draining=false,drainOffset=0
-export async function drainXPayPayments(){if(draining)return;draining=true;try{const s=await read();const pending=Object.values(s.payments).filter(p=>p.status==='submitted');if(pending.length){drainOffset%=pending.length;const batch=[...pending.slice(drainOffset),...pending.slice(0,drainOffset)].slice(0,20);drainOffset+=batch.length;for(const p of batch)await observe(p).catch(()=>undefined)}}finally{draining=false}}
+export async function drainXPayPayments(){if(draining)return;draining=true;try{const s=await read();const pending=Object.values(s.payments).filter(p=>p.status==='submitted'||(p.status==='paid'&&isStockCheckoutId(p.merchantId)&&!p.checkoutSynced));if(pending.length){drainOffset%=pending.length;const batch=[...pending.slice(drainOffset),...pending.slice(0,drainOffset)].slice(0,20);drainOffset+=batch.length;for(const p of batch)await observe(p).catch(()=>undefined)}}finally{draining=false}}
 
 export async function listPocketXPayStockDestinations(owner:string) {
  const s=await read()

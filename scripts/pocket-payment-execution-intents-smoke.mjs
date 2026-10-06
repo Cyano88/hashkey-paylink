@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
+import { stockAssets } from '../src/pocket/lib/pocketXStocksWallet.ts'
 
 const root = await mkdtemp(join(tmpdir(), 'pocket-payment-execution-'))
 try {
@@ -46,6 +47,25 @@ try {
   const reconciled = await repository.update({ ownerId: request.ownerId, intentId: reviewCreated.intent.id, state: 'completed', providerReference: 'vtpass-request-1' })
   assert.equal(reconciled.state, 'completed')
   const productionRepository = createPaymentExecutionRepository({ storePath: join(root, 'production.json'), durable: false, isRender: true })
+  const stock = stockAssets[0]
+  const token = { chainId: 196, address: stock.address, symbol: stock.symbol, decimals: 18 }
+  const stockRequest = { ...request, kind: 'hosted_checkout', idempotencyKey: 'stock-checkout-test-1', token, amount: '0.000000000000000001', sourceNetwork: 'xlayer', settlementNetwork: 'xlayer' }
+  const stockIntent = await repository.create(stockRequest)
+  assert.equal(stockIntent.intent.asset, stock.symbol)
+  assert.equal(stockIntent.intent.amount, stockRequest.amount)
+  assert.equal(ledgerEvents.at(-1).asset, stock.symbol)
+  assert.equal(ledgerEvents.at(-1).metadata.tokenDecimals, '18')
+  assert.equal(ledgerEvents.at(-1).metadata.tokenAddress.toLowerCase(), stock.address.toLowerCase())
+  assert.equal((await repository.create(stockRequest)).replayed, true)
+  const immutable = await repository.update({ ownerId: request.ownerId, intentId: stockIntent.intent.id, state: 'authorized', metadata: { tokenSymbol: 'USDC', tokenDecimals: '6', tokenAddress: 'wrong' } })
+  assert.equal(immutable.metadata.tokenSymbol, stock.symbol)
+  assert.equal(immutable.metadata.tokenDecimals, '18')
+  assert.equal(immutable.metadata.tokenAddress.toLowerCase(), stock.address.toLowerCase())
+  await assert.rejects(repository.create({ ...stockRequest, token: { ...token, decimals: 17 } }), /invalid|another payment/)
+  await assert.rejects(repository.create({ ...stockRequest, amount: '0.0000000000000000001' }), /amount is invalid/)
+  await assert.rejects(repository.create({ ...stockRequest, sourceNetwork: 'base' }), /token is invalid/)
+  await assert.rejects(repository.create({ ...stockRequest, token: { ...token, symbol: 'USDC' } }), /token is invalid/)
+  await assert.rejects(repository.create({ ...stockRequest, kind: 'service_funding' }), /rail does not support/)
   await assert.rejects(productionRepository.create(request), /Durable payment execution storage is not configured/)
 } finally {
   await rm(root, { recursive: true, force: true })

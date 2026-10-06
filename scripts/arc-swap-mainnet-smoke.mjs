@@ -75,6 +75,9 @@ try{
  }
  const receipt=await verifyEvmUsdcTransfer({chain:'arc',txHash:'0x'+'a'.repeat(64),payer:wallet,recipient:other,minAmount:'10'})
  assert.equal(receipt.amount,'10','Native and ERC20 USDC logs must not double count')
+ const exact=await verifyEvmUsdcTransfer({chain:'arc',txHash:'0x'+'a'.repeat(64),payer:wallet,recipient:other,minAmount:'10',exactAmount:true})
+ assert.equal(exact.amount,'10')
+ await assert.rejects(()=>verifyEvmUsdcTransfer({chain:'arc',txHash:'0x'+'a'.repeat(64),payer:wallet,recipient:other,minAmount:'9',exactAmount:true}),/exactly/)
  await assert.rejects(()=>verifyEvmUsdcTransfer({chain:'arc',txHash:'0x'+'a'.repeat(64),payer:wallet,recipient:other,minAmount:'11'}))
 }finally{globalThis.fetch=oldFetch}
 console.log('Arc swaps/mainnet checks passed: route restrictions, exact amounts, signed quotes, settlement transfers, CCTP fees and native USDC accounting.')

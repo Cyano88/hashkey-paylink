@@ -20,7 +20,8 @@ const buyer=getAddress('0x'+'11'.repeat(20)),seller=getAddress('0x'+'22'.repeat(
 const terms={version:1,title:'Design work',description:'Deliver a finished design with source files.',amount,durationSeconds:86400,xlayerPayment:payment};
 const binding=prepareWorkBinding('req_work',terms,buyer,seller,1000);
 const fixture=JSON.parse(readFileSync(new URL('./fixtures/xstocks-agreement-binding.json',import.meta.url),'utf8'));
-assert.deepEqual(prepareWorkBinding(...fixture.args),fixture.expected,'accepted hashes and escrow IDs survive extraction');
+// The persisted JSON fixture omits optional undefined fields such as custody.
+assert.deepEqual(JSON.parse(JSON.stringify(prepareWorkBinding(...fixture.args))),fixture.expected,'accepted hashes and escrow IDs survive extraction');
 assert.equal(binding.contractTerms.amount,payment.amountUnits);assert.equal(binding.contractTerms.deliveryWindow,7*86400);
 assert.notEqual(binding.termsHash,prepareWorkBinding('req_work',{...terms,description:'Different accepted work'},buyer,seller,1000).termsHash);
 assert.notEqual(binding.contractTerms.offerId,prepareWorkBinding('req_work',{...terms,version:2},buyer,seller,1000).contractTerms.offerId);

@@ -1,4 +1,5 @@
 import { authorizeOperations } from './operations-policy.js'
+import { normalizeXLayerCheckoutConfig, type XLayerCheckoutConfig } from '../src/lib/xlayerCheckoutConfig.js'
 import { verifyOperationsSection } from './operations-access.js'
 import { effectiveProductCapabilities, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
 import { developerEnvironment } from './developer-environment.js'
@@ -64,6 +65,7 @@ type DeveloperProject = {
   checkoutMode?: DeveloperCheckoutMode
   capabilities?: DeveloperCapability[]
   productSettingsVersion?: number
+  xlayerCheckout?: XLayerCheckoutConfig
   settlementMode: SettlementMode
   settlementStatus: 'ready' | 'review_required'
   operationalStatus?: 'active' | 'suspended'
@@ -102,6 +104,8 @@ type DeveloperProject = {
 type DeveloperStore = { projects: Record<string, DeveloperProject> }
 
 export type DeveloperCheckoutPolicy = {
+  xlayerCheckout?: XLayerCheckoutConfig
+  swapPermission?: boolean
   partnerId: string
   ownerId?: string
   ownerEmail?: string
@@ -379,6 +383,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     checkoutMode: projectCheckoutMode(project),
     capabilities: effectiveProductCapabilities(project),
     productSettingsVersion: project.productSettingsVersion,
+    xlayerCheckout: project.xlayerCheckout,
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' : 'active',
@@ -780,6 +785,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           ? effectiveProductCapabilities(currentProject)
           : requestedCapabilities(req.body.capabilities, currentCheckoutMode)
         const routingRequired = needsSettlementRouting(capabilities)
+        let xlayerCheckout: XLayerCheckoutConfig | undefined
+        try { xlayerCheckout = normalizeXLayerCheckoutConfig(req.body?.xlayerCheckout === undefined ? currentProject.xlayerCheckout : req.body.xlayerCheckout) }
+        catch (error) { return res.status(400).json({ ok: false, error: (error as Error).message }) }
+        if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
         const networks = !routingRequired ? [] : settlementMode === 'ngn' ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
@@ -835,7 +844,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           const next: DeveloperProject = {
-            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode,
+            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
@@ -974,6 +983,7 @@ function policyForDeveloperProject(
     : paymentOptions[0]?.network ?? 'arc'
   return {
     partnerId: project.id,
+    xlayerCheckout: project.xlayerCheckout,
     ownerId: project.ownerId,
     ownerEmail: project.ownerEmail,
     merchantName: project.name,
@@ -998,13 +1008,15 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
   for (const project of Object.values(store?.projects ?? {})) {
     const key = project.keys.find(item => !item.revokedAt && safeDigestEqual(item.digest, digest))
     if (!key) continue
+    if (key.expiresAt && (!Number.isFinite(Date.parse(key.expiresAt)) || Date.parse(key.expiresAt) <= now)) return null
     if (scope === 'wallet:swap' && !key.scopes?.includes(scope)) return null
     if (apiKey.startsWith('hpl_app_') && (!scope || scope === 'keys:manage' || !key.scopes?.includes(scope)
       || !key.expiresAt || !Number.isFinite(Date.parse(key.expiresAt)) || Date.parse(key.expiresAt) <= now
       || projectCheckoutMode(project) !== 'human')) return null
     const keyEnvironment: DeveloperEnvironment = key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')
     if (keyEnvironment !== requestedEnvironment) continue
-    return policyForDeveloperProject(project, keyEnvironment, secret)
+    const policy = policyForDeveloperProject(project, keyEnvironment, secret)
+    return policy ? { ...policy, swapPermission: Boolean(key.scopes?.includes('wallet:swap')) } : null
   }
   return null
 }
@@ -1285,4 +1297,12 @@ export async function resolveWalletSwapProjectEnabled(projectId:string,rail:'arc
   const project=(await defaults.read(STORE_KEY))?.projects[projectId]
   return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&project.settlementStatus==='ready'
     &&effectiveProductCapabilities(project).includes(rail==='arc'?'swap_arc':'swap_xlayer'))
+}
+
+export async function resolveStockCheckoutProjectEnabled(projectId:string,recipient:string,asset:string,swap=false):Promise<boolean>{
+ const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
+ return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&project.settlementStatus==='ready'
+  &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'
+  &&project.xlayerCheckout?.recipient.toLowerCase()===recipient.toLowerCase()&&project.xlayerCheckout.assets.includes(asset.toLowerCase())
+  &&(!swap||effectiveProductCapabilities(project).includes('swap_xlayer')))
 }

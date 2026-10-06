@@ -35,6 +35,20 @@ export default function ApiReference() {
   }'`}</CodeBlock>
           <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Human live keys use configured Base, Arbitrum, and explicitly saved Arc mainnet routes. Agent checkout supports Base and Arc only. Test keys cannot authorize mainnet transactions. Recipient overrides are rejected. API keys stay server-side.</p>
         </SubSection>
+        <SubSection title="X Layer assets: separately activated human projects">
+          <p>Configure accepted assets and the X Layer receiving wallet in your human project. This release requires project-specific activation by Hash PayLink. Existing USDC routing remains configured separately; this is not an asset-to-bank settlement service.</p>
+          <CodeBlock lang="json">{`{
+  "rail": "xlayer",
+  "kind": "payment",
+  "asset": "NVDAx",
+  "amount": "0.01",
+  "swap": false,
+  "returnUrl": "https://your-allowlisted-domain.example/complete"
+}`}</CodeBlock>
+          <p>Use the same POST /api/v2/checkouts endpoint, server key and unique Idempotency-Key. The amount is an exact quantity of the accepted token, not a dollar price. The response returns a hosted checkout URL and a checkout identifier. Query that identifier through the same status API; payment.confirmed webhooks include the actual asset, token contract and amount.</p>
+          <p>Setting swap to true requires both the project?s X Layer Swap capability and an API key with wallet:swap permission. The customer separately approves conversion into the accepted asset, then reviews and approves payment. Conversion alone never completes checkout. With swap disabled, the customer pays directly from their accepted balance. This path does not support Polymarket funding, agent checkout, flexible amounts or request-level recipient overrides.</p>
+          <p>Customers can sign in and approve in the browser using Pocket wallet infrastructure. Installing the app is optional. Success requires verification of the exact merchant transfer.</p>
+        </SubSection>
         <SubSection title="Agent wallet path">
           <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Open <code>checkoutUrl</code> for the hosted Circle Agent Wallet payer flow: email identity, wallet restoration or creation, USDC and App Pay balances, Gateway funding, and payment all stay inside checkout. Autonomous agents can instead send a GET request to <code>agentPaymentUrl</code>. Its first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. After Gateway verification and settlement, Hash PayLink returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/checkouts \

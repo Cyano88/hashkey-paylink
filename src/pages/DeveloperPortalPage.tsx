@@ -1,10 +1,12 @@
 import ProductPicker from '../developer/ProductPicker'
+import XLayerCheckoutSettings from '../developer/XLayerCheckoutSettings'
+import type { XLayerCheckoutConfig } from '../lib/xlayerCheckoutConfig'
 import {needsSettlementRouting, type ProductCapability} from '../lib/developerProducts'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../lib/developerNetworkPolicy'
 import PaymentActivityPanel from '../developer/PaymentActivityPanel'
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CliGuide, OverviewPanel, ProductsPanel, SandboxPanel, portalSections, type PortalSection } from '../developer/PortalPanels'
+import { CliGuide, OverviewPanel, ProductsPanel, portalSections, type PortalSection } from '../developer/PortalPanels'
 import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
@@ -16,6 +18,7 @@ type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: CheckoutMode | ''; capabilities: Capability[] }
 type Project = {
+  xlayerCheckout?: XLayerCheckoutConfig
   id: string
   name: string
   ownerEmail: string
@@ -185,6 +188,7 @@ export default function DeveloperPortalPage() {
       const data = await api('PUT', {
         action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
         checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
+        xlayerCheckout: draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' ? draft.xlayerCheckout ?? null : null,
         settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
         arcMainnetChainId: draft.networks.includes('arc') ? 5042 : undefined, recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
         webhookUrl: draft.webhookUrl, bankCode: draft.bankCode, bankName: draft.bankName,
@@ -278,8 +282,7 @@ export default function DeveloperPortalPage() {
       <PortalTop onLogout={logout} />
       <Link to="/cli/authorize" className="mt-3 inline-block text-xs text-blue-600">Manage CLI access</Link>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">{sandbox ? 'Sandbox preview - test payments are not enabled' : 'Live project configuration'}</p>
-        <div role="group" aria-label="Environment" className="flex rounded-full border border-gray-200 p-1 dark:border-white/10">{(['live','test'] as const).map(environment => <button key={environment} type="button" aria-pressed={sandbox === (environment === 'test')} disabled={busy} onClick={() => setParams(current => { const next = new URLSearchParams(current); next.set('environment',environment); return next })} className={cn('min-h-10 rounded-full px-4 text-sm font-semibold', sandbox === (environment === 'test') ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'text-gray-500')}>{environment === 'live' ? 'Live' : 'Sandbox'}</button>)}</div>
+        <p className="text-sm text-gray-500">{sandbox ? 'Test payments are unavailable' : 'Live project configuration'}</p>
       </div>
       <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
         <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
@@ -294,7 +297,7 @@ export default function DeveloperPortalPage() {
         </aside>
 
         <section id="developer-content" tabIndex={-1} className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
-          {sandbox ? <SandboxPanel /> : creatingNew
+          {sandbox ? <div><h1 className="text-xl font-semibold">Test payments are unavailable</h1><p className="mt-2 text-sm text-gray-500">This old link cannot create or execute payments.</p><Link className="pocket-cta-primary mt-5" to="?environment=live">Open live configuration</Link></div> : creatingNew
             ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
             : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
@@ -459,6 +462,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
     </>}
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
+    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout })} />}
     <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? ''} onChange={event => setDraft({ ...draft, allowedOrigins: [event.target.value] })} placeholder="https://yourplatform.com" /></Field>
 
     {draft.settlementMode === 'ngn' && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
@@ -497,7 +501,7 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
     {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
     <p className="mt-4 text-sm leading-6 text-gray-500">Swap requires a separate <code>wallet:swap</code> key. X Layer agreements require <code>xstocks-agreement:read</code> and <code>xstocks-agreement:create</code>. Create these using the owner-approved CLI; general checkout keys do not enable Swap.</p>
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
-      {environmentSection('test', 'Sandbox keys - unavailable', `New sandbox keys are disabled until test environments are connected. Existing keys remain separate from live keys. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
+      {project.keys.some(key => key.environment === 'test') && environmentSection('test', 'Existing test keys', `New sandbox keys are disabled until test environments are connected. Existing keys remain separate from live keys. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
       {environmentSection('live', 'Live keys', `General keys use configured settlement routes. Create separate scoped keys through the CLI for wallet operations.`)}
     </div>
   </div>

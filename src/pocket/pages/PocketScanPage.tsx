@@ -22,7 +22,12 @@ export default function PocketScanPage() {
    if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true,state:scanState});return}
    const path=code.kind==='pos'?'/api/ng-pos?view=pocket-scan&merchant_id='+encodeURIComponent(code.id)+'&code='+encodeURIComponent(code.url):'/api/v2/checkouts?id='+encodeURIComponent(code.id)+'&attempt='+encodeURIComponent(code.attempt)
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})
-   const data=await response.json()
+   const data=await response.json().catch(()=>null)
+   if(!data)throw Error('Checkout is temporarily unavailable. Please try again.')
+   if(response.ok&&data.ok&&data.checkout?.stockCheckout&&data.checkout.id===code.id&&/^chkx_[a-f0-9]{24}$/.test(code.id)){
+    if(data.checkout.status!=='pending')throw Error('This checkout is already closed. Do not pay it again.')
+    navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true,state:scanState});return
+   }
    if(response.ok&&data.ok&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId||'')){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:scanState});return}
    if(!response.ok||data.ok!==true||typeof data.paymentUrl!=='string'||!data.paymentUrl.startsWith('/pay?'))throw Error(typeof data.error==='string'?data.error:'This checkout is unavailable.')
    if(code.kind==='checkout'&&['paid','failed','expired'].includes(data.checkout?.status))throw Error('This checkout is already closed. Do not pay it again.')
@@ -71,7 +76,7 @@ export default function PocketScanPage() {
  return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white'>
   <div className='mx-auto w-full max-w-[462px]'>
    <header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>
-   {checkout?<section aria-label='Payment review'><Suspense fallback={<p role='status'>Opening payment review...</p>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back}}/></Suspense></section>:<>
+   {checkout?<section aria-label='Payment review'><Suspense fallback={<p role='status'>Opening payment review...</p>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back,native:true,merchantName:checkout.merchant}}/></Suspense></section>:<>
     <p className='mb-4 text-center text-sm text-gray-500'>Scan a Hash PayLink merchant or checkout QR.</p>
     <div className='relative aspect-square overflow-hidden rounded-[26px] bg-gray-950'><video ref={video} muted playsInline aria-label='QR camera preview' className='h-full w-full object-cover'/><div aria-hidden='true' className='pointer-events-none absolute inset-12 rounded-2xl border-2 border-white/70'/>{!camera&&<p className='absolute inset-x-4 top-1/2 text-center text-sm text-white/70'>Point your camera at a merchant QR.</p>}</div>
     {busy?<p role='status' className='mt-4 text-center text-sm'>Verifying checkout...</p>:<button type='button' onClick={()=>camera?stop():void start()} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950'>{camera?'Stop camera':'Open camera'}</button>}

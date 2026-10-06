@@ -3,18 +3,19 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import { appendPocketMoneyLedgerEvent, type PocketMoneyLedgerInput } from './money-ledger.js'
+import { paymentAssetAmount, paymentToken, type PaymentToken } from './payment-asset.js'
 
 export type PaymentExecutionKind = 'bank_payout' | 'bill_payment' | 'pos_settlement' | 'hosted_checkout' | 'wallet_transfer' | 'service_funding'
 export type PaymentExecutionState = 'prepared' | 'authorized' | 'submitted' | 'processing' | 'completed' | 'failed' | 'expired' | 'needs_review'
 export type PaymentExecutionIntent = {
   id: string; ownerId: string; idempotencyKey: string; requestHash: string
-  kind: PaymentExecutionKind; state: PaymentExecutionState; asset: 'USDC'; amount: string
+  kind: PaymentExecutionKind; state: PaymentExecutionState; asset: string; amount: string; token?: PaymentToken
   sourceNetwork: string; settlementNetwork: string; destinationType: string
   resourceId?: string; providerReference?: string; transactionHash?: string; failureCode?: string
   metadata: Record<string, string>; createdAt: number; updatedAt: number
 }
 type Store = { intents: Record<string, PaymentExecutionIntent>; idempotency: Record<string, string>; ledgerOutbox: Record<string, PocketMoneyLedgerInput> }
-type CreateInput = Pick<PaymentExecutionIntent, 'ownerId' | 'idempotencyKey' | 'kind' | 'amount' | 'sourceNetwork' | 'settlementNetwork' | 'destinationType'> & { metadata?: Record<string, string> }
+type CreateInput = Pick<PaymentExecutionIntent, 'ownerId' | 'idempotencyKey' | 'kind' | 'amount' | 'sourceNetwork' | 'settlementNetwork' | 'destinationType'> & { token?: PaymentToken; metadata?: Record<string, string> }
 type UpdateInput = { ownerId: string; intentId: string; state?: PaymentExecutionState; expectedState?: PaymentExecutionState; resourceId?: string; providerReference?: string; transactionHash?: string; failureCode?: string; metadata?: Record<string, string> }
 type Options = { storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; createId?: () => string; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson; appendLedger?: typeof appendPocketMoneyLedgerEvent }
 
@@ -25,13 +26,12 @@ export class PaymentExecutionConflictError extends Error { status = 409 }
 export class PaymentExecutionNotFoundError extends Error { status = 404 }
 
 function clean(value: unknown, max: number) { return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max) }
-function amount(value: unknown) {
-  const normalized = clean(value, 40)
-  if (!/^\d+(?:\.\d{1,6})?$/.test(normalized) || Number(normalized) <= 0) throw Object.assign(new Error('Payment amount is invalid.'), { status: 400 })
-  return normalized
-}
+const amount = paymentAssetAmount
 function safeMetadata(value?: Record<string, string>) {
   return Object.fromEntries(Object.entries(value ?? {}).map(([key, item]) => [clean(key, 60), clean(item, 240)]).filter(([key]) => key))
+}
+function tokenMetadata(token?: PaymentToken): Record<string, string> {
+  return token ? { tokenAddress: token.address, tokenDecimals: String(token.decimals), tokenChainId: String(token.chainId), tokenSymbol: token.symbol } : {}
 }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
@@ -43,7 +43,8 @@ function canonical(value: unknown): string {
 }
 function scope(ownerId: string, kind: string, idempotencyKey: string) { return createHash('sha256').update(`${ownerId}\0${kind}\0${idempotencyKey}`).digest('hex') }
 function requestHash(input: CreateInput) {
-  return createHash('sha256').update(canonical({ amount: amount(input.amount), destinationType: clean(input.destinationType, 60), kind: input.kind, metadata: safeMetadata(input.metadata), settlementNetwork: clean(input.settlementNetwork, 30).toLowerCase(), sourceNetwork: clean(input.sourceNetwork, 30).toLowerCase() })).digest('hex')
+  const token = paymentToken(input.token, input.sourceNetwork, input.settlementNetwork)
+  return createHash('sha256').update(canonical({ amount: amount(input.amount, token), ...(token ? { token } : {}), destinationType: clean(input.destinationType, 60), kind: input.kind, metadata: safeMetadata(input.metadata), settlementNetwork: clean(input.settlementNetwork, 30).toLowerCase(), sourceNetwork: clean(input.sourceNetwork, 30).toLowerCase() })).digest('hex')
 }
 const transitions: Record<PaymentExecutionState, PaymentExecutionState[]> = {
   prepared: ['authorized', 'failed', 'expired', 'needs_review'], authorized: ['submitted', 'failed', 'expired', 'needs_review'],
@@ -88,11 +89,13 @@ export function createPaymentExecutionRepository(options: Options = {}) {
       const ownerId = clean(input.ownerId, 180), idempotencyKey = clean(input.idempotencyKey, 160)
       if (!ownerId || !idempotencyKey) throw Object.assign(new Error('Payment execution identity and idempotency key are required.'), { status: 400 })
       const hash = requestHash(input)
+      const token = paymentToken(input.token, input.sourceNetwork, input.settlementNetwork)
+      if (token && !['hosted_checkout', 'wallet_transfer'].includes(input.kind)) throw Object.assign(new Error('This payment rail does not support token amounts.'), { status: 400 })
       const result = await mutate(store => {
         const key = scope(ownerId, input.kind, idempotencyKey), existing = store.intents[store.idempotency[key]]
         if (existing) { if (existing.requestHash !== hash) throw new PaymentExecutionConflictError('Idempotency key is already bound to another payment request.'); return { intent: existing, replayed: true } }
         const timestamp = now()
-        const intent: PaymentExecutionIntent = { id: createId(), ownerId, idempotencyKey, requestHash: hash, kind: input.kind, state: 'prepared', asset: 'USDC', amount: amount(input.amount), sourceNetwork: clean(input.sourceNetwork, 30).toLowerCase(), settlementNetwork: clean(input.settlementNetwork, 30).toLowerCase(), destinationType: clean(input.destinationType, 60), metadata: safeMetadata(input.metadata), createdAt: timestamp, updatedAt: timestamp }
+        const intent: PaymentExecutionIntent = { id: createId(), ownerId, idempotencyKey, requestHash: hash, kind: input.kind, state: 'prepared', asset: token?.symbol ?? 'USDC', ...(token ? { token } : {}), amount: amount(input.amount, token), sourceNetwork: clean(input.sourceNetwork, 30).toLowerCase(), settlementNetwork: clean(input.settlementNetwork, 30).toLowerCase(), destinationType: clean(input.destinationType, 60), metadata: { ...safeMetadata(input.metadata), ...tokenMetadata(token) }, createdAt: timestamp, updatedAt: timestamp }
         store.intents[intent.id] = intent; store.idempotency[key] = intent.id
         const eventKey = `${intent.id}:prepared:${timestamp}`
         store.ledgerOutbox[eventKey] = { eventKey, ownerId: intent.ownerId, executionId: intent.id, rail: intent.kind, state: intent.state, asset: intent.asset, amount: intent.amount, sourceNetwork: intent.sourceNetwork, settlementNetwork: intent.settlementNetwork, metadata: intent.metadata, recordedAt: timestamp }
@@ -143,7 +146,7 @@ export function createPaymentExecutionRepository(options: Options = {}) {
         if (!current || current.ownerId !== input.ownerId) throw new PaymentExecutionNotFoundError('Payment execution was not found.')
         if (input.expectedState && current.state !== input.expectedState) return current
         if (input.state && input.state !== current.state && !transitions[current.state].includes(input.state)) throw new PaymentExecutionConflictError(`Payment execution cannot move from ${current.state} to ${input.state}.`)
-        const next: PaymentExecutionIntent = { ...current, ...(input.state ? { state: input.state } : {}), ...(input.resourceId ? { resourceId: clean(input.resourceId, 180) } : {}), ...(input.providerReference ? { providerReference: clean(input.providerReference, 180) } : {}), ...(input.transactionHash ? { transactionHash: clean(input.transactionHash, 180) } : {}), ...(input.failureCode ? { failureCode: clean(input.failureCode, 80) } : {}), metadata: { ...current.metadata, ...safeMetadata(input.metadata) }, updatedAt: now() }
+        const next: PaymentExecutionIntent = { ...current, ...(input.state ? { state: input.state } : {}), ...(input.resourceId ? { resourceId: clean(input.resourceId, 180) } : {}), ...(input.providerReference ? { providerReference: clean(input.providerReference, 180) } : {}), ...(input.transactionHash ? { transactionHash: clean(input.transactionHash, 180) } : {}), ...(input.failureCode ? { failureCode: clean(input.failureCode, 80) } : {}), metadata: { ...current.metadata, ...safeMetadata(input.metadata), ...tokenMetadata(current.token) }, updatedAt: now() }
         store.intents[next.id] = next
         const eventKey = `${next.id}:${next.state}:${next.updatedAt}`
         store.ledgerOutbox[eventKey] = { eventKey, ownerId: next.ownerId, executionId: next.id, rail: next.kind, state: next.state, asset: next.asset, amount: next.amount, sourceNetwork: next.sourceNetwork, settlementNetwork: next.settlementNetwork, resourceId: next.resourceId, providerReference: next.providerReference, transactionHash: next.transactionHash, failureCode: next.failureCode, metadata: next.metadata, recordedAt: next.updatedAt }

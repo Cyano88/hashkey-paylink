@@ -2,8 +2,9 @@
 import {build} from 'esbuild'
 import {readFileSync,readdirSync} from 'node:fs'
 import {createServer} from 'node:http'
-const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright')
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const mocks={
+ PocketCheckoutSwap:`export default ()=>null`,
  usePocketIdentity:`export default ()=>({user:{id:'payer'},getAccessToken:async()=>''})`,
  'react-router-dom':`export const useLocation=()=>({pathname:'/xstocks/xpay'}),useNavigate=()=>()=>{},useSearchParams=()=>[new URLSearchParams('merchant=merchant')];`,
  usePocketSlowConfirmation:`export default ()=>false`,

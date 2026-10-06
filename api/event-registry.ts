@@ -510,6 +510,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         payer,
         recipient: paymentOption.recipient,
         minAmount: minimumAmount,
+        exactAmount: true,
         notBefore: checkout.createdAt,
         notAfter: checkout.expiresAt,
       })

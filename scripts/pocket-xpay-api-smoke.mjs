@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
+'../hosted-stock-checkouts.js':`export const isStockCheckoutId=id=>typeof id==='string'&&/^chkx_[a-f0-9]{24}$/.test(id);export const readStockCheckout=async id=>globalThis.fixture.stockCheckout?.id===id?globalThis.fixture.stockCheckout:null;export const assertStockCheckoutPayable=async()=>{if(globalThis.fixture.stockDisabled)throw Object.assign(Error('Checkout disabled'),{status:409})};export const settleStockCheckout=async proof=>{globalThis.fixture.stockSettled=proof;globalThis.fixture.stockCheckout.payment={status:'paid',txHash:proof.hash}}`,
 './payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
 '../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
 '../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));globalThis.fixture.saved=state;return structuredClone(state)}`,
@@ -97,3 +98,25 @@ assert.equal((await listPocketUnifiedXPayStockPayments('merchant',unifiedId))[0]
 fixture.saved.payments[unifiedPayment.id].symbol='USDC';
 assert.equal((await listPocketUnifiedXPayStockPayments('merchant',unifiedId))[0].rail,'stablecoins');
 console.log('PASS direct USDC wallet receipts remain on the Stablecoins rail.');
+
+// A developer checkout reuses this payment engine with immutable token units.
+fixture.owner='stock-payer';fixture.wallets['stock-payer']='0x'+'4'.repeat(40);
+fixture.stockCheckout={id:'chkx_'+'1'.repeat(24),ownerId:'merchant',merchantName:'Developer merchant',recipient:to,amount:'0.123456789',token:{address:token},createdAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+60000).toISOString(),swapEnabled:false};
+const stockBody={action:'prepare',id:fixture.stockCheckout.id,wallet:fixture.wallets['stock-payer'],token,usd:'9999',key:'fixture-stock-checkout-0001'};
+const stockPayment=(await call(stockBody)).payment;
+assert.equal(stockPayment.amount,'0.123456789','Client USD input cannot change fixed token units');
+assert.ok(stockPayment.expiresAt<=Date.parse(fixture.stockCheckout.expiresAt));
+assert.equal((await call({...stockBody,usd:'1'})).payment.id,stockPayment.id);
+fixture.owner='other-stock-payer';fixture.wallets['other-stock-payer']='0x'+'5'.repeat(40);
+const concurrent=(await call({...stockBody,wallet:fixture.wallets['other-stock-payer'],key:'fixture-stock-checkout-0002'})).payment;
+fixture.owner='stock-payer';fixture.stockDisabled=true;await call({action:'authorize',id:stockPayment.id},409);fixture.stockDisabled=false;
+await call({action:'authorize',id:stockPayment.id});
+assert.equal((await call({action:'merchant',id:fixture.stockCheckout.id})).payments.find(p=>p.id===stockPayment.id).status,'submitted');
+fixture.owner='other-stock-payer';await call({action:'authorize',id:concurrent.id},409);
+assert.equal((await call({action:'merchant',id:fixture.stockCheckout.id})).payments.some(p=>p.id===stockPayment.id),false);
+fixture.owner='stock-payer';const stockHash='0x'+'d'.repeat(64);fixture.head=200n;
+fixture.receipts[stockHash]={status:'success',blockNumber:190n,blockHash:'block',logs:[{address:token,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from:fixture.wallets['stock-payer'],to}}),data:encodeAbiParameters([{type:'uint256'}],[123456789000000000n])}]};
+assert.equal((await call({action:'confirm',id:stockPayment.id,hash:stockHash})).payment.status,'paid');
+assert.equal(fixture.stockSettled.id,fixture.stockCheckout.id);assert.equal(fixture.stockSettled.units,'123456789000000000');
+await call({...stockBody,key:'fixture-stock-checkout-0003'},409);
+console.log('PASS shared developer stock engine: fixed units, disabled-project authorization, concurrent payer lock, verified settlement and paid-order replay rejection.');
