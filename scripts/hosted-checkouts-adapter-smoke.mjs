@@ -523,6 +523,31 @@ assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.bod
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'settled' }, nairaDependencies)
 assert.equal(nairaNotifications.length, 3)
 
+// Uganda uses the same USDC verification and delivery state machine, with UGX-bound routing.
+let ugandaStore
+const ugandaNotifications=[]
+const ugandaDependencies={...nairaDependencies,
+ read:async()=>ugandaStore,
+ mutate:async(_,fn)=>(ugandaStore=fn(ugandaStore)),
+ policy:()=>({...nairaDependencies.policy(),partnerId:'dev_ugandaproject',settlementMode:'ugx',nairaSettlement:{bankCode:'MOMOUGPC',bankName:'MTN',accountName:'UGANDA MERCHANT',accountNumber:'256772123456',refundAddress:'0x1111111111111111111111111111111111111111'}}),
+ prepareNaira:async(policy,id,amount)=>{assert.equal(policy.settlementMode,'ugx');return {...await nairaDependencies.prepareNaira(policy,id,amount),amountNgn:'4500.00',bankName:'MTN',bankLast4:'3456'}},
+ createId:()=> 'chk_ugandaproject1234',
+ notify:async(partnerId,event,data)=>{ugandaNotifications.push({event,data});return {status:'sent',eventId:'evt_uganda',responseStatus:204}},
+}
+const ugandaHandler=createHostedCheckoutsHandler(ugandaDependencies)
+const ugandaHeaders={...nairaHeaders,'idempotency-key':'uganda:order:000001'}
+const ugandaCreated=await request(ugandaHandler,'POST',{body:nairaBody,headers:ugandaHeaders});assert.equal(ugandaCreated.statusCode,201)
+const ugandaLookup=await request(ugandaHandler,'GET',{query:{id:ugandaCreated.body.checkoutId}})
+assert.equal(ugandaLookup.body.checkout.settlementMode,'ugx');assert.equal(ugandaLookup.body.checkout.settlementCurrency,'UGX');assert.equal(ugandaLookup.body.checkout.settlementAmount,'4500.00')
+const ugandaUrl=new URL(ugandaLookup.body.paymentUrl,'https://app.hashpaylink.com');assert.equal(ugandaUrl.searchParams.get('fiat_currency'),'UGX');assert.equal(ugandaUrl.searchParams.get('fx'),'UGX');assert.equal(ugandaUrl.searchParams.get('n'),'base');assert.equal(ugandaUrl.searchParams.get('bank'),'MTN')
+await markHostedCheckoutPaid({id:ugandaCreated.body.checkoutId,txHash:'0x'+'7'.repeat(64),payer:'0x2222222222222222222222222222222222222222',amount:'1.253',confirmedAt:'2026-07-19T12:20:00.000Z',network:'base'},ugandaDependencies)
+assert.equal(ugandaStore.checkouts[ugandaCreated.body.checkoutId].payment.status,'processing');assert.equal(ugandaNotifications.some(n=>n.event==='payment.confirmed'),false)
+await markHostedCheckoutNairaPayout({intentId:ugandaCreated.body.checkoutId,status:'pending'},ugandaDependencies);assert.equal(ugandaStore.checkouts[ugandaCreated.body.checkoutId].payment.status,'processing')
+await markHostedCheckoutNairaPayout({intentId:ugandaCreated.body.checkoutId,status:'settled'},ugandaDependencies);assert.equal(ugandaStore.checkouts[ugandaCreated.body.checkoutId].payment.status,'paid')
+assert.equal(ugandaNotifications.find(n=>n.event==='payment.confirmed').data.settlementCurrency,'UGX')
+await markHostedCheckoutNairaPayout({intentId:ugandaCreated.body.checkoutId,status:'settled'},ugandaDependencies);assert.equal(ugandaNotifications.filter(n=>n.event==='payment.confirmed').length,1)
+console.log('Uganda mobile money checkout: UGX routing and quote, USDC processing, provider-confirmed delivery and idempotent webhook passed.')
+
 let retryNow = new Date('2026-07-19T12:00:00.000Z')
 let retryStore = {
   checkouts: {},

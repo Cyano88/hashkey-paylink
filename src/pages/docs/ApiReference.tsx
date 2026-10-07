@@ -13,11 +13,11 @@ export default function ApiReference() {
           Create a human-checkout or agentic-x402 project in the Privy-authenticated developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
         </p>
         <SubSection title="Request access">
-          <p>Open the <a href="/developers" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement accepts a valid receiving address for every enabled network. Naira settlement requires a Paycrest-verified Nigerian bank account and a valid Base USDC refund address.</p>
+          <p>Open the <a href="/developers" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement accepts a valid receiving address for every enabled network. Local settlement accepts Base USDC and pays out NGN to a configured Nigerian bank account or UGX to a configured MTN/Airtel Uganda mobile money account. Configure the country, payout details and a valid Base USDC refund address in the developer dashboard. Uganda requires the same verified Pocket identity used for local payouts.</p>
         </SubSection>
         <SubSection title="Hosted flow">
           <CodeBlock lang="text">{`Create checkout → Open hosted URL → Slide to pay → Verify status and receipt`}</CodeBlock>
-          <p>The shared checkout surface is used across Hash PayLink products. USDC projects choose the networks they accept and the payer chooses one at checkout. Naira settlement is currently fixed-amount and Base-only: the payer sends the exact quoted Base USDC amount, then the bank settlement is processed.</p>
+          <p>The shared checkout surface is used across Hash PayLink products. USDC projects choose the networks they accept and the payer chooses one at checkout. Bank and mobile-money settlement are fixed-amount and Base-only: the payer sends the exact quoted Base USDC amount, then the configured local payout is processed. These are merchant receiving options, not ways for the payer to pay from a bank or mobile-money balance. X Layer USDC and xStocks settle as digital assets; direct local settlement for these assets is not supported.</p>
         </SubSection>
         <SubSection title="POST /api/v2/checkouts">
           <p>Creates an immutable, expiring USDC or paid-service checkout. Private-beta credentials and an idempotency key are required.</p>
@@ -72,7 +72,7 @@ export default function ApiReference() {
           <p>Agentic payment is available only from an agentic-x402 project and only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> or <code>base</code> with a live key. Arbitrum remains available for human checkout and Polymarket Funding, but cannot start new agent payments. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests, Polymarket funding and local-bank settlement require a separate human-checkout project.</p>
         </SubSection>
         <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
-          <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For Naira settlement, <code>processing</code> means the USDC deposit is confirmed but bank delivery is not final. Verify <code>paid</code> from your server before fulfillment.</p>
+          <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For bank or mobile-money settlement, <code>processing</code> means the USDC deposit is confirmed but local delivery is not final. Settlement reports its currency as NGN or UGX; never infer delivery from the USDC transaction alone. Verify <code>paid</code> from your server before fulfillment.</p>
           <CodeBlock lang="bash">{`curl "https://app.hashpaylink.com/api/v2/checkouts?purpose=status&id=chk_..." \\
   -H "X-API-Key: YOUR_SERVER_KEY"`}</CodeBlock>
         </SubSection>

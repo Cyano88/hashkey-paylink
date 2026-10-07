@@ -6,6 +6,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto'
 import type { Request, Response } from 'express'
 import { formatUnits, getAddress, isAddress } from 'viem'
 import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
+import {isLocalSettlement,developerSettlementCurrency} from '../src/lib/developerSettlement.js'
 import { dispatchDeveloperWebhook, prepareDeveloperNairaCheckout, resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './developer-projects.js'
 import { paymentExecutionRepository, type PaymentExecutionRepository } from './pocket/payment-execution-intents.js'
 import { ensureHostedCheckoutExecution, expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
@@ -72,7 +73,7 @@ export type HostedCheckoutPaymentAttempt = {
   receiptUrl?: string
 }
 type HostedCheckoutSettlement = {
-  mode: 'ngn'
+  mode: 'ngn' | 'ugx'
   provider: 'paycrest'
   orderId: string
   intentId: string
@@ -540,6 +541,7 @@ export async function markHostedCheckoutPaid(input: {
       status: payment.status,
       network: payment.network ?? record.network,
       amount: payment.amount,
+      ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
       payer: payment.payer,
       ...(payment.referenceType === 'circle_gateway_transfer'
         ? { gatewayTransferId: payment.txHash }
@@ -667,7 +669,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     if (newlyDelivered) updated = enqueueWebhook(updated, record.partnerId, 'payment.confirmed', {
       checkoutId: record.id,
       status: 'paid',
-      settlementCurrency: 'NGN',
+      settlementCurrency: record.settlement ? developerSettlementCurrency(record.settlement.mode) : undefined,
       settlementAmount: record.settlement?.amountNgn,
       providerStatus: status,
       transactionHash: record.payment?.txHash,
@@ -676,7 +678,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     if (newlyFailed) updated = enqueueWebhook(updated, record.partnerId, 'payment.failed', {
       checkoutId: record.id,
       status: 'failed',
-      settlementCurrency: 'NGN',
+      settlementCurrency: record.settlement ? developerSettlementCurrency(record.settlement.mode) : undefined,
       settlementStatus: status,
       amount: record.payment?.amount,
       transactionHash: record.payment?.txHash,
@@ -725,7 +727,7 @@ function hostedCheckoutAmountUnits(value: string) {
 function reservedCheckoutUnits(store: CheckoutStore, partnerId: string, nowMs: number) {
   const windowStart = nowMs - HOSTED_CHECKOUT_WINDOW_MS
   return Object.values(store.checkouts).reduce((total, record) => {
-    if (record.partnerId !== partnerId || record.flexible || record.settlement?.mode === 'ngn') return total
+    if (record.partnerId !== partnerId || record.flexible || isLocalSettlement(record.settlement?.mode)) return total
     const confirmedAt = Date.parse(record.payment?.confirmedAt ?? '')
     if (Number.isFinite(confirmedAt)) return confirmedAt >= windowStart ? total + hostedCheckoutAmountUnits(record.payment?.amount ?? record.amount) : total
     const createdAt = Date.parse(record.createdAt)
@@ -838,16 +840,18 @@ function checkoutPaymentUrl(record: CheckoutRecord) {
   const attempt = hostedCheckoutPaymentAttempt(record)
   const selectedOption = attempt.network ? hostedCheckoutPaymentOption(record, attempt.network) : null
   const params = new URLSearchParams({
-    src: record.settlement?.mode === 'ngn' ? 'bank-receive' : record.kind === 'service' ? 'service' : 'partner',
+    src: isLocalSettlement(record.settlement?.mode) ? 'bank-receive' : record.kind === 'service' ? 'service' : 'partner',
     n: selectedOption?.network ?? record.network,
     m: record.memo,
     checkout: record.id,
     attempt: hostedCheckoutPaymentAttempt(record).id,
     id: `0x${stableDirectId}`,
   })
-  if (record.settlement?.mode === 'ngn') {
+  if (record.settlement && isLocalSettlement(record.settlement.mode)) {
     params.set('hostedKind', record.kind)
-    params.set('settlementMode', 'ngn')
+    params.set('settlementMode', record.settlement.mode)
+    params.set('fiat_currency', developerSettlementCurrency(record.settlement.mode))
+    params.set('fx', developerSettlementCurrency(record.settlement.mode))
     params.set('settlement', 'instant_fiat')
     params.set('offramp', 'paycrest')
     params.set('intent', record.settlement.intentId)
@@ -936,6 +940,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           expiresAt: record.expiresAt,
           settlementMode: record.settlement?.mode ?? 'usdc',
+          ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
           ...(record.payment ? { payment: record.payment } : {}),
         })
       }
@@ -959,6 +964,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           network: hostedCheckoutPaymentAttempt(record).network ?? record.network,
             availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           settlementMode: record.settlement?.mode ?? 'usdc',
+          ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
           status: record.payment?.status ?? 'pending',
           settlementStatus: record.payout?.status,
             expiresAt: record.expiresAt,
@@ -1008,7 +1014,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const description = clean(req.body?.description, 240)
     const amount = req.body?.flexible === true ? '' : normalizePositiveUsdc(req.body?.amount)
     const flexible = req.body?.flexible === true
-    const isNairaProject = !providerRouting && 'projectManaged' in policy && policy.settlementMode === 'ngn'
+    const isNairaProject = !providerRouting && 'projectManaged' in policy && isLocalSettlement(policy.settlementMode)
     const requestedNetwork = clean(req.body?.network, 20).toLowerCase()
     const requestedRecipient = clean(req.body?.recipient, 80)
     if ('projectManaged' in policy && checkoutMode !== policy.checkoutMode) {
@@ -1049,7 +1055,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (checkoutMode === 'human' && routingOptions && requestedNetwork && requestedNetwork !== network) return res.status(400).json({ ok: false, error: 'network must match defaultNetwork when paymentOptions are supplied.' })
     if (routingOptions && requestedRecipient && legacyRecipient !== recipient) return res.status(400).json({ ok: false, error: 'recipient must match the default payment option.' })
     if (!flexible && !amount) return res.status(400).json({ ok: false, error: 'Enter a positive USDC amount or set flexible to true.' })
-    if (isNairaProject && flexible) return res.status(400).json({ ok: false, error: 'Naira settlement currently requires a fixed USDC amount.' })
+    if (isNairaProject && flexible) return res.status(400).json({ ok: false, error: 'Local settlement currently requires a fixed USDC amount.' })
     if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 1_440) return res.status(400).json({ ok: false, error: 'expiresInMinutes must be a whole number between 5 and 1440.' })
     if (returnUrl) {
       const origin = normalizedOrigin(returnUrl)
@@ -1151,7 +1157,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         ...(providerRouting ? { providerFunding: providerRouting.funding } : {}),
         ...(checkoutMode === 'human' && routingOptions && !nairaOrder ? { paymentOptions: routingOptions } : {}),
         ...(nairaOrder ? { settlement: {
-          mode: 'ngn' as const,
+          mode: (policy as DeveloperCheckoutPolicy).settlementMode as 'ngn' | 'ugx',
           provider: 'paycrest' as const,
           orderId: nairaOrder.orderId,
           intentId: nairaOrder.intentId,

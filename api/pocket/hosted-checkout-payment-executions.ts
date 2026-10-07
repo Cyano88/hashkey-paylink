@@ -27,6 +27,7 @@ function paymentMetadata(record: CheckoutRecord) {
     fundingRequestId: record.providerFunding?.requestId || '',
     receiptId: attempt?.receiptId || '',
     receiptUrl: attempt?.receiptUrl || '',
+    ...(record.settlement?.mode === 'ugx' ? {settlementCurrency:'UGX',settlementAmount:record.settlement.amountNgn,payoutMethod:'mobile_money'} : {}),
   }
 }
 
@@ -40,6 +41,7 @@ function checkoutMetadata(record: CheckoutRecord) {
     memo: record.memo,
     provider: record.providerFunding?.provider || '',
     fundingRequestId: record.providerFunding?.requestId || '',
+    ...(record.settlement?.mode === 'ugx' ? {settlementCurrency:'UGX',settlementAmount:record.settlement.amountNgn,payoutMethod:'mobile_money'} : {}),
   }
 }
 
@@ -55,7 +57,7 @@ export async function ensureHostedCheckoutExecution(record: CheckoutRecord, repo
     amount,
     sourceNetwork: executionNetwork,
     settlementNetwork: record.settlement ? 'base' : executionNetwork,
-    destinationType: record.settlement ? 'verified_merchant_bank_account' : 'partner_checkout',
+    destinationType: record.settlement?.mode === 'ugx' ? 'verified_merchant_mobile_money' : record.settlement ? 'verified_merchant_bank_account' : 'partner_checkout',
     metadata: checkoutMetadata(record),
   })
   if (created.intent.resourceId) return created.intent

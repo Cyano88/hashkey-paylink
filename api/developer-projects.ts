@@ -1,3 +1,6 @@
+import {isLocalSettlement,developerSettlementCurrency,ugandaMobileMoneyProviders,type DeveloperSettlementMode} from '../src/lib/developerSettlement.js'
+import {normalizePayoutAccount} from '../src/pocket/lib/pocketFiatCorridors.js'
+import {requirePocketBasicKyc} from './pocket/kyc-level.js'
 import { authorizeOperations } from './operations-policy.js'
 import { normalizeXLayerCheckoutConfig, type XLayerCheckoutConfig } from '../src/lib/xlayerCheckoutConfig.js'
 import { verifyOperationsSection } from './operations-access.js'
@@ -19,7 +22,7 @@ import { createPaycrestOfframpOrder, isPaycrestConfigured, listPaycrestInstituti
 const STORE_KEY = (process.env.DEVELOPER_PROJECT_STORE_KEY ?? 'hashpaylink:developer-projects:v1').trim()
 const NETWORKS = ['base', 'arbitrum', 'arc'] as const
 type DeveloperNetwork = typeof NETWORKS[number]
-type SettlementMode = 'usdc' | 'ngn'
+type SettlementMode = DeveloperSettlementMode
 type DeveloperEnvironment = 'test' | 'live'
 export type DeveloperCheckoutMode = 'human' | 'agentic'
 export type DeveloperCapability = ProductCapability
@@ -140,8 +143,9 @@ type Dependencies = {
   verify: (req: Request) => Promise<VerifiedDeveloper>
   validateWebhook: (url: string) => Promise<void>
   paycrestReady: () => boolean
-  listBanks: () => Promise<PaycrestInstitution[]>
-  verifyBank: (input: { institution: string; accountIdentifier: string }) => Promise<string>
+  listBanks: (currency?: 'NGN' | 'UGX') => Promise<PaycrestInstitution[]>
+  requireLocalPayoutEligibility?: typeof requirePocketBasicKyc
+  verifyBank: (input: { institution: string; accountIdentifier: string; currency?: 'NGN' | 'UGX' }) => Promise<string>
   portalSecret: () => string
   adminEmails: () => string
   adminUserIds: () => string
@@ -259,7 +263,7 @@ const defaults: Dependencies = {
   verify: verifyDeveloper,
   validateWebhook: validatePublicWebhookDestination,
   paycrestReady: isPaycrestConfigured,
-  listBanks: () => listPaycrestInstitutions('NGN'),
+  listBanks: currency => listPaycrestInstitutions(currency ?? 'NGN'),
   verifyBank: verifyPaycrestAccount,
   portalSecret: () => (process.env.DEVELOPER_PORTAL_SECRET ?? '').trim(),
   adminEmails: () => (process.env.DEVELOPER_ADMIN_EMAILS ?? '').trim(),
@@ -579,8 +583,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if (req.method === 'GET') {
         const resource = clean(req.query?.resource, 30).toLowerCase()
         if (resource === 'institutions') {
-          if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Naira settlement is temporarily unavailable.' })
-          const institutions = await dependencies.listBanks()
+          if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Local settlement is temporarily unavailable.' })
+          const currency = clean(req.query?.currency, 3).toUpperCase() || 'NGN'
+          if (currency !== 'NGN' && currency !== 'UGX') return res.status(400).json({ok:false,error:'Choose NGN or UGX.'})
+          const institutions = (await dependencies.listBanks(currency)).filter(item => currency !== 'UGX' || ugandaMobileMoneyProviders.includes(item.code as typeof ugandaMobileMoneyProviders[number]))
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
@@ -791,8 +797,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
-        const networks = !routingRequired ? [] : settlementMode === 'ngn' ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
-        const defaultNetwork = !routingRequired ? 'arc' : settlementMode === 'ngn' ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
+        const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
+        const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
         const recipients = Object.fromEntries(NETWORKS.flatMap(network => {
           const recipient = validRecipient(req.body?.recipients?.[network])
           return recipient ? [[network, recipient]] : []
@@ -802,16 +808,21 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           : []
         const webhookUrl = normalizedWebhookUrl(req.body?.webhookUrl)
         const refundAddress = validRecipient(req.body?.refundAddress)
-        const bankCode = settlementMode === 'ngn' ? clean(req.body?.bankCode, 40) : ''
-        const bankName = settlementMode === 'ngn' ? clean(req.body?.bankName, 100) : ''
-        const bankAccountName = settlementMode === 'ngn' ? clean(req.body?.bankAccountName, 120) : ''
-        const bankAccountNumber = settlementMode === 'ngn' ? clean(req.body?.bankAccountNumber, 20).replace(/\D/g, '') : ''
+        const bankCode = isLocalSettlement(settlementMode) ? clean(req.body?.bankCode, 40) : ''
+        const bankName = isLocalSettlement(settlementMode) ? clean(req.body?.bankName, 100) : ''
+        const bankAccountName = isLocalSettlement(settlementMode) ? clean(req.body?.bankAccountName, 120) : ''
+        const currency = settlementMode === 'ugx' ? 'UGX' : 'NGN'
+        const rawAccount = clean(req.body?.bankAccountNumber, 30)
+        const bankAccountNumber = isLocalSettlement(settlementMode) ? normalizePayoutAccount(rawAccount, currency) : ''
+        if (isLocalSettlement(settlementMode) && rawAccount && !bankAccountNumber) return res.status(400).json({ok:false,error:currency === 'UGX' ? 'Enter a valid Uganda mobile money number.' : 'Enter a valid 10-digit Nigerian account number.'})
+        if (isLocalSettlement(settlementMode) && xlayerCheckout) return res.status(400).json({ok:false,error:'Local settlement accepts Base USDC. Disable X Layer acceptance for this project.'})
         if (name.length < 2 || !website || useCase.length < 20) return res.status(400).json({ ok: false, error: 'Complete the platform details.' })
         if (requestedBrandImageUrl && !brandImageUrl) return res.status(400).json({ ok: false, error: 'Checkout brand marks must be PNG, WebP, or JPG files hosted on the project website origin.' })
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         if (currentCheckoutMode === 'agentic' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agentic x402 projects support USDC settlement only.' })
         if (currentCheckoutMode === 'agentic' && capabilities.includes('polymarket_funding')) return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
-        if (settlementMode !== 'usdc' && settlementMode !== 'ngn') return res.status(400).json({ ok: false, error: 'Choose USDC or Naira settlement.' })
+        if (settlementMode !== 'usdc' && !isLocalSettlement(settlementMode)) return res.status(400).json({ ok: false, error: 'Choose USDC, Nigerian bank, or Uganda mobile money settlement.' })
+        if (isLocalSettlement(settlementMode) && !capabilities.includes('hosted_checkout')) return res.status(400).json({ok:false,error:'Local settlement requires Hosted checkout.'})
         if (currentCheckoutMode === 'agentic' && networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(400).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Remove unsupported networks in Settings.' })
         if (networks.some(network => !developerProductNetworks(currentCheckoutMode, capabilities).includes(network))) return res.status(400).json({ ok: false, error: 'Choose supported settlement networks. X Layer agreements and swaps use their own product settings.' })
         if (capabilities.length === 1 && capabilities[0] === 'arc_agreements' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agreements require Arc USDC settlement.' })
@@ -820,24 +831,30 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!allowedOrigins.length) return res.status(400).json({ ok: false, error: 'Add at least one allowed return origin.' })
         if (clean(req.body?.webhookUrl, 300) && !webhookUrl) return res.status(400).json({ ok: false, error: 'Enter a valid HTTPS webhook URL.' })
         if (webhookUrl) await dependencies.validateWebhook(webhookUrl)
-        if (settlementMode === 'ngn' && !refundAddress) return res.status(400).json({ ok: false, error: 'Add a valid Base USDC refund address for Naira settlement.' })
-        if (settlementMode === 'ngn' && (!bankCode || !bankName || (!/^\d{10}$/.test(bankAccountNumber) && !currentProject.bankAccountCipher))) {
-          return res.status(400).json({ ok: false, error: 'Add a Nigerian bank and 10-digit account number for Naira settlement.' })
+        if (isLocalSettlement(settlementMode) && !refundAddress) return res.status(400).json({ ok: false, error: 'Add a valid Base USDC refund address for local settlement.' })
+        if (isLocalSettlement(settlementMode) && (!bankCode || !bankName || (!bankAccountNumber && !currentProject.bankAccountCipher))) {
+          return res.status(400).json({ ok: false, error: 'Add a payout institution and valid account details for the selected country.' })
         }
 
         let verifiedBankName = bankAccountNumber ? bankAccountName : currentProject.bankAccountName
         let bankVerifiedAt = currentProject.bankVerifiedAt
-        if (settlementMode === 'ngn') {
-          if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Naira settlement is temporarily unavailable.' })
-          const bankChanged = bankCode !== currentProject.bankCode || bankName !== currentProject.bankName
+        if (isLocalSettlement(settlementMode)) {
+          if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Local settlement is temporarily unavailable.' })
+          const bankChanged = bankCode !== currentProject.bankCode || bankName !== currentProject.bankName || settlementMode !== currentProject.settlementMode
+          if (settlementMode === 'ugx') {
+            await (dependencies.requireLocalPayoutEligibility ?? requirePocketBasicKyc)(identity.userId)
+            const providers = await dependencies.listBanks('UGX')
+            if (!ugandaMobileMoneyProviders.includes(bankCode as typeof ugandaMobileMoneyProviders[number]) || !providers.some(p => p.code === bankCode)) return res.status(400).json({ok:false,error:'Choose a supported Uganda mobile money provider.'})
+          } else if (ugandaMobileMoneyProviders.includes(bankCode as typeof ugandaMobileMoneyProviders[number])) return res.status(400).json({ok:false,error:'Choose a Nigerian bank for NGN settlement.'})
           if (!bankAccountNumber && bankChanged) return res.status(400).json({ ok: false, error: 'Re-enter the account number after changing the bank.' })
           if (bankAccountNumber) {
-            verifiedBankName = clean(await dependencies.verifyBank({ institution: bankCode, accountIdentifier: bankAccountNumber }), 120)
+            verifiedBankName = clean(await dependencies.verifyBank({ institution: bankCode, accountIdentifier: bankAccountNumber, currency }), 120)
+            if (settlementMode === 'ugx' && !verifiedBankName) return res.status(503).json({ok:false,error:'The provider could not verify this mobile money account. Try again later.'})
             if (!verifiedBankName || verifiedBankName.toLowerCase() === 'ok') verifiedBankName = bankAccountName
             if (!verifiedBankName) return res.status(400).json({ ok: false, error: 'Paycrest verified the account but did not return its name. Enter the account name and save again.' })
             bankVerifiedAt = dependencies.now().toISOString()
           }
-          if (!bankVerifiedAt) return res.status(400).json({ ok: false, error: 'Verify the bank account before activating Naira settlement.' })
+          if (!bankVerifiedAt) return res.status(400).json({ ok: false, error: 'Verify the payout details before activating local settlement.' })
         }
 
         const store = await dependencies.mutate(STORE_KEY, current => {
@@ -848,9 +865,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
-            bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: settlementMode === 'ngn' ? bankVerifiedAt : undefined,
-            bankAccountLast4: settlementMode === 'ngn' ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
-            bankAccountCipher: settlementMode === 'ngn' ? (bankAccountNumber ? encryptValue(secret, bankAccountNumber) : latest.bankAccountCipher) : '',
+            bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: isLocalSettlement(settlementMode) ? bankVerifiedAt : undefined,
+            bankAccountLast4: isLocalSettlement(settlementMode) ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
+            bankAccountCipher: isLocalSettlement(settlementMode) ? (bankAccountNumber ? encryptValue(secret, bankAccountNumber) : latest.bankAccountCipher) : '',
             updatedAt: dependencies.now().toISOString(),
           }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
@@ -942,8 +959,8 @@ function policyForDeveloperProject(
   const allowedNetworks = environment === 'test'
     ? new Set<DeveloperNetwork>()
     : new Set<DeveloperNetwork>(developerProductNetworks(projectCheckoutMode(project), project.capabilities ?? ['hosted_checkout']))
-  if (project.settlementMode === 'ngn' && environment !== 'live') return null
-  const paymentOptions = project.settlementMode === 'ngn'
+  if (isLocalSettlement(project.settlementMode) && environment !== 'live') return null
+  const paymentOptions = isLocalSettlement(project.settlementMode)
     ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])
     : project.networks.flatMap(network => (
         allowedNetworks.has(network) && (network !== 'arc' || project.arcMainnetChainId === 5042) && project.recipients[network]
@@ -951,7 +968,7 @@ function policyForDeveloperProject(
           : []
       ))
   if (!paymentOptions.length && (environment !== 'live' || needsSettlementRouting(effectiveProductCapabilities(project)))) return null
-  if (project.settlementMode === 'ngn') {
+  if (isLocalSettlement(project.settlementMode)) {
     if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
     return {
       partnerId: project.id,
@@ -962,7 +979,7 @@ function policyForDeveloperProject(
       allowedOrigins: project.allowedOrigins,
       defaultNetwork: 'base',
       paymentOptions,
-      settlementMode: 'ngn',
+      settlementMode: project.settlementMode,
       environment,
       checkoutMode: projectCheckoutMode(project),
       capabilities: effectiveProductCapabilities(project),
@@ -1077,21 +1094,24 @@ export function buildDeveloperWebhookRequest(
   return { eventId, payload, timestamp, signature: developerWebhookSignature(signingSecret, timestamp, payload) }
 }
 
-export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPolicy, checkoutId: string, requestedUsdc: string) {
+// Keep the exported name for existing callers; settlementMode binds the local currency.
+export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPolicy, checkoutId: string, requestedUsdc: string, dependencies = {availability:resolvePaycrestOfframpAvailability,createOrder:createPaycrestOfframpOrder}) {
   const settlement = policy.nairaSettlement
   const amount = Number(requestedUsdc)
-  if (policy.settlementMode !== 'ngn' || !settlement) throw new Error('Naira settlement is not configured for this project.')
+  if (!isLocalSettlement(policy.settlementMode) || !settlement) throw new Error('Local settlement is not configured for this project.')
   if (!Number.isFinite(amount) || amount <= 0) throw Object.assign(new Error('Enter a positive USDC checkout amount.'), { status: 400 })
-  const availability = await resolvePaycrestOfframpAvailability({ amount: requestedUsdc, network: 'base', token: 'USDC', fiat: 'NGN' })
+  const currency = developerSettlementCurrency(policy.settlementMode)
+  const availability = await dependencies.availability({ amount: requestedUsdc, network: 'base', token: 'USDC', fiat: currency })
   if (!availability.exact) {
     throw Object.assign(new Error(`Up to ${availability.availableUsdc} USDC is available now. Enter this amount or less.`), { status: 409, code: 'PAYCREST_AMOUNT_UNAVAILABLE' })
   }
   const rate = availability.rate
   const amountNgn = (amount * rate).toFixed(2)
-  const order = await createPaycrestOfframpOrder({
+  const order = await dependencies.createOrder({
     intentId: checkoutId,
     merchantId: policy.partnerId,
     amountNgn,
+    fiatCurrency: currency,
     estimatedAmountUsdc: requestedUsdc,
     bankCode: settlement.bankCode,
     accountNumber: settlement.accountNumber,

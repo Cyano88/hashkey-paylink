@@ -27,7 +27,7 @@ type Project = {
   useCase: string
   checkoutMode: CheckoutMode
   capabilities: Capability[]
-  settlementMode: 'usdc' | 'ngn'
+  settlementMode: 'usdc' | 'ngn' | 'ugx'
   settlementStatus: 'ready' | 'review_required'
   operationalStatus?: 'active' | 'suspended'
   suspensionReason?: string
@@ -64,6 +64,8 @@ function fieldClass() {
 
 export default function DeveloperPortalPage() {
   const { ready, authenticated, getAccessToken, logout, user } = usePrivy()
+  const institutionAccessToken = useRef(getAccessToken)
+  institutionAccessToken.current = getAccessToken
   const loadGeneration = useRef(0)
   const [projects, setProjects] = useState<Project[]>([])
   const [authWaitExpired, setAuthWaitExpired] = useState(false)
@@ -148,19 +150,21 @@ export default function DeveloperPortalPage() {
   useEffect(() => { const project = params.get('project'); if (project) { setNewKey(null); setNewWebhookSecret(null); setActiveId(project) } }, [params.get('project')])
   useEffect(() => { setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId])
   useEffect(() => {
-    if (!authenticated || draft?.settlementMode !== 'ngn' || institutions.length || institutionsLoading) return
+    if (!authenticated || !draft || draft.settlementMode === 'usdc') { setInstitutions([]); return }
+    const currency = draft.settlementMode === 'ugx' ? 'UGX' : 'NGN'
+    setInstitutions([])
     let cancelled = false
     setInstitutionsLoading(true)
-    void getAccessToken().then(async token => {
-      if (!token) throw new Error('Sign in again to load banks.')
-      const response = await fetch('/api/developer-projects?resource=institutions', { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' })
+    void institutionAccessToken.current().then(async token => {
+      if (!token) throw new Error('Sign in again to load payout institutions.')
+      const response = await fetch('/api/developer-projects?resource=institutions&currency='+currency, { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' })
       const data = await response.json().catch(() => undefined) as { ok?: boolean; institutions?: Institution[]; error?: string } | undefined
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Banks could not be loaded.')
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Payout institutions could not be loaded.')
       if (!cancelled) setInstitutions(data.institutions ?? [])
-    }).catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Banks could not be loaded.') })
+    }).catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Payout institutions could not be loaded.') })
       .finally(() => { if (!cancelled) setInstitutionsLoading(false) })
     return () => { cancelled = true }
-  }, [authenticated, draft?.settlementMode, getAccessToken, institutions.length])
+  }, [authenticated, draft?.settlementMode, user?.id])
 
   async function createProject() {
     const generation = loadGeneration.current
@@ -375,6 +379,8 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
 
 function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, onSave }: { draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
   const bankAccountNumber = draft.bankAccountNumber ?? ''
+  const localSettlement = draft.settlementMode !== 'usdc'
+  const mobileMoney = draft.settlementMode === 'ugx'
   const routingRequired = needsSettlementRouting(draft.capabilities)
   const agreementOnly = draft.capabilities.includes('arc_agreements') && !draft.capabilities.some(capability=>['hosted_checkout','polymarket_funding'].includes(capability))
   const supportedNetworks = developerProductNetworks(draft.checkoutMode, draft.capabilities)
@@ -431,13 +437,13 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     </div>
 
     {routingRequired && <><div className="mt-7">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement for checkout and Arc agreements</p>
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{localSettlement ? 'Checkout settlement' : 'Settlement for checkout and Arc agreements'}</p>
       {draft.checkoutMode === 'agentic' || agreementOnly
         ? <div className="mt-2 rounded-xl bg-gray-100 px-3 py-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.05] dark:text-gray-200">Receive USDC</div>
-        : <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
-          {[['usdc', 'Receive USDC'], ['ngn', 'Receive Naira']] .map(([value, label]) => <button key={value} type="button" onClick={() => setDraft({ ...draft, settlementMode: value as 'usdc' | 'ngn', ...(value === 'ngn' ? { networks: ['base'], defaultNetwork: 'base', recipients: {} } : {}) })} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
+        : <div className="mt-2 grid grid-cols-1 gap-2 rounded-2xl bg-gray-100 p-1 sm:grid-cols-3 dark:bg-white/[0.05]">
+          {[['usdc', 'Digital assets'], ['ngn', 'Nigeria bank'], ['ugx', 'Uganda mobile money']] .map(([value, label]) => <button key={value} type="button" onClick={() => {if(value===draft.settlementMode)return;setDraft({ ...draft, settlementMode: value as Project['settlementMode'], bankCode:'',bankName:'',bankAccountName:'',bankAccountNumber:'',bankAccountLast4:'',bankVerifiedAt:undefined, ...(value !== 'usdc' ? { networks: ['base'], defaultNetwork: 'base', recipients: {}, xlayerCheckout:undefined } : {}) })}} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
         </div>}
-      {draft.settlementMode === 'ngn' && <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200">Payers use Base USDC. Paycrest sends the Naira settlement to your verified bank account.</p>}
+      {localSettlement && <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200">Customers pay USDC on Base. {mobileMoney ? 'You receive UGX in your configured MTN or Airtel mobile money account.' : 'You receive NGN in your configured Nigerian bank account.'} Delivery is confirmed before checkout is marked paid.</p>}
     </div>
 
     <div className="mt-7">
@@ -445,7 +451,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {NETWORKS.filter(network => network.key !== 'solana' && supportedNetworks.includes(network.key)).map(network => {
           const active = network.key !== 'solana' && draft.networks.includes(network.key)
-          const disabled = network.disabled || (draft.settlementMode === 'ngn' && network.key !== 'base')
+          const disabled = network.disabled || (localSettlement && network.key !== 'base')
           return <button key={network.key} type="button" disabled={disabled} onClick={() => network.key !== 'solana' && toggleNetwork(network.key)} className={cn('flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition', active ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:bg-blue-400/15 dark:text-blue-200' : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-blue-400/10', disabled && 'cursor-not-allowed opacity-45')}>{network.label}{network.note && <span className="text-xs font-black uppercase opacity-70">{network.note}</span>}</button>
         })}
       </div>
@@ -465,12 +471,12 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout })} />}
     <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? ''} onChange={event => setDraft({ ...draft, allowedOrigins: [event.target.value] })} placeholder="https://yourplatform.com" /></Field>
 
-    {draft.settlementMode === 'ngn' && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
-      <Field label="Bank" className="sm:col-span-2"><PocketSelect value={draft.bankCode} options={institutions.map(bank => ({ value: bank.code, label: bank.name }))} onChange={value => { const bank = institutions.find(item => item.code === value); setDraft({ ...draft, bankCode: value, bankName: bank?.name ?? '', bankAccountNumber: '', bankVerifiedAt: undefined }) }} disabled={institutionsLoading} placeholder={institutionsLoading ? 'Loading banks…' : 'Select bank'} ariaLabel="Naira settlement bank" /></Field>
-      <Field label="Account number"><input className={fieldClass()} inputMode="numeric" value={bankAccountNumber} onChange={event => setDraft({ ...draft, bankAccountNumber: event.target.value, bankVerifiedAt: undefined })} placeholder={draft.bankAccountLast4 ? `••••••${draft.bankAccountLast4}` : '10-digit account'} /></Field>
-      <Field label="Account name"><input className={fieldClass()} value={draft.bankAccountName} readOnly={Boolean(draft.bankVerifiedAt && !bankAccountNumber)} onChange={event => setDraft({ ...draft, bankAccountName: event.target.value, bankVerifiedAt: undefined })} placeholder="Verified after save" /></Field>
-      <Field label="USDC refund address" className="sm:col-span-2"><input className={fieldClass()} value={draft.refundAddress} onChange={event => setDraft({ ...draft, refundAddress: event.target.value })} placeholder="0x..." /></Field>
-      {draft.bankVerifiedAt && <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300"><ShieldCheck className="h-4 w-4" /> Bank account verified</p>}
+    {localSettlement && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
+      <Field label={mobileMoney ? "Mobile money provider" : "Bank"} className="sm:col-span-2"><PocketSelect value={draft.bankCode} options={institutions.map(bank => ({ value: bank.code, label: bank.name }))} onChange={value => { const bank = institutions.find(item => item.code === value); setDraft({ ...draft, bankCode: value, bankName: bank?.name ?? '', bankAccountNumber: '', bankVerifiedAt: undefined }) }} disabled={institutionsLoading} placeholder={institutionsLoading ? 'Loading...' : mobileMoney ? 'Select provider' : 'Select bank'} ariaLabel={mobileMoney ? 'Uganda mobile money provider' : 'Naira settlement bank'} /></Field>
+      <Field label={mobileMoney ? "Mobile money number" : "Account number"}><input className={fieldClass()} inputMode="numeric" value={bankAccountNumber} onChange={event => setDraft({ ...draft, bankAccountNumber: event.target.value, bankVerifiedAt: undefined })} placeholder={draft.bankAccountLast4 ? `••••••${draft.bankAccountLast4}` : mobileMoney ? '2567XXXXXXXX' : '10-digit account'} /></Field>
+      <Field label={mobileMoney ? "Registered account name" : "Account name"}><input className={fieldClass()} value={draft.bankAccountName} readOnly={Boolean(draft.bankVerifiedAt && !bankAccountNumber)} onChange={event => setDraft({ ...draft, bankAccountName: event.target.value, bankVerifiedAt: undefined })} placeholder={mobileMoney ? "Name registered with the provider" : "Verified after save"} /></Field>
+      <Field label="Base USDC refund address" className="sm:col-span-2"><input className={fieldClass()} value={draft.refundAddress} onChange={event => setDraft({ ...draft, refundAddress: event.target.value })} placeholder="0x..." /></Field>
+      {draft.bankVerifiedAt && <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300"><ShieldCheck className="h-4 w-4" /> Payout details checked</p>}
     </div>}
     <button type="button" disabled={busy} onClick={onSave} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Save changes</button>
   </div>

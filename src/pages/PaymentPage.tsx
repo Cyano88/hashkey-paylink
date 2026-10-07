@@ -78,6 +78,7 @@ import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
 import { hostedCheckoutPresentation, resolveHostedCheckoutKind } from '../lib/hostedCheckout'
 import {saveCheckoutCircleSession,restoreCheckoutCircleSession,clearCheckoutCircleSession} from '../lib/checkoutCircleSession'
+import {assertHostedLocalSettlementOrder} from '../lib/hostedLocalSettlement'
 import { PRIVY_AUTH_ENABLED, PRIVY_APP_ID } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
@@ -566,12 +567,13 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const isHostedCheckout = /^chk_[a-zA-Z0-9]{8,40}$/.test(hostedCheckoutId)
   const hostedKind = getPaylinkParam(initParams, 'hostedKind', 'hostedKind')
   const hostedSettlementMode = getPaylinkParam(initParams, 'settlementMode', 'settlementMode')
-  const isHostedNairaSettlement = isHostedCheckout && hostedSettlementMode === 'ngn'
+  const isHostedLocalSettlement = isHostedCheckout && (hostedSettlementMode === 'ngn' || hostedSettlementMode === 'ugx')
   const isHostedService = isHostedCheckout && (getPaylinkParam(initParams, 'src', 'src') === 'service' || hostedKind === 'service')
   const [hostedIntentStatus, setHostedIntentStatus] = useState<'idle' | 'checking' | 'verified' | 'error'>(() => isHostedCheckout ? 'checking' : 'idle')
   const [hostedIntentError, setHostedIntentError] = useState('')
   const [hostedConfirmationStatus, setHostedConfirmationStatus] = useState<'idle' | 'checking' | 'processing' | 'verified' | 'error'>('idle')
   const [hostedConfirmationError, setHostedConfirmationError] = useState('')
+  const [hostedPayoutFailed, setHostedPayoutFailed] = useState(false)
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
@@ -619,7 +621,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
   const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
   const ngPosOfframpProvider = (initParams.get('offramp') ?? '').trim()
-  const ngPosPaycrestIntentId = isBankReceivePayment ? '' : (initParams.get('intent') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
+  const ngPosPaycrestIntentId = isBankReceivePayment && !isHostedLocalSettlement ? '' : (initParams.get('intent') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const ngPosBankName = (initParams.get('bank') ?? '').trim()
   const ngPosBankAccount = (initParams.get('acct') ?? '').trim()
   const ngPosBankAccountName = (initParams.get('acctName') ?? '').trim()
@@ -700,6 +702,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             setHostedConfirmationStatus('verified')
           } else if (attempt?.status === 'processing') {
             setHostedConfirmationStatus('processing')
+          } else if (isHostedLocalSettlement && attempt?.status === 'failed') {
+            setHostedPayoutFailed(true)
           }
         }
       })
@@ -749,6 +753,11 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     if (!fxCurrency || fxSrc === 'custom') return
     setFxLoading(true)
     try {
+      if (isHostedLocalSettlement) {
+        const rate = Number(ngPosAmountNgn) / Number(amt)
+        if (Number.isFinite(rate) && rate > 0) { setFxRate(rate); setFxStale(false) }
+        return
+      }
       if (isNgPosPaycrestOfframp && ngPosMerchantId) {
         const response = await fetch(`/api/ng-pos?merchant_id=${encodeURIComponent(ngPosMerchantId)}`)
         const value = await response.json().catch(() => ({})) as { ok?: boolean; merchant?: { fx_rate_ngn_per_usdc?: string; fiat_currency?: string } }
@@ -763,7 +772,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (d.ok && d.rate) { setFxRate(d.rate); setFxStale(d.stale ?? false) }
     } catch { /* ignore */ }
     finally { setFxLoading(false) }
-  }, [fxCurrency, fxSrc, isNgPosPaycrestOfframp, ngPosMerchantId])
+  }, [fxCurrency, fxSrc, isNgPosPaycrestOfframp, ngPosMerchantId, isHostedLocalSettlement, ngPosAmountNgn, amt])
 
   useEffect(() => { if (fxShow && fxSrc === 'live') refreshFxRate() }, [fxShow, fxSrc, refreshFxRate])
 
@@ -2746,6 +2755,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     setPaycrestStatusText('Preparing payout...')
     try {
       if (!settlementIntentId) {
+        if (isHostedLocalSettlement) throw Error('This checkout has no verified payout order. Reload and try again.')
         const amountNgn = isFlex ? localAmt.trim() : ngPosAmountNgn.trim()
         if (!ngPosMerchantId || !amountNgn || Number.parseFloat(amountNgn) <= 0) {
           throw new Error('Enter the local amount before preparing payout.')
@@ -2790,6 +2800,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
       if (!response.ok || !data.ok || !data.order) {notifyPocketKycRequirement(data);throw new Error(data.error || 'Could not prepare payout.')}
+      if (isHostedLocalSettlement) assertHostedLocalSettlementOrder(data.order,{id:hostedCheckoutId,recipient:activeRecipient,amount:effectiveAmt,currency:posFiatCurrency})
       if (pocketScan) assertPocketScanPayoutPayable(data.order)
       const needsReview = !!pocketScan && pocketScanPayoutNeedsReview(paycrestOrder, data.order)
       setPaycrestOrder(data.order)
@@ -3373,7 +3384,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const browserPaymentFlow = !pocketScan && !isBankSendPayment
   const fullScreenHumanCheckout = browserPaymentFlow && !isPolymarketFunding && !isAgentOrWalletFunding
-  const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled')
+  const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
   const checkoutSlideStatus: SlideActionStatus = (pocketScan || browserPaymentFlow ? pocketScanDelivered : isConfirmed)
     ? 'successful'
     : isSendError
@@ -3667,7 +3678,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string; error?: string } | undefined
         if (!res.ok || !data?.ok) throw new Error(data?.error || 'Checkout verification is still pending.')
         if (data.receiptId) setPaymentReceiptId(data.receiptId)
-        if (hosted) setHostedConfirmationStatus(isHostedNairaSettlement ? 'processing' : 'verified')
+        if (hosted) setHostedConfirmationStatus(isHostedLocalSettlement ? 'processing' : 'verified')
         return
       } catch (error) {
         lastError = error instanceof Error ? error.message : 'Checkout verification is still pending.'
@@ -3764,7 +3775,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }, [isConfirmed, txHash, isHostedCheckout, isNgPosPayment])
 
   useEffect(() => {
-    if (!isHostedNairaSettlement || hostedConfirmationStatus !== 'processing') return
+    if (!isHostedLocalSettlement || hostedConfirmationStatus !== 'processing') return
     let cancelled = false
     let timer: number | undefined
     async function pollSettlement() {
@@ -3777,7 +3788,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             return
           }
           if (data?.checkout?.status === 'failed') {
-            setHostedConfirmationError('Bank settlement was not completed. Do not pay again; check the refund wallet or contact support.')
+            setHostedPayoutFailed(true)
+            setHostedConfirmationError('Local settlement was not completed. Do not pay again; check the refund wallet or contact support.')
             setHostedConfirmationStatus('error')
             return
           }
@@ -3787,7 +3799,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     }
     void pollSettlement()
     return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
-  }, [hostedCheckoutId, hostedConfirmationStatus, isHostedNairaSettlement])
+  }, [hostedCheckoutId, hostedConfirmationStatus, isHostedLocalSettlement])
 
   // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
@@ -3949,7 +3961,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
   if (pocketScan && (pocketScanDelivered || pocketSlowConfirmation || isSendError)) {
-    const delivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled')
+    const delivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
     const state = delivered ? 'successful' : isEvmReverted || isBasePaymasterFailed || (isSendError && !txHash) ? 'failed' : 'pending'
     const status = state === 'successful' ? 'confirmed' : state === 'failed' ? 'failed' : 'processing'
     const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
@@ -3986,13 +3998,13 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
 
   if (browserPaymentFlow && (isConfirmed || Boolean(txHash) || circleEvmAcceptedPending)) {
-    const failed = isEvmReverted || isBasePaymasterFailed
-    const state = checkoutCompletion({transferConfirmed:isConfirmed,checkoutVerified:!isHostedCheckout||hostedConfirmationStatus==='verified',payoutSettled:!isNgPosPaycrestOfframp||paycrestOrder?.status==='settled',fundingComplete:!isPolymarketBridge||polymarketBridgeComplete,reverted:failed})
+    const failed = isEvmReverted || isBasePaymasterFailed || hostedPayoutFailed
+    const state = checkoutCompletion({transferConfirmed:isConfirmed,checkoutVerified:!isHostedCheckout||hostedConfirmationStatus==='verified',payoutSettled:!isNgPosPaycrestOfframp||(isHostedLocalSettlement?hostedConfirmationStatus==='verified':paycrestOrder?.status==='settled'),fundingComplete:!isPolymarketBridge||polymarketBridgeComplete,reverted:failed})
     const receipt = paymentReceipt ? { ...paymentReceipt, status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
     return <><HashPayLinkCheckoutBrand/><BrowserPaymentResult fullScreen={fullScreenHumanCheckout}
       state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={String(payableAmt)+' '+meta.asset} receipt={receipt}
       statusLabel={state==='successful' && (isPolymarketFunding||isAgentOrWalletFunding) ? 'Funded' : undefined}
-      detail={failed ? 'The transaction failed. Check its status before starting another payment.' : isPolymarketBridge ? 'Waiting for funds to reach your Polymarket account. Do not pay again.' : isHostedNairaSettlement && hostedConfirmationStatus === 'processing' || isNgPosPaycrestOfframp && isConfirmed ? 'USDC confirmed. Bank delivery is processing.' : 'Waiting for payment verification. Do not pay again.'}
+      detail={state === 'successful' ? undefined : hostedPayoutFailed ? 'Local delivery failed. Check the refund status or contact support. Do not pay again.' : failed ? 'The transaction failed. Check its status before starting another payment.' : isPolymarketBridge ? 'Waiting for funds to reach your Polymarket account. Do not pay again.' : isHostedLocalSettlement && hostedConfirmationStatus === 'processing' || isNgPosPaycrestOfframp && isConfirmed ? (posFiatCurrency === 'UGX' ? 'USDC confirmed. Mobile money delivery is processing.' : 'USDC confirmed. Bank delivery is processing.') : 'Waiting for payment verification. Do not pay again.'}
       returnUrl={isPolymarketBridge ? resolvedPolymarketReturnUrl : isAgentOrWalletFunding ? agentFundingBackUrl : hostedReturnUrl || undefined}
       returnLabel={isPolymarketBridge ? 'Return to '+polymarketReturnLabel : isAgentOrWalletFunding ? 'Return to app' : 'Return to merchant'}
       onCheckStatus={isPolymarketBridge ? () => void refreshPolymarketBridgeStatus() : isHostedCheckout && hostedConfirmationStatus === 'error' ? () => void registerOrdinaryReceipt() : undefined}
@@ -4085,7 +4097,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
               {isUnder ? 'Underpayment Detected'
                : polymarketBridgePending ? 'Confirming funding'
-               : isHostedNairaSettlement && hostedConfirmationStatus === 'processing' ? 'Sending Naira'
+               : isHostedLocalSettlement && hostedConfirmationStatus === 'processing' ? (posFiatCurrency === 'UGX' ? 'Sending Uganda shillings' : 'Sending Naira')
                : isHostedCheckout && hostedConfirmationStatus !== 'verified' ? 'Payment received'
                : checkoutPresentation.successful}
             </h2>

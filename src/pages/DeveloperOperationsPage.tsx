@@ -44,7 +44,7 @@ type Project = {
   useCase: string
   checkoutMode: 'human' | 'agentic'
   capabilities: Array<'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'>
-  settlementMode: 'usdc' | 'ngn'
+  settlementMode: 'usdc' | 'ngn' | 'ugx'
   settlementStatus: 'ready' | 'review_required'
   operationalStatus: 'active' | 'suspended'
   suspendedAt?: string
@@ -319,7 +319,7 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
     <div className="mt-7 grid gap-3 sm:grid-cols-2">
       <Detail label="Owner" value={project.ownerEmail || 'Email unavailable'} />
       <Detail label="Payment path" value={project.checkoutMode === 'agentic' ? 'Agentic x402' : 'Human checkout'} />
-      <Detail label="Settlement" value={project.settlementMode === 'ngn' ? 'Naira via Paycrest' : 'Receive USDC'} />
+      <Detail label="Settlement" value={project.settlementMode === 'ugx' ? 'Uganda mobile money via Paycrest' : project.settlementMode === 'ngn' ? 'Naira via Paycrest' : 'Receive USDC'} />
       <Detail label="Credentials" value={`${activeKeys.length} active key${activeKeys.length === 1 ? '' : 's'}`} />
       <Detail label="Created" value={formatDate(project.createdAt)} />
       <Detail label="Last changed" value={formatDate(project.updatedAt)} />
