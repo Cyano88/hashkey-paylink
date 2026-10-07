@@ -703,6 +703,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             setManualTxHash(attempt.transaction as `0x${string}`)
           }
           if (attempt?.status === 'paid') {
+            ordinaryReceiptRegistered.current = true
             setManualPayDetected(true)
             setHostedConfirmationStatus('verified')
           } else if (attempt?.status === 'processing') {
