@@ -70,7 +70,7 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
   }
   if(d.now()-order.createdAt>25*60_000)return res.status(410).json({ok:false,error:'Order expired. Start a new basket.'})
   if(!order.checkoutId){
-   const made=await d.call('',{...(order.rail==='circle'?{kind:'service',checkoutMode:'human',...(order.selectedNetwork?{defaultNetwork:order.selectedNetwork}:{})}:{rail:'xlayer',kind:'payment'}),asset:order.asset,amount:order.amount,title:'Lunchroom order '+id.slice(0,6),swap:false,returnUrl:'https://app.hashpaylink.com/demo/food?order='+id},'food-demo:'+id)
+   const made=await d.call('',{...(order.rail==='circle'?{kind:'service',checkoutMode:'human',...(order.selectedNetwork?{defaultNetwork:order.selectedNetwork}:{})}:{rail:'xlayer',kind:'payment'}),asset:order.asset,amount:order.amount,title:'Lunchroom order '+id.slice(0,6),swap:false,returnUrl:'https://app.hashpaylink.com/launchroom?order='+id},'food-demo:'+id)
    const url=new URL(made.checkoutUrl,'https://app.hashpaylink.com');const validId=order.rail==='circle'?/^chk_[a-zA-Z0-9]{8,40}$/.test(made.checkoutId):/^chkx_[a-f0-9]{24}$/.test(made.checkoutId);if(!validId||url.origin!=='https://app.hashpaylink.com'||url.pathname!=='/pay/c/'+made.checkoutId||!String(made.checkoutUrl).startsWith('/pay/c/'))throw Error('Invalid checkout response.')
    const settlementMode=made.settlementMode||'usdc',payableAmount=made.amount||order.amount
    if(order.rail==='circle'&&(!['usdc','ngn','ugx'].includes(settlementMode)||!/^\d+(\.\d{1,6})?$/.test(payableAmount)||Number(payableAmount)<=0))throw Error('Invalid checkout amount.')

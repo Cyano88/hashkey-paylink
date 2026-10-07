@@ -37,6 +37,7 @@ export default function CheckoutApp() {
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
     <Route path="developers" element={<ExternalRedirect origin="https://developer.hashpaylink.com" pathname="/" />} />
     <Route path="admin/*" element={<ExternalRedirect origin="https://developer.hashpaylink.com" />} />
+    <Route path="launchroom" element={<FoodDemoPage />} />
     <Route path="demo/food" element={<FoodDemoPage />} />
     <Route path="pay/order/:orderId" element={<PocketOrderCheckoutPage />} />
     <Route element={<SurfaceLayout />}>

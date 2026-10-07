@@ -4,6 +4,7 @@ import Layout from './Layout'
 import SurfaceLayout from './surfaces/SurfaceLayout'
 import ExternalRedirect from './surfaces/ExternalRedirect'
 import FoundationPage from './pages/FoundationPage'
+import FoodDemoPage from './pages/FoodDemoPage'
 import X402Receipt   from './pages/X402Receipt'
 import AgentTerms    from './pages/AgentTerms'
 import { SolanaProvider } from './lib/SolanaContext'
@@ -75,6 +76,8 @@ export default function App() {
     <SolanaProvider>
     <BrowserRouter>
       <Routes>
+        <Route path="launchroom" element={<FoodDemoPage />} />
+        <Route path="pay/order/:orderId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
         <Route path="hashpaystream/docs" element={<StandaloneHashPayStreamRedirect />} />
         <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
         {!IS_APP_HOST && <Route index element={<FoundationPage />} />}

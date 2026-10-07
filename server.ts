@@ -588,6 +588,11 @@ app.get('/.well-known/apple-app-site-association', (_req, res) => {
   })
 })
 
+app.get(['/pitch', '/pitch/'], (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache')
+  res.sendFile(join(__dirname, 'dist', 'pitch', 'index.html'))
+})
+
 app.use(express.static(join(__dirname, 'dist'), {
   index: false,
   setHeaders(res, filePath) {
