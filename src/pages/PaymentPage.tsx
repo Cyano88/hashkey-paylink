@@ -16,6 +16,7 @@ import { isRetiredAssistantCheckout } from '../lib/retiredAssistantCheckout'
 import PocketGetApp from '../pocket/components/PocketGetApp'
 import { assertPocketScanPayoutPayable, pocketScanPayoutNeedsReview } from '../pocket/lib/pocketScanPayout'
 import { requestPocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
+import PocketPaymentSecurityGate from '../pocket/components/PocketPaymentSecurityGate'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link, useOutletContext, useNavigate } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
@@ -363,6 +364,7 @@ export function PocketMerchantPayment({params,onBack,merchantName,verify}:{param
 
 export default function PaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext } = {}) {
   const [routeParams] = useSearchParams()
+  const {authenticated,user,getAccessToken}=usePrivy()
   const params = pocketScan ? new URLSearchParams(pocketScan.params) : routeParams
   if (isRetiredAssistantCheckout(params)) {
     return <main className="mx-auto max-w-md px-6 py-16 text-center">
@@ -371,7 +373,10 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: PocketPayment
       <a className="mt-6 inline-block text-sm font-semibold underline" href="https://pocket.hashpaylink.com">Open Pocket</a>
     </main>
   }
-  return <ActivePaymentPage pocketScan={pocketScan} />
+  const payment=<ActivePaymentPage pocketScan={pocketScan} />
+  return !pocketScan&&routeParams.has('checkout')&&authenticated
+    ? <PocketPaymentSecurityGate key={user?.id} email={emailFromPrivyUser(user).toLowerCase()} getAccessToken={getAccessToken}>{payment}</PocketPaymentSecurityGate>
+    : payment
 }
 
 function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext } = {}) {
@@ -2448,7 +2453,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
       if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw new Error(buildData.error ?? 'Failed to build transaction') }
 
-      if(pocketScan)await requestPocketPaymentApproval()
+      if(pocketScan||(isHostedCheckout&&privyAuthenticated))await requestPocketPaymentApproval()
       const signedB64 = await signCircleSolanaTransaction({
         session,
         rawTransaction: buildData.tx,
@@ -3013,7 +3018,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         if (usePrivyCircleCheckout && !privyAccessToken) {
           throw new Error('Your secure checkout session expired. Sign in again before paying.')
         }
-        if(pocketScan)await requestPocketPaymentApproval()
+        if(pocketScan||(isHostedCheckout&&privyAuthenticated))await requestPocketPaymentApproval()
         if (pocketScan && preparedPaycrestOrder) assertPocketScanPayoutPayable(preparedPaycrestOrder)
         const txHash = await sendCircleEvmEmailPayment({
           session,

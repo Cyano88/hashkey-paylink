@@ -107,11 +107,11 @@ async function circleSolanaApi<T>(payload: Record<string, unknown>, privyAccessT
   const action = typeof payload.action === 'string' ? payload.action : ''
   const paymentAction = /^(execute|signPayment|signOwnWalletBridge)/.test(action)
   const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.hostname === 'pocket.hashpaylink.com' || window.location.pathname.includes('/pocket'))
-  const approval = pocketClient && action !== 'signOwnWalletBridge' ? takePocketPaymentApproval() : null
+  const approval = paymentAction && action !== 'signOwnWalletBridge' ? takePocketPaymentApproval() : null
   const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',
     ...(action === 'getChallenge' || action === 'getTransaction' ? { signal: AbortSignal.timeout(12_000) } : {}),
-    headers: { 'Content-Type': 'application/json', ...(privyAccessToken ? { Authorization: 'Bearer ' + privyAccessToken } : {}), ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(privyAccessToken ? { Authorization: 'Bearer ' + privyAccessToken } : {}), ...(pocketClient ? { 'X-Pocket-Client': '1' } : {}), ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) },
     body: JSON.stringify(payload),
   })
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number }

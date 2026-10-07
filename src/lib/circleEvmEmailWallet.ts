@@ -359,7 +359,7 @@ async function circleWalletApi<T>(
   const action = typeof payload.action === 'string' ? payload.action : 'request'
   const paymentAction = /^(execute|signPayment)/.test(action)
   const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.hostname === 'pocket.hashpaylink.com' || window.location.pathname.includes('/pocket'))
-  const approval = pocketClient && action !== 'executeEvmBridge' ? takePocketPaymentApproval() : null
+  const approval = paymentAction && action !== 'executeEvmBridge' ? takePocketPaymentApproval() : null
   const scope = typeof payload.chain === 'string'
     ? payload.chain
     : typeof payload.blockchain === 'string'
@@ -375,8 +375,8 @@ async function circleWalletApi<T>(
         ...(options.privyAccessToken ? { Authorization: `Bearer ${options.privyAccessToken}` } : {}),
         ...(pocketClient ? {
           'X-Pocket-Client': '1',
-          ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}),
         } : {}),
+        ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}),
       },
       body: JSON.stringify(payload),
       ...(/^(getTransaction|getChallenge)$/.test(action) ? { signal: AbortSignal.timeout(12_000) } : {}),
