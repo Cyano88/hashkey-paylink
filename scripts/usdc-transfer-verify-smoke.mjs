@@ -163,6 +163,33 @@ await assert.rejects(
   /RPC HTTP 400 for eth_blockNumber/,
 )
 
+// Checkout accepts a canonical Base transfer before L1 finality, but never a
+// debit, reverted receipt, wrong recipient, or noncanonical block by itself.
+let inclusionHead = '0x11'
+let inclusionHash = `0x${'b'.repeat(64)}`
+nextReceipt = { ...receipt('0x1'), blockHash: inclusionHash }
+globalThis.fetch = async (_url, init) => {
+  const request = JSON.parse(init.body)
+  const result = request.method === 'eth_chainId' ? '0x2105'
+    : request.method === 'eth_getTransactionReceipt' ? nextReceipt
+    : { number: request.params[0] === 'latest' ? inclusionHead : request.params[0] === 'finalized' ? '0xf' : '0x10', hash: inclusionHash, timestamp: blockTimestamp }
+  return { ok: true, status: 200, text: async () => JSON.stringify({ result }) }
+}
+const includedInput = { chain: 'base', txHash, payer, recipient, minAmount: amount, exactAmount: true, confirmation: 'base-included' }
+assert.equal((await verifyEvmUsdcTransfer(includedInput)).amount, amount)
+await assert.rejects(verifyEvmUsdcTransfer({ ...includedInput, confirmation: 'finalized' }), /not finalized/)
+inclusionHead = '0x10'
+await assert.rejects(verifyEvmUsdcTransfer(includedInput), /another Base block/)
+inclusionHead = '0x11'
+inclusionHash = `0x${'c'.repeat(64)}`
+await assert.rejects(verifyEvmUsdcTransfer(includedInput), /not canonical/)
+inclusionHash = nextReceipt.blockHash
+nextReceipt.status = '0x0'
+await assert.rejects(verifyEvmUsdcTransfer(includedInput), /did not succeed/)
+nextReceipt.status = '0x1'
+await assert.rejects(verifyEvmUsdcTransfer({ ...includedInput, recipient: payer }), /transfer|amount/i)
+console.log('PASS: Base checkout inclusion succeeds before finality and rejects reverted, noncanonical, premature and wrong-recipient transfers.')
+
 globalThis.fetch = previousFetch
 if (previousRpc === undefined) delete process.env.PRIVATE_RPC_URL
 else process.env.PRIVATE_RPC_URL = previousRpc

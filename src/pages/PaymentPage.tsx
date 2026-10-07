@@ -3780,6 +3780,13 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }, [isConfirmed, txHash, isHostedCheckout, isNgPosPayment])
 
   useEffect(() => {
+    if (!isHostedCheckout || !isConfirmed || !txHash || hostedConfirmationStatus !== 'error') return
+    const timer = window.setTimeout(() => void registerOrdinaryReceipt(), 15_000)
+    return () => window.clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHostedCheckout, isConfirmed, txHash, hostedConfirmationStatus])
+
+  useEffect(() => {
     if (!isHostedLocalSettlement || hostedConfirmationStatus !== 'processing') return
     let cancelled = false
     let timer: number | undefined

@@ -513,6 +513,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         exactAmount: true,
         notBefore: checkout.createdAt,
         notAfter: checkout.expiresAt,
+        confirmation: evmChain === 'base' ? 'base-included' : 'finalized',
       })
       if (!verifiedTransfer.confirmedAt) throw new Error('Hosted checkout confirmation time was not verified.')
       amount = verifiedTransfer.amount
