@@ -8,12 +8,13 @@ import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from './render-
 import {readStockMarketPrices} from './pocket/xstocks-prices.js'
 import {stockAssets,stockUsdc} from '../src/pocket/lib/pocketXStocksWallet.js'
 const STORE='hashpaylink:food-demo-orders:v1'
-type Order={id:string;fingerprint:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;asset:FoodAsset;rail?:'circle'|'xlayer';network?:string;selectedNetwork?:string;amount:string;createdAt:number;checkoutId?:string;checkoutUrl?:string;paid?:boolean}
+type Order={id:string;fingerprint:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;asset:FoodAsset;rail?:'circle'|'xlayer';network?:string;selectedNetwork?:string;amount:string;payableAmount?:string;settlementMode?:'usdc'|'ngn'|'ugx';createdAt:number;checkoutId?:string;checkoutUrl?:string;paid?:boolean}
 type Draft={id:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;createdAt:number}
 type Store={orders:Record<string,Order>;drafts?:Record<string,Draft>}
 async function projectChoices():Promise<XPayDestination[]>{
  const policy=await resolveDeveloperApiKeyPolicy({headers:{'x-api-key':process.env.FOOD_DEMO_PROJECT_KEY||''},method:'POST',originalUrl:'/api/v2/checkouts',body:{}})
- if(!policy||policy.environment!=='live'||policy.checkoutMode!=='human'||!policy.capabilities.includes('hosted_checkout')||policy.settlementMode!=='usdc')throw Error('Checkout is not configured for this store.')
+ if(!policy||policy.environment!=='live'||policy.checkoutMode!=='human'||!policy.capabilities.includes('hosted_checkout'))throw Error('Checkout is not configured for this store.')
+ if(policy.settlementMode==='ngn'||policy.settlementMode==='ugx')return [{id:'circle',name:policy.merchantName,kind:'bank',currency:policy.settlementMode==='ngn'?'NGN':'UGX',assets:['USDC'],networks:['base'],revision:'1'}]
  const choices:XPayDestination[]=[]
  const networks=policy.paymentOptions.map(p=>p.network).filter(n=>['base','arbitrum','arc'].includes(n))
  if(networks.length)choices.push({id:'circle',name:policy.merchantName,kind:'stablecoins',currency:'USD',assets:['USDC'],networks,revision:'1'})
@@ -28,7 +29,7 @@ const defaults={choices:projectChoices,read:async()=>await readDurableJson<Store
 export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){const d={...defaults,...overrides};return async(req:Request,res:Response)=>{
  res.setHeader('Cache-Control','no-store')
  try{
-  if(req.method==='GET'&&!req.query.id)return res.json({ok:true,menu:foodMenu,liveEnabled:Boolean(d.ready())})
+  if(req.method==='GET'&&!req.query.id){const liveEnabled=Boolean(d.ready());return res.json({ok:true,menu:foodMenu,liveEnabled,acceptedAssets:liveEnabled?[...new Set((await d.choices()).flatMap(c=>c.assets))]:[]})}
   if(!d.ready())return res.status(503).json({ok:false,error:'Payments are currently unavailable.'})
   if(req.method==='POST'&&req.body?.action==='prepare'){
    const id=String(req.body?.requestId||'');if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid order reference.')
@@ -46,8 +47,8 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
   if(req.method==='GET'){
    if(!/^[a-f0-9]{32}$/.test(String(req.query.id)))return res.status(404).json({ok:false,error:'Order not found.'})
    const order=(await d.read()).orders[String(req.query.id)];if(!order)return res.status(404).json({ok:false,error:'Order not found.'})
-   if(order.checkoutId&&!order.paid){const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status');if(status.status==='paid'&&(order.rail==='circle'?status.checkoutId===order.checkoutId&&status.settlementMode==='usdc'&&status.payment?.amount===order.amount:status.checkout?.id===order.checkoutId&&status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].network=status.network||'xlayer';return s});order.paid=true;order.network=status.network||'xlayer'}}
-   return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.amount,cents:order.cents,status:order.paid?'paid':'pending'}})
+   if(order.checkoutId&&!order.paid){const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status');if(status.status==='paid'&&(order.rail==='circle'?status.checkoutId===order.checkoutId&&status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout?.id===order.checkoutId&&status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].network=status.network||'xlayer';return s});order.paid=true;order.network=status.network||'xlayer'}}
+   return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.payableAmount||order.amount,cents:order.cents,status:order.paid?'paid':'pending'}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const id=String(req.body?.requestId||'');if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid order reference.')
@@ -71,7 +72,9 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
   if(!order.checkoutId){
    const made=await d.call('',{...(order.rail==='circle'?{kind:'service',checkoutMode:'human',...(order.selectedNetwork?{defaultNetwork:order.selectedNetwork}:{})}:{rail:'xlayer',kind:'payment'}),asset:order.asset,amount:order.amount,title:'Lunchroom order '+id.slice(0,6),swap:false,returnUrl:'https://app.hashpaylink.com/demo/food?order='+id},'food-demo:'+id)
    const url=new URL(made.checkoutUrl,'https://app.hashpaylink.com');const validId=order.rail==='circle'?/^chk_[a-zA-Z0-9]{8,40}$/.test(made.checkoutId):/^chkx_[a-f0-9]{24}$/.test(made.checkoutId);if(!validId||url.origin!=='https://app.hashpaylink.com'||url.pathname!=='/pay/c/'+made.checkoutId||!String(made.checkoutUrl).startsWith('/pay/c/'))throw Error('Invalid checkout response.')
-   await d.mutate(s=>{s.orders[id].checkoutId=made.checkoutId;s.orders[id].checkoutUrl=made.checkoutUrl;return s});order.checkoutId=made.checkoutId;order.checkoutUrl=made.checkoutUrl
+   const settlementMode=made.settlementMode||'usdc',payableAmount=made.amount||order.amount
+   if(order.rail==='circle'&&(!['usdc','ngn','ugx'].includes(settlementMode)||!/^\d+(\.\d{1,6})?$/.test(payableAmount)||Number(payableAmount)<=0))throw Error('Invalid checkout amount.')
+   await d.mutate(s=>{s.orders[id].checkoutId=made.checkoutId;s.orders[id].checkoutUrl=made.checkoutUrl;if(order.rail==='circle'){s.orders[id].settlementMode=settlementMode;s.orders[id].payableAmount=payableAmount}return s});order.checkoutId=made.checkoutId;order.checkoutUrl=made.checkoutUrl
   }
   return res.json({ok:true,checkoutUrl:order.checkoutUrl,orderId:id})
  }catch(e){return res.status(400).json({ok:false,error:(e as Error).message})}

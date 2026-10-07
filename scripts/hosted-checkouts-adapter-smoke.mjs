@@ -537,6 +537,9 @@ const ugandaDependencies={...nairaDependencies,
 const ugandaHandler=createHostedCheckoutsHandler(ugandaDependencies)
 const ugandaHeaders={...nairaHeaders,'idempotency-key':'uganda:order:000001'}
 const ugandaCreated=await request(ugandaHandler,'POST',{body:nairaBody,headers:ugandaHeaders});assert.equal(ugandaCreated.statusCode,201)
+assert.equal(ugandaCreated.body.amount,'1.253');assert.equal(ugandaCreated.body.settlementMode,'ugx')
+const ugandaReplay=await request(ugandaHandler,'POST',{body:nairaBody,headers:ugandaHeaders})
+assert.equal(ugandaReplay.body.amount,'1.253');assert.equal(ugandaReplay.body.settlementMode,'ugx');assert.equal(ugandaReplay.body.checkoutId,ugandaCreated.body.checkoutId)
 const ugandaLookup=await request(ugandaHandler,'GET',{query:{id:ugandaCreated.body.checkoutId}})
 assert.equal(ugandaLookup.body.checkout.settlementMode,'ugx');assert.equal(ugandaLookup.body.checkout.settlementCurrency,'UGX');assert.equal(ugandaLookup.body.checkout.settlementAmount,'4500.00')
 const ugandaUrl=new URL(ugandaLookup.body.paymentUrl,'https://app.hashpaylink.com');assert.equal(ugandaUrl.searchParams.get('fiat_currency'),'UGX');assert.equal(ugandaUrl.searchParams.get('fx'),'UGX');assert.equal(ugandaUrl.searchParams.get('n'),'base');assert.equal(ugandaUrl.searchParams.get('bank'),'MTN')

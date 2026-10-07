@@ -43,3 +43,26 @@ console.log('PASS store handoff, project-controlled choices, disabled option rej
 
 draftStore.drafts[draftId].createdAt-=26*60_000
 assert.equal((await draftCall('GET',{}, {id:draftId,purpose:'selection'})).data.checkoutUrl,'/pay/c/chk_12345678?attempt=test_123','Refresh resumes an existing payment even after the selection deadline')
+
+for(const mode of ['ngn','ugx']){
+ let localStore={orders:{}},localStatus='processing',reportedAmount='4.6',reportedMode=mode,createCount=0
+ const destination={id:'circle',name:'Lunchroom',kind:'bank',currency:mode.toUpperCase(),assets:['USDC'],networks:['base'],revision:'1'}
+ const handler=createFoodDemoHandler({ready:()=>true,choices:async()=>[destination],read:async()=>structuredClone(localStore),mutate:async fn=>{localStore=fn(structuredClone(localStore));return structuredClone(localStore)},call:async(path,body)=>{
+  if(body){createCount++;assert.equal(body.amount,'4.5');return {ok:true,checkoutId:'chk_87654321',checkoutUrl:'/pay/c/chk_87654321',settlementMode:mode,amount:'4.6'}}
+  return {ok:true,checkoutId:'chk_87654321',status:localStatus,settlementMode:reportedMode,network:'base',payment:{amount:reportedAmount}}
+ }})
+ const localId=(mode==='ngn'?'f':'1').repeat(32)
+ async function request(method,body={},query={}){let code=200,data;await handler({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return {code,data}}
+ assert.deepEqual((await request('GET')).data.acceptedAssets,['USDC'])
+ await request('POST',{action:'prepare',requestId:localId,items:[{id:'jollof',quantity:1}]})
+ assert.deepEqual((await request('GET',{}, {id:localId,purpose:'selection'})).data.destinations,[destination])
+ const selection={requestId:localId,asset:'USDC',rail:'circle',network:'base'}
+ assert.equal((await request('POST',selection)).code,200)
+ assert.equal((await request('POST',selection)).code,200);assert.equal(createCount,1)
+ assert.equal((await request('GET',{}, {id:localId})).data.order.status,'pending','USDC confirmation alone is not bank delivery')
+ localStatus='paid';reportedMode='usdc';assert.equal((await request('GET',{}, {id:localId})).data.order.status,'pending','Settlement mode must match the created checkout')
+ reportedMode=mode;reportedAmount='4.5';assert.equal((await request('GET',{}, {id:localId})).data.order.status,'pending','Payment must match the provider payable amount')
+ reportedAmount='4.6';const receipt=(await request('GET',{}, {id:localId})).data.order
+ assert.equal(receipt.status,'paid');assert.equal(receipt.amount,'4.6');assert.equal(receipt.cents,450)
+}
+console.log('PASS local bank/mobile settlement: configured choices, exact provider amount, immutable retry and delivery-gated receipt.')
