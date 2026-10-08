@@ -15,6 +15,7 @@ import { stockPickerTokens } from '../lib/pocketStockPickerTokens'
 import { formatStockQuantity } from '../lib/pocketStockDisplay'
 import { Copy } from './PocketIcons'
 import { prepareStockTransfer, stockAssets, stockGasAsset, stockUsdc, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
+import { stockTransferGasLabel, xLayerTransferSponsorshipEnabled } from '../lib/pocketXLayerSponsorship'
 import type usePocketStockWallet from '../hooks/usePocketStockWallet'
 
 type Wallet = ReturnType<typeof usePocketStockWallet>
@@ -77,7 +78,7 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
       <p className="mt-3 text-xs leading-5 text-gray-400">Receive USDC, supported stocks or OKB on X Layer only.</p>
       <p className="my-5 break-all rounded-2xl bg-gray-100 p-4 font-mono text-xs dark:bg-white/5">{wallet.address}</p>
       <button type="button" className={button} onClick={async () => { try { await navigator.clipboard.writeText(wallet.address!); setCopied(true) } catch { setError('Could not copy. Select the address above.') } }}><Copy className="mr-2 inline h-4 w-4" />{copied ? 'Copied' : 'Copy deposit address'}</button>
-      <p className="mt-4 text-xs leading-5 text-gray-400">Keep some OKB to pay gas.</p>
+      <p className="mt-4 text-xs leading-5 text-gray-400">{xLayerTransferSponsorshipEnabled ? 'Pocket covers gas for supported USDC and stock transfers. Other actions may require OKB.' : 'Keep some OKB to pay gas.'}</p>
     </> : <>
       <h2 className="mb-5 text-sm font-bold">Send on X Layer</h2>
       <div className="mb-4"><p className="mb-2 text-[11px] text-gray-400">Asset</p>{assetPicker}<p className="mt-2 text-[11px] text-gray-400">{wallet.balanceStale ? 'Last known' : 'Available'} - {tokens.find(t => t.address === asset.address)?.balance == null ? '\u2014' : formatStockQuantity(tokens.find(t => t.address === asset.address)!.balance!)} {asset.symbol}</p></div>
@@ -87,7 +88,7 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
     </>}
     {reviewOpen && !resultOpen && <PocketBottomSheet title="Confirm send" showCloseButton dismissOnBackdrop={false} dismissible={!busy && !wallet.busy} onClose={()=>{setReviewOpen(false);setReview(null)}}>
       <PocketConfirmationDetails amount={(review?.amount || amount) + ' ' + (review?.asset.symbol || asset.symbol)} rows={[
-        ['Wallet address', <span className="break-all">{review?.recipient || recipient}</span>], ['Network', 'X Layer'], ...(review ? [['Gas estimate', stockQuantity(review.fee, 18) + ' OKB'] as [string,string]] : []),
+        ['Wallet address', <span className="break-all">{review?.recipient || recipient}</span>], ['Network', 'X Layer'], ...(review ? [['Gas', stockTransferGasLabel(review, fee => stockQuantity(fee, 18))] as [string,string]] : []),
       ]} />
       <div className="mt-5"><PocketFundingAction {...fundingProps}><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy || wallet.busy ? 'pending' : 'idle'} disabled={pending || !review} onConfirm={()=>void send()} labels={{idle:'Confirm send',disabled:'Transaction pending',pending:review?'Sending':'Checking fees'}} /></PocketFundingAction></div>
       {!fundingAsset && error && <p role="alert" className="mt-3 text-xs text-red-500">{error}</p>}

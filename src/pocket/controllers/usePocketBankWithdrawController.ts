@@ -19,7 +19,7 @@ const BANK_PAYOUT_OPERATION_KEY = 'pocket:bank-withdraw:operation'
 const BANK_PAYOUT_FAST_POLL_ATTEMPTS = 12
 
 export const PAYMENT_TIMEOUT_NOTICE = 'The payout quote expired before any money was sent. Your details are still here; tap Confirm again to refresh it.'
-export const PAYOUT_REFUNDED_NOTICE = 'This payout was refunded. Your returned USDC will appear in Activity.'
+export const PAYOUT_REFUNDED_NOTICE = 'This payout was refunded. Your returned funds will appear in Activity.'
 
 async function operationFingerprint(value: string) {
   const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -66,6 +66,7 @@ function clearStoredOperation() {
 }
 
 export default function usePocketBankWithdrawController({
+  asset = 'USDC',
   country = 'NG',
   authenticated,
   email,
@@ -82,6 +83,7 @@ export default function usePocketBankWithdrawController({
   getAccessToken,
   onSent,
 }: {
+  asset?: 'USDC' | 'USDT'
   country?: string
   authenticated: boolean
   email: string
@@ -424,7 +426,7 @@ export default function usePocketBankWithdrawController({
         ? approvedSession.current.session
         : await getEvmSession(selectedWallet.address)
       approvedSession.current = { walletAddress: selectedWallet.address, session }
-      const fingerprint = await operationFingerprint([country, email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
+      const fingerprint = await operationFingerprint([asset, country, email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
       const key = idempotencyKey.current || storedOperation(fingerprint) || window.crypto.randomUUID()
       idempotencyKey.current = key
       window.sessionStorage.setItem(BANK_PAYOUT_OPERATION_KEY, JSON.stringify({ fingerprint, idempotencyKey: key }))
@@ -432,6 +434,7 @@ export default function usePocketBankWithdrawController({
         accessToken,
         idempotencyKey: key,
         request: {
+          source_asset: asset,
           country,
           currency: pocketFiatCurrency(country),
           owner_email: email,
@@ -452,7 +455,7 @@ export default function usePocketBankWithdrawController({
       setResult(prepared)
       const requiredUsdc = Number(prepared.amountUsdc)
       if (!Number.isFinite(requiredUsdc) || requiredUsdc <= 0) {
-        throw new Error('The bank payout provider returned an invalid USDC amount.')
+        throw new Error('The bank payout provider returned an invalid asset amount.')
       }
       setStatus('routing')
     } catch (reason) {
@@ -470,7 +473,7 @@ export default function usePocketBankWithdrawController({
       setStatus('idle')
       setError(message)
     }
-  }, [country, accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, wallet])
+  }, [asset, country, accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, wallet])
 
   const prepareApproval = useCallback(async () => {
     setError('')
@@ -507,6 +510,7 @@ export default function usePocketBankWithdrawController({
         },
       })
       if (activeIntentId.current !== prepared.intentId) return
+      if ((payable.asset || 'USDC') !== (prepared.asset || 'USDC')) throw new Error('The payout asset changed. Start a new payment.')
       if (payable.state === 'expired') throw new Error(PAYMENT_TIMEOUT_NOTICE)
       setResult(payable)
       const session = approvedSession.current?.walletAddress === selectedWallet.address
@@ -519,6 +523,7 @@ export default function usePocketBankWithdrawController({
         linkedWalletAddress: selectedWallet.address,
         recipient: payable.receiveAddress as Address,
         amount: payable.amountUsdc,
+        asset: payable.asset || 'USDC',
         idempotencyKey: idempotencyKey.current,
         onAccepted: identifiers => {
           if (activeIntentId.current !== prepared.intentId || cancelled.current) return

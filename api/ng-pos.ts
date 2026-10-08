@@ -1,3 +1,4 @@
+import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {requirePocketBasicKyc} from './pocket/kyc-level.js'
 import {reservePocketBankAllowance} from './pocket/transfer-allowance.js'
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
@@ -92,6 +93,7 @@ type Store = {
 }
 
 type OfframpIntent = {
+  source_token?: BaseStablecoin
   xpay_checkout_id?: string
   fiat_currency?: 'NGN' | 'UGX'
   intent_id: string
@@ -667,6 +669,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
             ? 'Bank receive payment'
             : 'Retail POS payment',
         amount: order.amount_usdc,
+        assetSymbol: baseStablecoin(order.source_token),
         // Provider status refreshes must not move an older payment to the top.
         // A registered receipt keeps its confirmation time in mergeRegisteredPaycrestActivity.
         ts: paycrestActivityTimestamp(order),
@@ -888,6 +891,10 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   if (!idempotencyKey) throw ngPosRequestError(400, 'Missing or invalid idempotency key.')
   const store = await readStore()
   const directPayout = body.direct_payout === true
+  const sourceToken = baseStablecoin(body.source_asset)
+  if (sourceToken === 'USDT' && process.env.POCKET_USDT_PAYOUT_ENABLED !== 'true') throw ngPosRequestError(503, 'USDT bank payouts are not available yet.')
+  if (sourceToken === 'USDT' && country !== 'NG') throw ngPosRequestError(400, 'USDT bank payouts currently support Nigeria only.')
+  if (sourceToken === 'USDT' && !directPayout) throw ngPosRequestError(400, 'USDT requires a direct bank payout.')
   const merchantSource = directPayout ? 'bank-withdraw' : 'bank-receive'
   const existingMerchant = Object.values(store.merchants).find(merchant => (
     merchant.owner_id === ownerId && merchant.source === merchantSource && merchant.idempotency_key === idempotencyKey
@@ -899,6 +906,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
     const replayLink = (existingMerchant.creation_response as any)?.link
     const replayIntentId = cleanText(replayLink?.intent_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
     const replayIntent = replayIntentId ? store.intents?.[replayIntentId] : undefined
+    if (replayIntent && baseStablecoin(replayIntent.source_token) !== sourceToken) throw ngPosRequestError(409, 'This retry belongs to another payment asset.')
     const replayExpiry = Date.parse(replayIntent?.expires_at || '')
     const expiredDirectPayout = directPayout && (!Number.isFinite(replayExpiry) || replayExpiry <= Date.now())
     if (!expiredDirectPayout) return { ...existingMerchant.creation_response, replayed: true }
@@ -1003,6 +1011,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
     intentId = idempotentResourceId('intent', ownerId, idempotencyKey)
     store.intents ??= {}
     store.intents[intentId] = {
+      source_token: sourceToken,
       intent_id: intentId,
       merchant_id: merchant.merchant_id,
       amount_ngn: amountNgnText,
@@ -1348,7 +1357,7 @@ export default async function handler(req: Request, res: Response) {
       if (!existing && merchant && await isPosRetired(merchant.merchant_id)) return res.status(410).json({ok:false,error:'This collection is closed.'})
       const payerIdentity=await verifiedPrivyUser(req)
       await requirePocketBasicKyc(payerIdentity.userId)
-      if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc},true)
+      if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc,token:baseStablecoin(intent.source_token)},true)
       if (existing && !ensurePayable) {
         const execution = await syncOwnedPosExecution(existing)
         return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
@@ -1379,6 +1388,7 @@ export default async function handler(req: Request, res: Response) {
         amountNgn: intent.amount_ngn,
         fiatCurrency: pocketFiatCurrency(merchant.country),
         estimatedAmountUsdc: intent.estimated_amount_usdc,
+        token: baseStablecoin(intent.source_token),
         unifiedXPay: Boolean(intent.xpay_checkout_id),
         bankCode,
         accountNumber: bank.account_number,
@@ -1447,6 +1457,7 @@ export default async function handler(req: Request, res: Response) {
           chain: 'base',
           txHash,
           recipient: existing.receive_address,
+          token: baseStablecoin(existing.source_token),
           minAmount: existing.amount_usdc,
           ...(existing.source === 'bank-withdraw' ? {
             confirmation: 'base-included' as const,

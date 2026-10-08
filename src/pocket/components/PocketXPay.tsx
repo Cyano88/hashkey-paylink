@@ -21,6 +21,7 @@ import PocketPaymentSuccess from './PocketPaymentSuccess'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { stockPickerTokens } from '../lib/pocketStockPickerTokens'
 import { stockAssets, stockUsdc, prepareStockTransfer, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
+import { stockTransferGasLabel } from '../lib/pocketXLayerSponsorship'
 import { formatStockQuantity } from '../lib/pocketStockDisplay'
 import { xpayRequest } from '../api/pocketXPayClient'
 import type { XPayMerchant, XPayPayment } from '../lib/pocketXPay'
@@ -130,7 +131,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
    {!review&&<h2 className="mb-5 text-center text-base font-semibold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
     <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[
-      ['Merchant',payment.merchantName],['Network','X Layer'],['Gas',formatStockQuantity(stockQuantity(review.fee,18))+' OKB'],
+      ['Merchant',payment.merchantName],['Network','X Layer'],['Gas',stockTransferGasLabel(review, fee => formatStockQuantity(stockQuantity(fee,18)))],
     ]}/>
     <div className="mt-5"><PocketFundingAction {...fundingProps}><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy||wallet.busy?'pending':'idle'} disabled={payment.status==='submitted'||busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onConfirm={()=>void (quoteExpired?prepare():pay())} labels={{idle:quoteExpired?'Update payment amount':'Confirm payment',pending:'Processing',disabled:'Payment pending'}}/></PocketFundingAction></div>
     {quoteExpired&&!busy&&<p role="status" className="mt-3 text-xs text-gray-500">Price expired. Update the amount to continue.</p>}

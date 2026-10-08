@@ -83,6 +83,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       if (!approval) throw Error('Payment approval expired. Please try again.')
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
       const fresh = await prepareStockTransfer(address, review.asset, review.recipient, review.amount)
+      if (!!fresh.sponsored !== !!review.sponsored) throw Error('Gas payment changed. Review this transfer again.')
       if (fresh.fee > review.fee * 120n / 100n) throw Error('Network fee changed. Review this transfer again.')
       await ensurePocketXLayerWallet(() => walletRef.current, address, () => { if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.') })
       await hooks?.beforeSubmit?.()
@@ -91,7 +92,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       return await runStockSubmission({key, kind:'send',
         details:{recipient:review.recipient,amount:review.amount,symbol:review.asset.symbol,at:Date.now()},
         wait:hash=>stockClient.waitForTransactionReceipt({hash,timeout:30_000}),
-        send: () => sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
+        send: () => sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,...(fresh.sponsored ? {sponsor:true} : {}),uiOptions:{showWalletUIs:false}}),
         onPending: next => { if(scope.current===key) {setPending(next);hooks?.onSubmitted?.(next.hash)} },
         onUncertain: value => { if(scope.current===key) setUncertain(value) },
       })

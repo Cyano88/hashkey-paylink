@@ -1,3 +1,4 @@
+import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import {verifySolanaUsdcTransfer} from './solana-usdc-transfer-verify.js'
 import {isValidSolanaAddress} from '../src/lib/solanaAddress.js'
 import {assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
@@ -14,6 +15,7 @@ import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from './usdc-transfer-ve
 import { attachHostedCheckoutReceipt, hostedCheckoutMode, hostedCheckoutPaymentOption, markHostedCheckoutPaid, readVerifiedHostedCheckoutRecord } from './hosted-checkouts.js'
 
 type PaymentEntry = {
+  assetSymbol?: 'USDC' | 'USDT'
   xpayCheckoutId?: string
   eventId:     string
   txHash:      string
@@ -237,6 +239,7 @@ function receiptHash(entry: PaymentEntry) {
     payer: entry.payer,
     memo: entry.memo,
     amount: entry.amount,
+    ...(entry.assetSymbol === 'USDT' ? {assetSymbol: entry.assetSymbol} : {}),
     ts: entry.ts,
     source: entry.source,
     merchantId: entry.merchantId,
@@ -451,6 +454,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   let amountNgn = ''
   let intentId = ''
   let hostedCheckoutIdForReceipt = ''
+  let assetSymbol: 'USDC' | 'USDT' = 'USDC'
   let brandName = ''
   let brandImageUrl = ''
 
@@ -531,6 +535,15 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     memo = checkout.title
     contextLabel = checkout.merchantName
     settlementType = checkout.kind === 'service' ? 'hosted_service' : 'hosted_payment'
+  }
+
+  if (source === 'bank-withdraw') {
+    const order = intentId ? await getPaycrestPosOrder(intentId) : null
+    if (!order || order.source !== 'bank-withdraw' || order.merchant_id !== merchantId || eventId !== `ngpos-${order.merchant_id}` || chain !== 'base') throw paymentError('Bank payout receipt does not match a recorded payout.', 409)
+    assetSymbol = baseStablecoin(order.source_token)
+    await verifyEvmUsdcTransfer({chain:'base', token:assetSymbol, txHash, recipient:order.receive_address, payer:order.payer_wallet || order.refund_address, minAmount:order.amount_usdc, exactAmount:true, confirmation:'base-included', notBefore:order.created_at})
+    amount = order.amount_usdc
+    requestedAmount = order.amount_usdc
   }
 
   if (source === 'ngpos' || source === 'bank-receive') {
@@ -629,7 +642,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     if (duplicate) scheduleArchivePayment(duplicate, payer)
     return result
   }
-  const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
+  const entry: PaymentEntry = { assetSymbol, eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
   if(source==='ngpos' && (isAddress(payer)||chain==='solana'&&isValidSolanaAddress(payer)))entry.verifiedPayer=chain==='solana'?payer:payer.toLowerCase()
   if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source

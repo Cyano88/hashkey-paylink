@@ -1,6 +1,6 @@
 export function fundingShortfall(error: string, asset = 'USDC'): string | null {
  if (/add OKB|insufficient OKB|not enough OKB/i.test(error)) return 'OKB'
- return /insufficient (?:funds|balance|USDC|[A-Z]+x)|amount is higher than.*balance|(?:exceeds|exceed).*balance|not enough.*(?:balance|USDC|stock)|balance.*(?:too low|insufficient)|no single.*source can cover/i.test(error) ? asset : null
+ return /insufficient (?:funds|balance|USDC|USDT|[A-Z]+x)|amount is higher than.*balance|(?:exceeds|exceed).*balance|not enough.*(?:balance|USDC|stock)|balance.*(?:too low|insufficient)|no single.*source can cover/i.test(error) ? asset : null
 }
 export function amountExceedsBalance(amount: string | number, balance: string | number | null | undefined, known: boolean) {
  if(!known||balance==null)return false

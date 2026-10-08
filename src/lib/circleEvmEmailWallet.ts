@@ -1004,15 +1004,17 @@ export async function sendCircleEvmEmailWithdraw(params: {
   recipient: Address
   feeQuoteToken?: string
   amount: string
+  asset?: 'USDC' | 'USDT'
   idempotencyKey: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
   onConfirmed?: (hash: Hex) => void
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) {
+  if (params.asset === 'USDT' && (params.session.chain !== 'base' || params.feeQuoteToken)) throw Error('USDT requires a direct Base transfer.')
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
     amount: params.amount,
-    asset: CHAIN_META[params.session.chain].asset,
+    asset: params.asset || CHAIN_META[params.session.chain].asset,
     recipient: params.recipient,
     chainLabel: CHAIN_META[params.session.chain].label,
   })
@@ -1027,6 +1029,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
     action: params.feeQuoteToken ? 'executeEvmPayment' : 'executeEvmWithdraw',
     feeQuoteToken: params.feeQuoteToken,
     feeMode: 'gross',
+    asset: params.asset || 'USDC',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     walletAddress: params.session.wallet.address,
@@ -1036,7 +1039,8 @@ export async function sendCircleEvmEmailWithdraw(params: {
     idempotencyKey: params.idempotencyKey,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a withdraw challenge.')
-  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
+  if (params.asset === 'USDT' && challenge.approval?.asset !== 'USDT') throw new Error('The withdrawal approval does not match USDT.')
+  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: params.asset || CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
   params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: findTransactionId(challenge) ?? '' })
   let observedTransactionId = findTransactionId(challenge) ?? ''
   let confirmedHash: Hex | null = null

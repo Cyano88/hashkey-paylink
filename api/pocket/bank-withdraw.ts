@@ -1,3 +1,4 @@
+import {baseStablecoin} from '../../src/lib/baseStablecoins.js'
 import { forwardPocketRequest } from './forward-request.js'
 import {reservePocketBankAllowance} from './transfer-allowance.js'
 import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib/pocketFiatCorridors.js'
@@ -107,6 +108,9 @@ export function publicOrder(order: any, execution?: PaymentExecutionIntent, rout
     amountNgn: text(order?.amount_ngn),
     fiatCurrency: order?.fiat_currency === 'UGX' ? 'UGX' : 'NGN',
     amountUsdc: text(order?.amount_usdc),
+    asset: baseStablecoin(order?.source_token),
+    amountAsset: text(order?.amount_usdc),
+    network: 'base',
     receiveAddress: text(order?.receive_address),
     txHash: text(order?.tx_hash) || execution?.transactionHash || '',
     // The provider order receives a transaction hash only after Hash PayLink
@@ -289,6 +293,8 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
       if (action === 'prepare') {
         const idempotencyKey = text(req.headers['idempotency-key'], 128)
         if (!isPocketIdempotencyKey(idempotencyKey)) return res.status(400).json({ ok: false, error: 'A valid idempotency key is required.' })
+        const asset = baseStablecoin(req.body?.source_asset)
+        if (asset === 'USDT' && process.env.POCKET_USDT_PAYOUT_ENABLED !== 'true') return res.status(503).json({ok:false,error:'USDT bank payouts are not available yet.'})
         const amount = text(req.body?.amount_ngn, 30)
         const walletAddress = text(req.body?.wallet_address, 80)
         if (req.body?.country !== undefined && !['NG','UG'].includes(req.body.country)) return res.status(400).json({ok:false,error:'Unsupported payout country.'})
@@ -304,7 +310,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const replay = await dependencies.executions.findByIdempotency(identity.userId, 'bank_payout', idempotencyKey)
         if (replay) {
           const requestedBeneficiary = beneficiaryFingerprint(text(req.body?.bank_code, 20), accountNumber)
-          const sameRequest = (replay.metadata.fiatCurrency || 'NGN') === currency && Number(replay.metadata.amountNgn) === Number(amount)
+          const sameRequest = baseStablecoin(replay.metadata.asset) === asset && (replay.metadata.fiatCurrency || 'NGN') === currency && Number(replay.metadata.amountNgn) === Number(amount)
             && replay.metadata.bankCode === text(req.body?.bank_code, 20)
             && replay.metadata.bankName === text(req.body?.bank_name, 160)
             && replay.metadata.bankLast4 === accountNumber.slice(-4)
@@ -351,10 +357,12 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           ensure_payable: true,
         })
         if (prepared.status !== 200 || !prepared.body?.order) throw Object.assign(new Error(prepared.body?.error || 'Could not prepare bank payout.'), { status: prepared.status,code:prepared.body?.code,remainingNgn:prepared.body?.remainingNgn,dailyLimitNgn:prepared.body?.dailyLimitNgn })
+        if (baseStablecoin(prepared.body.order.source_token) !== asset) throw Object.assign(Error('The payout asset does not match this request.'), {status:502})
         const execution = await dependencies.executions.create({
           ownerId: identity.userId, idempotencyKey, kind: 'bank_payout', amount: text(prepared.body.order.amount_usdc),
           sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'verified_bank_account',
           metadata: {
+            asset,
             bankCode: text(req.body?.bank_code, 20),
             bankName: text(req.body?.bank_name, 160),
             bankLast4: accountNumber.slice(-4),
@@ -399,11 +407,12 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           return res.status(409).json({ ok: false, error: 'This payout window expired. Start a new payout.' })
         }
         const payoutOrder=payable.body.order
-        await dependencies.reserveAllowance(identity.userId,{id:payoutOrder.intent_id,amount:payoutOrder.amount_ngn,currency:payoutOrder.fiat_currency||'NGN',usdc:payoutOrder.amount_usdc,providerOrderId:payoutOrder.paycrest_order_id})
+        await dependencies.reserveAllowance(identity.userId,{id:payoutOrder.intent_id,amount:payoutOrder.amount_ngn,currency:payoutOrder.fiat_currency||'NGN',usdc:payoutOrder.amount_usdc,token:baseStablecoin(payoutOrder.source_token),providerOrderId:payoutOrder.paycrest_order_id})
         const route = routeRecord(await syncOwnedRoute(identity, text(payable.body.order.intent_id), dependencies))
         return res.json({ ok: true, data: publicOrder(payable.body.order, execution, route) })
       }
 
+      if (['routeStart','routeUpdate'].includes(action) && baseStablecoin(ownedOrder.source_token) !== 'USDC') return res.status(400).json({ok:false,error:'USDT payouts require USDT already on Base. USDC bridging is not available for this asset.'})
       if (action === 'routeStart') {
         const source = text(req.body?.source, 20)
         const destination = text(req.body?.destination, 20)

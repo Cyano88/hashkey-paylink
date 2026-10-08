@@ -54,6 +54,13 @@ assert.equal(verified.amount, formatUnits(amountUnits, 6))
 assert.equal(verified.confirmedAt, new Date(Number(BigInt(blockTimestamp) * 1_000n)).toISOString())
 
 const exactInput = { chain: 'base', txHash, payer, recipient, minAmount: amount, exactAmount: true }
+await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT'}), /transfer/i)
+nextReceipt.logs[0].address = '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2'
+assert.equal((await verifyEvmUsdcTransfer({...exactInput, token:'USDT'})).amountUnits, amountUnits.toString())
+await assert.rejects(verifyEvmUsdcTransfer(exactInput), /transfer/i)
+await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT', chain:'arbitrum'}), /Base/i)
+await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT', payer:recipient}), /transfer/i)
+nextReceipt = receipt('0x1')
 assert.equal((await verifyEvmUsdcTransfer(exactInput)).amountUnits, amountUnits.toString())
 nextReceipt.logs[0].data = `0x${(amountUnits + 1n).toString(16)}`
 await assert.rejects(verifyEvmUsdcTransfer(exactInput), /exactly/)

@@ -1,3 +1,4 @@
+import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import { updatePaycrestOrderStore } from './paycrest-order-state.js'
 import type { Request, Response } from 'express'
 import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
@@ -19,7 +20,9 @@ export type PaycrestOrderRecord = {
   merchant_id: string
   amount_ngn: string
   fiat_currency?: 'NGN' | 'UGX'
-  amount_usdc: string
+  amount_usdc: string // Legacy numeric field; always read together with source_token.
+  source_token?: BaseStablecoin
+  source_network?: 'base'
   receive_address: string
   refund_address: string
   payer_email?: string
@@ -341,6 +344,7 @@ export async function createPaycrestOfframpOrder(input: {
   merchantId: string
   amountNgn: string
   estimatedAmountUsdc: string
+  token?: BaseStablecoin
   fiatCurrency?: 'NGN' | 'UGX'
   bankCode: string
   accountNumber: string
@@ -355,6 +359,14 @@ export async function createPaycrestOfframpOrder(input: {
   referenceSuffix?: string
   unifiedXPay?: boolean
 }) {
+  const token = baseStablecoin(input.token)
+  if (token === 'USDT') {
+    if (process.env.POCKET_USDT_PAYOUT_ENABLED !== 'true') throw Error('USDT bank payouts are not available yet.')
+    if ((input.fiatCurrency || 'NGN') !== 'NGN') throw Error('USDT bank payouts currently support Nigeria only.')
+    if (input.source !== 'bank-withdraw') throw Error('USDT is only available for direct bank payouts.')
+    const {readPaycrestBaseUsdtSupport}=await import('./paycrest-usdt.js')
+    await readPaycrestBaseUsdtSupport()
+  }
   if (!isAddress(input.refundAddress)) throw new Error('A valid Circle refund wallet is required.')
   const referenceSuffix = String(input.referenceSuffix ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20)
   const reference = `${input.source === 'hosted-checkout' ? 'checkout' : 'ngpos'}-${input.intentId}${referenceSuffix ? `-${referenceSuffix}` : ''}`.slice(0, 90)
@@ -364,7 +376,7 @@ export async function createPaycrestOfframpOrder(input: {
     amountIn: 'fiat',
     source: {
       type: 'crypto',
-      currency: 'USDC',
+      currency: token,
       network: 'base',
       refundAddress: input.refundAddress,
     },
@@ -390,13 +402,14 @@ export async function createPaycrestOfframpOrder(input: {
     body: JSON.stringify(payload),
   })
   if (pocketSenderFee) assertXPaySenderFee(data)
+  if (token === 'USDT' && (data?.source?.currency !== token || data?.source?.network !== 'base')) throw Error('Paycrest payout asset could not be verified.')
   const providerAccount = data?.providerAccount ?? data?.provider_account ?? {}
   const receiveAddress = firstText(providerAccount.receiveAddress, providerAccount.receive_address)
   if (!isAddress(receiveAddress)) throw new Error('Paycrest did not return a valid Base receive address.')
 
   const amountUsdc = payableCryptoAmount(data)
   if (!amountUsdc || Number(amountUsdc) <= 0) {
-    throw new Error('Paycrest did not return the exact USDC amount to collect.')
+    throw new Error(`Paycrest did not return the exact ${token} amount to collect.`)
   }
 
   const now = new Date().toISOString()
@@ -407,6 +420,7 @@ export async function createPaycrestOfframpOrder(input: {
     amount_ngn: input.amountNgn,
     fiat_currency: input.fiatCurrency ?? 'NGN',
     amount_usdc: amountUsdc,
+    source_token: token, source_network: 'base',
     receive_address: receiveAddress,
     refund_address: input.refundAddress,
     payer_email: input.payerEmail,

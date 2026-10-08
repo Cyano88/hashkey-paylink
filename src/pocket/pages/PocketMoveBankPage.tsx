@@ -1,3 +1,6 @@
+import {pocketUsdtPayoutEnabled, readBaseUsdtBalance} from '../lib/pocketBaseUsdt'
+import {parseUnits} from 'viem'
+import PocketSelect from '../components/PocketSelect'
 import PocketFundingAction from '../components/PocketFundingAction'
 import {fundingShortfall} from '../lib/pocketFundingShortfall'
 import { RectangleStackIcon } from '@heroicons/react/24/outline'
@@ -57,6 +60,7 @@ function PocketMoveBankContent() {
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const routeMode = new URLSearchParams(search).get('mode') === 'request' ? 'request' : 'withdraw'
   const mode = routeMode
+  const [asset,setAsset] = useState<'USDC'|'USDT'>('USDC')
   const [recipientStep,setRecipientStep] = useState(false)
   const [recipientTab,setRecipientTab] = useState<'recent'|'favourites'>('recent')
   const directory = new URLSearchParams(search).get('recipients')
@@ -95,6 +99,7 @@ function PocketMoveBankContent() {
   const getLiquidityEvmSession = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string) => walletController.getEvmSession(network, walletAddress), [walletController.getEvmSession])
   const getLiquiditySolanaSession = useCallback((walletAddress: string) => walletController.getSolanaSession(walletAddress), [walletController.getSolanaSession])
   const direct = usePocketBankWithdrawController({
+    asset,
     country: bank.country,
     authenticated,
     email,
@@ -136,7 +141,7 @@ function PocketMoveBankContent() {
     funding: direct.result?.intentId ? {kind:'bank-withdraw',id:direct.result.intentId} : undefined,
     bankPayout: true,
     readRoutingSnapshot,
-    enabled: direct.status === 'routing' && Boolean(direct.result?.amountUsdc),
+    enabled: direct.status === 'routing' && direct.result?.asset !== 'USDT' && Boolean(direct.result?.amountUsdc),
     amount: direct.result?.amountUsdc ?? '',
     destination: 'base',
     getAccessToken,
@@ -146,6 +151,14 @@ function PocketMoveBankContent() {
     refreshBalances: wallets.refreshBalances,
     persistence: routePersistence,
   })
+  const ensurePayoutLiquidity = useCallback(async () => {
+    if (direct.result?.asset !== 'USDT') return bankLiquidity.ensureLiquidity()
+    const wallet = wallets.wallets.base || await ensureBaseWallet()
+    if (!wallet) throw Error('Open your Base wallet to continue.')
+    const balance = await readBaseUsdtBalance(wallet.address)
+    if (balance.units < parseUnits(direct.result.amountUsdc, 6)) throw Error('Insufficient USDT on Base. Add USDT on Base to continue.')
+    return wallet
+  }, [direct.result?.asset, direct.result?.amountUsdc, bankLiquidity.ensureLiquidity, wallets.wallets.base, ensureBaseWallet])
   const routedIntent = useRef('')
   useEffect(() => {
     const intentId = direct.result?.intentId ?? ''
@@ -155,10 +168,10 @@ function PocketMoveBankContent() {
     }
     if (routedIntent.current === intentId) return
     routedIntent.current = intentId
-    void bankLiquidity.ensureLiquidity()
+    void ensurePayoutLiquidity()
       .then(wallet => direct.continueAfterRouting(wallet))
       .catch(reason => direct.failRouting(reason, intentId))
-  }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
+  }, [ensurePayoutLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
   useEffect(() => {
     const intentId = direct.result?.intentId ?? ''
     if (direct.status !== 'route-review') return
@@ -167,7 +180,7 @@ function PocketMoveBankContent() {
     const reconcile = async () => {
       while (!cancelled) {
         try {
-          const wallet = await bankLiquidity.ensureLiquidity()
+          const wallet = await ensurePayoutLiquidity()
           if (!cancelled) await direct.continueAfterRouting(wallet)
           return
         } catch (reason) {
@@ -179,7 +192,7 @@ function PocketMoveBankContent() {
     }
     void reconcile()
     return () => { cancelled = true }
-  }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
+  }, [ensurePayoutLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
   const recoveredPayout = !directAmountValid && Boolean(direct.result?.intentId) && direct.status !== 'idle' && direct.status !== 'sent'
   const directSlideStatus = direct.status === 'sent'
@@ -200,6 +213,7 @@ function PocketMoveBankContent() {
     payer: wallets.wallets.base?.address || email || 'Pocket',
     memo: 'Bank transfer',
     amount: direct.result.amountUsdc,
+    assetSymbol: direct.result.asset || 'USDC',
     amountNgn: direct.result.amountNgn,
     fiatCurrency: direct.result.fiatCurrency,
     ts: Date.now(),
@@ -334,15 +348,16 @@ function PocketMoveBankContent() {
             </>}
 
             {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
+              {pocketUsdtPayoutEnabled && <PocketSelect ariaLabel="Payment asset" value={asset} disabled={directLocked} onChange={value=>{direct.resetResult(false);setAsset(value as 'USDC'|'USDT')}} options={[{value:'USDC',label:'USDC'},{value:'USDT',label:'USDT · Base'}]} />}
               <PocketBankAmountFields currency={pocketFiatCurrency(bank.country)} accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
-              <PocketFiatUsdcEstimate amount={Number(direct.amount)} currency={pocketFiatCurrency(bank.country)} />
+              {asset === 'USDC' && <PocketFiatUsdcEstimate amount={Number(direct.amount)} currency={pocketFiatCurrency(bank.country)} />}
               <div className="mt-auto space-y-2 pt-6" style={{ visibility: reviewOpen || bankReceipt ? 'hidden' : undefined }}>
                 {recoveredPayout ? (
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
                   </p>
-                ) : <PocketFundingAction asset={bankLiquidity.insufficient?'USDC':fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();await bankLiquidity.recheckFunding()}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Continue</button></PocketFundingAction>}
+                ) : <PocketFundingAction asset={asset === 'USDT' ? fundingShortfall(direct.error, 'USDT') : bankLiquidity.insufficient ? 'USDC' : fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();await bankLiquidity.recheckFunding()}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Continue</button></PocketFundingAction>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && ['moving', 'waiting', 'reconciling'].includes(bankLiquidity.status) && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
                 {!reviewOpen && !recoveredPayout && !fundingShortfall(direct.error) && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
@@ -384,10 +399,10 @@ function PocketMoveBankContent() {
         onClose={bank.closeShare}
       />
       {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
-        <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' USDC' : reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
-          ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
+        <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' ' + (direct.result.asset || asset) : asset === 'USDC' && reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
+          ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base ' + (direct.result?.asset || asset)], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
-<PocketFundingAction asset={bankLiquidity.insufficient?'USDC':fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();await bankLiquidity.recheckFunding();setReviewOpen(false)}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><PocketSlideAction onApprovalBusyChange={setApprovalBusy}
+<PocketFundingAction asset={asset === 'USDT' ? fundingShortfall(direct.error, 'USDT') : bankLiquidity.insufficient ? 'USDC' : fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();await bankLiquidity.recheckFunding();setReviewOpen(false)}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><PocketSlideAction onApprovalBusyChange={setApprovalBusy}
                   status={directSlideStatus}
                   disabled={!direct.canSubmit}
                   onPrepare={direct.prepareApproval}

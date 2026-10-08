@@ -382,3 +382,19 @@ clearActivePocketBankPayout(processingOrder.intent_id)
 assert.equal(readActivePocketBankPayout(), '')
 
 console.log('Circle Pocket direct bank-withdraw adapter smoke tests passed.')
+
+const previousUsdtFlag = process.env.POCKET_USDT_PAYOUT_ENABLED
+delete process.env.POCKET_USDT_PAYOUT_ENABLED
+const disabledUsdt = await request(handler, {...prepareBody, source_asset:'USDT'}, {'idempotency-key':idempotencyKey})
+assert.equal(disabledUsdt.statusCode, 503)
+process.env.POCKET_USDT_PAYOUT_ENABLED = 'true'
+const switchedAsset = await request(handler, {...prepareBody, source_asset:'USDT'}, {'idempotency-key':idempotencyKey})
+assert.equal(switchedAsset.statusCode, 409, 'same idempotency key cannot switch assets')
+await assert.rejects(preparePocketBankWithdraw({accessToken:'privy-token', request:{...prepareBody,source_asset:'USDT'},idempotencyKey,fetcher}), /asset does not match/)
+persistedOrder = {...processingOrder,source_token:'USDT',source_network:'base'}
+const usdtRoute = await request(handler, {action:'routeStart',intent_id:processingOrder.intent_id,source:'arbitrum',destination:'base',amount:'1'})
+assert.equal(usdtRoute.statusCode, 400)
+assert.match(usdtRoute.body.error, /USDT already on Base/)
+if(previousUsdtFlag === undefined)delete process.env.POCKET_USDT_PAYOUT_ENABLED
+else process.env.POCKET_USDT_PAYOUT_ENABLED = previousUsdtFlag
+console.log('PASS: USDT rollout gate, retry asset binding, response asset binding and bridge exclusion.')

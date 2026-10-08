@@ -52,7 +52,7 @@ export default async function handler(req: Request, res: Response) {
         memo: receipt.memo,
         amount: receipt.amount,
         requestedAmount: receipt.requestedAmount,
-        asset: 'USDC',
+        asset: receipt.assetSymbol || 'USDC',
         createdAt: receipt.ts,
         source: receipt.source,
         merchantId: receipt.merchantId,

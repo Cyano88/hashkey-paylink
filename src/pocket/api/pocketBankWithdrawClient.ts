@@ -8,6 +8,9 @@ export type PocketBankWithdrawData = {
   fiatCurrency?: 'NGN' | 'UGX'
   amountNgn: string
   amountUsdc: string
+  amountAsset?: string
+  asset?: 'USDC' | 'USDT'
+  network?: 'base'
   receiveAddress: string
   txHash: string
   handoffVerified: boolean
@@ -43,6 +46,8 @@ function parseData(value: unknown): PocketBankWithdrawData {
   // handoffVerified. On that version txHash is only exposed after the exact
   // Base USDC transfer has been verified and submitted to Paycrest, so it is
   // the backward-compatible proof of the same handoff boundary.
+  if (data.asset !== undefined && !['USDC','USDT'].includes(data.asset)) throw new Error('Unsupported payout asset.')
+  if (data.asset === 'USDT' && (data.network !== 'base' || data.amountAsset !== data.amountUsdc)) throw new Error('USDT payout response was invalid.')
   const normalized = {
     ...data,
     handoffVerified: typeof data.handoffVerified === 'boolean'
@@ -79,13 +84,15 @@ async function mutate({ accessToken, body, idempotencyKey, fetcher = fetch }: { 
   return parseData(data)
 }
 
-export function preparePocketBankWithdraw(input: {
+export async function preparePocketBankWithdraw(input: {
   accessToken: string
   request: Record<string, unknown>
   idempotencyKey?: string
   fetcher?: typeof fetch
 }) {
-  return mutate({ ...input, idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('bank-withdraw'), body: { action: 'prepare', ...input.request } })
+  const result = await mutate({ ...input, idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('bank-withdraw'), body: { action: 'prepare', ...input.request } })
+  if ((result.asset || 'USDC') !== (input.request.source_asset || 'USDC')) throw new Error('The payout asset does not match this request.')
+  return result
 }
 
 export function confirmPocketBankWithdraw(input: { accessToken: string; request: Record<string, unknown>; fetcher?: typeof fetch }) {

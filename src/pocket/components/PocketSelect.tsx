@@ -23,6 +23,7 @@ export default function PocketSelect({
   buttonClassName,
   searchable = false,
   searchPlaceholder = 'Search',
+  showNetworkBalances = true,
   initialOpen=false,layer=85,onDismiss,
 }: {
   initialOpen?:boolean;layer?:number;onDismiss?:()=>void
@@ -36,6 +37,7 @@ export default function PocketSelect({
   buttonClassName?: string
   searchable?: boolean
   searchPlaceholder?: string
+  showNetworkBalances?: boolean
 }) {
   const [open, setOpen] = useState(initialOpen)
   const [query, setQuery] = useState('')
@@ -84,7 +86,7 @@ export default function PocketSelect({
     <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={unavailable} onClick={()=>setOpen(true)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#262626]',buttonClassName)}>
       {selected && <PocketNetworkMark network={selected.value}/>}<span className="flex-1 text-left">{selected?.label ?? placeholder}</span><ChevronDown className="h-4 w-4"/>
     </button>
-    {open && <PocketBottomSheet layer={layer} title="Select network" onClose={()=>{setOpen(false);onDismiss?.()}}><h2 className="mb-3 text-sm font-bold">Select network</h2><div role="listbox" aria-label={ariaLabel}>{options.map(option=><button key={option.value} type="button" role="option" aria-selected={option.value===value} disabled={option.disabled} onClick={()=>{onChange(option.value);setOpen(false)}} className="flex min-h-14 w-full items-center gap-3 text-left text-sm font-semibold disabled:opacity-50"><PocketNetworkMark network={option.value}/><span className="flex-1">{option.label}</span><PocketNetworkBalance network={option.value}/><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border',option.value===value?'border-4 border-gray-950 dark:border-white':'border-gray-300 dark:border-gray-600')}/></button>)}</div></PocketBottomSheet>}
+    {open && <PocketBottomSheet layer={layer} title="Select network" onClose={()=>{setOpen(false);onDismiss?.()}}><h2 className="mb-3 text-sm font-bold">Select network</h2><div role="listbox" aria-label={ariaLabel}>{options.map(option=><button key={option.value} type="button" role="option" aria-selected={option.value===value} disabled={option.disabled} onClick={()=>{onChange(option.value);setOpen(false)}} className="flex min-h-14 w-full items-center gap-3 text-left text-sm font-semibold disabled:opacity-50"><PocketNetworkMark network={option.value}/><span className="flex-1">{option.label}</span>{showNetworkBalances && <PocketNetworkBalance network={option.value}/>}<span aria-hidden="true" className={cn('h-4 w-4 rounded-full border',option.value===value?'border-4 border-gray-950 dark:border-white':'border-gray-300 dark:border-gray-600')}/></button>)}</div></PocketBottomSheet>}
   </div>
 
   return (

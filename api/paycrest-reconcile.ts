@@ -1,3 +1,4 @@
+import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import {
   getPaycrestPosOrder,
   markPaycrestPosPayment,
@@ -124,6 +125,7 @@ export async function reconcilePaycrestOrderPayment(id: string, options: { allow
 
   const match = await findEvmUsdcTransfer({
     chain: 'base',
+    token: baseStablecoin(order.source_token),
     recipient: order.receive_address,
     minAmount: order.amount_usdc,
     ...paycrestTransferRecoveryWindow(order),

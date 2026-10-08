@@ -38,7 +38,7 @@ export async function pocketTransferAllowance(owner:string) {
  const used=(ledger?.charges||[]).filter(c=>c.day===day&&c.state==='reserved').reduce((n,c)=>n+c.amount,0)/100
  return {level:verification.level,country:verification.country,paymentLevel:level,dailyLimitNgn:limit,remainingNgn:Math.max(0,limit-used),advancedDailyLimitNgn:advancedDailyNgn(),resetsAt:new Date(Date.parse(day+'T00:00:00Z')+86400000-3600000).toISOString()}
 }
-export async function reservePocketBankAllowance(owner:string,input:{id:string;amount:string;currency:string;usdc?:string;providerOrderId?:string},checkOnly=false) {
+export async function reservePocketBankAllowance(owner:string,input:{id:string;amount:string;currency:string;usdc?:string;token?:'USDC'|'USDT';providerOrderId?:string},checkOnly=false) {
  const verification=await readPocketKycLevel(owner),level=verification.paymentLevel||verification.level
  if(level==='none')throw failure('KYC_BASIC_REQUIRED','Complete Basic verification to use bank transfers.')
  await refreshReleases(owner)
@@ -50,7 +50,7 @@ export async function reservePocketBankAllowance(owner:string,input:{id:string;a
  if(input.currency!=='NGN'&&!existing){
   if(input.currency!=='UGX'||!input.usdc||!Number.isFinite(Number(input.usdc))||Number(input.usdc)<=0)throw failure('KYC_LIMIT_UNAVAILABLE','The transfer allowance could not be checked. Try again.')
   const {getPaycrestOfframpRate}=await import('../paycrest-pos.js')
-  ngn=Number(input.usdc)*await getPaycrestOfframpRate({network:'base',token:'USDC',fiat:'NGN',amount:input.usdc})
+  ngn=Number(input.usdc)*await getPaycrestOfframpRate({network:'base',token:input.token||'USDC',fiat:'NGN',amount:input.usdc})
  }
  // Preserve the original FX equivalent across retries.
  const parts=input.amount.split('.')

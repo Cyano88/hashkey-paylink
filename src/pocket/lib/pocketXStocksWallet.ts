@@ -1,6 +1,7 @@
 import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem, parseUnits, type Address, type Hex } from 'viem'
 import { xLayer } from 'viem/chains'
 import catalogue from './pocketXStocksCatalog.json'
+import { xLayerTransferSponsorshipEnabled } from './pocketXLayerSponsorship'
 
 export const pocketXLayer = { ...xLayer, rpcUrls: { default: { http: ['https://rpc.xlayer.tech'] } } }
 export const stockClient = createPublicClient({ chain: pocketXLayer, transport: http(pocketXLayer.rpcUrls.default.http[0], { timeout: 15_000, retryCount: 1 }) })
@@ -12,7 +13,7 @@ export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 
 // OKX's native-token identifier for X Layer market-price requests.
 export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 export type StockHolding = { asset: StockAsset; units: bigint; decimals: number }
-export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; expiresAt: number }
+export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; sponsored?: boolean; expiresAt: number }
 
 export function stockAmountUnits(amount: string, decimals: number) {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36 || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amount) || (amount.split('.')[1]?.length || 0) > decimals) throw Error('Enter a valid amount within the asset precision.')
@@ -86,6 +87,11 @@ export async function prepareStockTransfer(owner: Address, asset: StockAsset, re
   if (!native) {
     const result = await stockClient.simulateContract({ account: owner, address: to, abi: stockTokenAbi, functionName: 'transfer', args: [recipient, units] })
     if (result.result !== true) throw Error('This stock contract did not accept the transfer.')
+  }
+  if (!native && xLayerTransferSponsorshipEnabled) {
+    // Privy estimates the sponsored operation. Do not require the payer to
+    // fund OKB or run an unsponsored gas estimate against an unfunded wallet.
+    return { owner, recipient, asset, amount, units, decimals, to, data, value, gas: 0n, fee: 0n, sponsored: true, expiresAt: Date.now() + 60_000 }
   }
   const gas = await stockClient.estimateGas({ account: owner, to, data, value })
   const fee = gas * await stockClient.getGasPrice() * 120n / 100n

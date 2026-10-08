@@ -1,8 +1,13 @@
+import { BASE_STABLECOINS, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import { formatUnits, isAddress, pad, parseUnits, type Address } from 'viem'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const ARC_USDC_EMITTER = '0xfffffffffffffffffffffffffffffffffffffffe'
-const usdcEventAddress = (chain: EvmUsdcChain) => chain === 'arc' ? ARC_USDC_EMITTER : USDC_TOKENS[chain]
+const usdcEventAddress = (chain: EvmUsdcChain, token: BaseStablecoin = 'USDC') => {
+  if (token === 'USDT') { if (chain !== 'base') throw Error('USDT verification is only enabled on Base.'); return BASE_STABLECOINS.USDT.address }
+  if (token !== 'USDC') throw Error('Unsupported transfer asset.')
+  return chain === 'arc' ? ARC_USDC_EMITTER : USDC_TOKENS[chain]
+}
 const usdcEventUnits = (chain: EvmUsdcChain, data?: string) => BigInt(data || '0x0') / (chain === 'arc' ? 1_000_000_000_000n : 1n)
 const BASE_PUBLIC_RPC = 'https://mainnet.base.org'
 
@@ -89,6 +94,7 @@ function readPositiveBigInt(value: unknown, fallback: bigint) {
 async function getTransferLogs(input: {
   rpcUrl: string
   chain: EvmUsdcChain
+  token?: BaseStablecoin
   payer?: string
   recipient: string
   fromBlock: bigint
@@ -101,7 +107,7 @@ async function getTransferLogs(input: {
   for (let from = input.fromBlock; from <= input.toBlock; from += input.chunkSize) {
     const end = from + input.chunkSize - 1n > input.toBlock ? input.toBlock : from + input.chunkSize - 1n
     logs.push(...await rpcCall<TransferLog[]>(input.rpcUrl, 'eth_getLogs', [{
-      address: usdcEventAddress(input.chain),
+      address: usdcEventAddress(input.chain, input.token),
       fromBlock: `0x${from.toString(16)}`,
       toBlock: `0x${end.toString(16)}`,
       topics: [TRANSFER_TOPIC, payerTopic, recipientTopic],
@@ -122,6 +128,7 @@ type BlockscoutTransfer = {
 }
 
 async function findBaseBlockscoutUsdcTransfer(input: {
+  token?: BaseStablecoin
   payer: string
   recipient: string
   minAmount: string
@@ -133,7 +140,7 @@ async function findBaseBlockscoutUsdcTransfer(input: {
   const deadline = Date.parse(input.notAfter)
   if (!Number.isFinite(earliest) || !Number.isFinite(deadline)) throw new Error('Invalid transfer recovery time.')
   const minUnits = usdcAmountUnits(input.minAmount)
-  const baseParams = { type: 'ERC-20', filter: 'to', token: USDC_TOKENS.base }
+  const baseParams = { type: 'ERC-20', filter: 'to', token: usdcEventAddress('base', input.token) }
   let url = `https://base.blockscout.com/api/v2/addresses/${input.recipient}/token-transfers?${new URLSearchParams(baseParams)}`
   for (let page = 0; page < 10 && url; page += 1) {
     const response = await fetch(url, { headers: { accept: 'application/json' } })
@@ -147,13 +154,13 @@ async function findBaseBlockscoutUsdcTransfer(input: {
       if (!Number.isFinite(timestamp) || timestamp < earliest || timestamp > deadline) continue
       if (String(item.from?.hash ?? '').toLowerCase() !== input.payer.toLowerCase()) continue
       if (String(item.to?.hash ?? '').toLowerCase() !== input.recipient.toLowerCase()) continue
-      if (String(item.token?.address_hash ?? '').toLowerCase() !== USDC_TOKENS.base.toLowerCase()) continue
+      if (String(item.token?.address_hash ?? '').toLowerCase() !== usdcEventAddress('base', input.token).toLowerCase()) continue
       const amountUnits = BigInt(String(item.total?.value ?? '0'))
       if (input.exactAmount ? amountUnits !== minUnits : amountUnits < minUnits) continue
       const txHash = String(item.transaction_hash ?? '')
       if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) continue
       const verified = await verifyEvmUsdcTransfer({
-        chain: 'base', txHash, payer: input.payer, recipient: input.recipient,
+        chain: 'base', token: input.token, txHash, payer: input.payer, recipient: input.recipient,
         minAmount: input.minAmount, exactAmount: input.exactAmount, notBefore: input.notBefore, notAfter: input.notAfter,
       })
       return {
@@ -175,6 +182,7 @@ async function findBaseBlockscoutUsdcTransfer(input: {
 }
 export async function findEvmUsdcTransfer(input: {
   chain: EvmUsdcChain
+  token?: BaseStablecoin
   payer?: string
   recipient: string
   minAmount: string
@@ -184,12 +192,13 @@ export async function findEvmUsdcTransfer(input: {
   lookbackBlocks?: bigint
   chunkSize?: bigint
 }) {
+  usdcEventAddress(input.chain, input.token)
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
   if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
   if (input.chain === 'base' && input.payer && input.notBefore && input.notAfter) {
     try {
       const explorerMatch = await findBaseBlockscoutUsdcTransfer({
-        payer: input.payer, recipient: input.recipient, minAmount: input.minAmount,
+        token: input.token, payer: input.payer, recipient: input.recipient, minAmount: input.minAmount,
         exactAmount: input.exactAmount, notBefore: input.notBefore, notAfter: input.notAfter,
       })
       if (explorerMatch) return explorerMatch
@@ -233,11 +242,11 @@ export async function findEvmUsdcTransfer(input: {
   let discoveryRpcUrl = rpcUrl
   let logs: TransferLog[]
   try {
-    logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
+    logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, token: input.token, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
   } catch (error) {
     if (input.chain !== 'base' || discoveryRpcUrl === BASE_PUBLIC_RPC || !/eth_getLogs/i.test(error instanceof Error ? error.message : String(error))) throw error
     discoveryRpcUrl = BASE_PUBLIC_RPC
-    logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
+    logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, token: input.token, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
   }
   const candidates = logs.filter(log => {
     const value = usdcEventUnits(input.chain, log.data)
@@ -275,6 +284,7 @@ export async function findEvmUsdcTransfer(input: {
 
 export async function verifyEvmUsdcTransfer(input: {
   chain: EvmUsdcChain
+  token?: BaseStablecoin
   txHash: string
   payer?: string
   recipient: string
@@ -285,6 +295,7 @@ export async function verifyEvmUsdcTransfer(input: {
   confirmation?: 'finalized' | 'base-included'
 }) {
   if (!/^0x[a-fA-F0-9]{64}$/.test(input.txHash)) throw new Error('Invalid transaction hash.')
+  usdcEventAddress(input.chain, input.token)
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
   if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
   if (input.confirmation === 'base-included' && input.chain !== 'base') throw new Error('Base inclusion confirmation is only supported for Base.')
@@ -343,7 +354,7 @@ export async function verifyEvmUsdcTransfer(input: {
     confirmedAt = new Date(confirmedAtMs).toISOString()
   }
 
-  const token = usdcEventAddress(input.chain).toLowerCase()
+  const token = usdcEventAddress(input.chain, input.token).toLowerCase()
   const recipientTopic = pad(input.recipient as Address, { size: 32 }).toLowerCase()
   const payerTopic = input.payer ? pad(input.payer as Address, { size: 32 }).toLowerCase() : ''
   const minUnits = usdcAmountUnits(input.minAmount)
@@ -372,5 +383,5 @@ export async function verifyEvmUsdcTransfer(input: {
     return { ok: true, amountUnits: matchedUnits.toString(), amount: formatUnits(matchedUnits, 6), confirmedAt }
   }
 
-  throw new Error(`No matching USDC transfer to recipient for ${input.exactAmount ? 'exactly' : 'at least'} ${input.minAmount} USDC.`)
+  throw new Error(`No matching ${input.token || 'USDC'} transfer to recipient for ${input.exactAmount ? 'exactly' : 'at least'} ${input.minAmount} USDC.`)
 }

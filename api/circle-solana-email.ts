@@ -1,3 +1,4 @@
+import {baseStablecoin, BASE_STABLECOINS} from '../src/lib/baseStablecoins.js'
 import { paymentBalanceError } from './payment-balance-error.js'
 import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
@@ -777,7 +778,9 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Invalid withdraw amount' })
       }
 
-      const tokenAddress = EVM_CHAINS[chain].tokenAddress
+      const asset = baseStablecoin(params.asset)
+      if (asset === 'USDT' && chain !== 'base') return res.status(400).json({ok:false,error:'USDT withdrawals are only enabled on Base.'})
+      const tokenAddress = asset === 'USDT' ? BASE_STABLECOINS.USDT.address : EVM_CHAINS[chain].tokenAddress
       const transferCallData = encodeFunctionData({
         abi: ERC20_TRANSFER_ABI,
         functionName: 'transfer',
@@ -800,7 +803,7 @@ export default async function handler(req: Request, res: Response) {
         callData: batchCallData,
         idempotencyKey,
       })
-      return res.json({ ok: true, ...data, approval: { amount: formatUnits(total, 6), total: formatUnits(total, 6), asset: 'USDC' } })
+      return res.json({ ok: true, ...data, approval: { amount: formatUnits(total, 6), total: formatUnits(total, 6), asset } })
     }
 
     if (action === 'executeEvmBridge') {

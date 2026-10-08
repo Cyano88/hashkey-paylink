@@ -1,4 +1,5 @@
 import {GiftIcon} from '@heroicons/react/24/outline'
+import {pocketUsdtEnabled} from '../lib/pocketBaseUsdt'
 import { useNavigate } from 'react-router-dom'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -13,7 +14,7 @@ export default function PocketTransferMenuPage({ kind }: { kind: 'send' | 'recei
     { title: 'Bank transfer', detail: 'Send to a bank account', Icon: Landmark, path: POCKET_ROUTES.bank + '?mode=withdraw' },
     { title: 'Pocket ID', detail: 'Send to a Pocket user', Icon: UserRound, path: POCKET_ROUTES.send + '?mode=pocket' },
   ] : [
-    { title: 'Deposit USDC', detail: 'Receive USDC into your wallet', Icon: Deposit, path: POCKET_ROUTES.deposit },
+    { title: pocketUsdtEnabled ? 'Deposit' : 'Deposit USDC', detail: pocketUsdtEnabled ? 'Receive USDC or USDT' : 'Receive USDC into your wallet', Icon: Deposit, path: POCKET_ROUTES.deposit },
     { title: 'Request USDC', detail: 'Request a payment', Icon: RequestMoney, path: POCKET_ROUTES.usdc },
   ]
   return <PocketRouteShell active="home" onSelect={tab => open(tab === 'bills' ? POCKET_ROUTES.bills : tab === 'profile' ? POCKET_ROUTES.profile : tab === 'activity' ? pocketPathFor({ section: 'activity', view: 'all' }) : POCKET_ROUTES.home)}>

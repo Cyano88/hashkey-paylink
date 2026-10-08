@@ -15,6 +15,7 @@ const ALLOWED_METHODS = new Set([
   'getSignatureStatuses',
   'getSlot',
   'getTokenAccountBalance',
+  'getTokenAccountsByOwner',
   'getTransaction',
   'isBlockhashValid',
   'sendTransaction',
@@ -40,6 +41,10 @@ function rpcRequests(value: unknown) {
     const item = request as Record<string, unknown>
     if (item.jsonrpc !== '2.0' || !ALLOWED_METHODS.has(String(item.method ?? ''))) return null
     if (item.params !== undefined && !Array.isArray(item.params) && (typeof item.params !== 'object' || item.params === null)) return null
+    if(item.method==='getTokenAccountsByOwner') {
+      const p=item.params as any[]
+      if(!Array.isArray(p)||p.length!==3||typeof p[0]!=='string'||!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(p[0])||p[1]?.mint!=='Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'||Object.keys(p[1]).length!==1||p[2]?.encoding!=='jsonParsed'||p[2]?.commitment!=='confirmed'||Object.keys(p[2]).length!==2)return null
+    }
   }
   return requests
 }

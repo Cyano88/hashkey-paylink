@@ -6,6 +6,7 @@ type PocketEvmTransferExecutor = (input: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
+  asset?: 'USDC' | 'USDT'
   feeQuoteToken?: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
@@ -46,6 +47,7 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress,
   recipient,
   amount,
+  asset = 'USDC',
   idempotencyKey,
   feeQuoteToken,
   onChallenge,
@@ -59,6 +61,7 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress: string
   recipient: Address
   amount: string
+  asset?: 'USDC' | 'USDT'
   feeQuoteToken?: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
@@ -68,6 +71,7 @@ export async function executePocketEvmTransfer({
   challengeConfirmer?: PocketEvmChallengeConfirmer
   confirmer?: PocketEvmTransferConfirmer
 }) {
+  if (asset === 'USDT' && (session.chain !== 'base' || feeQuoteToken)) throw new Error('USDT requires a direct Base transfer.')
   if (!['base', 'arbitrum', 'arc', 'ethereum', 'polygon'].includes(session.chain)) {
     throw new Error('Circle Pocket EVM withdrawal does not support this network.')
   }
@@ -90,7 +94,7 @@ export async function executePocketEvmTransfer({
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
   let verifiedHash: `0x${string}` | null = null
   let identifiers = { challengeId: '', transactionId: '' }
-  const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
+  const txHash = await executor({ session, recipient, amount, asset, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
     onChallenge: value => { identifiers = value; onChallenge?.(value) },
     onAccepted: value => { identifiers = value; onAccepted?.(value) },
     onConfirmed: hash => { verifiedHash = hash }
