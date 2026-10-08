@@ -205,6 +205,7 @@ export default function Layout() {
     || pocketRoute?.section === 'bills'
     || pocketRoute?.section === 'move'
     || pocketRoute?.section === 'profile'
+    || pocketRoute?.section === 'cards'
     || pocketRoute?.section === 'notifications'
     || (pocketRoute?.section === 'home' && pocketRoute.view !== 'overview')
 

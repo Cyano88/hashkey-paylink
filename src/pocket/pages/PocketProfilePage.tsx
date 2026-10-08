@@ -147,7 +147,7 @@ export default function PocketProfilePage() {
   if (feature) return <PocketProfileFeaturePage stocks={stocks} feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => signOut(true)} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white">
     <main className="mx-auto flex min-h-full w-full max-w-[462px] flex-col px-4 pb-[calc(7.5rem+var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
-      <PocketFlowHeader centered title="Profile" onBack={() => editing ? setEditing(false) : returnHome()} />
+      <PocketFlowHeader centered title="Profile" hideBack={!editing} onBack={() => editing ? setEditing(false) : returnHome()} />
       <section className="flex flex-1 flex-col pt-8">
         <div className="text-center"><PocketAvatar avatarId={editing ? profile.draft.avatarId : current?.avatarId} className="mx-auto h-24 w-24" /><p className="mt-4 text-xl font-black tracking-[-0.03em]">{current?.resolvedName || 'Pocket profile'}</p><p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{email}</p></div>
         {editing ? <div className="mt-8 space-y-5">

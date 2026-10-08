@@ -46,7 +46,6 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
               disabled={disabled}
               aria-disabled={disabled || undefined}
               aria-current={selected ? 'page' : undefined}
-              aria-label={key === 'cards' ? 'Cards coming soon' : undefined}
               onClick={() => { if (key === 'cards') { navigate(POCKET_BASE_PATH + POCKET_ROUTES.cards); return; } if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: stocks ? 'xstocks' : 'stablecoins' } }); else if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
@@ -63,7 +62,6 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
                   selected ? 'stroke-[2.5]' : 'stroke-[1.8]',
                 )}
               />
-              {key === 'cards' && <span aria-hidden="true" className="absolute -right-6 -top-1 rounded-full bg-gray-100 px-1 py-0.5 text-[7px] font-medium leading-none text-gray-500 dark:bg-white/10 dark:text-gray-400">Soon</span>}
               </span>
               <span>{label}</span>
             </button>

@@ -7,9 +7,8 @@ import './PocketCardsPage.css'
 
 export default function PocketCardsPage() {
   const navigate = useNavigate()
-  const home = () => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)
   return <PocketRouteShell active="cards" refreshEnabled={false} onSelect={tab => navigate(POCKET_BASE_PATH + (tab === 'bills' ? POCKET_ROUTES.bills : tab === 'profile' ? POCKET_ROUTES.profile : tab === 'activity' ? POCKET_ROUTES.activity : tab === 'cards' ? POCKET_ROUTES.cards : POCKET_ROUTES.home))}>
-    <PocketFlowHeader title="Cards" centered onBack={home} />
+    <PocketFlowHeader title="Cards" centered hideBack />
     <section aria-labelledby="pocket-card-title" className="pocket-card-preview">
       <div className="pocket-card-stage" aria-hidden="true">
         <div className="pocket-card-halo" />
