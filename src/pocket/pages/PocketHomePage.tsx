@@ -1,7 +1,6 @@
 import { POCKET_USDT_NETWORKS } from '../lib/pocketUsdtAssets'
 import {pocketUsdtEnabled} from '../lib/pocketBaseUsdt'
 import PocketAssetsSheet from '../components/PocketAssetsSheet'
-import {localCurrencyAmount} from '../lib/pocketDisplayCurrency'
 import usePocketDisplayCurrency from '../hooks/usePocketDisplayCurrency'
 import PocketLocalEquivalent from '../components/PocketLocalEquivalent'
 import PocketActivityStatusIcon from '../components/PocketActivityStatusIcon'
@@ -23,7 +22,7 @@ import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { formatPocketDisplayAmount } from '../lib/pocketMoney'
+import { formatPocketDollarAmount } from '../lib/pocketMoney'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import PocketRecentActivitySkeleton from '../components/PocketRecentActivitySkeleton'
 
@@ -83,10 +82,10 @@ export default function PocketHomePage() {
             </button>
           </div></div>
           <div className="mt-1.5">
-            {!balanceVisible || balancesVisible ? <p className="min-w-0 text-[clamp(2rem,10vw,2.75rem)] font-semibold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-total-amount>{balanceVisible ? '$' + formatPocketDisplayAmount(displayTotal) : hidden}</span></span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
+            {!balanceVisible || balancesVisible ? <p className="min-w-0 text-[clamp(2rem,10vw,2.75rem)] font-semibold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-total-amount>{balanceVisible ? formatPocketDollarAmount(displayTotal) : hidden}</span>{balanceVisible && <span className="ml-2 text-xs font-medium tracking-normal opacity-60">USD</span>}</span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
           {<div className="mt-1 flex h-4 items-center justify-center text-xs font-normal tabular-nums leading-4 text-white/55 dark:text-gray-500">
-            {!showNgn || !balanceVisible ? null : balancesVisible && fx.quote ? '~ ' + localCurrencyAmount(Math.round(displayTotal * fx.quote.rate), currency === 'UGX' ? 'UGX' : 'NGN') : !balancesVisible || fx.loading ? <span role="status" aria-label="Loading local equivalent" className="block h-3 w-24 animate-pulse rounded bg-white/10 motion-reduce:animate-none dark:bg-gray-950/[0.08]" /> : <span aria-label="Local equivalent temporarily unavailable">Rate unavailable</span>}
+            {!showNgn || !balanceVisible ? null : balancesVisible && fx.quote ? '~ ' + new Intl.NumberFormat('en-US', {maximumFractionDigits: 0}).format(displayTotal * fx.quote.rate) + ' ' + (currency === 'UGX' ? 'UGX' : 'NGN') : !balancesVisible || fx.loading ? <span role="status" aria-label="Loading local equivalent" className="block h-3 w-24 animate-pulse rounded bg-white/10 motion-reduce:animate-none dark:bg-gray-950/[0.08]" /> : <span aria-label="Local equivalent temporarily unavailable">Rate unavailable</span>}
           </div>}
         </div>
         <div className="absolute right-0 top-0 flex items-center gap-1">
