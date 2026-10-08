@@ -7,7 +7,7 @@
   position: relative;
   display: grid;
   place-items: center;
-  height: clamp(215px, 27dvh, 260px);
+  height: clamp(260px, 34dvh, 325px);
   isolation: isolate;
   perspective: 1000px;
 }
@@ -24,7 +24,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  width: min(84%, 320px);
+  width: min(94%, 374px);
   aspect-ratio: 1.586;
   padding: 22px;
   overflow: hidden;
