@@ -18,12 +18,12 @@ export default function PocketAssetsSheet({ holdings, total, complete, visible, 
   const held = holdings.filter(row => row.known && row.quantity > 0).sort((a, b) => b.valueUsd - a.valueUsd)
   const needsRefresh = !complete || holdings.some(row => row.stale)
   const amount = (value: number) => !visible ? '••••' : value > 0 && value < 0.01 ? '<$0.01' : new Intl.NumberFormat('en', {style: 'currency', currency: 'USD'}).format(value)
-  return <PocketBottomSheet title="Your assets" onClose={onClose}>
-    <div className="pb-4 pr-10">
+  return <PocketBottomSheet title="Your assets" onClose={onClose} fixedHeight="calc(414px + max(1.5rem, var(--pocket-safe-bottom)))">
+    <div className="shrink-0 pb-4 pr-10">
       <h2 className="text-xl font-semibold tracking-tight">Your assets</h2>
       {complete && <p className="mt-1 text-sm tabular-nums text-gray-500 dark:text-gray-400">{amount(total)}</p>}
     </div>
-    <ul className="min-h-40 divide-y divide-gray-100 pb-2 dark:divide-white/[0.07]">
+    <ul aria-label="Asset balances" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain divide-y divide-gray-100 pb-2 outline-none focus-visible:ring-1 focus-visible:ring-gray-400 dark:divide-white/[0.07]">
       {held.map(row => <li key={row.id} className="flex items-center gap-3 py-4">
         <span className="relative h-9 w-9 shrink-0">
           <img src={row.icon} alt="" className="h-9 w-9 rounded-full object-cover grayscale contrast-200 dark:invert" />
