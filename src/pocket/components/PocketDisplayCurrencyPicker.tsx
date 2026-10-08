@@ -10,7 +10,7 @@ const OPTIONS = [
   ['UGX', 'Ugandan shilling', 'UGX'],
 ] as const
 
-export default function PocketDisplayCurrencyPicker({ current, busy, error, onBack, onSelect, stocks = false }: { stocks?: boolean; current: Currency; busy: boolean; error: string; onBack(): void; onSelect(currency: Currency): Promise<boolean> }) {
+export default function PocketDisplayCurrencyPicker({ current, busy, error, onBack, onSelect }: { current: Currency; busy: boolean; error: string; onBack(): void; onSelect(currency: Currency): Promise<boolean> }) {
   const [pending, setPending] = useState<Currency | null>(null)
   const [saveError, setSaveError] = useState('')
   const saving = useRef(false)
@@ -24,7 +24,6 @@ export default function PocketDisplayCurrencyPicker({ current, busy, error, onBa
   }
   return <PocketBottomSheet title="Display currency" showCloseButton dismissible={!busy && !pending} onClose={onBack}>
     <h2 className="text-base font-semibold">Display currency</h2>
-    <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{stocks ? 'Saved for XStocks on this device.' : 'USD stays first. Local values are estimates.'}</p>
     <div className="mt-4" role="listbox" aria-label="Display currency">
       {OPTIONS.map(([value, label, code]) => <button key={value} type="button" role="option" aria-selected={value === current} disabled={busy || Boolean(pending)} onClick={() => void choose(value)} className="flex min-h-16 w-full items-center gap-3 border-b border-gray-100 text-left last:border-0 disabled:opacity-60 dark:border-[#262626]">
         <span className="flex-1 text-sm font-medium">{label}</span><span className="text-xs text-gray-500 dark:text-gray-400">{code}</span>
