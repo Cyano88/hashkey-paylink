@@ -43,11 +43,11 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
             <button
               key={key}
               type="button"
-              disabled={disabled || key === 'cards'}
-              aria-disabled={disabled || key === 'cards' || undefined}
+              disabled={disabled}
+              aria-disabled={disabled || undefined}
               aria-current={selected ? 'page' : undefined}
               aria-label={key === 'cards' ? 'Cards coming soon' : undefined}
-              onClick={() => { if (key === 'cards') return; if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: stocks ? 'xstocks' : 'stablecoins' } }); else if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
+              onClick={() => { if (key === 'cards') { navigate(POCKET_BASE_PATH + POCKET_ROUTES.cards); return; } if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: stocks ? 'xstocks' : 'stablecoins' } }); else if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected

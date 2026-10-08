@@ -1,15 +1,13 @@
 import { isPocketId, pocketIdInput } from '../lib/pocketId'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, Trash, TrendingUp } from '../components/PocketIcons'
+import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, Trash, TrendingUp } from '../components/PocketIcons'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketAvatar from '../components/PocketAvatar'
 import PocketBottomNav, { type PocketNavTab } from '../components/PocketBottomNav'
 import PocketLoadingState from '../components/PocketLoadingState'
 import PocketThemeToggle from '../components/PocketThemeToggle'
-import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import usePocketStockCurrency from '../hooks/usePocketStockCurrency'
 import usePocketProfile from '../hooks/usePocketProfile'
 import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
@@ -33,10 +31,7 @@ export default function PocketProfilePage() {
   const returnHome = () => navigate(stocks ? xStockPath('portfolio') : POCKET_BASE_PATH + POCKET_ROUTES.home, { replace: true })
   const { authenticated, email, getAccessToken, logout: identityLogout } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const stockCurrency = usePocketStockCurrency(email)
-  const displayCurrency = stocks ? stockCurrency.currency : profile.profile?.displayCurrency
   const [editing, setEditing] = useState(() => new URLSearchParams(window.location.search).get('edit') === 'id')
-  const [currencyOpen, setCurrencyOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -76,9 +71,7 @@ export default function PocketProfilePage() {
       } else if (feature) {
         rawEvent.preventDefault()
         setFeature(null)
-      } else if (currencyOpen) {
-        rawEvent.preventDefault()
-        setCurrencyOpen(false)
+
       } else if (editing) {
         rawEvent.preventDefault()
         setEditing(false)
@@ -89,7 +82,7 @@ export default function PocketProfilePage() {
     }
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
-  }, [currencyOpen, deleteBusy, deleteOpen, editing, feature, stocks, navigate])
+  }, [deleteBusy, deleteOpen, editing, feature, stocks, navigate])
   if (!profile.loaded && !profile.profile) return <PocketLoadingState active="profile" />
   const current = profile.profile
   const copyId = async () => { if (!current?.pocketId) return; await navigator.clipboard.writeText(current.pocketId); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
@@ -152,7 +145,6 @@ export default function PocketProfilePage() {
     </main>
   </div>
   if (feature) return <PocketProfileFeaturePage stocks={stocks} feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => signOut(true)} />
-  if (currencyOpen) return <PocketDisplayCurrencyPicker stocks={stocks} current={displayCurrency ?? 'USDC'} busy={stocks ? false : profile.busy} error={stocks ? '' : profile.error} onBack={() => setCurrencyOpen(false)} onSelect={async currency => stocks ? stockCurrency.save(currency) : Boolean(await profile.saveDisplayCurrency(currency))} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white">
     <main className="mx-auto flex min-h-full w-full max-w-[462px] flex-col px-4 pb-[calc(7.5rem+var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
       <PocketFlowHeader centered title="Profile" onBack={() => editing ? setEditing(false) : returnHome()} />
@@ -168,11 +160,7 @@ export default function PocketProfilePage() {
           {!stocks && <button type="button" onClick={() => setFeature('wallet-setup')} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Wallets</span><span className="mt-1 block text-sm font-bold">Wallet update</span></span><ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" /></button>}
           <div className="rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Email<Lock className="h-3 w-3" /></p><p className="mt-1 truncate text-sm font-bold">{email}</p></div>
           {!stocks && <div className="flex min-h-16 items-center gap-3 rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Appearance</span><span className="mt-1 block text-sm font-bold">Light or dark theme</span></span><PocketThemeToggle /></div>}
-          <button type="button" onClick={() => setCurrencyOpen(true)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
-            <Coins className="h-5 w-5 text-gray-500 dark:text-gray-300" />
-            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Display currency</span><span className="mt-1 block text-sm font-bold">{displayCurrency === 'NGN' ? 'Naira (NGN)' : displayCurrency === 'UGX' ? 'Ugandan shilling (UGX)' : stocks ? 'Default (USD)' : 'Default (USDC)'}</span></span>
-            <ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-          </button>
+
           {!stocks && <button type='button' onClick={() => setFeature('rates')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><TrendingUp className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Rates</span><span className='mt-1 block text-sm font-bold'>USDC to local currency</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>}
           {!stocks && <button type='button' onClick={() => setFeature('limits')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><Banknote className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Spending limits</span><span className='mt-1 block text-sm font-bold'>Bank, Bills, and USDC limits</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>}
           <button type='button' onClick={() => stocks ? navigate(xStockPath('notifications')) : setFeature('notifications')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><Bell className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Notifications</span><span className='mt-1 block text-sm font-bold'>Alerts and Pocket updates</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>

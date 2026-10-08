@@ -1,3 +1,4 @@
+import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import PocketStockBalanceCard from '../components/PocketStockBalanceCard'
 import {pocketStockBalanceValue} from '../lib/pocketStockBalanceValue'
 import PocketHomeAction from '../components/PocketHomeAction'
@@ -45,6 +46,7 @@ function AssetRow({ asset, quote, busy, quantity, quantityLoading, onOpen, forma
 }
 
 export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 'account' | 'verify-name'> }) {
+  const [currencyOpen, setCurrencyOpen] = useState(false)
   const [xpayFixed,setXpayFixed]=useState(false)
   const navigate = useNavigate()
   const wallet = usePocketStockWallet()
@@ -78,7 +80,7 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
   const openAsset = (asset: Asset) => navigate(xStockPath('market') + '?asset=' + encodeURIComponent(asset.symbol))
   const isAction = ['send', 'receive', 'request'].includes(view)
   const actionLabel = view === 'send' ? 'Send stocks' : view === 'receive' ? 'Receive stocks' : 'Request stocks'
-  const balance = <PocketStockBalanceCard {...balanceValues} visible={balanceVisible} onToggle={()=>setBalanceVisible(current=>{localStorage.setItem('pocket.balanceVisible',String(!current));return !current})} onScan={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.scan+'?rail=xstocks')} loading={(!wallet.ready&&!wallet.error)||!!wallet.address&&((!snapshot&&!wallet.error)||quotes.busy)} walletMissing={wallet.ready&&!wallet.address} staleLabel={showLastUpdated?lastUpdated:undefined} localEquivalent={balanceValues.total!==null&&stockCurrency.currency!=='USDC'&&freshFx&&usdcRate?'~ '+new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(balanceValues.total/usdcRate*freshFx)+' '+stockCurrency.currency:undefined}/>
+  const balance = <PocketStockBalanceCard {...balanceValues} onCurrencySelect={()=>setCurrencyOpen(true)} currencyOpen={currencyOpen} displayCurrency={stockCurrency.currency==='USDC'?'USD':stockCurrency.currency} visible={balanceVisible} onToggle={()=>setBalanceVisible(current=>{localStorage.setItem('pocket.balanceVisible',String(!current));return !current})} onScan={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.scan+'?rail=xstocks')} loading={(!wallet.ready&&!wallet.error)||!!wallet.address&&((!snapshot&&!wallet.error)||quotes.busy)} walletMissing={wallet.ready&&!wallet.address} staleLabel={showLastUpdated?lastUpdated:undefined} localEquivalent={balanceValues.total!==null&&stockCurrency.currency!=='USDC'&&freshFx&&usdcRate?'~ '+new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(balanceValues.total/usdcRate*freshFx)+' '+stockCurrency.currency:undefined}/>
   const market = <section className={card}>
     {view === 'home' && <div className="flex items-center justify-between"><h2 className="text-sm font-black">Stocks</h2><button type="button" onClick={() => navigate(xStockPath('market'))} className="flex min-h-11 items-center gap-1 text-[11px] font-bold text-gray-500">View all<ChevronRight className="h-3.5 w-3.5" /></button></div>}
     {view !== 'home' && <label className="flex items-center gap-2 rounded-xl bg-gray-100 px-3 dark:bg-white/[0.06]"><Search className="h-4 w-4 text-gray-400" /><input aria-label="Search stocks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, symbol or contract" className="min-h-11 min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>}
@@ -115,5 +117,6 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
         <section className={card}><h2 className="text-sm font-black">Pocket account</h2><button type="button" onClick={() => navigate(xStockPath('account'))} className="mt-3 flex min-h-14 w-full items-center gap-3 text-left"><UserRound className="h-5 w-5 text-gray-400" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">ID:{profile.profile?.pocketId || '—'}</span><span className="mt-1 block text-[11px] text-gray-400">Profile, security and settings</span></span><ChevronRight className="h-4 w-4 text-gray-400" /></button></section>
       </> : view === 'notifications' ? <><PocketFlowHeader title="Notifications" onBack={() => navigate(xStockPath('home'))} /><PocketStockNotifications /></> : view === 'activity' ? <PocketStockActivity wallet={wallet}/> : isAction ? ((view==='send'||view==='receive')&&!params.has('mode')&&!params.has('recipient') ? <PocketStockTransferMenu kind={view}/> : <><PocketFlowHeader title={actionLabel} onBack={()=>navigate(xStockPath(view==='request'?'receive':view as 'send'|'receive'))}/>{view==='send'&&params.get('mode')==='pocket'?<p className="py-8 text-center text-sm text-gray-500">Free Pocket ID transfers are not available yet.</p>:<PocketStockWalletActions key={view+params.toString()} wallet={wallet} view={view as 'send' | 'receive' | 'request'}/>} {view==='request'&&<PocketStockNotifications history/>}</>) : null}
     </div>
+    {currencyOpen && <PocketDisplayCurrencyPicker stocks current={stockCurrency.currency} busy={false} error="" onBack={()=>setCurrencyOpen(false)} onSelect={stockCurrency.save} />}
   </PocketRouteShell>
 }

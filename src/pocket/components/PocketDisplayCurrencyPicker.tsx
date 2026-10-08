@@ -1,23 +1,36 @@
-import PocketFlowHeader from './PocketFlowHeader'
-import { Check, Loader2 } from './PocketIcons'
+import { useRef, useState } from 'react'
+import PocketBottomSheet from './PocketBottomSheet'
+import { Loader2 } from './PocketIcons'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 
 type Currency = LocalCurrencyProfile['displayCurrency']
 const OPTIONS = [
-  ['USDC', 'Default', 'Show balances in USDC', true],
-  ['NGN', 'Naira', 'Show the Naira equivalent', true],
-  ['UGX', 'Ugandan shilling', 'Show the UGX equivalent', true],
+  ['USDC', 'US dollar', 'USD'],
+  ['NGN', 'Nigerian naira', 'NGN'],
+  ['UGX', 'Ugandan shilling', 'UGX'],
 ] as const
 
-function CurrencyOption({ option, current, busy, choose, stocks }: { stocks?: boolean; option: typeof OPTIONS[number]; current: Currency; busy: boolean; choose(currency: Currency): void }) {
-  const [code, country, detail, enabled] = option
-  return <button type="button" disabled={!enabled || busy} onClick={() => choose(code)} className="flex min-h-[72px] w-full items-center border-b border-gray-100 px-4 text-left last:border-0 dark:border-[#262626]">
-    <span className="flex-1"><b className="block text-sm">{country} <span className="text-xs text-gray-500 dark:text-gray-400">({stocks && code === 'USDC' ? 'USD' : code})</span></b><small className="text-gray-400">{stocks && code === 'USDC' ? 'Show stock values in USD' : detail}</small></span>
-    {busy && current === code ? <Loader2 className="h-4 w-4 animate-spin" /> : current === code ? <Check className="h-5 w-5 text-blue-600" /> : !enabled ? <small className="font-bold text-gray-300">Soon</small> : null}
-  </button>
-}
-
 export default function PocketDisplayCurrencyPicker({ current, busy, error, onBack, onSelect, stocks = false }: { stocks?: boolean; current: Currency; busy: boolean; error: string; onBack(): void; onSelect(currency: Currency): Promise<boolean> }) {
-  const choose = async (currency: Currency) => { if (await onSelect(currency)) onBack() }
-  return <div className="fixed inset-0 z-[55] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white"><main className="mx-auto max-w-[462px] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]"><PocketFlowHeader centered title="Display currency" onBack={onBack} /><h1 className="mt-8 text-2xl font-black">Choose how balances appear</h1><p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{stocks ? 'Applies only to XStocks on this device.' : "USDC stays first. Your chosen currency appears below as an estimate."}</p><div className="mt-6 overflow-hidden rounded-3xl bg-white dark:bg-white/5">{OPTIONS.map(option => <CurrencyOption stocks={stocks} key={option[0]} option={option} current={current} busy={busy} choose={currency => void choose(currency)} />)}</div>{error && <p className="mt-3 text-xs text-red-600">{error}</p>}</main></div>
+  const [pending, setPending] = useState<Currency | null>(null)
+  const [saveError, setSaveError] = useState('')
+  const saving = useRef(false)
+  const choose = async (currency: Currency) => {
+    if (busy || saving.current) return
+    if (currency === current) { onBack(); return }
+    saving.current = true; setPending(currency); setSaveError('')
+    try { if (await onSelect(currency)) onBack() }
+    catch { setSaveError('Could not save your display currency. Try again.') }
+    finally { saving.current = false; setPending(null) }
+  }
+  return <PocketBottomSheet title="Display currency" showCloseButton dismissible={!busy && !pending} onClose={onBack}>
+    <h2 className="text-base font-semibold">Display currency</h2>
+    <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{stocks ? 'Saved for XStocks on this device.' : 'USD stays first. Local values are estimates.'}</p>
+    <div className="mt-4" role="listbox" aria-label="Display currency">
+      {OPTIONS.map(([value, label, code]) => <button key={value} type="button" role="option" aria-selected={value === current} disabled={busy || Boolean(pending)} onClick={() => void choose(value)} className="flex min-h-16 w-full items-center gap-3 border-b border-gray-100 text-left last:border-0 disabled:opacity-60 dark:border-[#262626]">
+        <span className="flex-1 text-sm font-medium">{label}</span><span className="text-xs text-gray-500 dark:text-gray-400">{code}</span>
+        {pending === value ? <Loader2 className="h-4 w-4" /> : <span aria-hidden="true" className={'h-4 w-4 rounded-full border ' + (value === current ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} />}
+      </button>)}
+    </div>
+    {(saveError || error) && <p role="alert" className="mt-3 text-xs text-red-500">{saveError || error}</p>}
+  </PocketBottomSheet>
 }
