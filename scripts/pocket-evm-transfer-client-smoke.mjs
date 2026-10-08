@@ -58,8 +58,10 @@ assert.deepEqual(confirmationCalls, [{ chain: 'base', txHash: '0xaaaaaaaaaaaaaaa
 const usdtCalls = []
 await executePocketEvmTransfer({session, linkedWalletAddress:walletAddress, recipient, amount:'1.25',asset:'USDT',executor:async input=>{usdtCalls.push(input);return '0x'+'a'.repeat(64)},confirmer:async()=> 'confirmed'})
 assert.equal(usdtCalls[0].asset, 'USDT')
-await assert.rejects(executePocketEvmTransfer({session:{...session,chain:'arbitrum'},linkedWalletAddress:walletAddress,recipient,amount:'1',asset:'USDT',executor,confirmer}), /USDT/)
-await assert.rejects(executePocketEvmTransfer({session,linkedWalletAddress:walletAddress,recipient,amount:'1',asset:'USDT',feeQuoteToken:'usdc-quote',executor,confirmer}), /USDT/)
+await assert.rejects(executePocketEvmTransfer({session:{...session,chain:'arc'},linkedWalletAddress:walletAddress,recipient,amount:'1',asset:'USDT',executor,confirmer}), /USDT/)
+await executePocketEvmTransfer({session:{...session,chain:'arbitrum'},linkedWalletAddress:walletAddress,recipient,amount:'1',asset:'USDT',feeQuoteToken:'asset-bound-quote',executor:async input=>{usdtCalls.push(input);return null},confirm:false})
+assert.equal(usdtCalls.at(-1).asset,'USDT')
+assert.equal(usdtCalls.at(-1).feeQuoteToken,'asset-bound-quote')
 
 const handedOff = await executePocketEvmTransfer({
   session,

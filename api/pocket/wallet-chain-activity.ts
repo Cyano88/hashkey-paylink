@@ -1,3 +1,4 @@
+import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { createActivityLogReader, createFinalizedActivityReader } from './activity-rpc-budget.js'
 import type { ParsedTransactionWithMeta } from '@solana/web3.js'
 import { persistObservedWalletActivity } from './activity-feed.js'
@@ -24,7 +25,7 @@ const EVM = {
 } as const
 
 type EvmNetwork = keyof typeof EVM
-type RpcLog = { transactionHash?: string; blockNumber?: string; logIndex?: string; topics?: string[]; data?: string }
+type RpcLog = { address?: string; transactionHash?: string; blockNumber?: string; logIndex?: string; topics?: string[]; data?: string }
 type SolanaTokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { uiAmountString?: string | null } }
 
 function addressTopic(address: string) {
@@ -97,7 +98,7 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   let logCount=0
   const logs = await readActivityLogs<RpcLog>(network, ranges, async range => {
     const matches = await Promise.all([[TRANSFER_TOPIC, topic], [TRANSFER_TOPIC, null, topic]].map(topics =>
-      rpc<RpcLog[]>('eth_getLogs', [{ address: config.token, ...range, topics }]),
+      rpc<RpcLog[]>('eth_getLogs', [{ address: supportsPocketUsdt(network) ? [config.token, POCKET_USDT_ASSETS[network].address] : config.token, ...range, topics }]),
     ))
     logCount+=matches.flat().length
     if(logCount>2_000)throw new Error('Activity result limit reached.')
@@ -117,6 +118,8 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
     }))
   }
   return [...byId.entries()].flatMap(([id, log]) => {
+    const asset = log.address?.toLowerCase() === config.token.toLowerCase() ? 'USDC' : supportsPocketUsdt(network) && log.address?.toLowerCase() === POCKET_USDT_ASSETS[network].address.toLowerCase() ? 'USDT' : null
+    if (!asset) return []
     const topics = log.topics ?? []
     const sender = topics[1] ? `0x${topics[1].slice(-40)}` : ''
     const recipient = topics[2] ? `0x${topics[2].slice(-40)}` : ''
@@ -128,7 +131,8 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
       txHash: log.transactionHash || id,
       chain: network,
       payer: outgoingTransfer ? wallet : sender,
-      memo: outgoingTransfer ? 'USDC sent' : 'USDC deposit',
+      assetSymbol: asset,
+      memo: outgoingTransfer ? `${asset} sent` : `${asset} deposit`,
       amount: (Number(units) / (network === 'arc' ? 1e18 : 1e6)).toFixed(6).replace(/\.?0+$/, ''),
       ts: timestamps.get(log.blockNumber || '') || Date.now(),
       source: outgoingTransfer ? 'wallet-withdrawal' : 'wallet-deposit',
@@ -137,7 +141,7 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
       paycrestStatus: 'confirmed',
       direction: outgoingTransfer ? 'out' : 'in',
       recipient,
-      destination: `${network} USDC wallet`,
+      destination: `${network} ${asset} wallet`,
     } satisfies PocketActivityRow]
   })
 }
@@ -146,11 +150,12 @@ export function solanaUsdcTransferParties(
   owner: string,
   preBalances: readonly SolanaTokenBalance[] | null | undefined,
   postBalances: readonly SolanaTokenBalance[] | null | undefined,
+  mint = SOLANA_USDC_MINT.toBase58(),
 ) {
   const totals = (rows: readonly SolanaTokenBalance[] | null | undefined) => {
     const result = new Map<string, number>()
     for (const row of rows ?? []) {
-      if (row.mint !== SOLANA_USDC_MINT.toBase58() || !row.owner) continue
+      if (row.mint !== mint || !row.owner) continue
       result.set(row.owner, (result.get(row.owner) || 0) + Number(row.uiTokenAmount?.uiAmountString || 0))
     }
     return result
@@ -209,28 +214,34 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
     },
   })
   const owner = new PublicKey(wallet)
-  const ata = await getAssociatedTokenAddress(SOLANA_USDC_MINT, owner, true)
-  const signatures = await connection.getSignaturesForAddress(ata, { limit: 20 }, 'confirmed')
+  const signaturesByMint = await Promise.all([SOLANA_USDC_MINT, new PublicKey(POCKET_USDT_ASSETS.solana.address)].map(async mint => {
+    const ata = await getAssociatedTokenAddress(mint, owner, true)
+    return connection.getSignaturesForAddress(ata, { limit: 20 }, 'confirmed')
+  }))
+  const signatures = [...new Map(signaturesByMint.flat().map(row => [row.signature, row])).values()].sort((a,b) => (b.blockTime ?? 0) - (a.blockTime ?? 0)).slice(0,20)
   if (!signatures.length) return []
   signal.throwIfAborted()
   const transactions = await readFinalizedTransactions(rpcUrl, signatures, missing => connection.getParsedTransactions(missing, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }))
   signal.throwIfAborted()
   return transactions.flatMap((transaction, index) => {
     if (!transaction || transaction.meta?.err) return []
+    return (['USDC','USDT'] as const).flatMap(asset => {
     const ownerText = owner.toBase58()
     const { ownerDelta: delta, counterparty } = solanaUsdcTransferParties(
       ownerText,
       transaction.meta?.preTokenBalances,
       transaction.meta?.postTokenBalances,
+      asset === 'USDT' ? POCKET_USDT_ASSETS.solana.address : SOLANA_USDC_MINT.toBase58(),
     )
     if (Math.abs(delta) < 0.000001) return []
     const signature = signatures[index]?.signature || transaction.transaction.signatures[0]
     return [{
-      eventId: `solana:${signature}`,
+      eventId: `solana:${signature}${asset === 'USDT' ? ':USDT' : ''}`,
       txHash: signature,
       chain: 'solana',
       payer: delta > 0 ? counterparty || 'Solana wallet' : ownerText,
-      memo: delta > 0 ? 'USDC deposit' : 'USDC sent',
+      assetSymbol: asset,
+      memo: delta > 0 ? `${asset} deposit` : `${asset} sent`,
       amount: Math.abs(delta).toFixed(6).replace(/\.?0+$/, ''),
       ts: (transaction.blockTime || signatures[index]?.blockTime || Math.floor(Date.now() / 1000)) * 1000,
       source: delta > 0 ? 'wallet-deposit' : 'wallet-withdrawal',
@@ -241,8 +252,9 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
       paycrestStatus: 'confirmed',
       direction: delta > 0 ? 'in' : 'out',
       recipient: delta > 0 ? ownerText : counterparty || undefined,
-      destination: 'Solana USDC wallet',
+      destination: `Solana ${asset} wallet`,
     } satisfies PocketActivityRow]
+    })
   })
 }
 

@@ -5,7 +5,7 @@ import { createReadService, ReadRpcError, validateRead } from '../api/evm-read.t
 const wallet = '0x' + '11'.repeat(20), other = '0x' + '22'.repeat(20)
 const topic = address => '0x' + address.slice(2).padStart(64, '0')
 const transfer = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
-const log = (id, from, to) => ({ transactionHash: '0x' + id.repeat(64), logIndex: '0x0', blockNumber: '0x64', topics: [transfer, topic(from), topic(to)], data: '0xf4240' })
+const log = (id, from, to) => ({ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', transactionHash: '0x' + id.repeat(64), logIndex: '0x0', blockNumber: '0x64', topics: [transfer, topic(from), topic(to)], data: '0xf4240' })
 const incoming = log('a', other, wallet), outgoing = log('b', wallet, other), self = log('c', wallet, wallet), unrelated = log('d', other, other)
 const calls = []
 const scanRead = async (network, method, params, signal) => {
@@ -113,12 +113,12 @@ const solPending = solanaActivity('11111111111111111111111111111111', solCtrl.si
   return new Promise((_, reject) => init.signal.addEventListener('abort', () => { solAborted = true; reject(Error('aborted')) }, { once: true }))
 })
 await new Promise(r => setImmediate(r)); solCtrl.abort(); await assert.rejects(solPending)
-assert.equal(solAborted, true); assert.equal(solRequests, 1)
+assert.equal(solAborted, true); assert.equal(solRequests, 2)
 let rejectedRequests = 0
 await assert.rejects(solanaActivity('11111111111111111111111111111111', new AbortController().signal, async () => {
   rejectedRequests++; return new Response('private provider details', { status: 429 })
 }))
-assert.equal(rejectedRequests, 1)
+assert.equal(rejectedRequests, 2)
 // The global scan ceiling prevents unbounded distinct-wallet fan-out.
 const releases = []; let activeScans = 0
 const bounded = createWalletActivityReader(async () => { activeScans++; await new Promise(r => releases.push(r)); return [] })

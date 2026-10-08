@@ -49,7 +49,7 @@ const sdkTransport = createSolanaReadFetch(async (url, options) => {
  return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: [] }))
 }, Date.now, () => 'https://private.invalid')
 const sdkRows = await solanaActivity('11111111111111111111111111111111', new AbortController().signal, sdkTransport)
-assert.deepEqual(sdkRows, []); assert.equal(sdkCalls, 2, 'empty history avoids a transaction batch and SDK retries')
+assert.deepEqual(sdkRows, []); assert.equal(sdkCalls, 4, 'both asset histories avoid transaction batches and SDK retries')
 const balanceMethods = []
 const balanceTransport = createSolanaReadFetch(async (_url, options) => {
  const request = JSON.parse(options.body); balanceMethods.push(request.method)

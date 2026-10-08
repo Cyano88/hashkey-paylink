@@ -1,4 +1,5 @@
-import {baseStablecoin, BASE_STABLECOINS} from '../src/lib/baseStablecoins.js'
+import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../src/pocket/lib/pocketUsdtAssets.js'
+import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import { paymentBalanceError } from './payment-balance-error.js'
 import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
@@ -356,14 +357,20 @@ function isBytes32(value: string | undefined): value is `0x${string}` {
 }
 
 
-function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, recipientUnits: bigint, treasuryUnits: bigint) {
-  const target = EVM_CHAINS[chain].tokenAddress as `0x${string}`
+function paymentToken(chain: keyof typeof EVM_CHAINS, asset: 'USDC' | 'USDT') {
+  if (asset === 'USDC') return EVM_CHAINS[chain].tokenAddress
+  if (!supportsPocketUsdt(chain)) throw Object.assign(new Error('USDT is not supported on this network.'), {status:400})
+  return POCKET_USDT_ASSETS[chain].address
+}
+function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, recipientUnits: bigint, treasuryUnits: bigint, asset: 'USDC' | 'USDT' = 'USDC') {
+  const target = paymentToken(chain, asset) as `0x${string}`
   const calls = [{ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [recipient as `0x${string}`, recipientUnits] }) }]
   if (treasuryUnits > 0n) calls.push({ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [EVM_TREASURY as `0x${string}`, treasuryUnits] }) })
   return encodeFunctionData({ abi: SMART_WALLET_BATCH_ABI, functionName: 'executeBatch', args: [calls] })
 }
 async function verifiedPayoutExemption(params: Record<string, string>, checkOnly = true) {
   if (String(params.feeBps ?? '') !== '0') return false
+  if (baseStablecoin(params.asset) !== 'USDC') throw Object.assign(new Error('This payout exemption is only valid for USDC.'), {status:400})
   if (!params.payoutIntentId || params.chain !== 'base') throw Object.assign(new Error('A verified payout is required for a fee exemption.'), { status: 400 })
   const { getPaycrestPosOrder } = await import('./paycrest-pos.js')
   const order = await getPaycrestPosOrder(params.payoutIntentId)
@@ -663,6 +670,7 @@ export default async function handler(req: Request, res: Response) {
         walletAddress,
         wallets: ownedWallet ? [ownedWallet] : [],
       })
+      const asset = baseStablecoin(params.asset)
       const transferAmount = normalizeSolanaUsdcAmount(amount)
       const data = await circleJson<{
         challengeId?: string
@@ -680,36 +688,38 @@ export default async function handler(req: Request, res: Response) {
           amounts: [transferAmount],
           feeLevel: 'HIGH',
           refId: 'hashpaylink-solana-withdraw',
-          tokenAddress: SOLANA_USDC_MINT,
+          tokenAddress: asset === 'USDT' ? POCKET_USDT_ASSETS.solana.address : SOLANA_USDC_MINT,
           blockchain: 'SOL',
         }),
       })
-      return res.json({ ok: true, ...data })
+      return res.json({ ok: true, ...data, approval: {asset} })
     }
 
     if (action === 'quoteEvmPayment') {
+      const asset = baseStablecoin(params.asset)
       const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
       if (!userToken || !walletId || !isAddress(walletAddress || '') || !isAddress(recipient || '') || !/^\d{1,78}$/.test(totalUnits || '') || BigInt(totalUnits) <= 0n || !['base','arbitrum','arc','ethereum','polygon'].includes(chain)) return res.status(400).json({ ok: false, error: 'Valid payment details are required.' })
       const network = chain as keyof typeof EVM_CHAINS
       const owned = await readCircleUserWallet(userToken, network, walletId)
       const wallet = requireCircleGasStationEvmWallet({ chain: network, walletId, walletAddress, wallets: owned ? [owned] : [] })
       const exempt = await verifiedPayoutExemption(params)
+      paymentToken(chain as keyof typeof EVM_CHAINS, asset)
       const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
-      const rawBalance = await readEvmRpc(network, 'eth_call', [{ to: EVM_CHAINS[network].tokenAddress, data: '0x70a08231' + wallet.address.slice(2).padStart(64, '0') }, 'latest'])
+      const rawBalance = await readEvmRpc(network, 'eth_call', [{ to: paymentToken(network, asset), data: '0x70a08231' + wallet.address.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       const available = BigInt(rawBalance)
-      const checkBalance = (recovery: bigint) => paymentBalanceError(available, BigInt(totalUnits), recovery, mode, exempt)
+      const checkBalance = (recovery: bigint) => paymentBalanceError(available, BigInt(totalUnits), recovery, mode, exempt, asset)
       let recovery = 0n
       const initialBalanceError = checkBalance(recovery)
       if (initialBalanceError) return res.status(400).json(initialBalanceError)
       if (!exempt) {
-        const rate = network === 'arc' ? 100_000_000n : await readNativeUsdcRate(network === 'polygon' ? 'polygon' : 'ethereum')
+        const rate = network === 'arc' ? 100_000_000n : await readNativeUsdcRate(network === 'polygon' ? 'polygon' : 'ethereum', fetch, Date.now, asset)
         // Estimate both transfers, then include the quoted recovery transfer amount.
         for (let pass = 0; pass < 2; pass++) {
           const fees = paymentFeeBreakdown(BigInt(totalUnits), recovery, mode)
           const estimate = await circleJson<{ high?: { networkFeeRaw?: string; networkFee?: string } }>('/v1/w3s/transactions/contractExecution/estimateFee', {
             method: 'POST', userToken, apiKey: circleApiKey({ chain: network }),
-            body: JSON.stringify({ walletId: wallet.id, contractAddress: wallet.address, callData: paymentCallData(network, recipient, fees.recipient, fees.treasury) }),
+            body: JSON.stringify({ walletId: wallet.id, contractAddress: wallet.address, callData: paymentCallData(network, recipient, fees.recipient, fees.treasury, asset) }),
           })
           const native = estimate.high?.networkFeeRaw || estimate.high?.networkFee
           if (!native) throw Object.assign(new Error('Network fee quote is unavailable. Try again.'), { status: 503 })
@@ -719,11 +729,12 @@ export default async function handler(req: Request, res: Response) {
           if (balanceError) return res.status(400).json(balanceError)
         }
       }
-      const binding: PaymentFeeBinding = { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
+      const binding: PaymentFeeBinding = { asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
       return res.json({ ok: true, ...createPaymentFeeQuote(binding, recovery, exempt) })
     }
 
     if (action === 'executeEvmPayment') {
+      const asset = baseStablecoin(params.asset)
       const { userToken, walletId, walletAddress, chain, recipient, totalUnits, idempotencyKey } = params
       if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits || !idempotencyKey) {
         return res.status(400).json({ ok: false, error: 'Missing EVM withdrawal details or idempotency key.' })
@@ -736,15 +747,16 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Invalid EVM wallet or recipient address' })
       }
 
+      paymentToken(chain as keyof typeof EVM_CHAINS, asset)
       const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
       let quote
-      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
+      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
       catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },false)
-      const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: EVM_CHAINS[chain].tokenAddress, data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
+      const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: paymentToken(chain, asset), data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
-      if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: 'Insufficient USDC to cover the amount and fees. Try a lower amount.' })
-      const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits))
+      if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` })
+      const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits), asset)
 
       const data = await createCircleGasStationEvmChallenge({
         userToken,
@@ -755,7 +767,7 @@ export default async function handler(req: Request, res: Response) {
         refId: `hashpaylink-${chain}`,
         callData: batchCallData,
       })
-      return res.json({ ok: true, ...data, approval: { amount: formatUnits(BigInt(quote.recipientUnits), 6), total: formatUnits(BigInt(quote.totalUnits), 6), asset: 'USDC' } })
+      return res.json({ ok: true, ...data, approval: { amount: formatUnits(BigInt(quote.recipientUnits), 6), total: formatUnits(BigInt(quote.totalUnits), 6), asset } })
     }
 
     if (action === 'executeEvmWithdraw') {
@@ -779,8 +791,7 @@ export default async function handler(req: Request, res: Response) {
       }
 
       const asset = baseStablecoin(params.asset)
-      if (asset === 'USDT' && chain !== 'base') return res.status(400).json({ok:false,error:'USDT withdrawals are only enabled on Base.'})
-      const tokenAddress = asset === 'USDT' ? BASE_STABLECOINS.USDT.address : EVM_CHAINS[chain].tokenAddress
+      const tokenAddress = paymentToken(chain, asset)
       const transferCallData = encodeFunctionData({
         abi: ERC20_TRANSFER_ABI,
         functionName: 'transfer',

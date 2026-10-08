@@ -1,3 +1,5 @@
+import {POCKET_USDT_ASSETS} from '../src/pocket/lib/pocketUsdtAssets.js'
+import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote } from './payment-fee-quotes.js'
 import { readNativeUsdcRate } from './payment-network-fees.js'
 /**
@@ -235,6 +237,9 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
   catch { res.status(503).json({ ok: false, error: 'Solana relay not configured' }); return }
 
   try {
+    const asset = baseStablecoin(req.body.asset)
+    if (asset === 'USDT' && mode === 'withdraw') throw new Error('USDT sends require a payment fee quote.')
+    const mint = asset === 'USDT' ? new PublicKey(POCKET_USDT_ASSETS.solana.address) : USDC_MINT
     const connection = new Connection(getRpc(), 'confirmed')
 
     const fromPubkey = parseSolanaAddress('Sender address', from)
@@ -245,21 +250,21 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const tx = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash })
 
     // Ensure sender ATA exists (if it doesn't, payment will fail — sender must have USDC)
-    const fromATA = await getAssociatedTokenAddress(USDC_MINT, fromPubkey)
+    const fromATA = await getAssociatedTokenAddress(mint, fromPubkey)
     const fromAmount = await readTokenAccountAmount(connection, fromATA)
     if (!quoteOnly && (fromAmount === null || fromAmount < totalRaw)) {
-      throw new Error('Sender has insufficient Solana USDC for this payment')
+      throw new Error(`Sender has insufficient Solana ${asset} for this payment`)
     }
     // Ensure recipient ATA exists (relayer creates it if needed, covers rent)
-    const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
+    const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, mint, toPubkey, relayer.publicKey)
 
     const isWithdraw = mode === 'withdraw'
     const feeRaw = isWithdraw ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
     // Build the exact instruction topology before asking the RPC for its fee.
     const treasuryPubkey = isWithdraw ? null : getSolanaTreasury(1n)
-    const treasury = treasuryPubkey?.equals(toPubkey) ? { ata: toATA, created: false } : treasuryPubkey ? await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey) : null
-    tx.add(createTransferCheckedInstruction(fromATA, USDC_MINT, toATA, fromPubkey, totalRaw, USDC_DECIMALS))
-    if (treasury) tx.add(createTransferCheckedInstruction(fromATA, USDC_MINT, treasury.ata, fromPubkey, feeRaw || 1n, USDC_DECIMALS))
+    const treasury = treasuryPubkey?.equals(toPubkey) ? { ata: toATA, created: false } : treasuryPubkey ? await ensureATA(connection, tx, mint, treasuryPubkey, relayer.publicKey) : null
+    tx.add(createTransferCheckedInstruction(fromATA, mint, toATA, fromPubkey, totalRaw, USDC_DECIMALS))
+    if (treasury) tx.add(createTransferCheckedInstruction(fromATA, mint, treasury.ata, fromPubkey, feeRaw || 1n, USDC_DECIMALS))
     let gasRecoveryRaw = 0n
     let quote: ReturnType<typeof createPaymentFeeQuote> | undefined
     if (!isWithdraw) {
@@ -269,10 +274,10 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       const rent = setupCount ? await connection.getMinimumBalanceForRentExemption(165, 'confirmed') : 0
       if (!Number.isSafeInteger(rent) || rent < 0) throw new Error('Solana account setup quote is unavailable.')
       const lamports = BigInt(fee.value) + BigInt(rent) * BigInt(setupCount)
-      const rate = await readNativeUsdcRate('solana')
+      const rate = await readNativeUsdcRate('solana', fetch, Date.now, asset)
       // lamports (1e9 SOL), rate (1e8 USDC), output USDC base units (1e6).
       gasRecoveryRaw = (lamports * rate + 100_000_000_000n - 1n) / 100_000_000_000n
-      const binding = { chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: 'gross' as const }
+      const binding = { asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: 'gross' as const }
       if (quoteOnly) {
         quote = createPaymentFeeQuote(binding, gasRecoveryRaw)
         res.json({ ok: true, ...quote, includesAccountSetup: setupCount > 0 })
@@ -289,16 +294,16 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const treasuryRaw = feeRaw + gasRecoveryRaw
     const requiredRaw = totalRaw + treasuryRaw
     if (fromAmount === null || fromAmount < requiredRaw) {
-      res.status(400).json({ ok: false, error: 'Insufficient USDC to cover the amount and fees. Try a lower amount.' }); return
+      res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` }); return
     }
-    if (treasury) tx.instructions[tx.instructions.length - 1] = createTransferCheckedInstruction(fromATA, USDC_MINT, treasury.ata, fromPubkey, treasuryRaw, USDC_DECIMALS)
+    if (treasury) tx.instructions[tx.instructions.length - 1] = createTransferCheckedInstruction(fromATA, mint, treasury.ata, fromPubkey, treasuryRaw, USDC_DECIMALS)
 
     // Relayer partial-signs as fee payer
     tx.partialSign(relayer)
 
     const serialised = tx.serialize({ requireAllSignatures: false })
     res.json({
-      ok: true,
+      ok: true, asset,
       tx: Buffer.from(serialised).toString('base64'),
       lastValidBlockHeight,
       feeAmount: formatUsdc(feeRaw),

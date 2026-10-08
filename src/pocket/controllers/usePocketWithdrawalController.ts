@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseUnits, formatUnits, type Address } from 'viem'
 import { readCirclePaymentFeeQuote, type CirclePaymentFeeQuote } from '../../lib/circleEvmEmailWallet'
-import { readSolanaPaymentQuote, sendQuotedSolanaPayment } from '../../lib/solanaPaymentFees'
+import { readSolanaPaymentQuote, sendQuotedSolanaPayment, readSolanaRelayStatus } from '../../lib/solanaPaymentFees'
 import { reconcileCircleSolanaTransfer, sendCircleSolanaTransfer } from '../../lib/circleSolanaEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { claimSendAttempt, releaseSendAttempt, readSendAttempts, saveSendAttempt, updateSendAttempt, migrateLegacySends, POCKET_SENDS_UPDATED, sendOwner, type PocketSendAttempt } from '../lib/pocketSendAttempts'
@@ -12,15 +12,16 @@ import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import { reconcileCircleEvmEmailWithdraw, resumeCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
-function sendError(reason: unknown) {
+function sendError(reason: unknown, asset: 'USDC' | 'USDT' = 'USDC') {
   if (String((reason as {code?: unknown})?.code) === '155509') return 'Sending is temporarily unavailable on this network. Please try another network or contact Pocket support.'
   const message = reason instanceof Error ? reason.message : 'Could not prepare this transfer.'
-  return /transfer amount exceeds balance|insufficient.*funds|insufficient usdc/i.test(message)
-    ? 'Insufficient USDC to cover the amount and fees. Try a lower amount.' : message
+  return /transfer amount exceeds balance|insufficient.*funds|insufficient usd[ct]/i.test(message)
+    ? `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` : message
 }
 
 export default function usePocketWithdrawalController({
   owner,
+  asset = 'USDC',
   network,
   networkLabel,
   wallet,
@@ -38,6 +39,7 @@ export default function usePocketWithdrawalController({
   onActivity,
 }: {
   owner: string
+  asset?: 'USDC' | 'USDT'
   network: PocketNetwork
   networkLabel: string
   wallet?: CirclePocketWallet
@@ -64,26 +66,26 @@ export default function usePocketWithdrawalController({
   const [submissionReference, setSubmissionReference] = useState('')
   const [txHash, setTxHash] = useState('')
   const [error, setError] = useState('')
-  useEffect(() => { setFeeQuote(null) }, [network, address, amount, chargeFees])
+  useEffect(() => { setFeeQuote(null) }, [asset, network, address, amount, chargeFees])
   const feePreview = feeQuote ? { platform: formatUnits(BigInt(feeQuote.quote.platformFeeUnits), 6), network: formatUnits(BigInt(feeQuote.quote.networkFeeUnits), 6), total: formatUnits(BigInt(feeQuote.quote.totalUnits), 6) } : null
   const acceptedFeeToken = () => {
     if (!chargeFees) return undefined
     const q = feeQuote?.quote
     const normalize = (value: string) => network === 'solana' ? value : value.toLowerCase()
-    if (!q || q.chain !== network || q.amountUnits !== parseUnits(amount, 6).toString() || normalize(q.recipient) !== normalize(address) || !wallet?.address || normalize(q.walletAddress) !== normalize(wallet.address) || q.expiresAt <= Date.now() + 15000) throw new Error('Review the refreshed fees before confirming.')
-    if (BigInt(Math.floor(balance * 1e6)) < BigInt(q.totalUnits)) throw new Error('Insufficient USDC to cover the amount and fees. Try a lower amount.')
+    if (!q || (q.asset ?? 'USDC') !== asset || q.chain !== network || q.amountUnits !== parseUnits(amount, 6).toString() || normalize(q.recipient) !== normalize(address) || !wallet?.address || normalize(q.walletAddress) !== normalize(wallet.address) || q.expiresAt <= Date.now() + 15000) throw new Error('Review the refreshed fees before confirming.')
+    if (BigInt(Math.floor(balance * 1e6)) < BigInt(q.totalUnits)) throw new Error(`Insufficient ${asset} to cover the amount and fees. Try a lower amount.`)
     return feeQuote!.token
   }
-  const currentScope = useRef(''); currentScope.current = sendOwner(owner) + ':' + resetKey
+  const currentScope = useRef(''); currentScope.current = sendOwner(owner) + ':' + asset + ':' + resetKey
   const mounted=useRef(true)
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const operationId = useRef('')
   const running = useRef(false)
   const reset = useCallback(() => { operationId.current=''; setAmount('');setAddress('');setError('');setNotice('');setTxHash('');setSubmissionReference('');setStatus('idle');setPending(false) }, [])
-  useEffect(() => { reset() }, [resetKey, owner, reset])
+  useEffect(() => { reset() }, [asset, resetKey, owner, reset])
   useEffect(() => {
     if (!owner || !wallet?.address) return
-    try { migrateLegacySends(owner,{[network]:wallet}) } catch (e) { setError(sendError(e)) }
+    try { migrateLegacySends(owner,{[network]:wallet}) } catch (e) { setError(sendError(e, asset)) }
   }, [owner,network,wallet?.address])
   useEffect(() => {
     const sync = () => {
@@ -130,7 +132,7 @@ export default function usePocketWithdrawalController({
     clearExternalError()
     setError('')
     try {
-      validatePocketWithdrawal({ network, address, amount, balance })
+      validatePocketWithdrawal({ asset, network, address, amount, balance })
       const selectedWallet = options?.walletOverride ?? wallet ?? await ensureWallet(network)
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') await getSolanaSession(selectedWallet.address)
@@ -138,19 +140,19 @@ export default function usePocketWithdrawalController({
       if (chargeFees) {
         if (!feeQuote || feeQuote.quote.expiresAt <= Date.now() + 15000) {
           const next = network === 'solana'
-            ? await readSolanaPaymentQuote(selectedWallet.address, address, amount)
-            : await readCirclePaymentFeeQuote({ session: await getEvmSession(network, selectedWallet.address), recipient: address, amount, feeMode: 'gross' })
+            ? await readSolanaPaymentQuote(selectedWallet.address, address, amount, asset)
+            : await readCirclePaymentFeeQuote({ asset, session: await getEvmSession(network, selectedWallet.address), recipient: address, amount, feeMode: 'gross' })
           setFeeQuote(next)
-          if (BigInt(Math.floor(balance * 1e6)) < BigInt(next.quote.totalUnits)) throw new Error('Insufficient USDC to cover the amount and fees. Try a lower amount.')
+          if (BigInt(Math.floor(balance * 1e6)) < BigInt(next.quote.totalUnits)) throw new Error(`Insufficient ${asset} to cover the amount and fees. Try a lower amount.`)
           throw new Error('FEE_REVIEW_REQUIRED')
         }
         acceptedFeeToken()
       }
     } catch (reason) {
-      setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : sendError(reason))
+      setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : sendError(reason, asset))
       throw reason
     }
-  }, [address, amount, balance, chargeFees, feeQuote, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, wallet])
+  }, [asset, address, amount, balance, chargeFees, feeQuote, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, wallet])
 
   useEffect(() => registerPocketPaymentPreparer(prepare), [prepare])
 
@@ -169,16 +171,16 @@ export default function usePocketWithdrawalController({
     }
     try {
       clearExternalError();setError('');setNotice('');setTxHash('');setSubmissionReference('');setStatus('pending');setPending(true)
-      const recipient=validatePocketWithdrawal({network,address,amount,balance:options?.balanceOverride??balance}).recipient
+      const recipient=validatePocketWithdrawal({asset,network,address,amount,balance:options?.balanceOverride??balance}).recipient
       const selectedWallet=options?.walletOverride??wallet??await ensureWallet(network)
       if(!selectedWallet)throw Error('Circle wallet setup was cancelled.')
       if(!visible())return false
       migrateLegacySends(owner,{[network]:selectedWallet})
       const normalize=(value:string)=>network==='solana'?value:value.toLowerCase()
-      const fingerprint=[network,normalize(selectedWallet.address),normalize(recipient),parseUnits(amount,6).toString()].join(':')
-      const existing=readSendAttempts(owner).find(r=>!['confirmed','failed'].includes(r.state)&&r.network===network&&normalize(r.sourceAddress)===normalize(selectedWallet.address)&&normalize(r.recipient)===normalize(recipient)&&parseUnits(r.amount,6)===parseUnits(amount,6)&&(r.context===operationContext||(allowLegacyOperation&&r.context==='send')))
+      const fingerprint=[asset,network,normalize(selectedWallet.address),normalize(recipient),parseUnits(amount,6).toString()].join(':')
+      const existing=readSendAttempts(owner).find(r=>!['confirmed','failed'].includes(r.state)&&r.network===network&&(r.asset??'USDC')===asset&&normalize(r.sourceAddress)===normalize(selectedWallet.address)&&normalize(r.recipient)===normalize(recipient)&&parseUnits(r.amount,6)===parseUnits(amount,6)&&(r.context===operationContext||(allowLegacyOperation&&r.context==='send')))
       recoveredAttempt=Boolean(existing)
-      operation=existing??{owner:sendOwner(owner),idempotencyKey:crypto.randomUUID(),fingerprint,context:operationContext,network,sourceAddress:selectedWallet.address,recipient,amount:amount.trim(),state:'preparing',challengeId:'',transactionId:'',txHash:'',createdAt:Date.now(),updatedAt:Date.now()}
+      operation=existing??{owner:sendOwner(owner),idempotencyKey:crypto.randomUUID(),fingerprint,asset,context:operationContext,network,sourceAddress:selectedWallet.address,recipient,amount:amount.trim(),state:'preparing',challengeId:'',transactionId:'',txHash:'',createdAt:Date.now(),updatedAt:Date.now()}
       operationId.current=operation.idempotencyKey
       claimed=claimSendAttempt(owner,operation.idempotencyKey)
       if(!claimed){setStatus('submitted');setSubmissionReference(operation.challengeId||operation.idempotencyKey);return false}
@@ -192,10 +194,15 @@ export default function usePocketWithdrawalController({
       if(network==='solana'){
         const session=await getSolanaSession(selectedWallet.address)
         if(!visible())return false
-        if(existing?.challengeId)result=await reconcileCircleSolanaTransfer({accessToken,session,challengeId:existing.challengeId,transactionId:existing.transactionId,timeoutMs:30_000})
+        if(existing?.challengeId?.startsWith('relay:')) {
+          const hash=existing.challengeId.slice('relay:'.length)
+          const confirmed=await readSolanaRelayStatus(hash,accessToken,undefined,session.wallet.address)
+          result={state:confirmed?'confirmed':'submitted',txHash:hash}
+        }
+        else if(existing?.challengeId)result=await reconcileCircleSolanaTransfer({accessToken,session,challengeId:existing.challengeId,transactionId:existing.transactionId,timeoutMs:30_000})
         else {
           const feeQuoteToken=acceptedFeeToken();saveSendAttempt(operation);submissionStarted=true
-          result=chargeFees?await sendQuotedSolanaPayment({session,recipient,amount:amount.trim(),feeQuoteToken:feeQuoteToken!,accessToken,onChallenge}):await sendCircleSolanaTransfer({session,recipient,amount:amount.trim(),idempotencyKey:operation.idempotencyKey,onChallenge,onAccepted})
+          result=chargeFees?await sendQuotedSolanaPayment({asset,session,recipient,amount:amount.trim(),feeQuoteToken:feeQuoteToken!,accessToken,onChallenge}):await sendCircleSolanaTransfer({asset,session,recipient,amount:amount.trim(),idempotencyKey:operation.idempotencyKey,onChallenge,onAccepted})
         }
       }else{
         const session=await getEvmSession(network,selectedWallet.address)
@@ -203,7 +210,7 @@ export default function usePocketWithdrawalController({
         if(existing?.challengeId)result=await resumeCircleEvmEmailWithdraw({session,challengeId:existing.challengeId,transactionId:existing.transactionId,timeoutMs:30_000})
         else{
           const feeQuoteToken=acceptedFeeToken();saveSendAttempt(operation);submissionStarted=true
-          const transfer=await executePocketEvmTransfer({session,linkedWalletAddress:selectedWallet.address,feeQuoteToken,recipient:recipient as Address,amount,idempotencyKey:operation.idempotencyKey,onChallenge,onAccepted,confirm:true})
+          const transfer=await executePocketEvmTransfer({asset,session,linkedWalletAddress:selectedWallet.address,feeQuoteToken,recipient:recipient as Address,amount,idempotencyKey:operation.idempotencyKey,onChallenge,onAccepted,confirm:true})
           result={state:transfer.status,txHash:transfer.txHash||''}
         }
       }
@@ -220,15 +227,15 @@ export default function usePocketWithdrawalController({
     }catch(reason){
       const failure=reason as {terminalFailure?:boolean;submissionRejected?:boolean;txHash?:string;code?:number}
       const rejectedBeforeChallenge=failure?.submissionRejected===true&&!recoveredAttempt&&!operation?.challengeId&&!operation?.transactionId&&!operation?.txHash
-      const terminal=rejectedBeforeChallenge||failure?.terminalFailure===true||(!recoveredAttempt&&(failure?.code===4001||/reverted on-chain|user (rejected|cancelled)|user denied/i.test(sendError(reason))))
+      const terminal=rejectedBeforeChallenge||failure?.terminalFailure===true||(!recoveredAttempt&&(failure?.code===4001||/reverted on-chain|user (rejected|cancelled)|user denied/i.test(sendError(reason, asset))))
       const unknown=Boolean(operation&&(recoveredAttempt||submissionStarted||operation.challengeId||operation.state==='accepted'||operation.txHash))&&!terminal
-      if(operation)publish({state:unknown?(operation.challengeId?'submitted':'preparing'):'failed',error:sendError(reason),...(failure?.txHash?{txHash:failure.txHash}:{})})
+      if(operation)publish({state:unknown?(operation.challengeId?'submitted':'preparing'):'failed',error:sendError(reason, asset),...(failure?.txHash?{txHash:failure.txHash}:{})})
       if(operation?.state==='confirmed'){if(visible()){setTxHash(operation.txHash);setStatus('successful');setError('')}return true}
       if(operation?.state==='failed'){if(visible()){setTxHash(operation.txHash);setStatus('idle');setError(operation.error||'Transfer failed.')}return false}
-      if(visible()){setStatus(unknown?'submitted':'idle');setError(unknown?'':sendError(reason));if(failure?.txHash)setTxHash(failure.txHash);if(/quote|fees changed/i.test(sendError(reason)))setFeeQuote(null)}
+      if(visible()){setStatus(unknown?'submitted':'idle');setError(unknown?'':sendError(reason, asset));if(failure?.txHash)setTxHash(failure.txHash);if(/quote|fees changed/i.test(sendError(reason, asset)))setFeeQuote(null)}
       return false
     }finally{if(claimed&&operation)releaseSendAttempt(owner,operation.idempotencyKey);running.current=false;if(visible())setPending(false)}
-  },[owner,address,allowLegacyOperation,amount,balance,chargeFees,feeQuote,getAccessToken,clearExternalError,ensureWallet,getEvmSession,getSolanaSession,network,onActivity,operationContext,refreshBalances,wallet])
+  },[asset,owner,address,allowLegacyOperation,amount,balance,chargeFees,feeQuote,getAccessToken,clearExternalError,ensureWallet,getEvmSession,getSolanaSession,network,onActivity,operationContext,refreshBalances,wallet])
 
   return {
     recheckFunding: async () => { await refreshBalances(); setFeeQuote(null); setError('') },

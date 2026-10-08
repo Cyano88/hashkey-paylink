@@ -49,7 +49,7 @@ export function validateRead(method: unknown, input: unknown): { method: string;
     }
     case 'eth_getLogs': {
       const f = p[0]
-      valid = p.length === 1 && record(f) && only(f, ['address', 'topics', 'fromBlock', 'toBlock']) && address(f.address) &&
+      valid = p.length === 1 && record(f) && only(f, ['address', 'topics', 'fromBlock', 'toBlock']) && (address(f.address) || Array.isArray(f.address) && f.address.length > 0 && f.address.length <= 2 && f.address.every(address)) &&
         quantity(f.fromBlock) && quantity(f.toBlock) && BigInt(f.toBlock) >= BigInt(f.fromBlock) && BigInt(f.toBlock) - BigInt(f.fromBlock) < 2048n &&
         Array.isArray(f.topics) && f.topics.length >= 2 && f.topics.length <= 4 && hash(f.topics[0]) && f.topics.slice(1).some(hash) && f.topics.every((v: unknown) => v === null || hash(v))
       break

@@ -10,7 +10,7 @@ export default function PocketTransferMenuPage({ kind }: { kind: 'send' | 'recei
   const navigate = useNavigate()
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
   const actions = kind === 'send' ? [
-    { title: 'Stablecoins USDC', detail: 'Send USDC to a wallet', Icon: Coins, path: POCKET_ROUTES.send + '?mode=address' },
+    { title: 'Stablecoins', detail: pocketUsdtEnabled ? 'Send USDC or USDT' : 'Send USDC to a wallet', Icon: Coins, path: POCKET_ROUTES.send + '?mode=address' },
     { title: 'Bank transfer', detail: 'Send to a bank account', Icon: Landmark, path: POCKET_ROUTES.bank + '?mode=withdraw' },
     { title: 'Pocket ID', detail: 'Send to a Pocket user', Icon: UserRound, path: POCKET_ROUTES.send + '?mode=pocket' },
   ] : [

@@ -23,3 +23,7 @@ const pol = async url => { assert.match(String(url), /polygon-ecosystem-token/);
 assert.equal(await readNativeUsdcRate('polygon', pol, () => now), 50000000n)
 assert.equal(nativeFeeToUsdcUnits('1', 50000000n), 500000n)
 console.log('PASS: POL conversion is separate from ETH pricing and cache.')
+
+const usdtPrice=async url=>{assert.match(String(url),/ethereum,tether/);return Response.json({ethereum:{usd:3000,last_updated_at:now/1000},tether:{usd:0.99,last_updated_at:now/1000}})}
+assert.equal(await readNativeUsdcRate('ethereum',usdtPrice,()=>now,'USDT'),BigInt(Math.ceil(3000/0.99*1e8)))
+console.log('PASS: USDT fee recovery uses its own fresh price and cache.')

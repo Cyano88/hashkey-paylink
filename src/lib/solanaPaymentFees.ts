@@ -2,8 +2,8 @@ import type { CirclePaymentFeeQuote } from './circleEvmEmailWallet'
 import type { SolanaEmailSession } from './circleSolanaEmailWallet'
 import { POCKET_API } from '../pocket/lib/pocketSchemas'
 
-export async function readSolanaPaymentQuote(from: string, to: string, amount: string): Promise<CirclePaymentFeeQuote> {
-  const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from, to, amount, quoteOnly: true }) })
+export async function readSolanaPaymentQuote(from: string, to: string, amount: string, asset: 'USDC' | 'USDT' = 'USDC'): Promise<CirclePaymentFeeQuote> {
+  const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from, to, amount, asset, quoteOnly: true }) })
   const data = await response.json()
   if (!response.ok || !data.ok || !data.quote || !data.token) throw new Error(data.error || 'Solana fee quote is unavailable.')
   return data
@@ -25,11 +25,12 @@ export async function readSolanaRelayStatus(txHash: string, accessToken: string,
 // Persist the signed transaction before broadcast. Retrying this operation
 // resubmits the same bytes and signature, never a second payment.
 export async function sendQuotedSolanaPayment(input: {
-  session: SolanaEmailSession; recipient: string; amount: string; feeQuoteToken: string; accessToken: string
+  asset?: 'USDC' | 'USDT'; session: SolanaEmailSession; recipient: string; amount: string; feeQuoteToken: string; accessToken: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
 }) {
   const key = `pocket:solana-relay:pending:${input.session.wallet.address}`
-  const fingerprint = `${input.session.wallet.address}:${input.recipient}:${input.amount}`
+  const asset = input.asset ?? 'USDC'
+  const fingerprint = `${input.session.wallet.address}:${input.recipient}:${input.amount}${asset === 'USDC' ? '' : ':USDT'}`
   type Pending = { fingerprint: string; tx: string; txHash: string; lastValidBlockHeight: number }
   const saved = localStorage.getItem(key)
   let pending: Pending | null = saved ? JSON.parse(saved) : null
@@ -46,11 +47,12 @@ export async function sendQuotedSolanaPayment(input: {
     pending = null
   }
   if (!pending) {
-    const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: input.session.wallet.address, to: input.recipient, amount: input.amount, feeQuoteToken: input.feeQuoteToken }) })
+    const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: input.session.wallet.address, to: input.recipient, amount: input.amount, asset, feeQuoteToken: input.feeQuoteToken }) })
     const data = await response.json()
     if (!response.ok || !data.ok || !data.tx || !Number.isSafeInteger(data.lastValidBlockHeight)) throw new Error(data.error || 'Solana payment could not be prepared.')
+    if (asset === 'USDT' && data.asset !== asset) throw new Error('The prepared transfer does not match USDT.')
     const { signCircleSolanaTransaction } = await import('./circleSolanaEmailWallet')
-    const signed = await signCircleSolanaTransaction({ session: input.session, rawTransaction: data.tx, memo: `Send ${input.amount} USDC` })
+    const signed = await signCircleSolanaTransaction({ session: input.session, rawTransaction: data.tx, memo: `Send ${input.amount} ${asset}` })
     const { Transaction } = await import('@solana/web3.js')
     const { default: bs58 } = await import('bs58')
     const decode = (value: string) => { try { return Transaction.from(Uint8Array.from(atob(value), c => c.charCodeAt(0))) } catch { return Transaction.from(bs58.decode(value)) } }

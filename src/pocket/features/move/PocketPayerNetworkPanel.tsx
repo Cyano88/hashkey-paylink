@@ -11,6 +11,7 @@ type NetworkOption = {
 }
 
 type PocketPayerNetworkPanelProps = {
+  asset?: 'USDC' | 'USDT'
   disabled?: boolean
   showSelector: boolean
   selectedNetwork: string
@@ -26,6 +27,7 @@ type PocketPayerNetworkPanelProps = {
 }
 
 export function PocketPayerNetworkPanel({
+  asset = 'USDC',
   disabled = false,
   showSelector,
   selectedNetwork,
@@ -56,7 +58,7 @@ export function PocketPayerNetworkPanel({
           <button type="button" aria-label="Select payment network" aria-haspopup="dialog" aria-expanded={open} disabled={multiChain || disabled} onClick={() => setOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#262626]">
             {!multiChain && <PocketNetworkMark network={selectedNetwork} />}{multiChain ? 'Supported networks' : selectedNetworkLabel}<ChevronDown className="h-4 w-4" />
           </button>
-          {open && <PocketBottomSheet title="Select network" onClose={() => setOpen(false)}><h2 className="mb-3 text-sm font-bold">Select network</h2><div role="listbox" aria-label="Payment network">{options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedNetwork} onClick={() => {onNetworkSelect(option.value);setOpen(false)}} className="flex min-h-14 w-full items-center justify-between gap-3 text-left text-sm font-semibold"><PocketNetworkMark network={option.value} /><span className="flex-1">{option.label}</span><PocketNetworkBalance network={option.value}/><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border',option.value === selectedNetwork ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} /></button>)}</div></PocketBottomSheet>}
+          {open && <PocketBottomSheet title="Select network" onClose={() => setOpen(false)}><h2 className="mb-3 text-sm font-bold">Select network</h2><div role="listbox" aria-label="Payment network">{options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedNetwork} onClick={() => {onNetworkSelect(option.value);setOpen(false)}} className="flex min-h-14 w-full items-center justify-between gap-3 text-left text-sm font-semibold"><PocketNetworkMark network={option.value} /><span className="flex-1">{option.label}</span><PocketNetworkBalance asset={asset} network={option.value}/><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border',option.value === selectedNetwork ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} /></button>)}</div></PocketBottomSheet>}
         </div>
 
         {showMultiChainToggle && <button

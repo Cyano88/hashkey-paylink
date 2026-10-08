@@ -1,3 +1,4 @@
+import {POCKET_USDT_ASSETS} from '../src/pocket/lib/pocketUsdtAssets.ts'
 ﻿import assert from 'node:assert/strict'
 import { createPaymentFeeQuote } from '../api/payment-fee-quotes.ts'
 import { build } from 'esbuild'
@@ -21,7 +22,7 @@ const originalFetch=globalThis.fetch
 // Every upstream call is intercepted: this test cannot submit a real transaction.
 globalThis.fetch=async(url,init)=>{
  const path=new URL(url).pathname
- if(new URL(url).hostname==='api.coingecko.com')return Response.json({'polygon-ecosystem-token':{usd:0.5,last_updated_at:Math.floor(Date.now()/1000)},ethereum:{usd:3000,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})
+ if(new URL(url).hostname==='api.coingecko.com')return Response.json({'polygon-ecosystem-token':{usd:0.5,last_updated_at:Math.floor(Date.now()/1000)},ethereum:{usd:3000,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)},tether:{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})
  if(path==='/v1/w3s/transactions/contractExecution/estimateFee'){estimateCalls++;return Response.json({data:{high:{networkFeeRaw:'0.0001'}}})}
  if(path==='/v1/w3s/wallets/fixture-wallet')return Response.json({data:{wallet:{id:'fixture-wallet',address:payer,blockchain,accountType:'SCA',state:'LIVE'}}})
  assert.equal(path,'/v1/w3s/user/transactions/contractExecution')
@@ -33,7 +34,7 @@ globalThis.fetch=async(url,init)=>{
  return Response.json({data:{challengeId:result.challengeId}})
 }
 const base={action:'executeEvmPayment',userToken:'fixture-session',walletId:'fixture-wallet',walletAddress:payer,chain:'base',recipient,totalUnits:'100000000',feeMode:'gross',idempotencyKey:'11111111-1111-4111-8111-111111111111'}
-function quoteFor(request) { return createPaymentFeeQuote({chain:request.chain,walletId:request.walletId,walletAddress:request.walletAddress,recipient:request.recipient,amountUnits:request.totalUnits,mode:request.feeMode},800000n).token }
+function quoteFor(request) { return createPaymentFeeQuote({asset:request.asset,chain:request.chain,walletId:request.walletId,walletAddress:request.walletAddress,recipient:request.recipient,amountUnits:request.totalUnits,mode:request.feeMode},800000n).token }
 base.feeQuoteToken=quoteFor(base)
 async function call(body,expected=200){let status=200,result;await handler({method:'POST',body,headers:{}},{status(s){status=s;return this},json(r){result=r;return this}});assert.equal(status,expected,JSON.stringify(result));return result}
 try {
@@ -91,5 +92,27 @@ try {
  blockchain='ETH'
  await call(base,403)
  assert.equal(executions.length,count)
+ for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'ethereum','ETH'],[4,'polygon','MATIC']]){
+  blockchain=network
+  const request={...base,asset:'USDT',chain,idempotencyKey:`22222222-2222-4222-8222-22222222222${index}`}
+  const priced=await call({...request,action:'quoteEvmPayment'})
+  assert.equal(priced.quote.asset,'USDT')
+  assert.equal(priced.quote.platformFeeUnits,'250000')
+  request.feeQuoteToken=priced.token
+  const before=executions.length
+  await call({...request,asset:'USDC'},409)
+  await call({...request,feeQuoteToken:quoteFor({...request,asset:'USDC'})},409)
+  assert.equal(executions.length,before)
+  const result=await call(request)
+  assert.equal(result.approval.asset,'USDT')
+  const batch=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData})
+  assert(batch.args[0].every(call=>call.target.toLowerCase()===POCKET_USDT_ASSETS[chain].address.toLowerCase()))
+  assert.equal(batch.args[0].length,2)
+ }
+ blockchain='ARC'
+ await call({...base,asset:'USDT',chain:'arc'},400)
+ blockchain='BASE'
+ await call({...base,asset:'USDT',action:'quoteEvmPayment',feeBps:'0',payoutIntentId:'fixture-payout'},400)
+ console.log('PASS: USDT batch recipient and fee use exact pinned contracts; cross-asset quotes, Arc and USDC-only payout exemptions rejected.')
  console.log('PASS: five configured EVM rails preserve retry key and exact gross recipient; invalid keys and wrong-chain wallet submit nothing. Provider deduplication is mocked, not a live guarantee.')
 }finally{globalThis.fetch=originalFetch}

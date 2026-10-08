@@ -1,3 +1,4 @@
+import {supportsPocketUsdt} from '../pocket/lib/pocketUsdtAssets'
 import { createCircleSdk } from './createCircleSdk'
 import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import { installCircleApprovalSurface } from './circleApprovalSurface'
@@ -563,7 +564,7 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
         },
         abiInfo: {
           functionNameLabel: 'Action',
-          functionName: 'Send USDC payment',
+          functionName: `Send ${asset} payment`,
           parametersLabel: 'Payment details',
           parameters: [
             amount ? `Amount: ${amount} ${asset}` : `Asset: ${asset}`,
@@ -916,8 +917,8 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
 }
 
 export type CirclePaymentFeeQuote = { quote: PaymentFeeQuote; token: string }
-export async function readCirclePaymentFeeQuote(params: { session: CircleEvmEmailSession; recipient: string; amount: string; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string }): Promise<CirclePaymentFeeQuote> {
-  return circleWalletApi<CirclePaymentFeeQuote>({ action: 'quoteEvmPayment', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
+export async function readCirclePaymentFeeQuote(params: { session: CircleEvmEmailSession; recipient: string; amount: string; asset?: 'USDC' | 'USDT'; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string }): Promise<CirclePaymentFeeQuote> {
+  return circleWalletApi<CirclePaymentFeeQuote>({ action: 'quoteEvmPayment', asset: params.asset ?? 'USDC', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
 }
 
 export async function sendCircleEvmEmailPayment(params: {
@@ -1010,7 +1011,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
   onConfirmed?: (hash: Hex) => void
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) {
-  if (params.asset === 'USDT' && (params.session.chain !== 'base' || params.feeQuoteToken)) throw Error('USDT requires a direct Base transfer.')
+  if (params.asset === 'USDT' && !supportsPocketUsdt(params.session.chain)) throw Error('USDT is not supported on this network.')
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
     amount: params.amount,

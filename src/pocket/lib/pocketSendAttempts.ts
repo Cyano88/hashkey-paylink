@@ -3,7 +3,7 @@ export function claimSendAttempt(owner:string,id:string){const k=owner+':'+id;if
 export function releaseSendAttempt(owner:string,id:string){executing.delete(owner+':'+id)}
 import type { PocketNetwork, PocketActivityRow } from './pocketSchemas'
 export type PocketSendAttempt = {
- idempotencyKey: string; owner: string; network: PocketNetwork; sourceAddress: string; recipient: string; amount: string;
+ asset?: 'USDC' | 'USDT'; idempotencyKey: string; owner: string; network: PocketNetwork; sourceAddress: string; recipient: string; amount: string;
  fingerprint: string; context: string; state: 'preparing'|'submitted'|'accepted'|'confirmed'|'failed';
  challengeId: string; transactionId: string; txHash: string; createdAt: number; updatedAt: number; error?: string
 }
@@ -18,6 +18,7 @@ export function readSendAttempts(owner:string, storage:Storage=localStorage):Poc
  for(let i=0;i<storage.length;i++) {const k=storage.key(i);if(!k?.startsWith(prefix))continue
   const record=JSON.parse(storage.getItem(k)||'null') as PocketSendAttempt|null
   if(!record||record.owner!==sendOwner(owner)||!record.idempotencyKey||!record.sourceAddress||!record.recipient||!record.amount||!['solana','base','arbitrum','arc','ethereum','polygon'].includes(record.network)||!['preparing','submitted','accepted','confirmed','failed'].includes(record.state)||!Number.isFinite(record.createdAt))throw Error('A saved transfer could not be read. Check Activity before repeating it.')
+  if (!['USDC','USDT'].includes(record.asset ?? 'USDC') || (record.asset === 'USDT' && record.network === 'arc')) throw Error('A saved transfer has an invalid asset. Check Activity before repeating it.')
   // Repair only the explicit pre-challenge policy rejection, not lost responses.
   if(record.state==='preparing'&&!record.challengeId&&!record.transactionId&&!record.txHash
     &&/code 155509/.test(record.error||'')&&/needs to setup paymaster policy/i.test(record.error||'')){
@@ -61,6 +62,6 @@ export function mergeSendActivity(rows:PocketActivityRow[],attempts:PocketSendAt
   return row
  })
  const hashes=new Set(rows.filter(r=>r.txHash).map(r=>matchKey(r.chain||'',r.txHash)))
- const local=attempts.filter(r=>!r.txHash||!hashes.has(matchKey(r.network,r.txHash))).map<PocketActivityRow>(r=>({eventId:'send:'+r.idempotencyKey,txHash:r.txHash,chain:r.network,payer:r.sourceAddress,recipient:r.recipient,amount:r.amount,memo:r.context.startsWith('request:')?'Request payment':'USDC sent',ts:r.createdAt,source:r.context.startsWith('request:')?'request':'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:r.state==='confirmed'?'confirmed':r.state==='failed'?'failed':'pending',supportReference:r.idempotencyKey}))
+ const local=attempts.filter(r=>!r.txHash||!hashes.has(matchKey(r.network,r.txHash))).map<PocketActivityRow>(r=>({eventId:'send:'+r.idempotencyKey,txHash:r.txHash,chain:r.network,payer:r.sourceAddress,recipient:r.recipient,amount:r.amount,assetSymbol:r.asset??'USDC',memo:r.context.startsWith('request:')?'Request payment':`${r.asset??'USDC'} sent`,ts:r.createdAt,source:r.context.startsWith('request:')?'request':'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:r.state==='confirmed'?'confirmed':r.state==='failed'?'failed':'pending',supportReference:r.idempotencyKey}))
  return [...rows,...local].sort((a,b)=>b.ts-a.ts)
 }

@@ -18,3 +18,11 @@ assert.throws(()=>verifyPaymentFeeQuote(token,binding,121000,key))
 assert.throws(()=>verifyPaymentFeeQuote(token+'x',binding,2000,key))
 assert.throws(()=>verifyPaymentFeeQuote(token,binding,2000,key+'other'))
 console.log('25 bps arithmetic, fee totals, exemption arithmetic, signature integrity, binding and expiry passed.')
+
+const usdtBinding={...binding,asset:'USDT'}
+const usdt=createPaymentFeeQuote(usdtBinding,800000n,false,1000,key)
+assert.equal(verifyPaymentFeeQuote(usdt.token,usdtBinding,2000,key).asset,'USDT')
+assert.throws(()=>verifyPaymentFeeQuote(usdt.token,binding,2000,key),/asset changed/)
+assert.throws(()=>verifyPaymentFeeQuote(token,usdtBinding,2000,key),/asset changed/)
+assert.equal(verifyPaymentFeeQuote(token,{...binding,asset:'USDC'},2000,key).totalUnits,quote.totalUnits)
+console.log('PASS: USDT/USDC quotes cannot cross assets; legacy USDC quotes remain valid.')

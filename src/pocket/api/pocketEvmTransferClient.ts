@@ -1,3 +1,4 @@
+import {supportsPocketUsdt} from '../lib/pocketUsdtAssets'
 import { isAddress, parseUnits, type Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { CHAIN_META } from '../../lib/chains'
@@ -71,7 +72,7 @@ export async function executePocketEvmTransfer({
   challengeConfirmer?: PocketEvmChallengeConfirmer
   confirmer?: PocketEvmTransferConfirmer
 }) {
-  if (asset === 'USDT' && (session.chain !== 'base' || feeQuoteToken)) throw new Error('USDT requires a direct Base transfer.')
+  if (asset === 'USDT' && !supportsPocketUsdt(session.chain)) throw new Error('USDT is not supported on this network.')
   if (!['base', 'arbitrum', 'arc', 'ethereum', 'polygon'].includes(session.chain)) {
     throw new Error('Circle Pocket EVM withdrawal does not support this network.')
   }
@@ -83,15 +84,15 @@ export async function executePocketEvmTransfer({
   }
   if (!isAddress(recipient)) throw new Error('Enter a valid EVM destination address.')
   if (!/^\d+(?:\.\d{1,6})?$/.test(amount.trim())) {
-    throw new Error('Enter a valid USDC withdrawal amount.')
+    throw new Error(`Enter a valid ${asset} withdrawal amount.`)
   }
   let amountUnits: bigint
   try {
     amountUnits = parseUnits(amount.trim(), CHAIN_META[session.chain].decimals)
   } catch {
-    throw new Error('Enter a valid USDC withdrawal amount.')
+    throw new Error(`Enter a valid ${asset} withdrawal amount.`)
   }
-  if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
+  if (amountUnits <= 0n) throw new Error(`Enter a ${asset} withdrawal amount greater than zero.`)
   let verifiedHash: `0x${string}` | null = null
   let identifiers = { challengeId: '', transactionId: '' }
   const txHash = await executor({ session, recipient, amount, asset, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(),

@@ -474,6 +474,7 @@ export async function reconcileCircleSolanaTransfer(params: {
 export async function sendCircleSolanaTransfer(params: {
   session: SolanaEmailSession
   recipient: string
+  asset?: 'USDC' | 'USDT'
   amount: string
   idempotencyKey: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
@@ -489,11 +490,13 @@ export async function sendCircleSolanaTransfer(params: {
   })
   applyHashPayLinkCircleSolanaUi(sdk)
   const challenge = await circleSolanaApi<{
+    approval?: {asset: string}
     challengeId?: string
     transactionId?: string
     transaction?: Record<string, unknown>
   }>({
     action: 'executeSolanaTransfer',
+    asset: params.asset ?? 'USDC',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     walletAddress: params.session.wallet.address,
@@ -502,6 +505,7 @@ export async function sendCircleSolanaTransfer(params: {
     idempotencyKey: params.idempotencyKey,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a Solana transfer challenge.')
+  if (params.asset === 'USDT' && challenge.approval?.asset !== 'USDT') throw new Error('The transfer approval does not match USDT.')
   params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: circleTransactionId(challenge) ?? '' })
   let result: CircleChallengeResult
   try {
