@@ -72,11 +72,11 @@ assert.deepEqual(balanceCalls, [
 ])
 assert.deepEqual(loaded.body.rows.map(({ walletRevision, observedAt, ...row }) => row), [
   { key: 'base', label: 'Base', balance: 2.5, status: 'ok' },
-  { key: 'arbitrum', label: 'Arbitrum', balance: 0, status: 'ok' },
+  { key: 'arbitrum', label: 'Arbitrum', balance: 0, status: 'ok', usdt: 0 },
   { key: 'arc', label: 'Arc', balance: 0, status: 'error', error: 'Arc balance is temporarily unavailable.' },
   { key: 'solana', label: 'Solana', balance: 3.25, status: 'ok' },
-  { key: 'ethereum', label: 'Ethereum', balance: 0, status: 'ok' },
-  { key: 'polygon', label: 'Polygon', balance: 0, status: 'ok' },
+  { key: 'ethereum', label: 'Ethereum', balance: 0, status: 'ok', usdt: 0 },
+  { key: 'polygon', label: 'Polygon', balance: 0, status: 'ok', usdt: 0 },
 ])
 assert(loaded.body.rows.every(row => /^[a-f0-9]{64}$/.test(row.walletRevision)))
 assert(loaded.body.rows.filter(row => row.status === 'ok').every(row => Number.isSafeInteger(row.observedAt)))

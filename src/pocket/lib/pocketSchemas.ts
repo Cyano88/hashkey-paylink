@@ -103,6 +103,7 @@ export type PocketWalletsReadData = {
 }
 
 export type PocketBalanceRow = {
+  usdt?: number
   walletRevision?: string
   observedAt?: number
   key: PocketNetwork
@@ -535,6 +536,7 @@ export function isPocketBalancesReadData(value: unknown): value is PocketBalance
   if (value.rows.length !== POCKET_NETWORKS.length) return false
   const validRows = value.rows.every((row, index) => {
     if (!isRecord(row) || row.key !== POCKET_NETWORKS[index]) return false
+    if (row.usdt !== undefined && (row.key === 'arc' || typeof row.usdt !== 'number' || !Number.isFinite(row.usdt) || row.usdt < 0)) return false
     if (!isNonEmptyString(row.label, 64)) return false
     if (typeof row.balance !== 'number' || !Number.isFinite(row.balance) || row.balance < 0) return false
     if (row.status !== 'ok' && row.status !== 'error') return false

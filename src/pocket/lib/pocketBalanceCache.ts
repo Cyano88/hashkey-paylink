@@ -5,7 +5,7 @@ import { pocketBalanceRevision } from './pocketBalanceRevision'
 import { POCKET_NETWORKS } from './pocketSchemas'
 import { parsePocketWalletUpdateNotice } from './pocketWalletUpdate'
 
-export type BalanceDisplayRow = UnifiedBalanceBreakdown & { known: boolean; stale: boolean }
+export type BalanceDisplayRow = UnifiedBalanceBreakdown & { known: boolean; stale: boolean; usdt?: number; usdtStale?: boolean }
 export type PocketBalanceSnapshot = {
   wallets: CirclePocketWallets
   rows: UnifiedBalanceBreakdown[]
@@ -30,7 +30,7 @@ export function readCachedPocketBalance(owner: string): PocketBalanceSnapshot | 
   if (cache.has(owner)) {
     const saved = cache.get(owner)!
     if (saved.totalComplete && Date.now() - saved.savedAt > 60_000) {
-      const stale = { ...saved, total: 0, totalComplete: false, rows: saved.rows.map(row => ({ ...row, status: 'error' as const, balance: 0 })), displayRows: saved.displayRows.map(row => ({ ...row, stale: true })) }
+      const stale = { ...saved, total: 0, totalComplete: false, rows: saved.rows.map(row => ({ ...row, status: 'error' as const, balance: 0 })), displayRows: saved.displayRows.map(row => ({ ...row, stale: true, usdtStale: true })) }
       cache.set(owner, stale)
       return stale
     }
@@ -40,11 +40,11 @@ export function readCachedPocketBalance(owner: string): PocketBalanceSnapshot | 
     const saved = JSON.parse(localStorage.getItem(prefix + encodeURIComponent(owner)) || 'null') as PocketBalanceSnapshot | null
     if (!saved || !saved.wallets || !Number.isFinite(saved.savedAt) || !Array.isArray(saved.displayRows) || ![4, POCKET_NETWORKS.length].includes(saved.displayRows.length)) return
     if (!saved.displayRows.every((row, index) => row.key === POCKET_NETWORKS[index] && typeof row.known === 'boolean'
-      && Number.isFinite(row.balance) && row.balance >= 0 && (!row.known || (Number.isSafeInteger(row.observedAt) && row.observedAt! > 0 && /^[a-f0-9]{64}$/.test(row.walletRevision ?? ''))))) return
+      && Number.isFinite(row.balance) && row.balance >= 0 && (row.usdt === undefined || (row.key !== 'arc' && Number.isFinite(row.usdt) && row.usdt >= 0)) && (!row.known || (Number.isSafeInteger(row.observedAt) && row.observedAt! > 0 && /^[a-f0-9]{64}$/.test(row.walletRevision ?? ''))))) return
     // A restored snapshot is display-only until wallet binding and balances are refreshed.
     const displayRows: BalanceDisplayRow[] = POCKET_NETWORKS.map((key, index) => {
       const row = saved.displayRows[index]
-      return row ? { ...row, stale: true, status: 'error' as const }
+      return row ? { ...row, stale: true, usdtStale: true, status: 'error' as const }
         : { key, label: key, balance: 0, known: false, stale: true, status: 'error' as const }
     })
     const snapshot: PocketBalanceSnapshot = { ...saved, displayRows, rows: displayRows.map(row => ({ ...row, balance: 0 })), total: 0, totalComplete: false,
@@ -82,6 +82,8 @@ export async function mergePocketBalance(previous: PocketBalanceSnapshot | undef
       walletRevision: revision,
       observedAt: fresh ? incoming.observedAt ?? Date.now() : retained?.observedAt,
       known: Boolean(fresh || retained), stale: !fresh,
+      usdt: fresh && incoming.usdt !== undefined ? incoming.usdt : retained?.usdt,
+      usdtStale: !(fresh && incoming.usdt !== undefined),
     }
   }))
   const rows = displayRows.map(row => ({ ...row, balance: row.stale ? 0 : row.balance }))
@@ -97,7 +99,7 @@ export async function replacePocketBalanceWallets(owner: string, wallets: Circle
   const previous = readCachedPocketBalance(owner)
   if (previous) {
     // Hide during asynchronous revision calculation, never paint an old address's amount.
-    const displayRows = previous.displayRows.map(row => ({ ...row, balance: 0, known: false, stale: true, status: 'error' as const }))
+    const displayRows = previous.displayRows.map(row => ({ ...row, balance: 0, usdt: undefined, usdtStale: true, known: false, stale: true, status: 'error' as const }))
     save(owner, { ...previous, wallets, displayRows, rows: displayRows, total: 0, totalComplete: false, displayTotal: 0, displayComplete: false })
   }
   const snapshot = await mergePocketBalance(previous, wallets)
@@ -144,7 +146,7 @@ export async function loadPocketBalance(owner: string, getAccessToken: () => Pro
     } catch (reason) {
       if (!applied && valid() && (versions.get(owner) ?? 0) === version) {
         const saved = readCachedPocketBalance(owner)
-        if (saved) save(owner, { ...saved, totalComplete: false, total: 0, rows: saved.rows.map(row => ({ ...row, status: 'error', balance: 0 })), displayRows: saved.displayRows.map(row => ({ ...row, stale: true })) })
+        if (saved) save(owner, { ...saved, totalComplete: false, total: 0, rows: saved.rows.map(row => ({ ...row, status: 'error', balance: 0 })), displayRows: saved.displayRows.map(row => ({ ...row, stale: true, usdtStale: true })) })
       }
       throw reason
     } finally { clearTimeout(timer); controller.abort() }

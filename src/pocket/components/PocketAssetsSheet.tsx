@@ -22,13 +22,12 @@ export default function PocketAssetsSheet({ holdings, total, complete, visible, 
     <div className="pb-4 pr-10">
       <h2 className="text-xl font-semibold tracking-tight">Your assets</h2>
       {complete && <p className="mt-1 text-sm tabular-nums text-gray-500 dark:text-gray-400">{amount(total)}</p>}
-      {needsRefresh && <p role="status" className="mt-2 text-xs text-gray-500 dark:text-gray-400">Some balances couldn't refresh.</p>}
     </div>
     <ul className="min-h-40 divide-y divide-gray-100 pb-2 dark:divide-white/[0.07]">
       {held.map(row => <li key={row.id} className="flex items-center gap-3 py-4">
         <span className="relative h-9 w-9 shrink-0">
-          <img src={row.icon} alt="" className="h-9 w-9 rounded-full object-cover" />
-          <img src={row.networkIcon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-white object-cover dark:border-[#121212] dark:bg-[#121212]" />
+          <img src={row.icon} alt="" className="h-9 w-9 rounded-full object-cover grayscale contrast-200 dark:invert" />
+          <img src={row.networkIcon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-white object-cover grayscale contrast-200 dark:border-[#121212] dark:bg-[#121212]" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{row.symbol}</p>

@@ -1,4 +1,4 @@
-import usePocketUsdtBalance from '../hooks/usePocketUsdtBalance'
+import { POCKET_USDT_NETWORKS } from '../lib/pocketUsdtAssets'
 import {pocketUsdtEnabled} from '../lib/pocketBaseUsdt'
 import PocketAssetsSheet from '../components/PocketAssetsSheet'
 import {localCurrencyAmount} from '../lib/pocketDisplayCurrency'
@@ -49,7 +49,11 @@ export default function PocketHomePage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   usePocketProfile({ authenticated, email, getAccessToken })
-  const usdt = usePocketUsdtBalance(authenticated ? wallets.wallets : {}, getAccessToken)
+  const usdtRows = POCKET_USDT_NETWORKS.map(network => {
+    const row = wallets.displayRows.find(item => item.key === network)
+    return {network, balance: row?.usdt ?? 0, known: !authenticated || row?.usdt !== undefined, stale: row?.usdtStale ?? false}
+  })
+  const usdt = {rows: usdtRows, known: !pocketUsdtEnabled || usdtRows.every(row => row.known), balance: pocketUsdtEnabled ? usdtRows.reduce((sum, row) => sum + row.balance, 0) : 0}
   const activity = usePocketActivity({ authenticated, email, enabled: true, recent: true, getAccessToken })
   const currency = usePocketDisplayCurrency()
   const showNgn = currency !== 'USDC'

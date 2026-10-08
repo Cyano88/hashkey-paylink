@@ -1,3 +1,4 @@
+import { supportsPocketUsdt } from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { readCircleDisplayBalance } from './circle-display-balances.js'
 import { pocketBalanceRevision } from '../../src/pocket/lib/pocketBalanceRevision.js'
 import { readDurableJson } from '../render-durable-store.js'
@@ -165,7 +166,7 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
         const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
         const walletRevision = await pocketBalanceRevision(network, link ? { address: link.circleWalletAddress, walletId: link.circleWalletId, updatedAt: link.updatedAt } : undefined)
         if (!link) {
-          return { key: network, label: LABELS[network], balance: 0, status: 'ok', walletRevision, observedAt: Date.now() }
+          return { key: network, label: LABELS[network], balance: 0, status: 'ok', walletRevision, observedAt: Date.now(), ...(supportsPocketUsdt(network)?{usdt:0}:{}) }
         }
         if (link.chain !== network || (link.purpose ?? 'payment') !== 'payment') {
           throw Object.assign(new Error('Stored Circle wallet link did not match its payment network.'), { status: 500 })
@@ -175,7 +176,7 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
           const display = dependencies.readDisplayBalance ? await dependencies.readDisplayBalance(link, () => dependencies.readBalance(network, link.circleWalletAddress, true), req.query?.refresh === '1') : { balance: await dependencies.readBalance(network, link.circleWalletAddress, req.query?.refresh === '1'), observedAt: Date.now() }
           const balance = display.balance
           if (!Number.isFinite(balance) || balance < 0) throw new Error('Balance reader returned an invalid amount.')
-          return { key: network, label: LABELS[network], balance, status: 'ok', walletRevision, observedAt: display.observedAt }
+          return { key: network, label: LABELS[network], balance, status: 'ok', walletRevision, observedAt: display.observedAt, ...('usdt' in display && typeof display.usdt === 'number' && Number.isFinite(display.usdt) && display.usdt >= 0 ? {usdt:display.usdt} : {}) }
         } catch {
           return {
             key: network,
