@@ -2,7 +2,12 @@ export type PocketDisplayCurrency = 'USDC' | 'NGN' | 'UGX'
 export const normalizePocketDisplayCurrency = (value: unknown): PocketDisplayCurrency => value === 'NGN' || value === 'UGX' ? value : 'USDC'
 const listeners = new Set<() => void>()
 export function readPocketDisplayCurrency(email: string): PocketDisplayCurrency {
-  try { return normalizePocketDisplayCurrency(localStorage.getItem('pocket.stablecoins.currency:' + email.toLowerCase())) } catch { return 'USDC' }
+  try { return normalizePocketDisplayCurrency(localStorage.getItem('pocket.stablecoins.currencyPreference:' + email.toLowerCase()) ?? localStorage.getItem('pocket.stablecoins.currency:' + email.toLowerCase())) } catch { return 'USDC' }
+}
+// Explicit device preferences take priority over cached server profile defaults.
+export function savePocketDisplayCurrency(email: string, value: PocketDisplayCurrency) {
+  localStorage.setItem('pocket.stablecoins.currencyPreference:' + email.toLowerCase(), value)
+  listeners.forEach(listener => listener())
 }
 export function publishPocketDisplayCurrency(email: string, value: unknown) {
   try { localStorage.setItem('pocket.stablecoins.currency:' + email.toLowerCase(), normalizePocketDisplayCurrency(value)) } catch {}

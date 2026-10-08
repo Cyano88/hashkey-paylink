@@ -1,3 +1,4 @@
+import { savePocketDisplayCurrency } from '../lib/pocketDisplayCurrency'
 import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import { POCKET_USDT_NETWORKS } from '../lib/pocketUsdtAssets'
 import {pocketUsdtEnabled} from '../lib/pocketBaseUsdt'
@@ -48,7 +49,7 @@ export default function PocketHomePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const profile = usePocketProfile({ authenticated, email, getAccessToken })
+  usePocketProfile({ authenticated, email, getAccessToken })
   const usdtRows = POCKET_USDT_NETWORKS.map(network => {
     const row = wallets.displayRows.find(item => item.key === network)
     return {network, balance: row?.usdt ?? 0, known: !authenticated || row?.usdt !== undefined, stale: row?.usdtStale ?? false}
@@ -116,7 +117,7 @@ export default function PocketHomePage() {
       <div className="flex items-center justify-between"><div><p className="text-base font-semibold text-gray-950 dark:text-white">Recent activity</p></div><button type="button" onClick={() => open(POCKET_ROUTES.activity)} className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">View all<ChevronRight className="h-3.5 w-3.5" /></button></div>
       <div className="mt-3">{!activityReady ? <PocketRecentActivitySkeleton /> : recent.length ? recent.map(row => { const Icon = pocketActivityIcon(row); return <button key={row.eventId + ':' + row.txHash} type="button" onClick={() => setSelectedActivity(row)} className="relative flex w-full items-center gap-3 py-4 text-left after:absolute after:bottom-0 after:left-12 after:right-0 after:h-px after:bg-gray-200/70 last:after:hidden dark:after:bg-white/[0.07]"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.07]"><Icon className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-gray-900 dark:text-white">{pocketBankRecipientLabel(row) || row.activityLabel || row.memo || 'Payment'}</span><span className="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"><PocketActivityStatusIcon row={row} />{pocketActivityShortDate(row.ts)}</span></span><span className="text-sm font-medium tabular-nums text-gray-900 dark:text-white">{row.direction === 'in' || ['refunded', 'reversed'].includes(String(row.paycrestStatus ?? '').toLowerCase()) || row.refundTxHash ? '+' : '-'}{pocketActivityAmount(row)}{(!row.assetSymbol || row.assetSymbol === 'USDC') && row.source !== 'wallet-swap' && <PocketLocalEquivalent recordedAmount={row.amountNgn} recordedCurrency={row.fiatCurrency} amount={Number(row.amount)} className="mt-1 block text-right text-xs font-normal text-gray-500 dark:text-gray-400" />}</span></button>}) : <p className="py-8 text-center text-xs font-medium text-gray-500 dark:text-gray-400">{activity.error || 'Your completed payments will appear here.'}</p>}</div>
     </section>
-    {currencyOpen && <PocketDisplayCurrencyPicker current={currency} busy={profile.busy || !profile.loaded} error={profile.error} onBack={() => setCurrencyOpen(false)} onSelect={async next => Boolean(await profile.saveDisplayCurrency(next))} />}
+    {currencyOpen && <PocketDisplayCurrencyPicker current={currency} busy={false} error="" onBack={() => setCurrencyOpen(false)} onSelect={async next => { savePocketDisplayCurrency(email, next); return true }} />}
     {assetsOpen && <PocketAssetsSheet total={displayTotal} complete={balancesVisible} visible={balanceVisible} onClose={() => setAssetsOpen(false)} holdings={[...NETWORKS.map(network => {
       const row = wallets.displayRows.find(item => item.key === network.key)
       return {id:'USDC:'+network.key,symbol:'USDC',icon:'/brand/usdc-circle-logo.png',network:network.label,networkIcon:network.logo,quantity:row?.balance ?? 0,valueUsd:row?.balance ?? 0,known:!authenticated || Boolean(row?.known),stale:row?.stale}
