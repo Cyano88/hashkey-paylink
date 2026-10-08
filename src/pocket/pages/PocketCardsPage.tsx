@@ -7,7 +7,7 @@ import './PocketCardsPage.css'
 
 export default function PocketCardsPage() {
   const navigate = useNavigate()
-  return <PocketRouteShell active="cards" refreshEnabled={false} onSelect={tab => navigate(POCKET_BASE_PATH + (tab === 'bills' ? POCKET_ROUTES.bills : tab === 'profile' ? POCKET_ROUTES.profile : tab === 'activity' ? POCKET_ROUTES.activity : tab === 'cards' ? POCKET_ROUTES.cards : POCKET_ROUTES.home))}>
+  return <PocketRouteShell active="cards" fixedPage elasticFixedPage refreshEnabled={false} onSelect={tab => navigate(POCKET_BASE_PATH + (tab === 'bills' ? POCKET_ROUTES.bills : tab === 'profile' ? POCKET_ROUTES.profile : tab === 'activity' ? POCKET_ROUTES.activity : tab === 'cards' ? POCKET_ROUTES.cards : POCKET_ROUTES.home))}>
     <PocketFlowHeader title="Cards" centered hideBack />
     <section aria-label="Pocket card preview" className="pocket-card-preview">
       <div className="pocket-card-stage" aria-hidden="true">
@@ -26,8 +26,8 @@ export default function PocketCardsPage() {
           </div>
         </div>
       </div>
-      <div className="mx-auto mt-6 w-full max-w-[320px]">
-        <ul className="space-y-4">
+      <div className="pocket-card-benefits">
+        <ul className="pocket-card-benefits-list">
           {[
             // Fyatu Visa Platinum coverage: https://fyatu.com/card-issuing/ (2026-10-09).
             { Icon: Store, title: '60M+ merchants worldwide', description: 'Visa acceptance, where supported.' },

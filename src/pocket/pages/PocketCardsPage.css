@@ -1,13 +1,18 @@
 .pocket-card-preview {
   display: flex;
-  min-height: min(560px, calc(100dvh - 225px));
+  min-height: 0;
+  flex: 1;
+  margin-top: 0 !important;
   flex-direction: column;
 }
 .pocket-card-stage {
   position: relative;
   display: grid;
   place-items: center;
-  height: clamp(260px, 34dvh, 325px);
+  flex: 1;
+  min-height: 100px;
+  max-height: 360px;
+  container-type: size;
   isolation: isolate;
   perspective: 1000px;
 }
@@ -24,7 +29,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  width: min(94%, 374px);
+  width: min(94%, 374px, 140cqh);
   aspect-ratio: 1.586;
   padding: 22px;
   overflow: hidden;
@@ -58,7 +63,14 @@
   border-radius: 50%;
   background: radial-gradient(ellipse, #00000025, transparent 70%);
 }
-.pocket-card-availability { margin-top: auto; padding-top: 24px; }
+.pocket-card-benefits { width: min(100%, 340px); margin: 8px auto 0; flex-shrink: 0; }
+.pocket-card-benefits-list { display: grid; gap: clamp(8px, 1.5dvh, 16px); }
+.pocket-card-availability { flex-shrink: 0; padding-top: 16px; }
+@media (max-height: 740px) {
+  .pocket-card-benefits-list { gap: 6px; }
+  .pocket-card-benefits-list p + p { font-size: 11px; line-height: 15px; }
+  .pocket-card-availability { padding-top: 10px; }
+}
 @keyframes pocket-card-float {
   0%, 100% { transform: translate3d(0, 4px, 0) rotate(-7deg) rotateY(-7deg); }
   50% { transform: translate3d(0, -7px, 0) rotate(-3deg) rotateY(4deg); }

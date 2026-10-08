@@ -14,6 +14,7 @@ export default function PocketRouteShell({
   onSelect,
   navigationDisabled = false,
   fixedPage = false,
+  elasticFixedPage = false,
   scrollKey,
   rail,
   refreshEnabled = true,
@@ -23,6 +24,7 @@ export default function PocketRouteShell({
   onSelect: (tab: PocketNavTab) => void
   navigationDisabled?: boolean
   fixedPage?: boolean
+  elasticFixedPage?: boolean
   scrollKey?: string
   rail?: 'stablecoins' | 'xstocks'
   refreshEnabled?: boolean
@@ -90,7 +92,7 @@ export default function PocketRouteShell({
     pullStartY.current = null
     pullEdge.current = null
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
-    if (fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
+    if ((fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
