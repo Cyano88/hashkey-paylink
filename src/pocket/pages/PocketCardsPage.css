@@ -26,25 +26,48 @@
 }
 .pocket-preview-card {
   position: relative;
+  width: min(94%, 374px, 140cqh);
+  aspect-ratio: 1.586;
+  border-radius: 21px;
+  transform-style: preserve-3d;
+  transform: translate3d(0, 3px, -12px) rotateZ(-6deg) rotateX(7deg) rotateY(-24deg);
+  animation: pocket-card-float 12s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.pocket-preview-card::before,
+.pocket-preview-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid #858585;
+  background: linear-gradient(135deg, #737373, #292929 48%, #929292);
+}
+.pocket-preview-card::before {
+  transform: translateZ(-4px);
+  box-shadow: 0 18px 36px #00000030;
+}
+.pocket-preview-card::after { transform: translateZ(-2px); }
+.pocket-preview-card-face {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  width: min(94%, 374px, 140cqh);
-  aspect-ratio: 1.586;
   padding: 22px;
   overflow: hidden;
-  border: 1px solid #555;
-  border-radius: 21px;
+  border: 1px solid #666;
+  border-radius: inherit;
   color: #fff;
   background: linear-gradient(125deg, #3b3b3b 0%, #1e1e1e 33%, #101010 75%, #262626 100%);
-  box-shadow: inset 0 1px 0 #ffffff24, 0 18px 36px #00000030;
-  transform: rotate(-7deg) rotateY(-7deg);
-  animation: pocket-card-float 9s ease-in-out infinite;
+  box-shadow: inset 0 1px 0 #ffffff30;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 .pocket-preview-card-surface {
   position: absolute;
   inset: 0;
-  background: linear-gradient(115deg, transparent 30%, #ffffff09 49%, transparent 65%);
+  background: linear-gradient(115deg, transparent 25%, #ffffff12 49%, transparent 72%);
+  animation: pocket-card-light 12s cubic-bezier(.45, 0, .55, 1) infinite;
 }
 .pocket-card-etch {
   position: absolute;
@@ -72,9 +95,16 @@
   .pocket-card-availability { padding-top: 10px; }
 }
 @keyframes pocket-card-float {
-  0%, 100% { transform: translate3d(0, 4px, 0) rotate(-7deg) rotateY(-7deg); }
-  50% { transform: translate3d(0, -7px, 0) rotate(-3deg) rotateY(4deg); }
+  0%, 100% { transform: translate3d(0, 3px, -12px) rotateZ(-6deg) rotateX(7deg) rotateY(-24deg); }
+  25% { transform: translate3d(0, -5px, 18px) rotateZ(-3deg) rotateX(-3deg) rotateY(-4deg); }
+  50% { transform: translate3d(0, 1px, 0) rotateZ(2deg) rotateX(-9deg) rotateY(24deg); }
+  75% { transform: translate3d(0, -5px, 22px) rotateZ(-3deg) rotateX(4deg) rotateY(4deg); }
+}
+@keyframes pocket-card-light {
+  0%, 100% { transform: translateX(-22%); opacity: .45; }
+  50% { transform: translateX(22%); opacity: .9; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pocket-preview-card { animation: none; transform: rotate(-5deg); }
+  .pocket-preview-card { animation: none; transform: rotateZ(-4deg) rotateY(-10deg); }
+  .pocket-preview-card-surface { animation: none; }
 }

@@ -14,6 +14,7 @@ export default function PocketCardsPage() {
         <div className="pocket-card-halo" />
         <div className="pocket-card-shadow" />
         <div className="pocket-preview-card">
+          <div className="pocket-preview-card-face">
           <div className="pocket-preview-card-surface" />
           <div className="relative z-10 flex items-center gap-2">
             <img src="/pocket-mark.svg" alt="" className="h-7 w-7 invert" />
@@ -23,6 +24,7 @@ export default function PocketCardsPage() {
           <div className="relative z-10 flex items-end justify-between">
             <span className="text-[10px] font-medium tracking-wide text-white/50">by Hash PayLink</span>
             <img src="/brand/visa-preview.png" alt="Visa" className="h-7 w-[86px] object-contain brightness-0 invert" />
+          </div>
           </div>
         </div>
       </div>
