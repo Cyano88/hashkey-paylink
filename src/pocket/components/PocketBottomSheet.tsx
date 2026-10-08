@@ -4,6 +4,27 @@ import { X } from './PocketIcons'
 import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 import { isPocketNativeRuntime } from '../lib/pocketRoutes'
 
+// Reference counts keep nested sheets from unlocking the page underneath each other.
+const backgroundLocks = new WeakMap<HTMLElement, { count: number; overflow: string; top: number }>()
+function lockBackgroundScroll() {
+  const scrollers = Array.from(document.querySelectorAll<HTMLElement>('[data-pocket-scroller]'))
+  for (const element of scrollers) {
+    const existing = backgroundLocks.get(element)
+    if (existing) { existing.count++; continue }
+    backgroundLocks.set(element, { count: 1, overflow: element.style.overflowY, top: element.scrollTop })
+    element.style.overflowY = 'hidden'
+  }
+  return () => {
+    for (const element of scrollers) {
+      const lock = backgroundLocks.get(element)
+      if (!lock || --lock.count > 0) continue
+      element.style.overflowY = lock.overflow
+      element.scrollTop = lock.top
+      backgroundLocks.delete(element)
+    }
+  }
+}
+
 export default function PocketBottomSheet({ title, onClose, children, dismissible = true, showCloseButton = dismissible, dismissOnBackdrop = true, layer = 85, headerLabel, fullScreen = false, desktopCentered = !isPocketNativeRuntime(), fixedHeight }: { fixedHeight?: string; fullScreen?: boolean; desktopCentered?: boolean; headerLabel?: string; title: string; onClose: () => void; children: ReactNode; dismissible?: boolean; showCloseButton?: boolean; dismissOnBackdrop?: boolean; layer?:number }) {
   const root = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
@@ -14,6 +35,7 @@ export default function PocketBottomSheet({ title, onClose, children, dismissibl
     const previous = document.activeElement as HTMLElement | null
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    const unlockBackground = lockBackgroundScroll()
     if (!root.current?.contains(document.activeElement)) root.current?.focus()
     const topmost = () => { const dialogs = document.querySelectorAll('[role="dialog"]'); return dialogs[dialogs.length - 1] === root.current }
     const back = (event: Event) => {
@@ -37,11 +59,12 @@ export default function PocketBottomSheet({ title, onClose, children, dismissibl
       window.removeEventListener(POCKET_NATIVE_BACK_EVENT, back)
       document.removeEventListener('keydown', key)
       document.body.style.overflow = overflow
+      unlockBackground()
       if (previous?.isConnected) previous.focus()
     }
   }, [])
-  return createPortal(<div style={{zIndex:layer}} className={`${fullScreen ? "pocket-fullscreen-checkout" : ""} fixed inset-0 z-[85] flex items-end justify-center bg-black/40 px-0 pt-[max(1rem,var(--pocket-safe-top))] ${desktopCentered ? 'sm:items-center sm:p-6' : ''}`} onClick={event => { if (event.target === event.currentTarget && dismissible && dismissOnBackdrop) onClose() }}>
-    <div data-pocket-sheet style={fixedHeight ? { height: fixedHeight } : undefined} ref={root} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className={`pocket-sheet-surface font-sans relative max-h-[90dvh] w-full max-w-lg ${fixedHeight ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'} rounded-t-[28px] border border-gray-100 bg-white px-5 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-4 text-gray-950 outline-none dark:border-[#262626] dark:bg-black dark:text-white ${desktopCentered ? 'sm:rounded-[28px] sm:p-6' : ''}`}>
+  return createPortal(<div onTouchStart={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()} onTouchEnd={event => event.stopPropagation()} onTouchCancel={event => event.stopPropagation()} onWheel={event => event.stopPropagation()} style={{zIndex:layer}} className={`${fullScreen ? "pocket-fullscreen-checkout" : ""} fixed inset-0 z-[85] flex items-end justify-center bg-black/40 px-0 pt-[max(1rem,var(--pocket-safe-top))] ${desktopCentered ? 'sm:items-center sm:p-6' : ''}`} onClick={event => { if (event.target === event.currentTarget && dismissible && dismissOnBackdrop) onClose() }}>
+    <div data-pocket-sheet style={fixedHeight ? { height: fixedHeight } : undefined} ref={root} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className={`pocket-sheet-surface font-sans relative overscroll-y-contain max-h-[90dvh] w-full max-w-lg ${fixedHeight ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'} rounded-t-[28px] border border-gray-100 bg-white px-5 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-4 text-gray-950 outline-none dark:border-[#262626] dark:bg-black dark:text-white ${desktopCentered ? 'sm:rounded-[28px] sm:p-6' : ''}`}>
       {!fullScreen && (headerLabel ? <div data-pocket-sheet-header className="relative mb-4 flex h-5 shrink-0 items-center justify-center">
         <div aria-hidden="true" className="h-1 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
         <p className="absolute right-0 max-w-[42%] truncate text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{headerLabel}</p>

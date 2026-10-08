@@ -89,6 +89,7 @@ export default function PocketRouteShell({
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
     pullStartY.current = null
     pullEdge.current = null
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
     if (fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
