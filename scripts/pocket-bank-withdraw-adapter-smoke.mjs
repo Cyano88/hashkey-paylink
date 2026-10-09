@@ -388,6 +388,9 @@ delete process.env.POCKET_USDT_PAYOUT_ENABLED
 const disabledUsdt = await request(handler, {...prepareBody, source_asset:'USDT'}, {'idempotency-key':idempotencyKey})
 assert.equal(disabledUsdt.statusCode, 503)
 process.env.POCKET_USDT_PAYOUT_ENABLED = 'true'
+const ugandaUsdt = await request(handler, {...prepareBody, source_asset:'USDT', country:'UG', currency:'UGX'}, {'idempotency-key':idempotencyKey})
+assert.equal(ugandaUsdt.statusCode, 400)
+assert.match(ugandaUsdt.body.error, /Nigeria only/)
 const switchedAsset = await request(handler, {...prepareBody, source_asset:'USDT'}, {'idempotency-key':idempotencyKey})
 assert.equal(switchedAsset.statusCode, 409, 'same idempotency key cannot switch assets')
 await assert.rejects(preparePocketBankWithdraw({accessToken:'privy-token', request:{...prepareBody,source_asset:'USDT'},idempotencyKey,fetcher}), /asset does not match/)

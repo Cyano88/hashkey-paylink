@@ -8,6 +8,7 @@ const PAYCREST_LAST_KNOWN_MAX_AGE_MS = 6 * 60 * 60_000
 const PAYCREST_QUOTE_STORE_KEY = 'hashpaylink:pocket:paycrest-ngn-quote'
 
 export type PocketFxQuote = {
+  asset?: 'USDC' | 'USDT'
   currency: 'NGN' | 'UGX'
   symbol: '₦' | 'UGX'
   amount: string
@@ -20,6 +21,7 @@ export type PocketFxQuote = {
 }
 
 type PocketFxQuoteReaderDependencies = {
+  asset?: 'USDC' | 'USDT'
   currency?: 'NGN' | 'UGX'
   fetcher?: typeof fetch
   now?: () => number
@@ -30,11 +32,12 @@ type PocketFxQuoteReaderDependencies = {
 
 export function createPocketFxQuoteReader({
   currency = 'NGN',
+  asset = 'USDC',
   fetcher = fetch,
   now = Date.now,
   baseUrl = process.env.PAYCREST_API_BASE ?? 'https://api.paycrest.io',
-  readLastKnown = () => readDurableJson<PocketFxQuote>(PAYCREST_QUOTE_STORE_KEY + ":" + currency),
-  writeLastKnown = quote => writeDurableJson(PAYCREST_QUOTE_STORE_KEY + ":" + currency, quote),
+  readLastKnown = () => readDurableJson<PocketFxQuote>(PAYCREST_QUOTE_STORE_KEY + ":" + currency + (asset === 'USDT' ? ':USDT' : '')),
+  writeLastKnown = quote => writeDurableJson(PAYCREST_QUOTE_STORE_KEY + ":" + currency + (asset === 'USDT' ? ':USDT' : ''), quote),
 }: PocketFxQuoteReaderDependencies = {}) {
   let cached: PocketFxQuote | null = null
   let durableLoaded = false
@@ -42,11 +45,11 @@ export function createPocketFxQuoteReader({
 
   return async function readPocketFxQuote(amount = '1'): Promise<PocketFxQuote> {
     const currentTime = now()
-    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw new Error('Enter a valid USDC quote amount.')
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw new Error('Enter a valid stablecoin quote amount.')
     if (!durableLoaded) {
       durableLoaded = true
       void readLastKnown().then(saved => {
-        if (saved?.currency === currency && saved.source === 'paycrest' && Number.isFinite(saved.rate) && saved.rate > 0
+        if (saved?.currency === currency && (saved.asset ?? 'USDC') === asset && saved.source === 'paycrest' && Number.isFinite(saved.rate) && saved.rate > 0
           && (!cached || saved.quotedAt > cached.quotedAt)) cached = saved
       }).catch(() => undefined)
     }
@@ -55,7 +58,7 @@ export function createPocketFxQuoteReader({
 
     const promise = (async () => {
       const response = await fetcher(
-        `${baseUrl.replace(/\/+$/, '')}/v2/rates/base/USDC/${encodeURIComponent(amount)}/${currency}?side=sell`,
+        `${baseUrl.replace(/\/+$/, '')}/v2/rates/base/${asset}/${encodeURIComponent(amount)}/${currency}?side=sell`,
         { method: 'GET', signal: AbortSignal.timeout(PAYCREST_QUOTE_TIMEOUT_MS) },
       )
       const body = await response.json().catch(() => undefined) as {
@@ -74,6 +77,7 @@ export function createPocketFxQuoteReader({
 
       const quotedAt = now()
       cached = {
+        ...(asset === 'USDT' ? {asset} : {}),
         currency,
         symbol: currency === 'NGN' ? '₦' : 'UGX',
         amount,
@@ -96,7 +100,7 @@ export function createPocketFxQuoteReader({
 }
 
 type PocketFxQuoteHandlerDependencies = {
-  readQuote: (amount?: string, currency?: 'NGN' | 'UGX') => Promise<PocketFxQuote>
+  readQuote: (amount?: string, currency?: 'NGN' | 'UGX', asset?: 'USDC' | 'USDT') => Promise<PocketFxQuote>
 }
 
 export function createPocketFxQuoteHandler({ readQuote }: PocketFxQuoteHandlerDependencies) {
@@ -109,14 +113,16 @@ export function createPocketFxQuoteHandler({ readQuote }: PocketFxQuoteHandlerDe
       return res.status(400).json({ ok: false, error: 'Choose NGN or UGX for a local currency quote.' })
     }
 
+    const asset = String(req.query.asset ?? 'USDC').trim().toUpperCase()
+    if (asset !== 'USDC' && asset !== 'USDT') return res.status(400).json({ok:false,error:'Choose USDC or USDT.'})
     const amount = String(req.query.amount ?? '1').trim()
     if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) {
-      return res.status(400).json({ ok: false, error: 'Enter a valid USDC quote amount.' })
+      return res.status(400).json({ ok: false, error: 'Enter a valid stablecoin quote amount.' })
     }
 
     try {
-      const quote = await readQuote(amount, currency)
-      if (quote.currency !== currency) throw new Error('Quote currency did not match.')
+      const quote = await readQuote(amount, currency, asset)
+      if (quote.currency !== currency || (quote.asset ?? 'USDC') !== asset) throw new Error('Quote currency did not match.')
       return res.json({ ok: true, quote })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Paycrest FX quote is unavailable.'
@@ -125,6 +131,9 @@ export function createPocketFxQuoteHandler({ readQuote }: PocketFxQuoteHandlerDe
   }
 }
 
-const readers = { NGN: createPocketFxQuoteReader(), UGX: createPocketFxQuoteReader({ currency: 'UGX' }) }
-export const readPocketPaycrestQuote = (amount = '1', currency: 'NGN' | 'UGX' = 'NGN') => readers[currency](amount)
+const readers = {
+  USDC: { NGN: createPocketFxQuoteReader(), UGX: createPocketFxQuoteReader({ currency: 'UGX' }) },
+  USDT: { NGN: createPocketFxQuoteReader({asset:'USDT'}), UGX: createPocketFxQuoteReader({currency:'UGX',asset:'USDT'}) },
+}
+export const readPocketPaycrestQuote = (amount = '1', currency: 'NGN' | 'UGX' = 'NGN', asset:'USDC'|'USDT'='USDC') => readers[asset][currency](amount)
 export default createPocketFxQuoteHandler({ readQuote: readPocketPaycrestQuote })

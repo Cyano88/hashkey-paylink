@@ -1,6 +1,7 @@
 import { POCKET_API } from '../lib/pocketSchemas'
 
 export type PocketFxQuote = {
+  asset?: 'USDC' | 'USDT'
   currency: 'NGN' | 'UGX'
   symbol: '₦' | 'UGX'
   amount: string
@@ -23,7 +24,8 @@ export function parsePocketFxQuote(value: unknown): PocketFxQuote {
   }
   const quote = value.quote
   if (
-    (quote.currency !== 'NGN' && quote.currency !== 'UGX')
+    (quote.asset !== undefined && quote.asset !== 'USDC' && quote.asset !== 'USDT')
+    || (quote.currency !== 'NGN' && quote.currency !== 'UGX')
     || quote.symbol !== (quote.currency === 'NGN' ? '₦' : 'UGX')
     || typeof quote.amount !== 'string'
     || !/^\d+(?:\.\d{1,6})?$/.test(quote.amount)
@@ -43,8 +45,8 @@ export function parsePocketFxQuote(value: unknown): PocketFxQuote {
   return quote as PocketFxQuote
 }
 
-export async function readPocketFxQuote(amount = '1', fetcher: typeof fetch = fetch, currency: 'NGN' | 'UGX' = 'NGN'): Promise<PocketFxQuote> {
-  const params = new URLSearchParams({ currency, amount })
+export async function readPocketFxQuote(amount = '1', fetcher: typeof fetch = fetch, currency: 'NGN' | 'UGX' = 'NGN', asset:'USDC'|'USDT'='USDC'): Promise<PocketFxQuote> {
+  const params = new URLSearchParams({ currency, amount, ...(asset==='USDT'?{asset}:{}) })
   const response = await fetcher(`${POCKET_API.fxQuote}?${params.toString()}`, { method: 'GET', signal: AbortSignal.timeout(15_000) })
   const data = await response.json().catch(() => undefined)
   if (!response.ok) {
@@ -52,6 +54,6 @@ export async function readPocketFxQuote(amount = '1', fetcher: typeof fetch = fe
     throw new Error(message)
   }
   const quote = parsePocketFxQuote(data)
-  if (quote.currency !== currency || quote.amount !== amount) throw new Error('Live FX quote did not match the request.')
+  if (quote.currency !== currency || quote.amount !== amount || (quote.asset ?? 'USDC') !== asset) throw new Error('Live FX quote did not match the request.')
   return quote
 }

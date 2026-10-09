@@ -299,6 +299,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const walletAddress = text(req.body?.wallet_address, 80)
         if (req.body?.country !== undefined && !['NG','UG'].includes(req.body.country)) return res.status(400).json({ok:false,error:'Unsupported payout country.'})
         const country = req.body?.country === 'UG' ? 'UG' : 'NG'
+        if (asset === 'USDT' && country !== 'NG') return res.status(400).json({ok:false,error:'USDT bank payouts currently support Nigeria only.'})
         const currency = pocketFiatCurrency(country)
         if (req.body?.currency && req.body.currency !== currency) return res.status(400).json({ok:false,error:'Payout currency does not match country.'})
         const accountNumber = normalizePayoutAccount(req.body?.account_number, currency)

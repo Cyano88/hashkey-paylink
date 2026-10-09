@@ -11,6 +11,7 @@ export function runtimePublicConfig(env: PublicEnvironment = process.env) {
   const authBridge = first('VITE_AUTH_BRIDGE', 'AUTH_BRIDGE') || 'legacy'
   return {
     auth: { authBridge, privyAppId, privyEnabled: Boolean(privyAppId && authBridge !== 'legacy') },
+    payouts: { usdtEnabled: env.POCKET_USDT_PAYOUT_ENABLED === 'true' && env.VITE_POCKET_USDT_PAYOUT === 'true' },
     streampay: { checkpointFactoryAddress: readMainnetCheckpointFactory(env) },
   }
 }

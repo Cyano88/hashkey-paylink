@@ -11,14 +11,14 @@ function cachedQuote(key: string): PocketFxQuote | undefined {
     const raw = localStorage.getItem('pocket:fx:v1:' + key)
     if (!raw) return undefined
     const quote = parsePocketFxQuote({ ok: true, quote: JSON.parse(raw) })
-    if (quote.currency + ':' + quote.amount !== key) return undefined
+    if (((quote.asset ?? 'USDC') === 'USDT' ? 'USDT:' : '') + quote.currency + ':' + quote.amount !== key) return undefined
     cache.set(key, quote)
     return quote
   } catch { return undefined }
 }
-export default function usePocketFxQuote(balance: number, enabled = true, currency: 'NGN' | 'UGX' = 'NGN', retainDisplayEstimate = false) {
+export default function usePocketFxQuote(balance: number, enabled = true, currency: 'NGN' | 'UGX' = 'NGN', retainDisplayEstimate = false, asset:'USDC'|'USDT'='USDC') {
   const amount = Number.isFinite(balance) && balance > 0 ? balance.toFixed(6).replace(/\.?0+$/, '') : '1'
-  const key = currency + ':' + amount
+  const key = (asset === 'USDT' ? 'USDT:' : '') + currency + ':' + amount
   const [quote, setQuote] = useState<PocketFxQuote | null>(() => cachedQuote(key) ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -39,7 +39,7 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
       try {
         let request = pending.get(key)
         if (!request) {
-          request = readPocketFxQuote(amount, fetch, currency).then(value => { cache.set(key, value); try { if (!value.stale) localStorage.setItem('pocket:fx:v1:' + key, JSON.stringify(value)) } catch { /* Optional display cache. */ } return value }).finally(() => pending.delete(key))
+          request = readPocketFxQuote(amount, fetch, currency, asset).then(value => { cache.set(key, value); try { if (!value.stale) localStorage.setItem('pocket:fx:v1:' + key, JSON.stringify(value)) } catch { /* Optional display cache. */ } return value }).finally(() => pending.delete(key))
           pending.set(key, request)
         }
         const value = await request
@@ -54,14 +54,14 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
     window.addEventListener('focus', visible)
     document.addEventListener('visibilitychange', visible)
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible) }
-  }, [key, amount, currency, enabled, revision])
+  }, [key, amount, currency, asset, enabled, revision])
   useEffect(() => enabled ? registerPocketRefreshHandler(refresh) : undefined, [enabled, refresh])
   useEffect(() => {
     if (!quote || quote.expiresAt <= Date.now()) return
     const timer = window.setTimeout(() => { if (!retainDisplayEstimate) setQuote(null); void refresh() }, quote.expiresAt - Date.now())
     return () => window.clearTimeout(timer)
   }, [quote, refresh, retainDisplayEstimate])
-  const visibleQuote = enabled && quote?.currency === currency && quote.amount === amount && (retainDisplayEstimate || (!quote.stale && quote.expiresAt > Date.now())) ? quote : null
+  const visibleQuote = enabled && quote?.currency === currency && (quote.asset ?? 'USDC') === asset && quote.amount === amount && (retainDisplayEstimate || (!quote.stale && quote.expiresAt > Date.now())) ? quote : null
   const loading = enabled && !visibleQuote && (busy || !error)
   return { quote: visibleQuote, loading, busy, error, refresh }
 }
