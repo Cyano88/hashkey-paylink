@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {paymentReceiptOutcome} from '../src/lib/paymentReceiptPdf.ts'
+import {paymentReceiptOutcome,paymentReceiptView} from '../src/lib/paymentReceiptPdf.ts'
 import {mergePocketActivityRows} from '../src/pocket/lib/pocketActivitySnapshot.ts'
 import {pocketActivityReceipt} from '../src/pocket/lib/pocketReceipt.ts'
 for (const [status,label] of [['refund available','Refund available'],['refunding','Refunding'],['refunded','Refunded']]) assert.equal(paymentReceiptOutcome({source:'bills',status}).label,label)
@@ -16,4 +16,9 @@ const receipt=pocketActivityReceipt(bill,{allowPending:true})
 assert.equal(receipt.refundTxHash,bill.refundTxHash)
 assert.equal(receipt.txHash,bill.txHash)
 assert.equal(receipt.amount,'0.36812')
+for(const asset of ['USDC','USDT']) {
+ const view=paymentReceiptView({...receipt,asset})
+ assert(view.rows.some(row=>row.label===`${asset} returned`))
+ assert(!view.rows.some(row=>row.label.includes(asset==='USDT'?'USDC':'USDT')))
+}
 console.log('PASS: bill refund labels and original/refund proofs stay on one record; unrelated deposits remain.')

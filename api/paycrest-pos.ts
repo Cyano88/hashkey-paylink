@@ -1,4 +1,5 @@
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
+import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
 import { updatePaycrestOrderStore } from './paycrest-order-state.js'
 import type { Request, Response } from 'express'
 import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
@@ -361,7 +362,7 @@ export async function createPaycrestOfframpOrder(input: {
 }) {
   const token = baseStablecoin(input.token)
   if (token === 'USDT') {
-    if (process.env.POCKET_USDT_PAYOUT_ENABLED !== 'true') throw Error('USDT bank payouts are not available yet.')
+    if (!usdtPayoutAllowed({wallet:input.payerWallet,account:input.accountNumber,bankCode:input.bankCode,amount:input.amountNgn})) throw Error('USDT bank payouts are not available yet.')
     if ((input.fiatCurrency || 'NGN') !== 'NGN') throw Error('USDT bank payouts currently support Nigeria only.')
     if (input.source !== 'bank-withdraw') throw Error('USDT is only available for direct bank payouts.')
     const {readPaycrestBaseUsdtSupport}=await import('./paycrest-usdt.js')

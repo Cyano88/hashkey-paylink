@@ -1,4 +1,5 @@
 import {baseStablecoin} from '../../src/lib/baseStablecoins.js'
+import {usdtPayoutAllowed} from './usdt-payout-gate.js'
 import { forwardPocketRequest } from './forward-request.js'
 import {reservePocketBankAllowance} from './transfer-allowance.js'
 import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib/pocketFiatCorridors.js'
@@ -294,7 +295,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const idempotencyKey = text(req.headers['idempotency-key'], 128)
         if (!isPocketIdempotencyKey(idempotencyKey)) return res.status(400).json({ ok: false, error: 'A valid idempotency key is required.' })
         const asset = baseStablecoin(req.body?.source_asset)
-        if (asset === 'USDT' && process.env.POCKET_USDT_PAYOUT_ENABLED !== 'true') return res.status(503).json({ok:false,error:'USDT bank payouts are not available yet.'})
+        if (asset === 'USDT' && !usdtPayoutAllowed({wallet:req.body?.wallet_address,account:req.body?.account_number,bankCode:req.body?.bank_code,amount:req.body?.amount_ngn})) return res.status(503).json({ok:false,error:'USDT bank payouts are not available yet.'})
         const amount = text(req.body?.amount_ngn, 30)
         const walletAddress = text(req.body?.wallet_address, 80)
         if (req.body?.country !== undefined && !['NG','UG'].includes(req.body.country)) return res.status(400).json({ok:false,error:'Unsupported payout country.'})

@@ -1,4 +1,5 @@
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
+import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
 import {requirePocketBasicKyc} from './pocket/kyc-level.js'
 import {reservePocketBankAllowance} from './pocket/transfer-allowance.js'
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
@@ -892,7 +893,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const store = await readStore()
   const directPayout = body.direct_payout === true
   const sourceToken = baseStablecoin(body.source_asset)
-  if (sourceToken === 'USDT' && process.env.POCKET_USDT_PAYOUT_ENABLED !== 'true') throw ngPosRequestError(503, 'USDT bank payouts are not available yet.')
+  if (sourceToken === 'USDT' && !usdtPayoutAllowed({wallet:body.wallet_address,account:body.account_number,bankCode:body.bank_code,amount:body.amount})) throw ngPosRequestError(503, 'USDT bank payouts are not available yet.')
   if (sourceToken === 'USDT' && country !== 'NG') throw ngPosRequestError(400, 'USDT bank payouts currently support Nigeria only.')
   if (sourceToken === 'USDT' && !directPayout) throw ngPosRequestError(400, 'USDT requires a direct bank payout.')
   const merchantSource = directPayout ? 'bank-withdraw' : 'bank-receive'
