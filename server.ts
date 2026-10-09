@@ -113,6 +113,7 @@ import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
 import pocketStockPricesHandler from './api/pocket/xstocks-prices.js'
 import pocketStockSwapHandler from './api/pocket/xstocks-swap.js'
 import pocketArcSwapHandler from './api/pocket/arc-swap.js'
+import pocketUsdtBridgeHandler from './api/pocket/usdt-bridge.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
 import pocketBalancesHandler from './api/pocket/balances.js'
 import pocketWalletUpdateStatusHandler from './api/pocket/wallet-update-status.js'
@@ -436,6 +437,7 @@ app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandl
 app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
 app.all('/api/pocket/xstocks/swap', strictLimiter, pocketStockSwapHandler)
 app.all('/api/pocket/arc-swap',          strictLimiter, pocketArcSwapHandler)
+app.all('/api/pocket/usdt-bridge',       strictLimiter, pocketUsdtBridgeHandler)
 app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)
 app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)
 app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler)

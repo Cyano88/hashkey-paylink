@@ -58,7 +58,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
     settlementType: 'wallet_swap', paycrestStatus: record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
   }
-  if (record.action !== 'wallet.bridge' || !record.metadata?.txHash) return undefined
+  if (!['wallet.bridge','wallet.usdt-bridge'].includes(record.action) || !record.metadata?.txHash) return undefined
   const source = record.metadata.source || 'USDC'
   const destination = record.metadata.destination || 'destination'
   return {
@@ -75,7 +75,8 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     contextLabel: `${source} to ${destination}`,
     settlementType: 'wallet_bridge',
     paycrestStatus: record.status === 'completed' ? 'completed' : record.status === 'failed' ? 'failed' : 'processing',
-    activityLabel: 'USDC bridge',
+    activityLabel: record.action === 'wallet.usdt-bridge' ? 'USDT bridge' : 'USDC bridge',
+    assetSymbol: record.action === 'wallet.usdt-bridge' ? 'USDT' : 'USDC',
     destinationTxHash: record.metadata.destinationTxHash,
     direction: 'out',
     recipient: destination,

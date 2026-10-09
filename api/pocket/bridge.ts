@@ -32,6 +32,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
     if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
       const identity = await dependencies.verifyUser(req)
+      if (req.body?.asset && req.body.asset !== 'USDC') throw Object.assign(new Error('This route supports USDC only. Use the stablecoin bridge for USDT.'), { status: 400 })
       const action = String(req.method === 'GET' ? req.query.action ?? 'status' : req.body?.action ?? 'quote')
       if (action === 'pending' && req.method === 'GET') {
         const actions = await dependencies.listActions(identity.userId, 500, 'wallet.bridge', true)

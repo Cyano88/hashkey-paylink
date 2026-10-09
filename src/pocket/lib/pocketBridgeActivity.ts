@@ -3,6 +3,8 @@ import type { PocketActivityRow } from '../models/pocketActivity'
 import { bridgeProgressLabel, type PocketPendingBridge, type PocketBridgeProgress } from './pocketPendingBridge'
 
 export function bridgeFromActivityRow(row: PocketActivityRow): PocketPendingBridge | null {
+  // USDT uses a separate provider and recovery endpoint, never Circle CCTP.
+  if (row.assetSymbol === 'USDT') return null
   if (row.bridge) return row.bridge
   if (row.source !== 'wallet-bridge' && row.settlementType !== 'wallet_bridge') return null
   const networks = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
