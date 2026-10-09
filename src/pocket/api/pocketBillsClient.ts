@@ -144,7 +144,7 @@ export function parsePocketBillsAvailability(value: unknown) {
   const categories = Array.isArray(bills.categories) ? bills.categories.map(String) : []
   return {
     enabled: bills.enabled === true,
-    usdtEnabled: bills.usdtEnabled === true,
+    usdtEnabled: bills.usdtEnabled === true || import.meta.env?.VITE_POCKET_USDT_BILLS_CANARY === 'true',
     environment: bills.environment === 'live' ? 'live' as const : 'sandbox' as const,
     airtimeEnabled: categories.includes('airtime'),
     dataEnabled: categories.includes('data'),

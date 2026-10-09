@@ -1,4 +1,4 @@
-import {billAsset, billToken} from './bills-asset.js'
+import {billAsset, billToken, usdtBillsAllowed, usdtBillsCanaryQuoteAllowed} from './bills-asset.js'
 import {billDestination,normalizeUgandaPhone} from '../../src/pocket/lib/pocketBillCountry.js'
 import {internationalOperator,priceInternationalBill,type InternationalBill} from '../vtpass-international.js'
 import { randomUUID } from 'node:crypto'
@@ -312,7 +312,7 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
       if (req.body?.asset !== undefined && !['USDC','USDT'].includes(req.body.asset)) throw new PocketBillsStoreError('BILLS_INVALID_ASSET', 'Select USDC or USDT.', 400)
       const asset = billAsset(req.body?.asset)
-      if (asset === 'USDT' && process.env.POCKET_USDT_BILLS_ENABLED !== 'true') throw new PocketBillsStoreError('BILLS_ASSET_DISABLED', 'USDT bill payments are not enabled yet.', 503)
+      if (asset === 'USDT' && !usdtBillsAllowed(String(req.body?.payer_wallet || ''), process.env, dependencies.now())) throw new PocketBillsStoreError('BILLS_ASSET_DISABLED', 'USDT bill payments are not enabled yet.', 503)
       const category = normalizeCategory(req.body?.category)
       const country = billDestination(req.body?.country)
       if (country === 'UG' && !['airtime','data'].includes(category)) throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.')
@@ -388,6 +388,7 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
 
       const fx = await dependencies.readFxQuote('1', asset)
       if ((fx.asset ?? 'USDC') !== asset || fx.currency !== 'NGN' || fx.stale || fx.expiresAt <= dependencies.now()) throw new PocketBillsStoreError('BILLS_INVALID_QUOTE', 'A current quote for this payment asset is unavailable.', 503)
+      if (asset === 'USDT' && !usdtBillsCanaryQuoteAllowed({wallet:linkedPayerWallet,phone,country,category,amountNgn,amount:usdcForNgn(amountNgn,fx.rate)},process.env,dependencies.now())) throw new PocketBillsStoreError('BILLS_CANARY_LIMIT', 'This payment is outside the approved USDT test.', 403)
       const created = await dependencies.store.createQuote({
         asset,
         ownerId: identity.userId,
