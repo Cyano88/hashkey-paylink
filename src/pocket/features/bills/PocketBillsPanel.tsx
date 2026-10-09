@@ -287,7 +287,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {isVerifiedBill && (
               <>
                 {!bills.verification ? (
-                  bills.verifyBusy ? <PocketLoadingField label={view === 'tv' ? 'Resolving smartcard' : 'Resolving meter'} /> : <p className="text-center text-[10px] font-medium text-gray-500 dark:text-gray-400">We�ll check the customer name before payment.</p>
+                  bills.verifyBusy ? <PocketLoadingField label={view === 'tv' ? 'Resolving smartcard' : 'Resolving meter'} /> : null
                 ) : (
                   <PocketResolvedNameRow label="Customer name" name={bills.environment === 'sandbox' ? `Test ${view === 'tv' ? 'smartcard' : 'meter'}` : bills.verification.customerName || `${view === 'tv' ? 'Smartcard' : 'Meter'} confirmed`} detail={bills.environment !== 'sandbox' ? bills.verification.customerAddress : undefined} />
                 )}
