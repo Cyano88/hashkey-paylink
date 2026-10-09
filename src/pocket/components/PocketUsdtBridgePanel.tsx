@@ -2,12 +2,12 @@ import {useCallback,useEffect,useRef,useState} from 'react'
 import {executeCircleEvmEmailChallenge,type CircleEvmEmailSession} from '../../lib/circleEvmEmailWallet'
 import {pocketApiUrl} from '../lib/pocketRoutes'
 import {pocketBridgeNetworkLabel} from '../lib/pocketBridgeNetworks'
-import PocketSelect from './PocketSelect'
+import PocketBridgeForm from './PocketBridgeForm'
 import PocketTransactionSheet from './PocketTransactionSheet'
 import PocketSlideAction from './PocketSlideAction'
 import PocketFundingAction from './PocketFundingAction'
 import {Loader2} from './PocketIcons'
-import {formatPocketDisplayAmount} from '../lib/pocketMoney'
+
 
 const NETWORKS=['base','arbitrum','ethereum','polygon'] as const
 type Network=typeof NETWORKS[number]
@@ -28,14 +28,17 @@ export default function PocketUsdtBridgePanel(props:Props){
   const save=(value:Pending|null)=>{if(value)localStorage.setItem(key,JSON.stringify(value));else localStorage.removeItem(key);setPending(value)}
   const api=useCallback(async(body?:Record<string,unknown>)=>{
     const token=await props.getAccessToken();if(!token)throw Error('Sign in to bridge stablecoins.')
-    const response=await fetch(pocketApiUrl('/api/pocket/usdt-bridge'),{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)})
-    const data=await response.json().catch(()=>({ok:false,error:'Bridge service is unavailable.'}));if(response.status===404)throw Error('USDT bridging is updating. Try again shortly.');if(!response.ok||!data.ok)throw Error(data.error?.message||data.error||'Bridge request failed.');return data
+    const response=await fetch(pocketApiUrl('/api/pocket/usdt-bridge'),{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(body?30000:8000)})
+    const data=await response.json().catch(()=>({ok:false,error:'Bridge service is unavailable.'}));if(response.status===404)throw Error('USDT bridging is updating. Try again shortly.');if(!response.ok||!data.ok)throw Object.assign(Error(data.error?.message||data.error||'Bridge request failed.'),{retryable:response.status>=500||response.status===429});return data
   },[props.getAccessToken])
   useEffect(()=>{let disposed=false;setLoading(true);setRecoveryFailed(false);setError('');setPending(null);session.current=null
     const owner=props.owner
     void (async()=>{
       try{const stored=localStorage.getItem(key);if(stored){const p=JSON.parse(stored);if(!p.quoteToken||!p.quote?.id)throw Error('Saved bridge details could not be read. Contact support before retrying.');if(!disposed)setPending(p)}
-        const data=await api();if(disposed||currentOwner.current!==owner)return;if(data.pending?.length)save(data.pending[0]);setLoading(false)
+        for(let attempt=0;attempt<5;attempt++){
+          try{const data=await api();if(disposed||currentOwner.current!==owner)return;if(data.pending?.length)save(data.pending[0]);setLoading(false);break}
+          catch(e){if(disposed)return;const transient=(e as {retryable?:boolean}).retryable||e instanceof TypeError||(e as Error).name==='TimeoutError';if(!transient||attempt===4)throw e;await new Promise(resolve=>window.setTimeout(resolve,Math.min(8000,1000*2**attempt)));if(disposed)return}
+        }
       }catch(e){if(!disposed){setError((e as Error).message);setRecoveryFailed(true);setLoading(false)}}
     })();return()=>{disposed=true;version.current++}
   },[props.owner,api,key,reload])
@@ -104,24 +107,17 @@ export default function PocketUsdtBridgePanel(props:Props){
   },[pending?.quote.id,pending?.txHash])
   useEffect(()=>{if(pending){setSource(pending.quote.source);setDestination(pending.quote.destination);setAmount(pending.quote.amount)}},[pending?.quote.id])
   const balance=props.balances.find(row=>row.key===source)
-  const locked=busy||preparing||loading||Boolean(pending)
+  const locked=busy||preparing||Boolean(pending)
   const validAmount=/^\d+(\.\d{1,6})?$/.test(amount)&&Number(amount)>0
   return <>
-    <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-      <div className="grid grid-cols-2 gap-3">
-        <div><p className="mb-2 text-xs font-medium text-gray-500">From</p><PocketSelect showNetworkBalances={false} value={source} disabled={locked} ariaLabel="USDT source network" options={NETWORKS.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onChange={value=>{invalidate();setSource(value as Network);if(value===destination)setDestination(NETWORKS.find(n=>n!==value)!);setAmount('')}}/></div>
-        <div><p className="mb-2 text-xs font-medium text-gray-500">To</p><PocketSelect showNetworkBalances={false} value={destination} disabled={locked} ariaLabel="USDT destination network" options={NETWORKS.filter(n=>n!==source).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onChange={value=>{invalidate();setDestination(value as Network)}}/></div>
-      </div>
-      <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-medium text-gray-500">Available</span><span className="text-sm font-semibold tabular-nums">{balance?.usdt!==undefined&&!balance.usdtStale?formatPocketDisplayAmount(balance.usdt)+' USDT':'—'}</span></div>
-      <label className="block"><span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span><span className="mt-2 flex gap-2"><input type="text" aria-label="USDT bridge amount" inputMode="decimal" value={amount} disabled={locked} onChange={event=>{invalidate();setAmount(event.target.value)}} placeholder="0.00" className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base font-semibold outline-none dark:border-[#262626] dark:bg-[#121212]"/><button type="button" disabled={locked||balance?.usdt===undefined||balance.usdtStale} onClick={()=>{invalidate();setAmount(Math.max(0,balance?.usdt||0).toFixed(6).replace(/\.?0+$/,''))}} className="rounded-2xl border border-gray-200 px-4 text-xs font-semibold dark:border-[#262626]">Max</button></span></label>
-      {quoted&&!pending&&<div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#121212]"><div className="flex justify-between"><span>You receive</span><span className="font-semibold">{quoted.quote.receive} USDT</span></div><div className="flex justify-between"><span>Minimum received</span><span className="font-semibold">{quoted.quote.minimumReceive} USDT</span></div><div className="flex justify-between"><span>Bridge fee included</span><span className="font-semibold">{quoted.quote.fee} USDT</span></div>{!quoted.sufficientBalance&&<p>Insufficient USDT on {pocketBridgeNetworkLabel(source)}.</p>}</div>}
+    <PocketBridgeForm asset="USDT" disabled={locked} source={source} destination={destination} sources={NETWORKS.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} destinations={NETWORKS.filter(n=>n!==source).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onSource={value=>{invalidate();setSource(value as Network);if(value===destination)setDestination(NETWORKS.find(n=>n!==value)!);setAmount('')}} onDestination={value=>{invalidate();setDestination(value as Network)}} balance={balance?.usdt} amount={amount} onAmount={value=>{invalidate();setAmount(value)}} maxDisabled={balance?.usdt===undefined||balance.usdtStale} onMax={()=>{invalidate();setAmount(Math.max(0,balance?.usdt||0).toFixed(6).replace(/\.?0+$/,''))}} quote={quoted&&!pending?quoted.quote:null}>
       <PocketFundingAction flow="bridge" asset={!pending&&(quoted?.sufficientBalance===false||(balance?.usdt!==undefined&&!balance.usdtStale&&Number(amount)>balance.usdt))?'USDT':null} network={source} locked={locked} onReturn={async()=>{await props.refresh();await quote()}} onCancel={()=>{invalidate();setAmount('')}}>
       {pending?<button type="button" className="pocket-cta-primary w-full" disabled={!pending.needsAttention} aria-busy={!pending.needsAttention} onClick={()=>void check(pending)}>{!pending.needsAttention&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{pending.needsAttention?'Retry status check':pending.sourceConfirmed?'Arriving on '+pocketBridgeNetworkLabel(pending.quote.destination):'Bridging USDT'}</span></button>
       :recoveryFailed||(!quoted&&error&&!quoting)?<button type="button" className="pocket-cta-primary w-full" onClick={()=>recoveryFailed?setReload(value=>value+1):void quote()}>Try again</button>
-      :<PocketSlideAction key={quoted?.quote.id||'quote'} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:loading?'Loading':!validAmount?'Enter bridge amount':quoting||!quoted||quoteExpired?'Getting live quote':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
+      :<PocketSlideAction key={quoted?.quote.id||'quote'} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={loading||locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:!validAmount?'Enter bridge amount':loading||quoting||!quoted||quoteExpired?'Getting live quote':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
       </PocketFundingAction>
       {notice&&<p role="status" className="text-center text-xs text-gray-500">{notice}</p>}{error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
-    </section>
+    </PocketBridgeForm>
     {result&&<PocketTransactionSheet title="Bridge stablecoins" state={result.state} statusLabel={result.state==='successful'?'Bridge successful':'Bridge failed'} amount={result.quote.amount+' USDT'} detailsRows={[
       ['Asset','USDT'],['From',pocketBridgeNetworkLabel(result.quote.source)],['To',pocketBridgeNetworkLabel(result.quote.destination)],['Bridge fee',result.quote.fee+' USDT'],...(result.txHash?[['Transaction',result.txHash] as [string,string]]:[]),...(result.destinationTxHash?[['Destination transaction',result.destinationTxHash] as [string,string]]:[])
     ]} onDone={()=>setResult(null)}/>}
