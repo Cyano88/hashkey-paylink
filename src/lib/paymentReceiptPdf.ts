@@ -265,7 +265,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const network = networkKey === 'xlayer' ? 'X Layer' : networkKey ? CHAIN_META[networkKey].label : titleCase(receipt.chain || 'Network unavailable')
   const localAmount = receipt.fiatCurrency === 'UGX' && receipt.amountNgn && Number.isFinite(Number(receipt.amountNgn)) ? 'UGX ' + Number(receipt.amountNgn).toLocaleString('en-UG', { maximumFractionDigits: 2 }) : formatNgn(receipt.amountNgn)
   const pocketUsdc = paymentReceiptBrand(receipt).kind === 'pocket' && receipt.asset === 'USDC' && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
-  const amount = (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`
+  const bankPayout = ['bank-withdraw', 'bank-receive', 'bank-send'].includes(receipt.source || '') || String(receipt.settlementType || '').toLowerCase() === 'instant_fiat'
+  const bankLocalAmount = bankPayout && localAmount ? `${Number(receipt.amountNgn).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN'}` : ''
+  const amount = bankLocalAmount || (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if (receipt.source === 'gift') {
@@ -348,7 +350,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       { label: 'To', value: recipient, mono: /^0x/.test(recipient) },
       { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
       { label: 'Amount & narration', value: `${amount} · ${narration}` },
-      ...(localAmount ? [{ label: pocketUsdc ? 'Local amount' : `Total ${receipt.asset}`, value: pocketUsdc ? localAmount : `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` }] : []),
+      ...(localAmount ? [{ label: bankPayout ? 'Paid with' : pocketUsdc ? 'Local amount' : `Total ${receipt.asset}`, value: bankPayout || !pocketUsdc ? `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` : localAmount }] : []),
       ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount, receipt.asset)} ${receipt.asset || 'USDC'}` }] : []),
       ...(receipt.source === 'bank-withdraw' && receipt.bankSettlementStatus ? [{label:'Bank delivery',value:['settled','completed','successful'].includes(receipt.bankSettlementStatus) ? 'Delivered' : ['refunded','reversed'].includes(receipt.bankSettlementStatus) ? 'Refunded' : ['refunding','reversing'].includes(receipt.bankSettlementStatus) ? 'Refund pending' : ['failed','expired','cancelled','canceled'].includes(receipt.bankSettlementStatus) ? 'Not completed' : 'Processing'}] : []),
     ],
