@@ -182,13 +182,7 @@ export default function PocketMobileNumberInput({
       {validationMessage && <p role="alert" className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{validationMessage}</p>}
       {!validationMessage && invalidNumber && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{country==='UG'?'Enter a valid Ugandan mobile number.':'Enter a valid 11-digit Nigerian number.'}</p>}
       {!validationMessage && !invalidNumber && contactError && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{contactError}</p>}
-      {!validationMessage && !invalidNumber && !contactError && country==='NG' && detectedNetworkFromPhone(phoneNumber) && (
-        <p className="mt-1.5 px-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">Network detected. You can change it for a ported number.</p>
-      )}
     </div>
   )
 }
 
-function detectedNetworkFromPhone(value: string) {
-  return detectNigerianMobileNetwork(value)
-}
