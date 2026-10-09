@@ -6,9 +6,15 @@ VTpass continues to vend against the business's local-currency provider balance.
 
 ## Asset and recovery rules
 
-- New USDT quotes require `POCKET_USDT_BILLS_ENABLED=true`. Public configuration
+- General USDT quotes require `POCKET_USDT_BILLS_ENABLED=true`. Public configuration
   exposes the selector only when vending and refunds are also ready. No production
   flag was enabled during this implementation.
+- A temporary operator test can use `POCKET_USDT_BILLS_CANARY` with an expiring
+  wallet and phone binding. It allows Nigeria airtime only, up to NGN 100 and
+  0.10 USDT including the bill fee. The authenticated payer must match. The
+  dedicated test APK exposes the asset selector through
+  `VITE_POCKET_USDT_BILLS_CANARY`; normal production builds do not. Expiry blocks
+  new quotes, while already-issued quotes retain their normal short validity.
 - The quote, saved intent, payment execution, activity and refund retain USDT.
   Historical records without an asset remain USDC. Existing amount fields with
   `Usdc` names are retained for storage/API compatibility; interpret them using
