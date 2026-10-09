@@ -28,7 +28,12 @@ export function pocketActivityIcon(row: PocketActivityRow) {
   if (source.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat') return Landmark
   if (source === 'xpay' && ['NGN','UGX'].includes(row.fiatCurrency || row.assetSymbol || '')) return Landmark
   if (isIncomingPosPayment(row) || source === 'xpay') return QrCode
-  if (source === 'wallet-swap' || source === 'wallet-bridge') return ArrowLeftRight
+  if (source === 'wallet-bridge') {
+    if (row.assetSymbol?.toUpperCase() === 'USDT') return UsdtActivityLogo
+    if (!row.assetSymbol || row.assetSymbol.toUpperCase() === 'USDC') return UsdcActivityLogo
+    return ArrowLeftRight
+  }
+  if (source === 'wallet-swap') return ArrowLeftRight
   if (source.startsWith('wallet-') || row.settlementType?.startsWith('wallet_')) {
     if (!row.assetSymbol || row.assetSymbol.toUpperCase() === 'USDC') return UsdcActivityLogo
     if (row.assetSymbol.toUpperCase() === 'USDT') return UsdtActivityLogo

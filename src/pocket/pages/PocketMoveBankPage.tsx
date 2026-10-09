@@ -252,10 +252,10 @@ function PocketMoveBankContent() {
     return <PocketLoadingState active="home" />
   }
 
-  if (mode==='withdraw' && directory) return <PocketRouteShell active="home" onSelect={selectNav}><PocketFlowHeader centered title={directory==='favourites'?'Favourites':'Recent transfers'} onBack={closeDirectory}/>{recipientList(true)}</PocketRouteShell>
+  if (mode==='withdraw' && directory) return <PocketRouteShell active="home" refreshEnabled={false} onSelect={selectNav}><PocketFlowHeader centered title={directory==='favourites'?'Favourites':'Recent transfers'} onBack={closeDirectory}/>{recipientList(true)}</PocketRouteShell>
 
   return (
-    <PocketRouteShell active="home" onSelect={selectNav} fixedPage={mode === "withdraw" && recipientStep}>
+    <PocketRouteShell active="home" refreshEnabled={false} onSelect={selectNav} fixedPage={mode === "withdraw" && recipientStep}>
       {payoutToast && (
         <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,var(--pocket-safe-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#121212] dark:text-gray-300">
           {payoutToast}
@@ -292,7 +292,7 @@ function PocketMoveBankContent() {
           {authenticated && !bank.profileVerified && <PocketIdentityGate />}
 
           {authenticated && bank.profileVerified && !(mode === 'request' && bank.generatedLink) && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
-
+            {mode === 'withdraw' && !recipientStep && pocketUsdtPayoutEnabled && <PocketSelect ariaLabel="Payment asset" value={asset} disabled={directLocked} onChange={value=>{direct.resetResult(false);setAsset(value as 'USDC'|'USDT')}} options={[{value:'USDC',label:'USDC'},...(bank.country==='NG'?[{value:'USDT',label:'USDT'}]:[])]} />}
 
             <div hidden={mode === 'withdraw' && recipientStep} className="space-y-3">{mode === 'withdraw' && <PocketPayoutCountry value={bank.country} onChange={value=>{bank.setCountry(value);if(value==='UG')setAsset('USDC');direct.setAmount('');setReviewOpen(false)}} />}<PocketVerifiedBankFields
               recipientEntry
