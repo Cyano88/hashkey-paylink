@@ -15,6 +15,16 @@ Own-wallet bridges and swaps must not collect Hash PayLink's 25 bps payment-serv
 
 No reviewed bridge/swap request adds an explicit Hash PayLink 25 bps integrator charge or a platform treasury transfer. The `hashpaylink` LI.FI integrator tag is not proof of fee revenue. Provider fee-recipient attribution is not established by this audit.
 
+### Live provider breakdown
+
+A read-only LI.FI quote using the current production route parameters for 1 USDT, Arbitrum to Base, returned these included source-token costs on 2026-10-09:
+
+- `LIFI Fixed Fee`: 2,500 base units = 0.0025 USDT (0.25%).
+- `Relayer fee`: 99 base units = 0.000099 USDT.
+- `Relayer gas fee`: 2,967 base units = 0.002967 USDT.
+
+These are already deducted in the quoted destination amount. They are not Hash PayLink's platform fee or repayment of its Circle source-gas sponsorship. Consequently, the current route is not literally gas-only at the provider level. Do not relabel the aggregate bridge fee as gas, or claim there is no third-party 0.25% charge. Provider rates are time-sensitive. Official provider explanation: https://help.li.fi/hc/en-us/articles/13304987014299-Can-you-share-some-insight-on-the-fees-structure-of-using-LI-FI-for-a-DApp . No fee waiver or alternate direct-provider route has been implemented or verified.
+
 Evidence: `api/pocket/usdt-bridge-provider.ts`, `api/pocket/usdt-bridge.ts`, `api/pocket/cctp.ts`, `api/circle-solana-email.ts` (`executeEvmBridge`), `api/pocket/arc-swap-provider.ts`, `api/pocket/arc-swap.ts`, `api/pocket/xstocks-swap-provider.ts`, and `src/pocket/hooks/usePocketStockWallet.ts` (`trade`). The XStocks 120% gas balance check is a spending-capacity estimate, not a treasury payment.
 
 ## Required before claiming gas recovery is implemented
