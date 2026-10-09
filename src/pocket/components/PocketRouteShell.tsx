@@ -8,13 +8,14 @@ import PocketKycPrompt from './PocketKycPrompt'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { refreshPocketData } from '../lib/pocketRefresh'
 
+const REFRESH_THRESHOLD = 66
+
 export default function PocketRouteShell({
   active,
   children,
   onSelect,
   navigationDisabled = false,
   fixedPage = false,
-  elasticFixedPage = false,
   scrollKey,
   rail,
   refreshEnabled = true,
@@ -24,7 +25,6 @@ export default function PocketRouteShell({
   onSelect: (tab: PocketNavTab) => void
   navigationDisabled?: boolean
   fixedPage?: boolean
-  elasticFixedPage?: boolean
   scrollKey?: string
   rail?: 'stablecoins' | 'xstocks'
   refreshEnabled?: boolean
@@ -39,7 +39,7 @@ export default function PocketRouteShell({
   const [headerHeight, setHeaderHeight] = useState(() => Math.ceil(document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')?.getBoundingClientRect().bottom ?? 0))
   const [pullDistance, setPullDistance] = useState(0)
   const [pullDragging, setPullDragging] = useState(false)
-  const pullEdge = useRef<'top' | 'bottom' | null>(null)
+  const pullEdge = useRef<'top' | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState('')
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -92,7 +92,7 @@ export default function PocketRouteShell({
     pullStartY.current = null
     pullEdge.current = null
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
-    if ((fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
+    if (!refreshEnabled || fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
@@ -106,8 +106,8 @@ export default function PocketRouteShell({
     pullStartY.current = null
     setRefreshMessage('')
     setRefreshing(true)
-    pullDistanceRef.current = 66
-    setPullDistance(66)
+    pullDistanceRef.current = REFRESH_THRESHOLD
+    setPullDistance(REFRESH_THRESHOLD)
     try {
       await Promise.all([refreshPocketData(), new Promise(resolve => window.setTimeout(resolve, 350))])
     } catch {
@@ -138,25 +138,23 @@ export default function PocketRouteShell({
     }
     if (!pullEdge.current) {
       const atTop = scroller.scrollTop <= 1
-      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
       if (atTop && distance > 6) pullEdge.current = 'top'
-      else if (atBottom && distance < -6) pullEdge.current = 'bottom'
-      else if ((atTop && distance >= 0) || (atBottom && distance <= 0)) return
+      else if (atTop && distance >= 0) return
       else { pullStartY.current = y; return }
     }
-    const outward = pullEdge.current === 'top' ? distance : -distance
+    const outward = distance
     if (outward <= 0) { cancelPull(); return }
     // Increasing resistance, bounded travel; native momentum handles ordinary scrolling.
-    const limit = pullEdge.current === 'top' ? 104 : 72
+    const limit = 104
     const stretch = limit * (1 - Math.exp(-Math.max(0, outward - 6) / 150))
-    const nextDistance = pullEdge.current === 'top' ? stretch : -stretch
+    const nextDistance = stretch
     setPullDragging(true)
     pullDistanceRef.current = nextDistance
     setPullDistance(nextDistance)
   }
 
   const finishPull = () => {
-    const shouldRefresh = refreshEnabled && pullEdge.current === 'top' && pullDistanceRef.current >= 66
+    const shouldRefresh = refreshEnabled && pullEdge.current === 'top' && pullDistanceRef.current >= REFRESH_THRESHOLD
     pullStartY.current = null
     pullEdge.current = null
     setPullDragging(false)
@@ -236,16 +234,16 @@ export default function PocketRouteShell({
               scrollPaddingBottom: hideNavigation ? 'max(1.5rem, calc(0.75rem + var(--pocket-safe-bottom)))' : 'calc(7.5rem + var(--pocket-safe-bottom))',
             }}
           >
-            <div role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= 66 ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={!refreshEnabled || (pullDistance <= 4 && !refreshing)} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: refreshEnabled && (pullDistance > 4 || refreshing) ? 1 : 0, transform: `translateY(${pullDistance - 48}px)` }}>
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#121212] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms', animationPlayState: refreshing ? 'running' : 'paused' }} /></span>
+            <div data-pocket-refresh-indicator role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={!refreshEnabled || (pullDistance <= 4 && !refreshing)} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center" style={{ opacity: refreshEnabled && (pullDistance > 4 || refreshing) ? 1 : 0, transform: `translateY(${pullDistance - 48}px)`, transition: pullDragging ? 'none' : 'transform 200ms ease-out, opacity 150ms ease-out' }}>
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#121212] dark:text-gray-300 dark:ring-white/10">
+                {refreshing ? <Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms' }} /> : <svg aria-hidden="true" className="h-6 w-6 -rotate-90" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" pathLength="100" strokeDasharray={`${Math.min(1, pullDistance / REFRESH_THRESHOLD) * 90} 100`} /></svg>}
+              </span>
             </div>
             <div
               key={locationKey}
-              data-pocket-elastic-content
-              data-dragging={pullDragging || undefined}
-              className={`pocket-elastic-content mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${navigationType==='PUSH' && state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
+              data-pocket-page-content
+              className={`mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${navigationType==='PUSH' && state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
               style={{
-                transform: pullDistance ? `translate3d(0, ${pullDistance}px, 0)` : 'translate3d(0, 0, 0)',
                 minHeight: fixedPage ? 0 : `calc(100dvh - ${headerHeight}px)`,
                 height: fixedPage ? '100%' : undefined,
                 display: fixedPage ? 'flex' : undefined,
