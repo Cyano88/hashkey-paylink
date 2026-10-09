@@ -197,7 +197,7 @@ const dependencies = {
   provider,
   verifyUser: async req => ({ userId: req.headers['x-test-owner'], email: 'owner@example.com', wallets: [] }),
   readPayerWallet: async ownerId => ownerId === 'did:privy:owner-1' ? '0x2222222222222222222222222222222222222222' : '',
-  readFxQuote: async () => ({ rate: 1400, fetchedAt: now, expiresAt: now + 60_000, source: 'paycrest' }),
+  readFxQuote: async (_amount, asset = 'USDC') => ({ asset, currency: 'NGN', rate: 1400, fetchedAt: now, expiresAt: now + 60_000, source: 'paycrest' }),
   verifyTransfer: async input => {
     verificationCalls += 1
     lastVerificationInput = input
@@ -520,3 +520,22 @@ await confirmPocketBillPayment(ugDeps,'did:privy:owner-1',ugIntent.id,ugTx)
 await confirmPocketBillPayment(ugDeps,'did:privy:owner-1',ugIntent.id,ugTx)
 assert.equal(ugPurchases,1);assert.equal((await store.getOwnedIntent('did:privy:owner-1',ugIntent.id)).state,'delivered')
 console.log('PASS Uganda destination isolation, canonical phone, server pricing, platform fee, private provider email, data face value, and exactly-once delivery.')
+
+// Asset-specific quotes and executions, independently of live rollout settings.
+const priorUsdtBills = process.env.POCKET_USDT_BILLS_ENABLED
+try {
+ now += 120000
+ const body={asset:'USDT',service_id:'mtn',phone:'08011111111',amount_ngn:'100',payer_wallet:'0x2222222222222222222222222222222222222222'}
+ delete process.env.POCKET_USDT_BILLS_ENABLED
+ assert.equal((await request(quoteHandler,body,{idempotencyKey:'bills-usdt-disabled-0001'})).statusCode,503)
+ process.env.POCKET_USDT_BILLS_ENABLED='true'
+ const quoted=await request(quoteHandler,body,{idempotencyKey:'bills-usdt-enabled-0001'})
+ assert.equal(quoted.statusCode,200,JSON.stringify(quoted.body))
+ assert.equal(quoted.body.data.intent.asset,'USDT')
+ const execution=await executions.findByResource('did:privy:owner-1',quoted.body.data.intent.id,'bill_payment')
+ assert.equal(execution.asset,'USDT');assert.equal(execution.token.chainId,8453)
+ const mismatch=createPocketBillsQuoteHandler({...dependencies,readFxQuote:async()=>({currency:'NGN',rate:1400,expiresAt:now+60000})})
+ assert.equal((await request(mismatch,body,{idempotencyKey:'bills-usdt-wrong-quote-0001'})).statusCode,503)
+ assert.equal((await request(quoteHandler,{...body,asset:'BTC'},{idempotencyKey:'bills-invalid-asset-0001'})).statusCode,400)
+ console.log('PASS USDT bills rollout gate, quote asset binding and USDT ledger identity.')
+} finally {if(priorUsdtBills===undefined)delete process.env.POCKET_USDT_BILLS_ENABLED;else process.env.POCKET_USDT_BILLS_ENABLED=priorUsdtBills}

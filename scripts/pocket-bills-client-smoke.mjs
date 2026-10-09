@@ -20,7 +20,7 @@ const intent = {
   txHash: '', providerStatus: '', providerDescription: '', purchasedCode: 'Token : 26362054405982757802', failureReason: '', createdAt: Date.now(), updatedAt: Date.now(),
 }
 
-assert.deepEqual(parsePocketBillsAvailability({ bills: { enabled: true, environment: 'sandbox', categories: ['airtime', 'data'] } }), { enabled: true, environment: 'sandbox', airtimeEnabled: true, dataEnabled: true, tvEnabled: false, electricityEnabled: false })
+assert.deepEqual(parsePocketBillsAvailability({ bills: { enabled: true, environment: 'sandbox', categories: ['airtime', 'data'] } }), { enabled: true, usdtEnabled: false, environment: 'sandbox', airtimeEnabled: true, dataEnabled: true, tvEnabled: false, electricityEnabled: false })
 assert.throws(() => parsePocketBillsAvailability({}), /could not be verified/)
 assert.equal(parsePocketBillsAvailability({bills:{enabled:false,environment:'sandbox',categories:[]}}).enabled,false)
 assert.equal(parsePocketBillIntent(intent).amountUsdc, '0.071429')

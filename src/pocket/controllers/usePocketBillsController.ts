@@ -1,3 +1,5 @@
+import {parseUnits} from 'viem'
+import {readBaseUsdtBalance} from '../lib/pocketBaseUsdt'
 import {normalizeUgandaPhone,type PocketBillCountry} from '../lib/pocketBillCountry'
 import { markPocketActivityDirty } from '../lib/pocketActivityCache'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
@@ -109,12 +111,14 @@ export default function usePocketBillsController({
   const recoveryReader = useRef(recoverTransfer); recoveryReader.current = recoverTransfer
   const [destinationCountry,setDestinationCountryState]=useState<PocketBillCountry>('NG')
   const country: PocketBillCountry = view==='airtime'||view==='data'?destinationCountry:'NG'
+  const [selectedAsset,setSelectedAsset] = useState<'USDC'|'USDT'>('USDC')
   const category = view
   const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
   const balanceRefresher = useRef(refreshBalances); balanceRefresher.current = refreshBalances
   const activeBillKey = `pocket:bills:owned:${encodeURIComponent(owner.trim().toLowerCase())}:${category}`
   const savedAvailability = cachedPocketBillsAvailability()
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>(savedAvailability ? savedAvailability.enabled ? 'enabled' : 'disabled' : 'loading')
+  const [usdtEnabled,setUsdtEnabled] = useState(savedAvailability?.usdtEnabled ?? false)
   const [environment, setEnvironment] = useState<'sandbox' | 'live'>(savedAvailability?.environment ?? 'sandbox')
   const [airtimeEnabled, setAirtimeEnabled] = useState(savedAvailability?.airtimeEnabled ?? false)
   const [dataEnabled, setDataEnabled] = useState(savedAvailability?.dataEnabled ?? false)
@@ -131,6 +135,7 @@ export default function usePocketBillsController({
   const [dataVariations, setDataVariations] = useState<PocketDataVariation[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [intent, setIntent] = useState<PocketBillIntent | null>(null)
+  const asset = intent?.asset ?? (intent ? 'USDC' : selectedAsset)
   const [status, setStatus] = useState<FlowStatus>('idle')
   const [error, setError] = useState('')
   const [errorCode, setErrorCode] = useState('')
@@ -172,7 +177,7 @@ export default function usePocketBillsController({
       pending = readPocketBillsAvailability().then(result => {
         if (cancelled) return
         failures = 0
-        setEnvironment(result.environment); setAirtimeEnabled(result.airtimeEnabled); setDataEnabled(result.dataEnabled)
+        setUsdtEnabled(result.usdtEnabled); setEnvironment(result.environment); setAirtimeEnabled(result.airtimeEnabled); setDataEnabled(result.dataEnabled)
         setTvEnabled(result.tvEnabled); setElectricityEnabled(result.electricityEnabled)
         if (result.environment === 'sandbox' && !initializedSandbox) {
           initializedSandbox = true
@@ -216,6 +221,11 @@ export default function usePocketBillsController({
     setNotice('')
     window.localStorage.removeItem(activeBillKey)
   }, [activeBillKey, status])
+
+  const setAsset = useCallback((value:'USDC'|'USDT') => {
+    if (!['idle','error','success'].includes(status) || quoteInFlight.current || billPayInFlight.current || (value === 'USDT' && !usdtEnabled)) return
+    resetResult(); setSelectedAsset(value)
+  }, [status,usdtEnabled,resetResult])
 
   const setDestinationCountry=useCallback((value:PocketBillCountry)=>{
     if(['quoting','paying','confirming','processing','ready'].includes(status))return
@@ -302,7 +312,7 @@ export default function usePocketBillsController({
       setError('This earlier refund requires manual review; do not retry.')
     } else if (next.state === 'refunding' || next.state === 'refund_submitted') {
       setStatus('error')
-      setError('Your USDC refund is processing. Check Bills activity for confirmation.')
+      setError(`Your ${next.asset ?? 'USDC'} refund is processing. Check Bills activity for confirmation.`)
     } else if (next.state === 'failed') {
       setStatus('error')
       setError(next.failureReason || `${billLabel(category)} was not delivered. No payment was completed.`)
@@ -536,10 +546,10 @@ export default function usePocketBillsController({
       const wallet = baseWallet ?? await ensureBaseWallet()
       if (!wallet) throw new Error('Base wallet setup was cancelled.')
       const accessToken = await token()
-      const result = category === 'data' ? await quotePocketData({ accessToken, country, serviceId, variationCode: quoteVariation, phone, payerWallet: wallet.address })
-        : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone: tvRequiresCustomerVerification(serviceId) ? contactPhone : phone, payerWallet: wallet.address })
-          : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
-            : await quotePocketAirtime({ accessToken, country, serviceId, phone, amountNgn, payerWallet: wallet.address })
+      const result = category === 'data' ? await quotePocketData({ asset, accessToken, country, serviceId, variationCode: quoteVariation, phone, payerWallet: wallet.address })
+        : category === 'tv' ? await quotePocketTv({ asset, accessToken, serviceId, variationCode, smartcard: phone, contactPhone: tvRequiresCustomerVerification(serviceId) ? contactPhone : phone, payerWallet: wallet.address })
+          : category === 'electricity' ? await quotePocketElectricity({ asset, accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
+            : await quotePocketAirtime({ asset, accessToken, country, serviceId, phone, amountNgn, payerWallet: wallet.address })
       if(!mounted.current||billScope.current!==reviewScope||quoteGeneration.current!==generation)return
       if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
       setIntent(result.intent)
@@ -550,7 +560,7 @@ export default function usePocketBillsController({
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `Could not prepare the ${billLabel(category)} payment.`)
     } finally { quoteInFlight.current = false }
-  }, [amountNgn, authenticated, availability, baseWallet, category, country, contactPhone, dataVariations, ensureBaseWallet, phone, serviceId, setVariationCode, status, token, variationCode])
+  }, [asset, amountNgn, authenticated, availability, baseWallet, category, country, contactPhone, dataVariations, ensureBaseWallet, phone, serviceId, setVariationCode, status, token, variationCode])
 
   const pay = useCallback(async () => {
     if (!intent || status !== 'ready' || billPayInFlight.current) return
@@ -570,6 +580,12 @@ export default function usePocketBillsController({
       stillCurrent()
       const prepared = await preparePocketAirtime({ accessToken, intentId: intent.id })
       stillCurrent()
+      if ((prepared.asset ?? 'USDC') !== (intent.asset ?? 'USDC') || prepared.payerWallet.toLowerCase() !== wallet.address.toLowerCase()) throw Error('Bill payment details changed. Review the bill again.')
+      if (prepared.asset === 'USDT') {
+        const balance = await readBaseUsdtBalance(wallet.address)
+        if (balance.units < parseUnits(prepared.amountUsdc, 6)) throw Error('Insufficient USDT on Base. Add USDT on Base to continue.')
+        stillCurrent()
+      }
       setIntent(prepared)
       const saved = readActive(activeBillKey)
       const idempotencyKey = saved?.intentId === prepared.id && saved.idempotencyKey ? saved.idempotencyKey : crypto.randomUUID()
@@ -582,6 +598,7 @@ export default function usePocketBillsController({
         linkedWalletAddress: wallet.address,
         recipient: prepared.treasuryAddress as `0x${string}`,
         amount: prepared.amountUsdc,
+        asset: prepared.asset ?? 'USDC',
         idempotencyKey,
         onChallenge:ids=>persistActive(activeBillKey,prepared.id,'',idempotencyKey,ids),
         onAccepted:ids=>persistActive(activeBillKey,prepared.id,'',idempotencyKey,ids),
@@ -651,6 +668,7 @@ export default function usePocketBillsController({
       : ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone))))
 
   return {
+    asset, setAsset, usdtEnabled,
     country, setDestinationCountry,
     confirming,
     dismiss,

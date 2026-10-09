@@ -33,7 +33,7 @@ type PocketBillsPanelProps = {
   preview?: boolean
   bills: PocketBillsController & { paymentFunding?: PocketPaymentFunding[] }
   baseAddress: string
-  baseBalance: number
+  baseBalance: number | null
   walletBusy: boolean
   onOpenWallet: () => void
   onFundingReturn?:()=>Promise<unknown>
@@ -124,7 +124,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     amount: bills.intent.paymentAmountUsdc || bills.intent.amountUsdc,
     amountNgn: bills.intent.international?.deliveryAmount || bills.intent.amountNgn,
     fiatCurrency:bills.intent.international?.deliveryCurrency || 'NGN',
-    asset: 'USDC',
+    asset: bills.intent.asset ?? 'USDC',
     createdAt: bills.intent.updatedAt || bills.intent.createdAt,
     source: 'bills',
     settlementType: `bill_payment:${bills.intent.category}`,
@@ -141,7 +141,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
   const paymentRouteBusy = paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
   const paymentRouteInsufficient = paymentRouting?.insufficient
-    ?? Boolean(bills.intent && Number(bills.intent.amountUsdc) > baseBalance)
+    ?? Boolean(bills.intent && baseBalance !== null && Number(bills.intent.amountUsdc) > baseBalance)
   const catalogNetworks = view === 'airtime' && bills.country!=='UG'
     ? [...NETWORKS]
     : bills.dataServices
@@ -194,7 +194,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
             </span>
             {baseAddress ? (
-              <span className="shrink-0 text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(baseBalance)} <span className="text-[10px] text-gray-500 dark:text-gray-400">USDC</span></span>
+              <span className="shrink-0 text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{baseBalance === null ? '—' : formatPocketDisplayAmount(baseBalance)} <span className="text-[10px] text-gray-500 dark:text-gray-400">{bills.asset ?? 'USDC'}</span></span>
             ) : (
               <button type="button" onClick={onOpenWallet} disabled={walletBusy} className="flex min-h-9 items-center gap-2 rounded-full bg-gray-950 px-3 text-[11px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
                 {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}Open wallet
@@ -203,7 +203,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           </div>
 
           <div className="pocket-form-fields pocket-bill-fields min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-1">
-            {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
+            {bills.usdtEnabled && <PocketSelect ariaLabel="Payment asset" value={bills.asset} disabled={bills.processing || bills.status === 'ready'} onChange={value=>bills.setAsset(value as 'USDC'|'USDT')} options={[{value:'USDC',label:'USDC'},{value:'USDT',label:'USDT'}]} />}
+            {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · {bills.asset ?? 'USDC'} payment is real · no live service is delivered</p>}
             {isMobileBill ? <div><p className="mb-1 text-[11px] font-semibold text-gray-500">Pay bill in</p><PocketCountrySelect value={bills.country} options={[...BILL_COUNTRIES]} onChange={value=>bills.setDestinationCountry(value as PocketBillCountry)} disabled={locked || bills.processing} ariaLabel="Pay bill in" /></div> : <p className="text-[11px] text-gray-500">Pay bill in ? Nigeria</p>}
             {isMobileBill ? (
               <div data-pocket-data-phone={isData || undefined}>
@@ -308,7 +309,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
 
 
-            {bills.country!=='UG' && !isData && Number(bills.amountNgn) > 0 && <PocketFiatUsdcEstimate amount={Number(bills.amountNgn)} />}
+            {bills.country!=='UG' && !isData && Number(bills.amountNgn) > 0 && <PocketFiatUsdcEstimate amount={Number(bills.amountNgn)} asset={bills.asset} />}
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
             {bills.status === 'quoting' && (
@@ -319,17 +320,17 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {showPayment && !showResult && bills.intent && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
-                    <h2 className="mb-1 text-center text-2xl font-semibold">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</h2>
+                    <h2 className="mb-1 text-center text-2xl font-semibold">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} {bills.intent.asset ?? 'USDC'}</h2>
                     <p className="mb-6 text-center text-xs font-medium text-gray-500">{money(bills.intent.international?.deliveryAmount || bills.intent.amountNgn,bills.intent.international?.deliveryCurrency || 'NGN')}</p>
                     <div className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 text-xs dark:border-[#262626] dark:bg-[#121212]">
                       <div className="flex justify-between gap-3"><span className="text-gray-500">Biller</span><span className="text-right font-semibold">{bills.intent.serviceName || billName}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.international?.deliveryAmount || bills.intent.amountNgn,bills.intent.international?.deliveryCurrency || 'NGN')}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
-                      {Number(bills.intent.platformFeeUsdc || '0') > 0 && <div className="flex justify-between gap-3"><span className="text-gray-500">Platform fee</span><span className="font-semibold tabular-nums">{bills.intent.platformFeeUsdc} USDC</span></div>}
-                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</span></div>
+                      {Number(bills.intent.platformFeeUsdc || '0') > 0 && <div className="flex justify-between gap-3"><span className="text-gray-500">Platform fee</span><span className="font-semibold tabular-nums">{bills.intent.platformFeeUsdc} {bills.intent.asset ?? 'USDC'}</span></div>}
+                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} {bills.intent.asset ?? 'USDC'}</span></div>
                     </div>
                     {!fundingShortfall(bills.error) && bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
-                    <PocketFundingAction asset={paymentRouteInsufficient?'USDC':fundingShortfall(bills.error)} network="base" locked={slideStatus!=='idle'||approvalBusy} onReturn={async()=>{await onFundingReturn?.()}} onCancel={()=>bills.dismiss()}><PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
+                    <PocketFundingAction asset={paymentRouteInsufficient?(bills.asset ?? 'USDC'):fundingShortfall(bills.error,bills.asset ?? 'USDC')} network="base" locked={slideStatus!=='idle'||approvalBusy} onReturn={async()=>{await onFundingReturn?.()}} onCancel={()=>bills.dismiss()}><PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
                       status={slideStatus}
                       disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
                       onPrepare={onPreparePayment}

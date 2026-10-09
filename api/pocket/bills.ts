@@ -1,3 +1,4 @@
+import {billAsset, billToken} from './bills-asset.js'
 import {billDestination,normalizeUgandaPhone} from '../../src/pocket/lib/pocketBillCountry.js'
 import {internationalOperator,priceInternationalBill,type InternationalBill} from '../vtpass-international.js'
 import { randomUUID } from 'node:crypto'
@@ -32,7 +33,7 @@ type BillsDependencies = {
   readPayerWallet(ownerId: string): Promise<string>
   store: BillsStore
   provider: VtpassClient
-  readFxQuote(amount?: string): Promise<PocketFxQuote>
+  readFxQuote(amount?: string, asset?: 'USDC' | 'USDT'): Promise<PocketFxQuote>
   verifyTransfer(input: Parameters<typeof verifyEvmUsdcTransfer>[0]): ReturnType<typeof verifyEvmUsdcTransfer>
   now(): number
   requestId(): string
@@ -188,6 +189,7 @@ export async function syncBillExecution(dependencies: BillsDependencies, intent:
       idempotencyKey: intent.idempotencyKey,
       kind: 'bill_payment',
       amount: intent.amountUsdc,
+      ...(billAsset(intent.asset) === 'USDT' ? {token:{chainId:8453 as const,address:billToken(intent.asset).address,symbol:'USDT',decimals:6}} : {}),
       sourceNetwork: 'base',
       settlementNetwork: 'base',
       destinationType: 'bill_provider',
@@ -308,6 +310,9 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
     try {
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
+      if (req.body?.asset !== undefined && !['USDC','USDT'].includes(req.body.asset)) throw new PocketBillsStoreError('BILLS_INVALID_ASSET', 'Select USDC or USDT.', 400)
+      const asset = billAsset(req.body?.asset)
+      if (asset === 'USDT' && process.env.POCKET_USDT_BILLS_ENABLED !== 'true') throw new PocketBillsStoreError('BILLS_ASSET_DISABLED', 'USDT bill payments are not enabled yet.', 503)
       const category = normalizeCategory(req.body?.category)
       const country = billDestination(req.body?.country)
       if (country === 'UG' && !['airtime','data'].includes(category)) throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.')
@@ -381,8 +386,10 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       if (service.maximumAmount !== null && amount > service.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Maximum ${service.name} amount is NGN ${service.maximumAmount}.`), 'amountNgn')
       await assertProviderReserve(dependencies, amountNgn)
 
-      const fx = await dependencies.readFxQuote('1')
+      const fx = await dependencies.readFxQuote('1', asset)
+      if ((fx.asset ?? 'USDC') !== asset || fx.currency !== 'NGN' || fx.stale || fx.expiresAt <= dependencies.now()) throw new PocketBillsStoreError('BILLS_INVALID_QUOTE', 'A current quote for this payment asset is unavailable.', 503)
       const created = await dependencies.store.createQuote({
+        asset,
         ownerId: identity.userId,
         idempotencyKey,
         ...(international ? {international,providerEmail:identity.email} : {}),
@@ -424,6 +431,7 @@ export async function confirmPocketBillPayment(dependencies: BillsDependencies, 
     try {
       const verification = await dependencies.verifyTransfer({
         chain: 'base',
+        token: billAsset(current.asset),
         confirmation: 'base-included',
         txHash,
         payer: current.payerWallet,
@@ -653,13 +661,14 @@ function getDefaultHandlers() {
   // Initialize request adapters lazily so tests and runtime startup always use
   // the environment established by the server bootstrap.
   const config = readVtpassPhase0Config()
+  const fxReaders = {USDC:createPocketFxQuoteReader(),USDT:createPocketFxQuoteReader({asset:'USDT'})}
   const dependencies: BillsDependencies = {
     config,
     verifyUser: verifiedPrivyUser,
     readPayerWallet: async ownerId => (await readCircleLink(circleLinkKey(ownerId, 'base', 'payment')))?.circleWalletAddress ?? '',
     store: createPocketBillsStore({ config }),
     provider: createVtpassClient({ config }),
-    readFxQuote: createPocketFxQuoteReader(),
+    readFxQuote: (amount, asset = 'USDC') => fxReaders[asset](amount),
     verifyTransfer: verifyEvmUsdcTransfer,
     now: Date.now,
     requestId: randomUUID,

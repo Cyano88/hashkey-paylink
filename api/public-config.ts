@@ -26,6 +26,7 @@ export default function handler(_req: Request, res: Response) {
       evmEmailEnabled: String(process.env.VITE_CIRCLE_EVM_EMAIL_ENABLED ?? 'true').toLowerCase() !== 'false',
     },
     bills: {
+      usdtEnabled: billsConfig.canVend && billsConfig.refundsReady && process.env.POCKET_USDT_BILLS_ENABLED === 'true',
       enabled: bills.billsEnabled && bills.canVend,
       environment: bills.environment,
       categories: bills.liveCategories,

@@ -1,3 +1,4 @@
+import {billAsset} from './bills-asset.js'
 import {assertInternationalBill, type InternationalBill} from '../vtpass-international.js'
 import { formatUnits, isAddress, parseUnits } from 'viem'
 import { paymentFeeBreakdown } from '../../src/lib/platformFees.js'
@@ -28,6 +29,7 @@ export type PocketBillsIntentState =
   | 'needs_review'
 
 export type PocketBillsIntent = {
+  asset?: 'USDC' | 'USDT'
   id: string
   international?: InternationalBill
   providerEmail?: string
@@ -338,6 +340,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   }
 
   async function createQuote(input: {
+    asset?: 'USDC' | 'USDT'
     international?: InternationalBill
     providerEmail?: string
     ownerId: string
@@ -358,6 +361,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     payerWallet: string
     quoteExpiresAt: number
   }) {
+    const asset = billAsset(input.asset)
     const ownerId = cleanText(input.ownerId, 200)
     const idempotencyKey = cleanText(input.idempotencyKey, 128)
     const category = ['data', 'tv', 'electricity'].includes(String(input.category)) ? input.category as 'data' | 'tv' | 'electricity' : 'airtime'
@@ -418,7 +422,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote
     // must be replayed instead of producing a conflict or a second intent.
-    const fingerprint = JSON.stringify({ ...(international ? {international} : {}), category, serviceId, variationCode, phone, contactPhone, amountNgn, payerWallet: payerWallet.toLowerCase() })
+    const fingerprint = JSON.stringify({ ...(asset === 'USDT' ? {asset} : {}), ...(international ? {international} : {}), category, serviceId, variationCode, phone, contactPhone, amountNgn, payerWallet: payerWallet.toLowerCase() })
     return mutate(store => {
       const index = idempotencyIndex(ownerId, idempotencyKey)
       const existingId = store.idempotency[index]
@@ -454,6 +458,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         ownerId,
         idempotencyKey,
         requestFingerprint: fingerprint,
+        ...(asset === 'USDT' ? {asset} : {}),
         requestId,
         state: 'quoted',
         ...(international ? {international: structuredClone(international), providerEmail:input.providerEmail} : {}),

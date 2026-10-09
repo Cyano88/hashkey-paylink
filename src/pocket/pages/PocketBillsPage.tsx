@@ -73,7 +73,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
   })
   const paymentLiquidity = usePocketPaymentLiquidityController({
     funding: bills.intent ? {kind:'bills',id:bills.intent.id} : undefined,
-    enabled: authenticated && bills.status === 'ready',
+    enabled: authenticated && bills.status === 'ready' && bills.asset === 'USDC',
     // Bills use the same non-Ethereum funding sources as bank payouts.
     bankPayout: true,
     amount: bills.intent?.paymentAmountUsdc || bills.intent?.amountUsdc || '',
@@ -84,15 +84,16 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
     getSolanaSession: walletController.getSolanaSession,
     refreshBalances: wallets.refreshBalances,
   })
+  const usdtBalance = wallets.displayRows.find(row => row.key === 'base')?.usdt ?? null
   const routedBills = {
     ...bills,
-    paymentFunding: paymentLiquidity.paymentFunding,
-    processing: bills.processing || paymentLiquidity.busy,
-    error: paymentLiquidity.error || bills.error,
+    paymentFunding: bills.asset === 'USDT' ? undefined : paymentLiquidity.paymentFunding,
+    processing: bills.processing || (bills.asset === 'USDC' && paymentLiquidity.busy),
+    error: (bills.asset === 'USDC' ? paymentLiquidity.error : '') || bills.error,
     pay: async () => {
       if (!bills.intent || bills.status !== 'ready') return
       try {
-        await paymentLiquidity.ensureLiquidity()
+        if (bills.asset === 'USDC') await paymentLiquidity.ensureLiquidity()
         await bills.pay()
       } catch {
         // The liquidity controller keeps the actionable, retry-safe message.
@@ -139,15 +140,15 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
         preview={localPreview}
         bills={routedBills}
         baseAddress={localPreview ? '0x6F4bA8c27eDAA611Dfa019a5Bb3E42c92F1A7D10' : wallets.wallets.base?.address ?? ''}
-        baseBalance={localPreview ? 125.48 : baseBalance}
+        baseBalance={localPreview ? 125.48 : bills.asset === 'USDT' ? usdtBalance : baseBalance}
         walletBusy={walletBusy}
         onOpenWallet={() => void openBaseWallet()}
         onPreparePayment={async () => {
-          await paymentLiquidity.prepareLiquidity()
+          if (bills.asset === 'USDC') await paymentLiquidity.prepareLiquidity()
           await bills.preparePaymentApproval()
         }}
-        onFundingReturn={async()=>{await wallets.refreshBalances();await paymentLiquidity.recheckFunding()}}
-        paymentRouting={{
+        onFundingReturn={async()=>{await wallets.refreshBalances();if(bills.asset==='USDC')await paymentLiquidity.recheckFunding()}}
+        paymentRouting={bills.asset === 'USDT' ? undefined : {
           status: paymentLiquidity.status,
           notice: paymentLiquidity.notice,
           insufficient: paymentLiquidity.insufficient,

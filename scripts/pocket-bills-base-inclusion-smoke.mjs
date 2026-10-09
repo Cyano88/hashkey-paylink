@@ -27,6 +27,11 @@ try{
  receipt=structuredClone(original);await assert.rejects(()=>verifyEvmUsdcTransfer({...input,payer:'0x'+'7'.repeat(40)}),/No matching USDC/);
  await assert.rejects(()=>verifyEvmUsdcTransfer({...input,recipient:'0x'+'7'.repeat(40)}),/No matching USDC/);
  await assert.rejects(()=>verifyEvmUsdcTransfer({...input,notAfter:'2026-09-25T12:00:30Z'}),/after the checkout expired/);
+ receipt=structuredClone(original);
+ await assert.rejects(()=>verifyEvmUsdcTransfer({...input,token:'USDT'}),/No matching/);
+ receipt.logs[0].address='0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2';
+ assert.equal((await verifyEvmUsdcTransfer({...input,token:'USDT'})).amount,'1');
+ await assert.rejects(()=>verifyEvmUsdcTransfer(input),/No matching/);
  chain='0x1';await assert.rejects(()=>verifyEvmUsdcTransfer(input),/chain does not match/);
  await assert.rejects(()=>verifyEvmUsdcTransfer({...input,chain:'ethereum'}),/only supported for Base/);
  console.log('PASS: Base bills accept canonical two-block inclusion without L1 finality; default finality, chain, canonical hash, receipt success, token, payer, recipient, amount and time checks remain enforced.');

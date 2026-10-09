@@ -184,6 +184,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     payer: 'Circle Pocket',
     memo: intent.serviceName,
     amount: intent.paymentAmountUsdc || intent.amountUsdc,
+    ...(intent.asset === 'USDT' ? {assetSymbol: 'USDT'} : {}),
     ts: intent.updatedAt,
     source: 'bills',
     merchantId: intent.id,

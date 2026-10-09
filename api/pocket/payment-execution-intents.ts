@@ -90,7 +90,7 @@ export function createPaymentExecutionRepository(options: Options = {}) {
       if (!ownerId || !idempotencyKey) throw Object.assign(new Error('Payment execution identity and idempotency key are required.'), { status: 400 })
       const hash = requestHash(input)
       const token = paymentToken(input.token, input.sourceNetwork, input.settlementNetwork)
-      if (token && !['hosted_checkout', 'wallet_transfer'].includes(input.kind)) throw Object.assign(new Error('This payment rail does not support token amounts.'), { status: 400 })
+      if (token && !(token.chainId === 8453 ? input.kind === 'bill_payment' : ['hosted_checkout', 'wallet_transfer'].includes(input.kind))) throw Object.assign(new Error('This payment rail does not support token amounts.'), { status: 400 })
       const result = await mutate(store => {
         const key = scope(ownerId, input.kind, idempotencyKey), existing = store.intents[store.idempotency[key]]
         if (existing) { if (existing.requestHash !== hash) throw new PaymentExecutionConflictError('Idempotency key is already bound to another payment request.'); return { intent: existing, replayed: true } }

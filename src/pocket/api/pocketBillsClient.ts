@@ -19,6 +19,7 @@ export type PocketBillIntentState =
   | 'needs_review'
 
 export type PocketBillIntent = {
+  asset?: 'USDC' | 'USDT'
   international?: {country:'UG';deliveryCurrency:'UGX';deliveryAmount:string}
   id: string
   requestId: string
@@ -88,6 +89,7 @@ function isIntentState(value: unknown): value is PocketBillIntentState {
 
 export function parsePocketBillIntent(value: unknown): PocketBillIntent {
   const intent = record(value)
+  if (intent.asset !== undefined && intent.asset !== 'USDC' && intent.asset !== 'USDT') throw new PocketBillsApiError('Bill payment asset is invalid.')
   const category = intent.category === 'data' ? 'data' as const : intent.category === 'tv' ? 'tv' as const : intent.category === 'electricity' ? 'electricity' as const : intent.category === 'airtime' ? 'airtime' as const : undefined
   if (!text(intent.id) || !text(intent.requestId) || !isIntentState(intent.state) || !category) {
     throw new PocketBillsApiError('Bill-payment response was invalid.')
@@ -100,6 +102,7 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
   }
   return {
     ...(record(intent.international).country === 'UG' && record(intent.international).deliveryCurrency === 'UGX' ? {international:{country:'UG' as const,deliveryCurrency:'UGX' as const,deliveryAmount:text(record(intent.international).deliveryAmount)}} : {}),
+    ...(intent.asset === 'USDT' ? {asset:'USDT' as const} : {}),
     id: text(intent.id),
     requestId: text(intent.requestId),
     state: intent.state,
@@ -141,6 +144,7 @@ export function parsePocketBillsAvailability(value: unknown) {
   const categories = Array.isArray(bills.categories) ? bills.categories.map(String) : []
   return {
     enabled: bills.enabled === true,
+    usdtEnabled: bills.usdtEnabled === true,
     environment: bills.environment === 'live' ? 'live' as const : 'sandbox' as const,
     airtimeEnabled: categories.includes('airtime'),
     dataEnabled: categories.includes('data'),
@@ -239,7 +243,14 @@ export async function readPocketBillsLimitUsage(input: { accessToken: string; fe
   }
 }
 
+function matchingBillQuote(value: unknown, asset: 'USDC' | 'USDT' = 'USDC') {
+  const intent = parsePocketBillIntent(value)
+  if ((intent.asset ?? 'USDC') !== asset) throw new PocketBillsApiError('Bill quote does not match the selected asset.')
+  return intent
+}
+
 export async function quotePocketAirtime(input: {
+  asset?: 'USDC' | 'USDT'
   country?: PocketBillCountry
   accessToken: string
   serviceId: string
@@ -254,9 +265,9 @@ export async function quotePocketAirtime(input: {
     accessToken: input.accessToken,
     idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('airtime-quote'),
     fetcher: input.fetcher,
-    body: { ...(input.country==='UG'?{country:'UG',amount_local:input.amountNgn}:{}), service_id: input.serviceId, phone: input.phone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet },
+    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), ...(input.country==='UG'?{country:'UG',amount_local:input.amountNgn}:{}), service_id: input.serviceId, phone: input.phone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet },
   })
-  return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
+  return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }
 
 export type PocketDataService = { serviceId: string; name: string; imageUrl?:string }
@@ -337,6 +348,7 @@ export async function verifyPocketBillCustomer(input: {
 }
 
 export async function quotePocketData(input: {
+  asset?: 'USDC' | 'USDT'
   country?: PocketBillCountry
   accessToken: string
   serviceId: string
@@ -351,25 +363,27 @@ export async function quotePocketData(input: {
     accessToken: input.accessToken,
     idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('data-quote'),
     fetcher: input.fetcher,
-    body: { ...(input.country==='UG'?{country:'UG'}:{}), category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
+    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), ...(input.country==='UG'?{country:'UG'}:{}), category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
   })
-  return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
+  return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }
 
 export async function quotePocketTv(input: {
+  asset?: 'USDC' | 'USDT'
   accessToken: string; serviceId: string; variationCode: string; smartcard: string; contactPhone: string; payerWallet: string; idempotencyKey?: string; fetcher?: typeof fetch
 }) {
   const data = await postBills({ endpoint: POCKET_API.billsQuote, accessToken: input.accessToken, idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('tv-quote'), fetcher: input.fetcher,
-    body: { category: 'tv', service_id: input.serviceId, variation_code: input.variationCode, phone: input.smartcard, contact_phone: input.contactPhone, payer_wallet: input.payerWallet } })
-  return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
+    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), category: 'tv', service_id: input.serviceId, variation_code: input.variationCode, phone: input.smartcard, contact_phone: input.contactPhone, payer_wallet: input.payerWallet } })
+  return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }
 
 export async function quotePocketElectricity(input: {
+  asset?: 'USDC' | 'USDT'
   accessToken: string; serviceId: string; meterType: 'prepaid' | 'postpaid'; meterNumber: string; contactPhone: string; amountNgn: string; payerWallet: string; idempotencyKey?: string; fetcher?: typeof fetch
 }) {
   const data = await postBills({ endpoint: POCKET_API.billsQuote, accessToken: input.accessToken, idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('electricity-quote'), fetcher: input.fetcher,
-    body: { category: 'electricity', service_id: input.serviceId, variation_code: input.meterType, phone: input.meterNumber, contact_phone: input.contactPhone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet } })
-  return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
+    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), category: 'electricity', service_id: input.serviceId, variation_code: input.meterType, phone: input.meterNumber, contact_phone: input.contactPhone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet } })
+  return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }
 
 async function mutatePocketBill(input: {

@@ -1,3 +1,4 @@
+import {billAsset, billToken} from './bills-asset.js'
 import { adminBearerAuthorized, adminSecretConfigured } from '../admin-auth.js'
 import type { Request, Response } from 'express'
 import { isAddress } from 'viem'
@@ -17,7 +18,6 @@ import {
   publicPocketBillsIntent,
 } from './bills-store.js'
 
-const BASE_USDC_ADDRESS = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
 const TERMINAL_FAILURES = new Set(['FAILED', 'CANCELLED', 'DENIED'])
 const PROCESSING_STATES = new Set(['INITIATED', 'QUEUED', 'CLEARED', 'SENT', 'STUCK', 'CONFIRMED'])
 
@@ -75,6 +75,7 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
     throw new PocketBillsStoreError('BILLS_REFUND_TREASURY_NOT_READY', 'Circle Bills treasury is not ready.', 503)
   }
   let intent = await dependencies.store.getIntentById(intentId)
+  billAsset(intent.asset)
   if (ownerId && intent.ownerId !== ownerId) {
     throw new PocketBillsStoreError('BILLS_FORBIDDEN', 'Bill payment does not belong to this Pocket account.', 403)
   }
@@ -141,7 +142,7 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
       destinationAddress: intent.payerWallet,
       amount: refundAmount,
       refId,
-      tokenAddress: BASE_USDC_ADDRESS,
+      tokenAddress: billToken(intent.asset).address,
     })
     intent = await dependencies.store.recordCircleRefundSubmission({
       intentId,
@@ -172,6 +173,7 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
     try {
       const verified = await dependencies.verifyTransfer({
         chain: 'base',
+        token: billAsset(intent.asset),
         confirmation: 'base-included',
         txHash: intent.refundTxHash,
         payer: dependencies.circleConfig.treasuryAddress,
