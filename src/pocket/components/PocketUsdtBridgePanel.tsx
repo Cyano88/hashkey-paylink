@@ -26,9 +26,9 @@ export default function PocketUsdtBridgePanel(props:Props){
   currentOwner.current=props.owner
   const key='pocket:usdt-bridge:v1:'+encodeURIComponent(props.owner)
   const save=(value:Pending|null)=>{if(value)localStorage.setItem(key,JSON.stringify(value));else localStorage.removeItem(key);setPending(value)}
-  const api=useCallback(async(body?:Record<string,unknown>)=>{
+  const api=useCallback(async(body?:Record<string,unknown>,timeoutMs=30000)=>{
     const token=await props.getAccessToken();if(!token)throw Error('Sign in to bridge stablecoins.')
-    const response=await fetch(pocketApiUrl('/api/pocket/usdt-bridge'),{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(body?30000:8000)})
+    const response=await fetch(pocketApiUrl('/api/pocket/usdt-bridge'),{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(body?timeoutMs:8000)})
     const data=await response.json().catch(()=>({ok:false,error:'Bridge service is unavailable.'}));if(response.status===404)throw Error('USDT bridging is updating. Try again shortly.');if(!response.ok||!data.ok)throw Object.assign(Error(data.error?.message||data.error||'Bridge request failed.'),{retryable:response.status>=500||response.status===429});return data
   },[props.getAccessToken])
   useEffect(()=>{let disposed=false;setLoading(true);setRecoveryFailed(false);setError('');setPending(null);session.current=null
@@ -46,10 +46,15 @@ export default function PocketUsdtBridgePanel(props:Props){
   useEffect(()=>{setQuoteExpired(false);if(!quoted)return;const timer=window.setTimeout(()=>setQuoteExpired(true),Math.max(0,quoted.quote.expiresAt-Date.now()));return()=>clearTimeout(timer)},[quoted])
   const invalidate=()=>{version.current++;setQuoted(null);setQuoting(false);setError('');setNotice('');session.current=null}
   async function quote(){
-    if(lock.current||busy||preparing||pending||loading||recoveryFailed)return
+    if(document.visibilityState!=='visible'||lock.current||busy||preparing||pending||loading||recoveryFailed)return
     if(!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<=0)return
-    const requestVersion=++version.current;setQuoting(true);setError('');setQuoted(null)
-    try{const data=await api({action:'quote',source,destination,amount});if(requestVersion===version.current)setQuoted(data)}catch(e){if(requestVersion===version.current)setError((e as Error).message)}finally{if(requestVersion===version.current)setQuoting(false)}
+    const requestVersion=++version.current,deadline=Date.now()+30000;setQuoting(true);setError('');setQuoted(null)
+    try{
+      for(let attempt=0;attempt<3;attempt++){
+        try{const data=await api({action:'quote',source,destination,amount},Math.max(1,deadline-Date.now()));if(requestVersion===version.current)setQuoted(data);break}
+        catch(e){if(requestVersion!==version.current)return;const transient=(e as {retryable?:boolean}).retryable||e instanceof TypeError||(e as Error).name==='TimeoutError';if(!transient||attempt===2||Date.now()+1000*2**attempt>=deadline)throw e;await new Promise(resolve=>window.setTimeout(resolve,1000*2**attempt));if(requestVersion!==version.current)return}
+      }
+    }catch(e){if(requestVersion===version.current)setError((e as Error).message)}finally{if(requestVersion===version.current)setQuoting(false)}
   }
   const quoteRef=useRef(quote);quoteRef.current=quote
   useEffect(()=>{
@@ -58,6 +63,17 @@ export default function PocketUsdtBridgePanel(props:Props){
     return()=>{clearTimeout(timer);version.current++}
   },[amount,source,destination,loading,recoveryFailed,props.owner,pending?.quote.id])
   useEffect(()=>{if(quoteExpired&&!preparing&&!pending)void quoteRef.current()},[quoteExpired,preparing,pending?.quote.id])
+  useEffect(()=>{
+    const resume=()=>{
+      if(document.visibilityState!=='visible'){if(quoting){version.current++;setQuoting(false)}return}
+      if(pending||busy||preparing||loading||quoting)return
+      if(recoveryFailed){setReload(value=>value+1);return}
+      if(!quoted||quoted.quote.expiresAt<=Date.now())void quoteRef.current()
+    }
+    document.addEventListener('visibilitychange',resume)
+    window.addEventListener('online',resume)
+    return()=>{document.removeEventListener('visibilitychange',resume);window.removeEventListener('online',resume)}
+  },[quoted,quoting,pending,busy,preparing,loading,recoveryFailed])
   async function check(value:Pending,_interactive=true){
     if(lock.current)return
     lock.current=true;setError('')

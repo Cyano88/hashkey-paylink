@@ -3,7 +3,7 @@ import {build} from 'esbuild'
 const {chromium}=await import('file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const source=`import React from 'react';import{createRoot}from'react-dom/client';import{MemoryRouter}from'react-router-dom';import Panel from './src/pocket/components/PocketUsdtBridgePanel';
 window.requests=[];window.fail=false;window.listCalls=0;
-window.fetch=async(url,options)=>{const body=options?.body?JSON.parse(options.body):null;if(!body){window.listCalls++;if(window.listCalls<3)return new Response('<!DOCTYPE html>',{status:502});return new Response(JSON.stringify({ok:true,pending:[]}))}window.requests.push(body);if(body.action!=='quote')throw Error('No transaction allowed in fixture');if(window.fail)return new Response(JSON.stringify({ok:false,error:'Quote unavailable'}),{status:503});await new Promise(r=>setTimeout(r,body.amount==='1'?800:20));return new Response(JSON.stringify({ok:true,quoteToken:'fixture',sufficientBalance:Number(body.amount)<=8,quote:{id:body.amount+'-'+Date.now(),source:body.source,destination:body.destination,walletAddress:'0x'+'1'.repeat(40),amount:body.amount,receive:String(Number(body.amount)-.01),minimumReceive:String(Number(body.amount)-.02),fee:'.01',expiresAt:Date.now()+2000}}))};
+window.fetch=async(url,options)=>{const body=options?.body?JSON.parse(options.body):null;if(!body){window.listCalls++;if(window.listCalls<3)return new Response('<!DOCTYPE html>',{status:502});return new Response(JSON.stringify({ok:true,pending:[]}))}window.requests.push(body);if(window.failNextQuote){window.failNextQuote=false;return new Response('<!DOCTYPE html>',{status:502})}if(body.action!=='quote')throw Error('No transaction allowed in fixture');if(window.fail)return new Response(JSON.stringify({ok:false,error:'Quote unavailable'}),{status:503});await new Promise(r=>setTimeout(r,body.amount==='1'?800:20));return new Response(JSON.stringify({ok:true,quoteToken:'fixture',sufficientBalance:Number(body.amount)<=8,quote:{id:body.amount+'-'+Date.now(),source:body.source,destination:body.destination,walletAddress:'0x'+'1'.repeat(40),amount:body.amount,receive:String(Number(body.amount)-.01),minimumReceive:String(Number(body.amount)-.02),fee:'.01',expiresAt:Date.now()+2000}}))};
 createRoot(document.getElementById('root')).render(<MemoryRouter><Panel owner='form-fixture' getAccessToken={async()=> 'fixture'} getSession={async()=>{throw Error('Fixture approval unavailable')}} balances={[{key:'arbitrum',usdt:8}]} refresh={async()=>{}} onActivity={()=>{}} onBusyChange={()=>{}}/></MemoryRouter>);`
 const mocks={usePocketIdentity:`export default()=>({authenticated:true,email:'fixture@test',getAccessToken:async()=>null})`,usePocketWallets:`export default()=>({resolved:true,wallets:{},setWallets:()=>{}})`,usePocketWalletController:`export default()=>({ensureWallet:async()=>{throw Error('No live wallet')}})`,PocketNetworkBalance:`export default()=>null`,PocketRouteShell:`export default({children})=>children`,circleEvmEmailWallet:`export const executeCircleEvmEmailChallenge=async()=>{throw Error('No live challenge')}`}
 const result=await build({stdin:{contents:source,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,jsx:'automatic',define:{'import.meta.env':'{}'},plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>{const key=a.path.split('/').pop();return mocks[key]?{path:key,namespace:'fixture'}:undefined});b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'jsx'}))}}]})
@@ -24,12 +24,20 @@ try{
  await page.waitForTimeout(900)
  assert.match(await page.locator('body').innerText(),/1\.99 USDT/)
  assert.doesNotMatch(await page.locator('body').innerText(),/0\.99 USDT/)
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.fixtureHidden?'hidden':'visible'});window.fixtureHidden=true;document.dispatchEvent(new Event('visibilitychange'))})
+ const hiddenRequests=await page.evaluate(()=>window.requests.length)
+ await page.waitForTimeout(2300)
+ assert.equal(await page.evaluate(()=>window.requests.length),hiddenRequests)
+ await page.evaluate(()=>{window.fixtureHidden=false;document.dispatchEvent(new Event('visibilitychange'))})
+ await page.waitForFunction(n=>window.requests.length>n,hiddenRequests)
+ await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor()
  const before=await page.evaluate(()=>window.requests.length)
  await page.waitForFunction(n=>window.requests.length>n,before)
  await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor()
  await page.getByRole('button',{name:'Max',exact:true}).click()
  assert.equal(await input.inputValue(),'8')
  await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor()
+ await page.evaluate(()=>window.failNextQuote=true);await input.fill('4');await page.waitForFunction(()=>window.requests.filter(r=>r.amount==='4').length>=2);await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
  await input.fill('9')
  await page.getByRole('button',{name:'Add funds',exact:true}).waitFor()
  await page.evaluate(()=>window.fail=true)
