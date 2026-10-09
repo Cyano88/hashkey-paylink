@@ -71,7 +71,7 @@ export default function PocketHomePage() {
 
   const open = (path: string) => navigate(POCKET_BASE_PATH + path, path===POCKET_ROUTES.xpay?{state:{xpayOrigin:'stablecoins'}}:undefined)
   const toggleBalance = () => setBalanceVisible(current => { window.localStorage.setItem(BALANCE_VISIBLE_KEY, String(!current)); return !current })
-  const hidden = '••••'
+  const hidden = '****'
 
   return <PocketRouteShell active="home" onSelect={tab => open(navPath(tab))}>
     <PocketWalletUpdateCard key={email} notice={pocketWalletPreparationNotice(wallets.walletUpdate, wallets.wallets)} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
