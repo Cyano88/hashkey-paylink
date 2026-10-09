@@ -16,6 +16,7 @@ export default function PocketRouteShell({
   onSelect,
   navigationDisabled = false,
   fixedPage = false,
+  elasticFixedPage = false,
   scrollKey,
   rail,
   refreshEnabled = true,
@@ -25,6 +26,7 @@ export default function PocketRouteShell({
   onSelect: (tab: PocketNavTab) => void
   navigationDisabled?: boolean
   fixedPage?: boolean
+  elasticFixedPage?: boolean
   scrollKey?: string
   rail?: 'stablecoins' | 'xstocks'
   refreshEnabled?: boolean
@@ -39,7 +41,7 @@ export default function PocketRouteShell({
   const [headerHeight, setHeaderHeight] = useState(() => Math.ceil(document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')?.getBoundingClientRect().bottom ?? 0))
   const [pullDistance, setPullDistance] = useState(0)
   const [pullDragging, setPullDragging] = useState(false)
-  const pullEdge = useRef<'top' | null>(null)
+  const pullEdge = useRef<'top' | 'bottom' | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState('')
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -92,7 +94,7 @@ export default function PocketRouteShell({
     pullStartY.current = null
     pullEdge.current = null
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
-    if (!refreshEnabled || fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
+    if ((fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
@@ -138,16 +140,18 @@ export default function PocketRouteShell({
     }
     if (!pullEdge.current) {
       const atTop = scroller.scrollTop <= 1
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
       if (atTop && distance > 6) pullEdge.current = 'top'
-      else if (atTop && distance >= 0) return
+      else if (atBottom && distance < -6) pullEdge.current = 'bottom'
+      else if ((atTop && distance >= 0) || (atBottom && distance <= 0)) return
       else { pullStartY.current = y; return }
     }
-    const outward = distance
+    const outward = pullEdge.current === 'top' ? distance : -distance
     if (outward <= 0) { cancelPull(); return }
     // Increasing resistance, bounded travel; native momentum handles ordinary scrolling.
-    const limit = 104
+    const limit = pullEdge.current === 'top' ? 104 : 72
     const stretch = limit * (1 - Math.exp(-Math.max(0, outward - 6) / 150))
-    const nextDistance = stretch
+    const nextDistance = pullEdge.current === 'top' ? stretch : -stretch
     setPullDragging(true)
     pullDistanceRef.current = nextDistance
     setPullDistance(nextDistance)
@@ -242,8 +246,11 @@ export default function PocketRouteShell({
             <div
               key={locationKey}
               data-pocket-page-content
-              className={`mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${navigationType==='PUSH' && state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
+              data-dragging={pullDragging || undefined}
+              className={`pocket-boundary-content mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${navigationType==='PUSH' && state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
               style={{
+                // Top refresh gestures move only the indicator; other boundaries stay elastic.
+                transform: `translate3d(0, ${!refreshEnabled || pullDistance < 0 ? pullDistance : 0}px, 0)`,
                 minHeight: fixedPage ? 0 : `calc(100dvh - ${headerHeight}px)`,
                 height: fixedPage ? '100%' : undefined,
                 display: fixedPage ? 'flex' : undefined,
