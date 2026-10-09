@@ -154,6 +154,14 @@ export async function recordCirclePocketAction(input: {
     }
     // Bridge recovery can retry after a worker has already finalized the action.
     // Keep terminal state and the event timestamp stable for ledger deduplication.
+    if (input.action === 'wallet.usdt-bridge' && existing) {
+      for (const key of ['quoteToken', 'source', 'destination', 'amount']) {
+        if (existing.metadata?.[key] !== input.metadata?.[key]) throw new Error('Bridge details do not match the saved transfer.')
+      }
+      if (existing.status === 'completed' || existing.status === 'failed') return existing
+      input.metadata = { ...existing.metadata, ...input.metadata }
+      if (existing.status === input.status && Object.keys(input.metadata).every(key => input.metadata?.[key] === existing.metadata?.[key])) return existing
+    }
     if (input.action === 'wallet.bridge' && existing) {
       if (existing.metadata?.source !== input.metadata?.source || existing.metadata?.destination !== input.metadata?.destination || existing.metadata?.amount !== input.metadata?.amount) {
         throw new Error('Bridge details do not match the saved transfer.')

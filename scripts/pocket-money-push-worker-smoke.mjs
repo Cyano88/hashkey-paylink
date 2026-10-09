@@ -102,7 +102,7 @@ const movePushes=[]
 await runPocketMoneyPushWorker({configured:()=>true,listOwners:async()=>['moves'],readWallets:async()=>[],listActions:async()=>[],listRequests:async()=>[],readActivity:async()=>[row({txHash:sourceHash,direction:'out'}),row({txHash:mintHash,direction:'in'}),row({txHash:billHash,direction:'out'}),row({txHash:billHash,direction:'in'})],readContext:async()=>[
  {...row({txHash:sourceHash,direction:'out'}),source:'wallet-bridge',chain:'arc',destination:'base',destinationTxHash:mintHash,paycrestStatus:'completed'},
  {...row({txHash:billHash,direction:'out'}),source:'wallet-swap',chain:'arc',contextLabel:'1 USDC to 1 token',paycrestStatus:'completed'}],sendPush:async(owner,event,input)=>movePushes.push(input),now:()=>now})
-assert.deepEqual(movePushes.map(n=>n.title).sort(),['Swap completed','USDC bridged'])
+assert.deepEqual(movePushes.map(n=>n.title).sort(),['Bridge successful','Swap completed'])
 console.log('PASS standalone bridge and swap each send one scoped push; all underlying sends and receipts remain silent.')
 
 const giftPushes=[],giftHash='0x'+'f'.repeat(64)

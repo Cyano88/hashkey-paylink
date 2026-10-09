@@ -4,6 +4,7 @@ import {base,arbitrum,mainnet,polygon} from 'viem/chains'
 import {verifiedPrivyUser,circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import {createCircleGasStationEvmChallenge,readCircleEvmChallenge} from '../circle-solana-email.js'
+import {evmActivity} from './wallet-chain-activity.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {bridgeError,openUsdtBridgeQuote,quoteUsdtBridge,sameAddress,sealUsdtBridgeQuote,USDT_BRIDGE_ROUTER,USDT_TRANSFER_ABI,usdtBridgeNetwork,type UsdtBridgeQuote,type UsdtBridgeNetwork} from './usdt-bridge-provider.js'
@@ -62,22 +63,44 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       await recordCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,challengeId:result.challengeId}})
       return res.json({ok:true,challengeId:result.challengeId})
     }
-    if(!existing)return res.json({ok:true,status:'not_submitted'})
-    if(existing.status==='completed')return res.json({ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash})
-    if(existing.status==='failed')return res.json({ok:true,status:'failed'})
+    return res.json(await reconcileUsdtBridge(identity.userId,quoteToken,{txHash:req.body.txHash,circleUserToken:req.body.circleUserToken}))
+  }catch(reason){const error=reason as Error&{status?:number};return res.status(error.status||503).json({ok:false,error:error.status?error.message:'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
+}
+
+// Shared by the authenticated status route and background reconciliation.
+const recoveryDefaults={findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch}
+export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string}={},overrides:Partial<typeof recoveryDefaults>={}){
+  const deps={...recoveryDefaults,...overrides}
+  const q=openUsdtBridgeQuote(quoteToken,ownerId,true),journalKey='pocket:usdt-bridge:'+q.id
+  const existing=await deps.findAction(ownerId,journalKey,ACTION)
+  const meta:Record<string,string>={...metadata(q,quoteToken),...(existing?.metadata||{})}
+    if(!existing)return {ok:true,status:'not_submitted'}
+    if(existing.status==='completed'){
+      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'across'},recordedAt:existing.updatedAt})
+      return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash}
+    }
+    if(existing.status==='failed')return {ok:true,status:'failed'}
     let txHash=meta.txHash||''
-    if(!txHash&&meta.challengeId&&req.body.circleUserToken){
-      const result=await readCircleEvmChallenge({chain:q.source,userToken:String(req.body.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId})
+    if(!txHash&&meta.challengeId&&input.circleUserToken){
+      const result=await deps.readChallenge({chain:q.source,userToken:String(input.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId}).catch(()=>({status:'pending' as const,txHash:undefined}))
       if(result.status==='failed'){
-        await recordCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:meta})
-        return res.json({ok:true,status:'failed'})
+        await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:meta})
+        return {ok:true,status:'failed'}
       }
       txHash=result.txHash||''
     }
-    txHash=txHash||String(req.body.txHash||'')
-    if(!/^0x[0-9a-f]{64}$/i.test(txHash))return res.json({ok:true,status:'pending',challengeId:meta.challengeId})
-    const receipt=await client(q.source).getTransactionReceipt({hash:txHash as Hex}).catch(()=>null)
-    if(!receipt)return res.json({ok:true,status:'pending',challengeId:meta.challengeId})
+    txHash=txHash||String(input.txHash||'')
+    if(!txHash){
+      const rows=await deps.readActivity(q.source,q.walletAddress,AbortSignal.timeout(8000)).catch(()=>[])
+      const hashes=[...new Set(rows.filter(r=>r.assetSymbol==='USDT'&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
+      for(const hash of hashes){
+        const receipt=await deps.client(q.source).getTransactionReceipt({hash:hash as Hex}).catch(()=>null)
+        if(receipt?.logs.some(log=>{if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false;try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId}catch{return false}})){txHash=hash;break}
+      }
+    }
+    if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:'pending',challengeId:meta.challengeId}
+    const receipt=await deps.client(q.source).getTransactionReceipt({hash:txHash as Hex}).catch(()=>null)
+    if(!receipt)return {ok:true,status:'pending',challengeId:meta.challengeId}
     const debited=receipt.logs.reduce((sum,log)=>{
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.source].address))return sum
       try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.from,q.walletAddress)?event.args.value:0n)-(sameAddress(event.args.to,q.walletAddress)?event.args.value:0n)}catch{return sum}
@@ -86,24 +109,23 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false
       try {const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId&&sameAddress(event.args.bridgeData.receiver,q.destinationAddress)&&sameAddress(event.args.bridgeData.sendingAssetId,POCKET_USDT_ASSETS[q.source].address)&&event.args.bridgeData.destinationChainId===BigInt(POCKET_USDT_ASSETS[q.destination].chainId)}catch{return false}
     })
-    if(!started)return res.json({ok:true,status:'needs_attention'})
-    await recordCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,txHash}})
+    if(!started)return {ok:true,status:'needs_attention'}
+    await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,txHash,sourceConfirmed:'true'}})
     const query=new URLSearchParams({txHash,fromChain:String(POCKET_USDT_ASSETS[q.source].chainId),toChain:String(POCKET_USDT_ASSETS[q.destination].chainId),bridge:'across'})
-    const response=await fetch('https://li.quest/v1/status?'+query,{signal:AbortSignal.timeout(15000)})
-    if(!response.ok)return res.json({ok:true,status:'pending',txHash})
+    const response=await deps.fetch('https://li.quest/v1/status?'+query,{signal:AbortSignal.timeout(15000)})
+    if(!response.ok)return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const delivery=await response.json() as any
-    if(delivery.status==='FAILED'||delivery.substatus==='PARTIAL'||delivery.substatus==='REFUNDED')return res.json({ok:true,status:'needs_attention',txHash})
-    if(delivery.status!=='DONE'||delivery.substatus!=='COMPLETED'||!sameAddress(delivery.sending?.txHash,txHash)||delivery.receiving?.chainId!==POCKET_USDT_ASSETS[q.destination].chainId)return res.json({ok:true,status:'pending',txHash})
+    if(delivery.status==='FAILED'||delivery.substatus==='PARTIAL'||delivery.substatus==='REFUNDED')return {ok:true,status:'needs_attention',txHash}
+    if(delivery.status!=='DONE'||delivery.substatus!=='COMPLETED'||!sameAddress(delivery.sending?.txHash,txHash)||Number(delivery.receiving?.chainId)!==POCKET_USDT_ASSETS[q.destination].chainId)return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const destinationTxHash=String(delivery.receiving?.txHash||'')
-    if(!/^0x[0-9a-f]{64}$/i.test(destinationTxHash))return res.json({ok:true,status:'pending',txHash})
-    const destinationReceipt=await client(q.destination).getTransactionReceipt({hash:destinationTxHash as Hex}).catch(()=>null)
+    if(!/^0x[0-9a-f]{64}$/i.test(destinationTxHash))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
+    const destinationReceipt=await deps.client(q.destination).getTransactionReceipt({hash:destinationTxHash as Hex}).catch(()=>null)
     const received=destinationReceipt?.status==='success'?destinationReceipt.logs.reduce((sum,log)=>{
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.destination].address))return sum
       try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.to,q.destinationAddress)?event.args.value:0n)-(sameAddress(event.args.from,q.destinationAddress)?event.args.value:0n)}catch{return sum}
     },0n):0n
-    if(received<BigInt(q.minimumUnits))return res.json({ok:true,status:'pending',txHash})
-    const completed=await recordCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash}})
-    await appendPocketMoneyLedgerEvent({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:identity.userId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{destinationTxHash,provider:'across'},recordedAt:completed.updatedAt})
-    return res.json({ok:true,status:'completed',txHash,destinationTxHash})
-  }catch(reason){const error=reason as Error&{status?:number};return res.status(error.status||503).json({ok:false,error:error.status?error.message:'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
+    if(received<BigInt(q.minimumUnits))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
+    const completed=await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash,sourceConfirmed:'true',paymentState:'completed'}})
+    await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:ownerId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{destinationTxHash,provider:'across'},recordedAt:completed.updatedAt})
+    return {ok:true,status:'completed',txHash,destinationTxHash}
 }

@@ -347,7 +347,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
       { label: 'Amount & narration', value: `${amount} · ${narration}` },
       ...(localAmount ? [{ label: pocketUsdc ? 'Local amount' : 'Total USDC', value: pocketUsdc ? localAmount : `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
-      ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount)} USDC` }] : []),
+      ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount)} ${receipt.asset || 'USDC'}` }] : []),
       ...(receipt.source === 'bank-withdraw' && receipt.bankSettlementStatus ? [{label:'Bank delivery',value:['settled','completed','successful'].includes(receipt.bankSettlementStatus) ? 'Delivered' : ['refunded','reversed'].includes(receipt.bankSettlementStatus) ? 'Refunded' : ['refunding','reversing'].includes(receipt.bankSettlementStatus) ? 'Refund pending' : ['failed','expired','cancelled','canceled'].includes(receipt.bankSettlementStatus) ? 'Not completed' : 'Processing'}] : []),
     ],
     reference,

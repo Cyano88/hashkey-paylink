@@ -24,7 +24,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
     ['Status', <span className="capitalize">{status}</span>],
     ...(row.direction === 'in' && row.payer ? [['From', row.payer] as [string, ReactNode]] : []),
     ...(row.direction !== 'in' && row.recipient ? [['To', row.recipient] as [string, ReactNode]] : []),
-    ...(row.feeAmount ? [['Fees', row.feeAmount + ' USDC'] as [string, ReactNode]] : []),
+    ...(row.feeAmount ? [['Fees', row.feeAmount + ' ' + (row.assetSymbol || 'USDC')] as [string, ReactNode]] : []),
     ['Network', <span className="capitalize">{row.chain}</span>],
     ['Date', new Date(row.ts).toLocaleString()],
   ]

@@ -1,3 +1,4 @@
+import {reconcileUsdtBridge} from './usdt-bridge.js'
 import type { Request, Response } from 'express'
 import { sendTransactionalEmail } from '../email-provider.js'
 import { reconcilePaycrestOrderPayment } from '../paycrest-reconcile.js'
@@ -24,6 +25,7 @@ type Dependencies = {
   expireCheckout: typeof expireHostedCheckoutExecution
   readPolymarketFunding: typeof getDepositStatus
   listBridges: typeof listUnresolvedCirclePocketActions
+  reconcileUsdt: typeof reconcileUsdtBridge
   readBridge: typeof readCircleBridgeStatus
   recordAction: typeof recordCirclePocketAction
   appendLedger: typeof appendPocketMoneyLedgerEvent
@@ -247,7 +249,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
     syncCheckout: syncHostedCheckoutExecution, expireCheckout: expireHostedCheckoutExecution,
     readPolymarketFunding: getDepositStatus, listBridges: listUnresolvedCirclePocketActions,
-    readBridge: readCircleBridgeStatus, recordAction: recordCirclePocketAction, appendLedger: appendPocketMoneyLedgerEvent,
+    reconcileUsdt: reconcileUsdtBridge, readBridge: readCircleBridgeStatus, recordAction: recordCirclePocketAction, appendLedger: appendPocketMoneyLedgerEvent,
     sendEmail: sendTransactionalEmail, mutateDurable: mutateDurableJson, now: Date.now, ...overrides,
   }
   const limit = Math.max(1, Math.min(Number(process.env.POCKET_RECONCILIATION_BATCH_SIZE ?? 100), 500))
@@ -256,6 +258,11 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
   for (const intent of intents) {
     try { results.push(await reconcileExecution(intent, dependencies)) }
     catch (error) { results.push({ id: intent.id, kind: intent.kind, result: 'error', message: errorText(error) }) }
+  }
+  for(const record of await dependencies.listBridges('wallet.usdt-bridge',Math.min(limit,20))){
+    if(!record.metadata?.quoteToken)continue
+    try{const result=await dependencies.reconcileUsdt(record.ownerId,record.metadata.quoteToken);results.push({id:record.id,kind:'wallet_bridge',result:result.status==='completed'?'reconciled':result.status==='needs_attention'?'review':'unchanged'})}
+    catch(error){results.push({id:record.id,kind:'wallet_bridge',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBridges(dependencies, limit))
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))

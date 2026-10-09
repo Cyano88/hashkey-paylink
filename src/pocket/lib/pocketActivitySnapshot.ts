@@ -65,6 +65,9 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     ? { ...row, feeAmount: fees.get(transactionKey(row)) } : row)
   const refundDeposits = new Set(values.filter(row => row.source === 'bills' && row.refundTxHash).map(row => transactionKey({ ...row, txHash: row.refundTxHash! }) + ':' + Number(row.amount)))
   const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
+  for(const row of values){
+    if(row.source==='wallet-bridge'&&row.destinationTxHash&&row.destination)contextual.add(transactionKey({...row,chain:row.destination,txHash:row.destinationTxHash})+':in')
+  }
   return values.filter(row => !['wallet-deposit', 'wallet-withdrawal'].includes(row.source || '')
     || (!contextual.has(transactionKey(row) + ':' + (row.direction || 'in'))
       && !(row.source === 'wallet-deposit' && (!row.assetSymbol || row.assetSymbol === 'USDC') && refundDeposits.has(transactionKey(row) + ':' + Number(row.amount)))))

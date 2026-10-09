@@ -1,4 +1,5 @@
 import { readPocketNotificationActivity } from './activity.js'
+import { reconcileUsdtBridge } from './usdt-bridge.js'
 import { pocketMoneyNotification } from '../../src/pocket/lib/pocketMoneyNotification.js'
 import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 import { listCirclePocketActions } from '../circle-pocket-action-journal.js'
@@ -24,13 +25,14 @@ type Dependencies = {
   findSolana: typeof findSolanaUsdcTransfer
   sendPush: typeof sendPocketPush
   readContext: typeof readPocketNotificationActivity
+  reconcileUsdt: typeof reconcileUsdtBridge
   now: () => number
 }
 
 function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions>>) {
   const hashes = new Set<string>()
   for (const record of records) {
-    if (record.action !== 'wallet.bridge' && record.action !== 'wallet.swap' && record.action !== 'bank-withdraw.route' && record.action !== 'gift.sent' && record.action !== 'gift.received') continue
+    if (record.action !== 'wallet.bridge' && record.action !== 'wallet.usdt-bridge' && record.action !== 'wallet.swap' && record.action !== 'bank-withdraw.route' && record.action !== 'gift.sent' && record.action !== 'gift.received') continue
     const candidates = [record.resourceId, record.metadata?.txHash, record.metadata?.destinationTxHash, record.metadata?.refundTxHash]
     candidates.forEach(value => { if (value) hashes.add(String(value).toLowerCase()) })
   }
@@ -50,6 +52,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
     findSolana: findSolanaUsdcTransfer,
     sendPush: sendPocketPush,
     readContext: readPocketNotificationActivity,
+    reconcileUsdt: reconcileUsdtBridge,
     now: Date.now,
     ...overrides,
   }
@@ -71,10 +74,19 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       const rows = mergePocketActivityRows([],rawRows)
       const ownWallets = new Set(wallets.map(item => item.walletAddress.toLowerCase()))
       const ignoredHashes = actionHashes(actions)
+      let notificationContext = context
+      // Recover bridge context before generic transfer notifications race it.
+      for (const action of actions.filter(item => item.action === 'wallet.usdt-bridge' && ['started','submitted'].includes(item.status) && item.metadata?.quoteToken).slice(0, 4)) {
+        try {
+          const bridge = await dependencies.reconcileUsdt(ownerId, action.metadata!.quoteToken)
+          for (const hash of [bridge.txHash, bridge.destinationTxHash]) if (hash) ignoredHashes.add(hash.toLowerCase())
+          if (bridge.status === 'completed') notificationContext = await dependencies.readContext(ownerId)
+        } catch { /* The reconciliation worker retries without announcing success. */ }
+      }
       const cutoff = dependencies.now() - lookbackMs
       // Provider records own payment wording. Suppress the debit, fee logs,
       // refund deposit and every attached funding leg even before delivery.
-      for (const row of context) {
+      for (const row of notificationContext) {
         for (const hash of [row.txHash,row.refundTxHash,row.destinationTxHash,...(row.paymentFunding||[]).flatMap(f=>[f.txHash,f.destinationTxHash])]) if(hash) ignoredHashes.add(hash.toLowerCase())
         const notice=pocketMoneyNotification(row)
         if(notice && notice.occurredAt>=cutoff){await dependencies.sendPush(ownerId,notice.eventId,notice);notifications++}
@@ -87,6 +99,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
           && row.ts >= cutoff
       }
       const matchingAcceptedRequest = (row: (typeof rows)[number]) => requests.find(request => {
+        if (row.assetSymbol && row.assetSymbol !== 'USDC') return false
         if (request.status !== 'accepted' || row.ts < request.updatedAt || Number(row.amount) !== Number(request.amount)) return false
         const senderAddress = request.senderAddress?.toLowerCase()
         if (!senderAddress) return false
