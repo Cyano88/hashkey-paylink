@@ -81,6 +81,8 @@ export default function PocketSelect({
     if (!open) setQuery('')
   }, [open])
 
+  const stablecoinOptions = options.length > 0 && options.every(option => option.value === 'USDC' || option.value === 'USDT')
+  const stablecoinIcon = (symbol: string) => <img src={symbol === 'USDT' ? '/brand/usdt.svg' : '/brand/usdc-circle-logo.png'} alt="" className="h-5 w-5 shrink-0 rounded-full grayscale contrast-200 dark:invert" />
   const networkOptions = /network/i.test(ariaLabel) && options.length > 0 && options.every(option => ['base','arbitrum','arc','solana','ethereum','polygon','xlayer'].includes(option.value))
   if (networkOptions) return <div className={className}>
     <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={unavailable} onClick={()=>setOpen(true)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#262626]',buttonClassName)}>
@@ -106,6 +108,7 @@ export default function PocketSelect({
           buttonClassName,
         )}
       >
+        {stablecoinOptions && selected && stablecoinIcon(selected.value)}
         <span className={cn('min-w-0 flex-1 truncate', !selected && 'text-gray-400')}>{selected?.label ?? placeholder}</span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400 transition-transform', open && 'rotate-180 text-blue-500')} />
       </button>
@@ -140,7 +143,7 @@ export default function PocketSelect({
                   option.disabled && 'cursor-not-allowed text-gray-300 hover:bg-transparent hover:text-gray-300 dark:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-600',
                 )}
               >
-                <span>{option.label}</span>
+                {stablecoinOptions && stablecoinIcon(option.value)}<span className="flex-1">{option.label}</span>
                 {active && <Check className="h-4 w-4 shrink-0 stroke-[2.5]" />}
               </button>
             )

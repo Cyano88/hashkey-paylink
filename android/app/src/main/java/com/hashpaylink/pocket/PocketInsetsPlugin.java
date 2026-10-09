@@ -1,6 +1,7 @@
 package com.hashpaylink.pocket;
 
 import android.graphics.Color;
+import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -15,6 +16,35 @@ import com.getcapacitor.PluginMethod;
 
 @CapacitorPlugin(name = \u0022PocketInsets\u0022)
 public class PocketInsetsPlugin extends Plugin {
+    private Boolean requestedDarkIcons;
+    private boolean requestedNavigationDarkIcons;
+    private int requestedSurface;
+
+    private void applySystemBarAppearance() {
+        if (requestedDarkIcons == null) return;
+        getActivity().getWindow().setBackgroundDrawable(new ColorDrawable(requestedSurface));
+        getActivity().getWindow().getDecorView().setBackgroundColor(requestedSurface);
+        getBridge().getWebView().setBackgroundColor(requestedSurface);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+            getActivity().getWindow(), getActivity().getWindow().getDecorView());
+        controller.setAppearanceLightStatusBars(requestedDarkIcons);
+        controller.setAppearanceLightNavigationBars(requestedNavigationDarkIcons);
+    }
+
+    // Android may reset system-bar contrast after application night-mode changes.
+    // Reapply the current Pocket surface after configuration/resume callbacks finish.
+    @Override
+    protected void handleOnConfigurationChanged(Configuration newConfig) {
+        super.handleOnConfigurationChanged(newConfig);
+        getActivity().getWindow().getDecorView().post(this::applySystemBarAppearance);
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        getActivity().getWindow().getDecorView().post(this::applySystemBarAppearance);
+    }
+
     @PluginMethod
     public void setPocketTheme(PluginCall call) {
         boolean dark = Boolean.TRUE.equals(call.getBoolean("dark", false));
@@ -37,15 +67,10 @@ public class PocketInsetsPlugin extends Plugin {
             int surface;
             try { surface = Color.parseColor(backgroundColor); }
             catch (IllegalArgumentException ignored) { surface = darkIcons ? Color.rgb(245,245,247) : Color.BLACK; }
-            getActivity().getWindow().setBackgroundDrawable(new ColorDrawable(surface));
-            getActivity().getWindow().getDecorView().setBackgroundColor(surface);
-            getBridge().getWebView().setBackgroundColor(surface);
-            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
-                getActivity().getWindow(),
-                getActivity().getWindow().getDecorView()
-            );
-            controller.setAppearanceLightStatusBars(darkIcons);
-            controller.setAppearanceLightNavigationBars(navigationDarkIcons);
+            requestedDarkIcons = darkIcons;
+            requestedNavigationDarkIcons = navigationDarkIcons;
+            requestedSurface = surface;
+            applySystemBarAppearance();
             call.resolve();
         });
     }

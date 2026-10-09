@@ -13,6 +13,12 @@ function UsdcActivityLogo({ className }: { className?: string }) {
     createElement('path', { d: "M12.892 24.497c-4.754-1.7-7.192-6.98-5.424-11.653.914-2.55 2.925-4.491 5.424-5.402.244-.121.365-.303.365-.607v-.85c0-.242-.121-.424-.365-.485-.061 0-.183 0-.244.06a10.895 10.895 0 00-7.13 13.717c1.096 3.4 3.717 6.01 7.13 7.102.244.121.488 0 .548-.243.061-.06.061-.122.061-.243v-.85c0-.182-.182-.424-.365-.546zm6.46-18.936c-.244-.122-.488 0-.548.242-.061.061-.061.122-.061.243v.85c0 .243.182.485.365.607 4.754 1.7 7.192 6.98 5.424 11.653-.914 2.55-2.925 4.491-5.424 5.402-.244.121-.365.303-.365.607v.85c0 .242.121.424.365.485.061 0 .183 0 .244-.06a10.895 10.895 0 007.13-13.717c-1.096-3.46-3.778-6.07-7.13-7.162z" }))
 }
 
+// Reuse the Tether symbol from public/brand/usdt.svg in the activity badge.
+function UsdtActivityLogo({ className }: { className?: string }) {
+  return createElement('svg', { viewBox: '7 11 50 44', fill: 'currentColor', className, role: 'img', 'aria-label': 'USDT' },
+    createElement('path', { d: 'M17 15h30v8H36v5c10 .5 17 2.3 17 4.5s-7 4-17 4.5v14h-8V37c-10-.5-17-2.3-17-4.5s7-4 17-4.5v-5H17zm19 15v4h-8v-4c-8 .4-13 1.4-13 2.5 0 1.5 7.6 2.7 17 2.7s17-1.2 17-2.7c0-1.1-5-2.1-13-2.5z' }))
+}
+
 export function pocketActivityIcon(row: PocketActivityRow) {
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
   if (source === 'gift') return GiftIcon
@@ -25,6 +31,7 @@ export function pocketActivityIcon(row: PocketActivityRow) {
   if (source === 'wallet-swap' || source === 'wallet-bridge') return ArrowLeftRight
   if (source.startsWith('wallet-') || row.settlementType?.startsWith('wallet_')) {
     if (!row.assetSymbol || row.assetSymbol.toUpperCase() === 'USDC') return UsdcActivityLogo
+    if (row.assetSymbol.toUpperCase() === 'USDT') return UsdtActivityLogo
     return row.direction === 'in' || ['refunded', 'reversed'].includes(pocketActivityStatus(row)) ? ArrowDownToLine : ArrowUpFromLine
   }
   return CreditCard
