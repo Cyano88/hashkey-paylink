@@ -6,7 +6,7 @@ import type {PocketNetwork} from '../lib/pocketSchemas'
 const Deposit=lazy(()=>import('../pages/PocketDepositPage'))
 
 /** Funding never calls the payment action. The parent stays mounted with its draft. */
-export default function PocketFundingAction({asset,network,address,locked=false,onReturn,onCancel,children}:{asset:string|null;network:PocketNetwork|'xlayer';address?:string;locked?:boolean;onReturn:()=>Promise<unknown>|unknown;onCancel:()=>void;children:ReactNode}){
+export default function PocketFundingAction({asset,network,address,flow='payment',locked=false,onReturn,onCancel,children}:{asset:string|null;network:PocketNetwork|'xlayer';address?:string;flow?:'payment'|'bridge'|'swap'|'transfer'|'gift';locked?:boolean;onReturn:()=>Promise<unknown>|unknown;onCancel:()=>void;children:ReactNode}){
  const [open,setOpen]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false)
  const [target,setTarget]=useState('USDC')
  const root=useRef<HTMLElement>(null),closeRef=useRef<()=>void>(()=>{})
@@ -27,7 +27,7 @@ export default function PocketFundingAction({asset,network,address,locked=false,
  {open&&createPortal(<section data-pocket-colour-scope={network==='xlayer'?'xstocks':'stablecoins'} ref={root} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add funds" className="fixed inset-0 overflow-y-auto bg-[#F5F5F7] px-4 pb-8 pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white" style={{zIndex:150}}><div className="mx-auto max-w-md">
  {network==='xlayer'?<><h1 className="mb-5 text-center text-lg font-semibold">Deposit {target}</h1><p className="text-center text-sm text-gray-500">X Layer</p>{address&&<div style={{backgroundColor: 'white'}} className="mx-auto mt-6 w-fit rounded-2xl bg-white p-4"><QRCodeSVG value={address} size={200}/></div>}<p className="my-5 break-all rounded-2xl bg-white p-4 text-center font-mono text-xs dark:bg-white/5">{address||'Open your X Layer wallet first.'}</p>{address&&<button type="button" className="pocket-cta-primary w-full" onClick={async()=>{try{await navigator.clipboard.writeText(address);setCopied(true)}catch{setError('Could not copy address.')}}}>{copied?'Copied':'Copy deposit address'}</button>}<p className="mt-4 text-center text-xs text-gray-500">Send {target} on X Layer only.</p></>:<Suspense fallback={<p role="status">Opening deposit...</p>}><Deposit initialNetwork={network} initialAsset={target} embedded onBack={()=>void close()}/></Suspense>}
  {error&&<p role="alert" className="mt-4 text-center text-xs text-gray-500">{error}</p>}
- <button type="button" className="pocket-cta-primary mt-6 w-full" disabled={checking} onClick={()=>void close()}>{checking?'Checking balance...':'Return to payment'}</button>
- <button type="button" className="mt-3 min-h-12 w-full text-sm text-gray-500" disabled={checking} onClick={()=>{setOpen(false);onCancel()}}>Cancel payment</button>
+ <button type="button" className="pocket-cta-primary mt-6 w-full" disabled={checking} onClick={()=>void close()}>{checking?'Checking balance...':'Return to '+flow}</button>
+ <button type="button" className="mt-3 min-h-12 w-full text-sm text-gray-500" disabled={checking} onClick={()=>{setOpen(false);onCancel()}}>Cancel {flow}</button>
  </div></section>,document.body)}</>
 }
