@@ -177,26 +177,26 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
       ) : bills.availability === 'disabled' && !preview ? (
         <div className="rounded-[22px] bg-white p-5 text-center shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-[#121212] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
-          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bill payments are not available yet</h3>
+          <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Bill payments are not available yet</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">You can continue using Pocket to send and receive money. Check back here for bill payments.</p>
         </div>
       ) : !authenticated && !preview ? <SignInCard /> : !categoryEnabled && !preview ? (
         <div className="rounded-[22px] bg-white p-5 text-center shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-[#121212] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
-          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{billName} unavailable</h3>
+          <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{billName} unavailable</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? `${billName} testing is not enabled yet.` : `${billName} payments are not available yet.`}</p>
         </div>
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
           <div className="flex shrink-0 items-center justify-between gap-3 rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
             <span className="min-w-0">
-              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Paying from Base</span>
+              <span className="block text-xs font-medium text-gray-500 dark:text-gray-400">Paying from Base</span>
 
             </span>
             {baseAddress ? (
               <span className="shrink-0 text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(baseBalance)} <span className="text-[10px] text-gray-500 dark:text-gray-400">USDC</span></span>
             ) : (
-              <button type="button" onClick={onOpenWallet} disabled={walletBusy} className="flex min-h-9 items-center gap-2 rounded-full bg-gray-950 px-3 text-[11px] font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+              <button type="button" onClick={onOpenWallet} disabled={walletBusy} className="flex min-h-9 items-center gap-2 rounded-full bg-gray-950 px-3 text-[11px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
                 {walletBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}Open wallet
               </button>
             )}
@@ -225,7 +225,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             ) : (
               <>
                 <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{view === 'tv' ? 'TV provider' : 'Electricity provider'}</p>
+                  <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{view === 'tv' ? 'TV provider' : 'Electricity provider'}</p>
                   {bills.catalogBusy && !networks.length ? <PocketLoadingField label="Loading providers" /> : <PocketSelect value={bills.serviceId} options={networks} onChange={bills.setServiceId} disabled={locked || bills.catalogBusy} placeholder="Select provider" ariaLabel={`Select ${billName} provider`} />}
                 </div>
 
@@ -278,7 +278,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]">
-                  <span className="text-sm font-black text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span>
+                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span>
                   <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
                 </span>
               </label>
@@ -301,7 +301,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {view === 'electricity' && (
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
-                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]"><span className="text-sm font-black text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
+                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]"><span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
                 {Number(bills.verification?.minimumAmount) > 0 && <span className="mt-1.5 block text-[10px] font-semibold text-gray-500 dark:text-gray-400">Minimum amount: {money(String(bills.verification?.minimumAmount))}</span>}
               </label>
             )}
@@ -309,7 +309,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
 
             {bills.country!=='UG' && !isData && Number(bills.amountNgn) > 0 && <PocketFiatUsdcEstimate amount={Number(bills.amountNgn)} />}
-            {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
+            {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
             {bills.status === 'quoting' && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} onClose={bills.edit}>
@@ -319,7 +319,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {showPayment && !showResult && bills.intent && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
-                    <h2 className="mb-1 text-center text-2xl font-bold">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</h2>
+                    <h2 className="mb-1 text-center text-2xl font-semibold">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</h2>
                     <p className="mb-6 text-center text-xs font-medium text-gray-500">{money(bills.intent.international?.deliveryAmount || bills.intent.amountNgn,bills.intent.international?.deliveryCurrency || 'NGN')}</p>
                     <div className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 text-xs dark:border-[#262626] dark:bg-[#121212]">
                       <div className="flex justify-between gap-3"><span className="text-gray-500">Biller</span><span className="text-right font-semibold">{bills.intent.serviceName || billName}</span></div>
@@ -363,11 +363,11 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                   <div className="flex items-start gap-3">
                     <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]', errorPresentation.success ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-300')}><ErrorIcon className="h-4 w-4" /></span>
                     <span className="min-w-0">
-                      <span className="block text-xs font-black text-gray-950 dark:text-white">{errorPresentation.title}</span>
+                      <span className="block text-xs font-semibold text-gray-950 dark:text-white">{errorPresentation.title}</span>
                       <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{errorPresentation.body}</span>
                     </span>
                   </div>
-                  {errorPresentation.action && <button type="button" onClick={bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-gray-200 bg-white text-[11px] font-bold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.99] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:text-gray-200 dark:hover:bg-blue-400/10 dark:hover:text-blue-300">{errorPresentation.action}</button>}
+                  {errorPresentation.action && <button type="button" onClick={bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-gray-200 bg-white text-[11px] font-semibold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.99] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:text-gray-200 dark:hover:bg-blue-400/10 dark:hover:text-blue-300">{errorPresentation.action}</button>}
                 </div>
               )
             })()}

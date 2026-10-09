@@ -60,7 +60,7 @@ export default function PocketDataBundlePicker({
               onClick={() => setCategory(item.value)}
               aria-pressed={active}
               className={cn(
-                'min-h-8 shrink-0 rounded-full px-3 text-[10px] font-black transition-all duration-200',
+                'min-h-8 shrink-0 rounded-full px-3 text-[10px] font-semibold transition-all duration-200',
                 active
                   ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
                   : 'text-gray-500 hover:bg-blue-50 hover:text-blue-700 dark:text-gray-400 dark:hover:bg-blue-400/10 dark:hover:text-blue-200',
@@ -96,9 +96,9 @@ export default function PocketDataBundlePicker({
               )}
             >
               {selected && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white"><Check className="h-2.5 w-2.5 stroke-[3]" /></span>}
-              <span className="block text-[13px] font-black leading-tight tracking-[-0.03em] text-gray-950 dark:text-white">{bundle.dataAmount}</span>
+              <span className="block text-[13px] font-semibold leading-tight tracking-[-0.03em] text-gray-950 dark:text-white">{bundle.dataAmount}</span>
               <span className="mt-0.5 block truncate text-[9px] font-semibold text-gray-500 dark:text-gray-400">{bundle.validity}</span>
-              <span className="mt-2 block text-[10px] font-black tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price,currency)}</span>
+              <span className="mt-2 block text-[10px] font-semibold tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price,currency)}</span>
             </button>
           )
         })}
