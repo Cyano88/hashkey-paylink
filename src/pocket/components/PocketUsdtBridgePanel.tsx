@@ -5,6 +5,7 @@ import {pocketBridgeNetworkLabel} from '../lib/pocketBridgeNetworks'
 import PocketSelect from './PocketSelect'
 import PocketTransactionSheet from './PocketTransactionSheet'
 import PocketSlideAction from './PocketSlideAction'
+import PocketFundingAction from './PocketFundingAction'
 import {Loader2} from './PocketIcons'
 import {formatPocketDisplayAmount} from '../lib/pocketMoney'
 
@@ -19,6 +20,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   const [pending,setPending]=useState<Pending|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('')
   const [recoveryFailed,setRecoveryFailed]=useState(false),[reload,setReload]=useState(0)
   const [preparing,setPreparing]=useState(false),[quoteExpired,setQuoteExpired]=useState(false)
+  const [quoting,setQuoting]=useState(false)
   const [result,setResult]=useState<{quote:Quote;state:'successful'|'failed';txHash?:string;destinationTxHash?:string}|null>(null)
   const lock=useRef(false),version=useRef(0),session=useRef<CircleEvmEmailSession|null>(null),currentOwner=useRef(props.owner)
   currentOwner.current=props.owner
@@ -39,13 +41,20 @@ export default function PocketUsdtBridgePanel(props:Props){
   },[props.owner,api,key,reload])
   useEffect(()=>{props.onBusyChange(busy||preparing);return()=>props.onBusyChange(false)},[busy,preparing,props.onBusyChange])
   useEffect(()=>{setQuoteExpired(false);if(!quoted)return;const timer=window.setTimeout(()=>setQuoteExpired(true),Math.max(0,quoted.quote.expiresAt-Date.now()));return()=>clearTimeout(timer)},[quoted])
-  const invalidate=()=>{version.current++;setQuoted(null);setError('');setNotice('');session.current=null}
+  const invalidate=()=>{version.current++;setQuoted(null);setQuoting(false);setError('');setNotice('');session.current=null}
   async function quote(){
     if(lock.current||busy||preparing||pending||loading||recoveryFailed)return
-    lock.current=true
-    const requestVersion=++version.current;setBusy(true);setError('');setQuoted(null)
-    try{const data=await api({action:'quote',source,destination,amount});if(requestVersion===version.current)setQuoted(data)}catch(e){if(requestVersion===version.current)setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
+    if(!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<=0)return
+    const requestVersion=++version.current;setQuoting(true);setError('');setQuoted(null)
+    try{const data=await api({action:'quote',source,destination,amount});if(requestVersion===version.current)setQuoted(data)}catch(e){if(requestVersion===version.current)setError((e as Error).message)}finally{if(requestVersion===version.current)setQuoting(false)}
   }
+  const quoteRef=useRef(quote);quoteRef.current=quote
+  useEffect(()=>{
+    if(loading||recoveryFailed||pending)return
+    const timer=window.setTimeout(()=>void quoteRef.current(),450)
+    return()=>{clearTimeout(timer);version.current++}
+  },[amount,source,destination,loading,recoveryFailed,props.owner,pending?.quote.id])
+  useEffect(()=>{if(quoteExpired&&!preparing&&!pending)void quoteRef.current()},[quoteExpired,preparing,pending?.quote.id])
   async function check(value:Pending,_interactive=true){
     if(lock.current)return
     lock.current=true;setError('')
@@ -98,17 +107,19 @@ export default function PocketUsdtBridgePanel(props:Props){
   const locked=busy||preparing||loading||Boolean(pending)
   const validAmount=/^\d+(\.\d{1,6})?$/.test(amount)&&Number(amount)>0
   return <>
-    <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 dark:border-[#262626] dark:bg-[#0D0D0D]">
+    <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
       <div className="grid grid-cols-2 gap-3">
         <div><p className="mb-2 text-xs font-medium text-gray-500">From</p><PocketSelect showNetworkBalances={false} value={source} disabled={locked} ariaLabel="USDT source network" options={NETWORKS.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onChange={value=>{invalidate();setSource(value as Network);if(value===destination)setDestination(NETWORKS.find(n=>n!==value)!);setAmount('')}}/></div>
         <div><p className="mb-2 text-xs font-medium text-gray-500">To</p><PocketSelect showNetworkBalances={false} value={destination} disabled={locked} ariaLabel="USDT destination network" options={NETWORKS.filter(n=>n!==source).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onChange={value=>{invalidate();setDestination(value as Network)}}/></div>
       </div>
       <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-medium text-gray-500">Available</span><span className="text-sm font-semibold tabular-nums">{balance?.usdt!==undefined&&!balance.usdtStale?formatPocketDisplayAmount(balance.usdt)+' USDT':'—'}</span></div>
-      <label className="block text-xs font-medium text-gray-500">Amount<input aria-label="USDT bridge amount" inputMode="decimal" value={amount} disabled={locked} onChange={event=>{invalidate();setAmount(event.target.value)}} placeholder="0.00" className="mt-2 w-full rounded-2xl border border-gray-200 bg-transparent px-4 py-4 text-base font-semibold text-gray-900 outline-none focus:border-gray-400 dark:border-[#262626] dark:focus:border-gray-500 dark:text-white"/></label>
+      <label className="block"><span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span><span className="mt-2 flex gap-2"><input type="text" aria-label="USDT bridge amount" inputMode="decimal" value={amount} disabled={locked} onChange={event=>{invalidate();setAmount(event.target.value)}} placeholder="0.00" className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base font-semibold outline-none dark:border-[#262626] dark:bg-[#121212]"/><button type="button" disabled={locked||balance?.usdt===undefined||balance.usdtStale} onClick={()=>{invalidate();setAmount(Math.max(0,balance?.usdt||0).toFixed(6).replace(/\.?0+$/,''))}} className="rounded-2xl border border-gray-200 px-4 text-xs font-semibold dark:border-[#262626]">Max</button></span></label>
       {quoted&&!pending&&<div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#121212]"><div className="flex justify-between"><span>You receive</span><span className="font-semibold">{quoted.quote.receive} USDT</span></div><div className="flex justify-between"><span>Minimum received</span><span className="font-semibold">{quoted.quote.minimumReceive} USDT</span></div><div className="flex justify-between"><span>Bridge fee included</span><span className="font-semibold">{quoted.quote.fee} USDT</span></div>{!quoted.sufficientBalance&&<p>Insufficient USDT on {pocketBridgeNetworkLabel(source)}.</p>}</div>}
+      <PocketFundingAction flow="bridge" asset={!pending&&(quoted?.sufficientBalance===false||(balance?.usdt!==undefined&&!balance.usdtStale&&Number(amount)>balance.usdt))?'USDT':null} network={source} locked={locked} onReturn={async()=>{await props.refresh();await quote()}} onCancel={()=>{invalidate();setAmount('')}}>
       {pending?<button type="button" className="pocket-cta-primary w-full" disabled={!pending.needsAttention} aria-busy={!pending.needsAttention} onClick={()=>void check(pending)}>{!pending.needsAttention&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{pending.needsAttention?'Retry status check':pending.sourceConfirmed?'Arriving on '+pocketBridgeNetworkLabel(pending.quote.destination):'Bridging USDT'}</span></button>
-      :!quoted||(quoteExpired&&!preparing)?<button type="button" disabled={busy||loading||(!recoveryFailed&&!validAmount)} aria-busy={busy||loading} onClick={()=>recoveryFailed?setReload(value=>value+1):void quote()} className="pocket-cta-primary w-full">{(busy||loading)&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{busy?'Getting live quote':loading?'Loading':recoveryFailed?'Try again':!validAmount?'Enter bridge amount':quoteExpired?'Refresh quote':'Review bridge'}</span></button>
-      :<PocketSlideAction key={quoted.quote.id} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={busy||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:preparing?'Preparing bridge':'Confirm bridge',disabled:'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
+      :recoveryFailed||(!quoted&&error&&!quoting)?<button type="button" className="pocket-cta-primary w-full" onClick={()=>recoveryFailed?setReload(value=>value+1):void quote()}>Try again</button>
+      :<PocketSlideAction key={quoted?.quote.id||'quote'} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:loading?'Loading':!validAmount?'Enter bridge amount':quoting||!quoted||quoteExpired?'Getting live quote':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
+      </PocketFundingAction>
       {notice&&<p role="status" className="text-center text-xs text-gray-500">{notice}</p>}{error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
     </section>
     {result&&<PocketTransactionSheet title="Bridge stablecoins" state={result.state} statusLabel={result.state==='successful'?'Bridge successful':'Bridge failed'} amount={result.quote.amount+' USDT'} detailsRows={[
