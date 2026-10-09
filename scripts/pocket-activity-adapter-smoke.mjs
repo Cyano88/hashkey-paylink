@@ -89,6 +89,7 @@ const handler = createPocketActivityHandler({
           payer: 'Circle wallet payer',
           memo: 'Bank receive payment',
           amount: '3.75',
+          assetSymbol: 'USDT',
           ts: 1_730_000_000_000,
           source: 'bank-receive',
           settlementType: 'INSTANT_FIAT',
@@ -220,6 +221,7 @@ assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)
 assert.equal(serialized.includes('must-not-leak'), false)
 assert.equal(loaded.body.payments[4].bankName, 'Example Bank')
+assert.equal(loaded.body.payments[4].assetSymbol, 'USDT')
 assert.equal(loaded.body.payments[4].bankLast4, '1234')
 assert.equal(loaded.body.payments[4].accountName, 'Ada Lovelace')
 assert.equal(serialized.includes('must-not-leak-bank-secret'), false)

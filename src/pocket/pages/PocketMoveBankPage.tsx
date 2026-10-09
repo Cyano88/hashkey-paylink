@@ -292,7 +292,6 @@ function PocketMoveBankContent() {
           {authenticated && !bank.profileVerified && <PocketIdentityGate />}
 
           {authenticated && bank.profileVerified && !(mode === 'request' && bank.generatedLink) && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
-            {mode === 'withdraw' && !recipientStep && pocketUsdtPayoutEnabled && <PocketSelect ariaLabel="Payment asset" value={asset} disabled={directLocked} onChange={value=>{direct.resetResult(false);setAsset(value as 'USDC'|'USDT')}} options={[{value:'USDC',label:'USDC'},...(bank.country==='NG'?[{value:'USDT',label:'USDT'}]:[])]} />}
 
             <div hidden={mode === 'withdraw' && recipientStep} className="space-y-3">{mode === 'withdraw' && <PocketPayoutCountry value={bank.country} onChange={value=>{bank.setCountry(value);if(value==='UG')setAsset('USDC');direct.setAmount('');setReviewOpen(false)}} />}<PocketVerifiedBankFields
               recipientEntry
