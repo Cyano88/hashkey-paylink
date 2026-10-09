@@ -50,7 +50,22 @@ Before enabling production, complete a controlled Base USDT bill purchase using
 the intended Pocket account and verify provider delivery, exact debit, receipt
 and activity. Verify a controlled same-token Circle treasury refund separately;
 do not fabricate a failed bill or mark an uncertain provider result refundable.
-No live USDT bill purchase or treasury refund was performed in this change.
+Live follow-up on 2026-10-09 (UTC): the approved Pixel account completed NGN 100
+MTN airtime. Pocket showed Successful and a receipt with provider reference
+`20261009223701c2134dd74d4beb86d1287a75ca4e35`. Base USDT balance decreased from
+2.986277 to 2.912132 and the Circle treasury received exactly 0.074145 USDT,
+including the displayed 0.000184 USDT bill fee. Activity retained USDT.
+
+A separately approved 0.01 USDT treasury return was verified against the pinned
+Base USDT contract, exact amount, treasury sender, original payer and sealed
+Base blocks: `0xa9a8e51b74a4b91a5af47e688a19116b2c03e9ee738078fe2962f43b710f4724`.
+This verifies the Circle transfer mechanism, not a live failed-bill refund
+lifecycle. The successful bill was not altered or made refundable. Pixel activity
+correctly shows this independent return as a USDT deposit.
+
+The live receipt exposed a hardcoded Total USDC label beside a USDT amount.
+The shared bill/bank receipt labels now use the recorded asset, including refund
+labels; the USDC/USDT regression check passed. General USDT bills remain disabled.
 The broad repository typecheck was stopped without a result; do not report it as
 passed. The frontend production build and the focused runtime/browser suites are
 the validation evidence for this change.

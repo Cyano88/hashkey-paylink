@@ -14,6 +14,7 @@ import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Loader2 } from '../components/PocketIcons'
+import {formatPocketPaymentAmount} from '../lib/pocketMoney'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketLoadingState from '../components/PocketLoadingState'
 import PocketRouteShell from '../components/PocketRouteShell'
@@ -254,11 +255,11 @@ export default function PocketSendPage() {
       </div>
     </section>}
     {reviewOpen && !resultOpen && <PocketBottomSheet title={paymentRequest ? 'Confirm payment' : 'Confirm send'} showCloseButton dismissOnBackdrop={false} dismissible={!reviewPreparing && !approvalBusy && send.status === 'idle'} onClose={()=>setReviewOpen(false)}>
-      <PocketConfirmationDetails amount={send.amount + ' ' + asset} rows={[
+      <PocketConfirmationDetails amount={formatPocketPaymentAmount(send.amount) + ' ' + asset} rows={[
         ...(resolved ? [['Recipient', resolved.name] as [string,string]] : []),
         ['Wallet address', <span className="break-all">{send.address || resolved?.address}</span>],
         ['Network', networkLabel(network)],
-        ...(send.feePreview ? [['Platform fee', send.feePreview.platform + ' ' + asset], ['Network fee', send.feePreview.network + ' ' + asset], ['Total', send.feePreview.total + ' ' + asset]] as Array<[string,string]> : []),
+        ...(send.feePreview ? [['Platform fee', formatPocketPaymentAmount(send.feePreview.platform) + ' ' + asset], ['Network fee', formatPocketPaymentAmount(send.feePreview.network) + ' ' + asset], ['Total', formatPocketPaymentAmount(send.feePreview.total) + ' ' + asset]] as Array<[string,string]> : []),
       ]} />
       <div className="mt-5"><PocketFundingAction flow={paymentRequest?'payment':'transfer'} {...fundingProps}>{requestPaid ? <div className="rounded-2xl bg-emerald-50 px-4 py-4 text-center dark:bg-emerald-400/10"><Check className="mx-auto h-5 w-5 text-emerald-600" /><p className="mt-2 text-sm font-semibold">Request paid</p><p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{requestConfirmed ? 'The sender has been notified and this transfer will appear in Activity.' : 'Payment sent. View it in Activity.'}</p></div> : <PocketSlideAction plain onApprovalBusyChange={setApprovalBusy} status={reviewPreparing ? 'pending' : requestChecking ? 'submitted' : paymentRequest && (requestLiquidity.status === 'waiting' || requestLiquidity.status === 'reconciling') ? 'submitted' : paymentRequest && requestLiquidity.status === 'moving' ? 'pending' : send.status} disabled={!recipientReady || !send.amount || resolving || Boolean(paymentTxHash) || Boolean(paymentRequest && (requestLiquidity.checking || requestLiquidity.insufficient))} onConfirm={submitPayment} labels={{ disabled: paymentTxHash ? 'Confirming payment' : paymentRequest && requestLiquidity.checking ? 'Checking balance' : paymentRequest && requestLiquidity.insufficient ? 'Insufficient USDC' : recipientReady ? 'Enter amount' : 'Choose recipient', idle: paymentRequest ? 'Confirm payment' : mode === 'address' && !send.feePreview ? 'Review fees' : 'Confirm send', pending: reviewPreparing ? 'Checking fees' : requestLiquidity.status === 'moving' ? 'Moving USDC' : 'Sending', submitted: requestLiquidity.status === 'waiting' || requestLiquidity.status === 'reconciling' ? 'USDC moving' : requestChecking ? 'Confirming payment' : 'Transfer submitted', successful: paymentRequest ? 'Request paid' : 'Sent' }} />}</PocketFundingAction></div>
       {!fundingAsset && (send.error || requestLiquidity.error) && <p role="alert" className="mt-3 text-xs text-red-500">{send.error || requestLiquidity.error}</p>}

@@ -1,4 +1,5 @@
 import PocketBottomSheet from './PocketBottomSheet'
+import {formatPocketDisplayAmount} from '../lib/pocketMoney'
 
 export type PocketAssetHolding = {
   id: string
@@ -34,7 +35,7 @@ export default function PocketAssetsSheet({ holdings, total, complete, visible, 
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{row.network}</p>
         </div>
         <div className="shrink-0 text-right tabular-nums">
-          <p className="text-sm font-medium">{visible ? new Intl.NumberFormat('en', {maximumFractionDigits: 6}).format(row.quantity) : '••••'}</p>
+          <p className="text-sm font-medium">{visible ? ['USDC','USDT'].includes(row.symbol.toUpperCase()) ? formatPocketDisplayAmount(row.quantity) : new Intl.NumberFormat('en', {maximumFractionDigits: 6}).format(row.quantity) : '••••'}</p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{amount(row.valueUsd)}</p>
         </div>
       </li>)}

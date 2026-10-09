@@ -7,7 +7,8 @@ import { formatStockQuantity } from './pocketStockDisplay'
 export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol'>): string {
   if (row.source === 'wallet-swap') return 'Swap'
   if ((!row.amount || !Number.isFinite(Number(row.amount))) && row.amountNgn && Number.isFinite(Number(row.amountNgn))) return localCurrencyAmount(Number(row.amountNgn), row.fiatCurrency === 'UGX' ? 'UGX' : 'NGN')
-  return (row.assetSymbol ? formatStockQuantity(row.amount) : formatPocketDisplayAmount(Number(row.amount))) + ' ' + (row.assetSymbol || 'USDC')
+  const asset = row.assetSymbol || 'USDC'
+  return (['USDC','USDT'].includes(asset.toUpperCase()) ? formatPocketDisplayAmount(row.amount) : formatStockQuantity(row.amount)) + ' ' + asset
 }
 
 /** A bill keeps its identity when its transaction/provider reference arrives. */

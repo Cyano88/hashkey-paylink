@@ -1,34 +1,18 @@
-function compactParts(value: string | number) {
-  const numeric = typeof value === 'string' ? Number(value) : value
-  if (!Number.isFinite(numeric)) return null
-  const absolute = Math.abs(numeric)
-  const decimals = absolute >= 0.1 ? 2 : absolute >= 0.01 ? 3 : absolute >= 0.001 ? 4 : 6
-  const scale = 10 ** decimals
-  return { decimals, numeric: Math.trunc((numeric + Number.EPSILON) * scale) / scale }
-}
-
-/** Compact token precision for display only. Raw balances and transaction values stay unchanged. */
+/** Two decimal places for stablecoin display only; never use this to construct transactions. */
 export function formatPocketDisplayAmount(value: string | number) {
-  const compact = compactParts(value)
-  if (!compact || compact.numeric === 0) return '0'
-  return compact.numeric.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: compact.decimals,
-  })
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return '0.00'
+  if (amount !== 0 && Math.abs(amount) < 0.01) return amount < 0 ? '-<0.01' : '<0.01'
+  return amount.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})
 }
 
 /** Premium dollar balance formatting: leading symbol is rendered by the caller. */
 export function formatPocketDollarAmount(value: string | number) {
-  const compact = compactParts(value)
-  if (!compact || compact.numeric === 0) return '0.00'
-  return compact.numeric.toLocaleString('en-US', {
-    minimumFractionDigits: compact.decimals,
-    maximumFractionDigits: compact.decimals,
-  })
+  return formatPocketDisplayAmount(value)
 }
 
-/** Payment amounts retain USDC precision; balance-card compacting must not alter a debit quote. */
+/** Format the visible quote only; its original exact debit remains unchanged. */
 export function formatPocketPaymentAmount(value: string | number) {
   const amount = Number(value)
-  return Number.isFinite(amount) ? amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) : ''
+  return Number.isFinite(amount) ? formatPocketDisplayAmount(amount) : ''
 }
