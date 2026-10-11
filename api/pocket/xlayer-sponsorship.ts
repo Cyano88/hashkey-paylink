@@ -17,7 +17,7 @@ const contracts = new Set([
   ...catalogue.assets.map(a => a.address.toLowerCase()),
 ])
 const transferAbi = parseAbi(['function transfer(address,uint256) returns(bool)'])
-type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; providerFailure?: {status:number;code?:string;message?:string;requestId?:string} }
+type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; providerFailure?: {status:number;code?:string;message?:string;cause?:string;requestId?:string} }
 // Privy documents this exact 400 error as not broadcast. Other errors remain
 // uncertain. Keep the durable reservation: a duplicate must never send again.
 const notBroadcast = (record: Record) => !record.hash && !record.transactionId && !record.userOperationHash && record.providerFailure?.status === 400 && record.providerFailure?.code === 'transaction_broadcast_failure'
@@ -185,7 +185,10 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
           if (!current?.requests[id]) throw Error('Payment reservation unavailable.')
           const rawId=upstream.headers.get('x-request-id') || upstream.headers.get('x-privy-request-id')
           const requestId=rawId && /^[a-zA-Z0-9_-]{1,128}$/.test(rawId) ? rawId : undefined
-          current.requests[id].providerFailure = {status:upstream.status,code,message:diagnostic(result?.message,c.secret),requestId}
+          // Privy's ApiErrorType uses `error` for text and optional `cause`.
+          // RPC-shaped responses may instead contain error.message.
+          const message = typeof result?.error === 'string' ? result.error : result?.error?.message ?? result?.message
+          current.requests[id].providerFailure = {status:upstream.status,code,message:diagnostic(message,c.secret),cause:diagnostic(result?.cause,c.secret),requestId}
           return current
         })
         if (upstream.status === 400 && code === 'transaction_broadcast_failure' && !hash) return rejected(res)

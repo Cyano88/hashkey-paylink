@@ -93,6 +93,21 @@ assert.equal(Object.values(f.store.requests)[0].providerFailure.requestId,'trace
 f=fixture({fetch:async()=>new Response(JSON.stringify({code:'transaction_broadcast_failure'}),{status:500})});
 assert.equal((await f.call(body())).body.code,'sponsor_outcome_unknown','5xx must not be classified as a definitive rejection');
 console.log('PASS exact broadcast rejection, status recovery, no resend, redacted diagnostics and unknown-error safety.');
+for(const payload of [
+ {error:'Broadcast failed: '+config.secret+' Bearer hidden-token',cause:'Bundler simulation failed'},
+ {error:{message:'Broadcast failed: '+config.secret+' Bearer hidden-token'},cause:'Bundler simulation failed'},
+]) {
+ f=fixture({fetch:async()=>Response.json({code:'transaction_broadcast_failure',...payload},{status:400})});
+ const response=await f.call(body());
+ const failure=Object.values(f.store.requests)[0].providerFailure;
+ assert.equal(response.body.code,'pocket_sponsor_not_submitted');
+ assert.equal(failure.message,'Broadcast failed: [redacted] [redacted]');
+ assert.equal(failure.cause,'Bundler simulation failed');
+ assert.equal(JSON.stringify(f.store).includes(config.secret),false);
+ assert.equal(JSON.stringify(f.store).includes('hidden-token'),false);
+ assert.equal(JSON.stringify(response.body).includes('Bundler simulation'),false,'provider details stay server-side');
+}
+console.log('PASS Privy error/cause and nested RPC error diagnostic retention and redaction.');
 let submits=0,lookups=0,ready=false;
 const providerId='12345678-1234-4234-8234-123456789abc',operationHash='0x'+'b'.repeat(64);
 f=fixture({fetch:async(url,init)=>{
