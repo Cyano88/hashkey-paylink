@@ -112,6 +112,7 @@ import { drainStockNotifications } from './api/pocket/xstocks-notifications-stor
 import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
 import pocketStockPricesHandler from './api/pocket/xstocks-prices.js'
 import pocketStockSwapHandler from './api/pocket/xstocks-swap.js'
+import pocketXLayerSponsorshipHandler from './api/pocket/xlayer-sponsorship.js'
 import pocketArcSwapHandler from './api/pocket/arc-swap.js'
 import pocketUsdtBridgeHandler from './api/pocket/usdt-bridge.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
@@ -436,6 +437,7 @@ app.all('/api/pocket/xstocks/notifications', (req,res,next) => (req.method === '
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
 app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
 app.all('/api/pocket/xstocks/swap', strictLimiter, pocketStockSwapHandler)
+app.post('/api/pocket/xlayer/sponsorship', strictLimiter, pocketXLayerSponsorshipHandler)
 app.all('/api/pocket/arc-swap',          strictLimiter, pocketArcSwapHandler)
 app.all('/api/pocket/usdt-bridge',       strictLimiter, pocketUsdtBridgeHandler)
 app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)

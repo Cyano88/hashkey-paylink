@@ -1,0 +1,156 @@
+import type { Request, Response } from 'express'
+import { PrivyClient } from '@privy-io/server-auth'
+import { createHash } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
+import { decodeFunctionData, isAddress, parseAbi, zeroAddress } from 'viem'
+import { verifiedPrivyUser } from '../privy-circle-link.js'
+import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
+import { makeSponsoredRequest, type SponsoredRequest } from '../../src/pocket/lib/pocketSponsoredRequest.js'
+import catalogue from '../../src/pocket/lib/pocketXStocksCatalog.json' with { type: 'json' }
+import { stockClient, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
+import { readStockMarketPrices } from './xstocks-prices.js'
+import { assertSponsoredSendMinimum, isXLayerSendStablecoin } from '../../src/pocket/lib/pocketStockSendMinimum.js'
+
+const contracts = new Set([
+  '0xb6ceceab302e2e4948951ee7843fc24e92933061',
+  '0x779ded0c9e1022225f8e0630b35a9b54be713736',
+  ...catalogue.assets.map(a => a.address.toLowerCase()),
+])
+const transferAbi = parseAbi(['function transfer(address,uint256) returns(bool)'])
+type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; providerFailure?: {status:number;code?:string} }
+type Store = { requests: { [id: string]: Record } }
+type Config = { appId: string; secret: string; enabled: boolean; wallets: string[] }
+const configuration = (): Config => ({
+  appId: process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID || '',
+  secret: process.env.PRIVY_APP_SECRET || '',
+  enabled: process.env.POCKET_XLAYER_SPONSORSHIP_ENABLED === 'true',
+  wallets: (process.env.POCKET_XLAYER_SPONSORSHIP_WALLETS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean),
+})
+const loadUser = (id: string, c: Config) => new PrivyClient(c.appId, c.secret).getUserById(id)
+const mutate = (fn: (current: Store | undefined) => Store) => mutateDurableJson<Store>('pocket:xlayer-sponsorship:v1', fn)
+const read = () => readDurableJson<Store>('pocket:xlayer-sponsorship:v1')
+const fail = (message: string, status = 400) => Object.assign(new Error(message), { status })
+async function minimum(token:string,units:bigint) {
+  if(isXLayerSendStablecoin(token)) return assertSponsoredSendMinimum(token,units,6)
+  const address=token.toLowerCase() as `0x${string}`
+  if(await stockClient.getChainId()!==196) throw Error('X Layer could not be verified.')
+  const [decimals,prices]=await Promise.all([
+    stockClient.readContract({address,abi:stockTokenAbi,functionName:'decimals'}),readStockMarketPrices([address]),
+  ])
+  assertSponsoredSendMinimum(token,units,Number(decimals),prices[address])
+}
+export function validateSponsoredRequest(request: SponsoredRequest, walletId: string, c: Config, now: number) {
+  const tx = request?.body?.params?.transaction
+  const id = request?.headers?.['privy-idempotency-key']
+  const expiry = Number(request?.headers?.['privy-request-expiry'])
+  if (!/^[a-zA-Z0-9]{10,64}$/.test(walletId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id || '')) throw fail('Invalid payment reference.')
+  if (!Number.isSafeInteger(expiry) || expiry <= now || expiry > now + 120_000) throw fail('Payment approval expired. Review the transfer again.')
+  if (!tx || !isAddress(tx.from) || !isAddress(tx.to) || !contracts.has(tx.to.toLowerCase())) throw fail('Unsupported X Layer transfer.')
+  if (!/^0xa9059cbb[0-9a-f]{128}$/i.test(tx.data)) throw fail('Only token transfers can be sponsored.')
+  const { args } = decodeFunctionData({ abi: transferAbi, data: tx.data as `0x${string}` })
+  if (args[1] <= 0n || args[0].toLowerCase() === tx.from.toLowerCase() || args[0].toLowerCase() === zeroAddress) throw fail('Invalid transfer recipient or amount.')
+  if(isXLayerSendStablecoin(tx.to)) {
+    try { assertSponsoredSendMinimum(tx.to,args[1],6) } catch(error) { throw fail((error as Error).message) }
+  }
+  const canonical = makeSponsoredRequest({appId:c.appId,walletId,attemptId:id,expiresAt:expiry,from:tx.from,to:tx.to,data:tx.data})
+  // Reject added calls, delegate operations, native value, gas overrides, wrong
+  // chains, attacker-controlled URLs and extra headers. Relay exactly what was signed.
+  if (!isDeepStrictEqual(request, canonical)) throw fail('Payment request does not match the supported transfer.')
+  return { id, wallet: tx.from.toLowerCase(), canonical, token:tx.to, units:args[1] }
+}
+
+export function createXLayerSponsorshipHandler(overrides: Partial<{
+  identity: typeof verifiedPrivyUser; user: typeof loadUser; config: typeof configuration;
+  mutate: typeof mutate; read: typeof read; minimum:typeof minimum; durable: () => boolean; fetch: typeof fetch; now: () => number;
+}> = {}) {
+  const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, durable:hasRenderDurableStore, fetch, now:Date.now, ...overrides }
+  return async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store')
+    let reserved = false
+    try {
+      if (req.method !== 'POST') throw fail('Method not allowed.', 405)
+      const identity = await d.identity(req)
+      const c = d.config()
+      if (!c.appId || !c.secret || !d.durable()) throw fail('Sponsored transfers are not available yet.', 503)
+      const wallet = String(req.body?.wallet || '').toLowerCase()
+      if (!isAddress(wallet)) throw fail('Invalid Pocket wallet.', 400)
+      const user = await d.user(identity.userId, c)
+      const linked = user.linkedAccounts.filter(a => a.type === 'wallet' && a.walletClientType === 'privy' && a.chainType === 'ethereum' && a.address.toLowerCase() === wallet)
+      const embedded = linked[0] as { id?: string } | undefined
+      if (linked.length !== 1 || !embedded?.id) throw fail('Your Pocket wallet could not be verified.', 403)
+      // Read-only recovery remains available even if sponsorship is disabled.
+      if (req.body?.action === 'status') {
+        const id = String(req.body?.attemptId || '')
+        if (!/^[0-9a-f-]{36}$/i.test(id)) throw fail('Invalid payment reference.')
+        const record = (await d.read())?.requests[id]
+        if (!record) return res.json({ok:true,hash:null})
+        if (record.owner !== identity.userId || record.wallet !== wallet) throw fail('Payment not found.', 404)
+        return res.json({ok:true,hash:record.hash || null})
+      }
+      if (!c.enabled || !c.wallets.includes(wallet)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
+      if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})
+      if (req.body?.action !== 'send') throw fail('Unsupported sponsorship action.')
+      const request = req.body?.request as SponsoredRequest
+      // A malformed/expired replay must not claim an earlier request was unsent.
+      const possibleId = request?.headers?.['privy-idempotency-key']
+      if (typeof possibleId === 'string' && /^[0-9a-f-]{36}$/i.test(possibleId)) reserved = Boolean((await d.read())?.requests[possibleId])
+      const { id, canonical, wallet: from, token, units } = validateSponsoredRequest(request, embedded.id, c, d.now())
+      if (from !== wallet) throw fail('Payment wallet does not match your Pocket wallet.', 403)
+      const signature = req.body?.signature
+      if (typeof signature !== 'string' || !/^[A-Za-z0-9+/=]{32,512}$/.test(signature)) throw fail('Payment authorization is missing.')
+      // Recheck stocks against a server-loaded price/precision before reserving
+      // sponsor credit. Never accept a client-supplied USD value or price.
+      if(!reserved) try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
+      const fingerprint = createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
+      let existing: Record | undefined
+      await d.mutate(current => {
+        const store = current || { requests:{} }
+        existing = store.requests[id]
+        if (existing) {
+          if (existing.fingerprint !== fingerprint || existing.owner !== identity.userId) throw fail('Payment reference already used.', 409)
+          return store
+        }
+        // Atomic durable reservation. Uncertain upstream outcomes remain reserved;
+        // neither retries nor restarts can silently broadcast another transfer.
+        const recent = Object.values(store.requests).filter(r => r.at > d.now() - 86_400_000)
+        if (recent.length >= 50 || recent.filter(r => r.wallet === wallet || r.owner === identity.userId).length >= 10) throw fail('Sponsored transfer limit reached. Try again tomorrow.', 429)
+        store.requests[id] = {fingerprint,wallet,owner:identity.userId,at:d.now()}
+        return store
+      })
+      reserved = true
+      if (existing?.hash) return res.json({ok:true,hash:existing.hash})
+      if (existing) return res.status(409).json({ok:false,error:'This transfer is already being checked. View Activity before retrying.',code:'sponsor_outcome_unknown'})
+      const upstream = await d.fetch(canonical.url, {
+        method:'POST', redirect:'error', signal:AbortSignal.timeout(30_000),
+        headers:{...canonical.headers,'Content-Type':'application/json','Authorization':'Basic '+Buffer.from(`${c.appId}:${c.secret}`).toString('base64'),'privy-authorization-signature':signature},
+        body:JSON.stringify(canonical.body),
+      })
+      const result = await upstream.json()
+      const hash = result?.data?.hash
+      if (!upstream.ok || typeof hash !== 'string' || !/^0x[0-9a-f]{64}$/i.test(hash)) {
+        const code = typeof result?.code === 'string' && /^[a-zA-Z_][a-zA-Z_0-9]{0,63}$/.test(result.code) ? result.code : undefined
+        await d.mutate(current => {
+          if (!current?.requests[id]) throw Error('Payment reservation unavailable.')
+          current.requests[id].providerFailure = {status:upstream.status,code}
+          return current
+        })
+        // Never expose provider payloads/secrets or assume every HTTP error means
+        // no broadcast. A provider failure needs reconciliation, not another send.
+        return res.status(502).json({ok:false,error:'The wallet did not confirm this transfer. Check Activity before retrying.',code:'sponsor_outcome_unknown'})
+      }
+      await d.mutate(current => {
+        if (!current?.requests[id] || current.requests[id].fingerprint !== fingerprint) throw Error('Payment reservation unavailable.')
+        current.requests[id].hash = hash
+        return current
+      })
+      return res.json({ok:true,hash})
+    } catch (reason) {
+      const error = reason as Error & { status?: number }
+      return res.status(reserved ? 502 : error.status || 503).json({ok:false,
+        code:reserved?'sponsor_outcome_unknown':'pocket_sponsor_not_submitted',
+        error:reserved?'This transfer could not be confirmed. Check Activity before retrying.':error.status?error.message:'Sponsored transfers are temporarily unavailable.',
+      })
+    }
+  }
+}
+export default createXLayerSponsorshipHandler()
