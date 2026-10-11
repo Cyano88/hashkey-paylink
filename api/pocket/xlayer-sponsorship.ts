@@ -17,7 +17,19 @@ const contracts = new Set([
   ...catalogue.assets.map(a => a.address.toLowerCase()),
 ])
 const transferAbi = parseAbi(['function transfer(address,uint256) returns(bool)'])
-type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; providerFailure?: {status:number;code?:string} }
+type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; providerFailure?: {status:number;code?:string;message?:string;requestId?:string} }
+// Privy documents this exact 400 error as not broadcast. Other errors remain
+// uncertain. Keep the durable reservation: a duplicate must never send again.
+const notBroadcast = (record: Record) => !record.hash && record.providerFailure?.status === 400 && record.providerFailure?.code === 'transaction_broadcast_failure'
+const rejected = (res: Response) => res.status(422).json({ok:false,code:'pocket_sponsor_not_submitted',error:'Transfer was not sent. The wallet provider could not broadcast it.'})
+function diagnostic(value: unknown, secret: string) {
+  if(typeof value !== 'string') return undefined
+  return value.split(secret).join('[redacted]')
+    .replace(/(?:Bearer|Basic)\s+\S+/gi,'[redacted]')
+    .replace(/eyJ[A-Za-z0-9_.-]+/g,'[redacted]')
+    .replace(/0x[0-9a-f]{64,}/gi,'[redacted]')
+    .replace(/[\r\n\t]/g,' ').slice(0,500)
+}
 type Store = { requests: { [id: string]: Record } }
 type Config = { appId: string; secret: string; enabled: boolean; wallets: string[] }
 const configuration = (): Config => ({
@@ -85,6 +97,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         const record = (await d.read())?.requests[id]
         if (!record) return res.json({ok:true,hash:null})
         if (record.owner !== identity.userId || record.wallet !== wallet) throw fail('Payment not found.', 404)
+        if (notBroadcast(record)) return rejected(res)
         return res.json({ok:true,hash:record.hash || null})
       }
       if (!c.enabled || !c.wallets.includes(wallet)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
@@ -119,6 +132,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       })
       reserved = true
       if (existing?.hash) return res.json({ok:true,hash:existing.hash})
+      if (existing && notBroadcast(existing)) return rejected(res)
       if (existing) return res.status(409).json({ok:false,error:'This transfer is already being checked. View Activity before retrying.',code:'sponsor_outcome_unknown'})
       const upstream = await d.fetch(canonical.url, {
         method:'POST', redirect:'error', signal:AbortSignal.timeout(30_000),
@@ -131,9 +145,12 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         const code = typeof result?.code === 'string' && /^[a-zA-Z_][a-zA-Z_0-9]{0,63}$/.test(result.code) ? result.code : undefined
         await d.mutate(current => {
           if (!current?.requests[id]) throw Error('Payment reservation unavailable.')
-          current.requests[id].providerFailure = {status:upstream.status,code}
+          const rawId=upstream.headers.get('x-request-id') || upstream.headers.get('x-privy-request-id')
+          const requestId=rawId && /^[a-zA-Z0-9_-]{1,128}$/.test(rawId) ? rawId : undefined
+          current.requests[id].providerFailure = {status:upstream.status,code,message:diagnostic(result?.message,c.secret),requestId}
           return current
         })
+        if (upstream.status === 400 && code === 'transaction_broadcast_failure' && !hash) return rejected(res)
         // Never expose provider payloads/secrets or assume every HTTP error means
         // no broadcast. A provider failure needs reconciliation, not another send.
         return res.status(502).json({ok:false,error:'The wallet did not confirm this transfer. Check Activity before retrying.',code:'sponsor_outcome_unknown'})

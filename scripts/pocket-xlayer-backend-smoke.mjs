@@ -79,4 +79,17 @@ assert.equal(outcome.body.code,'sponsor_outcome_unknown');assert.equal(JSON.stri
 await f.call(uncertain);assert.equal(upstreamCalls,1,'unknown outcome stays reserved; no upstream retry')
 f=fixture({fetch:async()=>new Response(JSON.stringify({code:'invalid_data',message:'App secret is required for gas sponsored transactions.'}),{status:400})})
 assert.equal((await f.call(body())).body.code,'sponsor_outcome_unknown','generic provider errors do not unlock sends')
-console.log('PASS isolated backend: ownership, payload, limits, duplicate prevention and unknown outcomes.')
+console.log('PASS isolated backend: ownership, payload, limits, duplicate prevention and unknown outcomes.');
+let rejectedCalls=0;
+f=fixture({fetch:async()=>{rejectedCalls++;return new Response(JSON.stringify({code:'transaction_broadcast_failure',message:'Provider failed '+config.secret+' Bearer hidden-token'}),{status:400,headers:{'x-request-id':'trace-fixture-123'}})}});
+const rejectedPayment=body();
+assert.equal((await f.call(rejectedPayment)).body.code,'pocket_sponsor_not_submitted');
+assert.equal((await f.call(rejectedPayment)).body.code,'pocket_sponsor_not_submitted');
+assert.equal((await f.call({action:'status',wallet,attemptId:rejectedPayment.request.headers['privy-idempotency-key']})).body.code,'pocket_sponsor_not_submitted');
+assert.equal(rejectedCalls,1,'known rejection is never automatically resubmitted');
+assert.equal(JSON.stringify(f.store).includes(config.secret),false);
+assert.equal(JSON.stringify(f.store).includes('hidden-token'),false);
+assert.equal(Object.values(f.store.requests)[0].providerFailure.requestId,'trace-fixture-123');
+f=fixture({fetch:async()=>new Response(JSON.stringify({code:'transaction_broadcast_failure'}),{status:500})});
+assert.equal((await f.call(body())).body.code,'sponsor_outcome_unknown','5xx must not be classified as a definitive rejection');
+console.log('PASS exact broadcast rejection, status recovery, no resend, redacted diagnostics and unknown-error safety.');
