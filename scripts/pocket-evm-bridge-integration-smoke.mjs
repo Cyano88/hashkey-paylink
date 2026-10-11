@@ -15,7 +15,7 @@ let network='BASE',destinationNetwork='ARB',executions=[]
 globalThis.fetch=async(url,init)=>{
  const u=new URL(url)
  if(u.hostname==='iris-api.circle.com')return Response.json([{finalityThreshold:2000,minimumFee:'0',forwardFee:{med:'1000'}}])
- if(u.hostname==='api.coingecko.com')return Response.json({ethereum:{usd:3000,last_updated_at:Date.now()/1000},'polygon-ecosystem-token':{usd:0.5,last_updated_at:Date.now()/1000},'usd-coin':{usd:1,last_updated_at:Date.now()/1000}})
+ if(u.hostname==='api.coingecko.com')return Response.json({ethereum:{usd:3000,last_updated_at:Date.now()/1000},'polygon-ecosystem-token':{usd:0.5,last_updated_at:Date.now()/1000},'usd-coin':{usd:1,last_updated_at:Date.now()/1000},tether:{usd:1,last_updated_at:Date.now()/1000}})
  if(u.pathname==='/v1/w3s/wallets/wallet')return Response.json({data:{wallet:{id:'wallet',address:payer,blockchain:network,accountType:'SCA',state:'LIVE'}}})
  if(u.pathname==='/v1/w3s/wallets')return Response.json({data:{wallets:[{id:'destination',address:recipient,blockchain:destinationNetwork}]}})
  if(u.pathname.endsWith('/estimateFee')){assert.equal(init.headers['X-User-Token'],'session');const calls=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:JSON.parse(init.body).callData}).args[0];assert.equal(calls.length,3);return Response.json({data:{high:{networkFeeRaw:'0.000001'}}})}

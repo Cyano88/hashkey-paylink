@@ -396,7 +396,7 @@ export async function quoteCircleEvmBatchRecovery(input:import('./pocket/evm-bri
  if(!userToken||userToken.length>8000)throw Object.assign(Error('Unlock Pocket to quote this bridge.'),{status:409})
  const owned=await readCircleUserWallet(userToken,chain,input.walletId)
  requireCircleGasStationEvmWallet({chain,walletId:input.walletId,walletAddress:input.walletAddress,wallets:owned?[owned]:[]})
- const rate=chain==='arc'?100_000_000n:await readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum')
+ const rate=chain==='arc'?100_000_000n:await readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum',fetch,Date.now,input.asset)
  return quoteEvmBridgeFee(binding,async callData=>{
   const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({walletId:input.walletId,contractAddress:input.walletAddress,callData})})
   const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee

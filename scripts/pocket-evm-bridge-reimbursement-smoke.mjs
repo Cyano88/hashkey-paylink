@@ -28,7 +28,8 @@ for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const ass
  assert.equal(lower.networkFeeUnits,'1500');assert.equal(lower.totalUnits,'1011500')
  await assert.rejects(()=>refreshEvmBridgeFee(q,async()=> '0.000002',rate,now),/increased/)
  await assert.rejects(()=>quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now-1},async()=> '0.000001',rate,now))
- let i=0;await assert.rejects(()=>quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async()=>++i%2?'0.000001':'0.000002',rate,now),/estimate changed/)
+ let i=0;const fluctuating=await quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async()=>++i%2?'0.000001':'0.000002',rate,now);assert.equal(fluctuating.networkFeeUnits,'6000');assert.equal(i,3)
+ let rising=0;await assert.rejects(()=>quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async()=> '0.00000'+(++rising),rate,now),/estimate changed/)
  count++
 }
 console.log(`PASS: ${count} EVM asset/network combinations; exact bridge batch preserved, reimbursement only, signed bindings, expiry/tampering, lower-cost benefit and higher-cost rejection. Synthetic; no provider calls or fund movements.`)

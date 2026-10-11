@@ -15,7 +15,7 @@ Local source audit; this is not a production billing or deployment attestation.
 | --- | --- | --- |
 | Request payments | Sponsored, no reimbursement | Funding currently targets the exact requested amount. Quote the full debit and propagate it into funding, approval, balance checks and recovery before enabling reimbursement. |
 | EVM USDC CCTP bridges | Local implementation now quotes execution reimbursement and collects it atomically | Coordinated backend/mobile rollout and live verification still required. |
-| EVM USDT bridges | Source execution sponsored; provider costs in bridge quote | Extend signed quote, balance checks and batch. Update reconciliation, which currently expects source debit to equal bridge amount. |
+| EVM USDT bridges | Signed quotes include execution reimbursement and provider cost; exact treasury transfer required in source proof | Coordinated backend/mobile rollout and live verification required. |
 | Verified Base USDC payout funding | Exempt wallet-funding transfer | Paycrest payout already includes sender/provider fees. Reconcile actual sponsor expense with payout economics before adding another charge. |
 | X Layer sponsored transfers | Privy sponsorship; no token reimbursement | Provider provisioning remains unresolved. Confirm sponsor billing and successful execution before changing charging design. |
 | Solana USDC bridge | Local reimbursement implementation | Previously added quote/signing changes still require coordinated rollout and live verification. |

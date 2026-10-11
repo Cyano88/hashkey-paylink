@@ -70,7 +70,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       return res.json({ok:true,challengeId:result.challengeId})
     }
     return res.json(await reconcileUsdtBridge(identity.userId,quoteToken,{txHash:req.body.txHash,circleUserToken:req.body.circleUserToken}))
-  }catch(reason){const error=reason as Error&{status?:number};return res.status(error.status||503).json({ok:false,error:error.status?error.message:'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
+  }catch(reason){const error=reason as Error&{status?:number};console.error('[pocket-usdt-bridge]',{action:req.body?.action||req.method,reason:error.message});return res.status(error.status||503).json({ok:false,error:error.status?error.message:req.body?.action==='quote'?'Could not refresh the bridge quote. Try again.':'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
 }
 
 // Shared by the authenticated status route and background reconciliation.

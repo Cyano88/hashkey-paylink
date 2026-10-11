@@ -23,11 +23,12 @@ export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallDat
  valid(input)
  if(!Number.isSafeInteger(input.providerExpiresAt)||input.providerExpiresAt<=now)fail()
  let units=1n
- // Estimate the real batch including reimbursement; no percentage or service fee.
+ // Re-estimate the exact batch against the previously observed fee ceiling.
+ // Small provider fluctuations need not reach an exact fixed point. No markup.
  for(let pass=0;pass<4;pass++){
   const callData=withRecovery(input.bridgeCallData,input.tokenAddress,units)
   const next=nativeFeeToUsdcUnits(await estimate(callData),rateScaled8)
-  if(next===units){
+  if(next<=units){
    const total=BigInt(input.bridgeDebitUnits)+units
    if(total>=2n**256n)fail()
    const {providerExpiresAt,...binding}=input
