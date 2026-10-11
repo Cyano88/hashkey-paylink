@@ -113,6 +113,21 @@ try {
  await call({...base,asset:'USDT',chain:'arc'},400)
  blockchain='BASE'
  await call({...base,asset:'USDT',action:'quoteEvmPayment',feeBps:'0',payoutIntentId:'fixture-payout'},400)
+
+ for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'arc','ARC'],[4,'ethereum','ETH'],[5,'polygon','MATIC']])for(const asset of chain==='arc'?['USDC']:['USDC','USDT']){
+  blockchain=network
+  const request={...base,chain,asset,action:'executeEvmSend',idempotencyKey:('33333333-3333-4333-8333-3333333333'+(asset==='USDC'?'1':'2')+index)}
+  const priced=await call({...request,action:'quoteEvmSend'})
+  assert.equal(priced.quote.purpose,'wallet-send');assert.equal(priced.quote.platformFeeUnits,'0');assert.equal(priced.quote.feeBps,0)
+  assert(BigInt(priced.quote.networkFeeUnits)>0n);assert.equal(priced.quote.treasuryUnits,priced.quote.networkFeeUnits)
+  request.feeQuoteToken=priced.token
+  await call({...request,action:'executeEvmPayment'},409)
+  await call({...request,feeQuoteToken:quoteFor(request)},409)
+  await call(request)
+  const calls=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData}).args[0]
+  assert.equal(decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns(bool)']),data:calls[1].data}).args[1],BigInt(priced.quote.networkFeeUnits))
+ }
+ console.log('PASS: wallet sends on all five EVM rails retain gas only; payment/send quote crossover rejected for both assets.')
  console.log('PASS: USDT batch recipient and fee use exact pinned contracts; cross-asset quotes, Arc and USDC-only payout exemptions rejected.')
  console.log('PASS: five configured EVM rails preserve retry key and exact gross recipient; invalid keys and wrong-chain wallet submit nothing. Provider deduplication is mocked, not a live guarantee.')
 }finally{globalThis.fetch=originalFetch}

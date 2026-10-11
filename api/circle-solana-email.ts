@@ -1,3 +1,4 @@
+import {quoteEvmBridgeFee,sealEvmBridgeFee,openEvmBridgeFee} from './pocket/evm-bridge-reimbursement.js'
 import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../src/pocket/lib/pocketUsdtAssets.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import { paymentBalanceError } from './payment-balance-error.js'
@@ -388,6 +389,75 @@ async function verifiedPayoutExemption(params: Record<string, string>, checkOnly
   return true
 }
 
+
+export async function quoteCircleEvmBatchRecovery(input:import('./pocket/evm-bridge-reimbursement.js').EvmBridgeFeeBinding&{userToken:string;bridgeCallData:import('viem').Hex;providerExpiresAt:number}) {
+ const {userToken,...binding}=input
+ const chain=input.source as keyof typeof EVM_CHAINS
+ if(!userToken||userToken.length>8000)throw Object.assign(Error('Unlock Pocket to quote this bridge.'),{status:409})
+ const owned=await readCircleUserWallet(userToken,chain,input.walletId)
+ requireCircleGasStationEvmWallet({chain,walletId:input.walletId,walletAddress:input.walletAddress,wallets:owned?[owned]:[]})
+ const rate=chain==='arc'?100_000_000n:await readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum')
+ return quoteEvmBridgeFee(binding,async callData=>{
+  const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({walletId:input.walletId,contractAddress:input.walletAddress,callData})})
+  const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee
+  if(!fee)throw Error('Bridge fee is unavailable. Try again.')
+  return fee
+ },rate)
+}
+
+export async function quoteCircleEvmBridge(input:{ownerId:string;userToken:string;walletId:string;walletAddress:string;chain:keyof typeof EVM_CHAINS;destination:PocketBridgeNetwork;destinationAddress:string;amountUnits:string}) {
+ const {ownerId,userToken,walletId,walletAddress,chain,destination,destinationAddress,amountUnits}=input
+ if(!userToken||userToken.length>8000)throw Object.assign(Error('Unlock Pocket to quote this bridge.'),{status:409})
+ const owned=await readCircleUserWallet(userToken,chain,walletId)
+ requireCircleGasStationEvmWallet({chain,walletId,walletAddress,wallets:owned?[owned]:[]})
+       const transferUnits = BigInt(amountUnits)
+      if (transferUnits <= 0n) throw Error('Invalid bridge amount.')
+      const destinationNetwork = destination as PocketBridgeNetwork
+      const solana = destinationNetwork === 'solana' ? await solanaRecipient(destinationAddress) : null
+      const quote = await readCctpForwardQuote(chain, destinationNetwork, transferUnits, solana?.needsSetup)
+      const mintRecipient = destinationNetwork === 'solana'
+        ? `0x${Buffer.from(solana!.ata.toBytes()).toString('hex')}`
+        : cctpMintRecipient(destinationNetwork, destinationAddress)
+      const hookData = solana ? cctpForwardHookForSolana(solana.wallet, solana.needsSetup) : CCTP_FORWARD_HOOK
+      const tokenAddress = EVM_CHAINS[chain].tokenAddress
+      const approveData = encodeFunctionData({
+        abi: ERC20_APPROVE_ABI,
+        functionName: 'approve',
+        args: [CCTP_TOKEN_MESSENGER_V2, quote.totalUnits],
+      })
+      const burnData = encodeFunctionData({
+        abi: CCTP_TOKEN_MESSENGER_ABI,
+        functionName: 'depositForBurnWithHook',
+        args: [
+          quote.totalUnits,
+          CCTP_DOMAIN[destinationNetwork],
+          mintRecipient as `0x${string}`,
+          tokenAddress,
+          `0x${'0'.repeat(64)}`,
+          quote.maxFeeUnits,
+          quote.finalityThreshold,
+          hookData as `0x${string}`,
+        ],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: approveData },
+          { target: CCTP_TOKEN_MESSENGER_V2 as `0x${string}`, value: 0n, data: burnData },
+        ]],
+      })
+
+ const rate=chain==='arc'?100_000_000n:await readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum')
+ const priced=await quoteEvmBridgeFee({ownerId,walletId,walletAddress,source:chain,destination,destinationAddress,asset:'USDC',tokenAddress,amountUnits,bridgeDebitUnits:quote.totalUnits.toString(),bridgeCallData:batchCallData,providerExpiresAt:Date.now()+30000},async callData=>{
+  const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({walletId,contractAddress:walletAddress,callData})})
+  const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee
+  if(!fee)throw Error('Bridge fee is unavailable. Try again.')
+  return fee
+ },rate)
+ return {source:chain,destination,amount:formatUnits(BigInt(amountUnits),6),receive:formatUnits(BigInt(amountUnits),6),fee:formatUnits(BigInt(priced.totalUnits)-BigInt(amountUnits),6),total:formatUnits(BigInt(priced.totalUnits),6),destinationAddress,expiresAt:priced.expiresAt,quoteToken:sealEvmBridgeFee(priced)}
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -695,20 +765,21 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data, approval: {asset} })
     }
 
-    if (action === 'quoteEvmPayment') {
+    if (action === 'quoteEvmPayment' || action === 'quoteEvmSend') {
+      const purpose = action === 'quoteEvmSend' ? 'wallet-send' as const : 'payment' as const
       const asset = baseStablecoin(params.asset)
       const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
       if (!userToken || !walletId || !isAddress(walletAddress || '') || !isAddress(recipient || '') || !/^\d{1,78}$/.test(totalUnits || '') || BigInt(totalUnits) <= 0n || !['base','arbitrum','arc','ethereum','polygon'].includes(chain)) return res.status(400).json({ ok: false, error: 'Valid payment details are required.' })
       const network = chain as keyof typeof EVM_CHAINS
       const owned = await readCircleUserWallet(userToken, network, walletId)
       const wallet = requireCircleGasStationEvmWallet({ chain: network, walletId, walletAddress, wallets: owned ? [owned] : [] })
-      const exempt = await verifiedPayoutExemption(params)
+      const exempt = purpose === 'wallet-send' ? false : await verifiedPayoutExemption(params)
       paymentToken(chain as keyof typeof EVM_CHAINS, asset)
       const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
       const rawBalance = await readEvmRpc(network, 'eth_call', [{ to: paymentToken(network, asset), data: '0x70a08231' + wallet.address.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       const available = BigInt(rawBalance)
-      const checkBalance = (recovery: bigint) => paymentBalanceError(available, BigInt(totalUnits), recovery, mode, exempt, asset)
+      const checkBalance = (recovery: bigint) => paymentBalanceError(available, BigInt(totalUnits), recovery, mode, exempt || purpose === 'wallet-send', asset)
       let recovery = 0n
       const initialBalanceError = checkBalance(recovery)
       if (initialBalanceError) return res.status(400).json(initialBalanceError)
@@ -716,7 +787,7 @@ export default async function handler(req: Request, res: Response) {
         const rate = network === 'arc' ? 100_000_000n : await readNativeUsdcRate(network === 'polygon' ? 'polygon' : 'ethereum', fetch, Date.now, asset)
         // Estimate both transfers, then include the quoted recovery transfer amount.
         for (let pass = 0; pass < 2; pass++) {
-          const fees = paymentFeeBreakdown(BigInt(totalUnits), recovery, mode)
+          const fees = paymentFeeBreakdown(BigInt(totalUnits), recovery, mode, purpose === 'wallet-send')
           const estimate = await circleJson<{ high?: { networkFeeRaw?: string; networkFee?: string } }>('/v1/w3s/transactions/contractExecution/estimateFee', {
             method: 'POST', userToken, apiKey: circleApiKey({ chain: network }),
             body: JSON.stringify({ walletId: wallet.id, contractAddress: wallet.address, callData: paymentCallData(network, recipient, fees.recipient, fees.treasury, asset) }),
@@ -729,11 +800,12 @@ export default async function handler(req: Request, res: Response) {
           if (balanceError) return res.status(400).json(balanceError)
         }
       }
-      const binding: PaymentFeeBinding = { asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
+      const binding: PaymentFeeBinding = { purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
       return res.json({ ok: true, ...createPaymentFeeQuote(binding, recovery, exempt) })
     }
 
-    if (action === 'executeEvmPayment') {
+    if (action === 'executeEvmPayment' || action === 'executeEvmSend') {
+      const purpose = action === 'executeEvmSend' ? 'wallet-send' as const : 'payment' as const
       const asset = baseStablecoin(params.asset)
       const { userToken, walletId, walletAddress, chain, recipient, totalUnits, idempotencyKey } = params
       if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits || !idempotencyKey) {
@@ -750,7 +822,7 @@ export default async function handler(req: Request, res: Response) {
       paymentToken(chain as keyof typeof EVM_CHAINS, asset)
       const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
       let quote
-      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
+      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
       catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },false)
       const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: paymentToken(chain, asset), data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
@@ -830,46 +902,15 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Invalid bridge wallet address' })
       }
       const ownedWallets = await listCircleUserWallets(userToken, chain)
-      if (!ownedWallets.some(wallet => wallet.address.toLowerCase() === destinationAddress.toLowerCase() && wallet.blockchain === (destination === 'solana' ? 'SOL' : EVM_CHAINS[destination as keyof typeof EVM_CHAINS].blockchain))) {
+      if (!ownedWallets.some(wallet => (destination==='solana'?wallet.address===destinationAddress:wallet.address.toLowerCase()===destinationAddress.toLowerCase()) && wallet.blockchain === (destination === 'solana' ? 'SOL' : EVM_CHAINS[destination as keyof typeof EVM_CHAINS].blockchain))) {
         return res.status(403).json({ ok: false, error: 'Bridge destination must be one of your Circle Pocket wallets' })
       }
-      const transferUnits = BigInt(amountUnits)
-      if (transferUnits <= 0n) return res.status(400).json({ ok: false, error: 'Invalid bridge amount' })
-      const destinationNetwork = destination as PocketBridgeNetwork
-      const solana = destinationNetwork === 'solana' ? await solanaRecipient(destinationAddress) : null
-      const quote = await readCctpForwardQuote(chain, destinationNetwork, transferUnits, solana?.needsSetup)
-      const mintRecipient = destinationNetwork === 'solana'
-        ? `0x${Buffer.from(solana!.ata.toBytes()).toString('hex')}`
-        : cctpMintRecipient(destinationNetwork, destinationAddress)
-      const hookData = solana ? cctpForwardHookForSolana(solana.wallet, solana.needsSetup) : CCTP_FORWARD_HOOK
-      const tokenAddress = EVM_CHAINS[chain].tokenAddress
-      const approveData = encodeFunctionData({
-        abi: ERC20_APPROVE_ABI,
-        functionName: 'approve',
-        args: [CCTP_TOKEN_MESSENGER_V2, quote.totalUnits],
-      })
-      const burnData = encodeFunctionData({
-        abi: CCTP_TOKEN_MESSENGER_ABI,
-        functionName: 'depositForBurnWithHook',
-        args: [
-          quote.totalUnits,
-          CCTP_DOMAIN[destinationNetwork],
-          mintRecipient as `0x${string}`,
-          tokenAddress,
-          `0x${'0'.repeat(64)}`,
-          quote.maxFeeUnits,
-          quote.finalityThreshold,
-          hookData as `0x${string}`,
-        ],
-      })
-      const batchCallData = encodeFunctionData({
-        abi: SMART_WALLET_BATCH_ABI,
-        functionName: 'executeBatch',
-        args: [[
-          { target: tokenAddress as `0x${string}`, value: 0n, data: approveData },
-          { target: CCTP_TOKEN_MESSENGER_V2 as `0x${string}`, value: 0n, data: burnData },
-        ]],
-      })
+      const identity=await verifiedPrivyUser(req)
+      const approved=openEvmBridgeFee(params.quoteToken,{ownerId:identity.userId,walletId,walletAddress,source:chain,destination,destinationAddress,asset:'USDC',tokenAddress:EVM_CHAINS[chain].tokenAddress,amountUnits})
+      const balanceHex=await readEvmRpc(chain,'eth_call',[{to:EVM_CHAINS[chain].tokenAddress,data:'0x70a08231'+walletAddress.slice(2).padStart(64,'0')},'latest'])
+      if(typeof balanceHex!=='string'||!/^0x[0-9a-f]{64}$/i.test(balanceHex))throw Error('Balance could not be verified.')
+      if(BigInt(balanceHex)<BigInt(approved.totalUnits))return res.status(409).json({ok:false,error:'Insufficient USDC for the bridge and fee.'})
+      const batchCallData=approved.callData
       const data = await createCircleGasStationEvmChallenge({
         userToken,
         walletId,

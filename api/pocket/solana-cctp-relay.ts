@@ -1,4 +1,7 @@
+import {readNativeUsdcRate} from '../payment-network-fees.js'
+import {sealSolanaBridgeApproval,openSolanaBridgeApproval,assertSolanaBridgeMessage} from './solana-bridge-approval.js'
 import type { Request, Response } from 'express'
+import {solanaReimbursementUnits,checkSolanaRelayerBalance} from './solana-relayer-fees.js'
 import { AnchorProvider, Program } from '@coral-xyz/anchor'
 import BN from 'bn.js'
 import {
@@ -11,6 +14,8 @@ import {
 } from '@solana/web3.js'
 import {
   createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  readTokenAccountAmount,
   getAssociatedTokenAddress,
   SOLANA_ASSOCIATED_TOKEN_PROGRAM_ID,
   SOLANA_TOKEN_PROGRAM_ID,
@@ -358,6 +363,8 @@ export async function preparePocketSolanaCctpTransaction(input: {
   connection?: Connection
   buildBridge?: typeof buildManualBridge
   relayer?: Keypair
+  reimburse?: boolean
+  readRate?: typeof readNativeUsdcRate
 }) {
   const wallet = new PublicKey(input.walletAddress)
   const relayer = input.relayer ?? loadRelayer()
@@ -376,10 +383,7 @@ export async function preparePocketSolanaCctpTransaction(input: {
     + built.additionalRentLamports
     + BigInt(fee.value)
     + RELAYER_OPERATIONAL_BUFFER_LAMPORTS
-  const relayerBalance = BigInt(await connection.getBalance(relayer.publicKey, 'confirmed'))
-  if (relayerBalance < requiredLamports) {
-    throw fail(503, 'Solana bridge sponsorship is temporarily unavailable. Hash PayLink is replenishing its SOL fee wallet.')
-  }
+  await checkSolanaRelayerBalance(connection, relayer.publicKey, requiredLamports)
   sponsored.partialSign(relayer, built.messageSender)
   await validateSignedTransaction({
     transaction: sponsored,
@@ -388,9 +392,29 @@ export async function preparePocketSolanaCctpTransaction(input: {
     expected: input.expected,
     requireAllSignatures: false,
   })
+  let networkFeeUnits=0n
+  const providerFeeUnits=built.instructions.at(-1)!.data.readBigUInt64LE(84)
+  if(input.reimburse){
+    const treasury=new PublicKey(process.env.SOLANA_TREASURY||'')
+    const treasuryAta=await getAssociatedTokenAddress(USDC_MINT,treasury,true)
+    if(await readTokenAccountAmount(connection,treasuryAta)===null)throw fail(503,'Solana bridge treasury token account must be provisioned.')
+    const sourceAta=await getAssociatedTokenAddress(USDC_MINT,wallet,true)
+    sponsored.add(createTransferCheckedInstruction(sourceAta,USDC_MINT,treasuryAta,wallet,1n,6))
+    const quotedFee=(await connection.getFeeForMessage(sponsored.compileMessage(),'confirmed')).value
+    if(!Number.isSafeInteger(quotedFee)||quotedFee===null||quotedFee<=0)throw fail(503,'Solana bridge fee is unavailable.')
+    const cost=CCTP_EVENT_RENT_LAMPORTS+built.additionalRentLamports+BigInt(quotedFee)
+    networkFeeUnits=solanaReimbursementUnits(cost,await (input.readRate??readNativeUsdcRate)('solana'))
+    // The operational SOL reserve is never included in customer reimbursement.
+    await checkSolanaRelayerBalance(connection,relayer.publicKey,cost+RELAYER_OPERATIONAL_BUFFER_LAMPORTS)
+    const balance=await readTokenAccountAmount(connection,sourceAta)
+    if(balance===null||balance<parseUsdcAmount(input.expected.amount)+providerFeeUnits+networkFeeUnits)throw fail(400,'Insufficient USDC to cover the bridge and network fee.')
+    sponsored.instructions[sponsored.instructions.length-1]=createTransferCheckedInstruction(sourceAta,USDC_MINT,treasuryAta,wallet,networkFeeUnits,6)
+    sponsored.partialSign(relayer,built.messageSender)
+  }
   return {
     transaction: sponsored.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
     lastValidBlockHeight,
+    networkFeeUnits:String(networkFeeUnits),providerFeeUnits:String(providerFeeUnits),
   }
 }
 
@@ -409,7 +433,7 @@ export async function validatePocketSolanaCctpSignedTransaction(input: {
   })
 }
 
-function parseExpected(body: unknown): ExpectedBridge & { transaction?: string; lastValidBlockHeight?: number } {
+function parseExpected(body: unknown): ExpectedBridge & { quoteToken?: string; transaction?: string; lastValidBlockHeight?: number } {
   if (!body || typeof body !== 'object') throw fail(400, 'Solana CCTP bridge request is invalid.')
   const value = body as Record<string, unknown>
   if (value.destination !== 'base' && value.destination !== 'arbitrum' && value.destination !== 'arc' && value.destination !== 'ethereum' && value.destination !== 'polygon') throw fail(400, 'Solana CCTP destination is invalid.')
@@ -419,6 +443,7 @@ function parseExpected(body: unknown): ExpectedBridge & { transaction?: string; 
   parseEvmRecipient(value.destinationAddress)
   parseUsdcAmount(value.amount)
   return {
+    ...(typeof value.quoteToken === 'string' ? {quoteToken:value.quoteToken} : {}),
     destination: value.destination,
     destinationAddress: value.destinationAddress,
     amount: value.amount,
@@ -460,10 +485,7 @@ export function createPocketSolanaCctpPrepareHandler(dependencies: Dependencies)
     try {
       const body = parseExpected(req.body)
       const walletAddress = await linkedWallet(dependencies, req, body)
-      const prepared = await preparePocketSolanaCctpTransaction({
-        walletAddress,
-        expected: body,
-      })
+      const prepared = openSolanaBridgeApproval(body.quoteToken||'',{walletAddress,...body})
       return res.json({ ok: true, ...prepared })
     } catch (error) {
       return sendError(res, error)
@@ -479,11 +501,9 @@ export function createPocketSolanaCctpSubmitHandler(dependencies: Dependencies) 
       if (!body.transaction) throw fail(400, 'Solana CCTP signed transaction is required.')
       if (!Number.isSafeInteger(body.lastValidBlockHeight)) throw fail(400, 'Solana CCTP block height is required.')
       const walletAddress = await linkedWallet(dependencies, req, body)
-      await validatePocketSolanaCctpSignedTransaction({
-        transaction: body.transaction,
-        walletAddress,
-        expected: body,
-      })
+      const approved=openSolanaBridgeApproval(body.quoteToken||'',{walletAddress,...body},true)
+      if(body.lastValidBlockHeight!==approved.lastValidBlockHeight)throw fail(400,'Bridge block height changed.')
+      assertSolanaBridgeMessage(decodeTransaction(body.transaction),approved,true)
       return dependencies.relay({
         ...req,
         body: { tx: body.transaction, lastValidBlockHeight: body.lastValidBlockHeight },
@@ -510,5 +530,12 @@ export async function validatePocketSolanaBridgeSigning(req: Request, params: Re
   const source = await dependencies.readLink(circleLinkKey((await dependencies.verifyUser(req)).userId, 'solana', 'payment'))
   if (!source || source.circleWalletId !== params.walletId) throw fail(403, 'Reconnect your linked Pocket wallet.')
   const transaction = decodeTransaction(params.rawTransaction)
-  await validateSignedTransaction({ transaction, wallet: new PublicKey(walletAddress), relayer: loadRelayer().publicKey, expected, requireAllSignatures: false })
+  const approved=openSolanaBridgeApproval(expected.quoteToken||'',{walletAddress,...expected})
+  assertSolanaBridgeMessage(transaction,approved,false)
+}
+
+export async function quotePocketSolanaCctpReimbursement(walletAddress:string,expected:ExpectedBridge){
+ const prepared=await preparePocketSolanaCctpTransaction({walletAddress,expected,reimburse:true})
+ const approved={...prepared,...expected,walletAddress,expiresAt:Date.now()+30000}
+ return {...approved,quoteToken:sealSolanaBridgeApproval(approved)}
 }

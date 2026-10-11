@@ -1,3 +1,4 @@
+import {sealSolanaBridgeApproval,openSolanaBridgeApproval,assertSolanaBridgeMessage} from '../api/pocket/solana-bridge-approval.ts'
 import assert from 'node:assert/strict'
 import {
   Keypair,
@@ -133,7 +134,7 @@ await assert.rejects(() => preparePocketSolanaCctpTransaction({
   expected,
   connection: { ...healthyConnection, getBalance: async () => 3_081_535 },
   buildBridge: async () => bridgeInstructions(),
-}), /replenishing its SOL fee wallet/)
+}), /Solana network fees are temporarily unavailable/)
 
 console.log('Pocket Solana CCTP relay smoke checks passed.')
 
@@ -148,3 +149,25 @@ for (const createHandler of [createPocketSolanaCctpPrepareHandler, createPocketS
   assert.equal(relayed,false)
 }
 console.log('External Solana bridge destinations rejected without relaying.')
+
+process.env.SOLANA_TREASURY=Keypair.generate().publicKey.toBase58()
+process.env.POCKET_SWAP_QUOTE_SECRET='fixture-only-bridge-signing-key-1234567890'
+const quoted=await preparePocketSolanaCctpTransaction({walletAddress:wallet.publicKey.toBase58(),expected,reimburse:true,connection:{...healthyConnection,getAccountInfo:async()=>({owner:SOLANA_TOKEN_PROGRAM_ID}),getTokenAccountBalance:async()=>({value:{amount:'1000000000'}})},buildBridge:async()=>bridgeInstructions(),readRate:async()=>10000000000n})
+assert.equal(quoted.networkFeeUnits,'390500','Only 3900000 rent funding plus 5000 network lamports; reserve excluded')
+assert.equal(quoted.providerFeeUnits,'53591')
+const approval={...quoted,...expected,walletAddress:wallet.publicKey.toBase58(),expiresAt:Date.now()+30000}
+const token=sealSolanaBridgeApproval(approval)
+assert.deepEqual(openSolanaBridgeApproval(token,{...expected,walletAddress:wallet.publicKey.toBase58()}),approval)
+const paid=Transaction.from(Buffer.from(quoted.transaction,'base64'))
+assert.equal(paid.instructions.at(-1).data.readBigUInt64LE(1),390500n)
+assertSolanaBridgeMessage(paid,approval,false)
+assert.throws(()=>assertSolanaBridgeMessage(paid,approval,true))
+paid.partialSign(wallet);assertSolanaBridgeMessage(paid,approval,true)
+paid.instructions.at(-1).data.writeBigUInt64LE(390501n,1)
+assert.throws(()=>assertSolanaBridgeMessage(paid,approval,false),/changed/)
+for(const patch of [{amount:'2'},{walletAddress:relayer.publicKey.toBase58()},{destination:'arbitrum'},{destinationAddress:'0x'+'22'.repeat(20)}])assert.throws(()=>openSolanaBridgeApproval(token,{...expected,walletAddress:wallet.publicKey.toBase58(),...patch}))
+assert.throws(()=>openSolanaBridgeApproval(token+'x',{...expected,walletAddress:wallet.publicKey.toBase58()}))
+const expired=sealSolanaBridgeApproval({...approval,expiresAt:1})
+assert.throws(()=>openSolanaBridgeApproval(expired,{...expected,walletAddress:wallet.publicKey.toBase58()}),/expired/)
+assert.doesNotThrow(()=>openSolanaBridgeApproval(expired,{...expected,walletAddress:wallet.publicKey.toBase58()},true))
+console.log('PASS: exact gas reimbursement, no service fee or reserve markup; signed quote and exact transaction integrity; completed signatures required.')

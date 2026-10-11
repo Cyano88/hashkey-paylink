@@ -1,3 +1,5 @@
+import {quoteCircleEvmBridge} from '../circle-solana-email.js'
+import {quotePocketSolanaCctpReimbursement} from './solana-cctp-relay.js'
 import { resolvePocketFundingPayment } from './payment-funding.js'
 import { verifyPocketBridgeRecord } from './bridge-proof.js'
 import type { Request, Response } from 'express'
@@ -9,10 +11,12 @@ import { appendPocketMoneyLedgerEvent } from './money-ledger.js'
 import { listCirclePocketActions, recordCirclePocketAction } from '../circle-pocket-action-journal.js'
 
 type Dependencies = {
+  evmQuote: typeof quoteCircleEvmBridge
   resolveFunding: typeof resolvePocketFundingPayment
   verifyRecord: typeof verifyPocketBridgeRecord
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readLink(key: string): ReturnType<typeof readCircleLink>
+  solanaQuote: typeof quotePocketSolanaCctpReimbursement
   quote: typeof readCctpForwardQuote
   readSolanaRecipient: typeof solanaRecipient
   listActions: typeof listCirclePocketActions
@@ -27,7 +31,7 @@ function network(value: unknown): PocketBridgeNetwork {
 }
 
 export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {}) {
-  const dependencies: Dependencies = { resolveFunding: resolvePocketFundingPayment, verifyRecord: verifyPocketBridgeRecord, verifyUser: verifiedPrivyUser, readLink: readCircleLink, quote: readCctpForwardQuote, readSolanaRecipient: solanaRecipient, listActions: listCirclePocketActions, record: recordCirclePocketAction, fetcher: fetch, appendLedger: appendPocketMoneyLedgerEvent, ...overrides }
+  const dependencies: Dependencies = { evmQuote:quoteCircleEvmBridge, solanaQuote:quotePocketSolanaCctpReimbursement, resolveFunding: resolvePocketFundingPayment, verifyRecord: verifyPocketBridgeRecord, verifyUser: verifiedPrivyUser, readLink: readCircleLink, quote: readCctpForwardQuote, readSolanaRecipient: solanaRecipient, listActions: listCirclePocketActions, record: recordCirclePocketAction, fetcher: fetch, appendLedger: appendPocketMoneyLedgerEvent, ...overrides }
   return async function pocketBridgeHandler(req: Request, res: Response) {
     if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
@@ -111,21 +115,14 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
       ])
       if (!sourceLink) throw Object.assign(new Error(`Open your ${source} wallet before bridging.`), { status: 409 })
       if (!destinationLink) throw Object.assign(new Error(`Open your ${destination} wallet before bridging.`), { status: 409 })
-      const solana = destination === 'solana' ? await dependencies.readSolanaRecipient(destinationLink.circleWalletAddress) : null
-      const quote = await dependencies.quote(source, destination, transferUnits, solana?.needsSetup)
-      return res.json({
-        ok: true,
-        quote: {
-          source,
-          destination,
-          amount: formatUsdcUnits(quote.transferUnits),
-          fee: formatUsdcUnits(quote.maxFeeUnits),
-          total: formatUsdcUnits(quote.totalUnits),
-          receive: formatUsdcUnits(quote.transferUnits),
-          destinationAddress: destinationLink.circleWalletAddress,
-          expiresAt: Date.now() + 30_000,
-        },
-      })
+      if(source==='solana'){
+        if(destination==='solana')throw Object.assign(Error('Choose a different destination.'),{status:400})
+        const q=await dependencies.solanaQuote(sourceLink.circleWalletAddress,{destination,destinationAddress:destinationLink.circleWalletAddress,amount:formatUsdcUnits(transferUnits)})
+        const fee=BigInt(q.networkFeeUnits)+BigInt(q.providerFeeUnits)
+        return res.json({ok:true,quote:{source,destination,amount:q.amount,receive:q.amount,fee:formatUsdcUnits(fee),total:formatUsdcUnits(transferUnits+fee),destinationAddress:q.destinationAddress,expiresAt:q.expiresAt,quoteToken:q.quoteToken}})
+      }
+      const quote=await dependencies.evmQuote({ownerId:identity.userId,userToken:String(req.body?.circleUserToken||''),walletId:sourceLink.circleWalletId,walletAddress:sourceLink.circleWalletAddress,chain:source,destination,destinationAddress:destinationLink.circleWalletAddress,amountUnits:transferUnits.toString()})
+      return res.json({ok:true,quote})
     } catch (reason) {
       const status = Number((reason as { status?: number }).status) || 503
       return res.status(status).json({ ok: false, error: { code: status === 401 ? 'AUTH_REQUIRED' : status < 500 ? 'VALIDATION_FAILED' : 'PROVIDER_UNAVAILABLE', message: reason instanceof Error ? reason.message : 'Bridge request failed.', retryable: status >= 500 } })

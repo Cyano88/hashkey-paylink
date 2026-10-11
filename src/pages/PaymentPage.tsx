@@ -1320,6 +1320,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         let route = selectPocketCheckoutRoute({ destination, amountUnits: circleRequiredUnits, balances, bridgeTotals })
         for (let attempt = 0; attempt < 2 && route.kind === 'quote-required'; attempt += 1) {
           const quote = await readPocketBridgeQuote({
+            circleUserToken:(circleEvmEmailSession??circleSolanaSession)?.userToken,
             accessToken,
             source: route.source,
             destination: route.destination,
@@ -1340,7 +1341,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     }
     void resolvePocketRoute()
     return () => { cancelled = true }
-  }, [chain, circleRequiredUnits, getAccessToken, privyAuthenticated, smartCheckoutOwnsWalletCta, pocketFundingRevision])
+  }, [chain, circleRequiredUnits, getAccessToken, privyAuthenticated, smartCheckoutOwnsWalletCta, pocketFundingRevision, circleEvmEmailSession?.userToken, circleSolanaSession?.userToken])
 
   function openCircleWalletPanel() {
     window.requestAnimationFrame(() => {
@@ -2511,6 +2512,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       const amount = formatUnits(route.amountUnits, 6)
       const txHash = route.source === 'solana'
         ? await bridgeCircleSolanaWallet({
+            maxTotalUnits:route.kind==='bridge'?route.totalSourceUnits:undefined,
             session: {
               userToken: credentials.userToken,
               encryptionKey: credentials.encryptionKey,
@@ -2522,6 +2524,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             accessToken,
           })
         : await bridgeCircleEvmEmailWallet({
+            maxTotalUnits:route.kind==='bridge'?route.totalSourceUnits:undefined,
             privyAccessToken: accessToken,
             session: {
               userToken: credentials.userToken,

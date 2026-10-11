@@ -68,14 +68,17 @@ export default function usePocketBridgeController(input: {
     try {
       const accessToken = await input.getAccessToken()
       if (!accessToken) throw new Error('Sign in again to quote this bridge.')
-      const next = await readPocketBridgeQuote({ accessToken, source: input.source, destination, amount })
+      const sourceWallet=input.wallets[input.source] ?? await input.ensureWallet(input.source)
+      if(!sourceWallet)throw Error('Open your source wallet before quoting.')
+      const circleUserToken=input.source==='solana'?undefined:(await input.getEvmSession(input.source,sourceWallet.address)).userToken
+      const next = await readPocketBridgeQuote({ circleUserToken, accessToken, source: input.source, destination, amount })
       if (version !== quoteVersion.current) return null
       setQuote(next); setStatus('idle'); return next
     } catch (reason) {
       if (version === quoteVersion.current) { setQuote(null); setStatus('idle'); setError(reason instanceof Error ? reason.message : 'Could not quote this bridge route.') }
       return null
     }
-  }, [amount, destination, input.getAccessToken, input.source])
+  }, [amount, destination, input.getAccessToken, input.source, input.getEvmSession, input.ensureWallet, input.wallets])
   useEffect(() => {
     if (locked.current) return
     const timer = window.setTimeout(() => void refreshQuote(), 450)
@@ -105,7 +108,7 @@ export default function usePocketBridgeController(input: {
       const fresh = await refreshQuote()
       if (!fresh) return
       if(bridgeQuoteNeedsReview(reviewed,fresh))throw new Error('Quote changed. Review the updated amount and fee.')
-      if (Number(fresh.total) > input.sourceBalance) throw new Error('Amount plus network fee is higher than your available balance.')
+      if (Number(fresh.total) > input.sourceBalance) throw new Error('Amount plus fee is higher than your available balance.')
       const sourceWallet = input.wallets[input.source] ?? await input.ensureWallet(input.source)
       const destinationWallet = input.wallets[destination] ?? await input.ensureWallet(destination)
       if (!sourceWallet || !destinationWallet) throw new Error('Open both Pocket wallets before bridging.')
@@ -117,8 +120,8 @@ export default function usePocketBridgeController(input: {
       const persist = () => { lastAttempt.current = active.id; savePocketBridgeTransfer(owner, active, localStorage); saved = true }
       setStatus('confirming')
       const txHash = input.source === 'solana'
-        ? await bridgeCircleSolanaWallet({ session: session as PocketSolanaEmailSession, destination: destination as Exclude<PocketBridgeNetwork, 'solana'>, destinationAddress: destinationWallet.address, amount, accessToken, onBeforeSubmit: persist })
-        : await bridgeCircleEvmEmailWallet({ privyAccessToken: accessToken, idempotencyKey: active.id, session: session as CircleEvmEmailSession, destination, destinationAddress: destinationWallet.address, amount, onChallenge: challengeId => { active = { ...active, challengeId }; persist() } })
+        ? await bridgeCircleSolanaWallet({ quoteToken: fresh.quoteToken, session: session as PocketSolanaEmailSession, destination: destination as Exclude<PocketBridgeNetwork, 'solana'>, destinationAddress: destinationWallet.address, amount, accessToken, onBeforeSubmit: persist })
+        : await bridgeCircleEvmEmailWallet({ quoteToken:fresh.quoteToken, privyAccessToken: accessToken, idempotencyKey: active.id, session: session as CircleEvmEmailSession, destination, destinationAddress: destinationWallet.address, amount, onChallenge: challengeId => { active = { ...active, challengeId }; persist() } })
       active = { ...active, txHash, progress: 'submitted' }
       persist()
       // Track this transfer independently. A new form must never resume or

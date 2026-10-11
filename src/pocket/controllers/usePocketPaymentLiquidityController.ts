@@ -1,3 +1,4 @@
+import {fundingRouteNeedsReview} from '../lib/pocketFundingQuoteReview'
 import type { PocketPaymentFunding, PocketFundingReference } from '../lib/pocketPaymentFunding'
 import { cachedPocketDirectLiquidity } from '../lib/pocketDirectLiquidity'
 import type { PocketBalanceSnapshot } from '../lib/pocketBalanceCache'
@@ -43,6 +44,7 @@ const networkLabel = (network: PocketCheckoutNetwork) => ({ base: 'Base', arbitr
 export const pocketBridgePollDelay = (attempt: number) => attempt < 12 ? 1_500 : attempt < 32 ? 3_000 : 5_000
 
 async function inspectLiquidity(input: {
+  getEvmSession(network: Exclude<PocketCheckoutNetwork,'solana'>,address:string):Promise<CircleEvmEmailSession>
   accessToken: string
   destination: PocketCheckoutNetwork
   amountUnits: bigint
@@ -75,6 +77,7 @@ async function inspectLiquidity(input: {
   for (let attempt = 0; attempt < NETWORKS.length - 1 && route.kind === 'quote-required'; attempt += 1) {
     let quote
     try { quote = await readPocketBridgeQuote({
+      circleUserToken:route.source==='solana'?undefined:(await input.getEvmSession(route.source,wallets[route.source]!.address)).userToken,
       accessToken: input.accessToken,
       source: route.source,
       destination: route.destination,
@@ -136,12 +139,12 @@ export default function usePocketPaymentLiquidityController(input: {
     const key = accessToken + ':' + input.destination + ':' + amountUnits + ':' + Boolean(input.bankPayout)
     let pending = inspection.current?.key === key ? inspection.current.promise : null
     if (!pending) {
-      pending = inspectLiquidity({ accessToken, destination: input.destination, amountUnits, bankPayout: input.bankPayout })
+      pending = inspectLiquidity({ getEvmSession:input.getEvmSession, accessToken, destination: input.destination, amountUnits, bankPayout: input.bankPayout })
       inspection.current = {key, promise:pending}
     }
     try { return { ...await pending, accessToken } }
     finally { if (inspection.current?.promise === pending) inspection.current = null }
-  }, [amountUnits, input.destination, input.getAccessToken, input.readRoutingSnapshot, input.bankPayout])
+  }, [amountUnits, input.destination, input.getAccessToken, input.readRoutingSnapshot, input.bankPayout, input.getEvmSession])
 
   useEffect(() => {
     const current = ++run.current
@@ -186,10 +189,14 @@ export default function usePocketPaymentLiquidityController(input: {
           totalSourceUnits: checkpointAmountUnits,
         }
       }
+      if(!checkpoint?.txHash && fundingRouteNeedsReview(route,currentRoute)){
+        setRoute(currentRoute);setWallets(inspected.wallets)
+        throw Error('Bridge fee or route changed. Review the updated total before paying.')
+      }
       setRoute(currentRoute)
       setWallets(inspected.wallets)
       if (currentRoute.kind === 'insufficient') {
-        throw new Error('No single gas-sponsored source can cover the remaining amount and bridge fee.')
+        throw new Error('No single source can cover the remaining amount and bridge fee.')
       }
       const destinationWallet = inspected.wallets[currentRoute.destination]
         ?? await input.ensureWallet(currentRoute.destination)
@@ -247,6 +254,7 @@ export default function usePocketPaymentLiquidityController(input: {
         try {
           txHash = currentRoute.source === 'solana'
             ? await bridgeCircleSolanaWallet({
+                maxTotalUnits:currentRoute.kind==='bridge'?currentRoute.totalSourceUnits:undefined,
                 session: await input.getSolanaSession(sourceWallet.address),
                 destination: currentRoute.destination as 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon',
                 destinationAddress: destinationWallet.address,
@@ -254,6 +262,7 @@ export default function usePocketPaymentLiquidityController(input: {
                 accessToken: inspected.accessToken,
               })
             : await bridgeCircleEvmEmailWallet({
+                maxTotalUnits:currentRoute.kind==='bridge'?currentRoute.totalSourceUnits:undefined,
                 privyAccessToken: inspected.accessToken,
                 session: await input.getEvmSession(currentRoute.source, sourceWallet.address),
                 destination: currentRoute.destination,
@@ -316,7 +325,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setError(message)
       throw reason
     }
-  }, [amountUnits, fundingKey, input.funding?.kind, input.funding?.id, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect])
+  }, [amountUnits, fundingKey, input.funding?.kind, input.funding?.id, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect, route])
 
   const prepareLiquidity = useCallback(async () => {
     const inspected = await inspect()
@@ -326,22 +335,26 @@ export default function usePocketPaymentLiquidityController(input: {
       const checkpointAmountUnits = parseUnits(checkpoint.amount, 6)
       currentRoute = { kind: 'bridge', source: checkpoint.source, destination: checkpoint.destination, amountUnits: checkpointAmountUnits, totalSourceUnits: checkpointAmountUnits }
     }
+    if(!checkpoint?.txHash && fundingRouteNeedsReview(route,currentRoute)){
+      setRoute(currentRoute);setWallets(inspected.wallets)
+      throw Error('Bridge fee or route changed. Review the updated total before paying.')
+    }
     if (currentRoute.kind !== 'bridge') return
     const sourceWallet = inspected.wallets[currentRoute.source] ?? await input.ensureWallet(currentRoute.source)
     if (!sourceWallet) throw new Error('Open the source Pocket wallet before confirming this payment.')
     if (currentRoute.source === 'solana') await input.getSolanaSession(sourceWallet.address)
     else await input.getEvmSession(currentRoute.source, sourceWallet.address)
-  }, [input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, inspect])
+  }, [input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, inspect, route])
 
   const notice = error
     || (status === 'checking'
-      ? 'Checking gas-sponsored USDC routes.'
+      ? 'Checking USDC routes.'
       : status === 'moving'
         ? 'Moving USDC to ' + networkLabel(input.destination) + '.'
         : status === 'waiting' || status === 'reconciling'
           ? 'USDC is moving. Payment will continue after confirmed arrival.'
           : route?.kind === 'bridge'
-            ? 'Moving ' + formatUnits(route.amountUnits, 6) + ' USDC from ' + networkLabel(route.source) + ' to complete the payment on ' + networkLabel(route.destination) + '.'
+            ? 'Moving ' + formatUnits(route.amountUnits, 6) + ' USDC from ' + networkLabel(route.source) + ' to complete the payment on ' + networkLabel(route.destination) + '. Fee: ' + formatUnits(route.totalSourceUnits-route.amountUnits,6) + ' USDC. Total: ' + formatUnits(route.totalSourceUnits,6) + ' USDC.'
             : route?.kind === 'insufficient'
               ? 'Your available USDC cannot cover this payment and the network move.'
               : route?.kind === 'direct'

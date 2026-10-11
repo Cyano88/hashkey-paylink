@@ -1,3 +1,5 @@
+import {parseUnits} from 'viem'
+import {readPocketBridgeQuote} from '../api/pocketBridgeClient'
 import { pocketBridgeNetworkLabel } from './pocketBridgeNetworks'
 import { signCircleSolanaTransaction } from '../../lib/circleSolanaEmailWallet'
 import type { PocketSolanaEmailSession } from '../controllers/usePocketWalletController'
@@ -14,6 +16,8 @@ export function pocketBridgeApiErrorMessage(value: unknown, fallback: string) {
 }
 
 export async function bridgeCircleSolanaWallet(input: {
+  maxTotalUnits?: bigint
+  quoteToken?: string
   onBeforeSubmit?: () => void
   session: PocketSolanaEmailSession
   destination: Exclude<PocketBridgeNetwork, 'solana'>
@@ -21,10 +25,18 @@ export async function bridgeCircleSolanaWallet(input: {
   amount: string
   accessToken: string
 }) {
+  let quoteToken=input.quoteToken
+  if(!quoteToken&&input.maxTotalUnits!==undefined){
+    const quote=await readPocketBridgeQuote({accessToken:input.accessToken,source:'solana',destination:input.destination,amount:input.amount})
+    if(parseUnits(quote.total,6)>input.maxTotalUnits||quote.destinationAddress.toLowerCase()!==input.destinationAddress.toLowerCase())throw new Error('Bridge fees changed. Review the updated quote.')
+    quoteToken=quote.quoteToken
+  }
+  if(!quoteToken)throw new Error('Review a new Solana bridge quote.')
   const prepareResponse = await fetch(POCKET_API.solanaCctpPrepare, {
     method: 'POST',
     headers: { authorization: `Bearer ${input.accessToken}`, 'content-type': 'application/json' },
     body: JSON.stringify({
+      quoteToken,
       destination: input.destination,
       destinationAddress: input.destinationAddress,
       amount: input.amount,
@@ -42,7 +54,7 @@ export async function bridgeCircleSolanaWallet(input: {
 
   const signedTransaction = await signCircleSolanaTransaction({
     session: input.session,
-    bridge: { destination: input.destination, destinationAddress: input.destinationAddress, amount: input.amount, accessToken: input.accessToken },
+    bridge: { quoteToken, destination: input.destination, destinationAddress: input.destinationAddress, amount: input.amount, accessToken: input.accessToken },
     rawTransaction: prepared.transaction,
     memo: `Circle Pocket bridge ${input.amount} USDC from Solana to ${pocketBridgeNetworkLabel(input.destination)}`,
   })
@@ -53,6 +65,7 @@ export async function bridgeCircleSolanaWallet(input: {
     body: JSON.stringify({
       transaction: signedTransaction,
       lastValidBlockHeight: prepared.lastValidBlockHeight,
+      quoteToken,
       destination: input.destination,
       destinationAddress: input.destinationAddress,
       amount: input.amount,

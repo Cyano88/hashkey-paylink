@@ -7,17 +7,18 @@ process.env.RELAYER_PRIVATE_KEY_SOLANA=JSON.stringify([...relayer.secretKey])
 process.env.SOLANA_RPC_URL='https://fixture.invalid'
 process.env.SOLANA_TREASURY=treasury.publicKey.toBase58()
 process.env.POCKET_SWAP_QUOTE_SECRET='fixture-only-solana-quote-secret-123456789'
-let balance='100000000',fee=10000,setup=false
+let balance='100000000',fee=10000,setup=false,solBalance=1000000000
 const saved=new Map()
 for(const [name,fn] of Object.entries({
  getLatestBlockhash:async()=>({blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:12345}),
  getAccountInfo:async()=>setup?null:({owner:SOLANA_TOKEN_PROGRAM_ID}),
  getTokenAccountBalance:async()=>({value:{amount:balance}}),
+ getBalance:async()=>solBalance,
  getFeeForMessage:async()=>({value:fee}),
  getMinimumBalanceForRentExemption:async()=>2039280,
 })) {saved.set(name,Connection.prototype[name]);Connection.prototype[name]=fn}
 const oldFetch=globalThis.fetch
-globalThis.fetch=async url=>{assert.equal(new URL(url).hostname,'api.coingecko.com');return Response.json({solana:{usd:100,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})}
+globalThis.fetch=async url=>{assert.equal(new URL(url).hostname,'api.coingecko.com');return Response.json({solana:{usd:100,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)},tether:{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})}
 async function call(extra={}){let status=200,body;await buildSolanaTx({body:{from:sender.publicKey.toBase58(),to:recipient.publicKey.toBase58(),amount:'100',...extra}},{status(s){status=s;return this},json(b){body=b;return this}});return {status,body}}
 try {
  const q=await call({quoteOnly:true});assert.equal(q.status,200);assert.equal(q.body.quote.recipientUnits,'100000000');assert.equal(q.body.quote.platformFeeUnits,'250000');assert.equal(q.body.quote.networkFeeUnits,'1000');assert.equal(q.body.quote.totalUnits,'100251000');assert.equal(q.body.tx,undefined)
@@ -28,7 +29,25 @@ try {
  const paid=await call({feeQuoteToken:q.body.token,feeMode:'net'});assert.equal(paid.status,200);assert.equal(paid.body.recipientAmount,'100');assert.equal(paid.body.totalAmount,'100.251')
  const tx=Transaction.from(Buffer.from(paid.body.tx,'base64'));const transfers=tx.instructions.filter(x=>x.programId.equals(SOLANA_TOKEN_PROGRAM_ID));assert.equal(transfers.length,2);assert.equal(transfers[0].data.readBigUInt64LE(1),100000000n);assert.equal(transfers[1].data.readBigUInt64LE(1),251000n)
  assert.equal((await call({feeQuoteToken:q.body.token,amount:'99'})).status,409)
+
+ for(const asset of ['USDC','USDT']){
+  const send=await call({asset,mode:'send',quoteOnly:true})
+  assert.equal(send.body.quote.platformFeeUnits,'0');assert.equal(send.body.quote.networkFeeUnits,'1000');assert.equal(send.body.quote.totalUnits,'100001000')
+  assert.equal((await call({asset,feeQuoteToken:send.body.token})).status,409)
+  const built=await call({asset,mode:'send',feeQuoteToken:send.body.token});assert.equal(built.status,200)
+  const tx=Transaction.from(Buffer.from(built.body.tx,'base64'))
+  assert.equal(tx.instructions.at(-1).data.readBigUInt64LE(1),1000n)
+ }
+ assert.equal((await call({mode:'send',feeQuoteToken:q.body.token})).status,409)
+ console.log('PASS: Solana USDC/USDT sends charge gas only; merchant payment fees preserved; quote crossover rejected.')
+ fee=5000
+ const cheaper=await call({feeQuoteToken:q.body.token});assert.equal(cheaper.status,200);assert.equal(cheaper.body.gasRecoveryAmount,'0.0005');assert.equal(cheaper.body.totalAmount,'100.2505')
  fee=20000;assert.equal((await call({feeQuoteToken:q.body.token})).status,409)
  setup=true;const rent=await call({quoteOnly:true});assert.equal(rent.body.includesAccountSetup,true);assert.equal(rent.body.quote.networkFeeUnits,'409856')
+ setup=false
+ const noSetup=await call({feeQuoteToken:rent.body.token});assert.equal(noSetup.status,200);assert.equal(noSetup.body.gasRecoveryAmount,'0.002')
+ solBalance=0
+ const blocked=await call({feeQuoteToken:rent.body.token});assert.equal(blocked.status,503);assert.equal(blocked.body.tx,undefined)
+ console.log('PASS: lower fee and removed account setup reduce collection; empty relayer cannot return a signed transaction.')
  console.log('PASS: Solana RPC fee and rent quotes; case-sensitive binding; exact 100 USDC recipient; 0.25% plus gas treasury transfer; insufficient funds, absent/tampered binding and increased cost cannot produce a transaction.')
 }finally{globalThis.fetch=oldFetch;for(const [name,fn] of saved)Connection.prototype[name]=fn}

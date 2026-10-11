@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
 import {encodeAbiParameters,encodeEventTopics} from 'viem'
 import {reconcileUsdtBridge} from '../api/pocket/usdt-bridge.ts'
 import {sealUsdtBridgeQuote,USDT_TRANSFER_ABI,USDT_BRIDGE_ROUTER} from '../api/pocket/usdt-bridge-provider.ts'
@@ -45,3 +46,15 @@ assert.equal(pushes.filter(n=>n.title==='Bridge successful').length,1);assert.eq
 await runPocketMoneyPushWorker({configured:()=>true,listOwners:async()=>['owner'],now:()=>Date.now(),readActivity:async()=>[{...raw[0],paycrestStatus:'confirmed',recipient}],readWallets:async()=>[],listActions:async()=>[],readContext:async()=>[],listRequests:async()=>[{id:'request-separate-asset',status:'accepted',amount:'1',updatedAt:row.ts-1000,recipientId:'owner',senderAddress:recipient,network:'base'}],markRequestPaid:async()=>{paid++},findEvm:async()=>null,sendPush:async()=>{}})
 assert.equal(paid,0,'USDT cannot settle a USDC request')
 console.log('PASS USDT missing-hash recovery, destination token proof, ledger retry, per-asset notifications, bridge leg grouping and USDC-request isolation')
+
+const charged={...q,networkFeeUnits:'3000',totalUnits:'1003000',total:'1.003',reimbursementTreasury:EVM_PLATFORM_TREASURY}
+const chargedToken=sealUsdtBridgeQuote(charged)
+for(const destination of [EVM_PLATFORM_TREASURY,recipient]){
+ stored=record
+ const fundedReceipt={...sourceReceipt,logs:[...sourceReceipt.logs,transfer(tokenIn,wallet,destination,3000n)]}
+ const result=await reconcileUsdtBridge('owner',chargedToken,{txHash},{...deps,client:network=>({getTransactionReceipt:async()=>network==='arbitrum'?fundedReceipt:destinationReceipt})})
+ assert.equal(result.status,destination===EVM_PLATFORM_TREASURY?'completed':'needs_attention','exact reimbursement recipient is required')
+}
+stored=record
+assert.equal((await reconcileUsdtBridge('owner',chargedToken,{txHash},deps)).status,'needs_attention','missing reimbursement cannot pass source proof')
+console.log('PASS USDT total debit and exact treasury reimbursement proof; legacy recovery retained')

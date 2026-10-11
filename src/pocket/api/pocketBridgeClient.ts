@@ -3,6 +3,7 @@ import { POCKET_API } from '../lib/pocketSchemas'
 
 export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
 export type PocketBridgeQuote = {
+  quoteToken?: string
   source: PocketBridgeNetwork
   destination: PocketBridgeNetwork
   amount: string
@@ -17,11 +18,11 @@ function message(data: any) {
   return data?.error?.message || data?.error || 'Bridge request failed.'
 }
 
-export async function readPocketBridgeQuote(input: { accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; fetcher?: typeof fetch }) {
+export async function readPocketBridgeQuote(input: { circleUserToken?: string; accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; fetcher?: typeof fetch }) {
   const response = await (input.fetcher ?? fetch)(POCKET_API.bridge, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${input.accessToken}` },
-    body: JSON.stringify({ action: 'quote', source: input.source, destination: input.destination, amount: input.amount }),
+    body: JSON.stringify({ action: 'quote', circleUserToken: input.circleUserToken, source: input.source, destination: input.destination, amount: input.amount }),
   })
   const data = await response.json().catch(() => ({})) as { ok?: boolean; quote?: PocketBridgeQuote; error?: unknown }
   if (!response.ok || data.ok !== true || !data.quote) throw new Error(message(data))

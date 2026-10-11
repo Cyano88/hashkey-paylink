@@ -24,6 +24,8 @@ const handler = createPocketBridgeHandler({
   verifyUser: async () => ({ userId: 'privy-bridge-user', email: 'bridge@example.com' }),
   readLink: async key => ({ circleWalletAddress: key.endsWith(':solana') ? '4QW6qgCGxSFi1zTb1nrqdjuQFCbVuxLiCLNTZb8qovCE' : '0x1111111111111111111111111111111111111111' }),
   readSolanaRecipient: async () => ({ needsSetup: true }),
+  solanaQuote:async(walletAddress,expected)=>({...expected,walletAddress,networkFeeUnits:'390500',providerFeeUnits:'201000',expiresAt:123,quoteToken:'fixture'}),
+  evmQuote:async input=>({source:input.chain,destination:input.destination,amount:formatUsdcUnits(BigInt(input.amountUnits)),receive:formatUsdcUnits(BigInt(input.amountUnits)),fee:'0.204',total:formatUsdcUnits(BigInt(input.amountUnits)+204000n),destinationAddress:input.destinationAddress,expiresAt:123,quoteToken:'evm-fixture'}),
   quote: async (_source, _destination, transferUnits) => ({ transferUnits, forwardFeeUnits: 200_000n, protocolFeeUnits: 1_000n, maxFeeUnits: 201_000n, totalUnits: transferUnits + 201_000n, finalityThreshold: 1000 }),
   record: async input => { records.push(input); return { id: 'bridge-action-1' } },
   appendLedger: async input => { ledgerEvents.push(input); return input },
@@ -33,8 +35,8 @@ const handler = createPocketBridgeHandler({
 const quote = await request(handler, { body: { action: 'quote', source: 'base', destination: 'solana', amount: '2' } })
 assert.equal(quote.statusCode, 200)
 assert.deepEqual(quote.body.quote, {
-  source: 'base', destination: 'solana', amount: '2', fee: '0.201', total: '2.201', receive: '2',
-  destinationAddress: '4QW6qgCGxSFi1zTb1nrqdjuQFCbVuxLiCLNTZb8qovCE', expiresAt: quote.body.quote.expiresAt,
+  source: 'base', destination: 'solana', amount: '2', fee: '0.204', total: '2.204', receive: '2',
+  destinationAddress: '4QW6qgCGxSFi1zTb1nrqdjuQFCbVuxLiCLNTZb8qovCE', expiresAt: quote.body.quote.expiresAt,quoteToken:'evm-fixture',
 })
 
 const recorded = await request(handler, { body: { action: 'record', source: 'base', destination: 'solana', amount: '2', txHash: '0xsource', status: 'submitted' } })
@@ -82,3 +84,6 @@ for (const source of ['base','arbitrum','arc','solana','ethereum','polygon']) {
  }
 }
 console.log('Circle Pocket bridge adapter smoke tests passed, including all 30 directed quote routes.')
+
+const solQuote=await request(handler,{body:{action:'quote',source:'solana',destination:'base',amount:'2'}})
+assert.equal(solQuote.statusCode,200);assert.equal(solQuote.body.quote.total,'2.5915');assert.equal(solQuote.body.quote.fee,'0.5915');assert.equal(solQuote.body.quote.receive,'2');assert.equal(solQuote.body.quote.quoteToken,'fixture')

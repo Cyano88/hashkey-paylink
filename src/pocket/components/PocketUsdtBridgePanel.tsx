@@ -11,9 +11,9 @@ import {Loader2} from './PocketIcons'
 
 const NETWORKS=['base','arbitrum','ethereum','polygon'] as const
 type Network=typeof NETWORKS[number]
-type Quote={id:string;source:Network;destination:Network;walletAddress:string;amount:string;receive:string;minimumReceive:string;fee:string;expiresAt:number}
+type Quote={total?:string;networkFeeUnits?:string;id:string;source:Network;destination:Network;walletAddress:string;amount:string;receive:string;minimumReceive:string;fee:string;expiresAt:number}
 type Pending={quote:Quote;quoteToken:string;challengeId?:string;txHash?:string;sourceConfirmed?:boolean;needsAttention?:boolean}
-type Props={owner:string;getAccessToken():Promise<string|null>;getSession(network:Network,address:string):Promise<CircleEvmEmailSession>;onBusyChange(value:boolean):void;onActivity():void;refresh():Promise<unknown>;balances:Array<{key:string;usdt?:number;usdtStale?:boolean}>}
+type Props={ensureWallet(network:Network):Promise<{address:string}|null>;owner:string;getAccessToken():Promise<string|null>;getSession(network:Network,address:string):Promise<CircleEvmEmailSession>;onBusyChange(value:boolean):void;onActivity():void;refresh():Promise<unknown>;balances:Array<{key:string;usdt?:number;usdtStale?:boolean}>}
 export default function PocketUsdtBridgePanel(props:Props){
   const [source,setSource]=useState<Network>('arbitrum'),[destination,setDestination]=useState<Network>('base')
   const [amount,setAmount]=useState(''),[quoted,setQuoted]=useState<(Pending&{sufficientBalance:boolean})|null>(null)
@@ -50,8 +50,13 @@ export default function PocketUsdtBridgePanel(props:Props){
     if(!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<=0)return
     const requestVersion=++version.current,deadline=Date.now()+30000;setQuoting(true);setError('');setQuoted(null)
     try{
+      const wallet=await props.ensureWallet(source)
+      if(!wallet)throw Error('Open your source wallet to continue.')
+      const active=await props.getSession(source,wallet.address)
+      if(requestVersion!==version.current)return
+      session.current=active
       for(let attempt=0;attempt<3;attempt++){
-        try{const data=await api({action:'quote',source,destination,amount},Math.max(1,deadline-Date.now()));if(requestVersion===version.current)setQuoted(data);break}
+        try{const data=await api({action:'quote',source,destination,amount,circleUserToken:active.userToken},Math.max(1,deadline-Date.now()));if(requestVersion===version.current)setQuoted(data);break}
         catch(e){if(requestVersion!==version.current)return;const transient=(e as {retryable?:boolean}).retryable||e instanceof TypeError||(e as Error).name==='TimeoutError';if(!transient||attempt===2||Date.now()+1000*2**attempt>=deadline)throw e;await new Promise(resolve=>window.setTimeout(resolve,1000*2**attempt));if(requestVersion!==version.current)return}
       }
     }catch(e){if(requestVersion===version.current)setError((e as Error).message)}finally{if(requestVersion===version.current)setQuoting(false)}
@@ -126,7 +131,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   const locked=busy||preparing||Boolean(pending)
   const validAmount=/^\d+(\.\d{1,6})?$/.test(amount)&&Number(amount)>0
   return <>
-    <PocketBridgeForm asset="USDT" disabled={locked} source={source} destination={destination} sources={NETWORKS.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} destinations={NETWORKS.filter(n=>n!==source).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onSource={value=>{invalidate();setSource(value as Network);if(value===destination)setDestination(NETWORKS.find(n=>n!==value)!);setAmount('')}} onDestination={value=>{invalidate();setDestination(value as Network)}} balance={balance?.usdt} amount={amount} onAmount={value=>{invalidate();setAmount(value)}} maxDisabled={balance?.usdt===undefined||balance.usdtStale} onMax={()=>{invalidate();setAmount(Math.max(0,balance?.usdt||0).toFixed(6).replace(/\.?0+$/,''))}} quote={quoted&&!pending?quoted.quote:null}>
+    <PocketBridgeForm asset="USDT" disabled={locked} source={source} destination={destination} sources={NETWORKS.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} destinations={NETWORKS.filter(n=>n!==source).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onSource={value=>{invalidate();setSource(value as Network);if(value===destination)setDestination(NETWORKS.find(n=>n!==value)!);setAmount('')}} onDestination={value=>{invalidate();setDestination(value as Network)}} balance={balance?.usdt} amount={amount} onAmount={value=>{invalidate();setAmount(value)}} maxDisabled={balance?.usdt===undefined||balance.usdtStale} onMax={()=>{invalidate();setAmount(Math.max(0,(balance?.usdt||0)-Number(quoted?.quote.networkFeeUnits||0)/1e6).toFixed(6).replace(/\.?0+$/,''))}} quote={quoted&&!pending?quoted.quote:null}>
       <PocketFundingAction flow="bridge" asset={!pending&&(quoted?.sufficientBalance===false||(balance?.usdt!==undefined&&!balance.usdtStale&&Number(amount)>balance.usdt))?'USDT':null} network={source} locked={locked} onReturn={async()=>{await props.refresh();await quote()}} onCancel={()=>{invalidate();setAmount('')}}>
       {pending?<button type="button" className="pocket-cta-primary w-full" disabled={!pending.needsAttention} aria-busy={!pending.needsAttention} onClick={()=>void check(pending)}>{!pending.needsAttention&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{pending.needsAttention?'Retry status check':pending.sourceConfirmed?'Arriving on '+pocketBridgeNetworkLabel(pending.quote.destination):'Bridging USDT'}</span></button>
       :recoveryFailed||(!quoted&&error&&!quoting)?<button type="button" className="pocket-cta-primary w-full" onClick={()=>recoveryFailed?setReload(value=>value+1):void quote()}>Try again</button>
@@ -135,7 +140,7 @@ export default function PocketUsdtBridgePanel(props:Props){
       {notice&&<p role="status" className="text-center text-xs text-gray-500">{notice}</p>}{error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
     </PocketBridgeForm>
     {result&&<PocketTransactionSheet title="Bridge stablecoins" state={result.state} statusLabel={result.state==='successful'?'Bridge successful':'Bridge failed'} amount={result.quote.amount+' USDT'} detailsRows={[
-      ['Asset','USDT'],['From',pocketBridgeNetworkLabel(result.quote.source)],['To',pocketBridgeNetworkLabel(result.quote.destination)],['Bridge fee',result.quote.fee+' USDT'],...(result.txHash?[['Transaction',result.txHash] as [string,string]]:[]),...(result.destinationTxHash?[['Destination transaction',result.destinationTxHash] as [string,string]]:[])
+      ['Asset','USDT'],['From',pocketBridgeNetworkLabel(result.quote.source)],['To',pocketBridgeNetworkLabel(result.quote.destination)],['Fee',result.quote.fee+' USDT'],...(result.quote.total?[['Total',result.quote.total+' USDT'] as [string,string]]:[]),...(result.txHash?[['Transaction',result.txHash] as [string,string]]:[]),...(result.destinationTxHash?[['Destination transaction',result.destinationTxHash] as [string,string]]:[])
     ]} onDone={()=>setResult(null)}/>}
   </>
 }

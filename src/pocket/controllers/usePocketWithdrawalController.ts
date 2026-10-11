@@ -72,7 +72,7 @@ export default function usePocketWithdrawalController({
     if (!chargeFees) return undefined
     const q = feeQuote?.quote
     const normalize = (value: string) => network === 'solana' ? value : value.toLowerCase()
-    if (!q || (q.asset ?? 'USDC') !== asset || q.chain !== network || q.amountUnits !== parseUnits(amount, 6).toString() || normalize(q.recipient) !== normalize(address) || !wallet?.address || normalize(q.walletAddress) !== normalize(wallet.address) || q.expiresAt <= Date.now() + 15000) throw new Error('Review the refreshed fees before confirming.')
+    if (!q || q.purpose !== 'wallet-send' || q.platformFeeUnits !== '0' || (q.asset ?? 'USDC') !== asset || q.chain !== network || q.amountUnits !== parseUnits(amount, 6).toString() || normalize(q.recipient) !== normalize(address) || !wallet?.address || normalize(q.walletAddress) !== normalize(wallet.address) || q.expiresAt <= Date.now() + 15000) throw new Error('Review the refreshed fees before confirming.')
     if (BigInt(Math.floor(balance * 1e6)) < BigInt(q.totalUnits)) throw new Error(`Insufficient ${asset} to cover the amount and fees. Try a lower amount.`)
     return feeQuote!.token
   }
@@ -140,8 +140,8 @@ export default function usePocketWithdrawalController({
       if (chargeFees) {
         if (!feeQuote || feeQuote.quote.expiresAt <= Date.now() + 15000) {
           const next = network === 'solana'
-            ? await readSolanaPaymentQuote(selectedWallet.address, address, amount, asset)
-            : await readCirclePaymentFeeQuote({ asset, session: await getEvmSession(network, selectedWallet.address), recipient: address, amount, feeMode: 'gross' })
+            ? await readSolanaPaymentQuote(selectedWallet.address, address, amount, asset, 'wallet-send')
+            : await readCirclePaymentFeeQuote({ asset, session: await getEvmSession(network, selectedWallet.address), recipient: address, amount, feeMode: 'gross', purpose: 'wallet-send' })
           setFeeQuote(next)
           if (BigInt(Math.floor(balance * 1e6)) < BigInt(next.quote.totalUnits)) throw new Error(`Insufficient ${asset} to cover the amount and fees. Try a lower amount.`)
           throw new Error('FEE_REVIEW_REQUIRED')

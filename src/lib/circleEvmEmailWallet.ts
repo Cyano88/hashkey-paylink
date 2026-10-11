@@ -917,8 +917,8 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
 }
 
 export type CirclePaymentFeeQuote = { quote: PaymentFeeQuote; token: string }
-export async function readCirclePaymentFeeQuote(params: { session: CircleEvmEmailSession; recipient: string; amount: string; asset?: 'USDC' | 'USDT'; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string }): Promise<CirclePaymentFeeQuote> {
-  return circleWalletApi<CirclePaymentFeeQuote>({ action: 'quoteEvmPayment', asset: params.asset ?? 'USDC', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
+export async function readCirclePaymentFeeQuote(params: { session: CircleEvmEmailSession; recipient: string; amount: string; asset?: 'USDC' | 'USDT'; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string; purpose?: 'payment' | 'wallet-send' }): Promise<CirclePaymentFeeQuote> {
+  return circleWalletApi<CirclePaymentFeeQuote>({ action: params.purpose === 'wallet-send' ? 'quoteEvmSend' : 'quoteEvmPayment', asset: params.asset ?? 'USDC', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
 }
 
 export async function sendCircleEvmEmailPayment(params: {
@@ -1027,7 +1027,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
     transactionId?: string
     transaction?: Record<string, unknown>
   }>({
-    action: params.feeQuoteToken ? 'executeEvmPayment' : 'executeEvmWithdraw',
+    action: params.feeQuoteToken ? 'executeEvmSend' : 'executeEvmWithdraw',
     feeQuoteToken: params.feeQuoteToken,
     feeMode: 'gross',
     asset: params.asset || 'USDC',
@@ -1175,6 +1175,8 @@ export async function readCircleEvmBridgeChallenge(session: CircleEvmEmailSessio
 }
 
 export async function bridgeCircleEvmEmailWallet(params: {
+  quoteToken?: string
+  maxTotalUnits?: bigint
   privyAccessToken?: string
   idempotencyKey?: string
   onChallenge?: (challengeId: string) => void
@@ -1183,6 +1185,14 @@ export async function bridgeCircleEvmEmailWallet(params: {
   destinationAddress: string
   amount: string
 }) {
+  let quoteToken=params.quoteToken
+  if(!quoteToken && params.maxTotalUnits!==undefined && params.privyAccessToken){
+    const {readPocketBridgeQuote}=await import('../pocket/api/pocketBridgeClient')
+    const fresh=await readPocketBridgeQuote({accessToken:params.privyAccessToken,circleUserToken:params.session.userToken,source:params.session.chain,destination:params.destination,amount:params.amount})
+    if((params.destination==='solana'?fresh.destinationAddress!==params.destinationAddress:fresh.destinationAddress.toLowerCase()!==params.destinationAddress.toLowerCase())||parseUnits(fresh.total,6)>params.maxTotalUnits)throw Error('Bridge fee changed. Review the updated quote.')
+    quoteToken=fresh.quoteToken
+  }
+  if(!quoteToken)throw Error('Review a bridge quote before continuing.')
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
     amount: params.amount,
@@ -1198,6 +1208,7 @@ export async function bridgeCircleEvmEmailWallet(params: {
     transaction?: Record<string, unknown>
   }>({
     action: 'executeEvmBridge',
+    quoteToken,
     idempotencyKey: params.idempotencyKey,
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,

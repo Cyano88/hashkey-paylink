@@ -2,8 +2,8 @@ import type { CirclePaymentFeeQuote } from './circleEvmEmailWallet'
 import type { SolanaEmailSession } from './circleSolanaEmailWallet'
 import { POCKET_API } from '../pocket/lib/pocketSchemas'
 
-export async function readSolanaPaymentQuote(from: string, to: string, amount: string, asset: 'USDC' | 'USDT' = 'USDC'): Promise<CirclePaymentFeeQuote> {
-  const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from, to, amount, asset, quoteOnly: true }) })
+export async function readSolanaPaymentQuote(from: string, to: string, amount: string, asset: 'USDC' | 'USDT' = 'USDC', purpose: 'payment' | 'wallet-send' = 'payment'): Promise<CirclePaymentFeeQuote> {
+  const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from, to, amount, asset, mode: purpose === 'wallet-send' ? 'send' : undefined, quoteOnly: true }) })
   const data = await response.json()
   if (!response.ok || !data.ok || !data.quote || !data.token) throw new Error(data.error || 'Solana fee quote is unavailable.')
   return data
@@ -47,7 +47,7 @@ export async function sendQuotedSolanaPayment(input: {
     pending = null
   }
   if (!pending) {
-    const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: input.session.wallet.address, to: input.recipient, amount: input.amount, asset, feeQuoteToken: input.feeQuoteToken }) })
+    const response = await fetch('/api/solana-build-tx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: input.session.wallet.address, to: input.recipient, amount: input.amount, asset, mode: 'send', feeQuoteToken: input.feeQuoteToken }) })
     const data = await response.json()
     if (!response.ok || !data.ok || !data.tx || !Number.isSafeInteger(data.lastValidBlockHeight)) throw new Error(data.error || 'Solana payment could not be prepared.')
     if (asset === 'USDT' && data.asset !== asset) throw new Error('The prepared transfer does not match USDT.')

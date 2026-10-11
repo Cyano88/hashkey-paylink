@@ -1,13 +1,15 @@
 import type {Request,Response} from 'express'
-import {createPublicClient,decodeEventLog,getAddress,http,parseAbi,type Hex} from 'viem'
+import {createPublicClient,decodeEventLog,formatUnits,parseUnits,getAddress,http,parseAbi,type Hex} from 'viem'
 import {base,arbitrum,mainnet,polygon} from 'viem/chains'
 import {verifiedPrivyUser,circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
-import {createCircleGasStationEvmChallenge,readCircleEvmChallenge} from '../circle-solana-email.js'
+import {createCircleGasStationEvmChallenge,readCircleEvmChallenge,quoteCircleEvmBatchRecovery} from '../circle-solana-email.js'
 import {evmActivity} from './wallet-chain-activity.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {bridgeError,openUsdtBridgeQuote,quoteUsdtBridge,sameAddress,sealUsdtBridgeQuote,USDT_BRIDGE_ROUTER,USDT_TRANSFER_ABI,usdtBridgeNetwork,type UsdtBridgeQuote,type UsdtBridgeNetwork} from './usdt-bridge-provider.js'
+
+import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
 const ACTION='wallet.usdt-bridge'
 const chains={base,arbitrum,ethereum:mainnet,polygon}
@@ -35,8 +37,11 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       const [from,to]=await Promise.all([source,destination].map(n=>readCircleLink(circleLinkKey(identity.userId,n,'payment'))))
       if(!from||!to)bridgeError('Open both Pocket wallets before bridging.',409)
       const q=await quoteUsdtBridge({ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:getAddress(from.circleWalletAddress),destinationAddress:getAddress(to.circleWalletAddress),source,destination,amount:String(req.body.amount||'')})
+      const priced=await quoteCircleEvmBatchRecovery({ownerId:identity.userId,walletId:q.walletId,walletAddress:q.walletAddress,source,destination,destinationAddress:q.destinationAddress,asset:'USDT',tokenAddress:getAddress(POCKET_USDT_ASSETS[source].address),amountUnits:q.amountUnits,bridgeDebitUnits:q.amountUnits,bridgeCallData:q.callData,providerExpiresAt:q.expiresAt,userToken:String(req.body.circleUserToken||'')})
+      q.callData=priced.callData;q.networkFeeUnits=priced.networkFeeUnits;q.totalUnits=priced.totalUnits;q.total=formatUnits(BigInt(priced.totalUnits),6);q.reimbursementTreasury=EVM_PLATFORM_TREASURY;q.expiresAt=priced.expiresAt
+      q.fee=formatUnits(BigInt(priced.networkFeeUnits)+parseUnits(q.fee,6),6)
       const balance=await client(source).readContract({address:getAddress(POCKET_USDT_ASSETS[source].address),abi:BALANCE,functionName:'balanceOf',args:[q.walletAddress]})
-      return res.json({ok:true,quote:preview(q),quoteToken:sealUsdtBridgeQuote(q),sufficientBalance:balance>=BigInt(q.amountUnits)})
+      return res.json({ok:true,quote:preview(q),quoteToken:sealUsdtBridgeQuote(q),sufficientBalance:balance>=BigInt(q.totalUnits!)})
     }
     if(action!=='execute'&&action!=='status')bridgeError('Unsupported bridge action.')
     const quoteToken=String(req.body.quoteToken||''),q=openUsdtBridgeQuote(quoteToken,identity.userId,true)
@@ -49,11 +54,12 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       if(existing?.metadata?.challengeId)return res.json({ok:true,challengeId:existing.metadata.challengeId})
       if(existing)bridgeError('This bridge already has an unresolved submission. Check its status before retrying.',409)
       if(q.expiresAt<=Date.now())bridgeError('Quote expired. Review a new quote.',409)
+      if(!q.totalUnits||q.networkFeeUnits===undefined||!q.reimbursementTreasury)bridgeError('Review a new bridge quote.',409)
       const userToken=String(req.body.circleUserToken||'')
       if(!userToken||userToken.length>8000)bridgeError('Reconnect your Circle wallet.')
       const rpc=client(q.source)
       const balance=await rpc.readContract({address:getAddress(POCKET_USDT_ASSETS[q.source].address),abi:BALANCE,functionName:'balanceOf',args:[q.walletAddress]})
-      if(balance<BigInt(q.amountUnits))bridgeError('Insufficient USDT on the source network.',409)
+      if(balance<BigInt(q.totalUnits!))bridgeError('Insufficient USDT on the source network.',409)
       await rpc.call({account:q.walletAddress,to:q.walletAddress,data:q.callData})
       if(q.expiresAt<=Date.now())bridgeError('Quote expired. Review a new quote.',409)
       const claim=await claimCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,metadata:meta,dedupe:{metadataKey:'walletAddress',metadataValue:q.walletAddress,statuses:['started','submitted']}})
@@ -103,9 +109,13 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     if(!receipt)return {ok:true,status:'pending',challengeId:meta.challengeId}
     const debited=receipt.logs.reduce((sum,log)=>{
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.source].address))return sum
-      try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.from,q.walletAddress)?event.args.value:0n)-(sameAddress(event.args.to,q.walletAddress)?event.args.value:0n)}catch{return sum}
+      try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.from,q.walletAddress)?BigInt(event.args.value):0n)-(sameAddress(event.args.to,q.walletAddress)?BigInt(event.args.value):0n)}catch{return sum}
     },0n)
-    const started=receipt.status==='success'&&debited===BigInt(q.amountUnits)&&receipt.logs.some(log=>{
+    const reimbursed=receipt.logs.reduce((sum,log)=>{
+      if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.source].address)||!q.reimbursementTreasury)return sum
+      try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='Transfer'&&sameAddress(event.args.from,q.walletAddress)&&sameAddress(event.args.to,q.reimbursementTreasury)?sum+BigInt(event.args.value):sum}catch{return sum}
+    },0n)
+    const started=receipt.status==='success'&&reimbursed===BigInt(q.networkFeeUnits||'0')&&debited===BigInt(q.totalUnits||q.amountUnits)&&receipt.logs.some(log=>{
       if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false
       try {const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId&&sameAddress(event.args.bridgeData.receiver,q.destinationAddress)&&sameAddress(event.args.bridgeData.sendingAssetId,POCKET_USDT_ASSETS[q.source].address)&&event.args.bridgeData.destinationChainId===BigInt(POCKET_USDT_ASSETS[q.destination].chainId)}catch{return false}
     })
@@ -122,7 +132,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     const destinationReceipt=await deps.client(q.destination).getTransactionReceipt({hash:destinationTxHash as Hex}).catch(()=>null)
     const received=destinationReceipt?.status==='success'?destinationReceipt.logs.reduce((sum,log)=>{
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.destination].address))return sum
-      try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.to,q.destinationAddress)?event.args.value:0n)-(sameAddress(event.args.from,q.destinationAddress)?event.args.value:0n)}catch{return sum}
+      try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.to,q.destinationAddress)?BigInt(event.args.value):0n)-(sameAddress(event.args.from,q.destinationAddress)?BigInt(event.args.value):0n)}catch{return sum}
     },0n):0n
     if(received<BigInt(q.minimumUnits))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const completed=await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash,sourceConfirmed:'true',paymentState:'completed'}})

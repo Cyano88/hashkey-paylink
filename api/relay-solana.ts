@@ -2,6 +2,7 @@ import {POCKET_USDT_ASSETS} from '../src/pocket/lib/pocketUsdtAssets.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote } from './payment-fee-quotes.js'
 import { readNativeUsdcRate } from './payment-network-fees.js'
+import {solanaReimbursementUnits,checkSolanaRelayerBalance} from './pocket/solana-relayer-fees.js'
 /**
  * Solana gasless USDC relay.
  *
@@ -259,7 +260,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, mint, toPubkey, relayer.publicKey)
 
     const isWithdraw = mode === 'withdraw'
-    const feeRaw = isWithdraw ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    const feeRaw = isWithdraw || mode === 'send' ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
     // Build the exact instruction topology before asking the RPC for its fee.
     const treasuryPubkey = isWithdraw ? null : getSolanaTreasury(1n)
     const treasury = treasuryPubkey?.equals(toPubkey) ? { ata: toATA, created: false } : treasuryPubkey ? await ensureATA(connection, tx, mint, treasuryPubkey, relayer.publicKey) : null
@@ -276,8 +277,9 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       const lamports = BigInt(fee.value) + BigInt(rent) * BigInt(setupCount)
       const rate = await readNativeUsdcRate('solana', fetch, Date.now, asset)
       // lamports (1e9 SOL), rate (1e8 USDC), output USDC base units (1e6).
-      gasRecoveryRaw = (lamports * rate + 100_000_000_000n - 1n) / 100_000_000_000n
-      const binding = { asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: 'gross' as const }
+      gasRecoveryRaw = solanaReimbursementUnits(lamports, rate)
+      await checkSolanaRelayerBalance(connection, relayer.publicKey, lamports)
+      const binding = { purpose: mode === 'send' ? 'wallet-send' as const : 'payment' as const, asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: 'gross' as const }
       if (quoteOnly) {
         quote = createPaymentFeeQuote(binding, gasRecoveryRaw)
         res.json({ ok: true, ...quote, includesAccountSetup: setupCount > 0 })
@@ -289,7 +291,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
         res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
       }
-      gasRecoveryRaw = BigInt(accepted.networkFeeUnits)
+      // The signed quote is a ceiling. A cheaper fresh estimate benefits the customer.
     }
     const treasuryRaw = feeRaw + gasRecoveryRaw
     const requiredRaw = totalRaw + treasuryRaw
@@ -313,7 +315,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       ataRecoveryApplied: createsRecipientAta,
     })
   } catch (err) {
-    res.status(500).json({ ok: false, error: (err as Error).message })
+    res.status((err as Error & {status?:number}).status || 500).json({ ok: false, error: (err as Error).message })
   }
 }
 

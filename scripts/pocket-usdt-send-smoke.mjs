@@ -18,6 +18,7 @@ const methods={
  getLatestBlockhash:async()=>({blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:100}),
  getAccountInfo:async()=>({owner:SOLANA_TOKEN_PROGRAM_ID}),
  getTokenAccountBalance:async()=>({value:{amount:'100000000',decimals:6}}),
+ getBalance:async()=>1000000000,
  getFeeForMessage:async()=>({value:5000}),
  getMinimumBalanceForRentExemption:async()=>2039280,
 }

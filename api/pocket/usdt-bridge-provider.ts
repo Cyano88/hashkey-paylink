@@ -20,7 +20,7 @@ export function usdtBridgeNetwork(value: unknown):UsdtBridgeNetwork {
   if(!USDT_BRIDGE_NETWORKS.includes(value as UsdtBridgeNetwork)) bridgeError('USDT bridging is available on supported EVM networks only.')
   return value as UsdtBridgeNetwork
 }
-export type UsdtBridgeQuote = {id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork;walletAddress:Address;destinationAddress:Address;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;provider:'across'}
+export type UsdtBridgeQuote = {networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork;walletAddress:Address;destinationAddress:Address;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;provider:'across'}
 
 // Only audited Across V4 calls and its exact fee-forwarding step are accepted.
 // No token conversion, destination calls, native value, or arbitrary swap calls.
@@ -50,7 +50,7 @@ export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork
     if(!sameAddress(fees.args[0],from.address)||fees.args[1].length>4) bridgeError('Unsupported bridge fee operation.',502)
     fee=fees.args[1].reduce((sum,item)=>sum+item.amount,0n)
     const listed=(e.feeCosts||[]).filter((f:any)=>f.name==='LIFI Fixed Fee'&&f.included===true&&sameAddress(f.token?.address,from.address)).reduce((sum:bigint,f:any)=>sum+BigInt(f.amount),0n)
-    if(fee!==listed||fee>input.amountUnits/100n||b.minAmount!==input.amountUnits-fee||(b.minAmount*across.outputAmountMultiplier/10n**18n)<minimum) bridgeError('USDT bridge fee or delivery amount changed.',502)
+    if(fee!==listed||fee>input.amountUnits/100n||b.minAmount!==input.amountUnits-fee||(BigInt(b.minAmount)*BigInt(across.outputAmountMultiplier)/10n**18n)<minimum) bridgeError('USDT bridge fee or delivery amount changed.',502)
   } else if(b.hasSourceSwaps||b.minAmount!==input.amountUnits) bridgeError('Unexpected USDT bridge input.',502)
   if(across.outputAmount<minimum) bridgeError('Bridge output is below the approved minimum.',502)
   return {callData:t.data as Hex,transactionId:b.transactionId,minimum,receive}
