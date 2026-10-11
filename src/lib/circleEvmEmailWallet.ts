@@ -484,6 +484,7 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
   asset?: string
   recipient?: string
   chainLabel?: string
+  purpose?: 'bridge'
 }) {
   const asset = context?.asset ?? 'USDC'
   const amount = context?.amount
@@ -532,7 +533,7 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       resend: 'Resend code',
     },
     transactionRequest: {
-      title: 'Confirm payment',
+      title: context?.purpose === 'bridge' ? 'Confirm bridge' : 'Confirm payment',
       subtitle: amount
         ? `${amount} ${asset} on ${chainLabel}`
         : `${asset} on ${chainLabel}`,
@@ -546,7 +547,7 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       rawTx: 'Approve payment',
     },
     contractInteraction: {
-      title: 'Confirm payment',
+      title: context?.purpose === 'bridge' ? 'Confirm bridge' : 'Confirm payment',
       subtitle: amount
         ? `${amount} ${asset} on ${chainLabel}`
         : `${asset} on ${chainLabel}`,
@@ -564,7 +565,7 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
         },
         abiInfo: {
           functionNameLabel: 'Action',
-          functionName: `Send ${asset} payment`,
+          functionName: context?.purpose === 'bridge' ? `Bridge ${asset}` : `Send ${asset} payment`,
           parametersLabel: 'Payment details',
           parameters: [
             amount ? `Amount: ${amount} ${asset}` : `Asset: ${asset}`,
@@ -980,10 +981,16 @@ export async function executeCircleEvmEmailChallenge(params: {
   session: CircleEvmEmailSession
   challengeId: string
   pendingMessage?: string
+  approval?: { asset: 'USDC' | 'USDT'; amount: string; totalAmount?: string; purpose?: 'bridge' }
 }) {
   const challengeId = String(params.challengeId ?? '').trim()
   if (!challengeId || challengeId.length > 256) throw new Error('Circle wallet challenge is invalid.')
   const sdk = authenticatedSdk(params.session)
+  applyHashPayLinkCircleUi(sdk, {
+    ...params.approval,
+    asset: params.approval?.asset ?? CHAIN_META[params.session.chain].asset,
+    chainLabel: CHAIN_META[params.session.chain].label,
+  })
   const result = await executeChallengeWithTimeout(
     sdk,
     challengeId,

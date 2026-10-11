@@ -43,11 +43,20 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       const balance=await client(source).readContract({address:getAddress(POCKET_USDT_ASSETS[source].address),abi:BALANCE,functionName:'balanceOf',args:[q.walletAddress]})
       return res.json({ok:true,quote:preview(q),quoteToken:sealUsdtBridgeQuote(q),sufficientBalance:balance>=BigInt(q.totalUnits!)})
     }
-    if(action!=='execute'&&action!=='status')bridgeError('Unsupported bridge action.')
+    if(action!=='execute'&&action!=='status'&&action!=='resume')bridgeError('Unsupported bridge action.')
     const quoteToken=String(req.body.quoteToken||''),q=openUsdtBridgeQuote(quoteToken,identity.userId,true)
     const journalKey='pocket:usdt-bridge:'+q.id
     const existing=await findCirclePocketAction(identity.userId,journalKey,ACTION)
     const meta:Record<string,string>={...metadata(q,quoteToken),...(existing?.metadata||{})}
+    if(action==='resume'){
+      const state=await reconcileUsdtBridge(identity.userId,quoteToken,{circleUserToken:req.body.circleUserToken})
+      if(state.status!=='awaiting_approval')return res.json(state)
+      // Reopen only the existing challenge; never create another transaction.
+      // Simulate the saved batch again so expired provider routes cannot be approved.
+      try{await client(q.source).call({account:q.walletAddress,to:q.walletAddress,data:q.callData})}
+      catch{bridgeError('This saved bridge cannot be approved now. Your transfer remains saved for review.',409)}
+      return res.json(state)
+    }
     if(action==='execute'){
       const [from,to]=await Promise.all([q.source,q.destination].map(n=>readCircleLink(circleLinkKey(identity.userId,n,'payment'))))
       if(!from||!to||from.circleWalletId!==q.walletId||!sameAddress(from.circleWalletAddress,q.walletAddress)||!sameAddress(to.circleWalletAddress,q.destinationAddress))bridgeError('Linked wallets changed. Review a new bridge quote.',409)
@@ -87,6 +96,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     }
     if(existing.status==='failed')return {ok:true,status:'failed'}
     let txHash=meta.txHash||''
+    let awaitingApproval=false
     if(!txHash&&meta.challengeId&&input.circleUserToken){
       const result=await deps.readChallenge({chain:q.source,userToken:String(input.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId}).catch(()=>({status:'pending' as const,txHash:undefined}))
       if(result.status==='failed'){
@@ -94,6 +104,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
         return {ok:true,status:'failed'}
       }
       txHash=result.txHash||''
+      awaitingApproval=result.status==='awaiting_approval'
     }
     txHash=txHash||String(input.txHash||'')
     if(!txHash){
@@ -104,7 +115,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
         if(receipt?.logs.some(log=>{if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false;try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId}catch{return false}})){txHash=hash;break}
       }
     }
-    if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:'pending',challengeId:meta.challengeId}
+    if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:awaitingApproval?'awaiting_approval':'pending',challengeId:meta.challengeId}
     const receipt=await deps.client(q.source).getTransactionReceipt({hash:txHash as Hex}).catch(()=>null)
     if(!receipt)return {ok:true,status:'pending',challengeId:meta.challengeId}
     const debited=receipt.logs.reduce((sum,log)=>{

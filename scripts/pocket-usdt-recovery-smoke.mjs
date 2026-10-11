@@ -58,3 +58,11 @@ for(const destination of [EVM_PLATFORM_TREASURY,recipient]){
 stored=record
 assert.equal((await reconcileUsdtBridge('owner',chargedToken,{txHash},deps)).status,'needs_attention','missing reimbursement cannot pass source proof')
 console.log('PASS USDT total debit and exact treasury reimbursement proof; legacy recovery retained')
+
+stored={...record,metadata:{...record.metadata,challengeId:'saved-challenge'}}
+const approvalDeps={...deps,readActivity:async()=>[],readChallenge:async()=>({status:'awaiting_approval'})}
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},approvalDeps)).status,'awaiting_approval')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps)).status,'pending','missing session must not imply approval is outstanding')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readChallenge:async()=>{throw Error('provider unavailable')}})).status,'pending','provider outage must not authorize resume')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readActivity:deps.readActivity})).status,'completed','onchain proof wins over stale pending approval')
+console.log('PASS saved approval recovery, missing-session safety, provider outage and stale approval race')
