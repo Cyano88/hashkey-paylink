@@ -87,6 +87,7 @@ export default function PocketUsdtBridgePanel(props:Props){
       const active=session.current
       const result=await api({action:'status',quoteToken:value.quoteToken,txHash:value.txHash,...(active?{circleUserToken:active.userToken}:{})})
       if(currentOwner.current!==owner)return
+      setRecoveryFailed(false);setLoading(false)
       if(result.status==='completed'){save(null);setQuoted(null);setAmount('');setNotice('');setResult({quote:value.quote,state:'successful',txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
       else if(result.status==='failed'){save(null);setQuoted(null);setResult({quote:value.quote,state:'failed'});setError('The source transaction did not complete. You can request a new quote.')}
       else if(result.status==='not_submitted'&&Date.now()>value.quote.expiresAt+60000){save(null);setQuoted(null);setNotice('This quote expired without a submitted bridge. Request a new quote.')}
