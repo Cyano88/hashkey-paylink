@@ -93,3 +93,24 @@ assert.equal(Object.values(f.store.requests)[0].providerFailure.requestId,'trace
 f=fixture({fetch:async()=>new Response(JSON.stringify({code:'transaction_broadcast_failure'}),{status:500})});
 assert.equal((await f.call(body())).body.code,'sponsor_outcome_unknown','5xx must not be classified as a definitive rejection');
 console.log('PASS exact broadcast rejection, status recovery, no resend, redacted diagnostics and unknown-error safety.');
+let submits=0,lookups=0,ready=false;
+const providerId='12345678-1234-4234-8234-123456789abc',operationHash='0x'+'b'.repeat(64);
+f=fixture({fetch:async(url,init)=>{
+ if(init.method==='POST'){submits++;return Response.json({data:{hash:'',transaction_id:providerId,user_operation_hash:operationHash,caip2:'eip155:196'}})}
+ lookups++;assert.equal(url,'https://api.privy.io/v1/transactions/'+providerId);
+ return Response.json({id:providerId,wallet_id:walletId,caip2:'eip155:196',user_operation_hash:operationHash,transaction_hash:ready?hash:null,status:ready?'confirmed':'pending'});
+}});
+const acceptedPayment=body(), acceptedResult=await f.call(acceptedPayment);
+assert.equal(acceptedResult.status,202);assert.equal(acceptedResult.body.accepted,true);assert.equal(acceptedResult.body.hash,null);
+const acceptedRecord=Object.values(f.store.requests)[0];assert.equal(acceptedRecord.transactionId,providerId);assert.equal(acceptedRecord.providerFailure,undefined);
+await f.call(acceptedPayment);assert.equal(submits,1,'accepted operation cannot be broadcast twice');
+ready=true;
+assert.equal((await f.call({action:'status',wallet,attemptId:acceptedPayment.request.headers['privy-idempotency-key']})).body.hash,hash);
+assert.equal(Object.values(f.store.requests)[0].hash,hash);assert.equal(submits,1);assert.equal(lookups,2);
+for(const override of [{wallet_id:'wrong-wallet'},{caip2:'eip155:1'},{id:'different-provider-id'},{user_operation_hash:'0x'+'c'.repeat(64)}]){
+ f=fixture({fetch:async(url,init)=>init.method==='POST'?Response.json({data:{hash:'',transaction_id:providerId,user_operation_hash:operationHash,caip2:'eip155:196'}}):Response.json({id:providerId,wallet_id:walletId,caip2:'eip155:196',user_operation_hash:operationHash,transaction_hash:hash,...override})});
+ const payment=body();assert.equal((await f.call(payment)).body.hash,null);
+ assert.equal((await f.call({action:'status',wallet,attemptId:payment.request.headers['privy-idempotency-key']})).body.hash,null);
+ assert.equal(Object.values(f.store.requests)[0].hash,undefined);
+}
+console.log('PASS sponsored operation accepted before hash; durable recovery; exact wallet/network/operation binding; no duplicate broadcasts.');

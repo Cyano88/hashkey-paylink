@@ -17,10 +17,10 @@ const contracts = new Set([
   ...catalogue.assets.map(a => a.address.toLowerCase()),
 ])
 const transferAbi = parseAbi(['function transfer(address,uint256) returns(bool)'])
-type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; providerFailure?: {status:number;code?:string;message?:string;requestId?:string} }
+type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; providerFailure?: {status:number;code?:string;message?:string;requestId?:string} }
 // Privy documents this exact 400 error as not broadcast. Other errors remain
 // uncertain. Keep the durable reservation: a duplicate must never send again.
-const notBroadcast = (record: Record) => !record.hash && record.providerFailure?.status === 400 && record.providerFailure?.code === 'transaction_broadcast_failure'
+const notBroadcast = (record: Record) => !record.hash && !record.transactionId && !record.userOperationHash && record.providerFailure?.status === 400 && record.providerFailure?.code === 'transaction_broadcast_failure'
 const rejected = (res: Response) => res.status(422).json({ok:false,code:'pocket_sponsor_not_submitted',error:'Transfer was not sent. The wallet provider could not broadcast it.'})
 function diagnostic(value: unknown, secret: string) {
   if(typeof value !== 'string') return undefined
@@ -76,6 +76,27 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   mutate: typeof mutate; read: typeof read; minimum:typeof minimum; durable: () => boolean; fetch: typeof fetch; now: () => number;
 }> = {}) {
   const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, durable:hasRenderDurableStore, fetch, now:Date.now, ...overrides }
+  async function resolveAccepted(id: string, record: Record, walletId: string, c: Config) {
+    if (record.hash || !record.transactionId) return record.hash || null
+    const response = await d.fetch(`https://api.privy.io/v1/transactions/${record.transactionId}`, {
+      method:'GET', redirect:'error', signal:AbortSignal.timeout(10_000),
+      headers:{'privy-app-id':c.appId,Authorization:'Basic '+Buffer.from(`${c.appId}:${c.secret}`).toString('base64')},
+    })
+    if (!response.ok) return null
+    const tx = await response.json()
+    // Bind recovery to the exact provider transaction, wallet and network.
+    if (tx.id !== record.transactionId || tx.wallet_id !== walletId || tx.caip2 !== 'eip155:196') return null
+    if (record.userOperationHash && tx.user_operation_hash && tx.user_operation_hash !== record.userOperationHash) return null
+    if (typeof tx.transaction_hash !== 'string' || !/^0x[0-9a-f]{64}$/i.test(tx.transaction_hash)) return null
+    await d.mutate(current => {
+      const saved = current?.requests[id]
+      if (!saved || saved.fingerprint !== record.fingerprint || saved.transactionId !== record.transactionId) throw Error('Payment recovery mismatch.')
+      saved.hash = tx.transaction_hash
+      return current!
+    })
+    // A hash is a reference, not payment success. The client checks the receipt.
+    return tx.transaction_hash as string
+  }
   return async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store')
     let reserved = false
@@ -98,7 +119,8 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         if (!record) return res.json({ok:true,hash:null})
         if (record.owner !== identity.userId || record.wallet !== wallet) throw fail('Payment not found.', 404)
         if (notBroadcast(record)) return rejected(res)
-        return res.json({ok:true,hash:record.hash || null})
+        const hash = await resolveAccepted(id,record,embedded.id,c).catch(() => null)
+        return res.json({ok:true,hash,accepted:Boolean(record.transactionId || record.hash)})
       }
       if (!c.enabled || !c.wallets.includes(wallet)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
       if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})
@@ -141,6 +163,22 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       })
       const result = await upstream.json()
       const hash = result?.data?.hash
+      const transactionId = result?.data?.transaction_id
+      const userOperationHash = result?.data?.user_operation_hash
+      if (upstream.ok && !hash && result?.data?.caip2 === 'eip155:196' &&
+          typeof transactionId === 'string' && /^[a-zA-Z0-9_-]{10,128}$/.test(transactionId) &&
+          typeof userOperationHash === 'string' && /^0x[0-9a-f]{64}$/i.test(userOperationHash)) {
+        let accepted: Record | undefined
+        await d.mutate(current => {
+          const record = current?.requests[id]
+          if (!record || record.fingerprint !== fingerprint) throw Error('Payment reservation unavailable.')
+          record.transactionId=transactionId; record.userOperationHash=userOperationHash
+          accepted={...record}
+          return current!
+        })
+        const resolved = await resolveAccepted(id,accepted!,embedded.id,c).catch(() => null)
+        return res.status(resolved ? 200 : 202).json({ok:true,hash:resolved,accepted:true})
+      }
       if (!upstream.ok || typeof hash !== 'string' || !/^0x[0-9a-f]{64}$/i.test(hash)) {
         const code = typeof result?.code === 'string' && /^[a-zA-Z_][a-zA-Z_0-9]{0,63}$/.test(result.code) ? result.code : undefined
         await d.mutate(current => {
