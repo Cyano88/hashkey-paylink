@@ -73,7 +73,7 @@ export default function PocketHomePage() {
   const toggleBalance = () => setBalanceVisible(current => { window.localStorage.setItem(BALANCE_VISIBLE_KEY, String(!current)); return !current })
   const hidden = '****'
 
-  return <PocketRouteShell active="home" onSelect={tab => open(navPath(tab))}>
+  return <PocketRouteShell active="home" springBackPage onSelect={tab => open(navPath(tab))}>
     <PocketWalletUpdateCard key={email} notice={pocketWalletPreparationNotice(wallets.walletUpdate, wallets.wallets)} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
     <section data-pocket-balance-card className="flex min-h-[272px] flex-col overflow-hidden rounded-[26px] bg-gray-950 px-5 pb-3 pt-4 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
       <div className="relative flex flex-1 items-center justify-center">

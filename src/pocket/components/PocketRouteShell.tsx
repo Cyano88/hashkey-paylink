@@ -18,6 +18,7 @@ export default function PocketRouteShell({
   navigationDisabled = false,
   fixedPage = false,
   elasticFixedPage = false,
+  springBackPage = false,
   compactFlow = false,
   scrollKey,
   rail,
@@ -29,6 +30,7 @@ export default function PocketRouteShell({
   navigationDisabled?: boolean
   fixedPage?: boolean
   elasticFixedPage?: boolean
+  springBackPage?: boolean
   compactFlow?: boolean
   scrollKey?: string
   rail?: 'stablecoins' | 'xstocks'
@@ -75,7 +77,7 @@ export default function PocketRouteShell({
   useLayoutEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    if (fixedPage) { scroller.scrollTop = 0; return }
+    if (fixedPage || springBackPage) { scroller.scrollTop = 0; return }
     const saved = lastScroll.current[scrollPath] ?? Number(window.sessionStorage.getItem(`pocket:scroll:${scrollPath}`) || 0)
     scroller.scrollTop = Number.isFinite(saved) && saved > 0 ? saved : 0
     return () => {
@@ -83,7 +85,7 @@ export default function PocketRouteShell({
       scrollFrame.current=null
       window.sessionStorage.setItem(`pocket:scroll:${scrollPath}`, String(lastScroll.current[scrollPath] ?? saved))
     }
-  }, [scrollPath, fixedPage])
+  }, [scrollPath, fixedPage, springBackPage])
 
   const rememberScroll = (event: UIEvent<HTMLDivElement>) => {
     const top = event.currentTarget.scrollTop
@@ -151,8 +153,8 @@ export default function PocketRouteShell({
       cancelPull(); return
     }
     if (!pullEdge.current) {
-      const atTop = scroller.scrollTop <= 1
-      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+      const atTop = springBackPage || scroller.scrollTop <= 1
+      const atBottom = springBackPage || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
       if ((atTop || balanceCardPull.current) && distance > 6) pullEdge.current = 'top'
       else if ((atBottom || balanceCardPull.current) && distance < -6) pullEdge.current = 'bottom'
       else if ((atTop && distance >= 0) || (atBottom && distance <= 0)) return
@@ -161,7 +163,7 @@ export default function PocketRouteShell({
     const outward = pullEdge.current === 'top' ? distance : -distance
     if (outward <= 0) { cancelPull(); return }
     // Increasing resistance, bounded travel; native momentum handles ordinary scrolling.
-    const limit = pullEdge.current === 'top' ? 104 : 72
+    const limit = pullEdge.current === 'top' ? 104 : springBackPage ? Math.min(180, Math.max(72, scroller.scrollHeight - scroller.clientHeight + 48)) : 72
     const stretch = limit * (1 - Math.exp(-Math.max(0, outward - 6) / 150))
     const nextDistance = pullEdge.current === 'top' ? stretch : -stretch
     setPullDragging(true)
@@ -257,7 +259,8 @@ export default function PocketRouteShell({
             onTouchCancel={cancelPull}
             className="absolute inset-x-0 bottom-0 overflow-x-hidden overflow-y-auto overscroll-y-none [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
             style={{
-              overflowY: fixedPage ? 'hidden' : undefined,
+              overflowY: fixedPage || springBackPage ? 'hidden' : undefined,
+              touchAction: springBackPage ? 'pinch-zoom' : undefined,
               top: headerHeight > 0 ? headerHeight : 'var(--pocket-safe-top)',
               scrollPaddingTop: 16,
               scrollPaddingBottom: hideNavigation ? 'max(1.5rem, calc(0.75rem + var(--pocket-safe-bottom)))' : 'calc(7.5rem + var(--pocket-safe-bottom))',
