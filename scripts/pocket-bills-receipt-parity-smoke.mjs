@@ -12,10 +12,10 @@ for (const category of ['airtime','data','electricity','tv']) for (const asset o
  assert(view.rows.some(r=>r.value==='08123456789'))
  assert(view.rows.some(r=>r.label==='Fees'&&r.value.endsWith(asset)))
  assert.equal(pocketActivitySignedAmount(row),'\u22121,000.00 NGN')
- assert.equal(pocketActivityTitle(row),row.billProvider+' '+(category==='tv'?'TV':category))
+ assert.equal(pocketActivityTitle(row),row.billProvider)
  if(category==='electricity')assert.equal(view.rows.find(r=>r.label==='Meter Token').value,'1234 5678 9012')
 }
 console.log('PASS: Airtime, data, electricity and TV receipts preserve actual assets, local headline, provider, target, network, fees and electricity token.')
 
 assert.equal(pocketActivityTitle({source:'bank-withdraw',accountName:'Onoja Emmanuel',recipient:'0x123'}),'Onoja Emmanuel')
-assert.equal(pocketActivityTitle({source:'bills',billCategory:'airtime',billProvider:'MTN Airtime VTU'}),'MTN airtime')
+assert.equal(pocketActivityTitle({source:'bills',billCategory:'airtime',billProvider:'MTN Airtime VTU'}),'MTN')

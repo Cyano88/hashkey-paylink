@@ -18,7 +18,7 @@ export function pocketActivityTitle(row: PocketActivityRow): string {
   if (row.source === 'bills') {
     const kind = ({airtime:'airtime',data:'data',tv:'TV',electricity:'electricity'})[row.billCategory!] || 'Bill payment'
     const provider = (row.billProvider || '').trim().replace(/\s+(?:airtime(?:\s+VTU)?|data|subscription|payment)$/i, '')
-    return provider ? provider + ' ' + kind : kind.charAt(0).toUpperCase() + kind.slice(1)
+    return provider || kind.charAt(0).toUpperCase() + kind.slice(1)
   }
   if (row.source?.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat') return row.accountName?.trim() || row.recipient?.trim() || 'Bank transfer'
   if (row.source === 'wallet-deposit') return (row.assetSymbol || 'USDC') + ' received'
