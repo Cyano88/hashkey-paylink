@@ -92,7 +92,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         if (recipient.privyUserId === identity.userId) return fail(res, 400, 'Choose another Pocket user.')
         if (!deps.readWallet) return fail(res, 503, 'Pocket recipient lookup is unavailable.')
         const wallet = await deps.readWallet(circleLinkKey(recipient.privyUserId, network))
-        if (!wallet?.circleWalletAddress) return fail(res, 409, `This Pocket user has not opened a ${network === 'ethereum' ? 'Ethereum' : network === 'polygon' ? 'Polygon' : network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} wallet yet.`)
+        if (!wallet?.circleWalletAddress) return fail(res, 409, `This Pocket user has not opened a ${network === 'ethereum' ? 'Ethereum' : network === 'polygon' ? 'Polygon' : network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : network === 'arc' ? 'Arc' : 'Base'} wallet yet.`)
         return res.json({ ok: true, recipient: { pocketId: recipient.pocketId, name: profileName(recipient), network, address: wallet.circleWalletAddress } })
       }
       if (req.method === 'POST' && req.body?.action === 'create') {
@@ -102,7 +102,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         const network = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'].includes(req.body?.network) ? req.body.network as 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' : 'base'
         if (!deps.readWallet) return fail(res, 503, 'Pocket wallet lookup is unavailable.')
         const wallet = await deps.readWallet(circleLinkKey(identity.userId, network))
-        if (!wallet?.circleWalletAddress) return fail(res, 409, `Open your ${network === 'ethereum' ? 'Ethereum' : network === 'polygon' ? 'Polygon' : network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} Pocket wallet before requesting payment.`)
+        if (!wallet?.circleWalletAddress) return fail(res, 409, `Open your ${network === 'ethereum' ? 'Ethereum' : network === 'polygon' ? 'Polygon' : network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : network === 'arc' ? 'Arc' : 'Base'} Pocket wallet before requesting payment.`)
         const saved = await deps.repository.create({ eventId: req.body?.eventId, senderId: identity.userId, senderPocketId: sender.profile.pocketId, senderName: profileName(sender.profile), senderAddress: wallet.circleWalletAddress, recipientId: recipient.privyUserId, recipientPocketId: recipient.pocketId, recipientName: profileName(recipient), title: String(req.body?.title ?? '').trim().slice(0, 100) || 'USDC request', amount: String(req.body?.amount ?? '').trim(), flexibleAmount: false, network })
         if (!saved.replayed) void sendPocketPush(recipient.privyUserId, 'request-created:' + saved.request.id, {
           title: 'New payment request',

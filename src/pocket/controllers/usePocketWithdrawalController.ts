@@ -79,9 +79,11 @@ export default function usePocketWithdrawalController({
   const currentScope = useRef(''); currentScope.current = sendOwner(owner) + ':' + asset + ':' + resetKey
   const mounted=useRef(true)
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
+  const preparationScope = useRef('')
+  preparationScope.current = JSON.stringify([currentScope.current, address, amount, wallet?.address, balance, chargeFees])
   const operationId = useRef('')
   const running = useRef(false)
-  const reset = useCallback(() => { operationId.current=''; setAmount('');setAddress('');setError('');setNotice('');setTxHash('');setSubmissionReference('');setStatus('idle');setPending(false) }, [])
+  const reset = useCallback(() => { operationId.current=''; setFeeQuote(null);setAmount('');setAddress('');setError('');setNotice('');setTxHash('');setSubmissionReference('');setStatus('idle');setPending(false) }, [])
   useEffect(() => { reset() }, [asset, resetKey, owner, reset])
   useEffect(() => {
     if (!owner || !wallet?.address) return
@@ -101,7 +103,9 @@ export default function usePocketWithdrawalController({
   const setMax = useCallback(() => {
     if (balance > 0) {
       operationId.current=''
-      setAmount(String(balance))
+      setFeeQuote(null)
+      setError('')
+      setAmount(String(Math.floor(balance * 1e6) / 1e6))
       setNotice('')
       setTxHash('')
       setStatus('idle')
@@ -109,6 +113,8 @@ export default function usePocketWithdrawalController({
   }, [balance])
 
   const updateAddress = useCallback((value: string) => {
+    setFeeQuote(null)
+    setError('')
     setAddress(value)
     if (!pending) {
       operationId.current=''
@@ -119,6 +125,8 @@ export default function usePocketWithdrawalController({
   }, [pending])
 
   const updateAmount = useCallback((value: string) => {
+    setFeeQuote(null)
+    setError('')
     setAmount(value)
     if (!pending) {
       operationId.current=''
@@ -129,6 +137,8 @@ export default function usePocketWithdrawalController({
   }, [pending])
 
   const prepare = useCallback(async (options?: { walletOverride?: CirclePocketWallet }) => {
+    const scope = preparationScope.current
+    const isCurrent = () => mounted.current && preparationScope.current === scope
     clearExternalError()
     setError('')
     try {
@@ -142,6 +152,7 @@ export default function usePocketWithdrawalController({
           const next = network === 'solana'
             ? await readSolanaPaymentQuote(selectedWallet.address, address, amount, asset, 'wallet-send')
             : await readCirclePaymentFeeQuote({ asset, session: await getEvmSession(network, selectedWallet.address), recipient: address, amount, feeMode: 'gross', purpose: 'wallet-send' })
+          if (!isCurrent()) throw new Error('SEND_PREPARATION_CHANGED')
           setFeeQuote(next)
           if (BigInt(Math.floor(balance * 1e6)) < BigInt(next.quote.totalUnits)) throw new Error(`Insufficient ${asset} to cover the amount and fees. Try a lower amount.`)
           throw new Error('FEE_REVIEW_REQUIRED')
@@ -149,7 +160,7 @@ export default function usePocketWithdrawalController({
         acceptedFeeToken()
       }
     } catch (reason) {
-      setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : sendError(reason, asset))
+      if (isCurrent()) setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : sendError(reason, asset))
       throw reason
     }
   }, [asset, address, amount, balance, chargeFees, feeQuote, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, wallet])

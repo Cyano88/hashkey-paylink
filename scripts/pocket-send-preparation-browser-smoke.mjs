@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict'
+import { build } from 'esbuild'
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const stubs = {
+ circleEvmEmailWallet: `export const resumeCircleEvmEmailWithdraw=(...args)=>reconcileCircleEvmEmailWithdraw(...args);export const readCirclePaymentFeeQuote=()=>new Promise(resolve=>window.finishQuote=()=>resolve({token:'fixture',quote:{platformFeeUnits:'0',networkFeeUnits:'1000',totalUnits:'1001000',expiresAt:Date.now()+60000}})); export const reconcileCircleEvmEmailWithdraw=async()=>({state:'pending'});`,
+ circleSolanaEmailWallet: `export const reconcileCircleSolanaTransfer=async()=>({state:'pending'}); export const sendCircleSolanaTransfer=async()=>{};`,
+ solanaPaymentFees: `export const readSolanaRelayStatus=async()=>false;export const readSolanaPaymentQuote=async()=>{};export const sendQuotedSolanaPayment=async()=>{};`,
+ pocketEvmTransferStatusClient: `export const recoverPocketEvmTransfer=async()=>({status:'pending'});`,
+ pocketEvmTransferClient: `export const executePocketEvmTransfer=async(input)=>{window.submissions++;if(window.rejectBeforeChallenge)throw Object.assign(new Error(window.rejectBeforeChallenge),{submissionRejected:window.rejectBeforeChallenge==='Rejected before approval'});input.onChallenge({challengeId:'test',transactionId:'test'});input.onAccepted({challengeId:'test',transactionId:'test'});return new Promise((resolve,reject)=>{window.confirm=()=>resolve({txHash:'0x123',status:'confirmed'});window.unresolved=()=>resolve({txHash:'0x123',status:'submitted'});window.fail=()=>reject(Object.assign(new Error('Reverted'),{terminalFailure:true}));});};`
+}
+const bundle=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import useSend from './src/pocket/controllers/usePocketWithdrawalController';import CTA from './src/pocket/components/PocketSlideAction';const noop=()=>{};const asyncNoop=async()=>{};const wallet={address:'0x1111111111111111111111111111111111111111'};const session=async()=>({chain:'base',wallet});window.submissions=0;function App(){const send=useSend({owner:'fixture@pocket.test',network:'base',networkLabel:'Base',wallet,balance:10,resetKey:'test',chargeFees:true,restoreOperations:false,ensureWallet:asyncNoop,getEvmSession:session,getSolanaSession:asyncNoop,getAccessToken:async()=> 'test',refreshBalances:asyncNoop,clearExternalError:noop,onActivity:noop});window.send=send;return <><output>{send.status}:{send.error}</output><CTA plain approvalRequired={false} onPrepare={asyncNoop} status={send.status} onConfirm={()=>void send.withdraw({preserveForm:true})} labels={{idle:'Send',pending:'Confirming send'}}/></>};createRoot(document.getElementById('app')).render(<App/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,format:'iife',define:{'process.env.NODE_ENV':'"test"','import.meta.env':'{}'},plugins:[{name:'isolate',setup(b){b.onResolve({filter:/.*/},a=>{const key=a.path.split('/').pop();if(stubs[key])return{path:key,namespace:'stub'}});b.onLoad({filter:/.*/,namespace:'stub'},a=>({contents:stubs[a.path],loader:'tsx',resolveDir:process.cwd()}))}}]})
+const browser=await chromium.launch({headless:true,channel:'chrome'})
+try {
+ const page=await browser.newPage();await page.route('https://pocket.test/**',r=>r.fulfill({contentType:'text/html',body:'<div id="app"></div>'}));await page.goto('https://pocket.test/');await page.addScriptTag({content:bundle.outputFiles[0].text});await page.waitForFunction(()=>window.send);
+ await page.evaluate(()=>{window.send.setAddress('0x2222222222222222222222222222222222222222');window.send.setAmount('1')});
+ await page.waitForFunction(()=>window.send.amount==='1');
+ await page.evaluate(()=>{window.send.prepare().catch(()=>{});});await page.waitForFunction(()=>window.finishQuote);
+ await page.evaluate(()=>window.send.setAmount('2'));await page.waitForFunction(()=>window.send.amount==='2');await page.evaluate(()=>window.finishQuote());
+ await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>window.send.feePreview),null,'Late fee response cannot update a changed amount');assert.equal(await page.evaluate(()=>window.send.error),'');
+ await page.evaluate(()=>{window.finishQuote=null;window.send.prepare().catch(()=>{});});await page.waitForFunction(()=>window.finishQuote);await page.evaluate(()=>window.finishQuote());await page.waitForFunction(()=>window.send.feePreview);
+ assert.equal(await page.evaluate(()=>window.send.feePreview.platform),'0');
+ await page.evaluate(()=>window.send.setAddress('0x3333333333333333333333333333333333333333'));await page.waitForFunction(()=>window.send.feePreview===null);
+ assert.equal(await page.evaluate(()=>window.submissions),0);console.log('PASS stale preparation ignored and recipient edits clear fee preview; no transfer submitted.');
+}finally{await browser.close()}

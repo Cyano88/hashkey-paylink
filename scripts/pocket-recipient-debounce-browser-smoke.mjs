@@ -7,7 +7,7 @@ const stubs={
  usePocketActivity:`export default()=>({refresh:async()=>{}});`,
  usePocketWalletController:`export default()=>({});`,
  usePocketPaymentLiquidityController:`export default()=>({});`,
- usePocketWithdrawalController:`import{useState}from'react';export default()=>{const [amount,setAmount]=useState('1'),[address,setAddress]=useState('0x222'),[status,setStatus]=useState('idle'),[feePreview,setFee]=useState(null),[error,setError]=useState('');return {amount,address,status,feePreview,error,setAmount,setAddress,setMax:()=>{},reference:status==='successful'?'0xhash':'',txHash:status==='successful'?'0xhash':'',prepare:()=>new Promise(resolve=>window.finishPrepare=()=>{setFee({platform:'0.0025',network:'0.001',total:'1.0035'});resolve()}),withdraw:()=>{window.submissions++;setStatus('pending');return new Promise(resolve=>window.finishSend=state=>{setStatus(state);if(state==='idle')setError('Transfer rejected');resolve(state==='successful')})},reset:()=>{setStatus('idle');setAmount('');setAddress('');setError('')}}};`,
+ usePocketWithdrawalController:`import{useState}from'react';export default()=>{const [amount,setAmount]=useState('1'),[address,setAddress]=useState('0x222'),[status,setStatus]=useState('idle'),[feePreview,setFee]=useState(null),[error,setError]=useState('');return {amount,address,status,feePreview,error,setAmount,setAddress,setMax:()=>{},reference:status==='successful'?'0xhash':'',txHash:status==='successful'?'0xhash':'',prepare:()=>new Promise(resolve=>window.finishPrepare=()=>{setFee({platform:'0',network:'0.001',total:'1.001'});resolve()}),withdraw:()=>{window.submissions++;setStatus('pending');return new Promise(resolve=>window.finishSend=state=>{setStatus(state);if(state==='idle')setError('Transfer rejected');resolve(state==='successful')})},reset:()=>{setStatus('idle');setAmount('');setAddress('');setError('')}}};`,
  pocketRequestsClient:`export const preparePocketRequestPayment=async()=>{},completePocketRequest=async()=>{},readPocketRequestRoute=async()=>{},reconcilePocketRequest=async()=>{},readPocketRequests=async()=>[],resolvePocketRecipient=async(token,id,network)=>{window.lookups++;return {pocketId:id,network,name:'Person '+id,address:'0x'+id.padEnd(40,'0')}},startPocketRequestRoute=async()=>{},updatePocketRequestRoute=async()=>{};`,
  pocketPaymentApproval:`export const POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT='cancel';export const preparePocketPaymentApproval=async()=>{};export const requestPocketPaymentApproval=()=>new Promise(resolve=>window.finishPin=resolve);`,
  PocketRouteShell:`import React from'react';export default({children})=><main>{children}</main>;`,
@@ -27,6 +27,14 @@ try {
  await id.fill('emmanuel');assert.equal(await next.isDisabled(),true,'Old recipient cannot be used during debounce')
  assert.equal(await page.getByText('Person 123456',{exact:true}).count(),0)
  await page.getByText('Person emmanuel',{exact:true}).waitFor();assert.equal(await next.isEnabled(),true)
+ const amount=page.getByPlaceholder('0.00');
+ for(const invalid of ['0','-1','abc','0.0000001']){await amount.fill(invalid);assert.equal(await next.isDisabled(),true,'Invalid amount must not reach confirmation: '+invalid)}
+ await amount.fill('0.01');assert.equal(await next.isEnabled(),true,'Small valid sends must remain available');
+ await page.getByRole('button',{name:'Select payment network'}).click();
+ assert.equal(await page.getByRole('option',{name:/Arc/}).count(),1,'USDC includes Arc');
+ assert.equal(await page.getByRole('option',{name:/X Layer/}).isDisabled(),true,'X Layer is visible but not falsely enabled');
+ await page.getByRole('option',{name:/Arc/}).click();
+ await page.getByText('Person emmanuel',{exact:true}).waitFor();
  await id.fill('12');assert.equal(await next.isDisabled(),true);assert.equal(await page.getByText('Person emmanuel',{exact:true}).count(),0)
  console.log('PASS Pocket ID changes immediately invalidate the previous recipient; invalid IDs clear lookup state.')
 }finally{await browser.close()}
