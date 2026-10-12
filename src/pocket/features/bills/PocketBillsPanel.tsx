@@ -1,4 +1,4 @@
-import { pocketPricingMessage } from '../../lib/pocketPricingMessage'
+import { pocketPricingMessage, isPocketConnectionError } from '../../lib/pocketPricingMessage'
 import PocketFundingAction from '../../components/PocketFundingAction'
 import {fundingShortfall} from '../../lib/pocketFundingShortfall'
 import PocketCountrySelect from '../../components/PocketCountrySelect'
@@ -177,7 +177,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     || bills.errorCode === 'BILLS_PROVIDER_RESERVE_LOW'
     || bills.errorCode === 'BILLS_DISABLED'
     || bills.errorCode === 'BILLS_CATEGORY_DISABLED'
-  const errorPresentation = refundComplete
+  const errorPresentation = isPocketConnectionError(bills.error || '')
+    ? { title: 'Connection interrupted', body: 'Could not update this bill. Check your connection.', action: '', icon: AlertCircle, success: false }
+    : refundComplete
     ? { title: 'Refund complete', body: pocketPricingMessage(bills.error), action: '', icon: Check, success: true }
 
     : providerUnavailable
@@ -358,7 +360,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                               ? 'Confirm payment'
                               : 'Review payment',
                         idle: 'Confirm payment',
-                        pending: paymentRouting?.status === 'moving' ? 'Moving USDC' : 'Preparing payment',
+                        pending: paymentRouting?.status === 'moving' ? 'Moving USDC' : bills.status === 'confirming' ? 'Confirming payment' : 'Preparing payment',
                         submitted: paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling' ? 'USDC move confirming' : bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
                         successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
                       }}

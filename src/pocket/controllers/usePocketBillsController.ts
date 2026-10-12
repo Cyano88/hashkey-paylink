@@ -297,6 +297,9 @@ export default function usePocketBillsController({
       setNotice(environment === 'sandbox' ? 'VTpass sandbox test completed.' : `${next.serviceName} sent to ${next.phone}`)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       void balanceRefresher.current().catch(() => undefined)
+    } else if (next.state === 'quoted' || next.state === 'awaiting_payment') {
+      setStatus('confirming')
+      setNotice('')
     } else if (next.state === 'refunded') {
       setStatus('error')
       setErrorCode('BILLS_REFUNDED')
@@ -356,6 +359,10 @@ export default function usePocketBillsController({
     if (!next) throw new Error('Payment confirmation is temporarily unavailable.')
     markPocketActivityDirty(owner)
     if(visible())setIntent(next)
+    if (next.state === 'quoted' || next.state === 'awaiting_payment') {
+      if (visible()) { setStatus('confirming'); setNotice('') }
+      return next
+    }
     for (let attempt = 0; !finalState(next) && !terminalAttempts.current.has(intentId) && attempt < 12; attempt += 1) {
       if (visible()) {
         setStatus('processing')
@@ -613,7 +620,7 @@ export default function usePocketBillsController({
     } catch (reason) {
       if (!mounted.current || displayedAttempt.current!==intent.id || terminalAttempts.current.has(intent.id)) return
       const active=readActive(activeBillKey)
-      setStatus(active?.intentId===intent.id&&(active.txHash||active.challengeId)?'processing':'error')
+      setStatus(active?.intentId===intent.id&&(active.txHash||active.challengeId)?'confirming':'error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(active?.txHash||active?.challengeId?'':reason instanceof Error?reason.message:'Could not submit payment.')
     } finally { billPayInFlight.current=false;setConfirming(false) }
