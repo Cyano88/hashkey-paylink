@@ -202,6 +202,7 @@ export default function Layout() {
     ? resolvePocketRoute(isPocketHost ? pathname : pathname.slice('/pocket'.length) || '/')
     : null
   const isPocketImmersivePage = (pocketRoute?.section === 'xstocks' && pocketRoute.view !== 'home') || pocketRoute?.section === 'activity'
+    || pocketRoute?.section === 'services'
     || pocketRoute?.section === 'bills'
     || pocketRoute?.section === 'move'
     || pocketRoute?.section === 'profile'
