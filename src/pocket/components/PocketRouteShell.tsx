@@ -18,7 +18,6 @@ export default function PocketRouteShell({
   navigationDisabled = false,
   fixedPage = false,
   elasticFixedPage = false,
-  springBackPage = false,
   compactFlow = false,
   scrollKey,
   rail,
@@ -30,7 +29,6 @@ export default function PocketRouteShell({
   navigationDisabled?: boolean
   fixedPage?: boolean
   elasticFixedPage?: boolean
-  springBackPage?: boolean
   compactFlow?: boolean
   scrollKey?: string
   rail?: 'stablecoins' | 'xstocks'
@@ -54,7 +52,6 @@ export default function PocketRouteShell({
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
   const pullStartX = useRef(0)
-  const balanceCardPull = useRef(false)
   const refreshEligible = useRef(false)
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
@@ -77,7 +74,7 @@ export default function PocketRouteShell({
   useLayoutEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    if (fixedPage || springBackPage) { scroller.scrollTop = 0; return }
+    if (fixedPage) { scroller.scrollTop = 0; return }
     const saved = lastScroll.current[scrollPath] ?? Number(window.sessionStorage.getItem(`pocket:scroll:${scrollPath}`) || 0)
     scroller.scrollTop = Number.isFinite(saved) && saved > 0 ? saved : 0
     return () => {
@@ -85,7 +82,7 @@ export default function PocketRouteShell({
       scrollFrame.current=null
       window.sessionStorage.setItem(`pocket:scroll:${scrollPath}`, String(lastScroll.current[scrollPath] ?? saved))
     }
-  }, [scrollPath, fixedPage, springBackPage])
+  }, [scrollPath, fixedPage])
 
   const rememberScroll = (event: UIEvent<HTMLDivElement>) => {
     const top = event.currentTarget.scrollTop
@@ -101,14 +98,12 @@ export default function PocketRouteShell({
     pullStartY.current = null
     pullEdge.current = null
     refreshEligible.current = false
-    balanceCardPull.current = false
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
     if (compactFlow || (fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     setPullDistance(0)
     setPullDragging(false)
     refreshEligible.current = (scrollerRef.current?.scrollTop ?? 0) <= 1
-    balanceCardPull.current = event.target instanceof Element && Boolean(event.target.closest('[data-pocket-balance-card]'))
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
     pullStartX.current = event.touches[0].clientX
@@ -153,17 +148,17 @@ export default function PocketRouteShell({
       cancelPull(); return
     }
     if (!pullEdge.current) {
-      const atTop = springBackPage || scroller.scrollTop <= 1
-      const atBottom = springBackPage || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
-      if ((atTop || balanceCardPull.current) && distance > 6) pullEdge.current = 'top'
-      else if ((atBottom || balanceCardPull.current) && distance < -6) pullEdge.current = 'bottom'
+      const atTop = scroller.scrollTop <= 1
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+      if (atTop && distance > 6) pullEdge.current = 'top'
+      else if (atBottom && distance < -6) pullEdge.current = 'bottom'
       else if ((atTop && distance >= 0) || (atBottom && distance <= 0)) return
       else { pullStartY.current = y; return }
     }
     const outward = pullEdge.current === 'top' ? distance : -distance
     if (outward <= 0) { cancelPull(); return }
     // Increasing resistance, bounded travel; native momentum handles ordinary scrolling.
-    const limit = pullEdge.current === 'top' ? 104 : springBackPage ? Math.min(180, Math.max(72, scroller.scrollHeight - scroller.clientHeight + 48)) : 72
+    const limit = pullEdge.current === 'top' ? 104 : 72
     const stretch = limit * (1 - Math.exp(-Math.max(0, outward - 6) / 150))
     const nextDistance = pullEdge.current === 'top' ? stretch : -stretch
     setPullDragging(true)
@@ -181,6 +176,23 @@ export default function PocketRouteShell({
   }
 
   useEffect(() => { cancelPull() }, [scrollPath, fixedPage, keyboardOpen, inputFocused])
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const retainBoundaryPull = (event: globalThis.TouchEvent) => {
+      if (pullStartY.current === null || event.touches.length !== 1 || !event.cancelable) return
+      const dy = event.touches[0].clientY - pullStartY.current
+      const dx = Math.abs(event.touches[0].clientX - pullStartX.current)
+      if (dx > Math.max(18, Math.abs(dy))) return
+      const atTop = scroller.scrollTop <= 1
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+      // Let normal content pan natively; retain only the outward edge stretch.
+      if ((atTop && dy > 6) || (atBottom && dy < -6) || pullEdge.current) event.preventDefault()
+    }
+    scroller.addEventListener('touchmove', retainBoundaryPull, { passive: false })
+    return () => scroller.removeEventListener('touchmove', retainBoundaryPull)
+  }, [])
 
   useEffect(() => {
     // Always settle the stretch if the browser interrupts or loses the gesture.
@@ -259,8 +271,7 @@ export default function PocketRouteShell({
             onTouchCancel={cancelPull}
             className="absolute inset-x-0 bottom-0 overflow-x-hidden overflow-y-auto overscroll-y-none [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
             style={{
-              overflowY: fixedPage || springBackPage ? 'hidden' : undefined,
-              touchAction: springBackPage ? 'pinch-zoom' : undefined,
+              overflowY: fixedPage ? 'hidden' : undefined,
               top: headerHeight > 0 ? headerHeight : 'var(--pocket-safe-top)',
               scrollPaddingTop: 16,
               scrollPaddingBottom: hideNavigation ? 'max(1.5rem, calc(0.75rem + var(--pocket-safe-bottom)))' : 'calc(7.5rem + var(--pocket-safe-bottom))',
