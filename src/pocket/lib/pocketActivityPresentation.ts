@@ -1,4 +1,4 @@
-import { pocketActivityStatus, pocketMovementTitle } from './pocketReceipt'
+import { pocketActivityStatus } from './pocketReceipt'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
@@ -21,10 +21,21 @@ export function pocketActivityTitle(row: PocketActivityRow): string {
     return provider || kind.charAt(0).toUpperCase() + kind.slice(1)
   }
   if (row.source?.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat') return row.accountName?.trim() || row.recipient?.trim() || 'Bank transfer'
-  if (row.source === 'wallet-deposit') return (row.assetSymbol || 'USDC') + ' received'
-  if (row.source === 'wallet-withdrawal') return (row.assetSymbol || 'USDC') + ' sent'
-  if (row.source === 'wallet-bridge' || row.source === 'wallet-swap') return pocketMovementTitle(row)
-  return row.activityLabel || row.memo || pocketMovementTitle(row)
+  if (['wallet-deposit','wallet-withdrawal','wallet-bridge','wallet-swap','gift','request','collection'].includes(row.source || '')) return row.assetSymbol || 'USDC'
+  return row.contextLabel || row.activityLabel || row.assetSymbol || 'USDC'
+}
+
+export function pocketActivityAction(row: PocketActivityRow): string {
+  if (row.source?.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat') return 'Bank transfer'
+  if (row.source === 'bills') return ({airtime:'Airtime',data:'Data',tv:'TV',electricity:'Electricity'}[row.billCategory!] || 'Bill payment')
+  if (row.source === 'wallet-bridge') return 'Bridge'
+  if (row.source === 'wallet-swap') return 'Swap'
+  if (row.source === 'wallet-deposit') return 'Received'
+  if (row.source === 'wallet-withdrawal') return 'Sent'
+  if (row.source === 'gift') return pocketActivityStatus(row) === 'refunded' ? 'Gift refunded' : row.direction === 'in' ? 'Gift received' : 'Gift sent'
+  if (row.source === 'request' || row.source === 'collection') return 'Request payment'
+  if (['xpay','purchase','app-pay','pos','ngpos'].includes(row.source || '')) return row.direction === 'in' ? 'Payment received' : 'Payment'
+  return row.direction === 'in' ? 'Received' : 'Sent'
 }
 
 export function pocketActivitySignedAmount(row: PocketActivityRow): string {
