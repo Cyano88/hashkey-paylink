@@ -7,7 +7,7 @@ import PocketFiatUsdcEstimate from '../../components/PocketFiatUsdcEstimate'
 import { normalizeNigerianMobileNumber } from '../../lib/nigerianMobileNetwork'
 import usePocketSlowConfirmation from '../../hooks/usePocketSlowConfirmation'
 import { pocketBillTitle } from '../../lib/pocketReceipt'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import PocketBottomSheet from '../../components/PocketBottomSheet'
 import { PocketBillsSkeleton, PocketLoadingField, PocketQuoteSkeleton, PocketSkeletonBar } from '../../components/PocketContentSkeletons'
 import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from '../../components/PocketIcons'
@@ -91,12 +91,25 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const [dataNumberRequired, setDataNumberRequired] = useState(false)
   const dataPhoneValid = bills.country==='UG'?!!normalizeUgandaPhone(bills.phone):/^0\d{10}$/.test(normalizeNigerianMobileNumber(bills.phone))
   const [approvalBusy, setApprovalBusy] = useState(false)
-  useEffect(() => { if (bills.status === 'ready') setResultDismissed(false) }, [bills.status])
+  const refreshedExpiredQuote = useRef('')
+  const [failedRefreshId, setFailedRefreshId] = useState('')
+  useEffect(() => {
+    if (bills.errorCode !== 'BILLS_QUOTE_EXPIRED' || !bills.intent || approvalBusy || bills.processing) return
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || refreshedExpiredQuote.current === bills.intent!.id) return
+      refreshedExpiredQuote.current = bills.intent!.id
+      void Promise.resolve(bills.review()).finally(() => setFailedRefreshId(bills.intent!.id))
+    }
+    refresh()
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [bills.errorCode, bills.intent?.id, bills.processing, bills.review, approvalBusy])
+  useEffect(() => { if (bills.status === 'ready') { setResultDismissed(false); setFailedRefreshId('') } }, [bills.status])
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
   const slowConfirmation=usePocketSlowConfirmation(['confirming','processing'].includes(bills.status),bills.intent?.id||'',60_000,bills.confirming)
-  const showPayment = Boolean(bills.intent) && ['ready','paying','confirming','processing','successful'].includes(bills.status)
+  const showPayment = Boolean(bills.intent) && (['ready','quoting','paying','confirming','processing','successful'].includes(bills.status) || (bills.errorCode === 'BILLS_QUOTE_EXPIRED' && (approvalBusy || failedRefreshId !== bills.intent?.id)))
   const reviewBlocked = Boolean(bills.intent && ['provider_failed_unverified', 'refund_pending', 'refund_eligible', 'needs_review'].includes(bills.intent.state))
   const slideStatus = bills.status === 'successful'
     ? 'successful'
@@ -125,6 +138,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     amountNgn: bills.intent.international?.deliveryAmount || bills.intent.amountNgn,
     fiatCurrency:bills.intent.international?.deliveryCurrency || 'NGN',
     asset: bills.intent.asset ?? 'USDC',
+    feeAmount: bills.intent.platformFeeUsdc || undefined,
     createdAt: bills.intent.updatedAt || bills.intent.createdAt,
     source: 'bills',
     settlementType: `bill_payment:${bills.intent.category}`,
@@ -165,7 +179,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const errorPresentation = refundComplete
     ? { title: 'Refund complete', body: bills.error, action: '', icon: Check, success: true }
     : quoteExpired
-    ? { title: 'Quote expired', body: 'Rates can move. Review your details to get a fresh quote.', action: 'Review again', icon: Clock3, success: false }
+    ? { title: 'Could not refresh quote', body: 'Your details are saved. Try again.', action: 'Try again', icon: Clock3, success: false }
     : providerUnavailable
       ? { title: 'Bills temporarily unavailable', body: 'Your details are safe. Try again shortly.', action: 'Try again', icon: Clock3, success: false }
       : { title: 'Check your details', body: bills.error, action: '', icon: AlertCircle, success: false }
@@ -312,12 +326,12 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {bills.country!=='UG' && !isData && Number(bills.amountNgn) > 0 && <PocketFiatUsdcEstimate amount={Number(bills.amountNgn)} asset={bills.asset} />}
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
-            {bills.status === 'quoting' && (
+            {(bills.status === 'quoting' || (quoteExpired && !approvalBusy && failedRefreshId !== bills.intent?.id)) && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} onClose={bills.edit}>
                 <div className="space-y-6 py-6"><PocketSkeletonBar className="mx-auto h-8 w-36" /><PocketQuoteSkeleton label="Updating bill quote" /><PocketSkeletonBar className="h-12 w-full rounded-full" /></div>
               </PocketBottomSheet>
             )}
-            {showPayment && !showResult && bills.intent && (
+            {showPayment && bills.status !== 'quoting' && (!quoteExpired || approvalBusy) && !showResult && bills.intent && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
                     <h2 className="mb-1 text-center text-2xl font-semibold">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} {bills.intent.asset ?? 'USDC'}</h2>
@@ -332,7 +346,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                     {!fundingShortfall(bills.error) && bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
                     <PocketFundingAction asset={paymentRouteInsufficient?(bills.asset ?? 'USDC'):fundingShortfall(bills.error,bills.asset ?? 'USDC')} network="base" locked={slideStatus!=='idle'||approvalBusy} onReturn={async()=>{await onFundingReturn?.()}} onCancel={()=>bills.dismiss()}><PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
                       status={slideStatus}
-                      disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
+                      disabled={bills.status !== 'ready' || quoteExpired || paymentRouteBusy || paymentRouteInsufficient}
                       onPrepare={onPreparePayment}
                       onConfirm={() => void bills.pay()}
                       labels={{
@@ -357,7 +371,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             )}
 
             {bills.notice && !showPayment && !showResult && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
-            {bills.error && !showPayment && !showResult && (() => {
+            {(bills.error || (quoteExpired && failedRefreshId === bills.intent?.id)) && !showPayment && !showResult && (() => {
               const ErrorIcon = errorPresentation.icon
               return (
                 <div className={cn('rounded-2xl border p-3.5', errorPresentation.success ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/20 dark:bg-emerald-400/10' : 'border-gray-200 bg-gray-50/80 dark:border-[#262626] dark:bg-[#121212]')}>
@@ -368,7 +382,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                       <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{errorPresentation.body}</span>
                     </span>
                   </div>
-                  {errorPresentation.action && <button type="button" onClick={bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-gray-200 bg-white text-[11px] font-semibold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.99] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:text-gray-200 dark:hover:bg-blue-400/10 dark:hover:text-blue-300">{errorPresentation.action}</button>}
+                  {errorPresentation.action && <button type="button" onClick={quoteExpired ? () => void bills.review() : bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-gray-200 bg-white text-[11px] font-semibold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.99] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:text-gray-200 dark:hover:bg-blue-400/10 dark:hover:text-blue-300">{errorPresentation.action}</button>}
                 </div>
               )
             })()}

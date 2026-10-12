@@ -1,16 +1,14 @@
+import PocketActivityList from '../../components/PocketActivityList'
 import usePocketIdentity from '../../hooks/usePocketIdentity'
 import usePocketProfile from '../../hooks/usePocketProfile'
 import { useSearchParams } from 'react-router-dom'
 import PocketDateField from '../../components/PocketDateField'
-import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
-import { pocketActivityIcon } from '../../components/pocketActivityIcon'
-import PocketActivityStatusIcon from '../../components/PocketActivityStatusIcon'
-import { pocketActivityAmount, currentPocketActivityRow } from '../../lib/pocketActivityPresentation'
+import { currentPocketActivityRow } from '../../lib/pocketActivityPresentation'
 import { pocketActivityArchiveKey } from '../../lib/pocketActivityArchive'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Filter, Deposit } from '../../components/PocketIcons'
 import type { PocketActivityRow } from '../../models/pocketActivity'
-import { isIncomingPosPayment, isOutgoingPosPurchase, pocketBankRecipientLabel, personalPocketActivity } from '../../lib/pocketPurchaseKind'
+import { isIncomingPosPayment, isOutgoingPosPurchase, personalPocketActivity } from '../../lib/pocketPurchaseKind'
 import { pocketActivityStatus } from '../../lib/pocketReceipt'
 import PocketActivityReceipt from '../../components/PocketActivityReceipt'
 import PocketBridgeActivityDetails from '../../components/PocketBridgeActivityDetails'
@@ -24,7 +22,7 @@ export type { PocketActivityRow } from '../../models/pocketActivity'
 export type PocketActivityView = 'all' | 'purchases' | 'bank' | 'pos' | 'collections'
 type Category = 'all' | 'bank' | 'bills' | 'pos' | 'requests' | 'purchases' | 'wallet'
 type Props = {collectionTitle?:string;collectionId?:string;renderHeader?:(actions:ReactNode)=>ReactNode;incomingPos?:boolean;rail?:'stablecoins'|'xstocks';hideHeading?:boolean;archivedKeys?:string[];view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
-const categories: Array<[Category,string]> = [['all','All transactions'],['bank','Bank transfers'],['bills','Bills'],['pos','POS purchases'],['requests','Requests'],['purchases','Other purchases'],['wallet','USDC and swaps']]
+const categories: Array<[Category,string]> = [['all','All transactions'],['bank','Bank transfers'],['bills','Bills'],['pos','POS purchases'],['requests','Requests'],['purchases','Other purchases'],['wallet','Stablecoins and swaps']]
 export function pocketTransactionCategory(row: PocketActivityRow): Category {
   const source = String(row.source || '').toLowerCase().replace(/_/g,'-')
   if (isOutgoingPosPurchase(row) || isIncomingPosPayment(row)) return 'pos'
@@ -78,16 +76,6 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
     catch(reason){if(!(reason instanceof Error&&reason.name==='AbortError'))setExportError('Your statement could not be saved. Please try again.')}
     finally{setExporting(false)}
   }
-  const groups: Array<{key:string;label:string;rows:PocketActivityRow[]}> = []
-  const today=new Date();today.setHours(0,0,0,0)
-  const yesterday=new Date(today);yesterday.setDate(yesterday.getDate()-1)
-  for(const row of visible){
-    const date=new Date(row.ts);date.setHours(0,0,0,0)
-    const key=Number.isFinite(date.getTime())?String(date.getTime()):'earlier'
-    const label=key==='earlier'?'Earlier':date.getTime()===today.getTime()?'Today':date.getTime()===yesterday.getTime()?'Yesterday':date.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})
-    const last=groups[groups.length-1]
-    if(last?.key===key)last.rows.push(row);else groups.push({key,label,rows:[row]})
-  }
   const selectedRow=currentPocketActivityRow(selected || (receiptReference ? rows.find(row=>[row.eventId,row.providerReference,row.bankOrderId,row.txHash].includes(receiptReference)) || null : null), rows)
   if(!authenticated)return <>{renderHeader?.(null)}<p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Sign in to view your transactions.</p></>
   const actions=<div className="flex items-center">
@@ -121,18 +109,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
       <button type="button" disabled={!transactions.length||busy||exporting||!!statementPeriod.from&&!!statementPeriod.to&&statementPeriod.from>statementPeriod.to} onClick={()=>void exportStatement()} className="pocket-cta-primary mt-6 w-full">{exporting?'Preparing statement...':'Download '+statementFormat.toUpperCase()}</button>
     </PocketBottomSheet>}
     {busy&&!transactions.length?<PocketRecentActivitySkeleton/>:!visible.length?<p className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">{error&&!transactions.length?error:'No transactions to show.'}</p>:<div aria-label="Transactions">
-      {groups.map(group=><section key={group.key} data-pocket-activity-day className="mb-5"><h2 className="mb-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{group.label}</h2><div className="rounded-2xl bg-gray-50 px-3 dark:bg-[#141414]">{group.rows.map(row=>{
-        const status=pocketActivityStatus(row),outcome=paymentReceiptOutcome({status})
-        const incoming=isIncomingPosPayment(row)||row.direction==='in'||['refunded','reversed'].includes(pocketActivityStatus(row))
-        const Icon=pocketActivityIcon(row)
-        const title=(collectionId?row.payer:undefined)||pocketBankRecipientLabel(row)||row.activityLabel||row.memo||(incoming?'USDC received':'Payment')
-        const detail=pocketBankRecipientLabel(row)?[row.bankName,'Bank transfer'].filter(Boolean).join(' / '):new Date(row.ts).toLocaleDateString(undefined,{day:'numeric',month:'short'})
-        return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>{setSelected(row)}} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-200 text-gray-900 dark:bg-[#121212] dark:text-gray-200"><Icon className="h-5 w-5"/></span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{title}</span><span className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">{row.source==='wallet-bridge'&&<PocketActivityStatusIcon row={row}/>}<span className="truncate">{detail}</span></span></span>
-          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+pocketActivityAmount(row)}</span>{(!row.assetSymbol || row.assetSymbol === 'USDC') && row.source !== 'wallet-swap' && <PocketLocalEquivalent recordedAmount={row.amountNgn} recordedCurrency={row.fiatCurrency} amount={Number(row.amount)} className="mt-1 text-[10px] font-normal text-gray-500 dark:text-gray-400" />}<span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
-        </button>
-      })}</div></section>)}
+      <PocketActivityList rows={visible} onSelect={setSelected} title={collectionId ? row=>row.payer : undefined}/>
     </div>}
     {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={closeReceipt} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={selectedRow.paymentFunding?.length ? undefined : onNewBridge}/>}</PocketActivityReceipt>}
   </div>

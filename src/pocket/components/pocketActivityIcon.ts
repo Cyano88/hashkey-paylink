@@ -45,5 +45,5 @@ export function pocketActivityIcon(row: PocketActivityRow) {
 export function pocketActivityShortDate(timestamp: number) {
   const date = new Date(timestamp)
   if (!Number.isFinite(date.getTime())) return ''
-  return [date.getDate(), date.getMonth() + 1, date.getFullYear() % 100].map(value => String(value).padStart(2, '0')).join(':')
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }

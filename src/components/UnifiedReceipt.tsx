@@ -105,7 +105,7 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
 
       <section className="mt-5">
         <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
-        <p className="mt-3 break-words text-[30px] font-bold tracking-[-0.045em]">{view.amount}</p>
+        <p className="mt-3 break-words text-[30px] font-bold tracking-normal">{view.amount}</p>
       </section>
 
       <dl className="mt-3 border-t border-gray-100 pt-0.5 dark:border-white/10">
@@ -143,7 +143,7 @@ function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkRecei
       <div className="relative isolate overflow-hidden rounded-[28px] bg-white p-5 shadow-sm dark:bg-[#111216]">
         <ReceiptWatermark receipt={receipt}/>
         <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
-        <p className="mt-8 text-[32px] font-bold tracking-[-0.045em] text-gray-950 dark:text-white">{view.amount}</p>
+        <p className="mt-8 text-[32px] font-bold tracking-normal text-gray-950 dark:text-white">{view.amount}</p>
         <dl className="mt-7 divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/10 dark:border-white/10">
           {[...view.rows, { label: 'Status', value: receipt.status || 'confirmed' }].map(row => (
             <div key={row.label} className="flex items-start justify-between gap-5 py-3.5">

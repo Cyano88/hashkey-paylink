@@ -266,7 +266,8 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const localAmount = receipt.fiatCurrency === 'UGX' && receipt.amountNgn && Number.isFinite(Number(receipt.amountNgn)) ? 'UGX ' + Number(receipt.amountNgn).toLocaleString('en-UG', { maximumFractionDigits: 2 }) : formatNgn(receipt.amountNgn)
   const pocketUsdc = paymentReceiptBrand(receipt).kind === 'pocket' && receipt.asset === 'USDC' && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
   const bankPayout = ['bank-withdraw', 'bank-receive', 'bank-send'].includes(receipt.source || '') || String(receipt.settlementType || '').toLowerCase() === 'instant_fiat'
-  const bankLocalAmount = bankPayout && localAmount ? `${Number(receipt.amountNgn).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN'}` : ''
+  const pocketLocalPayment = paymentReceiptBrand(receipt).kind === 'pocket' && (bankPayout || variant === 'bills')
+  const bankLocalAmount = (bankPayout || pocketLocalPayment) && localAmount ? `${Number(receipt.amountNgn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN'}` : ''
   const amount = bankLocalAmount || (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
@@ -320,11 +321,13 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       timestamp: fmtTime(receipt.createdAt),
       rows: [
         { label: 'Type', value: type },
+        ...(pocketLocalPayment ? [{ label: 'Network', value: network }] : []),
+        ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount, receipt.asset)} ${receipt.asset || 'USDC'}` }] : []),
         ...(receipt.paymentFunding?.length ? [{ label: 'Payment funding', value: pocketFundingRoute(receipt.paymentFunding) }] : []),
         ...(isElectricity && receipt.providerName ? [{ label: 'Provider', value: receipt.providerName }] : []),
         { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
         { label: 'Amount', value: amount },
-        ...(localAmount ? [{ label: pocketUsdc ? 'Local amount' : `Total ${receipt.asset}`, value: pocketUsdc ? localAmount : `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` }] : []),
+        ...(localAmount ? [{ label: pocketLocalPayment ? 'Paid with' : pocketUsdc ? 'Local amount' : `Total ${receipt.asset}`, value: pocketUsdc && !pocketLocalPayment ? localAmount : `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` }] : []),
         ...(receipt.refundTxHash ? [{ label: 'Refund transaction', value: receipt.refundTxHash, mono: true }] : []),
         ...(receipt.status === 'refunded' ? [{ label: `${receipt.asset} returned`, value: `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` }] : []),
         ...(receipt.billToken ? [{ label: 'Meter Token', value: receipt.billToken.replace(/^token\s*:\s*/i, '').trim(), mono: true }] : []),

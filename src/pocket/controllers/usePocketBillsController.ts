@@ -564,6 +564,7 @@ export default function usePocketBillsController({
 
   const pay = useCallback(async () => {
     if (!intent || status !== 'ready' || billPayInFlight.current) return
+    if (intent.quoteExpiresAt <= Date.now()) { setStatus('error'); setErrorCode('BILLS_QUOTE_EXPIRED'); setError(''); return }
     billPayInFlight.current=true
     setConfirming(true)
     const stillCurrent=()=>{if(!mounted.current||billScope.current!==activeBillKey||displayedAttempt.current!==intent.id)throw Error('Your Pocket account or bill changed.')}

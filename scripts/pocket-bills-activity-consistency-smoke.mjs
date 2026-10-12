@@ -4,12 +4,12 @@ import { mergePocketActivityRows } from '../src/pocket/lib/pocketActivitySnapsho
 for (const category of ['airtime','data','tv','electricity']) {
  const pending={eventId:'pocket-bill:'+category,chain:'base',source:'bills',direction:'out',txHash:'',amount:'0.147112',amountNgn:'200',ts:1,paycrestStatus:'processing'}
  const delivered={...pending,txHash:'0x'+'1'.repeat(64),providerReference:'provider-'+category,paycrestStatus:'delivered',ts:2}
- assert.equal(pocketActivityAmount(pending),'0.14 USDC')
+ assert.equal(pocketActivityAmount(pending),'200.00 NGN')
  const rows=mergePocketActivityRows([pending],[delivered])
  assert.equal(rows.length,1,'Pending bill must be replaced, not duplicated')
  assert.equal(currentPocketActivityRow(pending,rows)?.paycrestStatus,'delivered')
  assert.equal(rows[0].amount,'0.147112','Preserve exact USDC debit for the receipt')
  assert.equal(currentPocketActivityRow(pending,[{...delivered,eventId:'other'}]),pending,'Do not show another bill')
 }
-assert.equal(pocketActivityAmount({source:'wallet-withdrawal',amount:'1',amountNgn:''}),'1 USDC')
-console.log('PASS: all bill categories keep one record, follow delivery, and consistently display USDC while preserving the delivered local amount.')
+assert.equal(pocketActivityAmount({source:'wallet-withdrawal',amount:'1',amountNgn:''}),'1.00 USDC')
+console.log('PASS: all bill categories keep one record, follow delivery, and display recorded local amounts while preserving the exact funding debit.')
