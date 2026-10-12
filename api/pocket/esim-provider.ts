@@ -18,8 +18,11 @@ export function normalizeEsimCatalog(rows: Json[], locations: Json[] = []): Pock
     })
     const networks: Json[] = Array.isArray(row.locationNetworkList) ? row.locationNetworkList : []
     const names = networks.map(item => item?.locationName).filter((name): name is string => typeof name === 'string' && Boolean(name))
-    const id = codes.join(',')
-    const name = location?.name || (!region ? names[0] : names.join(', ')) || id
+    const rawName = location?.name || (!region ? names[0] : names.join(', ')) || codes.join(',')
+    // Provider inventory has several country bundles per region. Group only
+    // numeric coverage suffixes; keep distinct combinations such as Europe & Morocco.
+    const name = region ? String(rawName).replace(/\s*\(\d+\+?\s*(?:areas?|countries)\)/gi, '').trim() : rawName
+    const id = region ? 'region:'+name.toLowerCase() : codes[0]
     const group = groups.get(id) || { id, name, countryCode: region ? '' : codes[0], region, plans: [] }
     if (group.plans.some(plan => plan.id === row.packageCode)) continue
     const gb = row.volume / 1073741824
@@ -27,6 +30,11 @@ export function normalizeEsimCatalog(rows: Json[], locations: Json[] = []): Pock
     group.plans.push({
       id: row.packageCode, title: typeof row.name === 'string' ? row.name : data, data: Number(row.dataType) === 2 ? `${data} / day` : data,
       daily: Number(row.dataType) === 2,
+      ...(region ? { coverage: codes.map(code => {
+        const listed=locations.find(item=>item?.code===code && typeof item.name==='string')?.name
+        if(listed)return listed
+        try{return new Intl.DisplayNames(['en'],{type:'region'}).of(code)||code}catch{return code}
+      }) } : {}),
       days: row.duration, operator: 'Redtea Mobile',
       topUp: [2, 3].includes(Number(row.supportTopUpType)),
       fairUsage: typeof row.fupPolicy === 'string' ? row.fupPolicy : '',

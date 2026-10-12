@@ -16,6 +16,9 @@ assert.equal(JSON.stringify(mapped).includes('price'),false)
 const regional=normalizeEsimCatalog([{...row,location:'KE,UG',supportTopUpType:1,activeType:1}],locations)[0]
 assert.equal(regional.name,'East Africa');assert.equal(regional.region,true)
 assert.equal(regional.plans[0].topUp,false);assert.match(regional.plans[0].activation,/install/)
+const grouped=normalizeEsimCatalog([{...row,location:'KE,UG'},{...row,packageCode:'EA2',location:'KE,UG,TZ'}],[{code:'EA1',name:'East Africa (2 areas)',subLocationList:[{code:'KE'},{code:'UG'}]},{code:'EA2',name:'East Africa (3 areas)',subLocationList:[{code:'KE'},{code:'UG'},{code:'TZ'}]}])
+assert.equal(grouped.length,1);assert.equal(grouped[0].name,'East Africa');assert.equal(grouped[0].plans.length,2)
+assert.equal(grouped[0].plans[0].coverage.length,2);assert.equal(grouped[0].plans[1].coverage.length,3)
 assert.deepEqual(normalizeEsimCatalog([{...row,volume:-1},{...row,durationUnit:'HOUR'}]),[])
 let calls=[],now=0
 const provider=createEsimCatalogProvider({accessCode:'fixture-code',now:()=>now,fetchImpl:async(url,init)=>{

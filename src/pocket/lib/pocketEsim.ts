@@ -3,6 +3,7 @@ export type PocketEsimPlan = {
   title: string
   data: string
   daily?: boolean
+  coverage?: string[]
   days: number
   operator: string
   topUp: boolean
