@@ -1286,7 +1286,8 @@ export async function readCircleEvmChallenge(input: { chain: CircleGasStationEvm
   const transactionId = Array.isArray(ids) && typeof ids[0] === 'string' ? ids[0] : ''
   if (!transactionId) {
     const state = String(challenge.status ?? challenge.state ?? '').toUpperCase()
-    return { status: ['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state) ? 'failed' as const : state === 'PENDING' ? 'awaiting_approval' as const : 'pending' as const }
+    if (['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state)) return { status: 'failed' as const, notSubmitted: true }
+    return { status: state === 'PENDING' ? 'awaiting_approval' as const : 'pending' as const }
   }
   const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken, apiKey: circleApiKey({ chain: input.chain }) })
   const tx = data.transaction

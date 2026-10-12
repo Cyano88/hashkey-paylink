@@ -101,6 +101,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash}
     }
     if(existing.status==='failed'){
+      if(meta.paymentState==='not_submitted')return {ok:true,status:'not_submitted',reason:'approval_expired'}
       if(meta.paymentState==='refunded'){
         await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':refunded',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'refunded',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:meta.refundNetwork,resourceId:q.id,transactionHash:meta.txHash,metadata:{refundTxHash:meta.refundTxHash,refundAmount:meta.refundAmount,provider:q.provider},recordedAt:existing.updatedAt})
         return {ok:true,status:'refunded',txHash:meta.txHash,destinationTxHash:meta.refundTxHash,settlement:{network:meta.refundNetwork,transactionHash:meta.refundTxHash,amountUnits:meta.refundAmountUnits}}
@@ -109,11 +110,13 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     }
     let txHash=meta.txHash||''
     let awaitingApproval=false
+    let statusUnavailable=false
     if(!txHash&&meta.challengeId&&input.circleUserToken){
-      const result=await deps.readChallenge({chain:q.source,userToken:String(input.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId}).catch(()=>({status:'pending' as const,txHash:undefined}))
+      const result=await deps.readChallenge({chain:q.source,userToken:String(input.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId}).catch(()=>{statusUnavailable=true;return {status:'pending' as const,txHash:undefined}})
       if(result.status==='failed'){
-        await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:meta})
-        return {ok:true,status:'failed'}
+        const notSubmitted='notSubmitted' in result&&result.notSubmitted===true
+        await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,...(notSubmitted?{paymentState:'not_submitted'}:{})}})
+        return notSubmitted?{ok:true,status:'not_submitted',reason:'approval_expired'}:{ok:true,status:'failed'}
       }
       txHash=result.txHash||''
       awaitingApproval=result.status==='awaiting_approval'
@@ -127,7 +130,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
         if(receipt&&(q.provider==='relay'?relayUsdtDepositMatches(q,receipt.logs):receipt.logs.some(log=>{if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false;try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId}catch{return false}}))){txHash=hash;break}
       }
     }
-    if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:awaitingApproval?'awaiting_approval':'pending',challengeId:meta.challengeId}
+    if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:awaitingApproval?'awaiting_approval':'pending',challengeId:meta.challengeId,...(!input.circleUserToken&&meta.challengeId?{requiresWalletSession:true}:{}),...(statusUnavailable?{statusUnavailable:true}:{})}
     const receipt=await deps.client(q.source).getTransactionReceipt({hash:txHash as Hex}).catch(()=>null)
     if(!receipt)return {ok:true,status:'pending',challengeId:meta.challengeId}
     const debited=receipt.logs.reduce((sum,log)=>{

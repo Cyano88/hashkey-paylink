@@ -66,3 +66,11 @@ assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps)).sta
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readChallenge:async()=>{throw Error('provider unavailable')}})).status,'pending','provider outage must not authorize resume')
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readActivity:deps.readActivity})).status,'completed','onchain proof wins over stale pending approval')
 console.log('PASS saved approval recovery, missing-session safety, provider outage and stale approval race')
+
+stored={...record,metadata:{...record.metadata,challengeId:'expired-challenge'}}
+const expired=await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readChallenge:async()=>({status:'failed',notSubmitted:true})})
+assert.equal(expired.status,'not_submitted');assert.equal(expired.reason,'approval_expired');assert.equal(stored.status,'failed');assert.equal(stored.metadata.paymentState,'not_submitted')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps)).status,'not_submitted','terminal unsubmitted record stays retired after app restart')
+stored={...record,metadata:{...record.metadata,challengeId:'unknown-challenge'}}
+const unknown=await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps);assert.equal(unknown.requiresWalletSession,true);assert.equal(stored.status,'submitted','missing hash or expired quote alone cannot clear an unknown payment')
+console.log('PASS verified unsubmitted approval retirement and missing-session recovery requirement')
