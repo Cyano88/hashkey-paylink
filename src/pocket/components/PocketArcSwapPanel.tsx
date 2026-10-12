@@ -1,3 +1,6 @@
+import PocketTransactionSheet from './PocketTransactionSheet'
+import {formatPocketDisplayAmount} from '../lib/pocketMoney'
+import {Loader2} from './PocketIcons'
 import PocketFundingAction from './PocketFundingAction'
 import {fundingShortfall} from '../lib/pocketFundingShortfall'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -14,6 +17,8 @@ type Props = { request?(body?:Record<string,unknown>,tokenAddress?:string):Promi
 
 export default function PocketArcSwapPanel(props: Props) {
   const visible = usePocketPageVisible()
+  const [checkingStatus,setCheckingStatus]=useState(false)
+  const [completed,setCompleted]=useState<{quote:Quote;txHash?:string;amountOut?:string}|null>(null)
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [tokens, setTokens] = useState<Token[]>([])
   const [tokenIn, setTokenIn] = useState('0x3600000000000000000000000000000000000000')
@@ -74,7 +79,7 @@ export default function PocketArcSwapPanel(props: Props) {
   async function getQuote() {
     if (locked.current || pending || document.visibilityState !== 'visible') return
     const version = ++requestVersion.current
-    setStatus('quoting'); setError(''); setQuoted(null)
+    setStatus('quoting'); setError('')
     try {
       const data = await api({ action: 'quote', tokenIn, tokenOut, amount })
       if (version !== requestVersion.current) return
@@ -93,7 +98,7 @@ export default function PocketArcSwapPanel(props: Props) {
   const pairReady = !!selectedInput && !!selectedOutput && tokenIn.toLowerCase() !== tokenOut.toLowerCase()
   useEffect(() => {
     if (pending || busy || approvalBusy) return
-    requestVersion.current++; setQuoted(null)
+    requestVersion.current++
     if (!visible || props.enabled === false || !pairReady || !amountValid || catalogError) return
     setStatus('quoting')
     const timer = window.setTimeout(() => void quoteRequest.current(), 500)
@@ -114,14 +119,15 @@ export default function PocketArcSwapPanel(props: Props) {
   async function check(value: Pending, quiet = false) {
     if(checking.current)return
     checking.current=true
-    try{await checkPending(value,quiet)}finally{checking.current=false}
+    if(!quiet)setCheckingStatus(true)
+    try{await checkPending(value,quiet)}finally{checking.current=false;if(!quiet)setCheckingStatus(false)}
   }
   async function checkPending(value: Pending, quiet: boolean) {
     let next = value
     const active = session.current ?? (quiet ? null : await props.getSession(next.walletAddress))
     const server = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash, ...(active ? {circleUserToken: active.userToken} : {}) })
     if (server.status === 'failed' || server.status === 'not_submitted') { savePending(null); setQuoted(null); setStatus('idle'); setNotice(server.error || 'No swap was submitted. Request a new quote.'); return }
-    if (server.status === 'completed') { savePending(null); setQuoted(null); setStatus('successful'); setAmount(''); setError(''); setNotice('Swap completed.'); await Promise.all([load(), props.refresh()]); return }
+    if (server.status === 'completed') { savePending(null); setQuoted(null); setStatus('successful'); setAmount(''); setError(''); setNotice('');setCompleted({quote:value.quote,txHash:server.txHash||value.txHash,amountOut:server.amountOut}); await Promise.all([load(), props.refresh()]); return }
     if (!next.txHash) {
       if (!next.challengeId) {
         const recovery = server
@@ -136,7 +142,7 @@ export default function PocketArcSwapPanel(props: Props) {
     }
     const result = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash })
     if (result.status === 'completed') {
-      setAmount(''); setError(''); setNotice('Swap completed.')
+      setAmount(''); setError(''); setNotice('');setCompleted({quote:next.quote,txHash:result.txHash||next.txHash,amountOut:result.amountOut})
       savePending(null); setQuoted(null); setStatus('successful')
       await Promise.all([load(), props.refresh()])
     } else if (result.status === 'failed') {
@@ -161,23 +167,26 @@ export default function PocketArcSwapPanel(props: Props) {
       await check(activePending)
     } catch (reason) {
       setError(activePending ? '' : 'Could not prepare this swap. Please try again.')
-      if (activePending) setNotice('Your swap is saved. Check its status below.')
+      if (activePending) {setError((reason as Error).message);setNotice('');void check(activePending,true).catch(()=>{})}
       setStatus('idle')
     } finally { locked.current = false }
   }
   const recover = useRef(check); recover.current=check
   useEffect(()=>{
     if(!pending||!visible||props.enabled===false)return
-    const update=()=>{if(!locked.current&&navigator.onLine!==false)void recover.current(pending,true).catch(()=>{})}
+    const update=()=>{if(!locked.current&&navigator.onLine!==false)void recover.current(pending,true).catch(reason=>setError(reason.message||'Could not check this swap.'))}
     update();const timer=window.setInterval(update,15000);window.addEventListener('online',update)
     return()=>{clearInterval(timer);window.removeEventListener('online',update)}
   },[pending,visible,props.enabled])
   const selected = tokens.find(token => token.address.toLowerCase() === tokenIn.toLowerCase())
   return <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-    {pending ? <div className="space-y-3 rounded-2xl bg-blue-50 p-4 dark:bg-blue-500/10">
-      <p className="text-sm">Swap pending. Checking for updates.</p>
-      <button type="button" disabled={busy} onClick={() => { setError(''); void prepare().then(() => check(pending)).catch(reason => setError(reason.message)) }} className="text-sm font-bold text-blue-600">Check swap status</button>
-      {pending.txHash && <a className="block text-xs text-blue-600" href={'https://explorer.arc.io/tx/' + pending.txHash} target="_blank" rel="noreferrer">View transaction</a>}
+    {pending ? <div className="space-y-4">
+      <div className="flex justify-between text-sm"><span>{formatPocketDisplayAmount(pending.quote.amount)} {pending.quote.tokenIn.symbol}</span><span>{pending.quote.tokenOut.symbol}</span></div>
+      <button type="button" className="pocket-cta-primary w-full" disabled={busy||checkingStatus} aria-busy={checkingStatus} onClick={()=>{setError('');setCheckingStatus(true);void prepare().then(()=>check(pending)).catch(reason=>setError(reason.message)).finally(()=>setCheckingStatus(false))}}>
+        {checkingStatus&&<Loader2 className="h-4 w-4 animate-spin"/>}
+        <span>{checkingStatus?'Checking swap':pending.txHash?'Update swap':'Verify previous swap'}</span>
+      </button>
+      {pending.txHash && <a className="block text-center text-xs text-gray-500" href={'https://explorer.arc.io/tx/' + pending.txHash} target="_blank" rel="noreferrer">View transaction</a>}
     </div> : <>
       <div className="grid grid-cols-2 gap-3">
         <div><p className="mb-2 text-xs text-gray-500 dark:text-gray-400">From</p><PocketArcTokenPicker label="Input Arc token" value={tokenIn} tokens={tokens} excluded={tokenOut} disabled={loadingTokens || !!catalogError || busy || approvalBusy} discover={discover} onChange={token => choose(token, 'in')} /></div>
@@ -186,17 +195,18 @@ export default function PocketArcSwapPanel(props: Props) {
       {loadingTokens && <p role="status" className="text-xs text-gray-500 dark:text-gray-400">Loading Arc tokens...</p>}
       {catalogError && <p role="alert" className="text-xs text-gray-500 dark:text-gray-400">{catalogError} <button type="button" onClick={() => void load()} className="font-bold text-blue-600">Try again</button></p>}
       <label className="block text-xs text-gray-500 dark:text-gray-400">Amount<input aria-label="Swap amount" inputMode="decimal" disabled={busy || approvalBusy || !!catalogError} value={amount} onChange={event => { invalidate(); setAmount(event.target.value) }} className="mt-2 w-full rounded-2xl border border-gray-200 bg-transparent p-4 text-base text-gray-950 dark:border-[#262626] dark:text-white" placeholder="0.00" /></label>
-      <p className="text-xs text-gray-500 dark:text-gray-400">Available: {selected?.balance ?? '—'} {selected?.symbol}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Available: {selected?.balance==null?'\u2014':formatPocketDisplayAmount(selected.balance)} {selected?.symbol}</p>
       {selected?.balanceStatus === 'wallet_required' && <button type="button" onClick={() => void props.ensureWallet().then(() => load()).catch(reason => setError(reason.message))} className="text-xs font-bold text-blue-600">Open Arc wallet</button>}
       {quoted && <div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#121212]">
-        <p>You receive: <b>{quoted.quote.expectedOut} {quoted.quote.tokenOut.symbol}</b></p>
-        <details><summary className="cursor-pointer">Fees and minimum received</summary><p>Minimum received: <b>{quoted.quote.minimumOut} {quoted.quote.tokenOut.symbol}</b></p>
-        {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: {fee.amount} {fee.symbol}{fee.included ? ' (included)' : ''}</p>)}
-        <p>Network fee: {quoted.quote.gasUsdc} USDC</p></details>
+        <p>You receive: <b>{formatPocketDisplayAmount(quoted.quote.expectedOut)} {quoted.quote.tokenOut.symbol}</b></p>
+        <details><summary className="cursor-pointer">Fees and minimum received</summary><p>Minimum received: <b>{formatPocketDisplayAmount(quoted.quote.minimumOut)} {quoted.quote.tokenOut.symbol}</b></p>
+        {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: {formatPocketDisplayAmount(fee.amount)} {fee.symbol}{fee.included ? ' (included)' : ''}</p>)}
+        <p>Network fee: Covered by Pocket</p></details>
       </div>}
       {error && !quoted && pairReady && amountValid && <button type="button" onClick={() => setQuoteRefresh(value => value + 1)} className="text-xs font-bold text-blue-600">Try price again</button>}
       <PocketFundingAction flow="swap" asset={quoted?.sufficientBalance===false?(selected?.symbol||'USDC'):fundingShortfall(error,selected?.symbol||'USDC')} network="arc" locked={busy||approvalBusy||!!pending} onReturn={async()=>{await props.refresh();await load();invalidate();setQuoteRefresh(n=>n+1)}} onCancel={()=>{invalidate();setAmount('');setError('')}}><PocketSlideAction approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating price...' : quoted?.sufficientBalance === false ? 'Insufficient balance' : quoted && quoted.sufficientBalance !== true ? 'Balance unavailable' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} /></PocketFundingAction>
     </>}
+    {completed&&<PocketTransactionSheet title="Swap on Arc" state="successful" statusLabel="Swap successful" amount={formatPocketDisplayAmount(completed.amountOut||completed.quote.expectedOut)+' '+completed.quote.tokenOut.symbol} detailsRows={[["Paid with",formatPocketDisplayAmount(completed.quote.amount)+' '+completed.quote.tokenIn.symbol],["Network","Arc"],...(completed.txHash?[["Transaction",completed.txHash] as [string,string]]:[])]} onDone={()=>{setCompleted(null);setStatus('idle')}}/>}
     {notice && <p className="text-xs text-emerald-600">{notice}</p>}
     {!fundingShortfall(error,selected?.symbol) && error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
   </section>

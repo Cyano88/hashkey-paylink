@@ -11,6 +11,7 @@ import { registerPocketPaymentPreparer } from '../lib/pocketPaymentApproval'
 
 export type PocketBridgeStatus = 'idle' | 'quoting' | 'confirming'
 export default function usePocketBridgeController(input: {
+  enabled?: boolean
   owner: string
   source: PocketBridgeNetwork
   sourceBalance: number
@@ -62,8 +63,9 @@ export default function usePocketBridgeController(input: {
     if (match) throw new Error('An earlier bridge for this amount and route has an unknown result. Check it in Activity before repeating it.')
   }, [input.owner, input.source, destination, amount])
   const refreshQuote = useCallback(async () => {
+    const input = latest.current
     const version = ++quoteVersion.current
-    if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || input.source === destination) { setQuote(null); setStatus('idle'); return null }
+    if (input.enabled === false || !amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || input.source === destination) { setQuote(null); setStatus('idle'); return null }
     setStatus('quoting'); setError('')
     try {
       const accessToken = await input.getAccessToken()
@@ -78,7 +80,7 @@ export default function usePocketBridgeController(input: {
       if (version === quoteVersion.current) { setQuote(null); setStatus('idle'); setError(reason instanceof Error ? reason.message : 'Could not quote this bridge route.') }
       return null
     }
-  }, [amount, destination, input.getAccessToken, input.source, input.getEvmSession, input.ensureWallet, input.wallets])
+  }, [amount, destination, input.source, input.owner, input.enabled])
   useEffect(() => {
     if (locked.current) return
     const timer = window.setTimeout(() => void refreshQuote(), 450)

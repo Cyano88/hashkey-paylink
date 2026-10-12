@@ -25,7 +25,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   const [quoting,setQuoting]=useState(false)
   const [solanaEnabled,setSolanaEnabled]=useState(false),[solanaDestinationEnabled,setSolanaDestinationEnabled]=useState(false)
   const [result,setResult]=useState<{quote:Quote;state:'successful'|'failed'|'reversed';settledAmount?:string;txHash?:string;destinationTxHash?:string}|null>(null)
-  const maxRequested=useRef(false);const lock=useRef(false),version=useRef(0),session=useRef<CircleEvmEmailSession|null>(null),currentOwner=useRef(props.owner)
+  const executionError=useRef('');const quotePaused=useRef(false);const maxRequested=useRef(false);const lock=useRef(false),version=useRef(0),session=useRef<CircleEvmEmailSession|null>(null),currentOwner=useRef(props.owner)
   currentOwner.current=props.owner
   const key='pocket:usdt-bridge:v1:'+encodeURIComponent(props.owner)
   const save=(value:Pending|null)=>{if(value)localStorage.setItem(key,JSON.stringify(value));else localStorage.removeItem(key);setPending(value)}
@@ -47,8 +47,10 @@ export default function PocketUsdtBridgePanel(props:Props){
   },[props.owner,api,key,reload])
   useEffect(()=>{props.onBusyChange(busy||preparing);return()=>props.onBusyChange(false)},[busy,preparing,props.onBusyChange])
   useEffect(()=>{setQuoteExpired(false);if(!quoted)return;const timer=window.setTimeout(()=>setQuoteExpired(true),Math.max(0,quoted.quote.expiresAt-Date.now()));return()=>clearTimeout(timer)},[quoted])
-  const invalidate=()=>{maxRequested.current=false;version.current++;setQuoted(null);setQuoting(false);setError('');setNotice('');session.current=null}
-  async function quote(){
+  const invalidate=()=>{quotePaused.current=false;executionError.current='';maxRequested.current=false;version.current++;setQuoted(null);setQuoting(false);setError('');setNotice('');session.current=null}
+  async function quote(manual=false){
+    if(manual){quotePaused.current=false;executionError.current=''}
+    if(quotePaused.current)return
     if(document.visibilityState!=='visible'||lock.current||busy||preparing||pending||loading||recoveryFailed)return
     if(!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<=0)return
     const requestVersion=++version.current,deadline=Date.now()+30000;setQuoting(true);setError('')
@@ -85,7 +87,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   },[quoted,quoting,pending,busy,preparing,loading,recoveryFailed])
   async function check(value:Pending,_interactive=true){
     if(lock.current)return
-    lock.current=true;setError('')
+    lock.current=true
     const owner=props.owner
     try{
       const active=session.current
@@ -95,7 +97,7 @@ export default function PocketUsdtBridgePanel(props:Props){
       if(result.status==='completed'){save(null);setQuoted(null);setAmount('');setNotice('');setResult({quote:value.quote,state:'successful',txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
       else if(result.status==='refunded'){save(null);setQuoted(null);setAmount('');setResult({quote:value.quote,state:'reversed',settledAmount:(Number(result.settlement.amountUnits)/1e6).toFixed(2),txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
       else if(result.status==='failed'){save(null);setQuoted(null);setResult({quote:value.quote,state:'failed'});setError('The source transaction did not complete. You can request a new quote.')}
-      else if(result.status==='not_submitted'){save(null);setQuoted(null);setNotice('');setError('Bridge was not submitted. Review a new quote.')}
+      else if(result.status==='not_submitted'){quotePaused.current=true;save(null);setQuoted(null);setNotice('');setError(executionError.current||'Bridge was not submitted. Review a new quote.')}
       else{save({...value,...(result.txHash?{txHash:result.txHash}:{}),...(result.challengeId?{challengeId:result.challengeId}:{}),sourceConfirmed:Boolean(result.sourceConfirmed||value.sourceConfirmed),awaitingApproval:result.status==='awaiting_approval',needsAttention:result.status==='needs_attention'});setNotice('');if(result.status==='needs_attention')setError('This bridge needs review. Contact support before sending again.');props.onActivity()}
     }catch(e){setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
   }
@@ -131,7 +133,7 @@ export default function PocketUsdtBridgePanel(props:Props){
     if(quoted?.quote.source==='solana'){await executeSolana(quoted);return}
     if(lock.current||!quoted||!session.current||!quoted.sufficientBalance)return
     if(quoted.quote.expiresAt<=Date.now()){setQuoted(null);setError('Quote expired. Review a new quote.');return}
-    lock.current=true;setBusy(true);setError('');let saved:Pending|null=null
+    lock.current=true;setBusy(true);setError('');executionError.current='';let saved:Pending|null=null
     const owner=props.owner
     try{
       saved={quote:quoted.quote,quoteToken:quoted.quoteToken};save(saved)
@@ -142,12 +144,12 @@ export default function PocketUsdtBridgePanel(props:Props){
       if(currentOwner.current!==owner)return
       if(result.transactionHash){saved={...saved,txHash:result.transactionHash};save(saved)}
       setNotice('');props.onActivity();void props.refresh()
-    }catch(e){setError(saved?'Your bridge is saved. We will update it automatically.':(e as Error).message)}finally{lock.current=false;setBusy(false)}
+    }catch(e){executionError.current=(e as Error).message;setError(executionError.current)}finally{lock.current=false;setBusy(false)}
     if(saved&&currentOwner.current===owner)void check(saved,false)
   }
   async function executeSolana(value:Pending){
     if(lock.current)return
-    lock.current=true;setBusy(true);setError('');const owner=props.owner
+    lock.current=true;setBusy(true);setError('');executionError.current='';const owner=props.owner
     let saved:Pending={...value}
     try{
       save(saved)
@@ -161,7 +163,7 @@ export default function PocketUsdtBridgePanel(props:Props){
         saved={...saved,signedTransaction};save(saved)
       }
       await api({action:'submit',quoteToken:saved.quoteToken,transaction:saved.signedTransaction})
-    }catch(e){if(currentOwner.current===owner)setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
+    }catch(e){if(currentOwner.current===owner){executionError.current=(e as Error).message;setError(executionError.current)}}finally{lock.current=false;setBusy(false)}
     if(currentOwner.current===owner)void check(saved,false)
   }
   const checkRef=useRef(check);checkRef.current=check
@@ -179,11 +181,11 @@ export default function PocketUsdtBridgePanel(props:Props){
   const sources=NETWORKS.filter(n=>n!=='solana'||solanaEnabled||pending?.quote.source==='solana')
   const destinations=source==='solana'?(['base','arbitrum'] as Network[]):NETWORKS.filter(n=>n!==source&&(n!=='solana'||(source==='arbitrum'&&solanaDestinationEnabled)||pending?.quote.destination==='solana'))
   return <>
-    <PocketBridgeForm asset="USDT" disabled={locked} source={source} destination={destination} sources={sources.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} destinations={destinations.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onSource={value=>{invalidate();setSource(value as Network);if(value===destination||(destination==='solana'&&value!=='arbitrum')||(value==='solana'&&!['base','arbitrum'].includes(destination)))setDestination(value==='base'?'arbitrum':'base');setAmount('')}} onDestination={value=>{invalidate();setDestination(value as Network)}} balance={balance?.usdt} amount={amount} onAmount={value=>{invalidate();setAmount(value)}} maxDisabled={balance?.usdt===undefined||balance.usdtStale} onMax={()=>{invalidate();maxRequested.current=true;setAmount(Math.max(0,(balance?.usdt||0)-Number(quoted?.quote.networkFeeUnits||0)/1e6).toFixed(6).replace(/\.?0+$/,''))}} quote={pending?.quote||quoted?.quote||null}>
+    <PocketBridgeForm asset="USDT" disabled={locked} source={source} destination={destination} sources={sources.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} destinations={destinations.map(value=>({value,label:pocketBridgeNetworkLabel(value)}))} onSource={value=>{invalidate();setSource(value as Network);if(value===destination||(destination==='solana'&&value!=='arbitrum')||(value==='solana'&&!['base','arbitrum'].includes(destination)))setDestination(value==='base'?'arbitrum':'base');setAmount('')}} onDestination={value=>{invalidate();setDestination(value as Network)}} balance={balance?.usdt} amount={amount} onAmount={value=>{invalidate();setAmount(value)}} maxDisabled={balance?.usdt===undefined} onMax={()=>{invalidate();maxRequested.current=true;setAmount(Math.max(0,(balance?.usdt||0)-Number(quoted?.quote.networkFeeUnits||0)/1e6).toFixed(6).replace(/\.?0+$/,''))}} quote={pending?.quote||quoted?.quote||null}>
       <PocketFundingAction flow="bridge" asset={!pending&&(quoted?.sufficientBalance===false||(balance?.usdt!==undefined&&!balance.usdtStale&&Number(amount)>balance.usdt))?'USDT':null} network={source} locked={locked} onReturn={async()=>{await props.refresh();await quote()}} onCancel={()=>{invalidate();setAmount('')}}>
-      {pending?<button type="button" className="pocket-cta-primary w-full" disabled={busy||(!pending.needsAttention&&(!pending.challengeId||Boolean(pending.txHash)||pending.sourceConfirmed))} aria-busy={busy||!pending.awaitingApproval&&!pending.needsAttention} onClick={()=>void (pending.needsAttention?check(pending):resumeApproval())}>{(busy||!pending.awaitingApproval&&!pending.needsAttention)&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{busy?'Preparing bridge':pending.needsAttention?'Retry status check':pending.sourceConfirmed?'Arriving on '+pocketBridgeNetworkLabel(pending.quote.destination):pending.txHash?'Bridging USDT':pending.awaitingApproval?'Confirm bridge':'Preparing bridge'}</span></button>
-      :recoveryFailed||(!quoted&&error&&!quoting)?<button type="button" className="pocket-cta-primary w-full" onClick={()=>recoveryFailed?setReload(value=>value+1):void quote()}>Try again</button>
-      :<PocketSlideAction key={quoted?.quote.id||'quote'} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={loading||locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:!validAmount?'Enter bridge amount':loading||quoting||!quoted||quoteExpired?'Getting live quote':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
+      {pending?<button type="button" className="pocket-cta-primary w-full" disabled={busy||(!pending.needsAttention&&((!pending.challengeId&&pending.quote.source!=='solana')||Boolean(pending.txHash)||pending.sourceConfirmed))} aria-busy={busy||!pending.awaitingApproval&&!pending.needsAttention} onClick={()=>void (pending.needsAttention?check(pending):resumeApproval())}>{(busy||!pending.awaitingApproval&&!pending.needsAttention)&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{busy?'Preparing bridge':pending.needsAttention?'Retry status check':pending.sourceConfirmed?'Arriving on '+pocketBridgeNetworkLabel(pending.quote.destination):pending.txHash?'Bridging USDT':pending.awaitingApproval?'Confirm bridge':'Preparing bridge'}</span></button>
+      :recoveryFailed||(!quoted&&error&&!quoting)?<button type="button" className="pocket-cta-primary w-full" onClick={()=>recoveryFailed?setReload(value=>value+1):void quote(true)}>Try again</button>
+      :<PocketSlideAction approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={loading||locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:!validAmount?'Enter bridge amount':loading||quoting||!quoted||quoteExpired?'Getting live quote':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
       </PocketFundingAction>
       {notice&&<p role="status" className="text-center text-xs text-gray-500">{notice}</p>}{error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
     </PocketBridgeForm>

@@ -243,6 +243,20 @@ async function readCircleUserWallet(userToken: string, chain: string, walletId: 
   return data.wallet ?? null
 }
 
+export async function verifyCircleSolanaSigningWallet(
+  input: {userToken: string; walletId: string; walletAddress?: string},
+  read = readCircleUserWallet,
+) {
+  // Read the selected wallet directly: a paginated wallet list can omit it.
+  const wallet = await read(input.userToken, 'solana', input.walletId)
+  if (!wallet || wallet.id !== input.walletId || wallet.blockchain !== solanaBlockchain()
+    || !isSolanaAddress(wallet.address) || (wallet.state && wallet.state !== 'LIVE')
+    || (input.walletAddress && wallet.address !== input.walletAddress)) {
+    throw new Error('Reconnect your Solana wallet before continuing. Nothing was sent.')
+  }
+  return wallet
+}
+
 export async function createCircleGasStationEvmChallenge(input: {
   userToken: string
   walletId: string
@@ -1216,16 +1230,7 @@ export default async function handler(req: Request, res: Response) {
       if (!userToken || !walletId || !rawTransaction) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, or rawTransaction' })
       }
-      const walletData = await circleJson<{ wallets: Array<{ id: string; address: string; blockchain: string }> }>('/v1/w3s/wallets', {
-        method: 'GET',
-        userToken,
-        apiKey: circleApiKey(),
-        headers: { accept: 'application/json' },
-      })
-      const wallet = walletData.wallets?.find((item) => item.id === walletId)
-      if (!wallet || !isSolanaAddress(wallet.address)) {
-        return res.status(400).json({ ok: false, error: 'Circle did not return a valid Solana wallet address. Reconnect with email and try again.' })
-      }
+      await verifyCircleSolanaSigningWallet({userToken, walletId, walletAddress: params.walletAddress})
       const sign = () => circleJson('/v1/w3s/user/sign/transaction', {
         method: 'POST',
         userToken,
