@@ -29,7 +29,9 @@ export default function PocketUsdtBridgePanel(props:Props){
   const executionError=useRef('');const quotePaused=useRef(false);const maxRequested=useRef(false);const lock=useRef(false),version=useRef(0),session=useRef<CircleEvmEmailSession|null>(null),currentOwner=useRef(props.owner)
   currentOwner.current=props.owner
   const key='pocket:usdt-bridge:v1:'+encodeURIComponent(props.owner)
-  const save=(value:Pending|null)=>{if(value)localStorage.setItem(key,JSON.stringify(value));else localStorage.removeItem(key);setPending(value)}
+  const pendingRef=useRef<Pending|null>(null),checking=useRef<Promise<void>|null>(null)
+  pendingRef.current=pending
+  const save=(value:Pending|null)=>{pendingRef.current=value;if(value)localStorage.setItem(key,JSON.stringify(value));else localStorage.removeItem(key);setPending(value)}
   const api=useCallback(async(body?:Record<string,unknown>,timeoutMs=30000)=>{
     const token=await props.getAccessToken();if(!token)throw Error('Sign in to bridge stablecoins.')
     const response=await fetch(pocketApiUrl('/api/pocket/usdt-bridge'),{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(body?timeoutMs:8000)})
@@ -88,8 +90,9 @@ export default function PocketUsdtBridgePanel(props:Props){
   },[quoted,quoting,pending,busy,preparing,loading,recoveryFailed])
   async function check(value:Pending,_interactive=true){
     if(lock.current)return
-    lock.current=true
+    if(checking.current)return checking.current
     const owner=props.owner
+    const task=(async()=>{
     try{
       // Restoring the retained session only reads challenge status; it never
       // executes approval. Without it an expired challenge polls forever.
@@ -108,7 +111,10 @@ export default function PocketUsdtBridgePanel(props:Props){
       else if(result.status==='not_submitted'&&result.reason==='approval_expired'){quotePaused.current=true;version.current++;save(null);setQuoted(null);setAmount('');setNotice('');setError('');setResult(null)}
       else if(result.status==='not_submitted'){quotePaused.current=true;save(null);setQuoted(null);setNotice('');setError(executionError.current||'Bridge was not submitted. Try again.')}
       else{save({...value,...(result.txHash?{txHash:result.txHash}:{}),...(result.challengeId?{challengeId:result.challengeId}:{}),sourceConfirmed:Boolean(result.sourceConfirmed||value.sourceConfirmed),awaitingApproval:result.status==='awaiting_approval',requiresWalletSession:result.requiresWalletSession===true||result.statusUnavailable===true,needsAttention:result.status==='needs_attention'});setNotice('');if(result.status==='needs_attention')setError('This bridge needs review. Contact support before sending again.');props.onActivity()}
-    }catch(e){setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
+    }catch(e){if(currentOwner.current===owner)setError((e as Error).message)}
+    })()
+    checking.current=task
+    try{await task}finally{if(checking.current===task)checking.current=null}
   }
   async function prepare(){
     setError('')
@@ -120,11 +126,18 @@ export default function PocketUsdtBridgePanel(props:Props){
     }catch(e){session.current=null;setError((e as Error).message||'Could not prepare your wallet. Please try again.');throw e}
   }
   async function resumeApproval(){
-    if(pending?.quote.source==='solana'){await executeSolana(pending);return}
-    if(lock.current||!pending?.challengeId)return
-    let value=pending;const owner=props.owner
+    if(lock.current)return
+    const owner=props.owner
     lock.current=true;setBusy(true);setError('')
+    let value:Pending|null=null
     try{
+      // A tap waits for an in-flight read instead of silently disappearing.
+      await checking.current
+      if(currentOwner.current!==owner)return
+      value=pendingRef.current
+      if(!value)return
+      if(value.quote.source==='solana'){lock.current=false;await executeSolana(value);return}
+      if(!value.challengeId||value.txHash||value.sourceConfirmed)return
       const active=await props.getSession(value.quote.source as Exclude<Network,'solana'>,value.quote.walletAddress)
       if(currentOwner.current!==owner)return
       session.current=active
@@ -136,7 +149,7 @@ export default function PocketUsdtBridgePanel(props:Props){
         value={...value,awaitingApproval:false,...(approved.transactionHash?{txHash:approved.transactionHash}:{})};save(value)
       }
     }catch(e){if(currentOwner.current===owner)setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
-    if(currentOwner.current===owner)void check(value,false)
+    if(value&&currentOwner.current===owner)void check(value,false)
   }
   async function execute(){
     if(quoted?.quote.source==='solana'){await executeSolana(quoted);return}
@@ -178,7 +191,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   const checkRef=useRef(check);checkRef.current=check
   useEffect(()=>{
     if(!pending)return
-    const run=()=>{if(document.visibilityState==='visible'&&!lock.current)void checkRef.current(pending,false)}
+    const run=()=>{if(document.visibilityState==='visible'&&!lock.current&&pendingRef.current)void checkRef.current(pendingRef.current!,false)}
     const initial=window.setTimeout(run,0),timer=window.setInterval(run,8000)
     document.addEventListener('visibilitychange',run)
     return()=>{clearTimeout(initial);clearInterval(timer);document.removeEventListener('visibilitychange',run)}

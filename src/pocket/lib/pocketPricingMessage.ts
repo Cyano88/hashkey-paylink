@@ -4,7 +4,7 @@ export function isPocketConnectionError(message: string) {
 
 /** UI wording only; provider codes and payment guards remain unchanged. */
 export function pocketPricingMessage(message: string) {
-  if (isPocketConnectionError(message)) return 'Could not connect. Check your connection and try again.'
+  if (isPocketConnectionError(message)) return 'Could not reach the service. Try again.'
   if (!/\bquotes?\b/i.test(message)) return message
   if (/expir|chang|mismatch|match|review/i.test(message)) return 'Review the updated amount before confirming.'
   return 'Could not update the amount. Try again.'
