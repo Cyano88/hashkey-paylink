@@ -353,12 +353,14 @@ function PocketMoveBankContent() {
               />
             </>}
 
-            {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
+            {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col">
+              <div className="pocket-bank-amount-body min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain">
               {pocketUsdtPayoutEnabled && <PocketSelect ariaLabel="Payment asset" value={asset} disabled={directLocked} onChange={value=>{direct.resetResult(false);setAsset(value as 'USDC'|'USDT')}} options={[{value:'USDC',label:'USDC'},...(bank.country==='NG'?[{value:'USDT',label:'USDT'}]:[])]} />}
               <PocketBankAmountFields currency={pocketFiatCurrency(bank.country)} accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
               <PocketFiatUsdcEstimate amount={Number(direct.amount)} currency={pocketFiatCurrency(bank.country)} asset={asset} />
-              <div className="mt-auto space-y-2 pt-6" style={{ visibility: reviewOpen || bankReceipt ? 'hidden' : undefined }}>
+              </div>
+              <div className="mt-auto shrink-0 space-y-2 pt-6" style={{ visibility: reviewOpen || bankReceipt ? 'hidden' : undefined }}>
                 {recoveredPayout ? (
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
