@@ -2,7 +2,7 @@
 
 ## Implemented
 
-Services replaces the bottom navigation XPay entry. Existing XPay checkout/QR URLs remain unchanged. Services links to XPay, Bills and eSIM using the existing Profile menu row styling. Unimplemented Earn is omitted.
+Services replaces the bottom navigation XPay entry. Existing XPay checkout/QR URLs remain unchanged. Services links to XPay, Bills and eSIM using the existing Bills menu row styling. Unimplemented Earn is omitted.
 
 `GET /api/pocket/esim/catalog` authenticates the existing Pocket session and reads eSIM Access fixed-volume and daily base packages and locations. Credentials stay server-side. Requests are coalesced, cached for one hour and cooled down after provider failures. Requests use a fixed provider origin and reject redirects. Daily plans show high-speed allowance and provider fair-use speed; duration-dependent pricing and purchasing remain unimplemented. Wholesale prices are not returned to clients. No payment or order endpoint is exposed.
 
@@ -10,7 +10,7 @@ The eSIM screen supports country/regional search, package details and the shared
 
 ## Provider access
 
-Create an account at https://console.esimaccess.com/ and open Developer > API Keys. Copy AccessCode into `ESIM_ACCESS_CODE` on the API server only. Do not use a `VITE_` prefix or put credentials in the app. The documented header authentication uses `RT-AccessCode`; SecretKey is for the alternative HMAC authentication method and is not needed for this catalogue adapter. Live read-only verification on 2026-10-12 returned 3,184 plans across 244 destination groups and a zero supplier balance. Angola has fixed plans up to 10 GB and daily allowances up to 10 GB/day; other destinations have fixed plans up to 100 GB. These are provider inventory observations, not universal availability guarantees.
+Create an account at https://console.esimaccess.com/ and open Developer > API Keys. Copy AccessCode into `ESIM_ACCESS_CODE` on the API server only. Do not use a `VITE_` prefix or put credentials in the app. The documented header authentication uses `RT-AccessCode`; SecretKey is for the alternative HMAC authentication method and is not needed for this catalogue adapter. Live read-only verification on 2026-10-12 returned 3,184 plans across 231 destination groups and a zero supplier balance. Angola has fixed plans up to 10 GB and daily allowances up to 10 GB/day; other destinations have fixed plans up to 100 GB. These are provider inventory observations, not universal availability guarantees.
 
 Provider documentation: https://docs.esimaccess.com/
 
@@ -26,3 +26,5 @@ There is no sandbox. Catalogue verification is read-only, but ordering spends th
 6. Validate success, timeout after submission, duplicate callbacks, failed provisioning, refunds and app restart recovery with fixtures. Then verify a controlled real purchase and installation on a compatible device before enabling customer purchases.
 
 USDC/USDT balances and yields are not changed by this phase. No payment fees, treasury debits, real eSIM orders or live provider claims are introduced.
+
+Country destinations use bundled flag-icons 7.5.0 artwork with the retained MIT license; regional bundles use Pocket's globe icon. Regional variants are grouped by destination name while each plan retains its exact coverage.

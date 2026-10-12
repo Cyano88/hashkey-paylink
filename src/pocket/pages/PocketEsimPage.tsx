@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketBottomSheet from '../components/PocketBottomSheet'
+import PocketCountryFlag from '../components/PocketCountryFlag'
 import { PocketSkeletonBar } from '../components/PocketContentSkeletons'
 import { Wifi, ChevronRight, Search } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -61,7 +62,7 @@ export default function PocketEsimPage() {
         <label className="flex h-12 items-center gap-3 rounded-2xl bg-gray-100 px-4 dark:bg-[#171717]"><Search className="h-5 w-5 shrink-0 text-gray-400" /><input aria-label="Search destinations" placeholder="Where are you travelling?" value={query} onChange={event => changeParams({ q: event.target.value })} className="min-w-0 flex-1 bg-transparent text-sm outline-none border-0 focus:ring-0" /></label>
         <div className="my-5 flex gap-2" aria-label="Destination type">{(['countries', 'regional'] as const).map(value => <button key={value} type="button" aria-pressed={tab === value} onClick={() => changeParams({ tab: value })} className={`min-h-10 rounded-full px-5 text-sm font-medium ${tab === value ? 'bg-gray-200 text-gray-950 dark:bg-[#262626] dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{value === 'countries' ? 'Countries' : 'Regional'}</button>)}</div>
         <div className="divide-y divide-gray-100 dark:divide-[#262626]">{rows.map(item => <button type="button" key={item.id} onClick={() => changeParams({ destination: item.id })} className="flex min-h-20 w-full items-center gap-4 py-4 text-left">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold dark:bg-[#171717]">{item.countryCode || <Wifi className="h-5 w-5" />}</span><span className="flex-1 text-sm font-medium">{item.name}</span><ChevronRight className="h-4 w-4 text-gray-400" />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center"><PocketCountryFlag code={item.region ? undefined : item.countryCode} /></span><span className="flex-1 text-sm font-medium">{item.name}</span><ChevronRight className="h-4 w-4 text-gray-400" />
         </button>)}</div>
         {!rows.length && <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{query ? 'No matching destinations.' : 'No plans available right now.'}</p>}
       </section>}

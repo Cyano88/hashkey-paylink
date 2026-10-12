@@ -8,6 +8,7 @@ export function Loader2({ className = '', ...props }: HTMLAttributes<HTMLSpanEle
   })
 }
 export {
+  GlobeAltIcon as Globe,
   ArrowDownIcon as ArrowDownToLine,
   ArrowDownTrayIcon as Deposit,
   DocumentPlusIcon as RequestMoney,
