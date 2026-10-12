@@ -11,6 +11,8 @@ export type PocketEsimPlan = {
   activation: string
 }
 
+export type PocketEsimPrice = { subtotal: string; platformFee: string; total: string; currency: 'USD'; days: number }
+
 export type PocketEsimDestination = {
   id: string
   name: string

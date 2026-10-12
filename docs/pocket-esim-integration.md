@@ -4,7 +4,11 @@
 
 Services replaces the bottom navigation XPay entry. Existing XPay checkout/QR URLs remain unchanged. Services links to XPay, Bills and eSIM using the existing Bills menu row styling. Unimplemented Earn is omitted.
 
-`GET /api/pocket/esim/catalog` authenticates the existing Pocket session and reads eSIM Access fixed-volume and daily base packages and locations. Credentials stay server-side. Requests are coalesced, cached for one hour and cooled down after provider failures. Requests use a fixed provider origin and reject redirects. Daily plans show high-speed allowance and provider fair-use speed; duration-dependent pricing and purchasing remain unimplemented. Wholesale prices are not returned to clients. No payment or order endpoint is exposed.
+`GET /api/pocket/esim/catalog` authenticates the existing Pocket session and reads eSIM Access fixed-volume and daily base packages and locations. Credentials stay server-side. Requests are coalesced, cached for one hour and cooled down after provider failures. Requests use a fixed provider origin and reject redirects. Daily plans show high-speed allowance and provider fair-use speed. Wholesale prices are not returned to clients. No payment or order endpoint is exposed.
+
+`POST /api/pocket/esim/price` authenticates the customer and returns a read-only retail preview. The provisional policy uses supplier suggested retail plus the existing 25 bps payment fee; integer arithmetic preserves the exact total. Daily plans multiply by a selected 1-365 days. Unknown currency, invalid duration, missing retail or below-cost retail fail closed. The sheet uses shimmers and cancels obsolete requests. This preview is not a locked payment quote and cannot debit a wallet.
+
+The unmounted `esim-orders.ts` service implements durable owner-scoped intents, immutable USDC/USDT Base quotes, supplier-float reservations, exact onchain transfer verification, one-payment-per-order enforcement, supplier idempotency and encrypted installation payloads. Supplier timeouts stay unresolved; recovery uses the same transactionId. Tests inject storage/provider/verifier dependencies; no live order has been placed. Integration requires a dedicated verified eSIM treasury or a cross-product transaction-use registry before sharing a treasury. Do not mount payment actions until the wallet approval UI, reconciliation worker, refunds and operational limits are complete. An explicit purchase gate and a 32-byte encryption key are required by the service.
 
 The eSIM screen supports country/regional search, package details and the shared Pocket sheet. Missing credentials show Coming soon. Provider failures show a short retry message. Preparation uses existing shimmers. Purchasing stays disabled even when catalog access is configured.
 
@@ -25,6 +29,6 @@ There is no sandbox. Catalogue verification is read-only, but ordering spends th
 5. Implement provider-confirmed failure/refund recovery returning the same paid asset and network. Protect webhook authentication, deduplication and out-of-order delivery. No refund merely because provisioning is slow.
 6. Validate success, timeout after submission, duplicate callbacks, failed provisioning, refunds and app restart recovery with fixtures. Then verify a controlled real purchase and installation on a compatible device before enabling customer purchases.
 
-USDC/USDT balances and yields are not changed by this phase. No payment fees, treasury debits, real eSIM orders or live provider claims are introduced.
+USDC/USDT balances and yields are not changed by this phase. Fee amounts are previews only. No treasury debits or real eSIM orders are enabled. The next work is to connect wallet approval and My eSIMs, persist submitted transaction recovery, integrate ledger/activity and same-asset refunds, then run a funded production canary before enabling purchases.
 
 Country destinations use bundled flag-icons 7.5.0 artwork with the retained MIT license; regional bundles use Pocket's globe icon. Regional variants are grouped by destination name while each plan retains its exact coverage.

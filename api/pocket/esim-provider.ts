@@ -1,4 +1,5 @@
 import type { PocketEsimDestination } from '../../src/pocket/lib/pocketEsim.js'
+import { priceEsim, type EsimPricePolicy } from './esim-pricing.js'
 
 const ORIGIN = 'https://api.esimaccess.com/api/v1/open'
 type Json = Record<string, any>
@@ -51,6 +52,7 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
 }) {
   let cached: PocketEsimDestination[] | null = null, cacheExpires = 0, retryAfter = 0
   let pending: Promise<PocketEsimDestination[]> | null = null
+  let inventory: Json[] = []
   async function request(path: string, payload: Json): Promise<Json> {
     const response = await fetchImpl(ORIGIN + path, {
       method: 'POST', redirect: 'error',
@@ -67,12 +69,24 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
       request('/package/list', { type: 'BASE', dataType: '1' }), request('/package/list', { type: 'BASE', dataType: '2' }), request('/location/list', {}),
     ])
     if (!Array.isArray(packages.packageList) || !Array.isArray(daily.packageList) || !Array.isArray(locations.locationList)) throw new Error('ESIM_PROVIDER_UNAVAILABLE')
-    cached = normalizeEsimCatalog([...packages.packageList, ...daily.packageList], locations.locationList)
+    inventory = [...packages.packageList, ...daily.packageList]
+    cached = normalizeEsimCatalog(inventory, locations.locationList)
     cacheExpires = now() + 60 * 60_000
     return cached
   }
   return {
     configured: Boolean(accessCode),
+    async price(packageCode: string, days: number, policy?: EsimPricePolicy) {
+      await this.catalog()
+      const row = inventory.find(item => item.packageCode === packageCode)
+      if (!row || !cached?.some(destination => destination.plans.some(plan => plan.id === packageCode))) throw Error('ESIM_PLAN_UNAVAILABLE')
+      return { ...priceEsim(row, days, policy), packageCode, slug: typeof row.slug === 'string' ? row.slug : '', daily: Number(row.dataType) === 2 }
+    },
+    async balance() {
+      const value = await request('/balance/query', {})
+      if (!Number.isSafeInteger(value.balance) || value.balance < 0) throw Error('ESIM_PROVIDER_UNAVAILABLE')
+      return value.balance as number
+    },
     async catalog(): Promise<PocketEsimDestination[]> {
       if (!accessCode) throw new Error('ESIM_NOT_CONFIGURED')
       if (cached && now() < cacheExpires) return cached
