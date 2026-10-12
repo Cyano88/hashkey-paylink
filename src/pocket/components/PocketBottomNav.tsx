@@ -1,11 +1,11 @@
-import { Home, Store, History, CreditCard, UserRound, Wallet } from './PocketIcons'
+import { Home, Activity, History, CreditCard, UserRound, Wallet } from './PocketIcons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isXStocksPath, xStockNavPath } from '../lib/pocketRail'
 
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { cn } from '../../lib/utils'
 
-export type PocketNavTab = 'home' | 'xpay' | 'bills' | 'cards' | 'activity' | 'profile'
+export type PocketNavTab = 'home' | 'services' | 'xpay' | 'bills' | 'cards' | 'activity' | 'profile'
 
 type PocketBottomNavProps = {
   rail?: 'stablecoins' | 'xstocks'
@@ -17,7 +17,7 @@ type PocketBottomNavProps = {
 
 const items = [
   { key: 'home', label: 'Home', icon: Home },
-  { key: 'xpay', label: 'XPay', icon: Store },
+  { key: 'services', label: 'Services', icon: Activity },
   { key: 'cards', label: 'Cards', icon: CreditCard },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ] as const
@@ -38,7 +38,7 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
     >
       <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 gap-1">
         {visibleItems.map(({ key, label, icon: Icon }) => {
-          const selected = active === key
+          const selected = active === key || (key === 'services' && active === 'xpay')
           return (
             <button
               key={key}
@@ -46,7 +46,7 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
               disabled={disabled}
               aria-disabled={disabled || undefined}
               aria-current={selected ? 'page' : undefined}
-              onClick={() => { if (key === 'cards') { navigate(POCKET_BASE_PATH + POCKET_ROUTES.cards); return; } if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: stocks ? 'xstocks' : 'stablecoins' } }); else if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
+              onClick={() => { if (key === 'cards') { navigate(POCKET_BASE_PATH + POCKET_ROUTES.cards); return; } if (key === 'services') navigate(POCKET_BASE_PATH + POCKET_ROUTES.services, { state: { xpayOrigin: stocks ? 'xstocks' : 'stablecoins' } }); else if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected

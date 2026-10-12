@@ -30,6 +30,8 @@ import PocketProgressDots from './components/PocketProgressDots'
 const PocketActivityPage = lazy(() => import('./pages/PocketActivityPage'))
 const PocketAssistantPage = lazy(() => import('./pages/PocketAssistantPage'))
 const PocketBillsPage = lazy(() => import('./pages/PocketBillsPage'))
+const PocketServicesPage = lazy(() => import('./pages/PocketServicesPage'))
+const PocketEsimPage = lazy(() => import('./pages/PocketEsimPage'))
 const PocketLandingPage = lazy(() => import('./pages/PocketLandingPage'))
 const loadPocketHome = () => import('./pages/PocketHomePage')
 const PocketHomePage = lazy(loadPocketHome)
@@ -279,6 +281,7 @@ export default function CirclePocketApp() {
 
   const active: PocketNavTab = route?.section === 'home'
       ? 'home'
+      : route?.section === 'services' ? 'services'
       : route?.section === 'profile'
       ? 'profile'
       : route?.section === 'bills'
@@ -295,6 +298,7 @@ export default function CirclePocketApp() {
   else if (!ready) content = <PocketLoadingState active={active} />
   else if (!authenticated) content = <PocketPageBoundary active='home'><PocketLandingPage /></PocketPageBoundary>
   else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>
+  else if (route?.section === 'services') content = <PocketPageBoundary active="services">{route.view === 'esim' ? <PocketEsimPage /> : <PocketServicesPage />}</PocketPageBoundary>
   else if (route?.section === 'xstocks' && route.view === 'account') content = <PocketPageBoundary active="profile"><PocketProfilePage /></PocketPageBoundary>
   else if (route?.section === 'xstocks' && route.view === 'verify-name') content = <PocketPageBoundary active="profile"><PocketVerifyNamePage /></PocketPageBoundary>
   else if (route?.section === 'xstocks' && route.view !== 'account' && route.view !== 'verify-name') content = <PocketPageBoundary active={route.view === 'portfolio' ? 'profile' : route.view === 'xpay' ? 'xpay' : route.view === 'activity' ? 'activity' : 'home'}><PocketXStocksPage view={route.view} /></PocketPageBoundary>
