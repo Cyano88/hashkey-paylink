@@ -52,6 +52,7 @@ export default function PocketRouteShell({
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
   const pullStartX = useRef(0)
+  const balanceCardPull = useRef(false)
   const refreshEligible = useRef(false)
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
@@ -98,12 +99,14 @@ export default function PocketRouteShell({
     pullStartY.current = null
     pullEdge.current = null
     refreshEligible.current = false
+    balanceCardPull.current = false
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
     if (compactFlow || (fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     setPullDistance(0)
     setPullDragging(false)
     refreshEligible.current = (scrollerRef.current?.scrollTop ?? 0) <= 1
+    balanceCardPull.current = event.target instanceof Element && Boolean(event.target.closest('[data-pocket-balance-card]'))
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
     pullStartX.current = event.touches[0].clientX
@@ -150,8 +153,8 @@ export default function PocketRouteShell({
     if (!pullEdge.current) {
       const atTop = scroller.scrollTop <= 1
       const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
-      if (atTop && distance > 6) pullEdge.current = 'top'
-      else if (atBottom && distance < -6) pullEdge.current = 'bottom'
+      if ((atTop || balanceCardPull.current) && distance > 6) pullEdge.current = 'top'
+      else if ((atBottom || balanceCardPull.current) && distance < -6) pullEdge.current = 'bottom'
       else if ((atTop && distance >= 0) || (atBottom && distance <= 0)) return
       else { pullStartY.current = y; return }
     }

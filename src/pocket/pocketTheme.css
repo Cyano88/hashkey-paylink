@@ -101,6 +101,8 @@ html.dark [data-pocket-auth='true'] [class~='border-white/35'] { border-color: r
 @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 900; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }
 
 .pocket-boundary-content { transition: transform 420ms cubic-bezier(.22, 1.35, .36, 1); }
+/* Card swipes stretch and return; activity remains the page's scrolling surface. */
+.pocket-boundary-content [data-pocket-balance-card] { touch-action: pinch-zoom; }
 .pocket-boundary-content[data-dragging] { transition: none; will-change: transform; }
 @media (prefers-reduced-motion: reduce) {
   .pocket-boundary-content { transition: none; transform: none !important; }
