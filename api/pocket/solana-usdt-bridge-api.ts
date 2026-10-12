@@ -68,7 +68,7 @@ export function createSolanaUsdtBridgeHandler(overrides:Partial<typeof defaultDe
   }
   if(body.action==='submit')await state.saveSigned(identity.userId,id,body.transaction)
   return res.json(await recoverSolanaUsdtBridge(identity.userId,id,deps))
- }catch(error){return res.status((error as any)?.status===404?404:409).json({ok:false,error:error instanceof Error?error.message:'Bridge is temporarily unavailable. Your saved transfer is retained.'})}
+ }catch(error){return res.status((error as any)?.status===404?404:409).json({ok:false,error:error instanceof Error?error.message:'Bridge is temporarily unavailable. Your saved transfer is retained.',...((error as any)?.maximumAmountUnits?{maximumAmountUnits:(error as any).maximumAmountUnits}:{})})}
  }
 }
 export default createSolanaUsdtBridgeHandler()

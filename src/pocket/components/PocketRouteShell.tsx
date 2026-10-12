@@ -17,6 +17,7 @@ export default function PocketRouteShell({
   navigationDisabled = false,
   fixedPage = false,
   elasticFixedPage = false,
+  compactFlow = false,
   scrollKey,
   rail,
   refreshEnabled = true,
@@ -27,6 +28,7 @@ export default function PocketRouteShell({
   navigationDisabled?: boolean
   fixedPage?: boolean
   elasticFixedPage?: boolean
+  compactFlow?: boolean
   scrollKey?: string
   rail?: 'stablecoins' | 'xstocks'
   refreshEnabled?: boolean
@@ -94,7 +96,7 @@ export default function PocketRouteShell({
     pullStartY.current = null
     pullEdge.current = null
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
-    if ((fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
+    if (compactFlow || (fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
@@ -251,7 +253,7 @@ export default function PocketRouteShell({
               style={{
                 // Top refresh gestures move only the indicator; other boundaries stay elastic.
                 transform: `translate3d(0, ${!refreshEnabled || pullDistance < 0 ? pullDistance : 0}px, 0)`,
-                minHeight: fixedPage ? 0 : `calc(100dvh - ${headerHeight}px)`,
+                minHeight: fixedPage || compactFlow ? 0 : `calc(100dvh - ${headerHeight}px)`,
                 height: fixedPage ? '100%' : undefined,
                 display: fixedPage ? 'flex' : undefined,
                 flexDirection: fixedPage ? 'column' : undefined,

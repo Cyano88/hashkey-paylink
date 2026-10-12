@@ -4,5 +4,5 @@ const networks: Record<string,{src:string;dark:boolean}> = {
 }
 export default function PocketNetworkMark({network}:{network:string}) {
  const mark=networks[network]
- return mark ? <img src={mark.src} alt="" className={cn('h-6 w-6 shrink-0 rounded-md object-cover grayscale contrast-200',mark.dark?'invert dark:invert-0':'dark:invert')} /> : null
+ return mark ? <img src={mark.src} alt="" className={cn('h-6 w-6 shrink-0 rounded-md grayscale contrast-200',network==='xlayer'?'object-contain p-[3px]':'object-cover',mark.dark?'invert dark:invert-0':'dark:invert')} /> : null
 }

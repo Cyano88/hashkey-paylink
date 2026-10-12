@@ -29,7 +29,7 @@ export async function prepareSolanaUsdtRelayTransaction(input:{
  const rate=await (input.readRate??(()=>readNativeUsdcRate('solana',fetch,Date.now,'USDT')))()
  const networkFeeUnits=solanaReimbursementUnits(BigInt(fee),rate)
  const totalUnits=BigInt(q.amountUnits)+networkFeeUnits
- if(totalUnits>=(1n<<64n)||balance===null||balance<totalUnits)throw Error('Insufficient USDT to cover this bridge.')
+ if(totalUnits>=(1n<<64n)||balance===null||balance<totalUnits)throw Object.assign(Error('Insufficient USDT to cover this bridge.'),{maximumAmountUnits:String(balance!==null&&balance>networkFeeUnits?balance-networkFeeUnits:0n)})
  await checkSolanaRelayerBalance(connection,relayer.publicKey,BigInt(fee)+100000n)
  tx.instructions[1]=createTransferCheckedInstruction(source,mint,feeAccount,owner,networkFeeUnits,6)
  tx.partialSign(relayer)
