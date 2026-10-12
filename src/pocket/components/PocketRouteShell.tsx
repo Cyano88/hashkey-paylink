@@ -9,6 +9,7 @@ import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { refreshPocketData } from '../lib/pocketRefresh'
 
 const REFRESH_THRESHOLD = 66
+const REFRESH_REVEAL_THRESHOLD = 48
 
 export default function PocketRouteShell({
   active,
@@ -51,6 +52,7 @@ export default function PocketRouteShell({
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
   const pullStartX = useRef(0)
+  const refreshEligible = useRef(false)
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
   const refreshInFlight = useRef(false)
@@ -95,9 +97,13 @@ export default function PocketRouteShell({
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
     pullStartY.current = null
     pullEdge.current = null
+    refreshEligible.current = false
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || document.querySelector('[data-pocket-sheet]')) return
     if (compactFlow || (fixedPage && !elasticFixedPage) || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=true], [role=slider]'))) return
     pullDistanceRef.current = 0
+    setPullDistance(0)
+    setPullDragging(false)
+    refreshEligible.current = (scrollerRef.current?.scrollTop ?? 0) <= 1
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
     pullStartX.current = event.touches[0].clientX
@@ -127,6 +133,7 @@ export default function PocketRouteShell({
   const cancelPull = () => {
     pullStartY.current = null
     pullEdge.current = null
+    refreshEligible.current = false
     setPullDragging(false)
     if (!refreshInFlight.current) { pullDistanceRef.current = 0; setPullDistance(0) }
   }
@@ -160,7 +167,7 @@ export default function PocketRouteShell({
   }
 
   const finishPull = () => {
-    const shouldRefresh = refreshEnabled && pullEdge.current === 'top' && pullDistanceRef.current >= REFRESH_THRESHOLD
+    const shouldRefresh = refreshEnabled && refreshEligible.current && pullEdge.current === 'top' && pullDistanceRef.current >= REFRESH_THRESHOLD
     pullStartY.current = null
     pullEdge.current = null
     setPullDragging(false)
@@ -169,6 +176,19 @@ export default function PocketRouteShell({
   }
 
   useEffect(() => { cancelPull() }, [scrollPath, fixedPage, keyboardOpen, inputFocused])
+
+  useEffect(() => {
+    // Always settle the stretch if the browser interrupts or loses the gesture.
+    const settle = () => cancelPull()
+    window.addEventListener('touchend', settle)
+    window.addEventListener('touchcancel', settle)
+    window.addEventListener('blur', settle)
+    return () => {
+      window.removeEventListener('touchend', settle)
+      window.removeEventListener('touchcancel', settle)
+      window.removeEventListener('blur', settle)
+    }
+  }, [])
 
   useEffect(() => {
     const editable = (target: EventTarget | null) => target instanceof HTMLElement && (target.matches('textarea, input:not([readonly]):not([disabled]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])') || target.isContentEditable)
@@ -240,7 +260,7 @@ export default function PocketRouteShell({
               scrollPaddingBottom: hideNavigation ? 'max(1.5rem, calc(0.75rem + var(--pocket-safe-bottom)))' : 'calc(7.5rem + var(--pocket-safe-bottom))',
             }}
           >
-            <div data-pocket-refresh-indicator role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={!refreshEnabled || (pullDistance <= 4 && !refreshing)} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center" style={{ opacity: refreshEnabled && (pullDistance > 4 || refreshing) ? 1 : 0, transform: `translateY(${pullDistance - 48}px)`, transition: pullDragging ? 'none' : 'transform 200ms ease-out, opacity 150ms ease-out' }}>
+            <div data-pocket-refresh-indicator role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={!refreshEnabled || (!refreshing && (!refreshEligible.current || pullDistance < REFRESH_REVEAL_THRESHOLD))} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center" style={{ opacity: refreshEnabled && (refreshing || (refreshEligible.current && pullDistance >= REFRESH_REVEAL_THRESHOLD)) ? 1 : 0, transform: `translateY(${pullDistance - 48}px)`, transition: pullDragging ? 'none' : 'transform 200ms ease-out, opacity 150ms ease-out' }}>
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#121212] dark:text-gray-300 dark:ring-white/10">
                 {refreshing ? <Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms' }} /> : <svg aria-hidden="true" className="h-6 w-6 -rotate-90" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" pathLength="100" strokeDasharray={`${Math.min(1, pullDistance / REFRESH_THRESHOLD) * 90} 100`} /></svg>}
               </span>
@@ -251,8 +271,8 @@ export default function PocketRouteShell({
               data-dragging={pullDragging || undefined}
               className={`pocket-boundary-content mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${navigationType==='PUSH' && state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
               style={{
-                // Top refresh gestures move only the indicator; other boundaries stay elastic.
-                transform: `translate3d(0, ${!refreshEnabled || pullDistance < 0 ? pullDistance : 0}px, 0)`,
+                // A short pull stretches gently; a deliberate refresh returns content home.
+                transform: `translate3d(0, ${refreshing ? 0 : pullDistance > 0 && refreshEnabled && refreshEligible.current ? Math.min(pullDistance, 24) * Math.max(0, 1 - Math.max(0, pullDistance - 24) / (REFRESH_REVEAL_THRESHOLD - 24)) : pullDistance}px, 0)`,
                 minHeight: fixedPage || compactFlow ? 0 : `calc(100dvh - ${headerHeight}px)`,
                 height: fixedPage ? '100%' : undefined,
                 display: fixedPage ? 'flex' : undefined,
