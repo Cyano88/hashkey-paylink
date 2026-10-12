@@ -203,6 +203,13 @@ function PocketMoveBankContent() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing' || direct.status === 'pending'
+  useEffect(() => {
+    if (asset === 'USDT' && bank.country !== 'NG' && !directLocked) {
+      direct.resetResult(false)
+      setAsset('USDC')
+      setReviewOpen(false)
+    }
+  }, [asset, bank.country, directLocked, direct.resetResult])
   const slowConfirmation=usePocketSlowConfirmation(['pending','processing'].includes(direct.status),direct.result?.intentId||'',60_000,direct.confirming)
   const bankTerminal=direct.result?.handoffVerified===true||['failed','refunded','sent'].includes(direct.result?.state||'')
   const bankReceipt = useMemo(() => (reviewOpen && (bankTerminal || slowConfirmation)) && direct.result ? pocketActivityReceipt({
@@ -398,7 +405,7 @@ function PocketMoveBankContent() {
         onClose={bank.closeShare}
       />
       {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
-        <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' ' + (direct.result.asset || asset) : reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' ' + asset : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
+        <PocketConfirmationDetails localAmountPrimary equivalentLoading={!direct.result?.amountUsdc && reviewFx.loading} equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' ' + (direct.result.asset || asset) : reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' ' + asset : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
           ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base ' + (direct.result?.asset || asset)], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
 <PocketFundingAction flow="transfer" asset={asset === 'USDT' ? fundingShortfall(direct.error, 'USDT') : bankLiquidity.insufficient ? 'USDC' : fundingShortfall(direct.error)} network="base" locked={directLocked||approvalBusy} onReturn={async()=>{await wallets.refreshBalances();if(asset==='USDC')await bankLiquidity.recheckFunding();setReviewOpen(false)}} onCancel={()=>{direct.resetResult(false);direct.setAmount('');setReviewOpen(false)}}><PocketSlideAction onApprovalBusyChange={setApprovalBusy}

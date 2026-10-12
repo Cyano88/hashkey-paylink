@@ -243,7 +243,7 @@ export default function usePocketBankWithdrawController({
           activeIntentId.current = ''
           clearStoredOperation()
           setStatus('idle')
-          setError('The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+          setError('The payout closed before completion. Check Activity and your balance before starting another payout.')
         }
         return
       }
@@ -326,7 +326,7 @@ export default function usePocketBankWithdrawController({
           clearActivePocketBankPayout(intentId)
           activeIntentId.current = ''
           setStatus('idle')
-          setError('The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+          setError('The payout closed before completion. Check Activity and your balance before starting another payout.')
           clearStoredOperation()
           return
         }
