@@ -1,3 +1,4 @@
+import { PocketQuoteSkeleton } from '../../components/PocketContentSkeletons'
 import { useState } from 'react'
 import { ArrowRight, Wallet } from 'lucide-react'
 import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, CheckCheck, Copy, Download, LayoutDashboard, Loader2, Mail, Send } from '../../components/PocketIcons'
@@ -336,7 +337,7 @@ export default function PocketHomeControls({
             </span>
           </label>
           {bridgeStatus === 'quoting' ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-xs font-semibold text-gray-500 dark:bg-[#121212] dark:text-gray-400"><Loader2 className="h-3.5 w-3.5 animate-spin" />Getting a live Circle quote</div>
+            <PocketQuoteSkeleton label="Updating bridge amount" />
           ) : bridgeQuote ? (
             <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-[#262626] dark:bg-[#121212]">
               <div className="flex justify-between gap-3"><span className="text-gray-500">You receive</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.receive)} USDC</span></div>
@@ -348,7 +349,7 @@ export default function PocketHomeControls({
             status={bridgeStatus === 'successful' ? 'successful' : bridgeStatus === 'bridging' ? 'submitted' : bridgeStatus === 'confirming' ? 'pending' : 'idle'}
             disabled={!bridgeQuote || Number(bridgeQuote.total) > selectedBalance || bridgeStatus === 'quoting'}
             onConfirm={onBridge}
-            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Confirm move', pending: 'Preparing move', submitted: 'Move processing', successful: 'Sent' }}
+            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Updating amount' : 'Enter bridge amount', idle: 'Confirm move', pending: 'Preparing move', submitted: 'Move processing', successful: 'Sent' }}
           />
           <p className="text-center text-[10px] leading-4 text-gray-500 dark:text-gray-400">Move USDC between networks. A fee may apply on the sending network.</p>
           {bridgeNotice && <p className={cn('text-center text-xs font-semibold', bridgeStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bridgeNotice}</p>}

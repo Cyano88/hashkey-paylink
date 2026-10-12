@@ -42,7 +42,7 @@ export function xpayRecoveryView(progress: XPayProgressSnapshot, recovery: XPayR
   const reason = recovery.reason === 'insufficient_okb' && action !== 'bridge_mint'
     ? 'Not enough OKB for the network fee. Add OKB in Pocket, then retry.'
     : recovery.reason === 'quote_expired'
-      ? 'The quote expired. Retry to review an updated amount.'
+      ? 'Continue to review the updated amount.'
       : recovery.reason === 'provider_unavailable'
         ? 'The service is temporarily unavailable. Please retry.'
         : recovery.reason === 'transaction_reverted'

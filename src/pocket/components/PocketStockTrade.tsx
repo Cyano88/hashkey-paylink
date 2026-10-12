@@ -1,3 +1,4 @@
+import { pocketPricingMessage } from '../lib/pocketPricingMessage'
 import PocketFundingAction from './PocketFundingAction'
 import {fundingShortfall,amountExceedsBalance} from '../lib/pocketFundingShortfall'
 import { useEffect, useRef, useState } from 'react'
@@ -58,7 +59,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
       try {
         const response = await swapRequest(getAccessToken, { action: 'quote', wallet: wallet.address!, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amount: amount.trim() })
         if (!cancelled) { setNow(Date.now()); setReview({ ...response, key: requestKey }) }
-      } catch (e) { if (!cancelled) { setReview(null); setError(e instanceof Error ? e.message : 'Quote unavailable.') } }
+      } catch (e) { if (!cancelled) { setReview(null); setError(e instanceof Error ? e.message : 'Amount unavailable.') } }
       finally { if (!cancelled) setQuoting(false) }
     }, 650)
     return () => { cancelled = true; window.clearTimeout(timer) }
@@ -96,7 +97,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
           <p className="text-sm font-semibold leading-6 text-gray-700 dark:text-gray-200">Est. {formatStockQuantity(current.quote.expectedOut)} {tokenOut.symbol}</p>
           <details><summary className="cursor-pointer">Fees - about {formatStockQuantity(current.quote.gasFee)} OKB network</summary>
             <p>Minimum {current.quote.minimumOut} {tokenOut.symbol} - 0.5% slippage</p>
-            {current.quote.positiveSlippageFee && <p>OKX retains price improvement above the quote, capped at {current.quote.positiveSlippageFee.capPercent}% of output.</p>}
+            {current.quote.positiveSlippageFee && <p>OKX retains price improvement above the expected amount, capped at {current.quote.positiveSlippageFee.capPercent}% of output.</p>}
           </details>
         </> : quoting ? <div role="status" aria-label="Getting estimate" className="space-y-2 py-1"><PocketSkeletonBar className="h-3 w-36" /><PocketSkeletonBar className="h-2.5 w-24" /></div> : null}
       </div>
@@ -104,6 +105,6 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
       <PocketFundingAction flow="swap" asset={fundingAsset} network="xlayer" address={wallet.address} locked={busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onReturn={async()=>{await wallet.refresh();setError('');setReview(null);setRevision(n=>n+1)}} onCancel={()=>{setAmount('');setReview(null);setError('')}}><button type="button" className={button} disabled={reconnectWallet || busy || quoting || !current || wallet.busy || wallet.uncertain || wallet.pending?.status === 'pending'} onClick={confirm}>{progress.stage === 'completed' ? 'Completed' : progress.stage === 'processing' || progress.stage === 'confirming' ? 'Processing...' : wallet.pending?.status === 'pending' ? 'Confirming...' : mode === 'buy' ? 'Buy ' + tokenOut.symbol : mode === 'sell' ? 'Sell ' + tokenIn.symbol : 'Swap ' + tokenIn.symbol + ' for ' + tokenOut.symbol}</button></PocketFundingAction>
     {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs text-amber-600">Check your pending trade in Activity before trading again.</p>}
     {reconnectWallet && <button type="button" onClick={() => window.location.reload()} className="mt-3 min-h-11 w-full text-xs font-bold">Reload Pocket</button>}
-    {!fundingAsset && error && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
+    {!fundingAsset && error && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{pocketPricingMessage(error)}</p>}
   </section>
 }

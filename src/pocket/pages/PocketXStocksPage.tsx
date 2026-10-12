@@ -1,8 +1,9 @@
+import { formatPocketFiatAmount } from '../lib/pocketDisplayCurrency'
 import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import PocketStockBalanceCard from '../components/PocketStockBalanceCard'
 import {pocketStockBalanceValue} from '../lib/pocketStockBalanceValue'
 import PocketHomeAction from '../components/PocketHomeAction'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowLeftRight, ChevronRight, Deposit, History, Search, Send, UserRound, Wallet } from '../components/PocketIcons'
 import { PocketSkeletonBar } from '../components/PocketContentSkeletons'
@@ -33,14 +34,14 @@ type Asset = Pick<typeof catalogue.assets[number], 'symbol' | 'name' | 'address'
 const card = 'rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none'
 const featuredSymbols = ['NVDAx', 'AAPLx', 'TSLAx', 'MSFTx', 'GOOGLx', 'AMZNx', 'METAx', 'SPYx']
 const featured = featuredSymbols.flatMap(symbol => catalogue.assets.filter(asset => asset.symbol === symbol))
-const dollars = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+const dollars = (value: number) => formatPocketFiatAmount(value, 'USD')
 
-function AssetRow({ asset, quote, busy, quantity, quantityLoading, onOpen, formatValue = dollars, usdcRate }: { usdcRate?: number; formatValue?: (value: number) => string; quantity?: string | null; quantityLoading?: boolean; asset: Asset; quote?: StockQuote; busy: boolean; onOpen: () => void }) {
+function AssetRow({ asset, quote, busy, quantity, quantityLoading, onOpen, formatValue = dollars, usdcRate }: { usdcRate?: number; formatValue?: (value: number) => ReactNode; quantity?: string | null; quantityLoading?: boolean; asset: Asset; quote?: StockQuote; busy: boolean; onOpen: () => void }) {
   const [imageFailed, setImageFailed] = useState(false)
   return <button type="button" onClick={onOpen} className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl px-1 py-3 text-left transition hover:bg-gray-50 dark:hover:bg-white/[0.04]">
     <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-black dark:bg-white/10">{!imageFailed ? <img src={asset.icon} onError={() => setImageFailed(true)} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-contain" /> : asset.symbol.slice(0, 3)}</span>
     <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{asset.name}</span><span className="mt-1 block text-[10px] text-gray-400">{asset.symbol}</span></span>
-    <span className="shrink-0 text-right"><span className="block text-xs font-bold tabular-nums">{quantity !== undefined ? quantityLoading ? <PocketSkeletonBar className="h-3 w-16" /> : quantity == null ? 'Unavailable' : formatStockQuantity(quantity) : quote ? formatValue(quote.usd) : busy ? <PocketSkeletonBar className="h-3 w-16" /> : '—'}</span>{quantity !== undefined && !quantityLoading && quantity != null && <span className="mt-1 block text-[10px] text-gray-400">{Number(quantity) === 0 ? '0 USDC' : quote && usdcRate ? '≈ ' + formatStockQuantity(Number(quantity) * quote.usd / usdcRate) + ' USDC' : busy ? <PocketSkeletonBar className="ml-auto h-2 w-14" /> : ''}</span>}{quantity === undefined && <span className={`mt-1 block text-[10px] tabular-nums ${quote?.change != null ? quote.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500' : 'text-gray-400'}`}>{quote?.change != null ? `${quote.change >= 0 ? '+' : ''}${quote.change.toFixed(2)}%` : busy ? <PocketSkeletonBar className="ml-auto mt-2 h-2 w-10" /> : ''}</span>}</span>
+    <span className="shrink-0 text-right"><span className="block text-xs font-bold tabular-nums">{quantity !== undefined ? quantityLoading ? <PocketSkeletonBar className="h-3 w-16" /> : quantity == null ? 'Unavailable' : formatStockQuantity(quantity) : quote ? formatValue(quote.usd) : busy ? <PocketSkeletonBar className="h-3 w-16" /> : '—'}</span>{quantity !== undefined && !quantityLoading && quantity != null && <span className="mt-1 block text-[10px] text-gray-400">{Number(quantity) === 0 ? formatValue(0) : quote ? <>{'~ '}{formatValue(Number(quantity) * quote.usd)}</> : busy ? <PocketSkeletonBar className="ml-auto h-2 w-14" /> : ''}</span>}{quantity === undefined && <span className={`mt-1 block text-[10px] tabular-nums ${quote?.change != null ? quote.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500' : 'text-gray-400'}`}>{quote?.change != null ? `${quote.change >= 0 ? '+' : ''}${quote.change.toFixed(2)}%` : busy ? <PocketSkeletonBar className="ml-auto mt-2 h-2 w-10" /> : ''}</span>}</span>
     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" />
   </button>
 }
@@ -56,7 +57,7 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
   const stockCurrency = usePocketStockCurrency(email)
   const fx = usePocketFxQuote(1, stockCurrency.currency !== 'USDC', stockCurrency.currency === 'UGX' ? 'UGX' : 'NGN')
   const freshFx = fx.quote && !fx.quote.stale && fx.quote.expiresAt > Date.now() ? fx.quote.rate : null
-  const formatValue = (value: number) => stockCurrency.currency !== 'USDC' ? freshFx ? new Intl.NumberFormat('en-NG', { style: 'currency', currency: stockCurrency.currency, maximumFractionDigits: 2 }).format(value * freshFx) : '—' : dollars(value)
+  const formatValue = (value: number) => stockCurrency.currency !== 'USDC' ? freshFx ? formatPocketFiatAmount(value * freshFx, stockCurrency.currency) : fx.loading ? <PocketSkeletonBar className="inline-block h-3 w-16" /> : '—' : dollars(value)
   const [holdingQuery, setHoldingQuery] = useState('')
   const [holdingLimit, setHoldingLimit] = useState(8)
   const snapshot = wallet.displaySnapshot || wallet.snapshot
@@ -80,7 +81,7 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
   const openAsset = (asset: Asset) => navigate(xStockPath('market') + '?asset=' + encodeURIComponent(asset.symbol))
   const isAction = ['send', 'receive', 'request'].includes(view)
   const actionLabel = view === 'send' ? 'Send stocks' : view === 'receive' ? 'Receive stocks' : 'Request stocks'
-  const balance = <PocketStockBalanceCard {...balanceValues} onCurrencySelect={()=>setCurrencyOpen(true)} currencyOpen={currencyOpen} displayCurrency={stockCurrency.currency==='USDC'?'USD':stockCurrency.currency} visible={balanceVisible} onToggle={()=>setBalanceVisible(current=>{localStorage.setItem('pocket.balanceVisible',String(!current));return !current})} onScan={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.scan+'?rail=xstocks')} loading={(!wallet.ready&&!wallet.error)||!!wallet.address&&((!snapshot&&!wallet.error)||quotes.busy)} walletMissing={wallet.ready&&!wallet.address} staleLabel={showLastUpdated?lastUpdated:undefined} localEquivalent={balanceValues.total!==null&&stockCurrency.currency!=='USDC'&&freshFx&&usdcRate?'~ '+new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(balanceValues.total/usdcRate*freshFx)+' '+stockCurrency.currency:undefined}/>
+  const balance = <PocketStockBalanceCard {...balanceValues} onCurrencySelect={()=>setCurrencyOpen(true)} currencyOpen={currencyOpen} displayCurrency={stockCurrency.currency==='USDC'?'USD':stockCurrency.currency} visible={balanceVisible} onToggle={()=>setBalanceVisible(current=>{localStorage.setItem('pocket.balanceVisible',String(!current));return !current})} onScan={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.scan+'?rail=xstocks')} loading={(!wallet.ready&&!wallet.error)||!!wallet.address&&((!snapshot&&!wallet.error)||quotes.busy)} walletMissing={wallet.ready&&!wallet.address} staleLabel={showLastUpdated?lastUpdated:undefined} localEquivalent={balanceValues.total!==null&&stockCurrency.currency!=='USDC'&&freshFx&&usdcRate?'~ '+formatPocketFiatAmount(balanceValues.total/usdcRate*freshFx, stockCurrency.currency):undefined}/>
   const market = <section className={card}>
     {view === 'home' && <div className="flex items-center justify-between"><h2 className="text-sm font-black">Stocks</h2><button type="button" onClick={() => navigate(xStockPath('market'))} className="flex min-h-11 items-center gap-1 text-[11px] font-bold text-gray-500">View all<ChevronRight className="h-3.5 w-3.5" /></button></div>}
     {view !== 'home' && <label className="flex items-center gap-2 rounded-xl bg-gray-100 px-3 dark:bg-white/[0.06]"><Search className="h-4 w-4 text-gray-400" /><input aria-label="Search stocks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, symbol or contract" className="min-h-11 min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>}

@@ -1,3 +1,4 @@
+import { pocketPricingMessage } from '../lib/pocketPricingMessage'
 import PocketTransactionSheet from './PocketTransactionSheet'
 import { PocketLoadingField, PocketQuoteSkeleton, PocketSkeletonBar } from './PocketContentSkeletons'
 import {formatPocketDisplayAmount} from '../lib/pocketMoney'
@@ -127,7 +128,7 @@ export default function PocketArcSwapPanel(props: Props) {
     let next = value
     const active = session.current ?? (quiet ? null : await props.getSession(next.walletAddress))
     const server = await api({ action: 'status', quoteToken: next.quoteToken, txHash: next.txHash, ...(active ? {circleUserToken: active.userToken} : {}) })
-    if (server.status === 'failed' || server.status === 'not_submitted') { savePending(null); setQuoted(null); setStatus('idle'); setNotice(server.error || 'No swap was submitted. Request a new quote.'); return }
+    if (server.status === 'failed' || server.status === 'not_submitted') { savePending(null); setQuoted(null); setStatus('idle'); setNotice(server.error || 'No swap was submitted. Try again.'); return }
     if (server.status === 'completed') { savePending(null); setQuoted(null); setStatus('successful'); setAmount(''); setError(''); setNotice('');setCompleted({quote:value.quote,txHash:server.txHash||value.txHash,amountOut:server.amountOut}); await Promise.all([load(), props.refresh()]); return }
     if (!next.txHash) {
       if (!next.challengeId) {
@@ -152,7 +153,7 @@ export default function PocketArcSwapPanel(props: Props) {
   }
   async function execute() {
     if (locked.current || !quoted || quoted.sufficientBalance !== true) return
-    if(quoted.quote.expiresAt<=Date.now()){setError('Price expired. Review the updated quote.');setQuoteRefresh(value=>value+1);return}
+    if(quoted.quote.expiresAt<=Date.now()){setError('Review the updated amount before confirming.');setQuoteRefresh(value=>value+1);return}
     locked.current = true; setStatus('pending'); setError('')
     let activePending: Pending | null = pending
     try {
@@ -205,10 +206,10 @@ export default function PocketArcSwapPanel(props: Props) {
         <p>Network fee: Covered by Pocket</p></details>
       </div>}
       {error && !quoted && pairReady && amountValid && <button type="button" onClick={() => setQuoteRefresh(value => value + 1)} className="text-xs font-bold text-blue-600">Try price again</button>}
-      <PocketFundingAction flow="swap" asset={quoted?.sufficientBalance===false?(selected?.symbol||'USDC'):fundingShortfall(error,selected?.symbol||'USDC')} network="arc" locked={busy||approvalBusy||!!pending} onReturn={async()=>{await props.refresh();await load();invalidate();setQuoteRefresh(n=>n+1)}} onCancel={()=>{invalidate();setAmount('');setError('')}}><PocketSlideAction loadingContent={(loadingTokens && !tokens.length) || status === 'quoting'} approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating quote' : quoted?.sufficientBalance === false ? 'Insufficient balance' : quoted && quoted.sufficientBalance !== true ? 'Balance unavailable' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} /></PocketFundingAction>
+      <PocketFundingAction flow="swap" asset={quoted?.sufficientBalance===false?(selected?.symbol||'USDC'):fundingShortfall(error,selected?.symbol||'USDC')} network="arc" locked={busy||approvalBusy||!!pending} onReturn={async()=>{await props.refresh();await load();invalidate();setQuoteRefresh(n=>n+1)}} onCancel={()=>{invalidate();setAmount('');setError('')}}><PocketSlideAction loadingContent={(loadingTokens && !tokens.length) || status === 'quoting'} approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating amount' : quoted?.sufficientBalance === false ? 'Insufficient balance' : quoted && quoted.sufficientBalance !== true ? 'Balance unavailable' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} /></PocketFundingAction>
     </>}
     {completed&&<PocketTransactionSheet title="Swap on Arc" state="successful" statusLabel="Swap successful" amount={formatPocketDisplayAmount(completed.amountOut||completed.quote.expectedOut)+' '+completed.quote.tokenOut.symbol} detailsRows={[["Paid with",formatPocketDisplayAmount(completed.quote.amount)+' '+completed.quote.tokenIn.symbol],["Network","Arc"],...(completed.txHash?[["Transaction",completed.txHash] as [string,string]]:[])]} onDone={()=>{setCompleted(null);setStatus('idle')}}/>}
     {notice && <p className="text-xs text-emerald-600">{notice}</p>}
-    {!fundingShortfall(error,selected?.symbol) && error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
+    {!fundingShortfall(error,selected?.symbol) && error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-400/10 dark:text-red-200">{pocketPricingMessage(error)}</p>}
   </section>
 }

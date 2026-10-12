@@ -45,7 +45,7 @@ export default function usePocketBridgeActivity(input: {
         if (current.current.owner !== owner) return
         if (outcome.failedWithoutTransaction || outcome.sourceFailed) {
           savePocketBridgeTransfer(owner, { ...active, progress: 'failed' }, localStorage)
-          setMessages(value => ({ ...value, [record.id]: 'The source transfer did not complete. You can start a new bridge with a fresh quote.' }))
+          setMessages(value => ({ ...value, [record.id]: 'The source transfer did not complete. You can start a new bridge.' }))
           return
         }
         const result = outcome.txHash ? {txHash:outcome.txHash} : await reconcileCircleEvmEmailWithdraw({ session, challengeId: active.challengeId, timeoutMs: 5_000 })

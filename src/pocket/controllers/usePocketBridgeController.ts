@@ -69,7 +69,7 @@ export default function usePocketBridgeController(input: {
     setStatus('quoting'); setError('')
     try {
       const accessToken = await input.getAccessToken()
-      if (!accessToken) throw new Error('Sign in again to quote this bridge.')
+      if (!accessToken) throw new Error('Sign in again to continue.')
       const sourceWallet=input.wallets[input.source] ?? await input.ensureWallet(input.source)
       if(!sourceWallet)throw Error('Open your source wallet before quoting.')
       const circleUserToken=input.source==='solana'?undefined:(await input.getEvmSession(input.source,sourceWallet.address)).userToken
@@ -77,7 +77,7 @@ export default function usePocketBridgeController(input: {
       if (version !== quoteVersion.current) return null
       setQuote(next); setStatus('idle'); return next
     } catch (reason) {
-      if (version === quoteVersion.current) { setQuote(null); setStatus('idle'); setError(reason instanceof Error ? reason.message : 'Could not quote this bridge route.') }
+      if (version === quoteVersion.current) { setQuote(null); setStatus('idle'); setError(reason instanceof Error ? reason.message : 'Could not update this bridge amount.') }
       return null
     }
   }, [amount, destination, input.source, input.owner, input.enabled])
@@ -89,7 +89,7 @@ export default function usePocketBridgeController(input: {
   const prepare = useCallback(async () => {
     try {
       assertNewTransfer()
-      if (!quote) throw new Error('Get a current quote before confirming.')
+      if (!quote) throw new Error('Update the amount before confirming.')
       const sourceWallet = input.wallets[input.source] ?? await input.ensureWallet(input.source)
       if (!sourceWallet) throw new Error('Open the source Pocket wallet before confirming.')
       if (input.source === 'solana') await input.getSolanaSession(sourceWallet.address)
@@ -105,11 +105,11 @@ export default function usePocketBridgeController(input: {
     setError(''); setNotice('')
     try {
       assertNewTransfer()
-      if(!quote)throw new Error('Review a quote before continuing.')
+      if(!quote)throw new Error('Review the amount before continuing.')
       const reviewed=quote
       const fresh = await refreshQuote()
       if (!fresh) return
-      if(bridgeQuoteNeedsReview(reviewed,fresh))throw new Error('Quote changed. Review the updated amount and fee.')
+      if(bridgeQuoteNeedsReview(reviewed,fresh))throw new Error('Review the updated amount and fee.')
       if (Number(fresh.total) > input.sourceBalance) throw new Error('Amount plus fee is higher than your available balance.')
       const sourceWallet = input.wallets[input.source] ?? await input.ensureWallet(input.source)
       const destinationWallet = input.wallets[destination] ?? await input.ensureWallet(destination)

@@ -30,13 +30,13 @@ for(const currency of ['GHS','KES','USD']) {assert.equal(normalizePocketDisplayC
 const profile={firstName:'',lastName:'',resolvedName:'',nameStatus:'unverified',email:'fixture@example.com',pocketNumber:'12345678',pocketId:'12345678',avatarId:1}
 assert.equal(parsePocketLocalCurrencyProfileRead({ok:true,profile:{...profile,displayCurrency:'GHS'}}).profile.displayCurrency,'USDC')
 assert.equal(parsePocketLocalCurrencyProfileRead({ok:true,profile:{...profile,displayCurrency:'UGX'}}).profile.displayCurrency,'UGX')
-assert.match(localCurrencyAmount(3700,'UGX'),/^USh /)
+assert.equal(localCurrencyAmount(3700,'UGX'),'3,700.00 UGX')
 const receipt={type:'test',receiptId:'fixture',receiptHash:'',title:'Bank transfer',status:'confirmed',eventId:'fixture',txHash:'',chain:'base',payer:'',memo:'',amount:'1.25',asset:'USDC',createdAt:0,source:'bank-withdraw',amountNgn:'1700',fiatCurrency:'NGN',brandKind:'pocket'}
 const view=paymentReceiptView(receipt)
-assert.equal(view.amount,'1.25 USDC')
-assert.ok(view.rows.some(row=>row.label==='Local amount'&&row.value.includes('1,700')), 'Keep recorded delivery amount on receipt')
+assert.equal(view.amount,'1,700.00 NGN')
+assert.ok(view.rows.some(row=>row.label==='Paid with'&&row.value==='1.25 USDC'), 'Keep recorded delivery amount on receipt')
 assert.equal(paymentReceiptView({...receipt,asset:'NVDAx',amountNgn:undefined,source:'xstocks'}).amount,'1.25 NVDAx')
-console.log('PASS: isolated Paycrest currencies, quote deduplication, strict response matching, legacy preference migration, USDC-first receipts and recorded local amounts.')
+console.log('PASS: isolated Paycrest currencies, quote deduplication, strict response matching, legacy preference migration, recorded-currency receipts and recorded local amounts.')
 
 // A slow durable store cannot hold a fresh quote response hostage.
 let finishRead, finishWrite
@@ -50,3 +50,18 @@ finishRead({...fresh,rate:1,quotedAt:fresh.quotedAt-10000});finishWrite()
 await new Promise(resolve=>setImmediate(resolve))
 assert.equal((await noStorageDelay()).rate,1400,'late saved rate never overwrites newer live quote')
 console.log('PASS live quote delivery independent of durable read/write latency.')
+
+const {readPocketDisplayCurrency,savePocketDisplayCurrency,publishPocketDisplayCurrency,subscribePocketDisplayCurrency,formatPocketFiatAmount}=await import('../src/pocket/lib/pocketDisplayCurrency.ts')
+const values=new Map();globalThis.localStorage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)}
+values.set('pocket.xstocks.displayCurrency:fixture@example.com','UGX')
+assert.equal(readPocketDisplayCurrency(' Fixture@example.com '),'UGX','Preserve legacy stock preference if no explicit stablecoin choice')
+let updates=0;const unsubscribe=subscribePocketDisplayCurrency(()=>updates++)
+savePocketDisplayCurrency('fixture@example.com','NGN')
+assert.equal(readPocketDisplayCurrency('fixture@example.com'),'NGN')
+publishPocketDisplayCurrency('fixture@example.com','USDC')
+assert.equal(readPocketDisplayCurrency('fixture@example.com'),'NGN','Server default cannot override explicit choice')
+assert.equal(readPocketDisplayCurrency('other@example.com'),'USDC','Account preferences stay isolated')
+assert.equal(updates,2);unsubscribe()
+for(const currency of ['USDC','NGN','UGX']){savePocketDisplayCurrency('fixture@example.com',currency);assert.equal(paymentReceiptView(receipt).amount,'1,700.00 NGN')}
+assert.equal(formatPocketFiatAmount(12.0445,'USD'),'12.04 USD')
+console.log('PASS shared preference, legacy fallback, account isolation, notifications, fiat code formatting and immutable receipt currency.')

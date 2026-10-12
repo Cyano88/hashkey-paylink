@@ -96,7 +96,7 @@ async function inspectLiquidity(input: {
       bridgeTotals,
     })
   }
-  if (route.kind === 'quote-required') throw new Error('Could not quote every eligible Pocket route.')
+  if (route.kind === 'quote-required') throw new Error('Could not update all available payment routes.')
   return { route, wallets }
 }
 

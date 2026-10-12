@@ -18,7 +18,7 @@ const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, m
 const BANK_PAYOUT_OPERATION_KEY = 'pocket:bank-withdraw:operation'
 const BANK_PAYOUT_FAST_POLL_ATTEMPTS = 12
 
-export const PAYMENT_TIMEOUT_NOTICE = 'The payout quote expired before any money was sent. Your details are still here; tap Confirm again to refresh it.'
+export const PAYMENT_TIMEOUT_NOTICE = 'Your details are saved. Continue to update the amount.'
 export const PAYOUT_REFUNDED_NOTICE = 'This payout was refunded. Your returned funds will appear in Activity.'
 
 async function operationFingerprint(value: string) {

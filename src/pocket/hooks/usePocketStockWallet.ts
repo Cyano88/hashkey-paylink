@@ -116,7 +116,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       const fee = gas * await stockClient.getGasPrice() * 120n / 100n
       if (await stockClient.getBalance({ address }) < value + fee) throw Error('Add OKB on X Layer for network fees.')
       stillCurrent()
-      if (swapQuote) { validateStockSwap(swapQuote, address); if (fee > parseUnits(review.gasFee, 18) * 120n / 100n) throw Error('Network fee changed. Review a new quote.') }
+      if (swapQuote) { validateStockSwap(swapQuote, address); if (fee > parseUnits(review.gasFee, 18) * 120n / 100n) throw Error('Network fee changed. Review the updated amount.') }
       return runStockSubmission({key,kind:swapQuote?'trade':'approval',
         send: () => sendTransaction({chainId:196,from:address,to,data,value},{address,uiOptions:{showWalletUIs:false}}),
         wait: hash => stockClient.waitForTransactionReceipt({hash,timeout:120_000}),
@@ -131,7 +131,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       stillCurrent()
       const verified = await requestSwap(getAccessToken, { action: 'verify', wallet: address, quoteToken })
       validateStockSwap(verified.quote, address)
-      if (JSON.stringify(verified.quote) !== JSON.stringify(review)) throw Error('The quote changed. Review it again.')
+      if (JSON.stringify(verified.quote) !== JSON.stringify(review)) throw Error('The amount changed. Review it again.')
       const units = BigInt(review.amountUnits)
       if (review.tokenIn.address !== 'native') {
         const token = getAddress(review.tokenIn.address)
@@ -148,7 +148,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       const fresh = await requestSwap(getAccessToken, { action: 'quote', wallet: address, tokenIn: review.tokenIn.address, tokenOut: review.tokenOut.address, amount: review.amount })
       validateStockSwap(fresh.quote, address)
       if (JSON.stringify(fresh.quote.positiveSlippageFee) !== JSON.stringify(review.positiveSlippageFee) || fresh.quote.amountUnits !== review.amountUnits || fresh.quote.tokenIn.address !== review.tokenIn.address || fresh.quote.tokenOut.address !== review.tokenOut.address
-        || BigInt(fresh.quote.minimumOutUnits) < BigInt(review.minimumOutUnits) || Number(fresh.quote.gasFee) > Number(review.gasFee) * 1.2) throw Error('Price or network fee changed. Review a new quote. Any completed approval is limited to your trade amount.')
+        || BigInt(fresh.quote.minimumOutUnits) < BigInt(review.minimumOutUnits) || Number(fresh.quote.gasFee) > Number(review.gasFee) * 1.2) throw Error('Price or network fee changed. Review the updated amount. Any completed approval is limited to your trade amount.')
       onProgress('processing')
       const hash = await submit(fresh.quote.tx.to, fresh.quote.tx.data, BigInt(fresh.quote.tx.value), fresh.quote)
       stillCurrent()

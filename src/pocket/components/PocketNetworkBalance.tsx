@@ -21,7 +21,7 @@ function Balance({ network, asset = 'USDC' }: { network: string; asset?: 'USDC' 
   return <span className="shrink-0 py-2 text-right tabular-nums">
     <span className="block text-sm font-semibold">{known ? `${formatPocketDisplayAmount(balance)} ${asset}` : <PocketAmountShimmer label={`Loading ${network} balance`} />}</span>
     {currency !== 'USDC' && (known
-      ? <PocketLocalEquivalent amount={balance} className="mt-0.5 text-xs font-normal text-gray-500 dark:text-gray-400" />
+      ? <PocketLocalEquivalent amount={balance} asset={asset} className="mt-0.5 text-xs font-normal text-gray-500 dark:text-gray-400" />
       : <span className="mt-0.5 block"><PocketAmountShimmer label={`Loading ${network} local equivalent`} className="w-16 overflow-hidden" /></span>)}
   </span>
 }

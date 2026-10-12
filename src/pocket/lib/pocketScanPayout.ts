@@ -18,7 +18,7 @@ export function assertPocketScanPayoutPayable(order: ScanPayoutOrder, now = Date
   }
   const expires = Date.parse(order.valid_until || '')
   if (!Number.isFinite(expires) || expires <= now + 30_000) {
-    throw new Error('This payout quote expired. Review a fresh quote before paying.')
+    throw new Error('Review the updated payout amount before paying.')
   }
 }
 

@@ -1,12 +1,10 @@
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
+import { readPocketDisplayCurrency, savePocketDisplayCurrency, subscribePocketDisplayCurrency } from '../lib/pocketDisplayCurrency'
 export default function usePocketStockCurrency(email: string) {
-  const key = 'pocket.xstocks.displayCurrency:' + email.trim().toLowerCase()
-  const [saved, setSaved] = useState<{key: string; currency: 'USDC' | 'NGN' | 'UGX'} | null>(null)
-  const currency = saved?.key === key ? saved.currency : localStorage.getItem(key) === 'NGN' ? 'NGN' : localStorage.getItem(key) === 'UGX' ? 'UGX' : 'USDC'
+  const currency = useSyncExternalStore(subscribePocketDisplayCurrency, () => readPocketDisplayCurrency(email), () => 'USDC' as const)
   const save = async (value: string) => {
     if (value !== 'USDC' && value !== 'NGN' && value !== 'UGX') return false
-    localStorage.setItem(key, value)
-    setSaved({key, currency: value})
+    savePocketDisplayCurrency(email, value)
     return true
   }
   return { currency, save }

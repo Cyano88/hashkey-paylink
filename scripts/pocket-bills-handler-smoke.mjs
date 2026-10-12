@@ -537,5 +537,19 @@ try {
  const mismatch=createPocketBillsQuoteHandler({...dependencies,readFxQuote:async()=>({currency:'NGN',rate:1400,expiresAt:now+60000})})
  assert.equal((await request(mismatch,body,{idempotencyKey:'bills-usdt-wrong-quote-0001'})).statusCode,503)
  assert.equal((await request(quoteHandler,{...body,asset:'BTC'},{idempotencyKey:'bills-invalid-asset-0001'})).statusCode,400)
+
+ now += 86400000
+ for (const asset of ['USDC','USDT']) for (const [category,fields] of [
+ ['data',{service_id:'mtn-data',variation_code:'mtn-100mb-100',phone:'08011111111'}],
+ ['tv',{service_id:'dstv',variation_code:'dstv-yanga',phone:'1212121212',contact_phone:'08011111111'}],
+ ['electricity',{service_id:'ikeja-electric',variation_code:'prepaid',phone:'1111111111111',contact_phone:'08011111111',amount_ngn:'100'}]
+ ]) {
+  const result=await request(quoteHandler,{...body,...fields,asset,category},{idempotencyKey:'bill-parity-category-'+category+'-'+asset})
+  assert.equal(result.statusCode,200,category+' '+asset+': '+JSON.stringify(result.body))
+  assert.equal(result.body.data.intent.asset??'USDC',asset)
+  const ledger=await executions.findByResource('did:privy:owner-1',result.body.data.intent.id,'bill_payment')
+  assert.equal(ledger.asset,asset)
+ }
+ console.log('PASS data, TV and electricity quotes and payment ledger bind to selected USDC or USDT.')
  console.log('PASS USDT bills rollout gate, quote asset binding and USDT ledger identity.')
 } finally {if(priorUsdtBills===undefined)delete process.env.POCKET_USDT_BILLS_ENABLED;else process.env.POCKET_USDT_BILLS_ENABLED=priorUsdtBills}

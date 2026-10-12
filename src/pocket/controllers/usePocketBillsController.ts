@@ -450,13 +450,13 @@ export default function usePocketBillsController({
     if (remaining <= 0) {
       setStatus('error')
       setErrorCode('BILLS_QUOTE_EXPIRED')
-      setError(`The ${billLabel(category)} quote expired. Review the payment again.`)
+      setError(`The payment amount needs updating.`)
       return
     }
     const timeout = window.setTimeout(() => {
       setStatus('error')
       setErrorCode('BILLS_QUOTE_EXPIRED')
-      setError(`The ${billLabel(category)} quote expired. Review the payment again.`)
+      setError(`The payment amount needs updating.`)
     }, remaining)
     return () => window.clearTimeout(timeout)
   }, [category, intent, status])
@@ -551,7 +551,7 @@ export default function usePocketBillsController({
           : category === 'electricity' ? await quotePocketElectricity({ asset, accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
             : await quotePocketAirtime({ asset, accessToken, country, serviceId, phone, amountNgn, payerWallet: wallet.address })
       if(!mounted.current||billScope.current!==reviewScope||quoteGeneration.current!==generation)return
-      if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
+      if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The payment amount needs updating.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {

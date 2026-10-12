@@ -1,5 +1,6 @@
+import PocketAmountShimmer from '../components/PocketAmountShimmer'
 import PocketActivityList from '../components/PocketActivityList'
-import { savePocketDisplayCurrency } from '../lib/pocketDisplayCurrency'
+import { savePocketDisplayCurrency, formatPocketFiatAmount } from '../lib/pocketDisplayCurrency'
 import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import { POCKET_USDT_NETWORKS } from '../lib/pocketUsdtAssets'
 import {pocketUsdtEnabled} from '../lib/pocketBaseUsdt'
@@ -88,7 +89,7 @@ export default function PocketHomePage() {
           </div>
           <div className="mt-2 flex h-8 items-center justify-center">
             {balanceVisible && <button type="button" aria-label="Change display currency" aria-haspopup="dialog" aria-expanded={currencyOpen} onClick={() => setCurrencyOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/10 px-4 text-xs font-medium tabular-nums transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 dark:bg-gray-950/[0.07] dark:hover:bg-gray-950/10">
-              {!showNgn ? 'USD' : balancesVisible && fx.quote ? '~ ' + new Intl.NumberFormat('en-US', {maximumFractionDigits: 0}).format(displayTotal * fx.quote.rate) + ' ' + currency : currency}
+              {!showNgn ? 'USD' : balancesVisible && fx.quote ? '~ ' + formatPocketFiatAmount(displayTotal * fx.quote.rate, currency === 'UGX' ? 'UGX' : 'NGN') : fx.loading ? <PocketAmountShimmer label="Updating display currency" /> : currency}
               <ChevronRight className="h-3.5 w-3.5" />
             </button>}
           </div>

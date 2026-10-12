@@ -33,7 +33,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
       {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
       <div className="mt-1 h-8 w-full shrink-0 overflow-y-auto text-xs leading-4 text-gray-500 dark:text-gray-400">
-        {usdcEquivalent && receipt && (localAmount ? <p>{usdcEquivalent}</p> : receipt.asset === 'USDT' ? null : <PocketLocalEquivalent amount={Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
+        {usdcEquivalent && receipt && (localAmount ? <p>{usdcEquivalent}</p> : <PocketLocalEquivalent asset={receipt.asset === 'USDT' ? 'USDT' : 'USDC'} amount={Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
         {state !== 'successful' && detail && <p className="mx-auto max-w-sm">{detail}</p>}
       </div>
     </div>

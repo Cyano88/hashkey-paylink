@@ -5,6 +5,6 @@ export async function stockSwapRequest(getAccessToken: () => Promise<string | nu
   if (!token) throw Error('Sign in to Pocket again.')
   const response = await fetch(pocketApiUrl('/api/pocket/xstocks/swap'), { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) })
   const data = await response.json()
-  if (!response.ok || !data.ok || !data.quote) throw Error(data.error || 'Could not load a stock quote.')
+  if (!response.ok || !data.ok || !data.quote) throw Error(data.error || 'Could not update the stock price.')
   return data
 }

@@ -1,3 +1,4 @@
+import { pocketPricingMessage } from '../lib/pocketPricingMessage'
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {executeCircleEvmEmailChallenge,type CircleEvmEmailSession} from '../../lib/circleEvmEmailWallet'
 import {pocketApiUrl} from '../lib/pocketRoutes'
@@ -96,19 +97,19 @@ export default function PocketUsdtBridgePanel(props:Props){
       setRecoveryFailed(false);setLoading(false)
       if(result.status==='completed'){save(null);setQuoted(null);setAmount('');setNotice('');setResult({quote:value.quote,state:'successful',txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
       else if(result.status==='refunded'){save(null);setQuoted(null);setAmount('');setResult({quote:value.quote,state:'reversed',settledAmount:(Number(result.settlement.amountUnits)/1e6).toFixed(2),txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
-      else if(result.status==='failed'){save(null);setQuoted(null);setResult({quote:value.quote,state:'failed'});setError('The source transaction did not complete. You can request a new quote.')}
+      else if(result.status==='failed'){save(null);setQuoted(null);setResult({quote:value.quote,state:'failed'});setError('The source transaction did not complete. Try again.')}
       else if(result.status==='not_submitted'&&result.reason==='approval_expired'){quotePaused.current=true;version.current++;save(null);setQuoted(null);setAmount('');setNotice('');setError('');setResult(null)}
-      else if(result.status==='not_submitted'){quotePaused.current=true;save(null);setQuoted(null);setNotice('');setError(executionError.current||'Bridge was not submitted. Review a new quote.')}
+      else if(result.status==='not_submitted'){quotePaused.current=true;save(null);setQuoted(null);setNotice('');setError(executionError.current||'Bridge was not submitted. Try again.')}
       else{save({...value,...(result.txHash?{txHash:result.txHash}:{}),...(result.challengeId?{challengeId:result.challengeId}:{}),sourceConfirmed:Boolean(result.sourceConfirmed||value.sourceConfirmed),awaitingApproval:result.status==='awaiting_approval',needsAttention:result.status==='needs_attention'});setNotice('');if(result.status==='needs_attention')setError('This bridge needs review. Contact support before sending again.');props.onActivity()}
     }catch(e){setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
   }
   async function prepare(){
     setError('')
     try{
-      if(!quoted||quoted.quote.expiresAt<=Date.now())throw Error('Quote expired. Refresh the quote to continue.')
+      if(!quoted||quoted.quote.expiresAt<=Date.now())throw Error('The amount needs updating. Continue to review it.')
       if(source==='solana')await props.getSolanaSession(quoted.quote.walletAddress)
       else session.current=await props.getSession(source,quoted.quote.walletAddress)
-      if(quoted.quote.expiresAt<=Date.now())throw Error('Quote expired. Refresh the quote to continue.')
+      if(quoted.quote.expiresAt<=Date.now())throw Error('The amount needs updating. Continue to review it.')
     }catch(e){session.current=null;setError((e as Error).message||'Could not prepare your wallet. Please try again.');throw e}
   }
   async function resumeApproval(){
@@ -133,7 +134,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   async function execute(){
     if(quoted?.quote.source==='solana'){await executeSolana(quoted);return}
     if(lock.current||!quoted||!session.current||!quoted.sufficientBalance)return
-    if(quoted.quote.expiresAt<=Date.now()){setQuoted(null);setError('Quote expired. Review a new quote.');return}
+    if(quoted.quote.expiresAt<=Date.now()){setQuoted(null);setError('The amount needs updating. Continue to review it.');return}
     lock.current=true;setBusy(true);setError('');executionError.current='';let saved:Pending|null=null
     const owner=props.owner
     try{
@@ -186,9 +187,9 @@ export default function PocketUsdtBridgePanel(props:Props){
       <PocketFundingAction flow="bridge" asset={!pending&&(quoted?.sufficientBalance===false||(balance?.usdt!==undefined&&!balance.usdtStale&&Number(amount)>balance.usdt))?'USDT':null} network={source} locked={locked} onReturn={async()=>{await props.refresh();await quote()}} onCancel={()=>{invalidate();setAmount('')}}>
       {pending?<button type="button" className="pocket-cta-primary w-full" disabled={busy||(!pending.needsAttention&&((!pending.challengeId&&pending.quote.source!=='solana')||Boolean(pending.txHash)||pending.sourceConfirmed))} aria-busy={busy||!pending.awaitingApproval&&!pending.needsAttention} onClick={()=>void (pending.needsAttention?check(pending):resumeApproval())}>{(busy||!pending.awaitingApproval&&!pending.needsAttention)&&<Loader2 className="h-4 w-4 animate-spin"/>}<span>{busy?'Preparing bridge':pending.needsAttention?'Retry status check':pending.sourceConfirmed?'Arriving on '+pocketBridgeNetworkLabel(pending.quote.destination):pending.txHash?'Bridging USDT':pending.awaitingApproval?'Confirm bridge':'Preparing bridge'}</span></button>
       :recoveryFailed||(!quoted&&error&&!quoting)?<button type="button" className="pocket-cta-primary w-full" onClick={()=>recoveryFailed?setReload(value=>value+1):void quote(true)}>Try again</button>
-      :<PocketSlideAction loadingContent={loading||quoting} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={loading||locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:!validAmount?'Enter bridge amount':loading||quoting?'Updating quote':!quoted||quoteExpired?'Quote unavailable':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
+      :<PocketSlideAction loadingContent={loading||quoting} approvalRequired={false} onPrepare={prepare} onApprovalBusyChange={setPreparing} status={busy?'pending':'idle'} disabled={loading||locked||quoting||!quoted||quoteExpired||!quoted.sufficientBalance} onConfirm={()=>void execute()} labels={{idle:'Confirm bridge',disabled:!validAmount?'Enter bridge amount':loading||quoting?'Updating amount':!quoted||quoteExpired?'Amount unavailable':'Insufficient balance',pending:'Preparing bridge',submitted:'Bridging USDT',successful:'Bridge successful'}}/>}
       </PocketFundingAction>
-      {notice&&<p role="status" className="text-center text-xs text-gray-500">{notice}</p>}{error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
+      {notice&&<p role="status" className="text-center text-xs text-gray-500">{notice}</p>}{error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{pocketPricingMessage(error)}</p>}
     </PocketBridgeForm>
     {result&&<PocketTransactionSheet title="Bridge stablecoins" state={result.state} statusLabel={result.state==='successful'?'Bridge successful':result.state==='reversed'?'Bridge refunded':'Bridge failed'} amount={(result.settledAmount||result.quote.amount)+' USDT'} detailsRows={[
       ['Asset','USDT'],['From',pocketBridgeNetworkLabel(result.quote.source)],['To',pocketBridgeNetworkLabel(result.quote.destination)],['Fee',result.quote.fee+' USDT'],...(result.quote.total?[['Total',result.quote.total+' USDT'] as [string,string]]:[]),...(result.txHash?[['Transaction',result.txHash] as [string,string]]:[]),...(result.destinationTxHash?[['Destination transaction',result.destinationTxHash] as [string,string]]:[])

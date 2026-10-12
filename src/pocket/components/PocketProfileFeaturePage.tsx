@@ -44,7 +44,7 @@ function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePoc
           : fx.quote
             ? <><p className='mt-6 text-3xl font-black tracking-[-0.04em]'>{currency + ' ' + (fx.quote.rate * 10).toLocaleString('en', {maximumFractionDigits: 2})}</p><p className='mt-2 text-xs font-bold text-gray-500 dark:text-gray-400'>1 USDC = {currency + ' ' + fx.quote.rate.toLocaleString('en', {maximumFractionDigits: 2})}</p></>
             : <p className='mt-6 text-sm font-bold text-red-500'>{fx.error || 'The live rate could not be reached. Tap refresh.'}</p>}
-        <p className='mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>{fx.quote?.stale ? 'Last confirmed rate. A fresh quote is requested before payment.' : 'Live sell quote for 10 USDC. Your amount-specific rate is locked when the payout is prepared.'}</p>
+        <p className='mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>{fx.quote?.stale ? 'Last confirmed rate. A fresh quote is requested before payment.' : 'Estimated rate for 10 USDC. The final rate is shown before you confirm.'}</p>
         <button type='button' onClick={() => void fx.refresh()} disabled={fx.busy} className='pocket-cta-secondary mt-5 w-full'>Refresh rate</button>
       </div>
     </div>

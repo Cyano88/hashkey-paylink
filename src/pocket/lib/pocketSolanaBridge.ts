@@ -28,10 +28,10 @@ export async function bridgeCircleSolanaWallet(input: {
   let quoteToken=input.quoteToken
   if(!quoteToken&&input.maxTotalUnits!==undefined){
     const quote=await readPocketBridgeQuote({accessToken:input.accessToken,source:'solana',destination:input.destination,amount:input.amount})
-    if(parseUnits(quote.total,6)>input.maxTotalUnits||quote.destinationAddress.toLowerCase()!==input.destinationAddress.toLowerCase())throw new Error('Bridge fees changed. Review the updated quote.')
+    if(parseUnits(quote.total,6)>input.maxTotalUnits||quote.destinationAddress.toLowerCase()!==input.destinationAddress.toLowerCase())throw new Error('Bridge fees changed. Review the updated amount.')
     quoteToken=quote.quoteToken
   }
-  if(!quoteToken)throw new Error('Review a new Solana bridge quote.')
+  if(!quoteToken)throw new Error('Review the updated bridge amount.')
   const prepareResponse = await fetch(POCKET_API.solanaCctpPrepare, {
     method: 'POST',
     headers: { authorization: `Bearer ${input.accessToken}`, 'content-type': 'application/json' },

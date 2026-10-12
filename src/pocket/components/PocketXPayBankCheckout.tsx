@@ -1,3 +1,4 @@
+import { pocketPricingMessage } from '../lib/pocketPricingMessage'
 import {useEffect,useRef,useState} from 'react'
 import {usePrivy} from '@privy-io/react-auth'
 import {formatUnits} from 'viem'
@@ -100,7 +101,7 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
    active(expected)
    if(['successful','refunded'].includes(p.state))return
    if(p.state==='failed')throw Error(p.error||'This step did not complete. Retry to continue.')
-   if(p.replacement)throw Error('Confirm the updated bank quote before continuing.')
+   if(p.replacement)throw Error('Confirm the updated bank amount before continuing.')
    const step=p.state==='approved'?(p.progress.swap?'swap':'bridge'):p.state==='swap_confirmed'?'bridge':p.state==='bridging'&&p.bridge?.state==='quoted'?'bridge':null
    if(step){
     const result=await request({action:step,id:p.id});p=adopt(result.payment)
@@ -128,7 +129,7 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
   }
  })
  const reviewPayout=()=>run(async()=>{if(!payment)return;adopt((await request({action:'reviewPayout',id:payment.id})).payment)})
- const acceptPayout=()=>run(async()=>{if(!payment?.replacement)return;await requestPocketPaymentApproval();const approval=takePocketPaymentApproval();if(!approval)throw Error('Confirm the updated quote again.');adopt((await request({action:'acceptPayout',id:payment.id,intentId:payment.replacement.intentId},approval)).payment)})
+ const acceptPayout=()=>run(async()=>{if(!payment?.replacement)return;await requestPocketPaymentApproval();const approval=takePocketPaymentApproval();if(!approval)throw Error('Confirm the updated amount.');adopt((await request({action:'acceptPayout',id:payment.id,intentId:payment.replacement.intentId},approval)).payment)})
  const quoteExpired=payment?.state==='quoted'&&(payment.expiresAt<=Date.now()+90000||Boolean(payment.quoteExpiresAt&&payment.quoteExpiresAt<=Date.now()))
  const expired=payment&&payment.expiresAt<=Date.now()+90000&&!['payout_requested','payout_submitted','successful','refunded'].includes(payment.state)
  const terminal=payment&&['successful','refunded'].includes(payment.state)
@@ -140,14 +141,14 @@ export default function PocketXPayBankCheckout({checkoutId,merchantId,merchantNa
   <p className="text-xs leading-5 text-gray-500">Your asset is converted to USDC to pay the merchant�s bank account. Unused USDC stays in your wallet.</p>
   <button className={cta} disabled={busy||loading||!historyChecked||!wallet.address||(!payment&&(!amount||Boolean(resumeId)))} onClick={()=>payment?setSheet(true):void prepare()}>{payment?'Continue payment':'Continue'}</button>
   {!loading&&!historyChecked&&<button className="min-h-11 w-full text-xs font-semibold" onClick={()=>setReload(n=>n+1)}>Try again</button>}
-  {error&&!sheet&&<p role="alert" className="text-xs text-red-500">{error}</p>}
+  {error&&!sheet&&<p role="alert" className="text-xs text-red-500">{pocketPricingMessage(error)}</p>}
   {sheet&&(terminal?<PocketPaymentSuccess receipt={xpayBankReceipt(payment)} onDone={onClose}/>:<PocketBottomSheet title="XPay" showCloseButton dismissOnBackdrop={false} dismissible={!busy} onClose={()=>setSheet(false)}>
    <h2 className="text-lg font-semibold">{payment?.merchantName}</h2>
    <p className="mt-4 text-2xl font-semibold">{formatStockQuantity(payment?.amount||'0')} {payment?.symbol}</p>
    <p className="mt-2 text-sm text-gray-500">{payment?.currency} {payment?.fiatAmount} to receive</p>
    {payment&&<><p className="mt-2 text-xs text-gray-500">Payment and payout fees included · {formatUnits(BigInt(payment.fundingUnits),6)} USDC</p><p className="mt-1 text-xs text-gray-500">X Layer network fees are paid in OKB.</p><PocketXPayProgress progress={payment.progress}/></>}
-   {error&&<p role="alert" className="my-3 text-xs leading-5 text-gray-500">{error}</p>}
-   {payment?.replacement?<><p className="my-3 text-xs text-gray-500">Updated total: {formatUnits(BigInt(payment.replacement.fundingUnits),6)} USDC. Your completed steps remain saved.</p><button className={cta} disabled={busy} onClick={()=>void acceptPayout()}>Confirm updated quote</button></>:quoteExpired?<button className={cta+' mt-5'} disabled={busy} onClick={()=>{requestKey.current=crypto.randomUUID();void prepare()}}>Update quote</button>:expired&&payment?.state!=='quoted'?<button className={cta+' mt-5'} disabled={busy} onClick={()=>void reviewPayout()}>Update quote</button>:<button className={cta+' mt-5'} disabled={busy} aria-busy={busy} onClick={()=>void drive()}>{busy&&<span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"/>}{busy||payment?.state==='quoted'?'Pay '+merchantName:error||payment?.state==='failed'?'Retry':'Continue payment'}</button>}
+   {error&&<p role="alert" className="my-3 text-xs leading-5 text-gray-500">{pocketPricingMessage(error)}</p>}
+   {payment?.replacement?<><p className="my-3 text-xs text-gray-500">Updated total: {formatUnits(BigInt(payment.replacement.fundingUnits),6)} USDC. Your completed steps remain saved.</p><button className={cta} disabled={busy} onClick={()=>void acceptPayout()}>Confirm updated amount</button></>:quoteExpired?<button className={cta+' mt-5'} disabled={busy} onClick={()=>{requestKey.current=crypto.randomUUID();void prepare()}}>Continue</button>:expired&&payment?.state!=='quoted'?<button className={cta+' mt-5'} disabled={busy} onClick={()=>void reviewPayout()}>Continue</button>:<button className={cta+' mt-5'} disabled={busy} aria-busy={busy} onClick={()=>void drive()}>{busy&&<span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"/>}{busy||payment?.state==='quoted'?'Pay '+merchantName:error||payment?.state==='failed'?'Retry':'Continue payment'}</button>}
    {payment?.state==='quoted'&&!busy&&<button className="min-h-11 w-full text-xs text-gray-500" onClick={()=>{setSheet(false);setPayment(null);requestKey.current=crypto.randomUUID()}}>Edit amount</button>}
   </PocketBottomSheet>)}
  </>

@@ -17,7 +17,7 @@ export type StockSwapQuote = {
 export const sameStockAddress = (a: unknown, b: string) => typeof a === 'string' && a.toLowerCase() === b.toLowerCase()
 export const okxTokenAddress = (a: StockAsset) => a.address === 'native' ? OKX_NATIVE : a.address
 export function validateStockSwap(quote: StockSwapQuote, owner: Address, now = Date.now()) {
-  const fail = () => { throw Error('The swap route does not match your review. Request a new quote.') }
+  const fail = () => { throw Error('The swap details changed. Review them again.') }
   if (quote.chainId !== 196 || !sameStockAddress(quote.owner, owner) || !sameStockAddress(quote.tx.from, owner)
     || !sameStockAddress(quote.tx.to, OKX_XLAYER_ROUTER) || !sameStockAddress(quote.spender, OKX_XLAYER_SPENDER)
     || quote.expiresAt <= now || quote.expiresAt > now + 65_000
