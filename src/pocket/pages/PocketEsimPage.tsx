@@ -86,13 +86,19 @@ export default function PocketEsimPage() {
       </section>}
     {plan && <PocketBottomSheet title="Plan details" onClose={() => setPlan(null)}>
       <h2 className="text-lg font-semibold">{plan.data} · {destination?.name}</h2>
-      <dl className="mt-6 space-y-4 text-sm">{[[plan.daily ? 'Plan' : 'Validity', plan.daily ? 'Daily data' : `${plan.days} ${plan.days === 1 ? 'day' : 'days'}`], ['Top-ups', plan.topUp ? 'Available' : 'Not available']].map(([label, value]) => <div key={label} className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="text-right font-medium">{value}</dd></div>)}</dl>
+      {!plan.daily && <dl className="mt-6 text-sm"><div className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">Validity</dt><dd className="text-right font-medium">{plan.days} {plan.days === 1 ? 'day' : 'days'}</dd></div></dl>}
       {plan.daily && <label className="mt-5 flex items-center justify-between text-sm"><span>Days</span><input aria-label="Days" type="text" inputMode="numeric" maxLength={3} value={days} onChange={event => { if (/^\d{0,3}$/.test(event.target.value)) { setPrice(null); setDays(event.target.value) } }} onBlur={() => setDays(String(Math.min(365, Math.max(1, Number(days) || 1))))} className="w-20 rounded-xl border-0 bg-gray-100 p-3 text-center outline-none focus:ring-0 dark:bg-[#171717]" /></label>}
       {priceError ? <p role="status" className="mt-5 text-sm text-gray-500 dark:text-gray-400">{priceError}</p> : !price ? <div role="status" aria-label="Updating price" className="mt-5 space-y-3"><PocketSkeletonBar className="h-5 w-full" /><PocketSkeletonBar className="h-5 w-full" /></div> : <dl className="mt-5 space-y-3 text-sm">{[['Plan', price.subtotal], ['Platform fee', price.platformFee], ['Total', price.total]].map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="font-medium">{Number(amount) > 0 && Number(amount) < 0.01 ? '<0.01' : Number(amount).toFixed(2)} USD</dd></div>)}</dl>}
-      {plan.activation && <p className="mt-5 text-sm leading-6 text-gray-500 dark:text-gray-400">{plan.activation}</p>}
-      {plan.coverage?.length ? <details className="mt-5 text-sm"><summary className="cursor-pointer font-medium">Coverage · {plan.coverage.length} countries / areas</summary><p className="mt-3 leading-6 text-gray-500 dark:text-gray-400">{plan.coverage.join(', ')}</p></details> : null}
-      {plan.fairUsage && <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">{plan.daily ? `After the daily high-speed allowance, data continues at up to ${plan.fairUsage}.` : plan.fairUsage}</p>}
-      <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">Requires an unlocked, eSIM-compatible phone.</p>
+      {plan.daily && plan.fairUsage && <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">Up to {plan.fairUsage} after your daily allowance.</p>}
+      <details className="mt-5 text-sm">
+        <summary className="cursor-pointer font-medium text-gray-600 dark:text-gray-300">Plan information</summary>
+        <div className="mt-3 space-y-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
+          <p>Unlocked, eSIM-compatible phone required.</p>
+          {plan.activation && <p>{plan.activation}</p>}
+          {!plan.daily && plan.fairUsage && <p>{plan.fairUsage}</p>}
+          {plan.coverage?.length ? <p><span className="font-medium text-gray-700 dark:text-gray-200">Coverage: </span>{plan.coverage.join(', ')}</p> : null}
+        </div>
+      </details>
       <button type="button" disabled className="pocket-cta-primary mt-6 w-full">Coming soon</button>
     </PocketBottomSheet>}
   </PocketRouteShell>
