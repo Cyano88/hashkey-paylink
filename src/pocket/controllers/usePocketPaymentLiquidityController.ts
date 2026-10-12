@@ -130,21 +130,24 @@ export default function usePocketPaymentLiquidityController(input: {
   const run = useRef(0)
   const inspection = useRef<{key:string;promise:Promise<Awaited<ReturnType<typeof inspectLiquidity>>>} | null>(null)
 
+  // Callbacks supplied inline by pages must not restart route inspection on every render.
+  const inspectionInput = useRef(input)
+  inspectionInput.current = input
   const inspect = useCallback(async () => {
     if (amountUnits <= 0n) throw new Error('Payment amount is unavailable.')
-    const accessToken = await input.getAccessToken()
+    const accessToken = await inspectionInput.current.getAccessToken()
     if (!accessToken) throw new Error('Sign in again to check Pocket balances.')
-    const direct = cachedPocketDirectLiquidity(input.readRoutingSnapshot?.(), input.destination, amountUnits, Date.now(), input.bankPayout)
+    const direct = cachedPocketDirectLiquidity(inspectionInput.current.readRoutingSnapshot?.(), input.destination, amountUnits, Date.now(), input.bankPayout)
     if (direct) return { ...direct, accessToken }
     const key = accessToken + ':' + input.destination + ':' + amountUnits + ':' + Boolean(input.bankPayout)
     let pending = inspection.current?.key === key ? inspection.current.promise : null
     if (!pending) {
-      pending = inspectLiquidity({ getEvmSession:input.getEvmSession, accessToken, destination: input.destination, amountUnits, bankPayout: input.bankPayout })
+      pending = inspectLiquidity({ getEvmSession:inspectionInput.current.getEvmSession, accessToken, destination: input.destination, amountUnits, bankPayout: input.bankPayout })
       inspection.current = {key, promise:pending}
     }
     try { return { ...await pending, accessToken } }
     finally { if (inspection.current?.promise === pending) inspection.current = null }
-  }, [amountUnits, input.destination, input.getAccessToken, input.readRoutingSnapshot, input.bankPayout, input.getEvmSession])
+  }, [amountUnits, input.destination, input.bankPayout])
 
   useEffect(() => {
     const current = ++run.current
@@ -348,7 +351,7 @@ export default function usePocketPaymentLiquidityController(input: {
 
   const notice = error
     || (status === 'checking'
-      ? 'Checking USDC routes.'
+      ? ''
       : status === 'moving'
         ? 'Moving USDC to ' + networkLabel(input.destination) + '.'
         : status === 'waiting' || status === 'reconciling'

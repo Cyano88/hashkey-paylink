@@ -344,7 +344,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                       <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} {bills.intent.asset ?? 'USDC'}</span></div>
                     </div>
                     {!fundingShortfall(bills.error) && bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{pocketPricingMessage(bills.error)}</p>}
-                    <PocketFundingAction asset={paymentRouteInsufficient?(bills.asset ?? 'USDC'):fundingShortfall(bills.error,bills.asset ?? 'USDC')} network="base" locked={slideStatus!=='idle'||approvalBusy} onReturn={async()=>{await onFundingReturn?.()}} onCancel={()=>bills.dismiss()}><PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
+                    <PocketFundingAction asset={paymentRouteInsufficient?(bills.asset ?? 'USDC'):fundingShortfall(bills.error,bills.asset ?? 'USDC')} network="base" locked={slideStatus!=='idle'||approvalBusy} onReturn={async()=>{await onFundingReturn?.()}} onCancel={()=>bills.dismiss()}><PocketSlideAction plain loadingContent={paymentRouting?.status === 'checking'} onApprovalBusyChange={setApprovalBusy}
                       status={slideStatus}
                       disabled={bills.status !== 'ready' || quoteExpired || paymentRouteBusy || paymentRouteInsufficient}
                       onPrepare={onPreparePayment}
@@ -355,7 +355,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                           : paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
                             ? 'Moving USDC'
                             : paymentRouting?.status === 'checking'
-                              ? 'Checking balances'
+                              ? 'Confirm payment'
                               : 'Review payment',
                         idle: 'Confirm payment',
                         pending: paymentRouting?.status === 'moving' ? 'Moving USDC' : 'Preparing payment',
