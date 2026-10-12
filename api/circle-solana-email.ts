@@ -1207,7 +1207,7 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...result })
     }
 
-    if (action === 'signOwnWalletBridge') {
+    if (action === 'signOwnWalletBridge' && params.asset !== 'USDT') {
       const { validatePocketSolanaBridgeSigning } = await import('./pocket/solana-cctp-relay.js')
       await validatePocketSolanaBridgeSigning(req, params)
     }
@@ -1226,16 +1226,19 @@ export default async function handler(req: Request, res: Response) {
       if (!wallet || !isSolanaAddress(wallet.address)) {
         return res.status(400).json({ ok: false, error: 'Circle did not return a valid Solana wallet address. Reconnect with email and try again.' })
       }
-      const data = await circleJson('/v1/w3s/user/sign/transaction', {
+      const sign = () => circleJson('/v1/w3s/user/sign/transaction', {
         method: 'POST',
         userToken,
         apiKey: circleApiKey(),
         body: JSON.stringify({
           walletId,
           rawTransaction,
-          memo: memo || 'Hash PayLink USDC payment on Solana',
+          memo: action === 'signOwnWalletBridge' && params.asset === 'USDT' ? 'Pocket USDT bridge on Solana' : memo || 'Hash PayLink USDC payment on Solana',
         }),
       })
+      const data = action === 'signOwnWalletBridge' && params.asset === 'USDT'
+        ? await (await import('./pocket/solana-usdt-bridge-signing.js')).authorizePocketSolanaUsdtBridge(req, params, async () => String((await sign()).challengeId || ''))
+        : await sign()
       if (!data.challengeId) {
         console.error('[circle-solana-email] Missing signing challenge', {
           walletId,

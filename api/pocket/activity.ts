@@ -74,7 +74,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     merchantId: record.id,
     contextLabel: `${source} to ${destination}`,
     settlementType: 'wallet_bridge',
-    paycrestStatus: record.status === 'completed' ? 'completed' : record.status === 'failed' ? 'failed' : 'processing',
+    paycrestStatus: record.metadata.paymentState === 'refunded' ? 'refunded' : record.status === 'completed' ? 'completed' : record.status === 'failed' ? 'failed' : 'processing',
     activityLabel: record.action === 'wallet.usdt-bridge' ? 'USDT bridge' : 'USDC bridge',
     assetSymbol: record.action === 'wallet.usdt-bridge' ? 'USDT' : 'USDC',
     destinationTxHash: record.metadata.destinationTxHash,

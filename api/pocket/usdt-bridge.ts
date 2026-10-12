@@ -1,4 +1,6 @@
 import type {Request,Response} from 'express'
+import {quoteEvmSolanaUsdt,solanaUsdtDestinationEnabled,relayUsdtDepositMatches,readEvmSolanaUsdtDelivery} from './evm-solana-usdt-bridge.js'
+import solanaUsdtBridgeHandler,{listPendingSolanaUsdtBridges,solanaUsdtBridgeEnabled,recoverSolanaUsdtBridge} from './solana-usdt-bridge-api.js'
 import {createPublicClient,decodeEventLog,formatUnits,parseUnits,getAddress,http,parseAbi,type Hex} from 'viem'
 import {base,arbitrum,mainnet,polygon} from 'viem/chains'
 import {verifiedPrivyUser,circleLinkKey,readCircleLink} from '../privy-circle-link.js'
@@ -16,27 +18,30 @@ const chains={base,arbitrum,ethereum:mainnet,polygon}
 const BALANCE=parseAbi(['function balanceOf(address owner) view returns(uint256)'])
 const client=(network:UsdtBridgeNetwork)=>createPublicClient({chain:chains[network],transport:http(process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||undefined,{timeout:15000})})
 const preview=(q:UsdtBridgeQuote)=>{const {callData,ownerId,...value}=q;return value}
-const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:'across'})
+const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
 
 export default async function usdtBridgeHandler(req:Request,res:Response){
+  if(req.method==='POST'&&(req.body?.source==='solana'||String(req.body?.quoteToken||'').startsWith('solana:')))return solanaUsdtBridgeHandler(req,res)
   res.setHeader('Cache-Control','no-store')
   try {
     if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Method not allowed.'})
     const identity=await verifiedPrivyUser(req)
     if(req.method==='GET'){
       const records=await listCirclePocketActions(identity.userId,500,ACTION,true)
-      const pending=records.filter(r=>['started','submitted'].includes(r.status)&&r.metadata?.quoteToken).map(r=>{
+      const pending=records.filter(r=>['started','submitted'].includes(r.status)&&r.metadata?.quoteToken&&!r.metadata.quoteToken.startsWith('solana:')).map(r=>{
         const q=openUsdtBridgeQuote(r.metadata!.quoteToken,identity.userId,true)
         return {quote:preview(q),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,txHash:r.metadata?.txHash}
       })
-      return res.json({ok:true,pending})
+      return res.json({ok:true,pending:[...await listPendingSolanaUsdtBridges(identity.userId),...pending],solanaSourceEnabled:solanaUsdtBridgeEnabled(),solanaDestinationEnabled:solanaUsdtDestinationEnabled()})
     }
     const action=req.body?.action
     if(action==='quote'){
-      const source=usdtBridgeNetwork(req.body.source),destination=usdtBridgeNetwork(req.body.destination)
+      const source=usdtBridgeNetwork(req.body.source),destination=req.body.destination==='solana'?'solana':usdtBridgeNetwork(req.body.destination)
+      if(destination==='solana'&&(!solanaUsdtDestinationEnabled()||source!=='arbitrum'))bridgeError('This Solana bridge route is not available yet.',409)
       const [from,to]=await Promise.all([source,destination].map(n=>readCircleLink(circleLinkKey(identity.userId,n,'payment'))))
       if(!from||!to)bridgeError('Open both Pocket wallets before bridging.',409)
-      const q=await quoteUsdtBridge({ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:getAddress(from.circleWalletAddress),destinationAddress:getAddress(to.circleWalletAddress),source,destination,amount:String(req.body.amount||'')})
+      const binding={ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:getAddress(from.circleWalletAddress),source,amount:String(req.body.amount||'')}
+      const q=destination==='solana'?await quoteEvmSolanaUsdt({...binding,destinationAddress:to.circleWalletAddress}):await quoteUsdtBridge({...binding,destination,destinationAddress:getAddress(to.circleWalletAddress)})
       const priced=await quoteCircleEvmBatchRecovery({ownerId:identity.userId,walletId:q.walletId,walletAddress:q.walletAddress,source,destination,destinationAddress:q.destinationAddress,asset:'USDT',tokenAddress:getAddress(POCKET_USDT_ASSETS[source].address),amountUnits:q.amountUnits,bridgeDebitUnits:q.amountUnits,bridgeCallData:q.callData,providerExpiresAt:q.expiresAt,userToken:String(req.body.circleUserToken||'')})
       q.callData=priced.callData;q.networkFeeUnits=priced.networkFeeUnits;q.totalUnits=priced.totalUnits;q.total=formatUnits(BigInt(priced.totalUnits),6);q.reimbursementTreasury=EVM_PLATFORM_TREASURY;q.expiresAt=priced.expiresAt
       q.fee=formatUnits(BigInt(priced.networkFeeUnits)+parseUnits(q.fee,6),6)
@@ -59,7 +64,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
     }
     if(action==='execute'){
       const [from,to]=await Promise.all([q.source,q.destination].map(n=>readCircleLink(circleLinkKey(identity.userId,n,'payment'))))
-      if(!from||!to||from.circleWalletId!==q.walletId||!sameAddress(from.circleWalletAddress,q.walletAddress)||!sameAddress(to.circleWalletAddress,q.destinationAddress))bridgeError('Linked wallets changed. Review a new bridge quote.',409)
+      if(!from||!to||from.circleWalletId!==q.walletId||!sameAddress(from.circleWalletAddress,q.walletAddress)||(q.destination==='solana'?to.circleWalletAddress!==q.destinationAddress:!sameAddress(to.circleWalletAddress,q.destinationAddress)))bridgeError('Linked wallets changed. Review a new bridge quote.',409)
       if(existing?.metadata?.challengeId)return res.json({ok:true,challengeId:existing.metadata.challengeId})
       if(existing)bridgeError('This bridge already has an unresolved submission. Check its status before retrying.',409)
       if(q.expiresAt<=Date.now())bridgeError('Quote expired. Review a new quote.',409)
@@ -83,18 +88,25 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
 }
 
 // Shared by the authenticated status route and background reconciliation.
-const recoveryDefaults={findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch}
+const recoveryDefaults={findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
 export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string}={},overrides:Partial<typeof recoveryDefaults>={}){
+  if(quoteToken.startsWith('solana:'))return recoverSolanaUsdtBridge(ownerId,quoteToken.slice(7))
   const deps={...recoveryDefaults,...overrides}
   const q=openUsdtBridgeQuote(quoteToken,ownerId,true),journalKey='pocket:usdt-bridge:'+q.id
   const existing=await deps.findAction(ownerId,journalKey,ACTION)
   const meta:Record<string,string>={...metadata(q,quoteToken),...(existing?.metadata||{})}
     if(!existing)return {ok:true,status:'not_submitted'}
     if(existing.status==='completed'){
-      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'across'},recordedAt:existing.updatedAt})
+      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:q.provider},recordedAt:existing.updatedAt})
       return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash}
     }
-    if(existing.status==='failed')return {ok:true,status:'failed'}
+    if(existing.status==='failed'){
+      if(meta.paymentState==='refunded'){
+        await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':refunded',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'refunded',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:meta.refundNetwork,resourceId:q.id,transactionHash:meta.txHash,metadata:{refundTxHash:meta.refundTxHash,refundAmount:meta.refundAmount,provider:q.provider},recordedAt:existing.updatedAt})
+        return {ok:true,status:'refunded',txHash:meta.txHash,destinationTxHash:meta.refundTxHash,settlement:{network:meta.refundNetwork,transactionHash:meta.refundTxHash,amountUnits:meta.refundAmountUnits}}
+      }
+      return {ok:true,status:'failed'}
+    }
     let txHash=meta.txHash||''
     let awaitingApproval=false
     if(!txHash&&meta.challengeId&&input.circleUserToken){
@@ -112,7 +124,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       const hashes=[...new Set(rows.filter(r=>r.assetSymbol==='USDT'&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
       for(const hash of hashes){
         const receipt=await deps.client(q.source).getTransactionReceipt({hash:hash as Hex}).catch(()=>null)
-        if(receipt?.logs.some(log=>{if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false;try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId}catch{return false}})){txHash=hash;break}
+        if(receipt&&(q.provider==='relay'?relayUsdtDepositMatches(q,receipt.logs):receipt.logs.some(log=>{if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false;try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId}catch{return false}}))){txHash=hash;break}
       }
     }
     if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:awaitingApproval?'awaiting_approval':'pending',challengeId:meta.challengeId}
@@ -126,12 +138,25 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.source].address)||!q.reimbursementTreasury)return sum
       try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='Transfer'&&sameAddress(event.args.from,q.walletAddress)&&sameAddress(event.args.to,q.reimbursementTreasury)?sum+BigInt(event.args.value):sum}catch{return sum}
     },0n)
-    const started=receipt.status==='success'&&reimbursed===BigInt(q.networkFeeUnits||'0')&&debited===BigInt(q.totalUnits||q.amountUnits)&&receipt.logs.some(log=>{
-      if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false
+    const started=receipt.status==='success'&&reimbursed===BigInt(q.networkFeeUnits||'0')&&debited===BigInt(q.totalUnits||q.amountUnits)&&(q.provider==='relay'?relayUsdtDepositMatches(q,receipt.logs):receipt.logs.some(log=>{
+      if(q.destination==='solana'||!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false
       try {const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId&&sameAddress(event.args.bridgeData.receiver,q.destinationAddress)&&sameAddress(event.args.bridgeData.sendingAssetId,POCKET_USDT_ASSETS[q.source].address)&&event.args.bridgeData.destinationChainId===BigInt(POCKET_USDT_ASSETS[q.destination].chainId)}catch{return false}
-    })
+    }))
     if(!started)return {ok:true,status:'needs_attention'}
     await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,txHash,sourceConfirmed:'true'}})
+    if(q.provider==='relay'){
+      const rpc=deps.client(q.source)
+      if(await rpc.getChainId()!==POCKET_USDT_ASSETS[q.source].chainId)return {ok:true,status:'needs_attention',txHash}
+      const block=await rpc.getBlock({blockNumber:receipt.blockNumber})
+      if(!sameAddress(block.hash,receipt.blockHash))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
+      const delivery=await deps.relayDelivery(q,txHash)
+      if(!('settlement' in delivery))return {ok:true,...delivery,txHash,sourceConfirmed:true}
+      const settlement=delivery.settlement,refunded=delivery.status==='refunded'
+      await deps.recordAction({ownerId,idempotencyKey:journalKey,action:ACTION,status:refunded?'failed':'completed',resourceId:q.id,metadata:{...meta,txHash,sourceConfirmed:'true',destinationTxHash:settlement.transactionHash,paymentState:delivery.status,...(refunded?{refundNetwork:settlement.network,refundTxHash:settlement.transactionHash,refundAmount:formatUnits(BigInt(settlement.amountUnits),6),refundAmountUnits:settlement.amountUnits}:{})}})
+      // Terminal reads retry the journal-to-ledger write gap without another payment.
+      return reconcileUsdtBridge(ownerId,quoteToken,input,overrides)
+    }
+    if(q.destination==='solana')return {ok:true,status:'needs_attention',txHash}
     const query=new URLSearchParams({txHash,fromChain:String(POCKET_USDT_ASSETS[q.source].chainId),toChain:String(POCKET_USDT_ASSETS[q.destination].chainId),bridge:'across'})
     const response=await deps.fetch('https://li.quest/v1/status?'+query,{signal:AbortSignal.timeout(15000)})
     if(!response.ok)return {ok:true,status:'pending',txHash,sourceConfirmed:true}

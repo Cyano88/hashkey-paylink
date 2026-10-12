@@ -25,6 +25,7 @@ export default function PocketBridgeForm(p:Props){
       {p.quote.minimumReceive&&<div className="flex justify-between"><span className="text-gray-500">Minimum received</span><b>{formatPocketDisplayAmount(p.quote.minimumReceive)} {p.asset}</b></div>}
       <div className="flex justify-between"><span className="text-gray-500">Fee</span><b>{formatPocketDisplayAmount(p.quote.fee)} {p.asset}</b></div>
       {p.quote.total&&<div className="flex justify-between"><span className="text-gray-500">Total</span><b>{formatPocketDisplayAmount(p.quote.total)} {p.asset}</b></div>}
+      {Number(p.amount)>0&&Number(p.quote.fee)/Number(p.amount)>0.05&&<p role="status" className="pt-1 text-xs text-gray-500 dark:text-gray-400">The fee is high for this amount. You can still proceed.</p>}
     </div>}
     {p.children}
   </section>

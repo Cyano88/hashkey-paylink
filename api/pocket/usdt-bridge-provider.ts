@@ -20,7 +20,7 @@ export function usdtBridgeNetwork(value: unknown):UsdtBridgeNetwork {
   if(!USDT_BRIDGE_NETWORKS.includes(value as UsdtBridgeNetwork)) bridgeError('USDT bridging is available on supported EVM networks only.')
   return value as UsdtBridgeNetwork
 }
-export type UsdtBridgeQuote = {networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork;walletAddress:Address;destinationAddress:Address;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;provider:'across'}
+export type UsdtBridgeQuote = {networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork|'solana';walletAddress:Address;destinationAddress:string;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;requestId?:string;provider:'across'|'relay'}
 
 // Only audited Across V4 calls and its exact fee-forwarding step are accepted.
 // No token conversion, destination calls, native value, or arbitrary swap calls.
@@ -33,7 +33,7 @@ export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork
     ||!sameAddress(t.to,USDT_BRIDGE_ROUTER)||!sameAddress(e.approvalAddress,USDT_BRIDGE_ROUTER)||BigInt(t.value||'0')!==0n||String(a.fromAmount)!==String(input.amountUnits)
     ||typeof t.data!=='string'||t.data.length>24000||!Array.isArray(data.includedSteps)||data.includedSteps.some((s:any)=>!['cross','protocol'].includes(s.type))) bridgeError('USDT bridge route did not match the requested wallets and assets.',502)
   const minimum=BigInt(e.toAmountMin),receive=BigInt(e.toAmount)
-  if(minimum<=0n||receive<minimum||receive>input.amountUnits||minimum*10000n<receive*9950n||input.amountUnits-minimum>input.amountUnits/20n) bridgeError('USDT bridge fees or minimum received are outside the supported limits.',502)
+  if(minimum<=0n||receive<minimum||receive>input.amountUnits||minimum*10000n<receive*9950n) bridgeError('USDT bridge minimum received does not match the requested amount and slippage.',502)
   const decoded=decodeFunctionData({abi:USDT_BRIDGE_ABI,data:t.data as Hex}) as any
   const b=decoded.args[0],across=decoded.args[decoded.args.length-1] as any
   if(b.bridge!=='across'||b.destinationChainId!==BigInt(to.chainId)||!sameAddress(b.sendingAssetId,from.address)||!sameAddress(b.receiver,input.destinationAddress)||b.hasDestinationCall
@@ -50,12 +50,12 @@ export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork
     if(!sameAddress(fees.args[0],from.address)||fees.args[1].length>4) bridgeError('Unsupported bridge fee operation.',502)
     fee=fees.args[1].reduce((sum,item)=>sum+item.amount,0n)
     const listed=(e.feeCosts||[]).filter((f:any)=>f.name==='LIFI Fixed Fee'&&f.included===true&&sameAddress(f.token?.address,from.address)).reduce((sum:bigint,f:any)=>sum+BigInt(f.amount),0n)
-    if(fee!==listed||fee>input.amountUnits/100n||b.minAmount!==input.amountUnits-fee||(BigInt(b.minAmount)*BigInt(across.outputAmountMultiplier)/10n**18n)<minimum) bridgeError('USDT bridge fee or delivery amount changed.',502)
+    if(fee!==listed||fee>=input.amountUnits||b.minAmount!==input.amountUnits-fee||(BigInt(b.minAmount)*BigInt(across.outputAmountMultiplier)/10n**18n)<minimum) bridgeError('USDT bridge fee or delivery amount changed.',502)
   } else if(b.hasSourceSwaps||b.minAmount!==input.amountUnits) bridgeError('Unexpected USDT bridge input.',502)
   if(across.outputAmount<minimum) bridgeError('Bridge output is below the approved minimum.',502)
   return {callData:t.data as Hex,transactionId:b.transactionId,minimum,receive}
 }
-export async function quoteUsdtBridge(input:Omit<UsdtBridgeQuote,'id'|'amountUnits'|'receive'|'minimumReceive'|'minimumUnits'|'fee'|'expiresAt'|'callData'|'transactionId'|'provider'>,fetcher=fetch):Promise<UsdtBridgeQuote> {
+export async function quoteUsdtBridge(input:Omit<UsdtBridgeQuote,'id'|'amountUnits'|'receive'|'minimumReceive'|'minimumUnits'|'fee'|'expiresAt'|'callData'|'transactionId'|'provider'|'destination'|'destinationAddress'>&{destination:UsdtBridgeNetwork;destinationAddress:Address},fetcher=fetch):Promise<UsdtBridgeQuote> {
   if(input.source===input.destination||!/^\d+(\.\d{1,6})?$/.test(input.amount)||input.amount.length>40) bridgeError('Enter an amount and choose different networks.')
   const units=parseUnits(input.amount,6)
   if(units<=0n) bridgeError('Enter an amount to bridge.')
