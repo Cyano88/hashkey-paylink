@@ -13,6 +13,10 @@ assert.equal((await call({action:'status',quoteToken:'not-solana'})).status,400)
 identity='another';assert.equal((await call({action:'status',quoteToken:'solana:test'})).status,404);identity='owner'
 const prepared=await call({action:'execute',quoteToken:'solana:test'});assert.equal(prepared.transaction,'prepared')
 const preview=solanaUsdtBridgePreview(record);assert.equal(preview.quote.total,'1.0015');assert.equal(preview.quote.fee,'0.0115');assert.equal(preview.quoteToken,'solana:test')
+record={...record,phase:'source_failed'}
+const expired=await call({action:'status',quoteToken:'solana:test'})
+assert.equal(expired.status,'not_submitted');assert.equal(expired.reason,'approval_expired');assert.equal(submitted,false)
+record={...record,phase:'quoted'}
 const result=await call({action:'submit',quoteToken:'solana:test',transaction:'signed'})
 assert.equal(result.status,'completed');assert.equal(result.destinationTxHash,'destination-hash');assert.ok(saved&&submitted&&settled)
 // Recovery is available even when new quotes are disabled.

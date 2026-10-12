@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
 import { cn } from '../../lib/utils'
+import { PocketSkeletonBar } from './PocketContentSkeletons'
 import { POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, preparePocketPaymentApproval, requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 import { AlertCircle, ArrowLeftRight, Banknote, Check, CheckCircle2, Loader2, Send, Wallet } from './PocketIcons'
 
@@ -12,6 +13,7 @@ type PocketSlideActionProps = ComponentProps<typeof SlideAction> & {
   plain?: boolean
   approvalRequired?: boolean
   onPrepare?: () => Promise<void>
+  loadingContent?: boolean
 }
 
 const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
@@ -23,7 +25,7 @@ const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
   error: 'Withdrawal failed',
 }
 
-export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange, plain = true }: PocketSlideActionProps) {
+export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange, plain = true, loadingContent = false }: PocketSlideActionProps) {
   const activationLocked = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const [optimisticPending, setOptimisticPending] = useState(false)
@@ -78,7 +80,7 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
   }, [])
 
   const confirmOnce = async () => {
-    if (disabled || status !== 'idle' || activationLocked.current) return
+    if (disabled || loadingContent || status !== 'idle' || activationLocked.current) return
     activationLocked.current = true
     setOptimisticPending(true)
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
@@ -101,7 +103,8 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
     <button
       type="button"
       onClick={() => void confirmOnce()}
-      disabled={disabled || optimisticPending || visualStatus !== 'idle'}
+      disabled={disabled || loadingContent || optimisticPending || visualStatus !== 'idle'}
+      aria-busy={loadingContent || optimisticPending || visualStatus === 'pending' || visualStatus === 'submitted'}
       aria-label={label}
       aria-live={'polite'}
       className={cn(
@@ -121,7 +124,7 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
           : visualStatus === 'error'
             ? <AlertCircle className="h-4 w-4" />
             : !plain ? <ActionIcon className="h-4 w-4" /> : null)}
-      <span>{label}</span>
+      {loadingContent && visualStatus === 'idle' ? <PocketSkeletonBar className="h-3 w-28" /> : <span>{label}</span>}
     </button>
   )
 }

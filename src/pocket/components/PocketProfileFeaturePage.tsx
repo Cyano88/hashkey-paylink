@@ -180,7 +180,7 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
       <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
       <button type='button' onClick={() => void changePin()} disabled={busy || ![4,6].includes(currentPin.length) || newPin.length !== 4 || confirmPin.length !== 4} className='pocket-cta-primary mt-4 w-full'>Change PIN</button>
     </article>
-    {!stocks && <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='pocket-cta-secondary w-full'>{busy ? 'Please wait...' : 'Reconnect Circle wallet'}</button>}
+    {!stocks && <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='pocket-cta-secondary w-full'>{busy ? 'Updating security' : 'Reconnect Circle wallet'}</button>}
     {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
     <button type='button' onClick={() => void resetPin()} disabled={busy} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 disabled:opacity-50 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
     <p className='px-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Reset signs you out first so your email identity can be verified again.</p>

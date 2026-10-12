@@ -29,6 +29,9 @@ const defaultDependencies={verifyUser:verifiedPrivyUser,state:createSolanaUsdtBr
 export async function recoverSolanaUsdtBridge(ownerId:string,id:string,deps=defaultDependencies){
  const state=deps.state();let current=await state.read(ownerId,id)
  if(!current.signedTransaction&&['quoted','authorizing','awaiting_approval'].includes(current.phase)&&current.quote.expiresAt<=Date.now())current=await state.expireUnsigned(ownerId,id,await deps.rpc().getBlockHeight('confirmed'))
+ // An expired unsigned approval never became a transfer. Do not report it as
+ // a failed payment when a client recovers an old draft on page entry.
+ if(current.phase==='source_failed'&&!current.signedTransaction&&!current.signature)return {ok:true,status:'not_submitted',reason:'approval_expired'}
  if(current.signedTransaction){await deps.journal(current);current=await state.submit(ownerId,id,deps.rpc())}
  if(['source_confirmed','completed','refunded'].includes(current.phase)){
   const result=await deps.reconcile(ownerId,id)

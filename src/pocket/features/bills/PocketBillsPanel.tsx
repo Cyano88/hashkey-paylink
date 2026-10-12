@@ -9,7 +9,7 @@ import usePocketSlowConfirmation from '../../hooks/usePocketSlowConfirmation'
 import { pocketBillTitle } from '../../lib/pocketReceipt'
 import { useEffect, useState } from 'react'
 import PocketBottomSheet from '../../components/PocketBottomSheet'
-import { PocketBillsSkeleton, PocketLoadingField } from '../../components/PocketContentSkeletons'
+import { PocketBillsSkeleton, PocketLoadingField, PocketQuoteSkeleton, PocketSkeletonBar } from '../../components/PocketContentSkeletons'
 import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
@@ -314,7 +314,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
             {bills.status === 'quoting' && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} onClose={bills.edit}>
-                <div role="status" className="flex min-h-40 flex-col items-center justify-center gap-3 py-6"><Loader2 aria-hidden="true" className="h-6 w-6 animate-spin motion-reduce:animate-none" /><p className="text-sm font-semibold">Getting live quote</p></div>
+                <div className="space-y-6 py-6"><PocketSkeletonBar className="mx-auto h-8 w-36" /><PocketQuoteSkeleton label="Updating bill quote" /><PocketSkeletonBar className="h-12 w-full rounded-full" /></div>
               </PocketBottomSheet>
             )}
             {showPayment && !showResult && bills.intent && (
@@ -376,7 +376,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           {!isData && <div className="shrink-0 pt-2" style={{ visibility: showPayment || showResult ? 'hidden' : undefined }}>
             {!showPayment && !reviewBlocked && (
               <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="pocket-cta-primary flex w-full items-center justify-center gap-2 px-4 transition disabled:cursor-not-allowed">
-                {bills.status === 'quoting' ? <span role="status" className="animate-pulse motion-reduce:animate-none">Getting live quote</span> : 'Buy'}
+                {bills.status === 'quoting' ? <span role="status" aria-label="Updating bill quote"><PocketSkeletonBar className="h-3 w-24" /></span> : 'Buy'}
               </button>
             )}
           </div>}

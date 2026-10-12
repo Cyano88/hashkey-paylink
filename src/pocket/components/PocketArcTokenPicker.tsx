@@ -78,7 +78,7 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
             {balancesLoading ? <PocketSkeletonBar className="h-3 w-14" /> : <span className="max-w-36 text-right text-xs tabular-nums"><span className="block">{token.holdingLabel ?? token.balance ?? 'Unavailable'}</span>{token.holdingValueLabel&&<span className="mt-1 block text-gray-500 dark:text-gray-400">{token.holdingValueLabel}</span>}</span>}{token.address.toLowerCase() === value.toLowerCase() && <Check className="h-4 w-4 shrink-0" />}
           </button>)}
           {normalized&&filtered.length>resultLimit&&<p className="py-3 text-xs text-gray-500">Refine your search to see more stocks.</p>}
-          {loading && <p role="status" className="py-6 text-center text-xs text-gray-500 dark:text-gray-400">Looking up token…</p>}
+          {loading && <div role="status" aria-label="Looking up asset" aria-busy="true" className="flex items-center gap-3 py-6"><PocketSkeletonBar className="h-10 w-10 rounded-full" /><div className="space-y-2"><PocketSkeletonBar className="h-3 w-24" /><PocketSkeletonBar className="h-3 w-36" /></div></div>}
           {error && <p role="alert" className="py-4 text-xs text-red-600">{error}</p>}
           {!listed.length && !found && !loading && !error && <p className="py-6 text-center text-xs text-gray-500 dark:text-gray-400">No matching token. Search by name or contract.</p>}
         </div>

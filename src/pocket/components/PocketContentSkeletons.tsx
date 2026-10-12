@@ -1,5 +1,11 @@
 export function PocketSkeletonBar({ className = '' }: { className?: string }) {
-  return <span aria-hidden="true" className={`block animate-pulse rounded-lg bg-gray-200/80 motion-reduce:animate-none dark:bg-white/[0.08] ${className}`} />
+  return <span aria-hidden="true" className={`pocket-shimmer block rounded-lg bg-gray-200/80 dark:bg-white/[0.08] ${className}`} />
+}
+
+export function PocketQuoteSkeleton({ label = 'Updating quote' }: { label?: string }) {
+  return <div role="status" aria-label={label} aria-busy="true" className="space-y-4 rounded-2xl bg-gray-50 p-4 dark:bg-[#121212]">
+    {[0, 1, 2].map(index => <div key={index} className="flex items-center justify-between gap-5"><PocketSkeletonBar className="h-3 w-24" /><PocketSkeletonBar className="h-3 w-20" /></div>)}
+  </div>
 }
 
 export function PocketLoadingField({ label, cards = false }: { label: string; cards?: boolean }) {

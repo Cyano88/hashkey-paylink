@@ -105,3 +105,8 @@ html.dark [data-pocket-auth='true'] [class~='border-white/35'] { border-color: r
 @media (prefers-reduced-motion: reduce) {
   .pocket-boundary-content { transition: none; transform: none !important; }
 }
+/* One restrained placeholder treatment; never used for a submitted transaction. */
+.pocket-shimmer { position: relative; overflow: hidden; isolation: isolate; }
+.pocket-shimmer::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgb(255 255 255 / .22), transparent); animation: pocket-shimmer-sweep 1.7s ease-in-out infinite; }
+@keyframes pocket-shimmer-sweep { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .pocket-shimmer::after { animation: none; display: none; } }

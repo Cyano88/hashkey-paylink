@@ -84,7 +84,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
   }
   const executionReady=stage==='review' && !!review && review.rows.every(row=>row.status==='ok') && !!operation.current
   const cta='mt-5 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'
-  if(status!=='ready')return <section className='pt-6'><p role={status==='failed'?'alert':'status'} className='text-sm leading-6'>{status==='checking'?'Checking wallet update...':error}</p>{status==='failed'&&<button type='button' className={cta} onClick={()=>void checkStatus()}>Check again</button>}</section>
+  if(status!=='ready')return <section className='pt-6'><p role={status==='failed'?'alert':'status'} className='text-sm leading-6'>{status==='checking'?'Checking wallet update':error}</p>{status==='failed'&&<button type='button' className={cta} onClick={()=>void checkStatus()}>Check again</button>}</section>
   if(additional.length && !previous)return <PocketAdditionalWalletUpdate email={email} getAccessToken={getAccessToken} networks={additional} onComplete={()=>{setAdditional([]);completed.current=true;goHome()}}/>
   if(previous)return <section className='pt-6'><PocketPreviousWallets key={email} email={email} getAccessToken={getAccessToken} onBack={goHome}/></section>
   return <section className='w-full space-y-4 pt-6'>
@@ -96,7 +96,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
           <dl className='mt-5 space-y-3'>{review.rows.map(row=><div key={row.network} className='flex justify-between gap-3 text-sm'><dt className='capitalize'>{row.network}</dt><dd>{row.status==='ok' && row.balance!==null?`${row.balance.toLocaleString(undefined,{maximumFractionDigits:6})} USDC`:'Unavailable'}</dd></div>)}</dl>
           <p role='status' className='mt-5 text-sm leading-6 text-gray-500 dark:text-gray-400'>Some balances are unavailable. Refresh to review all three networks before continuing.</p>
         </>}
-        {!executionReady && <button type='button' onClick={()=>void run()} disabled={busy} className={cta}>{busy?'Checking...':stage==='verified'?'Review balance migration':stage==='review'?'Refresh balances':'Verify updated wallets'}</button>}
+        {!executionReady && <button type='button' onClick={()=>void run()} disabled={busy} className={cta}>{busy?'Checking wallet':stage==='verified'?'Review balance migration':stage==='review'?'Refresh balances':'Verify updated wallets'}</button>}
         {stage!=='prepare' && <button type='button' onClick={goHome} disabled={busy} className='mt-3 min-h-12 w-full text-sm font-bold'>Back to Pocket</button>}
       </>}
     </article>

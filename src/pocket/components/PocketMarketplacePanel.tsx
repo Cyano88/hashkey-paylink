@@ -1,3 +1,4 @@
+import PocketRecentActivitySkeleton from './PocketRecentActivitySkeleton'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check, CheckCircle2, Clock3, Loader2, Search, Store } from './PocketIcons'
@@ -195,7 +196,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
 
           <div className="space-y-2">
             {loading && !snapshot ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-xs font-medium text-gray-500 dark:text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading compatible services</div>
+              <PocketRecentActivitySkeleton />
             ) : snapshot?.services.length ? snapshot.services.map(item => (
               <button
                 key={item.resource}

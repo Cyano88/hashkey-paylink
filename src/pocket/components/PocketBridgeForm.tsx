@@ -1,3 +1,4 @@
+import { PocketQuoteSkeleton } from './PocketContentSkeletons'
 import type {ReactNode} from 'react'
 import PocketSelect, {type PocketSelectOption} from './PocketSelect'
 import {formatPocketDisplayAmount} from '../lib/pocketMoney'
@@ -8,6 +9,7 @@ type Props = {
   onSource(value:string):void; onDestination(value:string):void
   balance?:number; amount:string; onAmount(value:string):void; onMax():void; maxDisabled?:boolean
   quote?:{receive:string;fee:string;minimumReceive?:string;total?:string}|null
+  quoteLoading?:boolean
   children:ReactNode
 }
 
@@ -20,6 +22,7 @@ export default function PocketBridgeForm(p:Props){
     </div>
     <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available</span><span className="text-sm font-semibold tabular-nums">{p.balance===undefined?'—':formatPocketDisplayAmount(p.balance)+' '+p.asset}</span></div>
     <label className="block"><span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span><span className="mt-2 flex gap-2"><input type="text" aria-label={p.asset+' bridge amount'} inputMode="decimal" disabled={p.disabled} value={p.amount} onChange={e=>p.onAmount(e.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base font-semibold outline-none dark:border-[#262626] dark:bg-[#121212]"/><button type="button" disabled={p.disabled||p.maxDisabled} onClick={p.onMax} className="rounded-2xl border border-gray-200 px-4 text-xs font-semibold dark:border-[#262626]">Max</button></span></label>
+    {p.quoteLoading&&!p.quote&&<PocketQuoteSkeleton />}
     {p.quote&&<div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#121212]">
       <div className="flex justify-between"><span className="text-gray-500">You receive</span><b>{formatPocketDisplayAmount(p.quote.receive)} {p.asset}</b></div>
       {p.quote.minimumReceive&&<div className="flex justify-between"><span className="text-gray-500">Minimum received</span><b>{formatPocketDisplayAmount(p.quote.minimumReceive)} {p.asset}</b></div>}

@@ -10,7 +10,7 @@ function Skeleton({ className }: { className: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`block animate-pulse rounded-lg bg-gray-200/85 motion-reduce:animate-none dark:bg-white/[0.08] ${className}`}
+      className={`pocket-shimmer block rounded-lg bg-gray-200/85 dark:bg-white/[0.08] ${className}`}
     />
   )
 }
@@ -27,7 +27,7 @@ export default function PocketLoadingState({ active }: { active: PocketNavTab })
   const title = feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'kyc' ? 'Identity verification' : feature === 'security' ? 'Payment security' : feature === 'wallet-setup' ? 'Wallet preparation' : layout === 'profile' ? 'Profile' : layout === 'send' || layout === 'menu' && path.endsWith('/transfer') ? 'Send' : layout === 'deposit' || layout === 'menu' ? 'Receive' : layout === 'bank' ? path.includes('verify-name') ? 'Verify bank name' : 'Bank transfer' : layout === 'swap' ? 'Swap' : layout === 'pos' ? 'POS' : layout === 'scan' ? 'Scan to pay' : layout === 'assistant' ? 'Support' : layout === 'notifications' ? 'Notifications' : layout === 'bills' ? 'Bills' : layout === 'activity' ? 'Activity' : 'Pocket'
   if (layout === 'activity' && visible) return <PocketActivityLoadingState />
   if (layout !== 'home' || !visible) return <div className="h-full min-h-0" aria-busy="true" aria-label={'Loading ' + title.toLowerCase()}>
-    <PocketRouteShell active={active} navigationDisabled onSelect={() => undefined}>
+    <PocketRouteShell active={active} refreshEnabled={false} navigationDisabled onSelect={() => undefined}>
       {layout !== 'home' && <PocketFlowHeader title={title} />}
       {visible && <section className="mt-7 space-y-5" data-pocket-skeleton={layout}>
         {layout === 'bills' ? <PocketBillsSkeleton /> : layout === 'notifications' ? <PocketNotificationsSkeleton /> : <div aria-hidden="true">
@@ -41,7 +41,7 @@ export default function PocketLoadingState({ active }: { active: PocketNavTab })
   </div>
   return (
     <div className="h-full min-h-0" aria-busy="true" aria-label="Opening Pocket">
-      <PocketRouteShell active={active} navigationDisabled onSelect={() => undefined}>
+      <PocketRouteShell active={active} refreshEnabled={false} navigationDisabled onSelect={() => undefined}>
         <section className="space-y-5" aria-hidden="true" data-pocket-skeleton="home">
           <div className="overflow-hidden rounded-[28px] bg-gray-950 p-6 text-white shadow-[0_22px_60px_rgba(15,23,42,0.16)] dark:bg-white dark:text-gray-950">
             <Skeleton className="h-3 w-24 bg-white/20 dark:bg-gray-950/10" />
