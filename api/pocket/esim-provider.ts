@@ -7,8 +7,7 @@ const coverage = (value: unknown) => typeof value === 'string' ? [...new Set(val
 export function normalizeEsimCatalog(rows: Json[], locations: Json[] = []): PocketEsimDestination[] {
   const groups = new Map<string, PocketEsimDestination>()
   for (const row of rows) {
-    // Fixed-volume base plans only. Daily plans need a separate duration/price flow.
-    if (!row || typeof row.packageCode !== 'string' || !row.packageCode || Number(row.dataType) !== 1 || row.durationUnit !== 'DAY'
+    if (!row || typeof row.packageCode !== 'string' || !row.packageCode || ![1,2].includes(Number(row.dataType)) || row.durationUnit !== 'DAY'
       || !Number.isInteger(row.duration) || row.duration <= 0 || !Number.isSafeInteger(row.volume) || row.volume <= 0) continue
     const codes = coverage(row.location)
     if (!codes.length) continue
@@ -26,7 +25,8 @@ export function normalizeEsimCatalog(rows: Json[], locations: Json[] = []): Pock
     const gb = row.volume / 1073741824
     const data = gb >= 1 ? `${Number(gb.toFixed(2))} GB` : `${Number((row.volume / 1048576).toFixed(2))} MB`
     group.plans.push({
-      id: row.packageCode, title: typeof row.name === 'string' ? row.name : data, data,
+      id: row.packageCode, title: typeof row.name === 'string' ? row.name : data, data: Number(row.dataType) === 2 ? `${data} / day` : data,
+      daily: Number(row.dataType) === 2,
       days: row.duration, operator: 'Redtea Mobile',
       topUp: [2, 3].includes(Number(row.supportTopUpType)),
       fairUsage: typeof row.fupPolicy === 'string' ? row.fupPolicy : '',
@@ -55,11 +55,11 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
     return body.obj
   }
   async function load() {
-    const [packages, locations] = await Promise.all([
-      request('/package/list', { type: 'BASE', dataType: '1' }), request('/location/list', {}),
+    const [packages, daily, locations] = await Promise.all([
+      request('/package/list', { type: 'BASE', dataType: '1' }), request('/package/list', { type: 'BASE', dataType: '2' }), request('/location/list', {}),
     ])
-    if (!Array.isArray(packages.packageList) || !Array.isArray(locations.locationList)) throw new Error('ESIM_PROVIDER_UNAVAILABLE')
-    cached = normalizeEsimCatalog(packages.packageList, locations.locationList)
+    if (!Array.isArray(packages.packageList) || !Array.isArray(daily.packageList) || !Array.isArray(locations.locationList)) throw new Error('ESIM_PROVIDER_UNAVAILABLE')
+    cached = normalizeEsimCatalog([...packages.packageList, ...daily.packageList], locations.locationList)
     cacheExpires = now() + 60 * 60_000
     return cached
   }

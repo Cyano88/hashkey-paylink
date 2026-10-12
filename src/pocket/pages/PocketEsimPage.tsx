@@ -55,7 +55,7 @@ export default function PocketEsimPage() {
       </section>
       : destination ? <section className="mt-6 space-y-3" aria-label="Data packages">
         {destination.plans.map(item => <button type="button" key={item.id} onClick={() => setPlan(item)} className="flex min-h-20 w-full items-center gap-4 rounded-2xl bg-gray-100 p-4 text-left dark:bg-[#171717]">
-          <span className="flex-1"><span className="block text-base font-semibold">{item.data}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{item.days} {item.days === 1 ? 'day' : 'days'} · {item.operator}</span></span><ChevronRight className="h-4 w-4" />
+          <span className="flex-1"><span className="block text-base font-semibold">{item.data}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{item.daily ? 'Daily high-speed allowance' : `${item.days} ${item.days === 1 ? 'day' : 'days'}`}</span></span><ChevronRight className="h-4 w-4" />
         </button>)}
       </section> : <section className="mt-5">
         <label className="flex h-12 items-center gap-3 rounded-2xl bg-gray-100 px-4 dark:bg-[#171717]"><Search className="h-5 w-5 shrink-0 text-gray-400" /><input aria-label="Search destinations" placeholder="Where are you travelling?" value={query} onChange={event => changeParams({ q: event.target.value })} className="min-w-0 flex-1 bg-transparent text-sm outline-none border-0 focus:ring-0" /></label>
@@ -67,9 +67,9 @@ export default function PocketEsimPage() {
       </section>}
     {plan && <PocketBottomSheet title="Plan details" onClose={() => setPlan(null)}>
       <h2 className="text-lg font-semibold">{plan.data} · {destination?.name}</h2>
-      <dl className="mt-6 space-y-4 text-sm">{[['Validity', `${plan.days} ${plan.days === 1 ? 'day' : 'days'}`], ['Provider', plan.operator], ['Top-ups', plan.topUp ? 'Available' : 'Not available']].map(([label, value]) => <div key={label} className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="text-right font-medium">{value}</dd></div>)}</dl>
+      <dl className="mt-6 space-y-4 text-sm">{[[plan.daily ? 'Plan' : 'Validity', plan.daily ? 'Daily data' : `${plan.days} ${plan.days === 1 ? 'day' : 'days'}`], ['Top-ups', plan.topUp ? 'Available' : 'Not available']].map(([label, value]) => <div key={label} className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="text-right font-medium">{value}</dd></div>)}</dl>
       {plan.activation && <p className="mt-5 text-sm leading-6 text-gray-500 dark:text-gray-400">{plan.activation}</p>}
-      {plan.fairUsage && <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">{plan.fairUsage}</p>}
+      {plan.fairUsage && <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">{plan.daily ? `After the daily high-speed allowance, data continues at up to ${plan.fairUsage}.` : plan.fairUsage}</p>}
       <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">Requires an unlocked, eSIM-compatible phone.</p>
       <button type="button" disabled className="pocket-cta-primary mt-6 w-full">Coming soon</button>
     </PocketBottomSheet>}

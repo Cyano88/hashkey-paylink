@@ -2,15 +2,15 @@
 
 ## Implemented
 
-Services replaces the bottom navigation XPay entry. Existing XPay checkout/QR URLs remain unchanged. Services links to XPay, Bills and eSIM; Earn remains Coming soon.
+Services replaces the bottom navigation XPay entry. Existing XPay checkout/QR URLs remain unchanged. Services links to XPay, Bills and eSIM using the existing Profile menu row styling. Unimplemented Earn is omitted.
 
-`GET /api/pocket/esim/catalog` authenticates the existing Pocket session and reads eSIM Access fixed-volume base packages and locations. Credentials stay server-side. Requests are coalesced, cached for one hour and cooled down after provider failures. Requests use a fixed provider origin and reject redirects. Daily plans are excluded until duration-dependent pricing is implemented. Wholesale prices are not returned to clients. No payment or order endpoint is exposed.
+`GET /api/pocket/esim/catalog` authenticates the existing Pocket session and reads eSIM Access fixed-volume and daily base packages and locations. Credentials stay server-side. Requests are coalesced, cached for one hour and cooled down after provider failures. Requests use a fixed provider origin and reject redirects. Daily plans show high-speed allowance and provider fair-use speed; duration-dependent pricing and purchasing remain unimplemented. Wholesale prices are not returned to clients. No payment or order endpoint is exposed.
 
 The eSIM screen supports country/regional search, package details and the shared Pocket sheet. Missing credentials show Coming soon. Provider failures show a short retry message. Preparation uses existing shimmers. Purchasing stays disabled even when catalog access is configured.
 
 ## Provider access
 
-Create an account at https://console.esimaccess.com/ and open Developer > API Keys. Copy AccessCode into `ESIM_ACCESS_CODE` on the API server only. Do not use a `VITE_` prefix or put credentials in the app. The documented header authentication uses `RT-AccessCode`; SecretKey is for the alternative HMAC authentication method and is not needed for this catalogue adapter. No real credentials have been verified for this implementation.
+Create an account at https://console.esimaccess.com/ and open Developer > API Keys. Copy AccessCode into `ESIM_ACCESS_CODE` on the API server only. Do not use a `VITE_` prefix or put credentials in the app. The documented header authentication uses `RT-AccessCode`; SecretKey is for the alternative HMAC authentication method and is not needed for this catalogue adapter. Live read-only verification on 2026-10-12 returned 3,184 plans across 244 destination groups and a zero supplier balance. Angola has fixed plans up to 10 GB and daily allowances up to 10 GB/day; other destinations have fixed plans up to 100 GB. These are provider inventory observations, not universal availability guarantees.
 
 Provider documentation: https://docs.esimaccess.com/
 

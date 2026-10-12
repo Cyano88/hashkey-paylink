@@ -2,6 +2,7 @@ export type PocketEsimPlan = {
   id: string
   title: string
   data: string
+  daily?: boolean
   days: number
   operator: string
   topUp: boolean
