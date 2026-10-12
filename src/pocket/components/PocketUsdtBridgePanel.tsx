@@ -158,7 +158,7 @@ export default function PocketUsdtBridgePanel(props:Props){
         if(!accessToken)throw Error('Sign in to continue.')
         const prepared=await api({action:'execute',quoteToken:value.quoteToken})
         if(currentOwner.current!==owner)return
-        const signedTransaction=await signCircleSolanaTransaction({session:active,rawTransaction:prepared.transaction,memo:'Pocket USDT bridge',bridge:{asset:'USDT',bridgeId:prepared.bridgeId,destination:value.quote.destination as 'base'|'arbitrum',destinationAddress:value.quote.destinationAddress!,amount:value.quote.amount,accessToken}})
+        const signedTransaction=await signCircleSolanaTransaction({session:active,rawTransaction:prepared.transaction,memo:'Pocket USDT bridge',bridge:{totalAmount:value.quote.total,asset:'USDT',bridgeId:prepared.bridgeId,destination:value.quote.destination as 'base'|'arbitrum',destinationAddress:value.quote.destinationAddress!,amount:value.quote.amount,accessToken}})
         if(currentOwner.current!==owner)return
         saved={...saved,signedTransaction};save(saved)
       }

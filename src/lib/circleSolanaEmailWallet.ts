@@ -171,7 +171,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
   })
 }
 
-function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk) {
+function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk, bridge?: {asset?: 'USDT';amount:string;totalAmount?:string;destinationAddress:string}) {
   sdk.setThemeColor({
     backdrop: '#020617',
     backdropOpacity: 0.42,
@@ -184,7 +184,7 @@ function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk) {
   })
   sdk.setResources({
     dAppIcon: '/hash-logo.png',
-    transactionTokenIcon: '/brand/circle-logo.jpeg',
+    transactionTokenIcon: bridge?.asset==='USDT'?'/brand/usdt.svg':'/brand/circle-logo.jpeg',
   })
   sdk.setLocalizations({
     common: {
@@ -192,6 +192,13 @@ function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk) {
       confirm: 'Confirm',
       sign: 'Approve',
     },
+    ...(bridge?{transactionRequest:{
+      title:'Confirm bridge',subtitle:bridge.amount+' '+(bridge.asset||'USDC')+' from Solana',
+      toLabel:'Recipient',to:[bridge.destinationAddress.slice(0,6)+'...'+bridge.destinationAddress.slice(-4)],
+      totalLabel:'Total',total:[(bridge.totalAmount||bridge.amount)+' '+(bridge.asset||'USDC')],
+      mainCurrency:{amount:bridge.amount,symbol:bridge.asset||'USDC'},
+      rawTxDescription:'Bridge details',rawTx:'Approve bridge',
+    }}:{}),
     socialEmailConfirm: {
       title: 'Hash PayLink',
       headline: 'Confirm your email to continue.',
@@ -546,7 +553,7 @@ export async function sendCircleSolanaTransfer(params: {
 }
 
 export async function signCircleSolanaTransaction(params: {
-  bridge?: { asset?: 'USDT'; bridgeId?: string; quoteToken?: string; destination: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'; destinationAddress: string; amount: string; accessToken: string }
+  bridge?: { totalAmount?: string; asset?: 'USDT'; bridgeId?: string; quoteToken?: string; destination: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'; destinationAddress: string; amount: string; accessToken: string }
   session: SolanaEmailSession
   rawTransaction: string
   memo: string
@@ -559,6 +566,7 @@ export async function signCircleSolanaTransaction(params: {
       encryptionKey: params.session.encryptionKey,
     },
   })
+  applyHashPayLinkCircleSolanaUi(sdk, params.bridge)
   const challenge = await circleSolanaApi<{ challengeId?: string }>({
     action: params.bridge ? 'signOwnWalletBridge' : 'signPayment',
     ...(params.bridge ? { asset:params.bridge.asset, bridgeId:params.bridge.bridgeId, walletAddress:params.session.wallet.address, quoteToken:params.bridge.quoteToken, destination: params.bridge.destination, destinationAddress: params.bridge.destinationAddress, amount: params.bridge.amount } : {}),

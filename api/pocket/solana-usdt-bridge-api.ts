@@ -28,6 +28,7 @@ async function journal(r:SolanaUsdtBridgeRecord){
 const defaultDependencies={verifyUser:verifiedPrivyUser,state:createSolanaUsdtBridgeState,readLink:readCircleLink,enabled:solanaUsdtBridgeEnabled,reconcile:reconcileSolanaUsdtSettlement,journal,rpc:()=>new Connection(getRpc(),'confirmed')}
 export async function recoverSolanaUsdtBridge(ownerId:string,id:string,deps=defaultDependencies){
  const state=deps.state();let current=await state.read(ownerId,id)
+ if(!current.signedTransaction&&['quoted','authorizing','awaiting_approval'].includes(current.phase)&&current.quote.expiresAt<=Date.now())current=await state.expireUnsigned(ownerId,id,await deps.rpc().getBlockHeight('confirmed'))
  if(current.signedTransaction){await deps.journal(current);current=await state.submit(ownerId,id,deps.rpc())}
  if(['source_confirmed','completed','refunded'].includes(current.phase)){
   const result=await deps.reconcile(ownerId,id)

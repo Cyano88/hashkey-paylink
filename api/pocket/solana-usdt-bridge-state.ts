@@ -72,6 +72,16 @@ export function createSolanaUsdtBridgeState(store:SolanaUsdtBridgeStore=durableS
    })
    return {challengeId}
   },
+  async expireUnsigned(ownerId:string,id:string,blockHeight:number){
+   return store.update(id,current=>{
+    const r=owned(current,ownerId)
+    // Raw signing never broadcasts. The only submission path persists signed
+    // bytes first, so an unsigned expired blockhash cannot create a future debit.
+    if(r.signedTransaction||!['quoted','authorizing','awaiting_approval'].includes(r.phase)
+      ||!Number.isSafeInteger(blockHeight)||blockHeight<=r.quote.lastValidBlockHeight)return r
+    return {...r,phase:'source_failed',updatedAt:now()}
+   })
+  },
   async saveSigned(ownerId:string,id:string,raw:string){
    const r=await read(ownerId,id),tx=assertSolanaUsdtBridgeMessage(r,raw,true)
    const signature=bs58.encode(tx.signature!)

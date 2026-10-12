@@ -63,3 +63,12 @@ const terminal=await state.submit('owner',completedRace.id,{...rpc,getSignatureS
 }})
 assert.equal(terminal.phase,'completed')
 console.log('Solana USDT approval/recovery passed: ownership, message binding, challenge reuse/race, unknown approval, persisted signed bytes, restart recovery and expired blockhash. Source confirmation is not destination completion. No live requests.')
+
+now=1000
+const unsigned=await register();await state.authorize(authorize(unsigned),challenge)
+assert.equal((await state.expireUnsigned('owner',unsigned.id,100)).phase,'awaiting_approval')
+assert.equal((await state.expireUnsigned('owner',unsigned.id,101)).phase,'source_failed')
+await assert.rejects(()=>state.saveSigned('owner',unsigned.id,signedRaw),/Approve/)
+assert.equal((await state.expireUnsigned('owner',expired.id,101)).phase,'signed','Never clear a signed operation on missing history')
+await assert.rejects(()=>state.expireUnsigned('other',unsigned.id,101),/not found/)
+console.log('PASS unsigned blockhash expiry releases stale approval; signed and foreign-owner attempts remain protected.')
