@@ -52,7 +52,7 @@ async function nativePocketFetch(request: Request) {
     void pending.then(resolve, reason => {
       const message = reason instanceof Error ? reason.message : String(reason ?? '')
       if (/unable to resolve host|no address associated|failed to fetch|network(?:error| request failed)|enotfound/i.test(message)) {
-        reject(new TypeError('Pocket could not connect. Check your connection and try again.'))
+        reject(new TypeError('Could not reach the service. Try again.'))
         return
       }
       reject(reason)

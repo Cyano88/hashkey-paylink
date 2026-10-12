@@ -104,7 +104,7 @@ export default function PocketUsdtBridgePanel(props:Props){
       }
       const result=await api({action:value.signedTransaction?'submit':'status',...(value.signedTransaction?{transaction:value.signedTransaction}:{}),quoteToken:value.quoteToken,txHash:value.txHash,...(active?{circleUserToken:active.userToken}:{})})
       if(currentOwner.current!==owner)return
-      setRecoveryFailed(false);setLoading(false)
+      setRecoveryFailed(false);setLoading(false);setError(executionError.current)
       if(result.status==='completed'){save(null);setQuoted(null);setAmount('');setNotice('');setResult({quote:value.quote,state:'successful',txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
       else if(result.status==='refunded'){save(null);setQuoted(null);setAmount('');setResult({quote:value.quote,state:'reversed',settledAmount:(Number(result.settlement.amountUnits)/1e6).toFixed(2),txHash:result.txHash,destinationTxHash:result.destinationTxHash});void props.refresh();props.onActivity()}
       else if(result.status==='failed'){save(null);setQuoted(null);setResult({quote:value.quote,state:'failed'});setError('The source transaction did not complete. Try again.')}
@@ -128,7 +128,7 @@ export default function PocketUsdtBridgePanel(props:Props){
   async function resumeApproval(){
     if(lock.current)return
     const owner=props.owner
-    lock.current=true;setBusy(true);setError('')
+    lock.current=true;setBusy(true);setError('');executionError.current=''
     let value:Pending|null=null
     try{
       // A tap waits for an in-flight read instead of silently disappearing.
@@ -148,7 +148,7 @@ export default function PocketUsdtBridgePanel(props:Props){
         if(currentOwner.current!==owner)return
         value={...value,awaitingApproval:false,...(approved.transactionHash?{txHash:approved.transactionHash}:{})};save(value)
       }
-    }catch(e){if(currentOwner.current===owner)setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
+    }catch(e){if(currentOwner.current===owner){executionError.current=(e as Error).message;setError(executionError.current)}}finally{lock.current=false;setBusy(false)}
     if(value&&currentOwner.current===owner)void check(value,false)
   }
   async function execute(){
