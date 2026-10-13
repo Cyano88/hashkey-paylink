@@ -1,6 +1,6 @@
 import { createArcDisplayBalanceReader } from './arc-display-balances.js'
 import type { Request, Response } from 'express'
-import { createPublicClient, formatUnits, getAddress, http, parseAbi, type Hex } from 'viem'
+import { createPublicClient, formatUnits, getAddress, http, parseAbi, parseUnits, type Hex } from 'viem'
 import { arcChain } from '../../src/lib/chains.js'
 import { circleLinkKey, readCircleLink, verifiedPrivyUser } from '../privy-circle-link.js'
 import { createCircleGasStationEvmChallenge, readCircleArcSwapChallenge } from '../circle-solana-email.js'
@@ -63,7 +63,7 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
     if (link.circleWalletId !== quote.walletId || !same(link.circleWalletAddress, quote.walletAddress)) return res.status(409).json({ ok: false, error: 'Your Arc wallet changed. Request a new quote.' })
     const journalKey = 'pocket:arc-swap:' + quote.id
     const existing = await findCirclePocketAction(identity.userId, journalKey, 'wallet.swap')
-    const metadata = { ...(existing?.metadata ?? {}), quoteToken: String(req.body.quoteToken), network: 'arc', amount: quote.amount, tokenIn: quote.tokenIn.symbol, tokenOut: quote.tokenOut.symbol, walletAddress: quote.walletAddress }
+    const metadata = { ...(existing?.metadata ?? {}), intentFingerprint:[quote.walletAddress.toLowerCase(),quote.tokenIn.address.toLowerCase(),quote.tokenOut.address.toLowerCase(),quote.amountUnits].join(':'), quoteToken: String(req.body.quoteToken), network: 'arc', amount: quote.amount, tokenIn: quote.tokenIn.symbol, tokenOut: quote.tokenOut.symbol, walletAddress: quote.walletAddress }
     if (action === 'execute') {
       if (existing?.metadata?.challengeId) return res.json({ ok: true, challengeId: existing.metadata.challengeId, swapId: quote.id })
       // Own-wallet swaps use Circle authorization; no additional Pocket payment PIN.
@@ -74,13 +74,17 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
       // Simulate the exact atomic approval/swap/revoke batch before requesting signature.
       await client.call({ account: quote.walletAddress, to: quote.walletAddress, data: quote.callData })
       if (quote.expiresAt <= Date.now()) return res.status(409).json({ ok: false, error: 'Quote expired. Review a new quote.' })
-      const claim = await claimCirclePocketAction({ ownerId: identity.userId, idempotencyKey: journalKey, action: 'wallet.swap', metadata, dedupe: { metadataKey: 'walletAddress', metadataValue: quote.walletAddress, statuses: ['started', 'submitted'] } })
+      const previous=await listCirclePocketActions(identity.userId,500,'wallet.swap',true)
+      if(previous.some(r=>r.idempotencyKey!==journalKey&&['started','submitted'].includes(r.status)&&r.metadata?.walletAddress?.toLowerCase()===quote.walletAddress.toLowerCase()&&r.metadata.tokenIn===quote.tokenIn.symbol&&r.metadata.tokenOut===quote.tokenOut.symbol&&r.metadata.amount&&parseUnits(r.metadata.amount,quote.tokenIn.decimals)===BigInt(quote.amountUnits)))return res.status(409).json({ok:false,error:'This swap is already being tracked in Activity.'})
+      const claim = await claimCirclePocketAction({ ownerId: identity.userId, idempotencyKey: journalKey, action: 'wallet.swap', metadata, dedupe: { metadataKey: 'intentFingerprint', metadataValue: metadata.intentFingerprint, statuses: ['started', 'submitted'] } })
       if (!claim.claimed) return res.status(409).json({ ok: false, error: 'A swap is already awaiting confirmation. Check its status before submitting again.' })
       const challenge = await createCircleGasStationEvmChallenge({ userToken, walletId: quote.walletId, walletAddress: quote.walletAddress, chain: 'arc', callData: quote.callData, idempotencyKey: quote.id, refId: `pocket:arc-swap:${quote.id}` })
       if (!challenge.challengeId) throw new Error('Circle returned no challenge.')
       await recordCirclePocketAction({ ownerId: identity.userId, idempotencyKey: journalKey, action: 'wallet.swap', status: 'submitted', resourceId: quote.id, metadata: { ...metadata, challengeId: challenge.challengeId } })
       return res.json({ ok: true, ...challenge, swapId: quote.id })
     }
+    if(existing?.status==='failed')return res.json({ok:true,status:'failed'})
+    if(existing?.status==='completed'&&existing.metadata?.txHash)return res.json({ok:true,status:'completed',txHash:existing.metadata.txHash,amountOut:existing.metadata.amountOut})
     let providerHash: string | undefined
     if (existing?.metadata?.challengeId && req.body.circleUserToken) {
       const providerState = await readCircleArcSwapChallenge({ userToken: String(req.body.circleUserToken), walletId: quote.walletId, walletAddress: quote.walletAddress, challengeId: existing.metadata.challengeId })
@@ -90,7 +94,7 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
       }
       providerHash = providerState.txHash
     }
-    const hash = providerHash || String(req.body.txHash ?? '')
+    const hash = providerHash || existing?.metadata?.txHash || String(req.body.txHash ?? '')
     if (!hash) return res.json({ ok: true, status: !existing && quote.expiresAt <= Date.now() ? 'not_submitted' : 'pending', challengeId: existing?.metadata?.challengeId })
     if (!/^0x[0-9a-f]{64}$/i.test(hash)) return res.status(400).json({ ok: false, error: 'Invalid swap transaction hash.' })
     let receipt

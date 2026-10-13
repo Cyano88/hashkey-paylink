@@ -26,15 +26,15 @@ try{
  await page.getByRole('option',{name:'Solana',exact:false}).waitFor();
  assert.equal(await page.locator('[data-balance-asset="USDT"]').count(),4)
  await page.getByRole('option',{name:'Base',exact:false}).click()
- const input=page.getByLabel('USDT bridge amount');assert.equal(await input.isEnabled(),true);assert.equal(await page.getByRole('alert').count(),0)
- await input.fill('1')
+ const input=page.getByLabel('USDT bridge amount');const fillAmount=async(value)=>{await input.press('ControlOrMeta+A');await input.press('Backspace');await input.pressSequentially(value)};assert.equal(await input.isEnabled(),true);assert.equal(await page.getByRole('alert').count(),0)
+ await fillAmount('1')
  await page.waitForFunction(()=>window.requests.some(r=>r.amount==='1'))
  assert.equal(await input.isEnabled(),true)
- await input.fill('2')
+ await fillAmount('2')
  await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor()
  await page.waitForTimeout(900)
- assert.match(await page.locator('body').innerText(),/1\.99 USDT/)
- assert.doesNotMatch(await page.locator('body').innerText(),/0\.99 USDT/)
+ assert.match(await page.locator('body').innerText(),/1\.99\s+USDT/)
+ assert.doesNotMatch(await page.locator('body').innerText(),/0\.99\s+USDT/)
  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.fixtureHidden?'hidden':'visible'});window.fixtureHidden=true;document.dispatchEvent(new Event('visibilitychange'))})
  const hiddenRequests=await page.evaluate(()=>window.requests.length)
  await page.waitForTimeout(2300)
@@ -48,11 +48,11 @@ try{
  await page.getByRole('button',{name:'Max',exact:true}).click()
  assert.equal(await input.inputValue(),'7.997')
  await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor()
- await page.evaluate(()=>window.failNextQuote=true);await input.fill('4');await page.waitForFunction(()=>window.requests.filter(r=>r.amount==='4').length>=2);await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
- await input.fill('9')
+ await page.evaluate(()=>window.failNextQuote=true);await fillAmount('4');await page.waitForFunction(()=>window.requests.filter(r=>r.amount==='4').length>=2);await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
+ await fillAmount('9')
  await page.getByRole('button',{name:'Add funds',exact:true}).waitFor()
  await page.evaluate(()=>window.fail=true)
- await input.fill('3')
+ await fillAmount('3')
  await page.getByRole('button',{name:'Try again',exact:true}).waitFor()
  await page.evaluate(()=>window.fail=false)
  await page.getByRole('button',{name:'Try again',exact:true}).click()
@@ -60,58 +60,27 @@ try{
  assert.equal(await page.evaluate(()=>window.requests.every(r=>r.action==='quote'&&r.circleUserToken==='circle-fixture')),true)
  assert.equal(await page.getByText('Total',{exact:true}).count(),1)
  assert.equal(await page.getByText('Fee',{exact:true}).count(),1)
- await page.evaluate(()=>window.highFee=true);await input.fill('1');await page.getByText('The fee is high for this amount. You can still proceed.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Confirm bridge',exact:true}).isEnabled(),true);
+ await page.evaluate(()=>window.highFee=true);await fillAmount('1');await page.getByText('The fee is high for this amount. You can still proceed.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Confirm bridge',exact:true}).isEnabled(),true);
  await page.getByRole('button',{name:'Select destination network',exact:true}).click();await page.getByRole('option',{name:'Solana',exact:false}).click();await page.waitForFunction(()=>window.requests.some(r=>r.destination==='solana'&&r.source==='arbitrum'));await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Confirm bridge',exact:true}).isEnabled(),true);
- await page.getByRole('button',{name:'Select source network',exact:true}).click();await page.getByRole('option',{name:'Solana',exact:false}).click();await input.fill('0.5');await page.getByRole('button',{name:'Confirm bridge',exact:true}).click();
- await page.getByRole('alert').filter({hasText:'No live signing'}).waitFor();
- await page.getByRole('button',{name:'Try again',exact:true}).waitFor();
- const failedRequests=await page.evaluate(()=>window.requests.length);await page.waitForTimeout(2700);
- assert.equal(await page.evaluate(()=>window.requests.length),failedRequests,'An unsent signing error must not start another quote');
- assert.match(await page.getByRole('alert').innerText(),/No live signing/);
+ await page.getByRole('button',{name:'Select source network',exact:true}).click();await page.getByRole('option',{name:'Solana',exact:false}).click();await fillAmount('0.5');await page.getByRole('button',{name:'Confirm bridge',exact:true}).click();
+ await page.getByRole('button',{name:'Enter bridge amount',exact:true}).waitFor();
+ assert.equal(await input.inputValue(),'','An unsigned failed attempt leaves a fresh form');
  assert.equal(await page.evaluate(()=>window.requests.some(r=>r.action==='submit')),false,'Failed signing must never submit');
- await page.getByRole('button',{name:'Try again',exact:true}).click();await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('pocket:operation:')).map(k=>JSON.parse(localStorage.getItem(k))).some(r=>r.state==='failed')),true);
  await page.goto('https://fixture.test');
- await page.evaluate(()=>{window.expiredApproval=true;localStorage.setItem('pocket:usdt-bridge:v1:form-fixture',JSON.stringify({quoteToken:'solana:expired',challengeId:'old',awaitingApproval:true,quote:{id:'expired',source:'solana',destination:'arbitrum',walletAddress:'fixture',amount:'0.5',receive:'0.48',minimumReceive:'0.47',fee:'0.02',total:'0.5',expiresAt:1}}))});
+ await page.evaluate(()=>localStorage.setItem('pocket:usdt-bridge:v1:form-fixture',JSON.stringify({quoteToken:'saved',challengeId:'saved-approval',awaitingApproval:true,quote:{id:'saved',source:'arbitrum',destination:'base',walletAddress:'0x'+'1'.repeat(40),amount:'16',receive:'15.96',minimumReceive:'15.96',fee:'.09',total:'16.05',expiresAt:Date.now()+60000}})));
  await page.addScriptTag({content:result.outputFiles[0].text});
- await page.waitForFunction(()=>window.requests.some(r=>r.action==='status')&&!localStorage.getItem('pocket:usdt-bridge:v1:form-fixture'));
- assert.equal(await page.getByRole('dialog').count(),0,'An expired unsigned approval must not open a failure receipt');
+ await page.getByRole('button',{name:'Enter bridge amount',exact:true}).waitFor();
  assert.equal(await page.getByLabel('USDT bridge amount').inputValue(),'');
- assert.equal(await page.getByRole('alert').count(),0);
- assert.equal(await page.evaluate(()=>window.requests.some(r=>['execute','submit','quote'].includes(r.action))),false,'Opening an expired draft must not initiate a new bridge or quote');
- await page.goto('https://fixture.test');
- await page.evaluate(()=>{window.expiredApproval=true;window.requireCircleSession=true;localStorage.setItem('pocket:usdt-bridge:v1:form-fixture',JSON.stringify({quoteToken:'evm:expired',challengeId:'old-evm',quote:{id:'expired-evm',source:'arbitrum',destination:'base',walletAddress:'0x'+'1'.repeat(40),amount:'20',receive:'19.94',minimumReceive:'19.94',fee:'0.11',total:'20.05',expiresAt:1}}))});
- await page.addScriptTag({content:result.outputFiles[0].text});
- await page.waitForFunction(()=>window.requests.some(r=>r.action==='status'&&r.circleUserToken==='circle-fixture')&&!localStorage.getItem('pocket:usdt-bridge:v1:form-fixture'));
  assert.equal(await page.getByLabel('USDT bridge amount').isEnabled(),true);
- assert.equal(await page.getByLabel('USDT bridge amount').inputValue(),'');
- assert.equal(await page.getByRole('dialog').count(),0);
- assert.equal(await page.evaluate(()=>window.requests.some(r=>['execute','submit','resume'].includes(r.action))),false,'Recovering an expired EVM approval must not sign or send again');
- await page.goto('https://fixture.test');
- await page.evaluate(()=>{window.pendingApproval=true;localStorage.setItem('pocket:usdt-bridge:v1:form-fixture',JSON.stringify({quoteToken:'saved',challengeId:'saved-approval',awaitingApproval:true,quote:{id:'saved',source:'arbitrum',destination:'base',walletAddress:'0x'+'1'.repeat(40),amount:'16',receive:'15.96',minimumReceive:'15.96',fee:'.09',total:'16.05',expiresAt:Date.now()+60000}}))});
- await page.addScriptTag({content:result.outputFiles[0].text});
- await page.waitForFunction(()=>window.requests.some(r=>r.action==='status'));
- await page.getByRole('button',{name:'Confirm bridge',exact:true}).click();
- await page.waitForFunction(()=>window.approvals===1);
- assert.equal(await page.evaluate(()=>window.requests.filter(r=>r.action==='resume').length),1,'A tap during background recovery must resume the saved approval once');
- assert.equal(await page.evaluate(()=>window.requests.filter(r=>r.action==='execute').length),0,'Recovery must not create another bridge');
- await page.getByRole('alert').filter({hasText:'Could not reach the service. Try again.'}).waitFor();
+ assert.equal(await page.evaluate(()=>localStorage.getItem('pocket:usdt-bridge:v1:form-fixture')),null);
+ assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('pocket:operation:')).map(k=>JSON.parse(localStorage.getItem(k))).some(r=>r.pending.challengeId==='saved-approval')),true,'Migration retains provider recovery identifiers');
+ assert.equal(await page.evaluate(()=>window.requests.some(r=>['status','resume','execute','submit'].includes(r.action))),false,'A new form neither recovers nor signs previous operations');
+ await fillAmount('2');
  await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();
- assert.equal(await page.getByRole('button',{name:'Confirm bridge',exact:true}).isEnabled(),true,'Approval errors must release the CTA');
- await page.goto('https://fixture.test');
- await page.evaluate(()=>{window.pendingApproval=true;window.hashDuringCheck=true;localStorage.setItem('pocket:usdt-bridge:v1:form-fixture',JSON.stringify({quoteToken:'saved',challengeId:'saved-approval',awaitingApproval:true,quote:{id:'saved',source:'arbitrum',destination:'base',walletAddress:'0x'+'1'.repeat(40),amount:'16',receive:'15.96',minimumReceive:'15.96',fee:'.09',total:'16.05',expiresAt:Date.now()+60000}}))});
- await page.addScriptTag({content:result.outputFiles[0].text});
- await page.waitForFunction(()=>window.requests.some(r=>r.action==='status'));
  await page.getByRole('button',{name:'Confirm bridge',exact:true}).click();
- await page.getByRole('button',{name:'Bridging USDT',exact:true}).waitFor();
- assert.equal(await page.evaluate(()=>window.approvals||0),0,'A recovered hash must cancel queued approval');
- assert.equal(await page.evaluate(()=>window.requests.some(r=>['resume','execute','submit'].includes(r.action))),false);
- await page.goto('https://fixture.test');
- await page.evaluate(()=>{window.pendingApproval=true;window.failStatusOnce=true;localStorage.setItem('pocket:usdt-bridge:v1:form-fixture',JSON.stringify({quoteToken:'saved',challengeId:'saved-approval',awaitingApproval:true,quote:{id:'saved',source:'arbitrum',destination:'base',walletAddress:'0x'+'1'.repeat(40),amount:'16',receive:'15.96',minimumReceive:'15.96',fee:'.09',total:'16.05',expiresAt:Date.now()+60000}}))});
- await page.addScriptTag({content:result.outputFiles[0].text});
- await page.getByRole('alert').filter({hasText:'Could not reach the service. Try again.'}).waitFor();
- await page.waitForFunction(()=>window.requests.filter(r=>r.action==='status').length>=2);
- await page.getByRole('alert').waitFor({state:'detached'});
- assert.equal(await page.evaluate(()=>window.requests.some(r=>['execute','submit','resume'].includes(r.action))),false,'Clearing a recovered service error must not approve payment');
- console.log('PASS confirmation during background status read; same challenge retained; no duplicate submission; service error does not blame mobile data');
- console.log('PASS Arbitrum-to-Solana selection; high-fee warning with enabled approval; automatic quote, editable input, stale quote rejection, expiry refresh, Max, funding shortfall and retry; no transfer submitted.')
+ await page.getByRole('button',{name:'Enter bridge amount',exact:true}).waitFor();
+ assert.equal(await page.getByLabel('USDT bridge amount').isEnabled(),true,'Unknown approval results cannot trap the form');
+ assert.equal(await page.evaluate(()=>window.approvals),1,'One explicit confirmation makes one SDK approval');
+ console.log('PASS bridge form: fresh forms, durable migration, no auto-signing, quote races, selectors, Max, fee warning, Solana signing failure');
 }finally{await browser.close()}

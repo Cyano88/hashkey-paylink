@@ -4,7 +4,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const stubs = {
  circleEvmEmailWallet: `export const resumeCircleEvmEmailWithdraw=(...args)=>reconcileCircleEvmEmailWithdraw(...args);export const readCirclePaymentFeeQuote=async()=>{}; export const reconcileCircleEvmEmailWithdraw=async()=>({state:'pending'});`,
  circleSolanaEmailWallet: `export const reconcileCircleSolanaTransfer=async()=>({state:'pending'}); export const sendCircleSolanaTransfer=async()=>{};`,
- solanaPaymentFees: `export const readSolanaPaymentQuote=async()=>{};export const sendQuotedSolanaPayment=async()=>{};`,
+ solanaPaymentFees: `export const readSolanaRelayStatus=async()=>false;export const readSolanaPaymentQuote=async()=>{};export const sendQuotedSolanaPayment=async()=>{};`,
  pocketEvmTransferStatusClient: `export const recoverPocketEvmTransfer=async()=>({status:'pending'});`,
  pocketEvmTransferClient: `export const executePocketEvmTransfer=async(input)=>{window.submissions++;if(window.rejectBeforeChallenge)throw Object.assign(new Error(window.rejectBeforeChallenge),{submissionRejected:window.rejectBeforeChallenge==='Rejected before approval'});input.onChallenge({challengeId:'test',transactionId:'test'});input.onAccepted({challengeId:'test',transactionId:'test'});return new Promise((resolve,reject)=>{window.confirm=()=>resolve({txHash:'0x123',status:'confirmed'});window.unresolved=()=>resolve({txHash:'0x123',status:'submitted'});window.fail=()=>reject(Object.assign(new Error('Reverted'),{terminalFailure:true}));});};`
 }

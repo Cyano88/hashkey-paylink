@@ -47,6 +47,11 @@ export function pocketActivitySignedAmount(row: PocketActivityRow): string {
 
 export function pocketActivityVisibleStatus(row: PocketActivityRow): string {
   const status = pocketActivityStatus(row)
+  if (status === 'awaiting_approval') return 'Approval required'
+  if (status === 'needs_review') return 'Checking status'
+  if (status === 'failed' && row.source === 'wallet-bridge') return 'Bridge failed'
+  if (status === 'failed' && row.source === 'wallet-swap') return 'Swap failed'
+  if (['pending','processing','submitted','started','accepted'].includes(status)) return 'Processing'
   return ['completed','confirmed','delivered','paid','settled','successful','validated','test complete'].includes(status) ? '' : status.replace(/_/g, ' ')
 }
 

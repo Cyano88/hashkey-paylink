@@ -37,6 +37,7 @@ export default function usePocketWithdrawalController({
   refreshBalances,
   clearExternalError,
   onActivity,
+  onTracked,
 }: {
   owner: string
   asset?: 'USDC' | 'USDT'
@@ -55,6 +56,7 @@ export default function usePocketWithdrawalController({
   getAccessToken: () => Promise<string | null>
   refreshBalances: () => Promise<void>
   clearExternalError: () => void
+  onTracked?: () => void
   onActivity: (message: string) => void
 }) {
   const [feeQuote, setFeeQuote] = useState<CirclePaymentFeeQuote | null>(null)
@@ -190,6 +192,7 @@ export default function usePocketWithdrawalController({
       const normalize=(value:string)=>network==='solana'?value:value.toLowerCase()
       const fingerprint=[asset,network,normalize(selectedWallet.address),normalize(recipient),parseUnits(amount,6).toString()].join(':')
       const existing=readSendAttempts(owner).find(r=>!['confirmed','failed'].includes(r.state)&&r.network===network&&(r.asset??'USDC')===asset&&normalize(r.sourceAddress)===normalize(selectedWallet.address)&&normalize(r.recipient)===normalize(recipient)&&parseUnits(r.amount,6)===parseUnits(amount,6)&&(r.context===operationContext||(allowLegacyOperation&&r.context==='send')))
+      if(existing&&operationContext==='send'){setStatus('idle');onActivity('Transfer awaiting confirmation');onTracked?.();return false}
       recoveredAttempt=Boolean(existing)
       operation=existing??{owner:sendOwner(owner),idempotencyKey:crypto.randomUUID(),fingerprint,asset,context:operationContext,network,sourceAddress:selectedWallet.address,recipient,amount:amount.trim(),state:'preparing',challengeId:'',transactionId:'',txHash:'',createdAt:Date.now(),updatedAt:Date.now()}
       operationId.current=operation.idempotencyKey
@@ -234,6 +237,7 @@ export default function usePocketWithdrawalController({
         onActivity(confirmed?'Transfer confirmed':'Transfer awaiting confirmation')
         void refreshBalances().catch(()=>undefined)
       }
+      if(!confirmed&&operationContext==='send')onTracked?.()
       return confirmed||Boolean(operation.txHash)||operation.state==='accepted'
     }catch(reason){
       const failure=reason as {terminalFailure?:boolean;submissionRejected?:boolean;txHash?:string;code?:number}
@@ -243,10 +247,11 @@ export default function usePocketWithdrawalController({
       if(operation)publish({state:unknown?(operation.challengeId?'submitted':'preparing'):'failed',error:sendError(reason, asset),...(failure?.txHash?{txHash:failure.txHash}:{})})
       if(operation?.state==='confirmed'){if(visible()){setTxHash(operation.txHash);setStatus('successful');setError('')}return true}
       if(operation?.state==='failed'){if(visible()){setTxHash(operation.txHash);setStatus('idle');setError(operation.error||'Transfer failed.')}return false}
+      if(unknown&&visible()&&operationContext==='send'){onActivity('Transfer awaiting confirmation');onTracked?.()}
       if(visible()){setStatus(unknown?'submitted':'idle');setError(unknown?'':sendError(reason, asset));if(failure?.txHash)setTxHash(failure.txHash);if(/quote|fees changed/i.test(sendError(reason, asset)))setFeeQuote(null)}
       return false
     }finally{if(claimed&&operation)releaseSendAttempt(owner,operation.idempotencyKey);running.current=false;if(visible())setPending(false)}
-  },[asset,owner,address,allowLegacyOperation,amount,balance,chargeFees,feeQuote,getAccessToken,clearExternalError,ensureWallet,getEvmSession,getSolanaSession,network,onActivity,operationContext,refreshBalances,wallet])
+  },[asset,owner,address,allowLegacyOperation,amount,balance,chargeFees,feeQuote,getAccessToken,clearExternalError,ensureWallet,getEvmSession,getSolanaSession,network,onActivity,onTracked,operationContext,refreshBalances,wallet])
 
   return {
     recheckFunding: async () => { await refreshBalances(); setFeeQuote(null); setError('') },

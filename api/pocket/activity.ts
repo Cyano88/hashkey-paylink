@@ -52,24 +52,24 @@ type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
   if(record.action.startsWith('gift.'))return giftActivityRow(record)
-  if (record.action === 'wallet.swap' && record.metadata?.txHash) return {
-    eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash, chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',
-    memo: record.metadata.tokenIn + ' to ' + record.metadata.tokenOut, amount: '0', ts: record.updatedAt,
+  if (record.action === 'wallet.swap' && record.metadata) return {
+    eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash || '', chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',
+    memo: record.metadata.tokenIn + ' to ' + record.metadata.tokenOut, amount: record.metadata.amount || '0', assetSymbol: record.metadata.tokenIn || 'USDC', providerReference: record.resourceId || record.idempotencyKey.replace(/^pocket:arc-swap:/,''), ts: record.createdAt,
     source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
-    settlementType: 'wallet_swap', paycrestStatus: record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
+    settlementType: 'wallet_swap', paycrestStatus: record.status === 'started' || record.status === 'submitted' ? 'processing' : record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
   }
-  if (!['wallet.bridge','wallet.usdt-bridge'].includes(record.action) || !record.metadata?.txHash) return undefined
+  if (!['wallet.bridge','wallet.usdt-bridge'].includes(record.action) || !record.metadata) return undefined
   const source = record.metadata.source || 'USDC'
   const destination = record.metadata.destination || 'destination'
   return {
     ...(record.metadata.fundingParent && record.metadata.fundingPayment ? {fundingParent:record.metadata.fundingParent,fundingPayment:JSON.parse(record.metadata.fundingPayment) as PocketActivityRow} : {}),
     eventId: `pocket-bridge:${record.id}`,
-    txHash: record.metadata.txHash,
+    txHash: record.metadata.txHash || '',
     chain: source,
     payer: 'Pocket wallet',
     memo: `${source} to ${destination}`,
     amount: record.metadata.amount || '0',
-    ts: record.updatedAt,
+    ts: record.createdAt,
     source: 'wallet-bridge',
     merchantId: record.id,
     contextLabel: `${source} to ${destination}`,
@@ -81,7 +81,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     direction: 'out',
     recipient: destination,
     destination,
-    providerReference: record.resourceId || record.metadata.txHash,
+    providerReference: record.resourceId || (record.action==='wallet.usdt-bridge'?record.idempotencyKey.replace(/^pocket:usdt-bridge:/,''):record.metadata.txHash),
   }
 }
 

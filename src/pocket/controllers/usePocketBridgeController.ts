@@ -21,6 +21,7 @@ export default function usePocketBridgeController(input: {
   getSolanaSession(walletAddress: string): Promise<PocketSolanaEmailSession>
   getAccessToken(): Promise<string | null>
   refresh(): Promise<unknown>
+  onTracked?(): void
   onActivity(): void
 }) {
   const latest = useRef(input)
@@ -134,6 +135,7 @@ export default function usePocketBridgeController(input: {
       setNotice('Bridge submitted. Follow its progress in Activity.')
       void input.refresh().catch(() => undefined)
       input.onActivity()
+      input.onTracked?.()
     } catch (reason) {
       if (latest.current.owner !== owner) return
       setStatus('idle')
@@ -143,6 +145,7 @@ export default function usePocketBridgeController(input: {
         setError('')
         setNotice('Your bridge is saved. Checking its status in Activity.')
         input.onActivity()
+      input.onTracked?.()
       }
     } finally { locked.current = false; setSubmitting(false) }
   }, [amount, destination, input, assertNewTransfer, refreshQuote, quote])

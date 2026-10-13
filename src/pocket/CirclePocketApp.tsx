@@ -1,3 +1,4 @@
+import usePocketOperationRecovery from './hooks/usePocketOperationRecovery'
 import PocketCardsPage from './pages/PocketCardsPage'
 import {activePocketEvmSession} from './controllers/usePocketWalletController'
 import {reconcileCircleEvmEmailWithdraw} from '../lib/circleEvmEmailWallet'
@@ -99,6 +100,7 @@ export default function CirclePocketApp() {
   const stocks = route?.section === 'xstocks'
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
   usePocketSendRecovery({authenticated,email,getAccessToken})
+  usePocketOperationRecovery({authenticated,email,getAccessToken})
   const activeIdentity = useRef('')
   activeIdentity.current = authenticated ? email : ''
   usePocketPushNotifications({ ready, authenticated, getAccessToken, navigate })

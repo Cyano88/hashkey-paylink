@@ -1,7 +1,7 @@
 import { readSolanaRelayStatus, clearConfirmedSolanaRelay } from '../../lib/solanaPaymentFees'
 import {confirmPocketAirtime,refreshPocketAirtime} from '../api/pocketBillsClient'
 import { useEffect, useRef } from 'react'
-import { activePocketEvmSession, activePocketSolanaSession } from '../controllers/usePocketWalletController'
+import { activePocketEvmSession, activePocketSolanaSession, restorePocketSolanaSession, connectFreshEvmSession } from '../controllers/usePocketWalletController'
 import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
 import { refreshPocketWalletSnapshot } from './usePocketWallets'
 import { migrateLegacySends, readSendAttempts, updateSendAttempt } from '../lib/pocketSendAttempts'
@@ -28,12 +28,12 @@ export default function usePocketSendRecovery(input:{authenticated:boolean;email
       let result:{state:'confirmed'|'submitted';txHash:string|null}|undefined
       if(r.network!=='solana'){
        if(r.txHash){const receipt=await EVM_CLIENTS[r.network].getTransactionReceipt({hash:r.txHash as `0x${string}`});if(!valid())return;updateSendAttempt(owner,r.idempotencyKey,{state:receipt.status==='success'?'confirmed':'failed',error:receipt.status==='success'?'':'Transfer reverted.'});changed=true;continue}
-       const session=activePocketEvmSession(owner,r.network,r.sourceAddress)
+       const session=activePocketEvmSession(owner,r.network,r.sourceAddress) ?? await connectFreshEvmSession(owner,r.network,r.sourceAddress,current.current.getAccessToken).catch(()=>null)
        if(session&&r.challengeId)result=await reconcileCircleEvmEmailWithdraw({session,challengeId:r.challengeId,transactionId:r.transactionId,timeoutMs:2500})
       }else{
        const hash=r.txHash||(r.challengeId.startsWith('relay:')?r.challengeId.slice(6):'')
        if(hash){const token=await current.current.getAccessToken();if(!valid())return;if(token&&await readSolanaRelayStatus(hash,token,undefined,r.sourceAddress)){if(!valid())return;clearConfirmedSolanaRelay(r.sourceAddress,hash);updateSendAttempt(owner,r.idempotencyKey,{state:'confirmed',txHash:hash});changed=true;continue}}
-       const session=activePocketSolanaSession(owner,r.sourceAddress)
+       const session=activePocketSolanaSession(owner,r.sourceAddress) ?? await restorePocketSolanaSession(owner,r.sourceAddress).catch(()=>null)
        if(session&&r.challengeId){const accessToken=await current.current.getAccessToken();if(!valid())return;result=await reconcileCircleSolanaTransfer({session,accessToken:accessToken||'',challengeId:r.challengeId,transactionId:r.transactionId,timeoutMs:2500})}
       }
       if(!valid())return

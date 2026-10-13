@@ -82,6 +82,18 @@ export function activePocketSolanaSession(email:string,address:string) {
   return sharedSolanaSessions.get(solanaSessionKey(email,address)) ?? null
 }
 
+/** Restore authentication for background reconciliation without opening sign-in or approval. */
+export async function restorePocketSolanaSession(email:string,address:string) {
+  const existing=activePocketSolanaSession(email,address)
+  if(existing)return existing
+  const authentication=await restorePocketWalletSession(email)
+  if(!authentication)return null
+  const session=await resumeCircleSolanaEmailWallet(authentication,address)
+  if(session.wallet.address!==address)throw new Error('The restored wallet does not match this transfer.')
+  sharedSolanaSessions.set(solanaSessionKey(email,address),session)
+  return session
+}
+
 export function activePocketEvmSession(
   email: string,
   network: Exclude<PocketNetwork, 'solana'>,
@@ -92,7 +104,7 @@ export function activePocketEvmSession(
   return Array.from(sharedEvmSessions.entries()).find(([key]) => key.startsWith(prefix))?.[1] ?? null
 }
 
-async function connectFreshEvmSession(
+export async function connectFreshEvmSession(
   email: string,
   network: Exclude<PocketNetwork, 'solana'>,
   walletAddress: string,

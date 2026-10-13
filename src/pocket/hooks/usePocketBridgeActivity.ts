@@ -38,7 +38,7 @@ export default function usePocketBridgeActivity(input: {
       if (current.current.owner !== owner) return
       if (!token) throw new Error('Sign in again to check this transfer.')
       if (active.challengeId && active.walletAddress && active.source !== 'solana' && !active.txHash) {
-        const session = interactive ? await current.current.getEvmSession(active.source, active.walletAddress) : activePocketEvmSession(owner, active.source, active.walletAddress)
+        const session = activePocketEvmSession(owner, active.source, active.walletAddress) ?? await current.current.getEvmSession(active.source, active.walletAddress)
         if (!session) return
         if (current.current.owner !== owner) return
         const outcome = await readCircleEvmBridgeChallenge(session, active.challengeId)

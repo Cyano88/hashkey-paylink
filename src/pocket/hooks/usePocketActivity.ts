@@ -1,3 +1,4 @@
+import {mergePocketOperations,readPocketOperations,POCKET_OPERATIONS_UPDATED} from '../lib/pocketOperationRecovery'
 import {collapsePocketAssetMoves} from '../lib/pocketAssetMoveActivity'
 import { personalPocketActivity } from '../lib/pocketPurchaseKind'
 import {readSendAttempts,mergeSendActivity,POCKET_SENDS_UPDATED} from '../lib/pocketSendAttempts'
@@ -61,10 +62,10 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
     return () => window.clearInterval(timer)
   }, [scope, enabled, refresh, snapshot?.refreshing])
 
-  useEffect(()=>{const update=()=>render(value=>value+1);window.addEventListener(POCKET_SENDS_UPDATED,update);return()=>window.removeEventListener(POCKET_SENDS_UPDATED,update)},[])
+  useEffect(()=>{const update=()=>render(value=>value+1);window.addEventListener(POCKET_SENDS_UPDATED,update);window.addEventListener(POCKET_OPERATIONS_UPDATED,update);return()=>{window.removeEventListener(POCKET_SENDS_UPDATED,update);window.removeEventListener(POCKET_OPERATIONS_UPDATED,update)}},[])
   let localError=''
   let rows=snapshot?.payments??[]
-  if(authenticated)try{rows=collapsePocketAssetMoves(mergeSendActivity(rows,readSendAttempts(email)))}catch{localError='Some saved transfers could not be loaded.'}
+  if(authenticated)try{rows=collapsePocketAssetMoves(mergePocketOperations(mergeSendActivity(rows,readSendAttempts(email)),readPocketOperations(email)))}catch{localError='Some saved transfers could not be loaded.'}
   const scoped = state.scope === scope ? state : { busy: false, error: '', attempted: false }
   const hasContent = Boolean(rows.length || snapshot?.merchants.length || snapshot?.collections.length)
   return {

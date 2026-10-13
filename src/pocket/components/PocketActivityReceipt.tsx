@@ -1,7 +1,7 @@
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import {useLocation,useNavigate} from 'react-router-dom'
-import { pocketActivityAmount } from '../lib/pocketActivityPresentation'
+import { pocketActivityAmount, pocketActivityVisibleStatus } from '../lib/pocketActivityPresentation'
 import { useState, type ReactNode } from 'react'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketTransactionDetails from './PocketTransactionDetails'
@@ -19,7 +19,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
     {message && <p role="status" className="mt-2 text-xs">{message}</p>}
   </div>}</>
   if (receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={onClose} extraActions={actions} />
-  const status = pocketActivityStatus(row).replace(/_/g, ' ')
+  const status = pocketActivityVisibleStatus(row) || pocketActivityStatus(row).replace(/_/g, ' ')
   const detailsRows: Array<[string, ReactNode]> = [
     ['Status', <span className="capitalize">{status}</span>],
     ...(row.direction === 'in' && row.payer ? [['From', row.payer] as [string, ReactNode]] : []),

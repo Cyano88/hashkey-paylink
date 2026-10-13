@@ -18,7 +18,7 @@ const chains={base,arbitrum,ethereum:mainnet,polygon}
 const BALANCE=parseAbi(['function balanceOf(address owner) view returns(uint256)'])
 const client=(network:UsdtBridgeNetwork)=>createPublicClient({chain:chains[network],transport:http(process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||undefined,{timeout:15000})})
 const preview=(q:UsdtBridgeQuote)=>{const {callData,ownerId,...value}=q;return value}
-const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
+const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({intentFingerprint:[q.walletAddress.toLowerCase(),q.source,q.destination,q.amountUnits].join(':'),quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
 
 export default async function usdtBridgeHandler(req:Request,res:Response){
   if(req.method==='POST'&&(req.body?.source==='solana'||String(req.body?.quoteToken||'').startsWith('solana:')))return solanaUsdtBridgeHandler(req,res)
@@ -76,7 +76,9 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       if(balance<BigInt(q.totalUnits!))bridgeError('Insufficient USDT on the source network.',409)
       await rpc.call({account:q.walletAddress,to:q.walletAddress,data:q.callData})
       if(q.expiresAt<=Date.now())bridgeError('Quote expired. Review a new quote.',409)
-      const claim=await claimCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,metadata:meta,dedupe:{metadataKey:'walletAddress',metadataValue:q.walletAddress,statuses:['started','submitted']}})
+      const previous=await listCirclePocketActions(identity.userId,500,ACTION,true)
+      if(previous.some(r=>r.idempotencyKey!==journalKey&&['started','submitted'].includes(r.status)&&r.metadata?.walletAddress?.toLowerCase()===q.walletAddress.toLowerCase()&&r.metadata.source===q.source&&r.metadata.destination===q.destination&&r.metadata.amount&&parseUnits(r.metadata.amount,6)===BigInt(q.amountUnits)))bridgeError('This transfer is already being tracked in Activity.',409)
+      const claim=await claimCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,metadata:meta,dedupe:{metadataKey:'intentFingerprint',metadataValue:meta.intentFingerprint,statuses:['started','submitted']}})
       if(!claim.claimed)bridgeError('An earlier USDT bridge is still pending. Check its status first.',409)
       const result=await createCircleGasStationEvmChallenge({userToken,walletId:q.walletId,walletAddress:q.walletAddress,chain:q.source,callData:q.callData,idempotencyKey:q.id,refId:journalKey})
       if(!result.challengeId)bridgeError('The bridge submission result is unknown. Check its status before retrying.',503)
