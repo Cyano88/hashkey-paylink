@@ -295,7 +295,6 @@ export default function usePocketBillsController({
     if (next.state === 'delivered') {
       setStatus('successful')
       setNotice(environment === 'sandbox' ? 'VTpass sandbox test completed.' : `${next.serviceName} sent to ${next.phone}`)
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       void balanceRefresher.current().catch(() => undefined)
     } else if (next.state === 'quoted' || next.state === 'awaiting_payment') {
       setStatus('confirming')

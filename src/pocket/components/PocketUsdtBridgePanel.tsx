@@ -15,7 +15,7 @@ const NETWORKS=['base','arbitrum','ethereum','polygon','solana'] as const
 type Network=typeof NETWORKS[number]
 type Quote={total?:string;destinationAddress?:string;networkFeeUnits?:string;id:string;source:Network;destination:Network;walletAddress:string;amount:string;receive:string;minimumReceive:string;fee:string;expiresAt:number}
 type Pending={quote:Quote;quoteToken:string;signedTransaction?:string;challengeId?:string;txHash?:string;sourceConfirmed?:boolean;needsAttention?:boolean;awaitingApproval?:boolean;requiresWalletSession?:boolean}
-type Props={onTracked?():void;ensureWallet(network:Network):Promise<{address:string}|null>;owner:string;getAccessToken():Promise<string|null>;getSession(network:Exclude<Network,'solana'>,address:string):Promise<CircleEvmEmailSession>;getSolanaSession(address:string):Promise<PocketSolanaEmailSession>;onBusyChange(value:boolean):void;onActivity():void;refresh():Promise<unknown>;balances:Array<{key:string;usdt?:number;usdtStale?:boolean}>}
+type Props={onTracked?(id:string):void;ensureWallet(network:Network):Promise<{address:string}|null>;owner:string;getAccessToken():Promise<string|null>;getSession(network:Exclude<Network,'solana'>,address:string):Promise<CircleEvmEmailSession>;getSolanaSession(address:string):Promise<PocketSolanaEmailSession>;onBusyChange(value:boolean):void;onActivity():void;refresh():Promise<unknown>;balances:Array<{key:string;usdt?:number;usdtStale?:boolean}>}
 export default function PocketUsdtBridgePanel(props:Props){
   const [source,setSource]=useState<Network>('arbitrum'),[destination,setDestination]=useState<Network>('base')
   const [amount,setAmount]=useState(''),[quoted,setQuoted]=useState<(Pending&{sufficientBalance:boolean})|null>(null)
@@ -115,7 +115,7 @@ export default function PocketUsdtBridgePanel(props:Props){
       if(result.transactionHash){saved={...saved,txHash:result.transactionHash};save(saved)}
       setNotice('');props.onActivity();void props.refresh()
     }catch(e){if(saved&&!saved.challengeId&&(e as {submissionRejected?:boolean}).submissionRejected)trackPocketOperation(owner,'bridge',saved,'failed');executionError.current=(e as Error).message;setError(executionError.current)}finally{if(saved)endPocketOperation(owner,saved.quote.id);lock.current=false;setBusy(false)}
-    if(saved&&currentOwner.current===owner){setPending(null);pendingRef.current=null;setQuoted(null);setAmount('');setError('');props.onActivity();props.onTracked?.()}
+    if(saved&&currentOwner.current===owner){setPending(null);pendingRef.current=null;setQuoted(null);setAmount('');setError('');props.onActivity();props.onTracked?.(saved.quote.id)}
   }
   async function executeSolana(value:Pending){
     if(lock.current)return
@@ -135,7 +135,7 @@ export default function PocketUsdtBridgePanel(props:Props){
       }
       await api({action:'submit',quoteToken:saved.quoteToken,transaction:saved.signedTransaction})
     }catch(e){if(!saved.signedTransaction)trackPocketOperation(owner,'bridge',saved,'failed');if(currentOwner.current===owner){executionError.current=(e as Error).message;setError(executionError.current)}}finally{endPocketOperation(owner,saved.quote.id);lock.current=false;setBusy(false)}
-    if(currentOwner.current===owner){setPending(null);pendingRef.current=null;setQuoted(null);setAmount('');setError('');props.onActivity();props.onTracked?.()}
+    if(currentOwner.current===owner){setPending(null);pendingRef.current=null;setQuoted(null);setAmount('');setError('');props.onActivity();props.onTracked?.(saved.quote.id)}
   }
   const shortfall=!pending&&(quoted?.sufficientBalance===false||exceedsBalance)
   const locked=busy||preparing||Boolean(pending)

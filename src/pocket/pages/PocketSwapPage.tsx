@@ -1,3 +1,4 @@
+import PocketBridgeProgressSheet, {type ActivePocketBridge} from '../components/PocketBridgeProgressSheet'
 import { pocketPricingMessage } from '../lib/pocketPricingMessage'
 import PocketBridgeForm from '../components/PocketBridgeForm'
 import PocketFundingAction from '../components/PocketFundingAction'
@@ -34,11 +35,13 @@ import { POCKET_BRIDGE_NETWORKS, pocketBridgeNetworkLabel as label, savedPocketB
 
 export default function PocketSwapPage() {
   const navigate = useNavigate()
+  const [activeBridge,setActiveBridge] = useState<ActivePocketBridge|null>(null)
   const [bridgeApprovalBusy, setBridgeApprovalBusy] = useState(false)
   const [swapBusy, setSwapBusy] = useState(false)
   const [mode, setMode] = useState<'bridge' | 'swap' | null>(null)
   const [bridgeAsset, setBridgeAsset] = useState<'USDC'|'USDT'>('USDC')
   const { authenticated, email, getAccessToken } = usePocketIdentity()
+  useEffect(()=>setActiveBridge(null),[email])
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const activity = usePocketActivity({ authenticated, email, enabled: false, getAccessToken })
   const [source, setSource] = useState<PocketBridgeNetwork>(() => {
@@ -49,7 +52,7 @@ export default function PocketSwapPage() {
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const sourceBalance = wallets.rows.find(row => row.key === source)?.balance ?? 0
   const sourceBalanceKnown = Boolean(wallets.displayRows?.find(r=>r.key===source)?.known&&!wallets.displayRows?.find(r=>r.key===source)?.stale)
-  const swap = usePocketBridgeController({ enabled:mode==='bridge'&&bridgeAsset==='USDC', owner: email, source, sourceBalance, sourceBalanceKnown, wallets: wallets.wallets, ensureWallet: walletController.ensureWallet, getEvmSession: (network, address) => walletController.getEvmSession(network, address), getSolanaSession: walletController.getSolanaSession, getAccessToken, refresh: wallets.refreshBalances, onActivity: () => void activity.refresh(), onTracked:()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.activity) })
+  const swap = usePocketBridgeController({ enabled:mode==='bridge'&&bridgeAsset==='USDC', owner: email, source, sourceBalance, sourceBalanceKnown, wallets: wallets.wallets, ensureWallet: walletController.ensureWallet, getEvmSession: (network, address) => walletController.getEvmSession(network, address), getSolanaSession: walletController.getSolanaSession, getAccessToken, refresh: wallets.refreshBalances, onActivity: () => void activity.refresh(), onTracked:id=>setActiveBridge({owner:email,asset:'USDC',id}) })
   const bridgeShortfall = fundingShortfall(swap.error)||(amountExceedsBalance(swap.quote?.total||swap.amount,sourceBalance,sourceBalanceKnown)?'USDC':null)
   usePocketBridgeActivity({owner:email,authenticated,rows:activity.rows,getAccessToken,getEvmSession:walletController.getEvmSession})
   const setSourceNetwork = (value: PocketBridgeNetwork) => { if (bridgeApprovalBusy || swap.submitting || swap.status === 'confirming') return; window.localStorage.setItem('pocket.home.network', value); setSource(value) }
@@ -66,12 +69,13 @@ export default function PocketSwapPage() {
     <PocketFlowHeader centered title={mode === 'bridge' ? 'Bridge stablecoins' : mode === 'swap' ? 'Swap on Arc' : 'Bridge & swap'} onBack={() => { if (!signing) { if (mode) setMode(null); else navigate(POCKET_BASE_PATH + POCKET_ROUTES.home) } }} />
     {!mode && <div className="divide-y divide-gray-100 dark:divide-[#262626]">{([['bridge','Bridge stablecoins','Move USDC or USDT between your wallets'],['swap','Swap on Arc','Exchange assets on Arc']] as const).map(([value,title,description])=><button key={value} type="button" onClick={()=>setMode(value)} className="flex w-full items-center gap-3 py-5 text-left"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-[#171717]"><ArrowLeftRight className="h-5 w-5"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{description}</span></span><ChevronRight className="h-4 w-4 text-gray-400"/></button>)}</div>}
     {mode==='bridge'&&<PocketSelect value={bridgeAsset} options={[{value:'USDC',label:'USDC'},{value:'USDT',label:'USDT'}]} disabled={signing} ariaLabel="Bridge asset" onChange={value=>{swap.setAmount('');setBridgeAsset(value as 'USDC'|'USDT')}}/>}
-    {mode==='bridge'&&bridgeAsset==='USDT'&&<PocketUsdtBridgePanel onTracked={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.activity)} ensureWallet={walletController.ensureWallet} key={email} owner={email} getAccessToken={getAccessToken} getSession={walletController.getEvmSession} getSolanaSession={walletController.getSolanaSession} balances={wallets.displayRows} refresh={wallets.refreshBalances} onActivity={()=>void activity.refresh()} onBusyChange={setBridgeApprovalBusy}/>}
+    {mode==='bridge'&&bridgeAsset==='USDT'&&<PocketUsdtBridgePanel onTracked={id=>setActiveBridge({owner:email,asset:'USDT',id})} ensureWallet={walletController.ensureWallet} key={email} owner={email} getAccessToken={getAccessToken} getSession={walletController.getEvmSession} getSolanaSession={walletController.getSolanaSession} balances={wallets.displayRows} refresh={wallets.refreshBalances} onActivity={()=>void activity.refresh()} onBusyChange={setBridgeApprovalBusy}/>}
     {mode === "swap"&&<PocketArcSwapPanel onTracked={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.activity)} key={email} enabled={mode === "swap"} onBusyChange={setSwapBusy} email={email} getAccessToken={getAccessToken} ensureWallet={() => walletController.ensureWallet("arc")} getSession={address => walletController.getEvmSession("arc", address)} refresh={wallets.refreshBalances} />}<PocketBridgeForm amountHint={bridgeShortfall?'Insufficient funds':undefined} quoteLoading={swap.status === 'quoting'} asset="USDC" hidden={mode!=="bridge"||bridgeAsset!=='USDC'} disabled={signing} source={source} destination={swap.destination} sources={POCKET_BRIDGE_NETWORKS.map(value=>({value,label:label(value)}))} destinations={swap.destinations.map(value=>({value,label:label(value)}))} onSource={value=>setSourceNetwork(value as PocketBridgeNetwork)} onDestination={value=>swap.setDestination(value as PocketBridgeNetwork)} balance={sourceBalance} amount={swap.amount} onAmount={swap.setAmount} onMax={()=>swap.setAmount(Math.max(0,sourceBalance-Number(swap.quote?.fee||0)).toFixed(6).replace(/\.?0+$/,''))} quote={swap.quote}>
       <PocketFundingAction showHint={false} flow="bridge" asset={bridgeShortfall} network={source} locked={signing||swap.submitting} onReturn={async()=>{await wallets.refreshBalances();await swap.refreshQuote()}} onCancel={()=>swap.setAmount('')}><PocketSlideAction loadingContent={swap.status === 'quoting'} approvalRequired={false} onApprovalBusyChange={setBridgeApprovalBusy} status={swap.status === 'confirming' ? 'pending' : 'idle'} disabled={signing || !swap.quote || Number(swap.quote.total) > sourceBalance || swap.status === 'quoting'} onConfirm={() => void swap.bridge()} labels={{ disabled: swap.status === 'quoting' ? 'Updating amount' : 'Enter bridge amount', idle: 'Confirm bridge', pending: 'Preparing bridge', submitted: 'Bridging...', successful: 'Bridged' }} /></PocketFundingAction>
       {swap.notice && <p role="status" className="text-center text-xs font-medium text-gray-500 dark:text-gray-400">{swap.notice} <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.activity)} className="font-semibold text-blue-600">View Activity</button></p>}
       {!bridgeShortfall && swap.error && <p className="rounded-2xl bg-red-50 p-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{pocketPricingMessage(swap.error)}</p>}
     </PocketBridgeForm>
+    {activeBridge&&activeBridge.owner===email&&<PocketBridgeProgressSheet active={activeBridge} onDone={()=>setActiveBridge(null)}/>}
     </div>
   </PocketRouteShell>
 }

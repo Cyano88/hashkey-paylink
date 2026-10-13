@@ -1,4 +1,5 @@
 import {localCurrencyAmount} from '../lib/pocketDisplayCurrency'
+import usePocketSuccessHaptic from '../hooks/usePocketSuccessHaptic'
 import PocketLocalEquivalent from './PocketLocalEquivalent'
 import PocketTransactionDetails from './PocketTransactionDetails'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
@@ -14,6 +15,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   embedded?: boolean; statusAction?: ReactNode; detailsRows?: Array<[string, ReactNode]>; statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
 }) {
   const [viewReceipt, setViewReceipt] = useState(false)
+  usePocketSuccessHaptic(state === 'successful')
   const [viewDetails, setViewDetails] = useState(false)
   const hasAction = state !== 'successful' && Children.toArray(statusAction).length > 0
   const canViewDetails = !receipt && Boolean(detailsRows?.length || Children.toArray(children).length)

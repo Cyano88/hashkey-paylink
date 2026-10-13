@@ -22,7 +22,7 @@ export default function usePocketBridgeController(input: {
   getSolanaSession(walletAddress: string): Promise<PocketSolanaEmailSession>
   getAccessToken(): Promise<string | null>
   refresh(): Promise<unknown>
-  onTracked?(): void
+  onTracked?(id: string): void
   onActivity(): void
 }) {
   const latest = useRef(input)
@@ -105,6 +105,7 @@ export default function usePocketBridgeController(input: {
     locked.current = true; setSubmitting(true)
     const owner = input.owner
     let saved = false
+    let attemptId = ''
     setError(''); setNotice('')
     try {
       assertNewTransfer()
@@ -122,6 +123,7 @@ export default function usePocketBridgeController(input: {
       const session = input.source === 'solana' ? await input.getSolanaSession(sourceWallet.address) : await input.getEvmSession(input.source, sourceWallet.address)
       if (latest.current.owner !== owner) return
       let active: PocketPendingBridge = { id: crypto.randomUUID(), source: input.source, destination, amount, walletAddress: sourceWallet.address, createdAt: Date.now(), progress: 'needs_attention' }
+      attemptId = active.id
       const persist = () => { lastAttempt.current = active.id; savePocketBridgeTransfer(owner, active, localStorage); saved = true }
       setStatus('confirming')
       const txHash = input.source === 'solana'
@@ -137,7 +139,7 @@ export default function usePocketBridgeController(input: {
       setNotice('Bridge submitted. Follow its progress in Activity.')
       void input.refresh().catch(() => undefined)
       input.onActivity()
-      input.onTracked?.()
+      input.onTracked?.(attemptId)
     } catch (reason) {
       if (latest.current.owner !== owner) return
       setStatus('idle')
@@ -147,7 +149,7 @@ export default function usePocketBridgeController(input: {
         setError('')
         setNotice('Your bridge is saved. Checking its status in Activity.')
         input.onActivity()
-      input.onTracked?.()
+        input.onTracked?.(attemptId)
       }
     } finally { locked.current = false; setSubmitting(false) }
   }, [amount, destination, input, assertNewTransfer, refreshQuote, quote])

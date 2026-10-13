@@ -66,7 +66,6 @@ export default function usePocketBankFundController(input: {
       setResult(next)
       if (next.state === 'funded') {
         setStatus('funded')
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
         await input.onFunded()
         return
       }
@@ -106,7 +105,6 @@ export default function usePocketBankFundController(input: {
       setResult(next)
       if (next.state === 'funded') {
         setStatus('funded')
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
         await input.onFunded()
         return
       }

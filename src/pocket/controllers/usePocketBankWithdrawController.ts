@@ -608,7 +608,6 @@ export default function usePocketBankWithdrawController({
       setStatus(submittedPayoutStatus(submitted))
       idempotencyKey.current = ''
       window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       const confirmed = await confirmPocketBankWithdraw({
         accessToken,
         request: {
