@@ -15,6 +15,7 @@ export default function usePocketBridgeController(input: {
   owner: string
   source: PocketBridgeNetwork
   sourceBalance: number
+  sourceBalanceKnown?: boolean
   wallets: Partial<Record<PocketBridgeNetwork, CirclePocketWallet>>
   ensureWallet(network: PocketBridgeNetwork): Promise<CirclePocketWallet | null>
   getEvmSession(network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string): Promise<CircleEvmEmailSession>
@@ -67,6 +68,7 @@ export default function usePocketBridgeController(input: {
     const input = latest.current
     const version = ++quoteVersion.current
     if (input.enabled === false || !amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || input.source === destination) { setQuote(null); setStatus('idle'); return null }
+    if (input.sourceBalanceKnown && Number(amount) > input.sourceBalance) { setQuote(null); setStatus('idle'); setError(''); return null }
     setStatus('quoting'); setError('')
     try {
       const accessToken = await input.getAccessToken()
@@ -81,7 +83,7 @@ export default function usePocketBridgeController(input: {
       if (version === quoteVersion.current) { setQuote(null); setStatus('idle'); setError(reason instanceof Error ? reason.message : 'Could not update this bridge amount.') }
       return null
     }
-  }, [amount, destination, input.source, input.owner, input.enabled])
+  }, [amount, destination, input.source, input.owner, input.enabled, input.sourceBalance, input.sourceBalanceKnown])
   useEffect(() => {
     if (locked.current) return
     const timer = window.setTimeout(() => void refreshQuote(), 450)

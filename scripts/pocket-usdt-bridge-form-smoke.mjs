@@ -51,6 +51,11 @@ try{
  await page.evaluate(()=>window.failNextQuote=true);await fillAmount('4');await page.waitForFunction(()=>window.requests.filter(r=>r.amount==='4').length>=2);await page.getByRole('button',{name:'Confirm bridge',exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
  await fillAmount('9')
  await page.getByRole('button',{name:'Add funds',exact:true}).waitFor()
+ await page.waitForTimeout(600)
+ assert.equal(await page.evaluate(()=>window.requests.some(r=>r.amount==='9')),false,'An amount above a fresh balance must not request fee estimation')
+ assert.equal(await page.getByText('Insufficient funds',{exact:true}).count(),1)
+ assert.equal(await input.evaluate(el=>el.parentElement.textContent.includes('Insufficient funds')),true,'The balance hint belongs beneath the amount')
+ assert.equal(await page.getByRole('alert').count(),0)
  await page.evaluate(()=>window.fail=true)
  await fillAmount('3')
  await page.getByRole('button',{name:'Try again',exact:true}).waitFor()

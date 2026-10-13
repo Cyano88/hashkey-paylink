@@ -6,7 +6,7 @@ import PocketSelect, {type PocketSelectOption} from './PocketSelect'
 import {formatPocketDisplayAmount} from '../lib/pocketMoney'
 
 type Props = {
-  asset:'USDC'|'USDT'; hidden?:boolean; disabled:boolean
+  amountHint?:string; asset:'USDC'|'USDT'; hidden?:boolean; disabled:boolean
   source:string; destination:string; sources:PocketSelectOption[]; destinations:PocketSelectOption[]
   onSource(value:string):void; onDestination(value:string):void
   balance?:number; amount:string; onAmount(value:string):void; onMax():void; maxDisabled?:boolean
@@ -19,7 +19,7 @@ type Props = {
 export default function PocketBridgeForm(p:Props){
   if(p.hidden)return null
   return <section hidden={p.hidden} className="flex min-h-0 flex-1 flex-col gap-3 bg-transparent">
-    <PocketExchangeLayout
+    <PocketExchangeLayout amountHint={p.amountHint}
       source={<PocketSelect buttonClassName="border-0 bg-gray-50 dark:bg-[#181818]" showUpcomingXLayer disabled={p.disabled} networkBalanceAsset={p.asset} value={p.source} options={p.sources} onChange={p.onSource} ariaLabel="Select source network"/>}
       destination={<PocketSelect buttonClassName="border-0 bg-gray-50 dark:bg-[#181818]" showUpcomingXLayer disabled={p.disabled} networkBalanceAsset={p.asset} value={p.destination} options={p.destinations} onChange={p.onDestination} ariaLabel="Select destination network"/>}
       available={p.balance===undefined?'?':formatPocketDisplayAmount(p.balance)+' '+p.asset}
