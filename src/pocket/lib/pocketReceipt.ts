@@ -60,6 +60,7 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
   if ((source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
   if (source === 'xpay') return row.direction === 'in' ? 'money_in' : 'app_purchase'
+  if (source === 'esim') return 'app_purchase'
   if (isOutgoingPosPurchase(row)) return 'app_purchase'
   if (source === 'purchase' || source === 'app-pay' || settlement === 'app_pay' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'app_purchase'
   if (source === 'gift') return row.direction === 'in' ? 'money_in' : 'money_out'
@@ -93,6 +94,7 @@ export function pocketBillTitle(category?: string): string {
 }
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
+  if (normalizedSource(row) === 'esim') return pocketActivityStatus(row) === 'refunded' ? 'eSIM refunded' : 'eSIM purchase'
   if (normalizedSource(row) === 'wallet-bridge') return (row.assetSymbol || 'USDC') + ' bridge'
   if (normalizedSource(row) === 'wallet-swap') return (row.assetSymbol || 'USDC') + ' swap'
   const kind = pocketReceiptKind(row)

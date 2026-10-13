@@ -24,6 +24,13 @@ export type PocketEsimDestination = {
 // Catalog access does not enable charging or provisioning.
 export type PocketEsimCatalog = {
   status: 'coming_soon' | 'available'
-  purchaseEnabled: false
+  purchaseEnabled: boolean
   destinations: PocketEsimDestination[]
+}
+
+export type PocketEsimOrder = {
+  id: string; state: 'quoted' | 'awaiting_payment' | 'payment_failed' | 'payment_received' | 'ordering' | 'order_unknown' | 'provisioning' | 'ready' | 'needs_review' | 'refund_eligible' | 'refunding' | 'refunded'; packageCode: string; days: number; asset: 'USDC' | 'USDT'; network: 'base'
+  price: PocketEsimPrice; createdAt: number; expiresAt: number; txHash: string; refundTxHash: string
+  networkFee?: string; totalDebit?: string
+  packageLabel?: string
 }

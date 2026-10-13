@@ -63,14 +63,15 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   }
   const values = observed.filter(row => !feeRows.has(row)).map(row => row.direction === 'out' && fees.has(transactionKey(row))
     ? { ...row, feeAmount: fees.get(transactionKey(row)) } : row)
-  const refundDeposits = new Set(values.filter(row => row.source === 'bills' && row.refundTxHash).map(row => transactionKey({ ...row, txHash: row.refundTxHash! }) + ':' + Number(row.amount)))
+  const refundKey = (row: PocketActivityRow) => transactionKey(row) + ':' + (row.assetSymbol || 'USDC') + ':' + Number(row.amount)
+  const refundDeposits = new Set(values.filter(row => ['bills','esim'].includes(row.source || '') && row.refundTxHash).map(row => refundKey({ ...row, txHash: row.refundTxHash! })))
   const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
   for(const row of values){
     if(row.source==='wallet-bridge'&&row.destinationTxHash&&row.destination)contextual.add(transactionKey({...row,chain:row.destination,txHash:row.destinationTxHash})+':in')
   }
   return values.filter(row => !['wallet-deposit', 'wallet-withdrawal'].includes(row.source || '')
     || (!contextual.has(transactionKey(row) + ':' + (row.direction || 'in'))
-      && !(row.source === 'wallet-deposit' && (!row.assetSymbol || row.assetSymbol === 'USDC') && refundDeposits.has(transactionKey(row) + ':' + Number(row.amount)))))
+      && !(row.source === 'wallet-deposit' && refundDeposits.has(refundKey(row)))))
     .sort((a, b) => b.ts - a.ts || rowKey(a).localeCompare(rowKey(b)))
 }
 

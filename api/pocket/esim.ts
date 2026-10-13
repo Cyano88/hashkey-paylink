@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { verifiedPrivyUser } from '../privy-circle-link.js'
 import { createEsimCatalogProvider } from './esim-provider.js'
+import { esimPurchaseConfigured } from './esim-checkout.js'
 
 export function createPocketEsimCatalogHandler({ verifyUser = verifiedPrivyUser, provider }: {
   verifyUser?: (req: Request) => Promise<unknown>
@@ -12,7 +13,7 @@ export function createPocketEsimCatalogHandler({ verifyUser = verifiedPrivyUser,
     try { await verifyUser(req) } catch { return res.status(401).json({ error: 'Sign in to view eSIMs.' }) }
     if (!provider.configured) return res.json({ status: 'coming_soon', purchaseEnabled: false, destinations: [] })
     try {
-      return res.json({ status: 'available', purchaseEnabled: false, destinations: await provider.catalog() })
+      return res.json({ status: 'available', purchaseEnabled: esimPurchaseConfigured(), destinations: await provider.catalog() })
     } catch {
       return res.status(503).json({ error: 'Could not update eSIM plans. Please try again.' })
     }
@@ -38,7 +39,7 @@ export function createPocketEsimPriceHandler({ verifyUser = verifiedPrivyUser, p
     if (typeof packageCode !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(packageCode) || !Number.isInteger(days) || days < 1 || days > 365) return res.status(400).json({ error: 'Choose a valid plan and duration.' })
     try {
       const price = await provider.price(packageCode, days)
-      return res.json({ price: price.public, purchaseEnabled: false })
+      return res.json({ price: price.public, purchaseEnabled: esimPurchaseConfigured() })
     } catch {
       return res.status(503).json({ error: 'This plan is temporarily unavailable.' })
     }

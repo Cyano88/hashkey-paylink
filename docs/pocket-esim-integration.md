@@ -1,34 +1,47 @@
-# Pocket eSIM integration
+﻿# Pocket eSIM production preparation
 
-## Implemented
+## Current local implementation
 
-Services replaces the bottom navigation XPay entry. Existing XPay checkout/QR URLs remain unchanged. Services links to XPay, Bills and eSIM using the existing Bills menu row styling. Unimplemented Earn is omitted.
+Services uses the existing Pocket menu layout. eSIM Access supplies country and regional catalogs, fixed-volume and daily packages. Credentials remain server-side; wholesale prices are not exposed. Countries use bundled flag artwork. Daily plans retain the provider fair-use terms.
 
-`GET /api/pocket/esim/catalog` authenticates the existing Pocket session and reads eSIM Access fixed-volume and daily base packages and locations. Credentials stay server-side. Requests are coalesced, cached for one hour and cooled down after provider failures. Requests use a fixed provider origin and reject redirects. Daily plans show high-speed allowance and provider fair-use speed. Wholesale prices are not returned to clients. No payment or order endpoint is exposed.
+The local server mounts authenticated catalog, retail price and order endpoints. Purchases remain behind `POCKET_ESIM_PURCHASE_ENABLED`. The local app connects Base USDC/USDT wallet approval to durable eSIM intents and includes My eSIMs, installation QR and manual installation. This code has not been deployed as part of the October 13 work.
 
-`POST /api/pocket/esim/price` authenticates the customer and returns a read-only retail preview. The provisional policy uses supplier suggested retail plus the existing 25 bps payment fee; integer arithmetic preserves the exact total. Daily plans multiply by a selected 1-365 days. Unknown currency, invalid duration, missing retail or below-cost retail fail closed. The sheet uses shimmers and cancels obsolete requests. This preview is not a locked payment quote and cannot debit a wallet.
+Retail pricing uses supplier suggested retail plus the existing 25 bps payment fee, calculated in integer units. A quote does not debit a wallet or order a profile. Expired unsubmitted quotes refresh quietly in the checkout. The checkout now obtains the existing signed Circle wallet-send fee quote in gross mode: the exact plan payment goes to the eSIM treasury and network reimbursement goes to the platform treasury. This avoids a second 25 bps fee. The server verifies asset, wallet, recipient, amount, purpose and expiry before binding the quote to the order. The UI shows the combined fee and full debit before approval. Refunds return the service payment in the original asset; the spent network reimbursement is not included.
 
-The unmounted `esim-orders.ts` service implements durable owner-scoped intents, immutable USDC/USDT Base quotes, supplier-float reservations, exact onchain transfer verification, one-payment-per-order enforcement, supplier idempotency and encrypted installation payloads. Supplier timeouts stay unresolved; recovery uses the same transactionId. Tests inject storage/provider/verifier dependencies; no live order has been placed. Integration requires a dedicated verified eSIM treasury or a cross-product transaction-use registry before sharing a treasury. Do not mount payment actions until the wallet approval UI, reconciliation worker, refunds and operational limits are complete. An explicit purchase gate and a 32-byte encryption key are required by the service.
+The order service verifies exact payer, recipient, chain, asset, amount and time window. It reserves supplier float, prevents reuse of a payment, and retries supplier orders with the same transactionId. Provider documentation specifies that duplicate transactionId values identify the same request. Unknown outcomes remain unresolved; no automatic second customer payment is sent.
 
-The eSIM screen supports country/regional search, package details and the shared Pocket sheet. Missing credentials show Coming soon. Provider failures show a short retry message. Preparation uses existing shimmers. Purchasing stays disabled even when catalog access is configured.
+Installation data is encrypted with AES-256-GCM and bound to the order ID. Only the order owner can read it. The UI distinguishes Confirming payment, Preparing eSIM, eSIM ready, Refund in progress, Refunded and Payment not sent. Success is shown only when installation material is ready. Installation fetch failures stop the shimmer and expose a retry action.
 
-## Provider access
+Provider-confirmed canceled profiles can trigger a same-asset Base refund through the dedicated Circle treasury. Refund claims and idempotency keys survive retries and restart. Slow provisioning alone cannot trigger a refund. A stale provisioning response cannot overwrite a refund state. The reconciliation worker runs every 30 seconds; transactions lacking a hash may still require the retained Circle session when the customer reopens the order.
 
-Create an account at https://console.esimaccess.com/ and open Developer > API Keys. Copy AccessCode into `ESIM_ACCESS_CODE` on the API server only. Do not use a `VITE_` prefix or put credentials in the app. The documented header authentication uses `RT-AccessCode`; SecretKey is for the alternative HMAC authentication method and is not needed for this catalogue adapter. Live read-only verification on 2026-10-12 returned 3,184 plans across 231 destination groups and a zero supplier balance. Angola has fixed plans up to 10 GB and daily allowances up to 10 GB/day; other destinations have fixed plans up to 100 GB. These are provider inventory observations, not universal availability guarantees.
+## Verified October 13, 2026
+
+Production configuration inspection and subsequent authorized setup found:
+
+- eSIM Access credential configured.
+- Supplier balance: 50 USD, verified through the provider balance API after the October 13 top-up (500000 provider units; 10000 units per USD).
+- Dedicated Base SCA eSIM treasury created and verified with Circle: `b9c81558-91c7-562b-abdc-e6f6ade4f1e8`, address `0xfa66554e4ea311839c530e51531b1d300a471708`, existing wallet set `e309e453-89aa-5e0c-8899-20a859906d24`.
+- All three eSIM treasury identifiers saved in Render and read back successfully.
+- Installation encryption key securely generated, saved in Render and verified without exposing its value. Preserve this key; do not rotate it without a migration for saved installations.
+- Durable database configured.
+- Purchase switch disabled.
+
+These settings are saved for the next deployment. The latest Render deployment remained unchanged; no deployment, provider order, funds movement or release push was performed during this setup. Purchases remain explicitly disabled.
+
+Local tests cover pricing, float reservations, owner isolation, exact transfer verification, payment replay protection, concurrent order/refund claims, unknown-order recovery, refund restart/idempotency, encrypted installation and status mapping. Browser fixtures cover country/regional navigation, purchase gating, mobile/desktop sheets and installation failure/retry/manual details. These are fixture checks, not proof of a live purchase or installed data connection.
+
+## Remaining launch work
+
+1. Treasury identifiers and installation encryption key are configured and verified in Render; verify runtime configuration after the authorized deployment. Keep the treasury separate from bills until a cross-product transaction-use registry exists.
+2. Supplier funding is verified at 50 USD. Select a plan covering the tester's actual country and approve its final customer quote before the controlled purchase. The live Nigeria catalog currently offers 100 MB for 7 days at 0.94 USD retail before the payment and network fees; supplier cost is 0.47 USD. No order has been placed.
+3. Activity now reads saved eSIM orders as a separate owner-scoped source, collapses matching wallet transfers/refunds, opens the saved order, and uses the existing receipt layout. Validate payment-attempt recovery without a stored hash on a real retained Circle session before launch.
+4. Verify the account's retail permission, activation and cancellation terms. Do not advertise unlimited data or top-ups unless the exact plan and implemented flow support them.
+5. Deploy only after explicit approval. Run one authorized funded purchase on an eSIM-compatible device, verify payment, single supplier debit, installation and actual data connectivity. Exercise refund and interrupted-order recovery before broad release.
+
+Leave provider webhooks unconfigured until an authenticated, deduplicated receiver has been implemented and verified. Server polling is the current reconciliation mechanism. Broader usage tracking and top-ups are not yet implemented.
 
 Provider documentation: https://docs.esimaccess.com/
 
-There is no sandbox. Catalogue verification is read-only, but ordering spends the real supplier balance. The documented funding methods are card, PayPal and bank transfer. Customer USDC/USDT payment is separate from supplier treasury funding. Leave the dashboard webhook URL blank until a verified receiving endpoint is deployed. Catalogue access alone is not proof of production readiness.
+The provider has no sandbox; creating an order spends real supplier funds. Catalog access and passing fixture tests do not establish production readiness.
 
-## Next: payment and fulfilment
-
-1. Verify partner approval, settlement/funding method, retail pricing permission, stock, device compatibility, activation rules and refund conditions against the account's actual API responses.
-2. Create a durable, owner-scoped eSIM intent with an immutable package, price, selected USDC/USDT token, network, fees and expiry. Reuse Pocket's confirmation UI and payment approval machinery; never reuse VTPass bill identifiers or mark an eSIM as a bill.
-3. Verify the exact customer transfer once, then create one provider order. Use a durable order reference and reconcile unknown outcomes before retrying; timeout does not prove failure.
-4. Distinguish payment received, preparing eSIM and ready to install. Persist provider order/ICCID, encrypted installation material and account ownership. Add My eSIMs, installation instructions, usage and eligible top-ups.
-5. Implement provider-confirmed failure/refund recovery returning the same paid asset and network. Protect webhook authentication, deduplication and out-of-order delivery. No refund merely because provisioning is slow.
-6. Validate success, timeout after submission, duplicate callbacks, failed provisioning, refunds and app restart recovery with fixtures. Then verify a controlled real purchase and installation on a compatible device before enabling customer purchases.
-
-USDC/USDT balances and yields are not changed by this phase. Fee amounts are previews only. No treasury debits or real eSIM orders are enabled. The next work is to connect wallet approval and My eSIMs, persist submitted transaction recovery, integrate ledger/activity and same-asset refunds, then run a funded production canary before enabling purchases.
-
-Country destinations use bundled flag-icons 7.5.0 artwork with the retained MIT license; regional bundles use Pocket's globe icon. Regional variants are grouped by destination name while each plan retains its exact coverage.
+October 13 follow-up: signed network-fee binding, receipt/Activity identity, USDC/USDT fee selection, one-submission checkout and preparing-to-ready progression passed fixture tests. Plan names are snapshotted for receipts independently of future catalog changes. The refund fixture suite passed again after treasury configuration; this does not establish a successful live refund.

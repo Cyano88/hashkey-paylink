@@ -2,6 +2,7 @@ import {giftActivityRow} from './gifts/receipts.js'
 import { collapsePocketAssetMoves } from '../../src/pocket/lib/pocketAssetMoveActivity.js'
 import { groupPocketPaymentFunding } from '../../src/pocket/lib/pocketPaymentFunding.js'
 import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
+import { readPocketEsimActivity } from './esim-checkout.js'
 import {readXPayConversionHashes} from './xpay-bank-store.js'
 import { isIncomingPosPayment, personalPocketActivity } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import { createDurablePocketActivityHandler } from './activity-feed.js'
@@ -434,9 +435,9 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   transformSnapshot: transformPocketActivitySnapshot,
-  sources: Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
+  sources: { esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
-  ])),
+  ])) },
 })
 
 /** Persisted purchase truth only: no wallet RPC scans or provider polling. */

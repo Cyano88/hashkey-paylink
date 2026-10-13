@@ -22,6 +22,7 @@ function UsdtActivityLogo({ className }: { className?: string }) {
 export function pocketActivityIcon(row: PocketActivityRow) {
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
   if (source === 'gift') return GiftIcon
+  if (source === 'esim') return Wifi
   if (isOutgoingPosPurchase(row)) return Store
   if (source === 'bills') return ({ airtime: Phone, data: Wifi, tv: Tv, electricity: Lightbulb })[row.billCategory!] || Receipt
   if (source === 'request' || source === 'collection') return RequestMoney

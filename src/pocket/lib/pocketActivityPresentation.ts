@@ -15,6 +15,7 @@ export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'am
 }
 
 export function pocketActivityTitle(row: PocketActivityRow): string {
+  if (row.source === 'esim') return row.contextLabel || 'Travel data'
   if (row.source === 'bills') {
     const kind = ({airtime:'airtime',data:'data',tv:'TV',electricity:'electricity'})[row.billCategory!] || 'Bill payment'
     const provider = (row.billProvider || '').trim().replace(/\s+(?:airtime(?:\s+VTU)?|data|subscription|payment)$/i, '')
@@ -26,6 +27,7 @@ export function pocketActivityTitle(row: PocketActivityRow): string {
 }
 
 export function pocketActivityAction(row: PocketActivityRow): string {
+  if (row.source === 'esim') return 'eSIM'
   if (row.source?.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat') return 'Bank transfer'
   if (row.source === 'bills') return ({airtime:'Airtime',data:'Data',tv:'TV',electricity:'Electricity'}[row.billCategory!] || 'Bill payment')
   if (row.source === 'wallet-bridge') return 'Bridge'
@@ -63,6 +65,6 @@ export function currentPocketActivityRow(selected: PocketActivityRow | null, row
     const bank = row.source?.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat'
     const refs = [selected.providerReference, selected.bankOrderId].filter(Boolean)
     if (bank && refs.some(ref => ref === row.providerReference || ref === row.bankOrderId)) return true
-    return row.eventId === selected.eventId && (['bills', 'request', 'xpay'].includes(row.source || '') || row.txHash === selected.txHash)
+    return row.eventId === selected.eventId && (['bills', 'request', 'xpay', 'esim'].includes(row.source || '') || row.txHash === selected.txHash)
   }) ?? selected
 }

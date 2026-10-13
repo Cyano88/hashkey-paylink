@@ -158,6 +158,7 @@ import dashboardPaymentsHandler from './api/dashboard-payments.js'
 import paymentTxLookupHandler from './api/payment-tx-lookup.js'
 import publicConfigHandler from './api/public-config.js'
 import { pocketEsimCatalogHandler, pocketEsimPriceHandler } from './api/pocket/esim.js'
+import { pocketEsimOrdersHandler, drainPocketEsimOrders } from './api/pocket/esim-checkout.js'
 import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
@@ -475,6 +476,8 @@ app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
 app.get('/api/pocket/esim/catalog', readLimiter, pocketEsimCatalogHandler)
 app.post('/api/pocket/esim/price', strictLimiter, pocketEsimPriceHandler)
+app.get('/api/pocket/esim/orders', readLimiter, pocketEsimOrdersHandler)
+app.post('/api/pocket/esim/orders', strictLimiter, pocketEsimOrdersHandler)
 app.get('/api/hashpaystream/arc-agreements', readLimiter, hashPayStreamArcAgreementsHandler)
 app.post('/api/hashpaystream/arc-agreements', strictLimiter, hashPayStreamArcAgreementsHandler)
 app.get('/api/hashpaystream/v2/agreements', readLimiter, hashPayStreamAgreementGateway)
@@ -635,6 +638,8 @@ void drainHostedCheckoutWebhookOutbox().catch(error => {
 
 const pocketGiftTimer = setInterval(() => { void drainPocketGifts().catch(() => console.warn('[pocket-gifts] reconciliation deferred')) }, 30_000)
 pocketGiftTimer.unref()
+const pocketEsimTimer = setInterval(() => { void drainPocketEsimOrders().catch(() => console.warn('[pocket-esim] reconciliation deferred')) }, 30_000)
+pocketEsimTimer.unref()
 const pocketReconciliationTimer = setInterval(() => {
   void drainPocketReconciliation().catch(error => {
     console.error('[pocket-reconciliation] scheduled run failed:', error instanceof Error ? error.message : String(error))

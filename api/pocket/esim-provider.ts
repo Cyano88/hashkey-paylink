@@ -80,7 +80,9 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
       await this.catalog()
       const row = inventory.find(item => item.packageCode === packageCode)
       if (!row || !cached?.some(destination => destination.plans.some(plan => plan.id === packageCode))) throw Error('ESIM_PLAN_UNAVAILABLE')
-      return { ...priceEsim(row, days, policy), packageCode, slug: typeof row.slug === 'string' ? row.slug : '', daily: Number(row.dataType) === 2 }
+      const destination = cached?.find(item => item.plans.some(plan => plan.id === packageCode))
+      const plan = destination?.plans.find(item => item.id === packageCode)
+      return { ...priceEsim(row, days, policy), packageCode, packageLabel: plan && destination ? `${plan.data} \u00b7 ${destination.name}` : 'Travel data', slug: typeof row.slug === 'string' ? row.slug : '', daily: Number(row.dataType) === 2 }
     },
     async balance() {
       const value = await request('/balance/query', {})

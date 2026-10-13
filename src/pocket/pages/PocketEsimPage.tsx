@@ -10,6 +10,8 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketApiUrl } from '../lib/pocketRoutes'
 import { xpayOrigin } from '../lib/pocketXPayNavigation'
 import type { PocketEsimCatalog, PocketEsimPlan, PocketEsimPrice } from '../lib/pocketEsim'
+import PocketEsimCheckout from '../components/PocketEsimCheckout'
+import PocketMyEsims from '../components/PocketMyEsims'
 
 export default function PocketEsimPage() {
   const navigate = useNavigate(), location = useLocation(), [params, setParams] = useSearchParams()
@@ -21,6 +23,10 @@ export default function PocketEsimPage() {
   const [days, setDays] = useState('1')
   const [price, setPrice] = useState<PocketEsimPrice | null>(null)
   const [priceError, setPriceError] = useState('')
+  const [checkout, setCheckout] = useState<{ plan: PocketEsimPlan; days: number } | null>(null)
+  const [myEsims, setMyEsims] = useState(false)
+  const orderId = params.get('order') || ''
+  useEffect(() => { if (orderId) setMyEsims(true) }, [orderId])
   const origin = xpayOrigin(location.state)
   const destination = catalog?.destinations.find(item => item.id === params.get('destination'))
   const tab = params.get('tab') === 'regional' ? 'regional' : 'countries'
@@ -64,6 +70,7 @@ export default function PocketEsimPage() {
   }, [plan, days])
   return <PocketRouteShell active="services" rail={origin} refreshEnabled={false} onSelect={tab => open(tab === 'profile' ? POCKET_ROUTES.profile : POCKET_ROUTES.home)}>
     <PocketFlowHeader title={destination?.name || 'eSIM'} centered onBack={() => destination ? changeParams({ destination: '' }) : open(POCKET_ROUTES.services)} />
+    {!destination && <div className="mt-4 flex justify-end"><button type="button" className="text-sm font-medium text-gray-600 dark:text-gray-300" onClick={() => setMyEsims(true)}>My eSIMs</button></div>}
     {!catalog && !error ? <section role="status" aria-label="Updating eSIM plans" className="mt-7 space-y-5"><PocketSkeletonBar className="h-12 w-full rounded-2xl" />{[0, 1, 2, 3].map(i => <PocketSkeletonBar key={i} className="h-16 w-full rounded-2xl" />)}</section>
       : error ? <section className="py-16 text-center"><p role="status" className="text-sm text-gray-500 dark:text-gray-400">{error}</p><button type="button" className="pocket-cta-primary mt-6 w-full" onClick={() => setRetry(value => value + 1)}>Try again</button></section>
       : catalog?.status === 'coming_soon' ? <section className="flex min-h-[55dvh] flex-col items-center justify-center text-center">
@@ -99,7 +106,9 @@ export default function PocketEsimPage() {
           {plan.coverage?.length ? <p><span className="font-medium text-gray-700 dark:text-gray-200">Coverage: </span>{plan.coverage.join(', ')}</p> : null}
         </div>
       </details>
-      <button type="button" disabled className="pocket-cta-primary mt-6 w-full">Coming soon</button>
+      <button type="button" disabled={!catalog?.purchaseEnabled || !price || Boolean(priceError)} className="pocket-cta-primary mt-6 w-full" onClick={() => { setCheckout({ plan, days: plan.daily ? Number(days) : plan.days }); setPlan(null) }}>{catalog?.purchaseEnabled ? 'Continue' : 'Coming soon'}</button>
     </PocketBottomSheet>}
+    {checkout && <PocketEsimCheckout plan={checkout.plan} days={checkout.days} onClose={() => { setCheckout(null); setMyEsims(true) }} />}
+    {myEsims && !checkout && <PocketMyEsims catalog={catalog} initialOrderId={orderId} onClose={() => { setMyEsims(false); if (orderId) changeParams({ order: '' }) }} />}
   </PocketRouteShell>
 }
