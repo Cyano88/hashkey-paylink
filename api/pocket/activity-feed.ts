@@ -103,6 +103,16 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
         saved = await store.read(key)
       }
       let snapshot = Object.values(saved?.sources ?? {}).reduce((result, source) => mergePocketActivitySnapshot(result, source.snapshot), empty())
+      // Older eSIM snapshots contained empty refund hashes and pre-transfer
+      // orders. Keep the durable order untouched, but publish only payment rows
+      // accepted by installed clients, even before the source refresh finishes.
+      snapshot = { ...snapshot, payments: snapshot.payments.flatMap(row => {
+        if (row.source !== 'esim') return [row]
+        if (!row.txHash) return []
+        if (row.refundTxHash !== '') return [row]
+        const { refundTxHash: _emptyRefund, ...payment } = row
+        return [payment]
+      }) }
       if(dependencies.transformSnapshot)snapshot=await dependencies.transformSnapshot(userId,snapshot)
       const complete = sourceNames.every(name => Boolean(saved?.sources[name]))
       const partial = !complete || sourceNames.some(name => now() - (saved?.sources[name]?.updatedAt ?? 0) > 60_000)

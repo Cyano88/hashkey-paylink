@@ -2,6 +2,7 @@
 import {createPaymentFeeQuote} from '../api/payment-fee-quotes.ts'
 import {verifyEsimFee} from '../api/pocket/esim-fees.ts'
 import {esimActivityRow} from '../api/pocket/esim-activity.ts'
+import {isPocketActivityRow,isPocketActivityReadData} from '../src/pocket/lib/pocketSchemas.ts'
 import {mergePocketActivityRows} from '../src/pocket/lib/pocketActivitySnapshot.ts'
 import {pocketActivityReceipt} from '../src/pocket/lib/pocketReceipt.ts'
 import {pocketActivityAction,currentPocketActivityRow} from '../src/pocket/lib/pocketActivityPresentation.ts'
@@ -17,8 +18,11 @@ assert.throws(()=>verifyEsimFee(item,'other-wallet',fee.token,now,secret))
 assert.throws(()=>verifyEsimFee(item,'wallet',fee.token,now+120001,secret))
 assert.throws(()=>verifyEsimFee({...item,treasury:item.payer},'wallet',fee.token,now,secret))
 assert.equal(esimActivityRow(item),null)
-const pending=esimActivityRow({...item,state:'awaiting_payment',...verified})
+assert.equal(esimActivityRow({...item,state:'awaiting_payment',...verified}),null)
+const pending=esimActivityRow({...item,state:'provisioning',...verified,txHash:'0x'+'a'.repeat(64)})
 const complete=esimActivityRow({...item,state:'ready',...verified,txHash:'0x'+'a'.repeat(64)})
+assert.equal(isPocketActivityRow(complete),true)
+assert.equal(isPocketActivityReadData({payments:[pending,complete],merchants:[],collections:[]}),true)
 assert.equal(pocketActivityAction(complete),'eSIM')
 assert.equal(complete.amount,'5.015');assert.equal(complete.feeAmount,'0.015')
 const receipt=pocketActivityReceipt(complete)
@@ -27,7 +31,8 @@ assert.equal(currentPocketActivityRow(pending,[complete]),complete)
 assert.equal(mergePocketActivityRows([pending],[complete]).length,1)
 const raw={...complete,source:'wallet-withdrawal',eventId:'raw-transfer'}
 assert.equal(mergePocketActivityRows([raw],[complete]).length,1)
-const refunded=esimActivityRow({...item,...verified,state:'refunded',refundTxHash:'0x'+'b'.repeat(64)})
+const refunded=esimActivityRow({...item,...verified,state:'refunded',txHash:complete.txHash,refundTxHash:'0x'+'b'.repeat(64)})
+assert.equal(isPocketActivityRow(refunded),true)
 assert.equal(refunded.amount,'5.0125')
 const deposit={...raw,source:'wallet-deposit',direction:'in',txHash:refunded.refundTxHash,amount:'5.0125'}
 assert.equal(mergePocketActivityRows([deposit],[refunded]).length,1)
