@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import {createDurablePocketActivityHandler} from '../api/pocket/activity-feed.ts'
 import {isPocketActivityReadData} from '../src/pocket/lib/pocketSchemas.ts'
+import {isPocketActivityRow} from '../src/pocket/lib/pocketSchemas.ts'
 
 const now=Date.now(),hash='0x'+'a'.repeat(64)
 const base={eventId:'esim_paid',source:'esim',chain:'base',payer:'payer',memo:'Nigeria data',amount:'0.95',txHash:hash,refundTxHash:'',ts:now}
@@ -17,4 +18,12 @@ for(const scope of [undefined,'recent']){
  assert.equal('refundTxHash' in body.payments[1],false)
 }
 assert.equal(JSON.stringify(saved),before,'Compatibility repair must preserve durable financial records')
+for(const kind of ['bridge','swap']){
+ const row={...bill,eventId:'pocket-'+kind+':operation-1',source:'wallet-'+kind,settlementType:'wallet_'+kind,txHash:'',paycrestStatus:'failed'}
+ assert.equal(isPocketActivityReadData({payments:[bill,row],merchants:[],collections:[]}),true)
+ assert.equal(isPocketActivityRow({...row,paycrestStatus:'processing'}),true)
+ assert.equal(isPocketActivityRow({...row,paycrestStatus:'completed'}),false,'No fabricated successful transfer without hash')
+ assert.equal(isPocketActivityRow({...row,eventId:'unrelated'}),false)
+ assert.equal(isPocketActivityRow({...row,source:'wallet-withdrawal'}),false)
+}
 console.log('PASS cached eSIM compatibility: TV and eSIM visible in full/recent Activity without mutating orders')

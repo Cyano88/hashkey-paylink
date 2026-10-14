@@ -600,8 +600,14 @@ function isOptionalBoundedString(value: unknown, max: number) {
 
 export function isPocketActivityRow(value: unknown): value is PocketActivityRow {
   if (!isRecord(value)) return false
+  // A durable operation can fail before broadcast. Its operation ID is the
+  // receipt identity; requiring a chain hash hides unrelated payment history.
+  const unbroadcastOperation = value.txHash === ''
+    && ['processing', 'failed', 'cancelled', 'expired'].includes(String(value.paycrestStatus))
+    && ((value.source === 'wallet-bridge' && value.settlementType === 'wallet_bridge' && /^pocket-bridge:[a-zA-Z0-9-]+$/.test(String(value.eventId)))
+      || (value.source === 'wallet-swap' && value.settlementType === 'wallet_swap' && /^pocket-swap:[a-zA-Z0-9-]+$/.test(String(value.eventId))))
   return isNonEmptyString(value.eventId, 256)
-    && (isNonEmptyString(value.txHash, 256) || value.fundingOnly === true && value.txHash === '' && Array.isArray(value.paymentFunding) && value.paymentFunding.length > 0)
+    && (isNonEmptyString(value.txHash, 256) || unbroadcastOperation || value.fundingOnly === true && value.txHash === '' && Array.isArray(value.paymentFunding) && value.paymentFunding.length > 0)
     && (value.fundingOnly === undefined || typeof value.fundingOnly === 'boolean')
     && (value.paymentFunding === undefined || Array.isArray(value.paymentFunding) && value.paymentFunding.length <= 100 && value.paymentFunding.every(item => isRecord(item) && isNonEmptyString(item.source, 32) && isNonEmptyString(item.destination, 32) && isNonEmptyString(item.amount, 80) && isNonEmptyString(item.txHash, 256) && isNonEmptyString(item.status, 80) && isOptionalBoundedString(item.destinationTxHash, 256)))
     && isNonEmptyString(value.chain, 64)
