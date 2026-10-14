@@ -178,7 +178,19 @@ export function createEsimOrderService(options: {
       const [iv, tag, encrypted] = item.profileCipher.split('.').map(value => Buffer.from(value, 'base64url'))
       const cipher = createDecipheriv('aes-256-gcm', Buffer.from(options.encryptionKey, 'hex'), iv)
       cipher.setAAD(Buffer.from(id)); cipher.setAuthTag(tag)
-      return JSON.parse(Buffer.concat([cipher.update(encrypted), cipher.final()]).toString('utf8'))
+      const cached = JSON.parse(Buffer.concat([cipher.update(encrypted), cipher.final()]).toString('utf8'))
+      // Refresh only this owner's issued profile. Older encrypted profiles did
+      // not retain APN data; a provider outage must not hide installation details.
+      try {
+        const profiles = await options.supplier.profiles(item.orderNo)
+        if (profiles.length === 1 && profiles[0].iccid === cached.iccid) {
+          const profile = { ...cached, ...profiles[0], activationCode: cached.activationCode }
+          const profileCipher = encrypt(profile, id)
+          await mutate(data => { const current = owned(data, ownerId, id); if (current.state === 'ready') current.profileCipher = profileCipher })
+          return profile
+        }
+      } catch { /* Keep the encrypted, owner-scoped fallback available. */ }
+      return cached
     },
     async refund(ownerId: string, id: string) {
       if (!options.refund) return fail('ESIM_REFUND_UNAVAILABLE')

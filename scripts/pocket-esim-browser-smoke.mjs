@@ -20,12 +20,12 @@ try{
  mode='available';await start();await p.getByRole('button',{name:/eSIM/}).click();await p.getByRole('button',{name:'Nigeria'}).waitFor();assert.equal(await p.locator('img[src="/brand/countries/ng.svg"]').evaluate(i=>i.complete&&i.naturalWidth>0),true);await p.screenshot({path:'.codex-temp/pocket-esim-flags.png'});await p.getByRole('textbox',{name:'Search destinations'}).fill('Nigeria');await p.getByRole('button',{name:'Nigeria'}).click();await p.getByRole('button',{name:/1 GB 7 days/}).click();await p.getByRole('dialog',{name:'Plan details'}).waitFor();await p.getByText('5.01 USD',{exact:true}).waitFor();assert.equal(await p.getByRole('button',{name:'Coming soon',exact:true}).isDisabled(),true);assert.equal(await p.getByRole('dialog').locator('text=net_price').count(),0);await p.screenshot({path:'.codex-temp/pocket-esim-details-mobile.png'});
  await p.getByRole('button',{name:'Close',exact:true}).click();await p.getByRole('button',{name:'Back',exact:true}).click();await p.getByRole('textbox',{name:'Search destinations'}).fill('');await p.getByRole('button',{name:'Regional',exact:true}).click();await p.getByRole('button',{name:'Europe',exact:true}).waitFor();
  mode='error';await start();await p.getByRole('button',{name:/eSIM/}).click();await p.getByText('Could not update eSIM plans. Please try again.',{exact:true}).waitFor();assert.equal((await p.locator('body').innerText()).includes('private provider failure'),false);mode='coming_soon';await p.getByRole('button',{name:'Try again',exact:true}).click();await p.getByRole('heading',{name:'Stay connected abroad'}).waitFor();
- let installationAttempts=0;
+ let installationAttempts=0, installed=false;
  await p.route('**/api/pocket/esim/orders',async r=>{
    const body=r.request().postDataJSON();
    if(body?.action==='installation'){
      installationAttempts++;
-     return r.fulfill({status:installationAttempts===1?503:200,contentType:'application/json',body:JSON.stringify(installationAttempts===1?{error:'Could not update your eSIM. Please try again.'}:{installation:{iccid:'fixture-iccid',activationCode:'LPA:1$example.invalid$fixture-code'}})});
+     return r.fulfill({status:installationAttempts===1?503:200,contentType:'application/json',body:JSON.stringify(installationAttempts===1?{error:'Could not update your eSIM. Please try again.'}:{installation:{iccid:'fixture-iccid',activationCode:'LPA:1$example.invalid$fixture-code',apn:'plus',status:installed?'IN_USE':'NEW',smdpStatus:installed?'INSTALLATION':'RELEASED'}})});
    }
    return r.fulfill({contentType:'application/json',body:JSON.stringify({orders:[{id:'esim_fixture',state:'ready',packageCode:'ng-1gb',days:7,asset:'USDT',network:'base',price:{total:'5.0125'},createdAt:1,expiresAt:2,txHash:'',refundTxHash:''}]})});
  });
@@ -39,5 +39,19 @@ try{
  await p.getByText('example.invalid',{exact:true}).waitFor();
  await p.screenshot({path:'.codex-temp/pocket-esim-installation-mobile.png'});
  assert.equal(installationAttempts,2);
+ await p.evaluate(()=>Object.defineProperty(navigator,'userAgent',{configurable:true,value:'Mozilla/5.0 (Linux; Android 16; Pixel)'}));
+ await p.getByRole('button',{name:'Close',exact:true}).click();
+ await p.getByRole('button',{name:/eSIM eSIM ready/}).click();
+ await p.getByRole('button',{name:'Install eSIM',exact:true}).waitFor();
+ await p.getByText('Internet setup',{exact:true}).click();
+ await p.getByText('plus',{exact:true}).waitFor();
+ assert.equal(await p.getByRole('button',{name:'Copy activation code',exact:true}).isVisible(),false);
+ installed=true;
+ await p.getByRole('button',{name:'Close',exact:true}).click();
+ await p.getByRole('button',{name:/eSIM eSIM ready/}).click();
+ await p.getByText('eSIM installed',{exact:true}).waitFor();
+ assert.equal(await p.getByRole('button',{name:'Install eSIM',exact:true}).count(),0);
+ await p.getByText('plus',{exact:true}).waitFor();
+ await p.screenshot({path:'.codex-temp/pocket-esim-setup-mobile.png'});
  await p.setViewportSize({width:1280,height:900});await p.screenshot({path:'.codex-temp/pocket-esim-desktop.png'});assert.deepEqual(errors,[]);console.log('PASS eSIM catalog, search, regions, purchase gate, mobile/desktop sheets and installation failure/retry/manual details.');
 }finally{await browser.close()}

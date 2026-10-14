@@ -37,6 +37,15 @@ await service.reconcile('owner',a.id);assert.equal((await service.get('owner',a.
 assert.equal(JSON.stringify(stored).includes('secret-install-code'),false)
 assert.equal((await service.installation('owner',a.id)).iccid,'12345')
 await assert.rejects(service.installation('stranger',a.id),/NOT_FOUND/)
+const originalProfiles=supplier.profiles
+supplier.profiles=async()=>[{...(await originalProfiles())[0],apn:'plus',smdpStatus:'INSTALLATION',status:'IN_USE'}]
+assert.equal((await service.installation('owner',a.id)).apn,'plus')
+assert.equal((await service.installation('owner',a.id)).status,'IN_USE')
+supplier.profiles=async()=>[{...(await originalProfiles())[0],iccid:'different-profile',apn:'wrong'}]
+assert.equal((await service.installation('owner',a.id)).apn,'plus','Never apply another profile settings')
+supplier.profiles=async()=>{throw Error('provider unavailable')}
+assert.equal((await service.installation('owner',a.id)).apn,'plus','Encrypted fallback survives provider outage')
+supplier.profiles=originalProfiles
 timeout=true;const otherTx='0x'+'3'.repeat(64);await service.confirm('owner',c.id,otherTx);assert.equal((await service.get('owner',c.id)).state,'order_unknown');const attempts=orders
 await service.reconcile('owner',c.id);assert.equal(orders,attempts)
 time+=60001;timeout=false;await service.reconcile('owner',c.id);assert.equal(orders,attempts+1);assert.equal((await service.get('owner',c.id)).state,'ready')

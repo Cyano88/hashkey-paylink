@@ -22,8 +22,9 @@ export function createEsimOrderProvider({ accessCode, fetchImpl = fetch }: { acc
       if (!Array.isArray(result?.esimList)) throw Error('ESIM_PROVIDER_UNAVAILABLE')
       return result.esimList.filter((row: any) => row.orderNo === orderNo).map((row: any) => ({
         iccid: String(row.iccid || ''), activationCode: String(row.ac || ''), status: String(row.esimStatus || ''),
+        apn: typeof row.apn === 'string' ? row.apn.trim() : '', smdpStatus: String(row.smdpStatus || ''),
         totalVolume: Number(row.totalVolume) || 0, usedVolume: Number(row.orderUsage) || 0, expiresAt: String(row.expiredTime || ''),
-      })) as { iccid: string; activationCode: string; status: string; totalVolume: number; usedVolume: number; expiresAt: string }[]
+      })) as { iccid: string; activationCode: string; status: string; apn: string; smdpStatus: string; totalVolume: number; usedVolume: number; expiresAt: string }[]
     },
   }
 }
