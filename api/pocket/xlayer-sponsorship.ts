@@ -10,6 +10,7 @@ import catalogue from '../../src/pocket/lib/pocketXStocksCatalog.json' with { ty
 import { stockClient, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { readStockMarketPrices } from './xstocks-prices.js'
 import { assertSponsoredSendMinimum, isXLayerSendStablecoin } from '../../src/pocket/lib/pocketStockSendMinimum.js'
+import { validateEarnSponsorship, preflightEarnSponsorship, type EarnIntent } from './earn-sponsorship.js'
 
 const contracts = new Set([
   '0xb6ceceab302e2e4948951ee7843fc24e92933061',
@@ -31,11 +32,12 @@ function diagnostic(value: unknown, secret: string) {
     .replace(/[\r\n\t]/g,' ').slice(0,500)
 }
 type Store = { requests: { [id: string]: Record } }
-type Config = { appId: string; secret: string; enabled: boolean; wallets: string[] }
+type Config = { appId: string; secret: string; enabled: boolean; wallets: string[]; earnEnabled?: boolean }
 const configuration = (): Config => ({
   appId: process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID || '',
   secret: process.env.PRIVY_APP_SECRET || '',
   enabled: process.env.POCKET_XLAYER_SPONSORSHIP_ENABLED === 'true',
+  earnEnabled: process.env.POCKET_EARN_ENABLED === 'true',
   wallets: (process.env.POCKET_XLAYER_SPONSORSHIP_WALLETS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean),
 })
 const loadUser = (id: string, c: Config) => new PrivyClient(c.appId, c.secret).getUserById(id)
@@ -51,13 +53,21 @@ async function minimum(token:string,units:bigint) {
   ])
   assertSponsoredSendMinimum(token,units,Number(decimals),prices[address])
 }
-export function validateSponsoredRequest(request: SponsoredRequest, walletId: string, c: Config, now: number) {
+export function validateSponsoredRequest(request: SponsoredRequest, walletId: string, c: Config, now: number, earn?: EarnIntent) {
   const tx = request?.body?.params?.transaction
   const id = request?.headers?.['privy-idempotency-key']
   const expiry = Number(request?.headers?.['privy-request-expiry'])
   if (!/^[a-zA-Z0-9]{10,64}$/.test(walletId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id || '')) throw fail('Invalid payment reference.')
   if (!Number.isSafeInteger(expiry) || expiry <= now || expiry > now + 120_000) throw fail('Payment approval expired. Review the transfer again.')
-  if (!tx || !isAddress(tx.from) || !isAddress(tx.to) || !contracts.has(tx.to.toLowerCase())) throw fail('Unsupported X Layer transfer.')
+  if (!tx || !isAddress(tx.from) || !isAddress(tx.to)) throw fail('Unsupported X Layer transaction.')
+  if (earn) {
+    if (!c.earnEnabled) throw fail('Earn is not available yet.', 403)
+    try { validateEarnSponsorship(earn, tx) } catch { throw fail('Unsupported Earn transaction.') }
+    const canonical = makeSponsoredRequest({appId:c.appId,walletId,attemptId:id,expiresAt:expiry,from:tx.from,to:tx.to,data:tx.data})
+    if (!isDeepStrictEqual(request, canonical)) throw fail('Earn request does not match the supported transaction.')
+    return { id, wallet: tx.from.toLowerCase(), canonical, token:tx.to, units:0n }
+  }
+  if (!contracts.has(tx.to.toLowerCase())) throw fail('Unsupported X Layer transfer.')
   if (!/^0xa9059cbb[0-9a-f]{128}$/i.test(tx.data)) throw fail('Only token transfers can be sponsored.')
   const { args } = decodeFunctionData({ abi: transferAbi, data: tx.data as `0x${string}` })
   if (args[1] <= 0n || args[0].toLowerCase() === tx.from.toLowerCase() || args[0].toLowerCase() === zeroAddress) throw fail('Invalid transfer recipient or amount.')
@@ -73,9 +83,9 @@ export function validateSponsoredRequest(request: SponsoredRequest, walletId: st
 
 export function createXLayerSponsorshipHandler(overrides: Partial<{
   identity: typeof verifiedPrivyUser; user: typeof loadUser; config: typeof configuration;
-  mutate: typeof mutate; read: typeof read; minimum:typeof minimum; durable: () => boolean; fetch: typeof fetch; now: () => number;
+  mutate: typeof mutate; read: typeof read; minimum:typeof minimum; earnPreflight:typeof preflightEarnSponsorship; durable: () => boolean; fetch: typeof fetch; now: () => number;
 }> = {}) {
-  const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, durable:hasRenderDurableStore, fetch, now:Date.now, ...overrides }
+  const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, ...overrides }
   async function resolveAccepted(id: string, record: Record, walletId: string, c: Config) {
     if (record.hash || !record.transactionId) return record.hash || null
     const response = await d.fetch(`https://api.privy.io/v1/transactions/${record.transactionId}`, {
@@ -123,19 +133,27 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         return res.json({ok:true,hash,accepted:Boolean(record.transactionId || record.hash)})
       }
       if (!c.enabled || !c.wallets.includes(wallet)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
+      if (req.body?.purpose !== undefined && req.body.purpose !== 'earn') throw fail('Unsupported sponsorship purpose.')
+      if (req.body?.purpose === 'earn' && !c.earnEnabled) throw fail('Earn is not available yet.',403)
       if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})
       if (req.body?.action !== 'send') throw fail('Unsupported sponsorship action.')
       const request = req.body?.request as SponsoredRequest
       // A malformed/expired replay must not claim an earlier request was unsent.
       const possibleId = request?.headers?.['privy-idempotency-key']
       if (typeof possibleId === 'string' && /^[0-9a-f-]{36}$/i.test(possibleId)) reserved = Boolean((await d.read())?.requests[possibleId])
-      const { id, canonical, wallet: from, token, units } = validateSponsoredRequest(request, embedded.id, c, d.now())
+      const earn = req.body?.purpose === 'earn' ? req.body?.intent as EarnIntent : undefined
+      if (req.body?.purpose === 'earn' && !earn) throw fail('Earn intent is missing.')
+      const { id, canonical, wallet: from, token, units } = validateSponsoredRequest(request, embedded.id, c, d.now(), earn)
       if (from !== wallet) throw fail('Payment wallet does not match your Pocket wallet.', 403)
       const signature = req.body?.signature
       if (typeof signature !== 'string' || !/^[A-Za-z0-9+/=]{32,512}$/.test(signature)) throw fail('Payment authorization is missing.')
       // Recheck stocks against a server-loaded price/precision before reserving
       // sponsor credit. Never accept a client-supplied USD value or price.
-      if(!reserved) try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
+      if(!reserved) {
+        if (earn) {
+          try { await d.earnPreflight(earn, wallet as `0x${string}`) } catch { throw fail('Could not prepare this Earn transaction. Refresh your balance and try again.',422) }
+        } else try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
+      }
       const fingerprint = createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
       let existing: Record | undefined
       await d.mutate(current => {
