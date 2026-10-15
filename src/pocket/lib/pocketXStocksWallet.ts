@@ -2,6 +2,7 @@ import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, 
 import { xLayer } from 'viem/chains'
 import catalogue from './pocketXStocksCatalog.json'
 import { xLayerTransferSponsorshipEnabled } from './pocketXLayerSponsorship'
+import { assertSponsoredSendMinimum, isXLayerSendStablecoin } from './pocketStockSendMinimum'
 
 export const pocketXLayer = { ...xLayer, rpcUrls: { default: { http: ['https://rpc.xlayer.tech'] } } }
 export const stockClient = createPublicClient({ chain: pocketXLayer, transport: http(pocketXLayer.rpcUrls.default.http[0], { timeout: 15_000, retryCount: 1 }) })
@@ -9,6 +10,7 @@ export const stockTokenAbi = parseAbi(['function balanceOf(address) view returns
 export type StockAsset = { symbol: string; name: string; address: string; icon: string }
 export const stockAssets: StockAsset[] = catalogue.assets
 export const stockUsdc: StockAsset = { symbol: 'USDC', name: 'USD Coin', address: '0xB6CEceAB302E2E4948951eE7843FC24E92933061', icon: '' }
+export const stockUsdt: StockAsset = { symbol: 'USDT', name: 'Tether USD (USDT0)', address: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736', icon: '/brand/usdt.svg' }
 export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '/brand/okb.png' }
 // OKX's native-token identifier for X Layer market-price requests.
 export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
@@ -24,7 +26,7 @@ export function stockAmountUnits(amount: string, decimals: number) {
 export async function assertStockChain() {
   if (await stockClient.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
 }
-export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; fullScanAt: number; observedAt: number } & ({source?:'rpc';blockNumber:bigint;blockHash:Hex}|{source:'okx';blockNumber:null;blockHash:null})
+export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; usdt?: bigint | null; gas: bigint; complete: boolean; fullScanAt: number; observedAt: number } & ({source?:'rpc';blockNumber:bigint;blockHash:Hex}|{source:'okx';blockNumber:null;blockHash:null})
 const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
 const tokenDecimals = new Map<string, number>()
 export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot, signal?: AbortSignal, options?: { rpcUrl?: string; force?: boolean }): Promise<StockBalanceSnapshot> {
@@ -36,7 +38,7 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   if (!block.hash || Date.now() - Number(block.timestamp) * 1000 > 60_000) throw Error('X Layer node is not current.')
   const reorganized = previous ? (blockNumber === previous.blockNumber ? block.hash !== previous.blockHash : (await client.getBlock({ blockNumber: previous.blockNumber })).hash !== previous.blockHash) : false
   if (previous && blockNumber < previous.blockNumber) throw Error('X Layer node is behind the previous balance snapshot.')
-  if (previous && blockNumber === previous.blockNumber && previous.complete && !reorganized) return previous
+  if (previous && blockNumber === previous.blockNumber && previous.complete && previous.usdt != null && !reorganized) return previous
   const full = reorganized || !previous?.complete || Date.now() - previous.fullScanAt >= 300_000 || blockNumber - previous.blockNumber > 2000n
   let assets = stockAssets
   if (!full && previous) {
@@ -64,21 +66,23 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   }
   const touched = new Set(assets.map(a => a.address))
   const holdings = [...(!full && previous ? previous.holdings.filter(h => !touched.has(h.asset.address)) : []), ...held.map(h => ({ ...h, decimals: tokenDecimals.get(h.asset.address)! }))]
-  const [cash, gas] = await Promise.all([
+  const [cash, gas, usdt] = await Promise.all([
     client.readContract({ address: getAddress(stockUsdc.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
     client.getBalance({ address: owner, blockNumber }),
+    client.readContract({ address: getAddress(stockUsdt.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
   ])
-  return { holdings, cash, gas, complete: true, blockNumber, blockHash: block.hash, fullScanAt: full ? Date.now() : previous!.fullScanAt, observedAt: Date.now() }
+  return { holdings, cash, usdt, gas, complete: true, blockNumber, blockHash: block.hash, fullScanAt: full ? Date.now() : previous!.fullScanAt, observedAt: Date.now() }
 }
 export async function prepareStockTransfer(owner: Address, asset: StockAsset, recipientInput: string, amount: string): Promise<StockTransfer> {
   await assertStockChain()
   if (!isAddress(recipientInput, { strict: true }) || /^0x0{40}$/i.test(recipientInput)) throw Error('Enter a valid X Layer recipient address.')
   const recipient = getAddress(recipientInput)
   if (recipient.toLowerCase() === owner.toLowerCase()) throw Error('Choose a recipient other than your own wallet.')
-  if (asset.address !== 'native' && ![stockUsdc, ...stockAssets].some(a => a.address.toLowerCase() === asset.address.toLowerCase())) throw Error('Unsupported stock contract.')
+  if (asset.address !== 'native' && ![stockUsdc, stockUsdt, ...stockAssets].some(a => a.address.toLowerCase() === asset.address.toLowerCase())) throw Error('Unsupported asset contract.')
   const native = asset.address === 'native'
   const decimals = native ? 18 : await stockClient.readContract({ address: getAddress(asset.address), abi: stockTokenAbi, functionName: 'decimals' })
   const units = stockAmountUnits(amount, decimals)
+  if (xLayerTransferSponsorshipEnabled && isXLayerSendStablecoin(asset.address)) assertSponsoredSendMinimum(asset.address, units, decimals)
   const balance = native ? await stockClient.getBalance({ address: owner }) : await stockClient.readContract({ address: getAddress(asset.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner] })
   if (units > balance) throw Error('Insufficient ' + asset.symbol + ' balance.')
   const to = native ? recipient : getAddress(asset.address)

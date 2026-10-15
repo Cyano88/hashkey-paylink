@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 for (const enabled of [false, true]) {
   const outfile = resolve('.codex-temp/sponsorship-' + enabled + '.mjs')
   await build({entryPoints:['src/pocket/lib/pocketXStocksWallet.ts'],outfile,bundle:true,platform:'node',format:'esm',packages:'external',define:{'import.meta.env':JSON.stringify({VITE_XLAYER_TRANSFER_SPONSORSHIP:String(enabled)})}})
-  const { stockClient: client, prepareStockTransfer: prepare, stockUsdc, stockGasAsset } = await import(pathToFileURL(outfile).href)
+  const { stockClient: client, prepareStockTransfer: prepare, stockUsdc, stockUsdt, stockGasAsset } = await import(pathToFileURL(outfile).href)
   let tokenBalance=1_000_000n, nativeBalance=0n, simulated=true, estimates=0
   Object.assign(client, {
     getChainId:async()=>196,
@@ -19,9 +19,13 @@ for (const enabled of [false, true]) {
   const owner='0x1111111111111111111111111111111111111111'
   const recipient='0x2222222222222222222222222222222222222222'
   if(enabled){
+    await assert.rejects(prepare(owner,stockUsdc,recipient,'0.01'),/Minimum send is 1 USD/)
     const r=await prepare(owner,stockUsdc,recipient,'1')
     assert.equal(r.sponsored,true);assert.equal(r.fee,0n);assert.equal(estimates,0)
     assert.equal(r.units,1_000_000n);assert.equal(r.recipient,recipient)
+    const tether=await prepare(owner,stockUsdt,recipient,'1')
+    assert.equal(tether.sponsored,true);assert.equal(tether.to.toLowerCase(),stockUsdt.address.toLowerCase());assert.equal(tether.fee,0n);assert.equal(tether.units,1000000n)
+    await assert.rejects(prepare(owner,stockUsdt,recipient,'0.99'),/Minimum send is 1 USD/)
   }else await assert.rejects(prepare(owner,stockUsdc,recipient,'1'),/Add OKB/)
   tokenBalance=0n
   await assert.rejects(prepare(owner,stockUsdc,recipient,'1'),/Insufficient/)
