@@ -1,3 +1,4 @@
+import {stockTradeProof,recordStockTradeNotices,type StockTradeProof} from './stock-trade-notifications.js'
 import {classifyEarnTransfer} from './earn-notifications.js'
 import {pocketEarnCompletion,pocketEarnNoticeRow,type PocketEarnMovement} from '../../src/pocket/lib/pocketEarnNotice.js'
 import { randomUUID } from 'node:crypto'
@@ -7,7 +8,7 @@ import { mutateDurableJson, readDurableJson, hasRenderDurableStore } from '../re
 import { stockAssets, stockUsdc, stockUsdt, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { formatStockQuantity } from '../../src/pocket/lib/pocketStockDisplay.js'
 import { sendPocketPush, pocketPushConfigured, listPocketPushOwners } from './push-devices.js'
-export type StockNotice = { id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
+export type StockNotice = { pushSuppressed?:boolean; tradeChecked?:boolean; trade?:{action:'buy'|'sell'|'swap';input:{symbol:string;amount:string};output:{symbol:string;amount:string}}; id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
 export type StockRequest = { id: string; eventId: string; sender: string; payer: string; senderPocketId: string; payerPocketId: string; address: string; payerAddress: string; token: string; symbol: string; amount: string; units: string; decimals: number; status: 'pending' | 'accepted' | 'declined' | 'paid'; at: number; updatedAt: number; hash?: string }
 export type StockNoticeStore = { wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
 export const STOCK_NOTICE_KEY = 'hashpaylink:pocket-xstocks-notifications:v1'
@@ -40,7 +41,7 @@ export function recordStockTransfer(s: StockNoticeStore,t: ConfirmedStockTransfe
   const already=Object.values(s.requests).some(r=>r.hash===t.id)
   if(already)return
   const request=Object.values(s.requests).find(r=>r.status==='accepted'&&r.updatedAt<=t.at&&r.address.toLowerCase()===t.to.toLowerCase()&&r.payerAddress.toLowerCase()===t.from.toLowerCase()&&r.token.toLowerCase()===t.token.toLowerCase()&&r.units===t.units)
-  if(request){request.status='paid';request.updatedAt=t.at;request.hash=t.id;for(const owner of [request.sender,request.payer])putStockNotice(s,{id:owner+':request-paid:'+request.id,owner,title:'XStocks request paid',body:display+' '+t.symbol+' paid.',at:t.at,hash:t.hash,requestId:request.id})}
+  if(request){request.status='paid';request.updatedAt=t.at;request.hash=t.id;for(const owner of [request.sender,request.payer]){putStockNotice(s,{id:owner+':request-paid:'+request.id,owner,title:'Payment request paid',body:display+' '+t.symbol+' paid.',at:t.at,hash:t.hash,requestId:request.id});Object.values(s.notices).filter(n=>n.owner===owner&&n.hash===t.hash&&n.transfer?.token.toLowerCase()===t.token.toLowerCase()).forEach(n=>{n.pushSuppressed=true})}}
 }
 export function decideStockRequest(s: StockNoticeStore,owner: string,id: string,action: 'accept'|'decline',now=Date.now()) {
   const r=s.requests[id]
@@ -48,7 +49,7 @@ export function decideStockRequest(s: StockNoticeStore,owner: string,id: string,
   if(r.status==='paid'||r.status==='declined')throw Object.assign(Error('This request is closed.'),{status:409})
   if(r.status==='accepted'&&action==='accept')return
   r.status=action==='accept'?'accepted':'declined';r.updatedAt=now
-  putStockNotice(s,{id:r.sender+':request-'+r.status+':'+r.id,owner:r.sender,title:'XStocks request '+r.status,body:'Open XStocks to view the request.',at:now,requestId:r.id})
+  putStockNotice(s,{id:r.sender+':request-'+r.status+':'+r.id,owner:r.sender,title:'Payment request '+r.status,body:'Open Pocket to view the request.',at:now,requestId:r.id})
 }
 export function addStockRequest(s: StockNoticeStore,input: Omit<StockRequest,'id'|'at'|'updatedAt'|'status'>,now=Date.now()) {
   const existing=Object.values(s.requests).find(r=>r.sender===input.sender&&r.eventId===input.eventId)
@@ -56,7 +57,7 @@ export function addStockRequest(s: StockNoticeStore,input: Omit<StockRequest,'id
   if(input.sender===input.payer)throw Object.assign(Error('Choose another Pocket ID.'),{status:400})
   if(Object.values(s.requests).filter(r=>r.sender===input.sender&&r.at>now-86400000).length>=50)throw Object.assign(Error('Daily request limit reached.'),{status:429})
   const r: StockRequest={...input,id:randomUUID(),at:now,updatedAt:now,status:'pending'};s.requests[r.id]=r
-  putStockNotice(s,{id:r.payer+':request:'+r.id,owner:r.payer,title:'XStocks payment request',body:'ID:'+r.senderPocketId+' requested '+formatStockQuantity(r.amount)+' '+r.symbol+'.',at:now,requestId:r.id});return r
+  putStockNotice(s,{id:r.payer+':request:'+r.id,owner:r.payer,title:'Payment request',body:'ID:'+r.senderPocketId+' requested '+formatStockQuantity(r.amount)+' '+r.symbol+'.',at:now,requestId:r.id});return r
 }
 let running: Promise<unknown>|null=null
 export function drainStockNotifications(){if(!running)running=(async()=>{try{await runStockNotifications()}finally{await deliverStockNotices()}})().finally(()=>{running=null});return running}
@@ -90,8 +91,9 @@ async function runStockNotifications(){
     transfers.push({id:log.transactionHash+':'+log.logIndex,hash:log.transactionHash,from:log.args.from,to:log.args.to,token:log.address.toLowerCase(),symbol:asset.symbol,units:String(log.args.value),decimals:asset.decimals,at:Number(b.timestamp)*1000})
    }
    await enrichEarnTransfers(transfers)
+   const tradeProofs=await confirmedTradeProofs(transfers)
    const endBlock=await stockNoticeClient.getBlock({blockNumber:end});if(endBlock.hash!==blocks.get(end)?.hash)throw Error('Stock notification chain changed')
-   await mutateStockNotices(s=>{if(s.cursor!==snapshot.cursor||s.cursorHash!==snapshot.cursorHash)return;transfers.forEach(t=>recordStockTransfer(s,t));s.cursor=String(end);s.cursorHash=endBlock.hash;const cutoff=Date.now()-45*86400000;Object.entries(s.notices).forEach(([id,n])=>{if(n.at<cutoff)delete s.notices[id]});Object.entries(s.requests).forEach(([id,r])=>{if(r.updatedAt<cutoff&&(r.status==='paid'||r.status==='declined'))delete s.requests[id]})})
+   await mutateStockNotices(s=>{if(s.cursor!==snapshot.cursor||s.cursorHash!==snapshot.cursorHash)return;transfers.forEach(t=>recordStockTransfer(s,t));recordStockTradeNotices(s,transfers,tradeProofs);s.cursor=String(end);s.cursorHash=endBlock.hash;const cutoff=Date.now()-45*86400000;Object.entries(s.notices).forEach(([id,n])=>{if(n.at<cutoff)delete s.notices[id]});Object.entries(s.requests).forEach(([id,r])=>{if(r.updatedAt<cutoff&&(r.status==='paid'||r.status==='declined'))delete s.requests[id]})})
   }
  }
 }
@@ -100,7 +102,7 @@ export async function deliverStockNotices(overrides:Partial<{configured:typeof p
  if(!d.configured())return
  const pushOwners=new Set(await d.listOwners())
  const snapshot=await d.read()
- const pending=Object.values(snapshot.notices).filter(n=>!n.delivered&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
+ const pending=Object.values(snapshot.notices).filter(n=>!n.delivered&&!n.pushSuppressed&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
  for(const n of pending){const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:n.earn&&n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
 }
 
@@ -108,7 +110,7 @@ const activityAttempts=new Map<string,number>()
 const activityHydrations=new Map<string,Promise<void>>()
 export function hydrateStockActivity(owner:string){
  if(!activityHydrations.has(owner))activityHydrations.set(owner,(async()=>{
-  const snapshot=await readStockNotices(),hashes=[...new Set(Object.values(snapshot.notices).filter(n=>n.owner===owner&&(!n.transfer||(!n.earnChecked&&[stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase()].includes(n.transfer.token.toLowerCase())))&&n.id.includes(':transfer:')&&n.hash&&(activityAttempts.get(owner+':'+n.hash)||0)<Date.now()).sort((a,b)=>b.at-a.at).map(n=>n.hash!))].slice(0,3)
+  const snapshot=await readStockNotices(),hashes=[...new Set(Object.values(snapshot.notices).filter(n=>n.owner===owner&&(!n.tradeChecked||!n.transfer||(!n.earnChecked&&[stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase()].includes(n.transfer.token.toLowerCase())))&&n.id.includes(':transfer:')&&n.hash&&(activityAttempts.get(owner+':'+n.hash)||0)<Date.now()).sort((a,b)=>b.at-a.at).map(n=>n.hash!))].slice(0,3)
   if(hashes.length&&await stockNoticeClient.getChainId()!==196)throw Error('Wrong stock activity chain')
   for(const hash of hashes){if(activityAttempts.size>512)activityAttempts.delete(activityAttempts.keys().next().value!);activityAttempts.set(owner+':'+hash,Date.now()+60000);try{
    const receipt=await stockNoticeClient.getTransactionReceipt({hash:hash as Address});if(receipt.status!=='success')continue
@@ -117,7 +119,8 @@ export function hydrateStockActivity(owner:string){
    for(const log of receipt.logs){if(!allowed.has(log.address.toLowerCase()))continue;try{const decoded=decodeEventLog({abi:[parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')],topics:log.topics,data:log.data});const asset=await stockNoticeAsset(log.address);transfers.push({id:hash+':'+log.logIndex,hash,from:decoded.args.from,to:decoded.args.to,token:log.address.toLowerCase(),symbol:asset.symbol,units:String(decoded.args.value),decimals:asset.decimals,at:Number(block.timestamp)*1000})}catch{}}
    if(Object.values(snapshot.notices).some(n=>n.owner===owner&&n.hash===hash&&n.id.includes(':native:'))){const tx=await stockNoticeClient.getTransaction({hash:hash as Address});if(tx.to&&tx.value>0n)transfers.push({id:hash+':native',hash,from:tx.from,to:tx.to,token:'native',symbol:'OKB',units:String(tx.value),decimals:18,at:Number(block.timestamp)*1000})}
    transfers.forEach(t=>{t.earn=classifyEarnTransfer(t,receipt);t.earnChecked=true})
-   await mutateStockNotices(s=>transfers.forEach(t=>recordStockTransfer(s,t)))
+   const proofs=await confirmedTradeProofs(transfers)
+   await mutateStockNotices(s=>{transfers.forEach(t=>recordStockTransfer(s,t));recordStockTradeNotices(s,transfers,proofs)})
   }catch{/* Retry historical metadata on a later activity read. */}}
  })().finally(()=>activityHydrations.delete(owner)))
  return activityHydrations.get(owner)!
@@ -137,4 +140,14 @@ export async function readPocketEarnNoticeActivity(owner:string){
  void hydrateStockActivity(owner).catch(()=>undefined)
  const s=await readStockNotices(),payments=Object.values(s.notices).filter(n=>n.owner===owner).flatMap(n=>{const row=pocketEarnNoticeRow(n);return row?[row]:[]})
  return {payments,merchants:[],collections:[]}
+}
+
+async function confirmedTradeProofs(transfers:ConfirmedStockTransfer[]){
+ const proofs:StockTradeProof[]=[]
+ for(const hash of new Set(transfers.filter(t=>!t.earn).map(t=>t.hash))){
+  if(new Set(transfers.filter(t=>t.hash===hash).map(t=>t.token.toLowerCase())).size<2)continue
+  const [tx,receipt]=await Promise.all([stockNoticeClient.getTransaction({hash:hash as Address}),stockNoticeClient.getTransactionReceipt({hash:hash as Address})])
+  const proof=stockTradeProof(tx,receipt);if(proof)proofs.push(proof)
+ }
+ return proofs
 }
