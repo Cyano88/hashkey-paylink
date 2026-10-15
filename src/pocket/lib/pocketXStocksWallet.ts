@@ -1,3 +1,4 @@
+import {POCKET_EARN_DISPLAY_TOKENS} from './pocketEarnDisplayAssets'
 import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem, parseUnits, type Address, type Hex } from 'viem'
 import { xLayer } from 'viem/chains'
 import catalogue from './pocketXStocksCatalog.json'
@@ -26,7 +27,7 @@ export function stockAmountUnits(amount: string, decimals: number) {
 export async function assertStockChain() {
   if (await stockClient.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
 }
-export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; usdt?: bigint | null; gas: bigint; complete: boolean; fullScanAt: number; observedAt: number } & ({source?:'rpc';blockNumber:bigint;blockHash:Hex}|{source:'okx';blockNumber:null;blockHash:null})
+export type StockBalanceSnapshot = { earn?:{usdc:bigint;usdt:bigint}; holdings: StockHolding[]; cash: bigint | null; usdt?: bigint | null; gas: bigint; complete: boolean; fullScanAt: number; observedAt: number } & ({source?:'rpc';blockNumber:bigint;blockHash:Hex}|{source:'okx';blockNumber:null;blockHash:null})
 const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
 const tokenDecimals = new Map<string, number>()
 export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot, signal?: AbortSignal, options?: { rpcUrl?: string; force?: boolean }): Promise<StockBalanceSnapshot> {
@@ -38,7 +39,7 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   if (!block.hash || Date.now() - Number(block.timestamp) * 1000 > 60_000) throw Error('X Layer node is not current.')
   const reorganized = previous ? (blockNumber === previous.blockNumber ? block.hash !== previous.blockHash : (await client.getBlock({ blockNumber: previous.blockNumber })).hash !== previous.blockHash) : false
   if (previous && blockNumber < previous.blockNumber) throw Error('X Layer node is behind the previous balance snapshot.')
-  if (previous && blockNumber === previous.blockNumber && previous.complete && previous.usdt != null && !reorganized) return previous
+  if (previous && blockNumber === previous.blockNumber && previous.complete && previous.usdt != null && previous.earn && !reorganized) return previous
   const full = reorganized || !previous?.complete || Date.now() - previous.fullScanAt >= 300_000 || blockNumber - previous.blockNumber > 2000n
   let assets = stockAssets
   if (!full && previous) {
@@ -66,12 +67,13 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   }
   const touched = new Set(assets.map(a => a.address))
   const holdings = [...(!full && previous ? previous.holdings.filter(h => !touched.has(h.asset.address)) : []), ...held.map(h => ({ ...h, decimals: tokenDecimals.get(h.asset.address)! }))]
-  const [cash, gas, usdt] = await Promise.all([
-    client.readContract({ address: getAddress(stockUsdc.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
-    client.getBalance({ address: owner, blockNumber }),
-    client.readContract({ address: getAddress(stockUsdt.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
+  const [tokenBalances,gas] = await Promise.all([
+    client.multicall({blockNumber,contracts:[stockUsdc.address,stockUsdt.address,...POCKET_EARN_DISPLAY_TOKENS].map(address=>({address:getAddress(address),abi:stockTokenAbi,functionName:'balanceOf' as const,args:[owner] as const}))}),
+    client.getBalance({address:owner,blockNumber}),
   ])
-  return { holdings, cash, usdt, gas, complete: true, blockNumber, blockHash: block.hash, fullScanAt: full ? Date.now() : previous!.fullScanAt, observedAt: Date.now() }
+  if(tokenBalances.some(row=>row.status!=='success'))throw Error('Wallet and earning balances could not be verified.')
+  const [cash,usdt,earnUsdc,earnUsdt]=tokenBalances.map(row=>row.result as bigint)
+  return { holdings, cash, usdt, earn:{usdc:earnUsdc,usdt:earnUsdt}, gas, complete: true, blockNumber, blockHash: block.hash, fullScanAt: full ? Date.now() : previous!.fullScanAt, observedAt: Date.now() }
 }
 export async function prepareStockTransfer(owner: Address, asset: StockAsset, recipientInput: string, amount: string): Promise<StockTransfer> {
   await assertStockChain()
