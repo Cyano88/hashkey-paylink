@@ -57,6 +57,7 @@ const processingOrder = {
 }
 const settledOrder = { ...processingOrder, status: 'settled', tx_hash: `0x${'2'.repeat(64)}` }
 const calls = []
+let verifiedBridgeActions=[]
 let routeAction
 let bridgeState = 'pending'
 let persistedOrder = processingOrder
@@ -80,7 +81,7 @@ const handler = createPocketBankWithdrawHandler({
   },
   ownsMerchant: async (owner, merchant) => owner === 'privy-user-1' && merchant === processingOrder.merchant_id,
   listHistory: async () => { historyReads++; return { merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] } },
-  listActions: async () => routeAction ? [routeAction] : [],
+  listActions: async () => [...(routeAction ? [routeAction] : []),...verifiedBridgeActions],
   claimAction: async input => {
     routeAction = { id: 'route-1', ownerId: input.ownerId, idempotencyKey: input.idempotencyKey, action: input.action, status: 'started', metadata: input.metadata, createdAt: 1, updatedAt: 1 }
     return { record: routeAction, claimed: true }
@@ -190,6 +191,14 @@ assert.equal(routeStarted.body.data.claimed, true)
 assert.equal(routeStarted.body.data.amount, '0.6')
 const routeDuplicate = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '0.6' })
 assert.equal(routeDuplicate.body.data.claimed, false)
+const beforeRecoveryTest=routeAction
+routeAction={...routeAction,status:'failed'}
+verifiedBridgeActions=[{action:'wallet.bridge',status:'completed',metadata:{fundingParent:'bank-withdraw:'+processingOrder.intent_id,source:'arbitrum',destination:'base',amount:'0.7',txHash:'0x'+'9'.repeat(64)}}]
+assert.equal((await request(handler,{action:'routeStatus',intent_id:processingOrder.intent_id})).body.data.phase,'failed','Wrong amount must not recover a payment route')
+verifiedBridgeActions[0].metadata.amount='0.6'
+const recoveredFunding=(await request(handler,{action:'routeStatus',intent_id:processingOrder.intent_id})).body.data
+assert.equal(recoveredFunding.phase,'completed');assert.equal(recoveredFunding.txHash,'0x'+'9'.repeat(64))
+routeAction=beforeRecoveryTest;verifiedBridgeActions=[]
 const routeSubmitted = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'submitted', tx_hash: `0x${'3'.repeat(64)}` })
 assert.equal(routeSubmitted.body.data.phase, 'submitted')
 bridgeState = 'unavailable'

@@ -194,6 +194,12 @@ async function ownedRoute(identity: VerifiedLinkUser, intentId: string, dependen
 async function syncOwnedRoute(identity: VerifiedLinkUser, intentId: string, dependencies: BankWithdrawDependencies) {
   const existing = await ownedRoute(identity, intentId, dependencies)
   if (!existing) return existing
+  // Bridge history is written only after wallet/amount/on-chain proof checks.
+  // Recover a lost client acknowledgement even if an older client marked it failed.
+  if (existing.status !== 'completed') {
+    const proof=(await dependencies.listActions(identity.userId,100)).find(row=>row.action==='wallet.bridge' && row.metadata?.fundingParent==='bank-withdraw:'+intentId && row.metadata.source===existing.metadata?.source && row.metadata.destination==='base' && row.metadata.amount===existing.metadata?.amount && row.metadata.txHash && ['submitted','completed'].includes(row.status))
+    if(proof && (proof.status==='completed' || existing.status!=='submitted' || !existing.metadata?.txHash))return dependencies.recordAction({ownerId:identity.userId,idempotencyKey:existing.idempotencyKey,action:existing.action,status:proof.status,resourceId:proof.metadata!.txHash,metadata:{...existing.metadata,txHash:proof.metadata!.txHash,paymentState:proof.status,destinationTxHash:proof.metadata?.destinationTxHash||''}})
+  }
   if (existing.status === 'started' && unsignedApprovalExpired({
     updatedAt: existing.updatedAt,
     transactionHash: existing.metadata?.txHash,
