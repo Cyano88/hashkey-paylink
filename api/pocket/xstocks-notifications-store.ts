@@ -1,6 +1,7 @@
+import {pocketStockNoticeActivity} from '../../src/pocket/lib/pocketStockNoticeActivity.js'
 import {stockTradeProof,recordStockTradeNotices,type StockTradeProof} from './stock-trade-notifications.js'
 import {classifyEarnTransfer} from './earn-notifications.js'
-import {pocketEarnCompletion,pocketEarnNoticeRow,type PocketEarnMovement} from '../../src/pocket/lib/pocketEarnNotice.js'
+import {pocketEarnCompletion,type PocketEarnMovement} from '../../src/pocket/lib/pocketEarnNotice.js'
 import { randomUUID } from 'node:crypto'
 import { createPublicClient, http, parseAbiItem, decodeEventLog, formatUnits, type Address } from 'viem'
 import { xLayer } from 'viem/chains'
@@ -103,7 +104,7 @@ export async function deliverStockNotices(overrides:Partial<{configured:typeof p
  const pushOwners=new Set(await d.listOwners())
  const snapshot=await d.read()
  const pending=Object.values(snapshot.notices).filter(n=>!n.delivered&&!n.pushSuppressed&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
- for(const n of pending){const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:n.earn&&n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
+ for(const n of pending){const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:(n.earn||n.trade||stockAssets.some(a=>a.address.toLowerCase()===n.transfer?.token.toLowerCase()))&&n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
 }
 
 const activityAttempts=new Map<string,number>()
@@ -138,7 +139,7 @@ async function enrichEarnTransfers(transfers:ConfirmedStockTransfer[]){
 export async function readPocketEarnNoticeActivity(owner:string){
  if(!hasRenderDurableStore())return {payments:[],merchants:[],collections:[]}
  void hydrateStockActivity(owner).catch(()=>undefined)
- const s=await readStockNotices(),payments=Object.values(s.notices).filter(n=>n.owner===owner).flatMap(n=>{const row=pocketEarnNoticeRow(n);return row?[row]:[]})
+ const s=await readStockNotices(),payments=pocketStockNoticeActivity(Object.values(s.notices).filter(n=>n.owner===owner),s.wallets[owner]?.address||'')
  return {payments,merchants:[],collections:[]}
 }
 
