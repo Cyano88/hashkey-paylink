@@ -1,3 +1,4 @@
+import {readPocketEarnNoticeActivity} from './xstocks-notifications-store.js'
 import {giftActivityRow} from './gifts/receipts.js'
 import { collapsePocketAssetMoves } from '../../src/pocket/lib/pocketAssetMoveActivity.js'
 import { groupPocketPaymentFunding } from '../../src/pocket/lib/pocketPaymentFunding.js'
@@ -435,7 +436,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   transformSnapshot: transformPocketActivitySnapshot,
-  sources: { esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
+  sources: { earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])) },
 })
