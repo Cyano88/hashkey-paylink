@@ -1,7 +1,9 @@
+import {xLayer} from 'viem/chains'
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
-import { formatUnits, getAddress, parseAbi, type Address } from 'viem'
-import { stockClient, stockTokenAbi, stockAmountUnits, assertStockChain } from '../../src/pocket/lib/pocketXStocksWallet.js'
+import { createPublicClient, http, formatUnits, getAddress, parseAbi, type Address } from 'viem'
+import { stockClient, stockTokenAbi, stockAmountUnits, assertStockChain, stockUsdc, stockUsdt } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { swapAssets, readStockSwapFee, okxTokenAddress, validateStockSwap, sameStockAddress, OKX_XLAYER_ROUTER, OKX_XLAYER_SPENDER, type StockSwapQuote } from '../../src/pocket/lib/pocketXStocksSwap.js'
+import {validateXLayerBridgeSwap} from '../../src/pocket/lib/pocketXStocksSwap.js'
 
 const allowanceAbi = parseAbi(['function allowance(address,address) view returns(uint256)'])
 function fail(message: string, status = 400): never { throw Object.assign(new Error(message), { status }) }
@@ -25,15 +27,24 @@ export async function okxGet(path: string, query: Record<string, string>, fetche
   return body.data[0]
 }
 export async function quoteStockSwap(input: { owner: Address; tokenIn: string; tokenOut: string; amount: string }) {
+  return quoteSwap(input, false)
+}
+export async function quoteXLayerBridgeSwap(input: {owner: Address; amount: string}) {
+  return quoteSwap({...input,tokenIn:stockUsdt.address,tokenOut:stockUsdc.address}, true)
+}
+async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: string; amount: string}, bridge: boolean) {
   if (!okxConfigured()) fail('Stock trading is awaiting provider activation.', 503)
-  const tokenIn = swapAssets.find(a => sameStockAddress(a.address, input.tokenIn))
-  const tokenOut = swapAssets.find(a => sameStockAddress(a.address, input.tokenOut))
+  const assets = bridge ? [stockUsdt, stockUsdc] : swapAssets
+  const tokenIn = assets.find(a => sameStockAddress(a.address, input.tokenIn))
+  const tokenOut = assets.find(a => sameStockAddress(a.address, input.tokenOut))
   if (!tokenIn || !tokenOut || sameStockAddress(tokenIn.address, tokenOut.address)) fail('Choose two different supported assets.')
   if (input.amount.length > 80) fail('Invalid amount.')
-  await assertStockChain()
-  const [decimalsIn, decimalsOut] = await Promise.all([tokenIn, tokenOut].map(a => a.address === 'native' ? Promise.resolve(18) : stockClient.readContract({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'decimals' })))
+  const client = bridge ? createPublicClient({chain:xLayer,transport:http(process.env.PRIVATE_RPC_URL_XLAYER,{timeout:15000,retryCount:0})}) : stockClient
+  if(bridge){if(!process.env.PRIVATE_RPC_URL_XLAYER||await client.getChainId()!==196)fail('X Layer connection could not be verified.',503)}
+  else await assertStockChain()
+  const [decimalsIn, decimalsOut] = await Promise.all([tokenIn, tokenOut].map(a => a.address === 'native' ? Promise.resolve(18) : client.readContract({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'decimals' })))
   const units = stockAmountUnits(input.amount, decimalsIn)
-  const data = await okxGet('swap', { chainIndex: '196', fromTokenAddress: okxTokenAddress(tokenIn), toTokenAddress: okxTokenAddress(tokenOut), amount: String(units), userWalletAddress: input.owner, swapReceiverAddress: input.owner, slippagePercent: '0.5', swapMode: 'exactIn', autoSlippage: 'false', priceImpactProtectionPercent: '3' })
+  const data = await okxGet('swap', { chainIndex: '196', fromTokenAddress: okxTokenAddress(tokenIn), toTokenAddress: okxTokenAddress(tokenOut), amount: String(units), userWalletAddress: input.owner, swapReceiverAddress: input.owner, slippagePercent: bridge ? '0.24' : '0.5', swapMode: 'exactIn', autoSlippage: 'false', priceImpactProtectionPercent: '3' })
   const route = data.routerResult, tx = data.tx
   if (!route || !tx || String(route.chainIndex) !== '196' || String(route.fromTokenAmount) !== String(units)
     || !sameStockAddress(route.fromToken?.tokenContractAddress, okxTokenAddress(tokenIn)) || !sameStockAddress(route.toToken?.tokenContractAddress, okxTokenAddress(tokenOut))
@@ -47,7 +58,7 @@ export async function quoteStockSwap(input: { owner: Address; tokenIn: string; t
   if (tokenIn.address !== 'native') {
     const approval = await okxGet('approve-transaction', { chainIndex: '196', tokenContractAddress: tokenIn.address, approveAmount: String(units) })
     if (!sameStockAddress(approval.dexContractAddress, OKX_XLAYER_SPENDER)) fail('The approval contract needs verification.', 502)
-    approvalRequired = await stockClient.readContract({ address: getAddress(tokenIn.address), abi: allowanceAbi, functionName: 'allowance', args: [input.owner, getAddress(OKX_XLAYER_SPENDER)] }) < units
+    approvalRequired = await client.readContract({ address: getAddress(tokenIn.address), abi: allowanceAbi, functionName: 'allowance', args: [input.owner, getAddress(OKX_XLAYER_SPENDER)] }) < units
   }
   const gas = BigInt(tx.gas || tx.gasLimit || '0'), gasPrice = BigInt(tx.gasPrice || '0')
   if (gas <= 0n || gas > 30_000_000n || gasPrice <= 0n) fail('Could not estimate the network fee.', 502)
@@ -57,7 +68,8 @@ export async function quoteStockSwap(input: { owner: Address; tokenIn: string; t
     tx: { from: input.owner, to: getAddress(tx.to), data: tx.data, value: String(tx.value || '0') } }
   const providerFee = readStockSwapFee(quote)
   if (providerFee) quote.positiveSlippageFee = providerFee
-  validateStockSwap(quote, input.owner)
+  if(bridge)validateXLayerBridgeSwap(quote,input.owner)
+  else validateStockSwap(quote, input.owner)
   return quote
 }
 function secret() {

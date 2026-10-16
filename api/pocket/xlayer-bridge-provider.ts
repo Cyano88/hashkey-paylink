@@ -24,7 +24,7 @@ export function stablecoinAddress(network:RelayStablecoinNetwork,asset:'USDC'|'U
  return POCKET_USDT_ASSETS[network].address
 }
 export type RelayStablecoinNetwork=keyof typeof RELAY_STABLECOIN_CHAINS
-export type RelayStablecoinInput={asset:'USDC'|'USDT';source:RelayStablecoinNetwork;destination:RelayStablecoinNetwork;sender:string;recipient:string;amountUnits:string}
+export type RelayStablecoinInput={asset:'USDC'|'USDT';source:RelayStablecoinNetwork;destination:RelayStablecoinNetwork;sender:string;recipient:string;amountUnits:string;inputAsset?:'USDC'}
 export type RelayStablecoinRefund={network:RelayStablecoinNetwork;asset:'USDC'|'USDT';recipient:string}
 export type RelayStablecoinPolicy={allowXLayerUsdcRefund?:boolean}
 const depositAbi=parseAbi(['function depositErc20(address depositor,address token,uint256 amount,bytes32 id)'])
@@ -36,13 +36,14 @@ const same=(network:string,a:unknown,b:string)=>typeof a==='string'&&(network===
 function inputCheck(i:RelayStablecoinInput){
  requireThat(Object.prototype.hasOwnProperty.call(RELAY_STABLECOIN_CHAINS,i.source)&&Object.prototype.hasOwnProperty.call(RELAY_STABLECOIN_CHAINS,i.destination)&&i.source!==i.destination&&(i.source==='xlayer'||i.destination==='xlayer'),'unsupported route')
  requireThat(i.asset==='USDC'||i.asset==='USDT','unsupported asset')
+ requireThat(i.inputAsset===undefined||i.inputAsset==='USDC'&&i.asset==='USDT'&&i.source==='xlayer'&&i.destination==='base','unsupported input asset')
  requireThat(i.asset!=='USDT'||i.source!=='arc'&&i.destination!=='arc','USDT is not supported on Arc')
  requireThat(/^[1-9]\d{0,18}$/.test(i.amountUnits)&&BigInt(i.amountUnits)<2n**64n,'invalid amount')
  for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(network==='solana'?new PublicKey(address).toBase58()===address:/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address),'invalid wallet')
 }
 // Request a slightly tighter USDT quote: live conversion routes can round their
 // minimum beyond the 50-bps validation bound. Keep that bound unchanged.
-export function relayStablecoinRequest(i:RelayStablecoinInput){inputCheck(i);return {user:i.sender,recipient:i.recipient,originChainId:RELAY_STABLECOIN_CHAINS[i.source].id,destinationChainId:RELAY_STABLECOIN_CHAINS[i.destination].id,originCurrency:stablecoinAddress(i.source,i.asset),destinationCurrency:stablecoinAddress(i.destination,i.asset),amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:i.asset==='USDT'?'49':'50',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:[]}}
+export function relayStablecoinRequest(i:RelayStablecoinInput){inputCheck(i);return {user:i.sender,recipient:i.recipient,originChainId:RELAY_STABLECOIN_CHAINS[i.source].id,destinationChainId:RELAY_STABLECOIN_CHAINS[i.destination].id,originCurrency:stablecoinAddress(i.source,i.inputAsset||i.asset),destinationCurrency:stablecoinAddress(i.destination,i.asset),amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:i.inputAsset?'24':i.asset==='USDT'?'49':'50',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:[]}}
 // Derive every account locally using the pinned settlement SDK deposit_token IDL.
 export function relayStablecoinSolanaDeposit(sender:string,amount:bigint,orderId:Hex,asset:'USDC'|'USDT'){
  const program=new PublicKey(RELAY_STABLECOIN_CHAINS.solana.depository),owner=new PublicKey(sender),mint=new PublicKey(stablecoinAddress('solana',asset))
@@ -53,7 +54,7 @@ export function relayStablecoinSolanaDeposit(sender:string,amount:bigint,orderId
 }
 export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Date.now(),policy:RelayStablecoinPolicy={}){
  inputCheck(i)
- const source=RELAY_STABLECOIN_CHAINS[i.source],destination=RELAY_STABLECOIN_CHAINS[i.destination],from=stablecoinAddress(i.source,i.asset),to=stablecoinAddress(i.destination,i.asset)
+ const source=RELAY_STABLECOIN_CHAINS[i.source],destination=RELAY_STABLECOIN_CHAINS[i.destination],from=stablecoinAddress(i.source,i.inputAsset||i.asset),to=stablecoinAddress(i.destination,i.asset)
  const protocol=q?.protocol?.v2,order=protocol?.orderData as Order
  requireThat(protocol?.hubType==='onchain'&&order?.version==='v1'&&order.inputs?.length===1&&order.output?.payments?.length===1&&order.output.calls?.length===0&&order.fees?.length===0,'unsupported order')
  requireThat(q.fees?.app?.amount==='0','app fee must be zero')
@@ -64,7 +65,7 @@ export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Da
  const minimum=BigInt(out.minimumAmount),receive=BigInt(out.expectedAmount)
  // High provider costs are disclosed before approval, not blocked by a percentage cap.
  // Keep the requested slippage bound and positive, consistent delivery amounts.
- requireThat(minimum>0n&&minimum<=receive&&receive<=amount&&minimum*10000n>=receive*9950n-10000n,'output outside amount/slippage limits')
+ requireThat(minimum>0n&&minimum<=receive&&receive<=amount&&minimum*10000n>=receive*(i.inputAsset?9976n:9950n)-10000n,'output outside amount/slippage limits')
  requireThat(Number.isSafeInteger(order.output.deadline)&&order.output.deadline*1000>now+45000&&order.output.deadline*1000<now+8*86400000,'invalid order deadline')
  const refunds=order.inputs[0].refunds
  requireThat(refunds?.length===2&&new Set(refunds.map(r=>r.chainId)).size===2,'unexpected refunds')
@@ -75,7 +76,7 @@ export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Da
   // Never permit an origin swap or arbitrary provider-selected refund token.
   const alternate=policy.allowXLayerUsdcRefund===true&&i.asset==='USDT'&&i.source==='base'&&i.destination==='xlayer'&&!src&&same('xlayer',r.currency,stablecoinAddress('xlayer','USDC'))
   requireThat(same(r.chainId,r.recipient,src?i.sender:i.recipient)&&(same(r.chainId,r.currency,src?from:to)||alternate)&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')
-  return {network:r.chainId as RelayStablecoinNetwork,asset:alternate?'USDC':i.asset,recipient:src?i.sender:i.recipient}
+  return {network:r.chainId as RelayStablecoinNetwork,asset:alternate?'USDC':src?(i.inputAsset||i.asset):i.asset,recipient:src?i.sender:i.recipient}
  })
  const details=protocol.paymentDetails
  requireThat(details?.chainId===i.source&&same(i.source,details.depository,source.depository)&&same(i.source,details.currency,from)&&details.amount===i.amountUnits,'depository mismatch')

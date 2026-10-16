@@ -6,6 +6,7 @@ type Network = RelayStablecoinInput['source']
 type Asset = RelayStablecoinInput['asset']
 export type XLayerBridgeBinding = RelayStablecoinInput & {
   orderId:string; requestId:string; minimumUnits:string
+  depositAsset?:'USDC'; depositUnits?:string
   // Populate only from the verified, owner-bound fee quote, never provider status.
   networkFeeUnits?:string; reimbursementTreasury?:string
   // Only the plan validated from the order and bound into an owner-signed quote.
@@ -37,6 +38,9 @@ export function evmStablecoinDelta(receipt:any,network:Exclude<Network,'solana'>
 /** Exact deposit event and exact net source debit, not a balance refresh. */
 export function xlayerBridgeSourceProven(q:XLayerBridgeBinding,receipt:any,hash:string):boolean {
   if(q.source==='solana'||(q.source!=='xlayer'&&q.destination!=='xlayer')||!units(q.amountUnits)||BigInt(q.amountUnits)<=0n||!hashValid(q.source,q.orderId))return false
+  const converted=q.depositAsset!==undefined||q.depositUnits!==undefined
+  if(converted&&(q.source!=='xlayer'||q.destination!=='base'||q.asset!=='USDT'||q.depositAsset!=='USDC'||!units(q.depositUnits)||BigInt(q.depositUnits)<=0n||BigInt(q.depositUnits)>BigInt(q.amountUnits)))return false
+  if(converted){const delta=evmStablecoinDelta(receipt,'xlayer','USDC',q.sender,hash);if(delta===null||delta<0n)return false}
   const hasFee=q.networkFeeUnits!==undefined||q.reimbursementTreasury!==undefined
   if(hasFee&&(!units(q.networkFeeUnits)||BigInt(q.networkFeeUnits)<=0n||!same(q.source,q.reimbursementTreasury,EVM_PLATFORM_TREASURY)||same(q.source,q.sender,EVM_PLATFORM_TREASURY)))return false
   const fee=hasFee?BigInt(q.networkFeeUnits!):0n
@@ -56,7 +60,7 @@ export function xlayerBridgeSourceProven(q:XLayerBridgeBinding,receipt:any,hash:
     if(log.removed||!same(q.source,log.address,RELAY_STABLECOIN_CHAINS[q.source].depository))return false
     try {
       const {args}=decodeEventLog({abi:deposit,eventName:'RelayErc20Deposit',data:log.data as Hex,topics:log.topics as [Hex,...Hex[]]})
-      return same(q.source,args.from,q.sender)&&same(q.source,args.token,stablecoinAddress(q.source,q.asset))&&args.amount===BigInt(q.amountUnits)&&same(q.source,args.id,q.orderId)
+      return same(q.source,args.from,q.sender)&&same(q.source,args.token,stablecoinAddress(q.source,q.depositAsset||q.asset))&&args.amount===BigInt(q.depositUnits||q.amountUnits)&&same(q.source,args.id,q.orderId)
     }catch{return false}
   })
   return matches.length===1
@@ -103,14 +107,14 @@ export function xlayerBridgeDeliveryCandidate(q:XLayerBridgeBinding,sourceHash:s
       for(const r of plan){
         const origin=r?.network===q.source
         if(!r||!origin&&r.network!==q.destination||!same(r.network,r.recipient,origin?q.sender:q.recipient))return attention
-        const alternate=q.asset==='USDT'&&q.source==='base'&&q.destination==='xlayer'&&!origin&&r.asset==='USDC'
+        const alternate=q.asset==='USDT'&&r.asset==='USDC'&&(q.source==='base'&&q.destination==='xlayer'&&!origin||q.source==='xlayer'&&q.destination==='base'&&origin&&q.depositAsset==='USDC'&&units(q.depositUnits)&&BigInt(q.depositUnits)>0n&&BigInt(q.depositUnits)<=BigInt(q.amountUnits))
         if(r.asset!==q.asset&&!alternate)return attention
       }
       const selected=plan.find(r=>r.network===network)
       if(!selected)return attention
       asset=selected.asset
     }
-    if(!same(network,refund.currency.address,stablecoinAddress(network,asset))||refund.currency.decimals!==6||!units(refund.amount)||BigInt(refund.amount)<=0n||BigInt(refund.amount)>BigInt(q.amountUnits))return attention
+    if(!same(network,refund.currency.address,stablecoinAddress(network,asset))||refund.currency.decimals!==6||!units(refund.amount)||BigInt(refund.amount)<=0n||BigInt(refund.amount)>BigInt(network===q.source&&q.depositAsset==='USDC'?q.depositUnits||'0':q.amountUnits))return attention
     exactUnits=refund.amount
   }else if(status.destinationChainId!==RELAY_STABLECOIN_CHAINS[q.destination].id)return attention
   if(!Array.isArray(request.data.outTxs)||!Array.isArray(status.txHashes))return {status:'pending'}

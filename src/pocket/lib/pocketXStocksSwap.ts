@@ -1,6 +1,6 @@
 import { decodeFunctionData, encodeFunctionData, getAddress, isAddress, type Abi, type Address, type Hex } from 'viem'
 import routerAbi from './pocketOkxRouterAbi.json'
-import { stockAssets, stockGasAsset, stockUsdc, stockAmountUnits, type StockAsset } from './pocketXStocksWallet'
+import { stockAssets, stockGasAsset, stockUsdc, stockUsdt, stockAmountUnits, type StockAsset } from './pocketXStocksWallet'
 
 // Circle native USDC on X Layer. Bridged versions are deliberately distinct.
 export { stockUsdc }
@@ -17,11 +17,20 @@ export type StockSwapQuote = {
 export const sameStockAddress = (a: unknown, b: string) => typeof a === 'string' && a.toLowerCase() === b.toLowerCase()
 export const okxTokenAddress = (a: StockAsset) => a.address === 'native' ? OKX_NATIVE : a.address
 export function validateStockSwap(quote: StockSwapQuote, owner: Address, now = Date.now()) {
+  return validateSwap(quote, owner, now, swapAssets)
+}
+// A separate, fixed pair for bridge funding. This does not enable USDT trading.
+export function validateXLayerBridgeSwap(quote: StockSwapQuote, owner: Address, now = Date.now()) {
+  if (!sameStockAddress(quote.tokenIn.address, stockUsdt.address) || !sameStockAddress(quote.tokenOut.address, stockUsdc.address)) throw Error('Unsupported bridge conversion.')
+  validateSwap(quote, owner, now, [stockUsdt, stockUsdc])
+  if (BigInt(quote.minimumOutUnits)*10000n < stockAmountUnits(quote.expectedOut,6)*9976n-10000n) throw Error('Bridge conversion exceeds the slippage limit.')
+}
+function validateSwap(quote: StockSwapQuote, owner: Address, now: number, allowedAssets: StockAsset[]) {
   const fail = () => { throw Error('The swap details changed. Review them again.') }
   if (quote.chainId !== 196 || !sameStockAddress(quote.owner, owner) || !sameStockAddress(quote.tx.from, owner)
     || !sameStockAddress(quote.tx.to, OKX_XLAYER_ROUTER) || !sameStockAddress(quote.spender, OKX_XLAYER_SPENDER)
     || quote.expiresAt <= now || quote.expiresAt > now + 65_000
-    || !swapAssets.some(a => sameStockAddress(a.address, quote.tokenIn.address)) || !swapAssets.some(a => sameStockAddress(a.address, quote.tokenOut.address))
+    || !allowedAssets.some(a => sameStockAddress(a.address, quote.tokenIn.address)) || !allowedAssets.some(a => sameStockAddress(a.address, quote.tokenOut.address))
     || sameStockAddress(quote.tokenIn.address, quote.tokenOut.address) || !/^\d+$/.test(quote.amountUnits) || !/^\d+$/.test(quote.minimumOutUnits)
     || !/^0x(?:[0-9a-f]{2})+$/i.test(quote.tx.data) || quote.tx.data.length > 100_000) fail()
   const input = BigInt(quote.amountUnits), minimum = BigInt(quote.minimumOutUnits)
