@@ -1,7 +1,8 @@
 import type { Hex } from 'viem'
+import {SponsoredTransferNotSubmitted} from './pocketSponsoredRequest'
 
 export type StockTradeStage = 'idle' | 'preparing' | 'processing' | 'confirming' | 'completed' | 'failed'
-export type StockPending = { id?:string; gift?:{id:string;attemptId:string;operation:'approval'|'funding'|'claim'|'refund'}; xpayPaymentId?:string; details?:{recipient:string;amount:string;symbol:string;at:number}; key: string; hash: Hex; kind?: 'approval' | 'trade' | 'send' | 'gift'; status: 'pending' | 'confirmed' | 'failed' }
+export type StockPending = { relay?:'privy'; id?:string; gift?:{id:string;attemptId:string;operation:'approval'|'funding'|'claim'|'refund'}; xpayPaymentId?:string; details?:{recipient:string;amount:string;symbol:string;at:number}; key: string; hash: Hex; kind?: 'approval' | 'trade' | 'send' | 'gift'; status: 'pending' | 'confirmed' | 'failed' }
 export const signingKey = (key: string) => 'pocket.xstocks.signing:' + key
 const pendingKey = (key: string) => 'pocket.xstocks.pending:' + key
 export const STOCK_ATTEMPTS_UPDATED='pocket:stock-attempts-updated'
@@ -60,9 +61,10 @@ export function settleStockPending(pending: StockPending, success: boolean): Sto
  return settled
 }
 export async function runStockSubmission(options: {
+ sponsored?:boolean;
  key: string; kind: NonNullable<StockPending['kind']>; xpayPaymentId?:string;
  gift?:StockPending['gift']; details?:StockPending['details'];
- send: () => Promise<{ hash: Hex }>;
+ send: (attemptId:string) => Promise<{ hash: Hex }>;
  wait?: (hash: Hex) => Promise<{ status: string }>;
  onPending: (pending: StockPending) => void;
  onUncertain: (uncertain: boolean) => void;
@@ -83,7 +85,7 @@ export async function runStockSubmission(options: {
  // remain independently trackable and do not take this signing lock.
  if(localStorage.getItem(signingKey(key))||readStockAttempts(key).some(r=>r.status==='pending'&&!r.hash))throw Object.assign(new Error('A payment is still being checked. View Activity before trying again.'),{transactionPending:true})
  const id=crypto.randomUUID()
- const draft:StockPending={key,kind,id,details,xpayPaymentId,gift,hash:'' as Hex,status:'pending'}
+ const draft:StockPending={key,kind,id,details,xpayPaymentId,gift,...(options.sponsored?{relay:'privy' as const}:{}),hash:'' as Hex,status:'pending'}
  localStorage.setItem(signingKey(key), String(Date.now()))
  try{saveStockAttempt(draft)}catch(reason){localStorage.removeItem(signingKey(key));throw reason}
  // Signing in progress is not an uncertain outcome. Only a rejected call with
@@ -91,10 +93,10 @@ export async function runStockSubmission(options: {
  onUncertain(false)
  let hash: Hex | undefined
  try {
-  const result = await send()
+  const result = await send(id)
   if (!/^0x[0-9a-f]{64}$/i.test(result.hash)) throw Error('The wallet returned an invalid transaction reference.')
   hash = result.hash
-  const pending: StockPending = { key, kind, id, details, xpayPaymentId, gift, hash, status: 'pending' }
+  const pending: StockPending = { ...draft, hash, status: 'pending' }
   saveStockAttempt(pending)
   localStorage.setItem(pendingKey(key), JSON.stringify(pending))
   localStorage.removeItem(signingKey(key))
@@ -107,7 +109,7 @@ export async function runStockSubmission(options: {
   return hash
  } catch (reason) {
   if (!hash) {
-   const definitelyNotSent = (reason as { code?: number })?.code === 4001 || isPrivyAuthorizationLoadError(reason)
+   const definitelyNotSent = reason instanceof SponsoredTransferNotSubmitted || (reason as { code?: number })?.code === 4001 || isPrivyAuthorizationLoadError(reason)
    if (definitelyNotSent) {localStorage.removeItem(signingKey(key));saveStockAttempt({...draft,status:'failed'})}
    onUncertain(!definitelyNotSent)
   }
@@ -116,6 +118,19 @@ export async function runStockSubmission(options: {
   if (hash && readStockAttempts(key).some(r=>r.hash===hash&&r.status==='pending')) Object.assign(error, {transactionPending:true})
   throw error
  }
+}
+
+// Only authenticated relay status may attach a missing hash or mark not submitted.
+export function reconcileSponsoredStockAttempt(record:StockPending,result:{hash?:Hex;notSubmitted?:boolean}){
+ if(record.relay!=='privy'||!record.id||record.hash||record.status!=='pending')return
+ const current=readStockAttempts(record.key).find(r=>r.id===record.id)
+ if(!current||current.hash||current.status!=='pending')return
+ if(!result.notSubmitted&&(!result.hash||!/^0x[0-9a-f]{64}$/i.test(result.hash)))return
+ const next:StockPending={...current,hash:result.hash||'' as Hex,status:result.notSubmitted?'failed':'pending'}
+ saveStockAttempt(next)
+ if(next.hash)localStorage.setItem(pendingKey(record.key),JSON.stringify(next))
+ if(!readStockAttempts(record.key).some(r=>r.id!==record.id&&r.status==='pending'&&!r.hash))localStorage.removeItem(signingKey(record.key))
+ return next
 }
 
 // Server-verified XPay source proof can clear only that payment's trade attempt.

@@ -4,7 +4,10 @@ import type {StockGiftIntent} from '../api/pocketStockGiftIntent'
 import {validateXPayBankCall,type XPayBankPayment,type XPayBankResponse} from '../lib/pocketXPayBankClient'
 import usePocketEmbeddedWallet from './usePocketEmbeddedWallet'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSendTransaction, useWallets } from '@privy-io/react-auth'
+import { useAuthorizationSignature, useSendTransaction, useWallets } from '@privy-io/react-auth'
+import {sendSponsoredTransfer,sponsoredTransferRequest} from '../api/pocketSponsoredTransfer'
+import {SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
+import {reconcileSponsoredStockAttempt} from '../lib/pocketStockSubmission'
 import { getAddress, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from 'viem'
 import { stockSwapRequest } from '../api/pocketStockSwapClient'
 import { validateStockSwap, type StockSwapQuote } from '../lib/pocketXStocksSwap'
@@ -27,6 +30,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
   useEffect(() => { setWalletWaitExpired(false); if (ready || hasEmbedded) return; const timer = window.setTimeout(() => setWalletWaitExpired(true), 15_000); return () => window.clearTimeout(timer) }, [ready, hasEmbedded])
   const setup=usePocketEmbeddedWallet()
   const { sendTransaction } = useSendTransaction()
+  const {generateAuthorizationSignature}=useAuthorizationSignature()
   const embedded = wallets.filter(w => w.walletClientType === 'privy')
   const wallet = authenticated && embedded.length === 1 && setup.address?.toLowerCase()===embedded[0].address.toLowerCase() ? embedded[0] : undefined
   const walletRef = useRef(wallet); walletRef.current = wallet
@@ -40,6 +44,20 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
   const [error, setError] = useState('')
   const [attempts,setAttempts]=useState<StockPending[]>([])
   useEffect(()=>{const reload=()=>setAttempts(readStockAttempts(ownerKey));reload();window.addEventListener(STOCK_ATTEMPTS_UPDATED,reload);return()=>window.removeEventListener(STOCK_ATTEMPTS_UPDATED,reload)},[ownerKey])
+  useEffect(()=>{
+    if(!address||!authenticated)return
+    let stopped=false,running=false
+    const recover=async()=>{
+      if(stopped||running||inFlight.current||document.visibilityState==='hidden')return
+      running=true
+      try{for(const r of readStockAttempts(ownerKey).filter(r=>r.relay==='privy'&&r.status==='pending'&&!r.hash)){
+        try{const result=await sponsoredTransferRequest({action:'status',wallet:address,attemptId:r.id},getAccessToken);if(!stopped&&result.hash)reconcileSponsoredStockAttempt(r,{hash:result.hash})}
+        catch(error){if(!stopped&&error instanceof SponsoredTransferNotSubmitted)reconcileSponsoredStockAttempt(r,{notSubmitted:true})}
+      }}finally{running=false;if(!stopped){setUncertain(!!localStorage.getItem('pocket.xstocks.signing:'+ownerKey));setPending(readStockPending(ownerKey)||readStockLast(ownerKey))}}
+    }
+    void recover();const timer=window.setInterval(()=>void recover(),8000)
+    return()=>{stopped=true;window.clearInterval(timer)}
+  },[ownerKey,address,authenticated,getAccessToken])
   const [pending, setPending] = useState<StockPending | null>(null)
   const inFlight = useRef(false)
   const mounted = useRef(true)
@@ -89,10 +107,10 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       await hooks?.beforeSubmit?.()
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
       // Pocket owns review and approval. Privy provides signing without a second transaction modal.
-      return await runStockSubmission({key, kind:'send',
+      return await runStockSubmission({key, kind:'send',sponsored:!!fresh.sponsored,
         details:{recipient:review.recipient,amount:review.amount,symbol:review.asset.symbol,at:Date.now()},
         wait:hash=>stockClient.waitForTransactionReceipt({hash,timeout:30_000}),
-        send: () => sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,...(fresh.sponsored ? {sponsor:true} : {}),uiOptions:{showWalletUIs:false}}),
+        send: attemptId => fresh.sponsored&&fresh.data ? sendSponsoredTransfer({owner:address,to:fresh.to,data:fresh.data,attemptId},{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}}) : sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
         onPending: next => { if(scope.current===key) {setPending(next);hooks?.onSubmitted?.(next.hash)} },
         onUncertain: value => { if(scope.current===key) setUncertain(value) },
       })
