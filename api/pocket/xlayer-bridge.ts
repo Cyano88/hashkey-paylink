@@ -89,7 +89,7 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
   await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:candidate.outcome==='completed'?'completed':'failed',resourceId:q.id,metadata:{...meta,txHash:hash,sourceConfirmed:'true',destinationTxHash:candidate.hash,paymentState:candidate.outcome,...(candidate.outcome==='refunded'?{refundNetwork:candidate.network,refundAmount:formatUnits(delta!,6)}:{})}})
   return reconcile(owner,q,token,input)
  }
- return async(req:Request,res:Response)=>{
+ const handler=async(req:Request,res:Response)=>{
   res.setHeader('Cache-Control','no-store')
   try{
    if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Method not allowed.'})
@@ -145,5 +145,8 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
    return res.json({ok:true,challengeId:result.challengeId})
   }catch(reason){const e=reason as Error&{status?:number};return res.status(e.status||503).json({ok:false,error:e.status?e.message:'Bridge status is unavailable. Any submitted transfer remains saved; check Activity before retrying.'})}
  }
+ return Object.assign(handler,{reconcile:(owner:string,token:string)=>reconcile(owner,openXLayerBridgeQuote(token,owner),token,{})})
 }
-export default createXLayerBridgeHandler()
+const handler=createXLayerBridgeHandler()
+export const reconcileXLayerBridge=handler.reconcile
+export default handler

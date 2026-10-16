@@ -1,5 +1,6 @@
 import { readPocketNotificationActivity } from './activity.js'
 import { reconcileUsdtBridge } from './usdt-bridge.js'
+import { reconcileXLayerBridge } from './xlayer-bridge.js'
 import { pocketMoneyNotification } from '../../src/pocket/lib/pocketMoneyNotification.js'
 import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 import { listCirclePocketActions } from '../circle-pocket-action-journal.js'
@@ -26,13 +27,14 @@ type Dependencies = {
   sendPush: typeof sendPocketPush
   readContext: typeof readPocketNotificationActivity
   reconcileUsdt: typeof reconcileUsdtBridge
+  reconcileXLayer: typeof reconcileXLayerBridge
   now: () => number
 }
 
 function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions>>) {
   const hashes = new Set<string>()
   for (const record of records) {
-    if (record.action !== 'wallet.bridge' && record.action !== 'wallet.usdt-bridge' && record.action !== 'wallet.swap' && record.action !== 'bank-withdraw.route' && record.action !== 'gift.sent' && record.action !== 'gift.received') continue
+    if (record.action !== 'wallet.bridge' && record.action !== 'wallet.usdt-bridge' && record.action !== 'wallet.xlayer-bridge' && record.action !== 'wallet.swap' && record.action !== 'bank-withdraw.route' && record.action !== 'gift.sent' && record.action !== 'gift.received') continue
     const candidates = [record.resourceId, record.metadata?.txHash, record.metadata?.destinationTxHash, record.metadata?.refundTxHash]
     candidates.forEach(value => { if (value) hashes.add(String(value).toLowerCase()) })
   }
@@ -53,6 +55,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
     sendPush: sendPocketPush,
     readContext: readPocketNotificationActivity,
     reconcileUsdt: reconcileUsdtBridge,
+    reconcileXLayer: reconcileXLayerBridge,
     now: Date.now,
     ...overrides,
   }
@@ -76,11 +79,11 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       const ignoredHashes = actionHashes(actions)
       let notificationContext = context
       // Recover bridge context before generic transfer notifications race it.
-      for (const action of actions.filter(item => item.action === 'wallet.usdt-bridge' && ['started','submitted'].includes(item.status) && item.metadata?.quoteToken).slice(0, 4)) {
+      for (const action of actions.filter(item => ['wallet.usdt-bridge','wallet.xlayer-bridge'].includes(item.action) && ['started','submitted'].includes(item.status) && item.metadata?.quoteToken).slice(0, 4)) {
         try {
-          const bridge = await dependencies.reconcileUsdt(ownerId, action.metadata!.quoteToken)
-          for (const hash of [bridge.txHash, bridge.destinationTxHash]) if (hash) ignoredHashes.add(hash.toLowerCase())
-          if (bridge.status === 'completed') notificationContext = await dependencies.readContext(ownerId)
+          const bridge = await (action.action==='wallet.xlayer-bridge'?dependencies.reconcileXLayer:dependencies.reconcileUsdt)(ownerId, action.metadata!.quoteToken)
+          for (const hash of [bridge.txHash, 'destinationTxHash' in bridge?bridge.destinationTxHash:undefined]) if (hash) ignoredHashes.add(hash.toLowerCase())
+          if (bridge.status === 'completed'||bridge.status==='refunded') notificationContext = await dependencies.readContext(ownerId)
         } catch { /* The reconciliation worker retries without announcing success. */ }
       }
       const cutoff = dependencies.now() - lookbackMs
