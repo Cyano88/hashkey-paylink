@@ -2,10 +2,11 @@ import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
-import { decodeFunctionData, isAddress, parseAbi, zeroAddress } from 'viem'
+import { decodeFunctionData, encodeFunctionData, isAddress, parseAbi, zeroAddress, type Hex } from 'viem'
 import { verifiedPrivyUser } from '../privy-circle-link.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
-import { makeSponsoredRequest, type SponsoredRequest } from '../../src/pocket/lib/pocketSponsoredRequest.js'
+import { makeSponsoredRequest, makeSponsoredBatchRequest, type SponsoredRequest } from '../../src/pocket/lib/pocketSponsoredRequest.js'
+import {quoteXLayerReimbursement,openXLayerReimbursement,sealXLayerReimbursement,refreshXLayerReimbursement,type XLayerFeeEstimator,type XLayerReimbursementPolicy,type XLayerFeeQuote} from './xlayer-reimbursement.js'
 import catalogue from '../../src/pocket/lib/pocketXStocksCatalog.json' with { type: 'json' }
 import { stockClient, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { readStockMarketPrices } from './xstocks-prices.js'
@@ -45,6 +46,16 @@ const loadUser = (id: string, c: Config) => new PrivyClient(c.appId, c.secret).g
 const mutate = (fn: (current: Store | undefined) => Store) => mutateDurableJson<Store>('pocket:xlayer-sponsorship:v1', fn)
 const read = () => readDurableJson<Store>('pocket:xlayer-sponsorship:v1')
 const fail = (message: string, status = 400) => Object.assign(new Error(message), { status })
+// Build stablecoin calls on the server. Client-supplied arbitrary batches never
+// reach the estimator or sponsor. Ownership is established by the handler first.
+function reimbursementTransfer(raw:any,ownerId:string,walletId:string,wallet:string,id:string,c:Config,now:number){
+  const token=raw?.asset==='USDC'?'0xb6ceceab302e2e4948951ee7843fc24e92933061':raw?.asset==='USDT'?'0x779ded0c9e1022225f8e0630b35a9b54be713736':null
+  if(!token||!isAddress(raw?.recipient)||typeof raw?.amountUnits!=='string'||! /^[1-9]\d{0,19}$/.test(raw.amountUnits)||BigInt(raw.amountUnits)>=2n**64n)throw fail('Invalid stablecoin transfer.')
+  const data=encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[raw.recipient,BigInt(raw.amountUnits)]})
+  const request=makeSponsoredRequest({appId:c.appId,walletId,attemptId:id,expiresAt:now+30000,from:wallet,to:token,data})
+  validateSponsoredRequest(request,walletId,c,now)
+  return {binding:{ownerId,walletId,walletAddress:wallet as Hex,asset:raw.asset as 'USDC'|'USDT',amountUnits:raw.amountUnits as string,intentId:id},calls:[{to:token as Hex,data,value:'0x0' as const}],token,units:BigInt(raw.amountUnits)}
+}
 async function minimum(token:string,units:bigint) {
   if(isXLayerSendStablecoin(token)) return assertSponsoredSendMinimum(token,units,6)
   const address=token.toLowerCase() as `0x${string}`
@@ -85,6 +96,7 @@ export function validateSponsoredRequest(request: SponsoredRequest, walletId: st
 export function createXLayerSponsorshipHandler(overrides: Partial<{
   identity: typeof verifiedPrivyUser; user: typeof loadUser; config: typeof configuration;
   mutate: typeof mutate; read: typeof read; minimum:typeof minimum; earnPreflight:typeof preflightEarnSponsorship; durable: () => boolean; fetch: typeof fetch; now: () => number;
+  reimbursement: {estimate:XLayerFeeEstimator;pricing:XLayerReimbursementPolicy};
 }> = {}) {
   const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, ...overrides }
   async function resolveAccepted(id: string, record: Record, walletId: string, c: Config) {
@@ -137,6 +149,13 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (!c.enabled || !(c.wallets.includes(wallet) || c.publicTransfers && req.body?.purpose === undefined)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
       if (req.body?.purpose !== undefined && req.body.purpose !== 'earn') throw fail('Unsupported sponsorship purpose.')
       if (req.body?.purpose === 'earn' && !c.earnEnabled) throw fail('Earn is not available yet.',403)
+      if (req.body?.action === 'quote') {
+        if(req.body?.purpose!==undefined||!d.reimbursement)throw fail('Reimbursed transfers are not available yet.',503)
+        const transfer=reimbursementTransfer(req.body.intent,identity.userId,embedded.id,wallet,req.body.attemptId,c,d.now())
+        const quote=await quoteXLayerReimbursement(transfer.binding,transfer.calls,d.now()+30000,d.reimbursement.estimate,d.reimbursement.pricing,d.now)
+        return res.json({ok:true,quoteToken:sealXLayerReimbursement(quote),feeUnits:quote.networkFeeUnits,totalUnits:quote.totalUnits,expiresAt:quote.expiresAt,
+          request:makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:quote.intentId,expiresAt:quote.expiresAt,calls:quote.calls})})
+      }
       if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})
       if (req.body?.action !== 'send') throw fail('Unsupported sponsorship action.')
       const request = req.body?.request as SponsoredRequest
@@ -145,10 +164,28 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (typeof possibleId === 'string' && /^[0-9a-f-]{36}$/i.test(possibleId)) reserved = Boolean((await d.read())?.requests[possibleId])
       const earn = req.body?.purpose === 'earn' ? req.body?.intent as EarnIntent : undefined
       if (req.body?.purpose === 'earn' && !earn) throw fail('Earn intent is missing.')
-      const { id, canonical, wallet: from, token, units } = validateSponsoredRequest(request, embedded.id, c, d.now(), earn)
-      if (from !== wallet) throw fail('Payment wallet does not match your Pocket wallet.', 403)
       const signature = req.body?.signature
       if (typeof signature !== 'string' || !/^[A-Za-z0-9+/=]{32,512}$/.test(signature)) throw fail('Payment authorization is missing.')
+      let approved:XLayerFeeQuote|undefined
+      let validated:ReturnType<typeof validateSponsoredRequest>|{id:string;canonical:ReturnType<typeof makeSponsoredBatchRequest>;wallet:string;token:string;units:bigint}
+      if(req.body?.quoteToken!==undefined){
+        if(earn||!d.reimbursement)throw fail('Reimbursed transfers are not available yet.',503)
+        const transfer=reimbursementTransfer(req.body.intent,identity.userId,embedded.id,wallet,possibleId,c,d.now())
+        try {approved=openXLayerReimbursement(req.body.quoteToken,transfer.binding,transfer.calls,d.now())}catch{throw fail('Transfer quote changed or expired. Review the transfer again.',422)}
+        const canonical=makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:approved.intentId,expiresAt:approved.expiresAt,calls:approved.calls})
+        if(!isDeepStrictEqual(request,canonical))throw fail('Payment request does not match the approved transfer.')
+        validated={id:approved.intentId,canonical,wallet,token:transfer.token,units:transfer.units}
+        if(!reserved){
+          try {await refreshXLayerReimbursement(approved,transfer.calls,d.reimbursement.estimate,d.now)}catch{throw fail('Transfer fee changed or expired. Review the transfer again.',422)}
+        }
+      }else{
+        validated=validateSponsoredRequest(request, embedded.id, c, d.now(), earn)
+        // Public stablecoin sends must not bypass reimbursement via the legacy
+        // single-call route. Existing allowlisted pilot and Earn are separate.
+        if(!earn&&c.publicTransfers&&!c.wallets.includes(wallet)&&isXLayerSendStablecoin(validated.token))throw fail('Review the transfer fee before sending.',422)
+      }
+      const { id, canonical, wallet: from, token, units } = validated
+      if (from !== wallet) throw fail('Payment wallet does not match your Pocket wallet.', 403)
       // Recheck stocks against a server-loaded price/precision before reserving
       // sponsor credit. Never accept a client-supplied USD value or price.
       if(!reserved) {

@@ -33,7 +33,32 @@ assert.equal((await fixture({config:()=>({...publicConfig,enabled:false})}).call
 assert.equal((await fixture({config:()=>({...publicConfig,publicTransfers:false})}).call({action:'prepare',wallet})).status,403)
 assert.equal((await fixture({config:()=>publicConfig,user:async()=>({linkedAccounts:[]})}).call({action:'prepare',wallet})).status,403)
 assert.equal((await fixture({config:()=>({...publicConfig,earnEnabled:true})}).call({action:'prepare',wallet,purpose:'earn'})).status,403,'public sends must not expand Earn access')
-assert.equal((await fixture({config:()=>publicConfig}).call(body())).status,200,'public send still passes full payload validation')
+assert.equal((await fixture({config:()=>publicConfig}).call(body())).status,422,'public stablecoin send cannot bypass fee quote')
+process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-xlayer-backend-quote-secret-not-production'
+for(const asset of ['USDC','USDT']){
+ let cost='100',estimated=[]
+ const reimbursed=fixture({config:()=>publicConfig,reimbursement:{pricing:{marginBps:2500,minimumFeeUnits:'0'},estimate:async input=>{estimated.push(structuredClone(input.calls));return {feeUnits:cost,expiresAt:now+25000,estimateId:'synthetic-full-cost'}}}})
+ const intent={asset,recipient,amountUnits:'1000000'},attemptId=crypto.randomUUID()
+ const quoteInput={action:'quote',wallet,intent,attemptId}
+ const quote=await reimbursed.call(quoteInput)
+ assert.equal(quote.status,200);assert.equal(quote.body.feeUnits,'125');assert.equal(quote.body.totalUnits,'1000125')
+ assert.equal(reimbursed.calls,0);assert.equal(reimbursed.store,undefined,'quote neither reserves nor broadcasts')
+ const send={action:'send',wallet,intent,quoteToken:quote.body.quoteToken,request:quote.body.request,signature:'a'.repeat(88)}
+ for(const mutate of [b=>b.intent.recipient=wallet,b=>b.intent.amountUnits='2000000',b=>b.request.body.params.calls.pop(),b=>b.request.body.params.calls[1].to=recipient,b=>b.request.body.params.calls.reverse(),b=>b.quoteToken+='x',b=>b.signature='',b=>b.request.body.caip2='eip155:1']){
+  const bad=structuredClone(send);mutate(bad);assert.ok((await reimbursed.call(bad)).status>=400);assert.equal(reimbursed.calls,0)
+ }
+ cost='101'
+ assert.equal((await reimbursed.call(send)).status,422,'refresh preserves margin, not just raw gas coverage')
+ assert.equal(reimbursed.store,undefined,'fee rejection never reserves sponsor credit')
+ cost='80'
+ assert.equal((await reimbursed.call(send)).status,200)
+ assert.deepEqual(estimated.at(-1),quote.body.request.body.params.calls,'refresh simulates approved batch with retained surplus')
+ assert.deepEqual(JSON.parse(reimbursed.sent.init.body),send.request.body,'relay preserves exact signed batch')
+ const estimateCount=estimated.length
+ assert.equal((await reimbursed.call(send)).body.hash,hash);assert.equal(reimbursed.calls,1);assert.equal(estimated.length,estimateCount,'accepted replay neither estimates nor broadcasts again')
+ assert.equal((await fixture({config:()=>publicConfig}).call(quoteInput)).status,503,'missing estimator fails closed')
+ assert.equal((await fixture({config:()=>publicConfig}).call(send)).status,503)
+}
 const valid=body(), first=await f.call(valid)
 assert.equal(first.body.hash,hash);assert.equal(f.calls,1)
 assert.deepEqual(JSON.parse(f.sent.init.body),valid.request.body,'exact signed body relayed')
