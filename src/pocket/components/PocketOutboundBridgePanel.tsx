@@ -23,7 +23,7 @@ export default function PocketOutboundBridgePanel(p:Props){
   const load=()=>{
    const records=readPocketOperations(p.owner).filter(r=>r.pending.quote.execution==='privy'&&r.pending.quote.walletAddress?.toLowerCase()===p.wallet.address?.toLowerCase())
    const finished=records.find(r=>r.pending.quote.id===active.current&&['completed','failed','refunded'].includes(r.state))
-   if(finished){active.current=null;p.onTracked(finished.pending.quote.id,finished.pending.quote.asset);void p.wallet.refresh();void p.refresh()}
+   if(finished){active.current=null;version.current++;setAmount('');setReview(null);setError('');setQuoting(false);p.onTracked(finished.pending.quote.id,finished.pending.quote.asset);void p.wallet.refresh();void p.refresh()}
    setPending(records.find(r=>!['completed','failed','refunded'].includes(r.state))?.pending||null)
   }
   load();window.addEventListener(POCKET_OPERATIONS_UPDATED,load);return()=>window.removeEventListener(POCKET_OPERATIONS_UPDATED,load)
