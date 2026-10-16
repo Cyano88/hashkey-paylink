@@ -3,6 +3,8 @@ import {activePocketEvmSession,connectFreshEvmSession} from '../controllers/useP
 import {pocketOperationExecuting,migratePocketOperations,readPocketOperations,trackPocketOperation,POCKET_OPERATIONS_UPDATED} from '../lib/pocketOperationRecovery'
 import {pocketApiUrl} from '../lib/pocketRoutes'
 import {prefetchPocketActivity} from './usePocketActivity'
+import {sponsoredTransferRequest} from '../api/pocketSponsoredTransfer'
+import {SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 
 /** Read saved operations globally. This worker never opens wallet approval. */
 export default function usePocketOperationRecovery(input:{authenticated:boolean;email:string;getAccessToken():Promise<string|null>}) {
@@ -23,6 +25,15 @@ export default function usePocketOperationRecovery(input:{authenticated:boolean;
      if(pocketOperationExecuting(owner,record.pending.quote.id))continue
      try{
       const p=record.pending,network=record.kind==='bridge'?p.quote.source:'arc'
+      if(record.kind==='bridge'&&p.quote.execution==='privy'&&network==='xlayer'){
+       try{
+        const result=await sponsoredTransferRequest({action:'status',wallet:p.quote.walletAddress,attemptId:p.quote.id},latest.current.getAccessToken) as any
+        if(!valid())return
+        const b=result.bridge||{},state=b.status==='completed'?'completed':b.status==='failed'?'failed':b.status==='refunded'?'refunded':b.status==='needs_attention'?'needs_review':'processing'
+        if(trackPocketOperation(owner,'bridge',{...p,...(result.hash?{txHash:result.hash}:{}),...(b.destinationTxHash?{destinationTxHash:b.destinationTxHash}:{}),...(b.status==='refunded'?{refundAsset:b.refundAsset,refundAmount:b.refundAmount,refundNetwork:b.refundNetwork,refundTxHash:b.destinationTxHash}:{})},state))changed=true
+       }catch(error){if(valid()&&error instanceof SponsoredTransferNotSubmitted){trackPocketOperation(owner,'bridge',p,'failed');changed=true}}
+       continue
+      }
       const address=p.walletAddress||p.quote.walletAddress
       // A known transaction hash can be checked without restoring wallet authentication.
       const session=network==='solana'||!address||p.txHash?null:activePocketEvmSession(owner,network,address)??await connectFreshEvmSession(owner,network,address,latest.current.getAccessToken).catch(()=>null)

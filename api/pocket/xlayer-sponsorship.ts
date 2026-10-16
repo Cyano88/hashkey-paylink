@@ -138,6 +138,11 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       const linked = user.linkedAccounts.filter(a => a.type === 'wallet' && a.walletClientType === 'privy' && a.chainType === 'ethereum' && a.address.toLowerCase() === wallet)
       const embedded = linked[0] as { id?: string } | undefined
       if (linked.length !== 1 || !embedded?.id) throw fail('Your Pocket wallet could not be verified.', 403)
+      if(req.body?.action==='bridge-capabilities'){
+        const records=Object.values((await d.read())?.requests||{}).filter(r=>r.owner===identity.userId&&r.wallet===wallet&&r.bridgeQuoteToken)
+        const pending=records.flatMap(r=>{try{const q=openOutboundBridge(r.bridgeQuoteToken!,identity.userId);return [{quote:outboundBridgePreview(q),quoteToken:r.bridgeQuoteToken,txHash:r.hash}]}catch{return []}})
+        return res.json({ok:true,enabled:!!(c.enabled&&c.outboundBridge&&d.reimbursement&&(c.wallets.includes(wallet)||c.publicTransfers)),pending})
+      }
       // Read-only recovery remains available even if sponsorship is disabled.
       if (req.body?.action === 'status') {
         const id = String(req.body?.attemptId || '')

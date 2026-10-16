@@ -3,6 +3,7 @@ import {stockGiftFundingReview,prepareStockGiftSettlement} from '../api/pocketSt
 import type {StockGiftIntent} from '../api/pocketStockGiftIntent'
 import {validateXPayBankCall,type XPayBankPayment,type XPayBankResponse} from '../lib/pocketXPayBankClient'
 import usePocketEmbeddedWallet from './usePocketEmbeddedWallet'
+import {sendOutboundBridge,validateOutboundBridge,outboundTokens,type OutboundBridgeReview} from '../api/pocketOutboundBridge'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthorizationSignature, useSendTransaction, useWallets } from '@privy-io/react-auth'
 import {sendSponsoredTransfer,sponsoredTransferRequest} from '../api/pocketSponsoredTransfer'
@@ -102,6 +103,22 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     current()
     if(balance<BigInt(reimbursement.totalUnits))throw Error('Insufficient '+asset.symbol+' balance including the network fee.')
     return {...review,reimbursement,expiresAt:Math.min(review.expiresAt,reimbursement.expiresAt)}
+  }
+  const bridgeOutbound=async(review:OutboundBridgeReview,beforeDispatch:()=>void)=>{
+    const approved=structuredClone(review),key=ownerKey
+    const current=()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}
+    if(!wallet||!address||inFlight.current||hasStockSubmission(key))throw new SponsoredTransferNotSubmitted('Wait for your wallet to finish reconnecting or submitting.')
+    let dispatched=false
+    inFlight.current=true;setBusy(true)
+    try{
+      validateOutboundBridge(approved,address,approved.quote.destinationAddress,approved.quote.asset,approved.quote.amount)
+      await requestPocketPaymentApproval();if(!takePocketPaymentApproval())throw Error('Payment approval expired.')
+      current();await ensurePocketXLayerWallet(()=>walletRef.current,address,current);current()
+      const balance=await stockClient.readContract({address:outboundTokens[approved.quote.asset],abi:stockTokenAbi,functionName:'balanceOf',args:[address]})
+      current();if(balance<parseUnits(approved.quote.total,6))throw Error('Insufficient balance including the network fee.')
+      return await sendOutboundBridge(approved,{getAccessToken,assertCurrent:current,sign:generateAuthorizationSignature,beforeDispatch:()=>{current();beforeDispatch();dispatched=true}})
+    }catch(error){if(!dispatched&&!(error instanceof SponsoredTransferNotSubmitted))throw new SponsoredTransferNotSubmitted(error instanceof Error?error.message:'Bridge was not sent.');throw error}
+    finally{inFlight.current=false;if(scope.current===key)setBusy(false)}
   }
   const send = async (review: StockTransfer, hooks?: {beforeSubmit?:()=>Promise<void>;onSubmitted?:(hash:Hex)=>void}) => {
     if(!wallet)throw Error('Your XStocks wallet is reconnecting. Try again in a moment.')
@@ -267,5 +284,5 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
   const reconcileGift=(id:string,operation:'funding'|'claim'|'refund',hash:Hex)=>{
     settleStockGiftProof(ownerKey,id,operation,hash);setPending(readStockPending(ownerKey));setUncertain(!!localStorage.getItem('pocket.xstocks.signing:'+ownerKey))
   }
-  return { prepareTransfer, signGift, recoverGiftFunding, reconcileGift, attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !address && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
+  return { bridgeOutbound, prepareTransfer, signGift, recoverGiftFunding, reconcileGift, attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !address && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
 }

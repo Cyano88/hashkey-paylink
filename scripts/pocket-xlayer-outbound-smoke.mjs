@@ -49,7 +49,15 @@ const send={action:'send',purpose:'bridge',wallet:input.sender,bridgeQuoteToken:
 const bad=structuredClone(send);bad.request.body.params.calls.pop();assert.equal((await call(bad)).status,400);assert.equal(broadcasts,0)
 assert.equal((await call(send)).body.hash,hash);assert.deepEqual(sent,send.request.body);assert.ok(Object.values(store.requests)[0].bridgeQuoteToken)
 assert.equal((await call(send)).body.hash,hash);assert.equal(broadcasts,1)
+const capability=await call({action:'bridge-capabilities',wallet:input.sender})
+assert.equal(capability.body.enabled,true);assert.equal(capability.body.pending.length,1)
+assert.equal(capability.body.pending[0].quote.execution,'privy');assert.equal(capability.body.pending[0].quote.walletAddress.toLowerCase(),input.sender.toLowerCase())
+assert.equal(capability.body.pending[0].request,undefined,'recovery must not store authorization signatures')
+store.requests.other={...Object.values(store.requests)[0],owner:'someone-else'}
+assert.equal((await call({action:'bridge-capabilities',wallet:input.sender})).body.pending.length,1)
 enabled=false
+assert.equal((await call({action:'bridge-capabilities',wallet:input.sender})).body.enabled,false)
+assert.equal((await call({action:'bridge-capabilities',wallet:input.sender})).body.pending.length,1)
 assert.equal((await call(quoteRequest)).status,403)
 const recovered=await call({action:'status',wallet:input.sender,attemptId:send.request.headers['privy-idempotency-key']})
 assert.equal(recovered.body.bridge.status,'completed','recovery remains available when outbound flag is disabled')
