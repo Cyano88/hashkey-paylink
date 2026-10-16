@@ -15,7 +15,8 @@ const deposit=parseAbi(['event RelayErc20Deposit(address from,address token,uint
 const log=(network,from,to,units)=>({address:stablecoinAddress(network,'USDC'),data:encodeAbiParameters(parseAbiParameters('uint256'),[units]),topics:encodeEventTopics({abi:transfer,eventName:'Transfer',args:{from,to}})})
 function harness(){
  const records=new Map(),receipts=new Map();let sends=0,ledger=0,lost=false,identity=owner,changed=false,enabled=true,canonical=true,providerStatus='pending'
- const rpc=network=>({getChainId:async()=>network==='base'?8453:196,readContract:async()=>1000000000n,call:async()=>{},getBlock:async()=>({hash:canonical?blockHash:sourceHash}),getTransactionReceipt:async({hash})=>{if(!receipts.has(hash))throw Error('not found');return receipts.get(hash)}})
+ const chainIds={base:8453,xlayer:196}
+ const rpc=network=>({getChainId:async()=>chainIds[network],readContract:async()=>1000000000n,call:async()=>{},getBlock:async()=>({hash:canonical?blockHash:sourceHash}),getTransactionReceipt:async({hash})=>{if(!receipts.has(hash))throw Error('not found');return receipts.get(hash)}})
  const handler=createXLayerBridgeHandler({identity:async()=>({userId:identity}),wallets:async()=>({walletId,walletAddress:sender,destinationAddress:changed?sender:recipient}),now:()=>fixture.now,enabled:async()=>enabled,apiKey:()=> 'synthetic',client:rpc,
  quote:async input=>{assert.equal(input.sender,sender);assert.equal(input.recipient,recipient);return route},
  price:input=>quoteEvmBridgeFee(input,async()=> '0.000001',3000n*100000000n,fixture.now),
@@ -25,12 +26,21 @@ function harness(){
  challenge:async()=>{sends++;if(lost)throw Error('lost response');return {challengeId:'challenge'}},readChallenge:async()=>({status:'awaiting_approval'}),activity:async()=>[],ledger:async()=>{ledger++},
  fetch:async url=>({ok:true,json:async()=>url.includes('/intents/')?{status:providerStatus,originChainId:8453,destinationChainId:196,inTxHashes:[sourceHash],txHashes:[destHash]}:{requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},status:providerStatus,user:sender,recipient,data:{inTxs:[{txHash:sourceHash,chainId:8453,status:'success'}],outTxs:[{txHash:destHash,chainId:196,status:'success'}]}}]}})})
  const request=async(body,method='POST')=>{let code=200,result;await handler({method,body},{setHeader(){},status(value){code=value;return this},json(value){result=value;return this}});return {code,...result}}
- return {request,records,receipts,get sends(){return sends},get ledger(){return ledger},set lost(v){lost=v},set identity(v){identity=v},set changed(v){changed=v},set enabled(v){enabled=v},set canonical(v){canonical=v},set providerStatus(v){providerStatus=v}}
+ return {request,records,receipts,chainIds,get sends(){return sends},get ledger(){return ledger},set lost(v){lost=v},set identity(v){identity=v},set changed(v){changed=v},set enabled(v){enabled=v},set canonical(v){canonical=v},set providerStatus(v){providerStatus=v}}
 }
 const quoteBody={action:'quote',source:'base',destination:'xlayer',amount:'10',circleUserToken:'synthetic'}
 const h=harness(),quoted=await h.request(quoteBody)
 assert.equal(quoted.code,200);assert.equal(quoted.quote.asset,'USDC');assert.equal(quoted.quote.networkFeeUnits,'3000');assert.equal(quoted.quote.total,'10.003');assert.equal(quoted.quote.callData,undefined)
 const execute={action:'execute',quoteToken:quoted.quoteToken,circleUserToken:'synthetic'}
+for(const [network,testnet] of [['base',84532],['xlayer',1952]]){
+ const wrong=harness();wrong.chainIds[network]=testnet
+ assert.equal((await wrong.request(quoteBody)).code,503,'wrong network cannot quote')
+ assert.equal(wrong.sends,0)
+ const switched=harness(),approved=await switched.request(quoteBody)
+ switched.chainIds[network]=testnet
+ assert.equal((await switched.request({...execute,quoteToken:approved.quoteToken})).code,503,'network change after quote cannot submit')
+ assert.equal(switched.sends,0);assert.equal(switched.records.size,0)
+}
 assert.notEqual((await h.request({...execute,quoteToken:quoted.quoteToken+'x'})).code,200)
 assert.equal((await h.request({...quoteBody,asset:'USDT'})).code,409)
 for(const source of ['xlayer','solana','arbitrum'])assert.equal((await h.request({...quoteBody,source})).code,409)

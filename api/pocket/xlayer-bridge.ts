@@ -2,7 +2,7 @@ import type {Request,Response} from 'express'
 import {xlayerBridgeWalletEligible} from './xlayer-bridge-access.js'
 import {PrivyClient} from '@privy-io/server-auth'
 import {createPublicClient,getAddress,http,parseAbi,parseUnits,formatUnits,type Hex} from 'viem'
-import {base} from 'viem/chains'
+import {base,xLayer} from 'viem/chains'
 import {verifiedPrivyUser,readCircleLink,circleLinkKey} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import {createCircleGasStationEvmChallenge,readCircleEvmChallenge,quoteCircleEvmBatchRecovery} from '../circle-solana-email.js'
@@ -16,7 +16,7 @@ const ACTION='wallet.xlayer-bridge'
 const balanceAbi=parseAbi(['function balanceOf(address) view returns(uint256)'])
 function fail(message:string,status=409):never {throw Object.assign(Error(message),{status})}
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase()
-const client=(network:'base'|'xlayer')=>createPublicClient({...(network==='base'?{chain:base}:{}),transport:http(network==='base'?process.env.PRIVATE_RPC_URL_BASE||undefined:process.env.PRIVATE_RPC_URL_XLAYER||'https://rpc.xlayer.tech',{timeout:15000})})
+const client=(network:'base'|'xlayer')=>createPublicClient({chain:network==='base'?base:xLayer,transport:http(network==='base'?process.env.PRIVATE_RPC_URL_BASE||undefined:process.env.PRIVATE_RPC_URL_XLAYER||'https://rpc.xlayer.tech',{timeout:15000})})
 async function wallets(owner:string){
  const appId=process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID||'',secret=process.env.PRIVY_APP_SECRET||''
  const [from,user]=await Promise.all([readCircleLink(circleLinkKey(owner,'base','payment')),new PrivyClient(appId,secret).getUserById(owner)])
@@ -36,6 +36,10 @@ const metadata=(q:XLayerBridgeQuote,quoteToken:string)=>({quoteToken,intentFinge
 
 export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
+ async function verifyNetworks(){
+  const [source,destination]=await Promise.all([d.client('base').getChainId(),d.client('xlayer').getChainId()])
+  if(source!==8453||destination!==196)throw Error('Bridge network mismatch.')
+ }
  async function receipt(network:'base'|'xlayer',hash:string){
   if(!/^0x[0-9a-f]{64}$/i.test(hash))return null
   const rpc=d.client(network)
@@ -104,6 +108,7 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
     if(asset==='USDT'&&!d.usdtEnabled())fail('USDT bridging to X Layer is not available yet.')
     const amount=String(req.body.amount||'')
     if(!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,6)<=0n)fail('Enter a '+asset+' amount.')
+    await verifyNetworks()
     const w=await d.wallets(userId),amountUnits=parseUnits(amount,6).toString()
     const route=await d.quote({asset,source:'base',destination:'xlayer',sender:w.walletAddress,recipient:w.destinationAddress,amountUnits},d.apiKey(),d.fetch,{allowXLayerUsdcRefund:asset==='USDT'})
     if(route.execution.kind!=='evm')throw Error('Unsupported bridge execution.')
@@ -132,8 +137,8 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
    const w=await d.wallets(userId)
    if(w.walletId!==q.walletId||!same(w.walletAddress,q.walletAddress)||!same(w.destinationAddress,q.destinationAddress))fail('Your linked wallets changed. Review a new quote.')
    const userToken=String(req.body.circleUserToken||'');if(!userToken||userToken.length>8000)fail('Unlock your Base wallet.')
+   await verifyNetworks()
    const rpc=d.client('base')
-   if(await rpc.getChainId()!==8453)throw Error('Source network mismatch.')
    const balance=await rpc.readContract({address:getAddress(stablecoinAddress('base',q.asset)),abi:balanceAbi,functionName:'balanceOf',args:[q.walletAddress]})
    if(balance<parseUnits(q.total,6))fail('Insufficient '+q.asset+' on Base.')
    await rpc.call({account:q.walletAddress,to:q.walletAddress,data:q.callData})
