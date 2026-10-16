@@ -1,3 +1,4 @@
+import {POCKET_EARN_DISPLAY_TOKENS} from '../src/pocket/lib/pocketEarnDisplayAssets.ts'
 import assert from 'node:assert/strict'
 import {fetchCircleDisplayBalance,createCircleDisplayBalanceReader,circleBalanceTokens} from '../api/pocket/circle-display-balances.ts'
 import {fetchOkxDisplayBalances,parseOkxBalanceRows,exactBalanceUnits,createStockDisplayReader} from '../api/pocket/okx-display-balances.ts'
@@ -35,8 +36,8 @@ assert.throws(()=>parseOkxBalanceRows(envelope([row('','NaN')]),owner))
 assert.equal(parseOkxBalanceRows([],owner,true).size,0);assert.throws(()=>parseOkxBalanceRows([],owner))
 assert.equal(exactBalanceUnits('1.230000000',6),1230000n);assert.throws(()=>exactBalanceUnits('1.0000001',6))
 let calls=[],omit=false
-const okxFetch=async(url,init)=>{calls.push({url,init});assert.ok(init.headers['OK-ACCESS-SIGN']);const rows=init.method==='GET'?[row('','0.1')]:omit?[]:[row(stockUsdc.address.toLowerCase(),'2.5'),row(stockUsdt.address.toLowerCase(),'3.25')];return new Response(JSON.stringify({code:'0',data:envelope(rows)}))}
-const snapshot=await fetchOkxDisplayBalances(owner,undefined,undefined,okxFetch);assert.equal(snapshot.cash,2500000n);assert.equal(snapshot.usdt,3250000n);assert.equal(snapshot.gas,100000000000000000n);assert.equal(snapshot.blockHash,null);assert.equal(snapshot.source,'okx');assert.equal(calls.length,2)
+const okxFetch=async(url,init)=>{calls.push({url,init});assert.ok(init.headers['OK-ACCESS-SIGN']);const rows=init.method==='GET'?[row('','0.1')]:omit?[]:[row(stockUsdc.address.toLowerCase(),'2.5'),row(stockUsdt.address.toLowerCase(),'3.25'),row(POCKET_EARN_DISPLAY_TOKENS[0],'1.000001'),row(POCKET_EARN_DISPLAY_TOKENS[1],'2.5')];return new Response(JSON.stringify({code:'0',data:envelope(rows)}))}
+const snapshot=await fetchOkxDisplayBalances(owner,undefined,undefined,okxFetch);assert.deepEqual(snapshot.earn,{usdc:1000001n,usdt:2500000n});assert.equal(snapshot.cash,2500000n);assert.equal(snapshot.usdt,3250000n);assert.equal(snapshot.gas,100000000000000000n);assert.equal(snapshot.blockHash,null);assert.equal(snapshot.source,'okx');assert.equal(calls.length,2)
 omit=true;await assert.rejects(fetchOkxDisplayBalances(owner,undefined,undefined,okxFetch))
 let providerCalls=0,rpcCalls=0,broken=false
 const stockReader=createStockDisplayReader(async()=>{providerCalls++;if(broken)throw Error('429');return {...snapshot,observedAt:now}},async(_o,previous)=>{rpcCalls++;assert.notEqual(previous?.source,'okx');return {...snapshot,source:'rpc',blockNumber:1n,blockHash:'0x'+'1'.repeat(64),observedAt:now}},()=>now)
@@ -60,7 +61,7 @@ let wire={...snapshot,observedAt:Date.now()};const originalFetch=globalThis.fetc
 const store=new Map();globalThis.localStorage={getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)}
 globalThis.fetch=async(_url,init)=>{assert.equal(JSON.parse(init.body).provider,'okx');return new Response(JSON.stringify({ok:true,snapshot:wire},(_k,v)=>typeof v==='bigint'?v.toString():v))}
 const decoded=await readRemoteStockBalances(async()=>'fixture',owner);assert.equal(decoded.blockNumber,null);assert.equal(decoded.cash,2500000n);assert.equal(decoded.usdt,3250000n)
-saveStockDisplayCache('fixture',decoded);assert.equal(readStockDisplayCache('fixture').source,'okx');assert.equal(readStockDisplayCache('other'),undefined)
+assert.deepEqual(decoded.earn,snapshot.earn);saveStockDisplayCache('fixture',decoded);assert.deepEqual(readStockDisplayCache('fixture').earn,snapshot.earn);assert.equal(readStockDisplayCache('fixture').source,'okx');assert.equal(readStockDisplayCache('other'),undefined)
 wire={...wire,source:'okx',blockNumber:'1',blockHash:'0x'+'1'.repeat(64)};await assert.rejects(readRemoteStockBalances(async()=>'fixture',owner));globalThis.fetch=originalFetch
 console.log('PASS Circle route integration, direct bank routing, OKX wire/cache roundtrip and no invented chain proof.')
 process.exit(0)
