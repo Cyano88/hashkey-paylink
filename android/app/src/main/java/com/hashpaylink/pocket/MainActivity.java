@@ -29,6 +29,7 @@ public class MainActivity extends BridgeActivity {
         SplashScreen launchSplash = SplashScreen.installSplashScreen(this);
         launchSplash.setKeepOnScreenCondition(() -> keepLaunchSplash);
         registerPlugin(PocketInsetsPlugin.class);
+        registerPlugin(PocketHapticsPlugin.class);
         registerPlugin(PocketStatementPlugin.class);
         registerPlugin(PocketReceiptPlugin.class);
         registerPlugin(PocketEsimPlugin.class);

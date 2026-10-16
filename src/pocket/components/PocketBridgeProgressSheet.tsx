@@ -34,5 +34,5 @@ export default function PocketBridgeProgressSheet({active,onDone}:{active:Active
  if(destination)rows.push(['To',pocketBridgeNetworkLabel(destination as any)])
  if(state==='reversed'&&refundAmount&&refundAsset){rows.push(['Original amount',amount+' '+active.asset],['Refund received',refundAmount+' '+refundAsset]);if(refundNetwork)rows.push(['Refund network',pocketBridgeNetworkLabel(refundNetwork as any)])}
  if(txHash)rows.push(['Transaction',txHash])
- return <PocketTransactionSheet title={active.asset+' bridge'} state={state} statusLabel={label} amount={state==='reversed'&&refundAmount&&refundAsset?refundAmount+' '+refundAsset:amount?formatPocketDisplayAmount(amount)+' '+active.asset:undefined} detail={state==='pending'?'You can close this sheet. Progress is saved in Activity.':undefined} detailsRows={rows} onDone={onDone}/>
+ return <PocketTransactionSheet key={active.owner+':'+active.id} title={active.asset+' bridge'} state={state} statusLabel={label} amount={state==='reversed'&&refundAmount&&refundAsset?refundAmount+' '+refundAsset:amount?formatPocketDisplayAmount(amount)+' '+active.asset:undefined} detail={state==='pending'?'You can close this sheet. Progress is saved in Activity.':undefined} detailsRows={rows} onDone={onDone}/>
 }
