@@ -32,11 +32,12 @@ function diagnostic(value: unknown, secret: string) {
     .replace(/[\r\n\t]/g,' ').slice(0,500)
 }
 type Store = { requests: { [id: string]: Record } }
-type Config = { appId: string; secret: string; enabled: boolean; wallets: string[]; earnEnabled?: boolean }
+type Config = { appId: string; secret: string; enabled: boolean; wallets: string[]; publicTransfers?: boolean; earnEnabled?: boolean }
 const configuration = (): Config => ({
   appId: process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID || '',
   secret: process.env.PRIVY_APP_SECRET || '',
   enabled: process.env.POCKET_XLAYER_SPONSORSHIP_ENABLED === 'true',
+  publicTransfers: process.env.POCKET_XLAYER_TRANSFER_PUBLIC_ENABLED === 'true',
   earnEnabled: process.env.POCKET_EARN_ENABLED === 'true',
   wallets: (process.env.POCKET_XLAYER_SPONSORSHIP_WALLETS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean),
 })
@@ -132,7 +133,8 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         const hash = await resolveAccepted(id,record,embedded.id,c).catch(() => null)
         return res.json({ok:true,hash,accepted:Boolean(record.transactionId || record.hash)})
       }
-      if (!c.enabled || !c.wallets.includes(wallet)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
+      // Public rollout covers token sends only. Earn retains its existing pilot gate.
+      if (!c.enabled || !(c.wallets.includes(wallet) || c.publicTransfers && req.body?.purpose === undefined)) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
       if (req.body?.purpose !== undefined && req.body.purpose !== 'earn') throw fail('Unsupported sponsorship purpose.')
       if (req.body?.purpose === 'earn' && !c.earnEnabled) throw fail('Earn is not available yet.',403)
       if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})

@@ -27,6 +27,13 @@ function fixture(options={}) {
 let f=fixture()
 assert.equal((await f.call({action:'prepare',wallet})).body.walletId,walletId)
 assert.equal(f.calls,0,'preflight never broadcasts')
+const publicConfig={...config,wallets:[],publicTransfers:true}
+assert.equal((await fixture({config:()=>publicConfig}).call({action:'prepare',wallet})).status,200)
+assert.equal((await fixture({config:()=>({...publicConfig,enabled:false})}).call({action:'prepare',wallet})).status,403)
+assert.equal((await fixture({config:()=>({...publicConfig,publicTransfers:false})}).call({action:'prepare',wallet})).status,403)
+assert.equal((await fixture({config:()=>publicConfig,user:async()=>({linkedAccounts:[]})}).call({action:'prepare',wallet})).status,403)
+assert.equal((await fixture({config:()=>({...publicConfig,earnEnabled:true})}).call({action:'prepare',wallet,purpose:'earn'})).status,403,'public sends must not expand Earn access')
+assert.equal((await fixture({config:()=>publicConfig}).call(body())).status,200,'public send still passes full payload validation')
 const valid=body(), first=await f.call(valid)
 assert.equal(first.body.hash,hash);assert.equal(f.calls,1)
 assert.deepEqual(JSON.parse(f.sent.init.body),valid.request.body,'exact signed body relayed')
