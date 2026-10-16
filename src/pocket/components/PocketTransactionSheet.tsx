@@ -3,7 +3,7 @@ import usePocketSuccessHaptic from '../hooks/usePocketSuccessHaptic'
 import PocketLocalEquivalent from './PocketLocalEquivalent'
 import PocketTransactionDetails from './PocketTransactionDetails'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
-import { Children, useState, type ReactNode } from 'react'
+import { Children, useEffect, useRef, useState, type ReactNode } from 'react'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { type PaylinkReceipt } from '../../lib/paymentReceiptPdf'
 import PocketBottomSheet from './PocketBottomSheet'
@@ -17,6 +17,14 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const [viewReceipt, setViewReceipt] = useState(false)
   usePocketSuccessHaptic(state === 'successful')
   const [viewDetails, setViewDetails] = useState(false)
+  const previousState=useRef(state)
+  useEffect(()=>{
+    if(previousState.current==='pending'&&state!=='pending'){
+      setViewDetails(false)
+      setViewReceipt(false)
+    }
+    previousState.current=state
+  },[state])
   const hasAction = state !== 'successful' && Children.toArray(statusAction).length > 0
   const canViewDetails = !receipt && Boolean(detailsRows?.length || Children.toArray(children).length)
   const canViewReceipt = Boolean(receipt)

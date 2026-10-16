@@ -1,4 +1,6 @@
 import PocketAmountKeypad, {pocketAmountKeyDown} from '../components/PocketAmountKeypad'
+import usePocketStockWallet from '../hooks/usePocketStockWallet'
+import PocketStockWalletActions from '../components/PocketStockWalletActions'
 import PocketSelect from '../components/PocketSelect'
 import {pocketUsdtEnabled} from '../lib/pocketBaseUsdt'
 import {supportsPocketUsdt} from '../lib/pocketUsdtAssets'
@@ -40,6 +42,20 @@ const networkLabel = (network: SendNetwork) => network === 'arc' ? 'Arc' : netwo
 function navPath(tab: PocketNavTab) { if (tab === 'profile') return POCKET_ROUTES.profile; if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'overview' }); if (tab === 'activity') return POCKET_ROUTES.activity; return POCKET_ROUTES.home }
 
 export default function PocketSendPage() {
+  const [params] = useSearchParams()
+  return params.get('network') === 'xlayer' && params.get('mode') === 'address' && !params.get('request') ? <PocketXLayerStablecoinSend/> : <PocketCircleSendPage/>
+}
+function PocketXLayerStablecoinSend() {
+  const wallet = usePocketStockWallet()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  return <PocketRouteShell active="home" fixedPage refreshEnabled={false} onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
+    <PocketFlowHeader centered title="Send" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.transfer)}/>
+    <PocketSelect ariaLabel="Send network" value="xlayer" options={['base','arbitrum','solana','ethereum','polygon',...(params.get('asset')==='USDT'?[]:['arc']),'xlayer'].map(value=>({value,label:value==='xlayer'?'X Layer':networkLabel(value as SendNetwork)}))} onChange={network=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.send+'?'+new URLSearchParams({mode:'address',network,asset:params.get('asset')==='USDT'?'USDT':'USDC'}))}/>
+    <PocketStockWalletActions wallet={wallet} view="send" stablecoinsOnly/>
+  </PocketRouteShell>
+}
+function PocketCircleSendPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requestId = searchParams.get('request')?.trim() ?? ''
@@ -51,7 +67,7 @@ export default function PocketSendPage() {
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const activity = usePocketActivity({ authenticated, email, enabled: false, getAccessToken })
   const [network, setNetworkState] = useState<SendNetwork>(() => { if (preparedNetwork === 'arc' || preparedNetwork === 'ethereum' || preparedNetwork === 'polygon' || preparedNetwork === 'arbitrum' || preparedNetwork === 'solana' || preparedNetwork === 'base') return preparedNetwork; const saved = window.localStorage.getItem('pocket.home.network'); return saved === 'arc' || saved === 'ethereum' || saved === 'polygon' || saved === 'arbitrum' || saved === 'solana' ? saved : 'base' })
-  const [selectedAsset, setAsset] = useState<'USDC' | 'USDT'>('USDC')
+  const [selectedAsset, setAsset] = useState<'USDC' | 'USDT'>(()=>searchParams.get('asset')==='USDT'?'USDT':'USDC')
   const asset = requestId ? 'USDC' : selectedAsset
   const [mode, setMode] = useState<RecipientMode>(preparedMode)
   const [pocketId, setPocketId] = useState(preparedMode === 'pocket' ? pocketIdInput(preparedRecipient) : '')
@@ -242,7 +258,7 @@ export default function PocketSendPage() {
       <div className="pocket-form-fields min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
       {paymentRequest && <div><p className="text-xs font-medium text-gray-500 dark:text-gray-400">Request from {paymentRequest.senderName}</p><p className="mt-1 text-sm font-semibold">{paymentRequest.title}</p><p className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">Sent {new Date(paymentRequest.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })} at {new Date(paymentRequest.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>}
       {!requestId && pocketUsdtEnabled && <PocketSelect ariaLabel="Send asset" value={asset} options={[{value:'USDC',label:'USDC'},{value:'USDT',label:'USDT'}]} onChange={value=>{setAsset(value as 'USDC'|'USDT');setReviewOpen(false);setAttemptedAt(0);setResolved(null);if(value==='USDT'&&!supportsPocketUsdt(network))setNetwork('base')}} />}
-      <PocketPayerNetworkPanel showUpcomingXLayer={!requestId} asset={asset} showSelector selectedNetwork={network} selectedNetworkLabel={networkLabel(network)} options={(['base','arbitrum','arc','solana','ethereum','polygon'] as SendNetwork[]).filter(value=>asset==='USDC'||supportsPocketUsdt(value)).map(value=>({value,label:networkLabel(value)}))} multiChain={false} emailReceive={false} onNetworkSelect={value=>setNetwork(value as SendNetwork)} onMultiChainToggle={()=>{}} showMultiChainToggle={false} disabled={Boolean(paymentRequest)} />
+      <PocketPayerNetworkPanel showUpcomingXLayer={!requestId} asset={asset} showSelector selectedNetwork={network} selectedNetworkLabel={networkLabel(network)} options={[...(['base','arbitrum','arc','solana','ethereum','polygon'] as SendNetwork[]).filter(value=>asset==='USDC'||supportsPocketUsdt(value)).map(value=>({value,label:networkLabel(value)})), ...(!requestId && mode==='address'?[{value:'xlayer',label:'X Layer'}]:[])]} multiChain={false} emailReceive={false} onNetworkSelect={value=>value==='xlayer'?navigate(POCKET_BASE_PATH+POCKET_ROUTES.send+'?'+new URLSearchParams({mode:'address',network:'xlayer',asset})):setNetwork(value as SendNetwork)} onMultiChainToggle={()=>{}} showMultiChainToggle={false} disabled={Boolean(paymentRequest)} />
       <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available</span><span className="text-sm font-semibold tabular-nums">{balanceKnown ? <>{formatPocketDisplayAmount(shownBalance)} {asset}<PocketLocalEquivalent amount={shownBalance} asset={asset} className="mt-1 block text-right text-xs font-normal text-gray-500 dark:text-gray-400" /></> : !wallets.resolved || wallets.balanceBusy ? <PocketAmountShimmer label="Loading available balance" /> : <span className="text-xs font-medium text-gray-500">Unavailable</span>}</span></div>
       {mode === 'pocket' ? <label className="block"><span className="text-sm font-medium text-gray-700 dark:text-gray-200">Recipient Pocket ID</span><span className="relative mt-2 block"><input type="text" inputMode="text" autoCapitalize="none" autoCorrect="off" value={pocketId} readOnly={Boolean(paymentRequest)} onChange={event => setPocketId(pocketIdInput(event.target.value))} placeholder="Enter Pocket ID" className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 pr-11 text-sm outline-none focus:border-gray-400 read-only:bg-gray-50 dark:border-[#262626] dark:bg-[#121212] dark:read-only:bg-white/[0.025]" />{resolving ? <span className="absolute right-4 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-500 dark:text-gray-400"><PocketSkeletonBar className="h-4 w-4 rounded-full" /></span> : resolved ? <Check className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-600 dark:text-gray-300" /> : null}</span></label> : <label className="block"><span className="text-sm font-medium text-gray-700 dark:text-gray-200">Recipient wallet address</span><input type="text" value={send.address} onChange={event => send.setAddress(event.target.value.trim())} placeholder={network === 'solana' ? 'Solana wallet address' : '0x... wallet address'} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212]" /></label>}
       {resolved && <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-900 dark:bg-white/[0.04] dark:text-white"><Check className="h-3.5 w-3.5 text-gray-600 dark:text-gray-300" /><span className="truncate">{resolved.name}</span><span className="ml-auto text-[10px] text-gray-500 dark:text-gray-400">Pocket {resolved.pocketId}</span></div>}
