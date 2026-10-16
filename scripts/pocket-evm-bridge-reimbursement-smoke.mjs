@@ -10,9 +10,10 @@ const calls=[{target:token,value:0n,data:'0x12345678'}]
 const bridgeCallData=encodeFunctionData({abi:batch,functionName:'executeBatch',args:[calls]})
 const now=100000,rate=3000n*100000000n
 let count=0
-for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const asset of ['USDC','USDT']){
+for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const asset of ['USDC','USDT'])for(const xlayer of [false,true]){
  if(source==='arc'&&asset==='USDT')continue
- const binding={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source,destination:source==='base'?'arbitrum':'base',destinationAddress,asset,tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1010000'}
+ if(xlayer&&asset==='USDT')continue
+ const binding={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source,destination:xlayer?'xlayer':source==='base'?'arbitrum':'base',destinationAddress,asset,tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1010000'}
  const q=await quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async data=>{assert.equal(decodeFunctionData({abi:batch,data}).args[0].length,2);return '0.000001'},rate,now)
  assert.equal(q.networkFeeUnits,'3000');assert.equal(q.totalUnits,'1013000');assert.equal(q.expiresAt,now+30000)
  const decoded=decodeFunctionData({abi:batch,data:q.callData}).args[0]
@@ -31,5 +32,9 @@ for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const ass
  let i=0;const fluctuating=await quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async()=>++i%2?'0.000001':'0.000002',rate,now);assert.equal(fluctuating.networkFeeUnits,'6000');assert.equal(i,3)
  let rising=0;await assert.rejects(()=>quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async()=> '0.00000'+(++rising),rate,now),/estimate changed/)
  count++
+}
+const blocked={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source:'base',destination:'xlayer',destinationAddress,asset:'USDC',tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1000000',bridgeCallData,providerExpiresAt:now+60000}
+for(const update of [{source:'xlayer',destination:'base'},{asset:'USDT'},{destinationAddress:'0x'+'0'.repeat(40)},{destinationAddress:'not-an-address'}]){
+ await assert.rejects(()=>quoteEvmBridgeFee({...blocked,...update},async()=>{assert.fail('unsupported route must not reach Circle estimation')},rate,now))
 }
 console.log(`PASS: ${count} EVM asset/network combinations; exact bridge batch preserved, reimbursement only, signed bindings, expiry/tampering, lower-cost benefit and higher-cost rejection. Synthetic; no provider calls or fund movements.`)
