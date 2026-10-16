@@ -24,3 +24,9 @@ export function makeSponsoredRequest(input: {
 export class SponsoredTransferNotSubmitted extends Error {
   readonly code = 'pocket_sponsor_not_submitted'
 }
+
+/** Calls must be supplied by the server's verified reimbursement quote. */
+export function makeSponsoredBatchRequest(input:{appId:string;walletId:string;attemptId:string;expiresAt:number;calls:Array<{to:string;data:string;value:'0x0'}>}){
+  const request=makeSponsoredRequest({...input,from:'',to:'',data:''})
+  return {...request,body:{chain_type:'ethereum',method:'wallet_sendCalls',caip2:'eip155:196',sponsor:true,params:{calls:input.calls.map(call=>({...call}))}}}
+}
