@@ -12,7 +12,7 @@ const now=100000,rate=3000n*100000000n
 let count=0
 for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const asset of ['USDC','USDT'])for(const xlayer of [false,true]){
  if(source==='arc'&&asset==='USDT')continue
- if(xlayer&&asset==='USDT')continue
+ if(xlayer&&asset==='USDT'&&source!=='base')continue
  const binding={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source,destination:xlayer?'xlayer':source==='base'?'arbitrum':'base',destinationAddress,asset,tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1010000'}
  const q=await quoteEvmBridgeFee({...binding,bridgeCallData,providerExpiresAt:now+60000},async data=>{assert.equal(decodeFunctionData({abi:batch,data}).args[0].length,2);return '0.000001'},rate,now)
  assert.equal(q.networkFeeUnits,'3000');assert.equal(q.totalUnits,'1013000');assert.equal(q.expiresAt,now+30000)
@@ -34,7 +34,7 @@ for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const ass
  count++
 }
 const blocked={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source:'base',destination:'xlayer',destinationAddress,asset:'USDC',tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1000000',bridgeCallData,providerExpiresAt:now+60000}
-for(const update of [{source:'xlayer',destination:'base'},{asset:'USDT'},{destinationAddress:'0x'+'0'.repeat(40)},{destinationAddress:'not-an-address'}]){
+for(const update of [{source:'xlayer',destination:'base'},{asset:'USDT',source:'ethereum'},{destinationAddress:'0x'+'0'.repeat(40)},{destinationAddress:'not-an-address'}]){
  await assert.rejects(()=>quoteEvmBridgeFee({...blocked,...update},async()=>{assert.fail('unsupported route must not reach Circle estimation')},rate,now))
 }
 console.log(`PASS: ${count} EVM asset/network combinations; exact bridge batch preserved, reimbursement only, signed bindings, expiry/tampering, lower-cost benefit and higher-cost rejection. Synthetic; no provider calls or fund movements.`)

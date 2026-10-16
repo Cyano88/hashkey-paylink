@@ -25,6 +25,8 @@ export function stablecoinAddress(network:RelayStablecoinNetwork,asset:'USDC'|'U
 }
 export type RelayStablecoinNetwork=keyof typeof RELAY_STABLECOIN_CHAINS
 export type RelayStablecoinInput={asset:'USDC'|'USDT';source:RelayStablecoinNetwork;destination:RelayStablecoinNetwork;sender:string;recipient:string;amountUnits:string}
+export type RelayStablecoinRefund={network:RelayStablecoinNetwork;asset:'USDC'|'USDT';recipient:string}
+export type RelayStablecoinPolicy={allowXLayerUsdcRefund?:boolean}
 const depositAbi=parseAbi(['function depositErc20(address depositor,address token,uint256 amount,bytes32 id)'])
 const approveAbi=parseAbi(['function approve(address spender,uint256 amount) returns(bool)'])
 const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
@@ -38,7 +40,9 @@ function inputCheck(i:RelayStablecoinInput){
  requireThat(/^[1-9]\d{0,18}$/.test(i.amountUnits)&&BigInt(i.amountUnits)<2n**64n,'invalid amount')
  for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(network==='solana'?new PublicKey(address).toBase58()===address:/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address),'invalid wallet')
 }
-export function relayStablecoinRequest(i:RelayStablecoinInput){inputCheck(i);return {user:i.sender,recipient:i.recipient,originChainId:RELAY_STABLECOIN_CHAINS[i.source].id,destinationChainId:RELAY_STABLECOIN_CHAINS[i.destination].id,originCurrency:stablecoinAddress(i.source,i.asset),destinationCurrency:stablecoinAddress(i.destination,i.asset),amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'50',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:[]}}
+// Request a slightly tighter USDT quote: live conversion routes can round their
+// minimum beyond the 50-bps validation bound. Keep that bound unchanged.
+export function relayStablecoinRequest(i:RelayStablecoinInput){inputCheck(i);return {user:i.sender,recipient:i.recipient,originChainId:RELAY_STABLECOIN_CHAINS[i.source].id,destinationChainId:RELAY_STABLECOIN_CHAINS[i.destination].id,originCurrency:stablecoinAddress(i.source,i.asset),destinationCurrency:stablecoinAddress(i.destination,i.asset),amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:i.asset==='USDT'?'49':'50',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:[]}}
 // Derive every account locally using the pinned settlement SDK deposit_token IDL.
 export function relayStablecoinSolanaDeposit(sender:string,amount:bigint,orderId:Hex,asset:'USDC'|'USDT'){
  const program=new PublicKey(RELAY_STABLECOIN_CHAINS.solana.depository),owner=new PublicKey(sender),mint=new PublicKey(stablecoinAddress('solana',asset))
@@ -47,7 +51,7 @@ export function relayStablecoinSolanaDeposit(sender:string,amount:bigint,orderId
  const data=Buffer.alloc(48);Buffer.from([11,156,96,218,39,163,180,19]).copy(data);data.writeBigUInt64LE(amount,8);Buffer.from(orderId.slice(2),'hex').copy(data,16)
  return new TransactionInstruction({programId:program,keys,data})
 }
-export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Date.now()){
+export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Date.now(),policy:RelayStablecoinPolicy={}){
  inputCheck(i)
  const source=RELAY_STABLECOIN_CHAINS[i.source],destination=RELAY_STABLECOIN_CHAINS[i.destination],from=stablecoinAddress(i.source,i.asset),to=stablecoinAddress(i.destination,i.asset)
  const protocol=q?.protocol?.v2,order=protocol?.orderData as Order
@@ -64,7 +68,15 @@ export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Da
  requireThat(Number.isSafeInteger(order.output.deadline)&&order.output.deadline*1000>now+45000&&order.output.deadline*1000<now+8*86400000,'invalid order deadline')
  const refunds=order.inputs[0].refunds
  requireThat(refunds?.length===2&&new Set(refunds.map(r=>r.chainId)).size===2,'unexpected refunds')
- for(const r of refunds){const src=r.chainId===i.source;requireThat(src||r.chainId===i.destination,'unexpected refund chain');requireThat(same(r.chainId,r.recipient,src?i.sender:i.recipient)&&same(r.chainId,r.currency,src?from:to)&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')}
+ const refundOptions:RelayStablecoinRefund[]=refunds.map(r=>{
+  const src=r.chainId===i.source
+  requireThat(src||r.chainId===i.destination,'unexpected refund chain')
+  // Opt-in inspection only until signed quotes, review and recovery carry this plan.
+  // Never permit an origin swap or arbitrary provider-selected refund token.
+  const alternate=policy.allowXLayerUsdcRefund===true&&i.asset==='USDT'&&i.source==='base'&&i.destination==='xlayer'&&!src&&same('xlayer',r.currency,stablecoinAddress('xlayer','USDC'))
+  requireThat(same(r.chainId,r.recipient,src?i.sender:i.recipient)&&(same(r.chainId,r.currency,src?from:to)||alternate)&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')
+  return {network:r.chainId as RelayStablecoinNetwork,asset:alternate?'USDC':i.asset,recipient:src?i.sender:i.recipient}
+ })
  const details=protocol.paymentDetails
  requireThat(details?.chainId===i.source&&same(i.source,details.depository,source.depository)&&same(i.source,details.currency,from)&&details.amount===i.amountUnits,'depository mismatch')
  const orderId=getOrderId(order,vmTypes) as Hex
@@ -92,11 +104,11 @@ export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Da
   const approval=(n:bigint)=>({target:from as Address,value:0n,data:encodeFunctionData({abi:approveAbi,functionName:'approve',args:[source.depository as Address,n]})})
   execution={kind:'evm',callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[[approval(0n),approval(amount),{target:source.depository as Address,value:0n,data:encodeFunctionData({abi:depositAbi,functionName:'depositErc20',args:[i.sender as Address,from as Address,amount,orderId]})},approval(0n)]]})}
  }
- return {provider:'relay' as const,orderId,requestId,asset:i.asset,source:i.source,destination:i.destination,amountUnits:i.amountUnits,receiveUnits:out.expectedAmount,minimumUnits:out.minimumAmount,appFeeUnits:'0',expiresAt:Math.min(now+45000,order.output.deadline*1000),execution}
+ return {provider:'relay' as const,orderId,requestId,asset:i.asset,source:i.source,destination:i.destination,amountUnits:i.amountUnits,receiveUnits:out.expectedAmount,minimumUnits:out.minimumAmount,appFeeUnits:'0',expiresAt:Math.min(now+45000,order.output.deadline*1000),execution,refundOptions}
 }
-export async function quoteRelayStablecoin(i:RelayStablecoinInput,apiKey:string,fetcher=fetch){
+export async function quoteRelayStablecoin(i:RelayStablecoinInput,apiKey:string,fetcher=fetch,policy:RelayStablecoinPolicy={}){
  requireThat(apiKey.trim().length>0,'provider API key required')
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(relayStablecoinRequest(i)),signal:AbortSignal.timeout(20000)})
  requireThat(response.ok,'quote unavailable')
- return validateRelayStablecoinQuote(await response.json(),i)
+ return validateRelayStablecoinQuote(await response.json(),i,Date.now(),policy)
 }

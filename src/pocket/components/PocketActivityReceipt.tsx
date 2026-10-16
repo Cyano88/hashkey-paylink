@@ -23,6 +23,8 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
   const exchange=row.source==='wallet-bridge'||row.source==='wallet-swap'
   const asset=(row.assetSymbol||'USDC').toUpperCase()
   const detailsRows: Array<[string, ReactNode]> = [
+    ...(row.source==='wallet-bridge'&&['refunded','reversed'].includes(pocketActivityStatus(row))&&row.refundAsset?[["Original amount",row.amount+' '+(row.assetSymbol||'USDC')]] as Array<[string,ReactNode]>:[]),
+    ...(row.source==='wallet-bridge'&&['refunded','reversed'].includes(pocketActivityStatus(row))&&row.refundAmount&&row.refundAsset?[["Refund received",row.refundAmount+' '+row.refundAsset],["Refund network",row.refundNetwork==='xlayer'?'X Layer':row.refundNetwork||''],...(row.refundTxHash?[["Refund transaction",row.refundTxHash]]:[])] as Array<[string,ReactNode]>:[]),
     ['Status', <span className="capitalize">{status}</span>],
     ...(row.direction === 'in' && row.payer ? [['From', row.payer] as [string, ReactNode]] : []),
     ...(row.direction !== 'in' && row.recipient ? [['To', row.recipient] as [string, ReactNode]] : []),

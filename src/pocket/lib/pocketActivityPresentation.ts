@@ -4,7 +4,8 @@ import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
 
 /** Recorded local payments use their original settlement amount, never a live conversion. */
-export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol'>): string {
+export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol' | 'paycrestStatus' | 'refundAmount' | 'refundAsset'>): string {
+  if(row.source==='wallet-bridge'&&['refunded','reversed'].includes(row.paycrestStatus||'')&&row.refundAmount&&row.refundAsset)return row.refundAmount+' '+row.refundAsset
   const local = row.amountNgn !== undefined && row.amountNgn !== '' && Number.isFinite(Number(row.amountNgn))
   if (local && (row.source === 'bills' || row.source?.startsWith('bank-') || row.source === 'xpay' || !row.amount || !Number.isFinite(Number(row.amount)))) {
     return Number(row.amountNgn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (row.fiatCurrency === 'UGX' ? 'UGX' : 'NGN')

@@ -30,10 +30,10 @@ async function enabled(owner:string){
  const linked=await wallets(owner).catch(()=>null)
  return !!linked&&allowed.includes(linked.destinationAddress.toLowerCase())
 }
-const defaults={identity:verifiedPrivyUser,wallets,client,quote:quoteRelayStablecoin,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,apiKey:()=>process.env.RELAY_API_KEY||''}
+const defaults={identity:verifiedPrivyUser,wallets,client,quote:quoteRelayStablecoin,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,usdtEnabled:()=>process.env.POCKET_XLAYER_USDT_BRIDGE_ENABLED==='true',apiKey:()=>process.env.RELAY_API_KEY||''}
 const key=(q:XLayerBridgeQuote)=>'pocket:xlayer-bridge:'+q.id
 const binding=(q:XLayerBridgeQuote)=>({...q,sender:q.walletAddress,recipient:q.destinationAddress})
-const metadata=(q:XLayerBridgeQuote,quoteToken:string)=>({quoteToken,intentFingerprint:q.walletAddress.toLowerCase()+':base:xlayer',assetSymbol:'USDC',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:'relay'})
+const metadata=(q:XLayerBridgeQuote,quoteToken:string)=>({quoteToken,intentFingerprint:q.walletAddress.toLowerCase()+':base:xlayer',assetSymbol:q.asset,source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:'relay'})
 
 export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
@@ -52,8 +52,8 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
   const meta:Record<string,string>={...metadata(q,token),...existing.metadata}
   if(existing.status==='completed'||existing.status==='failed'){
    const outcome=existing.status==='completed'?'completed':meta.paymentState==='refunded'?'refunded':'failed'
-   if(outcome!=='failed')await d.ledger({eventKey:key(q)+':'+outcome,ownerId:owner,executionId:existing.id,rail:'wallet_bridge',state:outcome,asset:'USDC',amount:outcome==='refunded'?meta.refundAmount:q.amount,sourceNetwork:'base',settlementNetwork:outcome==='refunded'?meta.refundNetwork:'xlayer',resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'relay'},recordedAt:existing.updatedAt})
-   return {ok:true,status:meta.paymentState==='not_submitted'?'not_submitted':outcome,...(meta.paymentState==='not_submitted'?{reason:'approval_expired'}:{}),txHash:meta.txHash,destinationTxHash:meta.destinationTxHash}
+   if(outcome!=='failed')await d.ledger({eventKey:key(q)+':'+outcome,ownerId:owner,executionId:existing.id,rail:'wallet_bridge',state:outcome,asset:outcome==='refunded'?(meta.refundAsset||q.asset):q.asset,amount:outcome==='refunded'?meta.refundAmount:q.amount,sourceNetwork:'base',settlementNetwork:outcome==='refunded'?meta.refundNetwork:'xlayer',resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'relay'},recordedAt:existing.updatedAt})
+   return {ok:true,status:meta.paymentState==='not_submitted'?'not_submitted':outcome,...(meta.paymentState==='not_submitted'?{reason:'approval_expired'}:{}),txHash:meta.txHash,destinationTxHash:meta.destinationTxHash,...(outcome==='refunded'?{refundAsset:meta.refundAsset||q.asset,refundAmount:meta.refundAmount,refundNetwork:meta.refundNetwork,refundTxHash:meta.refundTxHash||meta.destinationTxHash}:{})}
   }
   let hash=meta.txHash||'',awaiting=false
   if(!hash&&meta.challengeId&&input.circleUserToken){
@@ -67,7 +67,7 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
   hash=hash||input.txHash||''
   if(!hash){
    const rows=await d.activity('base',q.walletAddress,AbortSignal.timeout(8000)).catch(()=>[])
-   const candidates=[...new Set(rows.filter(r=>r.assetSymbol==='USDC'&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
+   const candidates=[...new Set(rows.filter(r=>r.assetSymbol===q.asset&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
    for(const h of candidates){const r=await receipt('base',h);if(r&&xlayerBridgeSourceProven(binding(q),r,h)){hash=h;break}}
   }
   if(!hash)return {ok:true,status:awaiting?'awaiting_approval':'pending',challengeId:meta.challengeId}
@@ -84,9 +84,9 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
   if(candidate.network!=='base'&&candidate.network!=='xlayer')return {ok:true,status:'needs_attention',txHash:hash}
   const destination=await receipt(candidate.network,candidate.hash)
   if(!destination)return {ok:true,status:'pending',txHash:hash,sourceConfirmed:true}
-  const delta=evmStablecoinDelta(destination,candidate.network,'USDC',candidate.recipient,candidate.hash)
+  const delta=evmStablecoinDelta(destination,candidate.network,candidate.asset,candidate.recipient,candidate.hash)
   if(!xlayerBridgeDeliveryProven(candidate,delta))return {ok:true,status:'needs_attention',txHash:hash,sourceConfirmed:true}
-  await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:candidate.outcome==='completed'?'completed':'failed',resourceId:q.id,metadata:{...meta,txHash:hash,sourceConfirmed:'true',destinationTxHash:candidate.hash,paymentState:candidate.outcome,...(candidate.outcome==='refunded'?{refundNetwork:candidate.network,refundAmount:formatUnits(delta!,6)}:{})}})
+  await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:candidate.outcome==='completed'?'completed':'failed',resourceId:q.id,metadata:{...meta,txHash:hash,sourceConfirmed:'true',destinationTxHash:candidate.hash,paymentState:candidate.outcome,...(candidate.outcome==='refunded'?{refundAsset:candidate.asset,refundTxHash:candidate.hash,refundNetwork:candidate.network,refundAmount:formatUnits(delta!,6)}:{})}})
   return reconcile(owner,q,token,input)
  }
  const handler=async(req:Request,res:Response)=>{
@@ -96,18 +96,20 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
    const {userId}=await d.identity(req)
    if(req.method==='GET'){
     const rows=await d.list(userId,500,ACTION,true)
-    return res.json({ok:true,enabled:await d.enabled(userId),pending:rows.filter(r=>['started','submitted'].includes(r.status)&&r.metadata?.quoteToken).map(r=>({quote:xlayerBridgePreview(openXLayerBridgeQuote(r.metadata!.quoteToken,userId)),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,txHash:r.metadata?.txHash}))})
+    return res.json({ok:true,enabled:await d.enabled(userId),usdtEnabled:await d.enabled(userId)&&d.usdtEnabled(),pending:rows.filter(r=>['started','submitted'].includes(r.status)&&r.metadata?.quoteToken).map(r=>({quote:xlayerBridgePreview(openXLayerBridgeQuote(r.metadata!.quoteToken,userId)),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,txHash:r.metadata?.txHash}))})
    }
    if(req.body?.action==='quote'){
     if(!await d.enabled(userId))fail('X Layer bridging is not available yet.')
-    if(req.body.source!=='base'||req.body.destination!=='xlayer'||req.body.asset!==undefined&&req.body.asset!=='USDC')fail('This bridge supports Base to X Layer USDC only.')
+    const asset=req.body.asset??'USDC'
+    if(req.body.source!=='base'||req.body.destination!=='xlayer'||!['USDC','USDT'].includes(asset))fail('This bridge supports Base to X Layer stablecoins only.')
+    if(asset==='USDT'&&!d.usdtEnabled())fail('USDT bridging to X Layer is not available yet.')
     const amount=String(req.body.amount||'')
-    if(!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,6)<=0n)fail('Enter a USDC amount.')
+    if(!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,6)<=0n)fail('Enter a '+asset+' amount.')
     const w=await d.wallets(userId),amountUnits=parseUnits(amount,6).toString()
-    const route=await d.quote({asset:'USDC',source:'base',destination:'xlayer',sender:w.walletAddress,recipient:w.destinationAddress,amountUnits},d.apiKey())
+    const route=await d.quote({asset,source:'base',destination:'xlayer',sender:w.walletAddress,recipient:w.destinationAddress,amountUnits},d.apiKey(),d.fetch,{allowXLayerUsdcRefund:asset==='USDT'})
     if(route.execution.kind!=='evm')throw Error('Unsupported bridge execution.')
-    const priced=await d.price({ownerId:userId,...w,source:'base',destination:'xlayer',asset:'USDC',tokenAddress:getAddress(stablecoinAddress('base','USDC')),amountUnits,bridgeDebitUnits:amountUnits,bridgeCallData:route.execution.callData,providerExpiresAt:route.expiresAt,userToken:String(req.body.circleUserToken||'')})
-    const q=xlayerBridgeQuote(route,priced),balance=await d.client('base').readContract({address:getAddress(stablecoinAddress('base','USDC')),abi:balanceAbi,functionName:'balanceOf',args:[q.walletAddress]})
+    const priced=await d.price({ownerId:userId,...w,source:'base',destination:'xlayer',asset,tokenAddress:getAddress(stablecoinAddress('base',asset)),amountUnits,bridgeDebitUnits:amountUnits,bridgeCallData:route.execution.callData,providerExpiresAt:route.expiresAt,userToken:String(req.body.circleUserToken||'')})
+    const q=xlayerBridgeQuote(route,priced),balance=await d.client('base').readContract({address:getAddress(stablecoinAddress('base',q.asset)),abi:balanceAbi,functionName:'balanceOf',args:[q.walletAddress]})
     return res.json({ok:true,quote:xlayerBridgePreview(q),quoteToken:sealXLayerBridgeQuote(q),sufficientBalance:balance>=parseUnits(q.total,6)})
    }
    if(!['execute','status','resume'].includes(req.body?.action))fail('Unsupported bridge action.',400)
@@ -126,14 +128,15 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
    }
    if(existing){if(['completed','failed'].includes(existing.status))return res.json(await reconcile(userId,q,token,req.body));if(existing.metadata?.challengeId)return res.json({ok:true,challengeId:existing.metadata.challengeId});fail('This bridge is already saved. Check its status before retrying.')}
    if(!await d.enabled(userId))fail('X Layer bridging is not available yet.')
+   if(q.asset==='USDT'&&!d.usdtEnabled())fail('USDT bridging to X Layer is not available yet.')
    if(q.expiresAt<=d.now())fail('Quote expired. Review a new quote.')
    const w=await d.wallets(userId)
    if(w.walletId!==q.walletId||!same(w.walletAddress,q.walletAddress)||!same(w.destinationAddress,q.destinationAddress))fail('Your linked wallets changed. Review a new quote.')
    const userToken=String(req.body.circleUserToken||'');if(!userToken||userToken.length>8000)fail('Unlock your Base wallet.')
    const rpc=d.client('base')
    if(await rpc.getChainId()!==8453)throw Error('Source network mismatch.')
-   const balance=await rpc.readContract({address:getAddress(stablecoinAddress('base','USDC')),abi:balanceAbi,functionName:'balanceOf',args:[q.walletAddress]})
-   if(balance<parseUnits(q.total,6))fail('Insufficient USDC on Base.')
+   const balance=await rpc.readContract({address:getAddress(stablecoinAddress('base',q.asset)),abi:balanceAbi,functionName:'balanceOf',args:[q.walletAddress]})
+   if(balance<parseUnits(q.total,6))fail('Insufficient '+q.asset+' on Base.')
    await rpc.call({account:q.walletAddress,to:q.walletAddress,data:q.callData})
    if(q.expiresAt<=d.now())fail('Quote expired. Review a new quote.')
    const meta=metadata(q,token)

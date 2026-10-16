@@ -1,5 +1,5 @@
 import {useEffect,useRef} from 'react'
-import {connectFreshEvmSession} from '../controllers/usePocketWalletController'
+import {activePocketEvmSession,connectFreshEvmSession} from '../controllers/usePocketWalletController'
 import {pocketOperationExecuting,migratePocketOperations,readPocketOperations,trackPocketOperation,POCKET_OPERATIONS_UPDATED} from '../lib/pocketOperationRecovery'
 import {pocketApiUrl} from '../lib/pocketRoutes'
 import {prefetchPocketActivity} from './usePocketActivity'
@@ -24,13 +24,14 @@ export default function usePocketOperationRecovery(input:{authenticated:boolean;
      try{
       const p=record.pending,network=record.kind==='bridge'?p.quote.source:'arc'
       const address=p.walletAddress||p.quote.walletAddress
-      const session=network==='solana'||!address?null:await connectFreshEvmSession(owner,network,address,latest.current.getAccessToken).catch(()=>null)
+      // A known transaction hash can be checked without restoring wallet authentication.
+      const session=network==='solana'||!address||p.txHash?null:activePocketEvmSession(owner,network,address)??await connectFreshEvmSession(owner,network,address,latest.current.getAccessToken).catch(()=>null)
       if(!valid())return
-      const response=await fetch(pocketApiUrl(record.kind==='bridge'?'/api/pocket/usdt-bridge':'/api/pocket/arc-swap'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action:'status',quoteToken:p.quoteToken,txHash:p.txHash,...(session?{circleUserToken:session.userToken}:{})}),signal:AbortSignal.timeout(30000)})
+      const response=await fetch(pocketApiUrl(record.kind==='bridge'?(p.quote.rail==='xlayer'?'/api/pocket/xlayer-bridge':'/api/pocket/usdt-bridge'):'/api/pocket/arc-swap'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action:'status',quoteToken:p.quoteToken,txHash:p.txHash,...(session?{circleUserToken:session.userToken}:{})}),signal:AbortSignal.timeout(30000)})
       const result=await response.json();if(!valid())return
       if(!response.ok||!result.ok)continue
       const state=result.status==='completed'?'completed':result.status==='failed'||(result.status==='not_submitted'&&result.reason==='approval_expired')?'failed':result.status==='refunded'?'refunded':result.status==='awaiting_approval'?'awaiting_approval':result.status==='not_submitted'||result.status==='needs_attention'||result.status==='needs_review'?'needs_review':'processing'
-      const next={...p,...(result.challengeId?{challengeId:result.challengeId}:{}),...(result.txHash?{txHash:result.txHash}:{}),...(result.destinationTxHash?{destinationTxHash:result.destinationTxHash}:{})}
+      const next={...p,...(result.status==='refunded'?{refundAsset:result.refundAsset,refundAmount:result.refundAmount,refundNetwork:result.refundNetwork,refundTxHash:result.refundTxHash}:{}),...(result.challengeId?{challengeId:result.challengeId}:{}),...(result.txHash?{txHash:result.txHash}:{}),...(result.destinationTxHash?{destinationTxHash:result.destinationTxHash}:{})}
       if(trackPocketOperation(owner,record.kind,next,state))changed=true
      }catch{/* An unreachable provider is not proof that a payment failed. */}
     }

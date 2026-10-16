@@ -1,0 +1,79 @@
+import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
+import {encodeAbiParameters,encodeEventTopics,parseAbi,parseAbiParameters} from 'viem'
+import {createXLayerBridgeHandler} from '../api/pocket/xlayer-bridge.ts'
+import {validateRelayStablecoinQuote,stablecoinAddress,RELAY_STABLECOIN_CHAINS} from '../api/pocket/xlayer-bridge-provider.ts'
+import {quoteEvmBridgeFee} from '../api/pocket/evm-bridge-reimbursement.ts'
+import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-xlayer-bridge-secret-not-production-12345'
+const fixture=JSON.parse(readFileSync('scripts/fixtures/relay-xlayer/USDT-base-xlayer.json','utf8'))
+const route=validateRelayStablecoinQuote(fixture.response,fixture.input,fixture.now,{allowXLayerUsdcRefund:true})
+const owner='owner',walletId='wallet',sender=fixture.input.sender,recipient=fixture.input.recipient
+const sourceHash='0x'+'a'.repeat(64),destHash='0x'+'b'.repeat(64),blockHash='0x'+'c'.repeat(64)
+const transfer=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
+const deposit=parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
+const log=(network,from,to,units)=>({address:stablecoinAddress(network,'USDT'),data:encodeAbiParameters(parseAbiParameters('uint256'),[units]),topics:encodeEventTopics({abi:transfer,eventName:'Transfer',args:{from,to}})})
+function harness(){
+ const records=new Map(),receipts=new Map();const ledgerEvents=[];let usdtEnabled=true;let sends=0,ledger=0,lost=false,identity=owner,changed=false,enabled=true,canonical=true,providerStatus='pending'
+ const rpc=network=>({getChainId:async()=>network==='base'?8453:196,readContract:async()=>1000000000n,call:async()=>{},getBlock:async()=>({hash:canonical?blockHash:sourceHash}),getTransactionReceipt:async({hash})=>{if(!receipts.has(hash))throw Error('not found');return receipts.get(hash)}})
+ const handler=createXLayerBridgeHandler({identity:async()=>({userId:identity}),wallets:async()=>({walletId,walletAddress:sender,destinationAddress:changed?sender:recipient}),now:()=>fixture.now,enabled:async()=>enabled,usdtEnabled:()=>usdtEnabled,apiKey:()=> 'synthetic',client:rpc,
+ quote:async input=>{assert.equal(input.sender,sender);assert.equal(input.recipient,recipient);return route},
+ price:input=>quoteEvmBridgeFee(input,async()=> '0.000001',3000n*100000000n,fixture.now),
+ find:async(_owner,key)=>records.get(key)||null,list:async()=>[...records.values()],
+ claim:async input=>{if([...records.values()].some(r=>['started','submitted'].includes(r.status)))return {claimed:false};records.set(input.idempotencyKey,{...input,id:'journal',status:'started',createdAt:fixture.now,updatedAt:fixture.now});return {claimed:true}},
+ record:async input=>{const r={...records.get(input.idempotencyKey),...input,updatedAt:fixture.now};records.set(input.idempotencyKey,r);return r},
+ challenge:async()=>{sends++;if(lost)throw Error('lost response');return {challengeId:'challenge'}},readChallenge:async()=>({status:'awaiting_approval'}),activity:async()=>[],ledger:async event=>{ledger++;ledgerEvents.push(event)},
+ fetch:async url=>({ok:true,json:async()=>url.includes('/intents/')?{status:providerStatus,originChainId:8453,destinationChainId:196,inTxHashes:[sourceHash],txHashes:[destHash]}:{requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},status:providerStatus,user:sender,recipient,data:{...(providerStatus==='refund'?{refundCurrencyData:{currency:{chainId:196,address:stablecoinAddress('xlayer','USDC'),decimals:6},amount:'9800000'}}:{}),inTxs:[{txHash:sourceHash,chainId:8453,status:'success'}],outTxs:[{txHash:destHash,chainId:196,status:'success'}]}}]}})})
+ const request=async(body,method='POST')=>{let code=200,result;await handler({method,body},{setHeader(){},status(value){code=value;return this},json(value){result=value;return this}});return {code,...result}}
+ return {request,records,receipts,ledgerEvents,set usdtEnabled(v){usdtEnabled=v},get sends(){return sends},get ledger(){return ledger},set lost(v){lost=v},set identity(v){identity=v},set changed(v){changed=v},set enabled(v){enabled=v},set canonical(v){canonical=v},set providerStatus(v){providerStatus=v}}
+}
+const quoteBody={action:'quote',asset:'USDT',source:'base',destination:'xlayer',amount:'10',circleUserToken:'synthetic'}
+const h=harness(),quoted=await h.request(quoteBody)
+assert.equal(quoted.code,200);assert.equal(quoted.quote.asset,'USDT');assert.equal(quoted.quote.networkFeeUnits,'3000');assert.equal(quoted.quote.total,'10.003');assert.equal(quoted.quote.callData,undefined)
+const execute={action:'execute',quoteToken:quoted.quoteToken,circleUserToken:'synthetic'}
+assert.notEqual((await h.request({...execute,quoteToken:quoted.quoteToken+'x'})).code,200)
+h.usdtEnabled=false;assert.equal((await h.request(quoteBody)).code,409);assert.equal((await h.request(execute)).code,409);h.usdtEnabled=true
+for(const source of ['xlayer','solana','arbitrum'])assert.equal((await h.request({...quoteBody,source})).code,409)
+h.identity='other';assert.notEqual((await h.request(execute)).code,200);assert.equal(h.sends,0);h.identity=owner
+h.changed=true;assert.equal((await h.request(execute)).code,409);h.changed=false
+await Promise.all([h.request(execute),h.request(execute)]);assert.equal(h.sends,1,'concurrent submission creates one challenge')
+assert.equal((await h.request(execute)).challengeId,'challenge');assert.equal(h.sends,1)
+const status={...execute,action:'status'}
+assert.equal((await h.request(status)).status,'awaiting_approval','approval is not completed bridging')
+const depositLog={address:RELAY_STABLECOIN_CHAINS.base.depository,data:encodeAbiParameters(parseAbiParameters('address,address,uint256,bytes32'),[sender,stablecoinAddress('base','USDT'),10000000n,route.orderId]),topics:encodeEventTopics({abi:deposit,eventName:'RelayErc20Deposit'})}
+const sourceReceipt={status:'success',transactionHash:sourceHash,blockNumber:1n,blockHash,logs:[log('base',sender,RELAY_STABLECOIN_CHAINS.base.depository,10000000n),depositLog,log('base',sender,EVM_PLATFORM_TREASURY,3000n)]}
+h.receipts.set(sourceHash,sourceReceipt);h.providerStatus='success'
+assert.equal((await h.request({...status,txHash:sourceHash})).status,'pending','provider success without receipt is pending')
+assert.equal(h.ledger,0)
+h.receipts.set(destHash,{status:'success',transactionHash:destHash,blockNumber:2n,blockHash,logs:[log('xlayer',sender,recipient,BigInt(route.minimumUnits)-1n)]})
+assert.equal((await h.request(status)).status,'needs_attention','insufficient delivery must not complete')
+h.receipts.get(destHash).logs=[log('xlayer',sender,recipient,BigInt(route.receiveUnits))]
+h.canonical=false;assert.equal((await h.request(status)).status,'pending');h.canonical=true
+h.enabled=false;assert.equal((await h.request(quoteBody)).code,409);assert.equal((await h.request(status)).status,'completed','disabled rollout still recovers existing bridge')
+assert.equal(h.sends,1);assert.equal(h.ledger,1)
+assert.equal((await h.request(status)).status,'completed');assert.equal(h.ledger,2,'terminal reads repair the ledger write gap idempotently')
+const lost=harness(),lostQuote=await lost.request(quoteBody);lost.lost=true
+const lostExecute={...execute,quoteToken:lostQuote.quoteToken}
+assert.equal((await lost.request(lostExecute)).code,503);assert.equal((await lost.request(lostExecute)).code,409);assert.equal(lost.sends,1)
+const fee=harness(),feeQuote=await fee.request(quoteBody);await fee.request({...execute,quoteToken:feeQuote.quoteToken})
+fee.receipts.set(sourceHash,{...sourceReceipt,logs:sourceReceipt.logs.slice(0,2)})
+assert.equal((await fee.request({action:'status',quoteToken:feeQuote.quoteToken,txHash:sourceHash})).status,'needs_attention','missing fee reimbursement fails proof')
+assert.equal(fee.ledger,0)
+console.log('PASS Base to X Layer handler: owned wallets, signed quote, exact fee, duplicate/lost-response protection, canonical source and delivery proofs, recovery while disabled, and terminal ledger repair. Synthetic only; no funds moved.')
+
+const refund=harness(),rq=await refund.request(quoteBody)
+await refund.request({action:'execute',quoteToken:rq.quoteToken,circleUserToken:'synthetic'})
+refund.receipts.set(sourceHash,sourceReceipt);refund.providerStatus='refund'
+const rs={action:'status',quoteToken:rq.quoteToken,txHash:sourceHash}
+refund.receipts.set(destHash,{status:'success',transactionHash:destHash,blockNumber:2n,blockHash,logs:[log('xlayer',sender,recipient,9800000n)]})
+assert.equal((await refund.request(rs)).status,'needs_attention','USDT receipt is not a USDC refund')
+refund.receipts.get(destHash).logs[0].address=stablecoinAddress('xlayer','USDC')
+refund.usdtEnabled=false;refund.enabled=false
+const returned=await refund.request(rs)
+assert.equal(returned.status,'refunded');assert.equal(returned.refundAsset,'USDC');assert.equal(returned.refundAmount,'9.8');assert.equal(returned.refundNetwork,'xlayer');assert.equal(returned.refundTxHash,destHash)
+assert.equal(refund.ledgerEvents.at(-1).asset,'USDC');assert.equal(refund.ledgerEvents.at(-1).amount,'9.8')
+assert.equal(refund.records.values().next().value.metadata.assetSymbol,'USDT','original bridge asset is retained')
+const [encoded,signature]=rq.quoteToken.split('.')
+const tampered=JSON.parse(Buffer.from(encoded,'base64url').toString());tampered.refundOptions[1].recipient=sender
+assert.notEqual((await refund.request({...rs,quoteToken:Buffer.from(JSON.stringify(tampered)).toString('base64url')+'.'+signature})).code,200)
+console.log('PASS signed USDT refund plan, USDT fee reimbursement, disabled rollout recovery, USDC refund receipt and ledger asset; no funds moved.')
