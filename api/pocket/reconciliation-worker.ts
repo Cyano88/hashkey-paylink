@@ -1,4 +1,5 @@
 import {reconcileUsdtBridge} from './usdt-bridge.js'
+import {reconcileXLayerBridge} from './xlayer-bridge.js'
 import type { Request, Response } from 'express'
 import { sendTransactionalEmail } from '../email-provider.js'
 import { reconcilePaycrestOrderPayment } from '../paycrest-reconcile.js'
@@ -26,6 +27,7 @@ type Dependencies = {
   readPolymarketFunding: typeof getDepositStatus
   listBridges: typeof listUnresolvedCirclePocketActions
   reconcileUsdt: typeof reconcileUsdtBridge
+  reconcileXLayer: typeof reconcileXLayerBridge
   readBridge: typeof readCircleBridgeStatus
   recordAction: typeof recordCirclePocketAction
   appendLedger: typeof appendPocketMoneyLedgerEvent
@@ -218,8 +220,11 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
   const cooldown = Math.max(60_000, Number(process.env.POCKET_RECONCILIATION_ALERT_COOLDOWN_MS ?? 15 * 60_000))
   let send = false
   await dependencies.mutateDurable<AlertState>(ALERT_STORE_KEY, current => {
-    if (!current || current.signature !== signature || dependencies.now() - current.lastSentAt >= cooldown) send = true
-    return send ? { signature, lastSentAt: dependencies.now() } : current
+    if (!current || current.signature !== signature || dependencies.now() - current.lastSentAt >= cooldown) {
+      send = true
+      return { signature, lastSentAt: dependencies.now() }
+    }
+    return current
   })
   if (!send) return false
   const counts = new Map<string, number>()
@@ -249,7 +254,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
     syncCheckout: syncHostedCheckoutExecution, expireCheckout: expireHostedCheckoutExecution,
     readPolymarketFunding: getDepositStatus, listBridges: listUnresolvedCirclePocketActions,
-    reconcileUsdt: reconcileUsdtBridge, readBridge: readCircleBridgeStatus, recordAction: recordCirclePocketAction, appendLedger: appendPocketMoneyLedgerEvent,
+    reconcileUsdt: reconcileUsdtBridge, reconcileXLayer:reconcileXLayerBridge, readBridge: readCircleBridgeStatus, recordAction: recordCirclePocketAction, appendLedger: appendPocketMoneyLedgerEvent,
     sendEmail: sendTransactionalEmail, mutateDurable: mutateDurableJson, now: Date.now, ...overrides,
   }
   const limit = Math.max(1, Math.min(Number(process.env.POCKET_RECONCILIATION_BATCH_SIZE ?? 100), 500))
@@ -265,6 +270,11 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch(error){results.push({id:record.id,kind:'wallet_bridge',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBridges(dependencies, limit))
+  for(const record of await dependencies.listBridges('wallet.xlayer-bridge',Math.min(limit,20))){
+    if(record.action!=='wallet.xlayer-bridge'||!record.metadata?.quoteToken)continue
+    try{const result=await dependencies.reconcileXLayer(record.ownerId,record.metadata.quoteToken);results.push({id:record.id,kind:'wallet_bridge',result:['completed','refunded'].includes(result.status)?'reconciled':result.status==='needs_attention'?'review':'unchanged'})}
+    catch(error){results.push({id:record.id,kind:'wallet_bridge',result:'error',message:errorText(error)})}
+  }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
   const threshold = submittedReviewThresholdMs()
   const remaining = await dependencies.executions.listUnresolved(1000)

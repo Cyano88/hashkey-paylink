@@ -83,7 +83,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     direction: 'out',
     recipient: destination,
     destination,
-    providerReference: record.resourceId || (record.action==='wallet.usdt-bridge'?record.idempotencyKey.replace(/^pocket:usdt-bridge:/,''):record.metadata.txHash),
+    providerReference: record.resourceId || (['wallet.usdt-bridge','wallet.xlayer-bridge'].includes(record.action)?record.idempotencyKey.replace(/^pocket:(?:usdt|xlayer)-bridge:/,''):record.metadata.txHash),
   }
 }
 
