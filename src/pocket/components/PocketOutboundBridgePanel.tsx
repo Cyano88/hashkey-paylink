@@ -1,6 +1,6 @@
 import {POCKET_XLAYER_MINIMUM_AMOUNT} from '../lib/pocketXLayerMinimum'
 import {useEffect,useRef,useState} from 'react'
-import {formatUnits,type Address} from 'viem'
+import {formatUnits,parseUnits,type Address} from 'viem'
 import PocketBridgeForm from './PocketBridgeForm'
 import PocketSlideAction from './PocketSlideAction'
 import {quoteOutboundBridge,type OutboundBridgeReview} from '../api/pocketOutboundBridge'
@@ -16,6 +16,7 @@ export default function PocketOutboundBridgePanel(p:Props){
  const current=(key:string)=>mounted.current&&scope.current===key
  const units=p.wallet.balanceStale?undefined:p.asset==='USDC'?p.wallet.snapshot?.cash:p.wallet.snapshot?.usdt
  const balance=units==null?undefined:Number(formatUnits(units,6))
+ const principalShortfall=units!=null&&/^\d+(\.\d{1,6})?$/.test(amount)&&parseUnits(amount,6)>units
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;version.current++}},[])
  useEffect(()=>{p.onBusyChange(busy);return()=>p.onBusyChange(false)},[busy,p.onBusyChange])
  useEffect(()=>{
@@ -29,7 +30,7 @@ export default function PocketOutboundBridgePanel(p:Props){
  },[p.owner,p.wallet.address])
  useEffect(()=>{
   const n=++version.current,key=scope.current;setReview(null);setError('');setQuoting(false)
-  if(busy||pending||!p.wallet.address||!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT)return
+  if(busy||pending||principalShortfall||!p.wallet.address||!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT)return
   setQuoting(true)
   const timer=setTimeout(()=>void(async()=>{
    try{
@@ -40,7 +41,7 @@ export default function PocketOutboundBridgePanel(p:Props){
    }catch(e){if(n===version.current&&current(key))setError((e as Error).message)}finally{if(n===version.current&&current(key))setQuoting(false)}
   })(),450)
   return()=>{clearTimeout(timer);version.current++}
- },[amount,p.asset,p.owner,p.wallet.address,generation,pending?.quote.id,busy])
+ },[amount,p.asset,p.owner,p.wallet.address,generation,pending?.quote.id,busy,principalShortfall])
  useEffect(()=>{if(!review||busy)return;const timer=setTimeout(()=>refreshQuote(n=>n+1),Math.max(0,review.quote.expiresAt-Date.now()));return()=>clearTimeout(timer)},[review,busy])
  const change=(value:string)=>{version.current++;setReview(null);setError('');setAmount(value)}
  // The Privy wallet hook owns preparation and PIN approval; do not run the registered Circle form preparer.
@@ -62,7 +63,7 @@ export default function PocketOutboundBridgePanel(p:Props){
    if(current(key))setError((e as Error).message)
   }finally{endPocketOperation(owner,approved.quote.id);locked.current=false;if(current(key)){setBusy(false);setReview(null)}}
  }
- const shortfall=!!review&&units!=null&&Number(review.quote.total)>Number(formatUnits(units,6)),q=pending?.quote||review?.quote
+ const shortfall=principalShortfall||(!!review&&units!=null&&parseUnits(review.quote.total,6)>units),q=pending?.quote||review?.quote
  return <PocketBridgeForm exactQuoteAmounts asset={pending?.quote.asset||p.asset} source="xlayer" destination="base" sources={[{value:'xlayer',label:'X Layer'},...POCKET_BRIDGE_NETWORKS.filter(n=>p.asset==='USDC'||!['arc','solana'].includes(n)).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))]} destinations={[{value:'base',label:'Base'}]} onSource={p.onSource} onDestination={()=>{}} disabled={busy||!!pending} amount={pending?.quote.amount||amount} onAmount={change} balance={balance} maxDisabled={balance===undefined} onMax={()=>change(Math.max(0,(balance||0)-Number(review?.quote.networkFee||0)).toFixed(6).replace(/\.?0+$/,''))} quote={q} quoteLoading={quoting} amountHint={shortfall?'Insufficient funds':!pending&&Number(amount)>0&&Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT?'Minimum '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+p.asset:undefined}>
   {pending&&active.current!==pending.quote.id?<button className="pocket-cta-primary w-full" onClick={()=>p.onTracked(pending.quote.id,pending.quote.asset)}>View bridge progress</button>:error&&!review&&!quoting&&!pending?<button className="pocket-cta-primary w-full" onClick={()=>refreshQuote(n=>n+1)}>Try again</button>:<PocketSlideAction approvalRequired={false} onPrepare={prepareOutbound} status={busy?'pending':pending?'submitted':'idle'} loadingContent={quoting} disabled={busy||!!pending||!review||shortfall||balance===undefined||review.quote.expiresAt<=Date.now()} onConfirm={()=>void submit()} labels={{idle:'Confirm bridge',disabled:shortfall?'Insufficient balance':quoting?'Updating amount':!amount?'Enter bridge amount':'Amount unavailable',pending:'Preparing bridge',submitted:'Bridging '+p.asset,successful:'Bridge successful'}}/>}
   {error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
