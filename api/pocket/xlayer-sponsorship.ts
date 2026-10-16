@@ -1,3 +1,4 @@
+import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
 import { createHash } from 'node:crypto'
@@ -101,8 +102,9 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   mutate: typeof mutate; read: typeof read; minimum:typeof minimum; earnPreflight:typeof preflightEarnSponsorship; durable: () => boolean; fetch: typeof fetch; now: () => number;
   reimbursement: {estimate:XLayerFeeEstimator;pricing:XLayerReimbursementPolicy};
   outbound:ReturnType<typeof createXLayerOutboundBridge>;
+  journal:typeof recordCirclePocketAction;
 }> = {}) {
-  const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, reimbursement:configuredXLayerReimbursement(), outbound:createXLayerOutboundBridge(), ...overrides }
+  const d = { journal:recordCirclePocketAction, identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, reimbursement:configuredXLayerReimbursement(), outbound:createXLayerOutboundBridge(), ...overrides }
   async function resolveAccepted(id: string, record: Record, walletId: string, c: Config) {
     if (record.hash || !record.transactionId) return record.hash || null
     const response = await d.fetch(`https://api.privy.io/v1/transactions/${record.transactionId}`, {
@@ -124,7 +126,22 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
     // A hash is a reference, not payment success. The client checks the receipt.
     return tx.transaction_hash as string
   }
-  return async (req: Request, res: Response) => {
+  async function journalOutbound(owner:string,token:string,hash:string|null,status:string,details:{status?:string;destinationTxHash?:string;refundAsset?:string;refundNetwork?:string;refundAmount?:string}={}){
+    const q=openOutboundBridge(token,owner),preview=outboundBridgePreview(q)
+    return d.journal({ownerId:owner,idempotencyKey:'pocket:xlayer-bridge:'+q.fee.intentId,action:'wallet.xlayer-bridge',resourceId:q.fee.intentId,status:status==='completed'?'completed':['failed','refunded'].includes(status)?'failed':'submitted',metadata:{execution:'privy',quoteToken:token,source:'xlayer',destination:'base',amount:preview.amount,assetSymbol:q.fee.asset,walletAddress:q.fee.walletAddress,paymentState:status,...(hash?{txHash:hash}:{}),...(details.destinationTxHash?{destinationTxHash:details.destinationTxHash}:{}),...(status==='refunded'?{refundAsset:details.refundAsset!,refundNetwork:details.refundNetwork!,refundAmount:details.refundAmount!,refundTxHash:details.destinationTxHash!}:{})}})
+  }
+  async function reconcileOutbound(owner:string,token:string){
+    const q=openOutboundBridge(token,owner),record=(await d.read())?.requests[q.fee.intentId]
+    if(!record||record.owner!==owner||record.wallet!==q.fee.walletAddress.toLowerCase()||record.bridgeQuoteToken!==token)throw Error('Bridge recovery reference is unavailable.')
+    const hash=await resolveAccepted(q.fee.intentId,record,q.fee.walletId,d.config()).catch(()=>null)
+    const bridge=notBroadcast(record)?{status:'failed' as const}:hash?await d.outbound.status(q,hash as Hex):{status:'pending' as const}
+    const saved=await journalOutbound(owner,token,hash,bridge.status,bridge)
+    // The shared journal protects terminal outcomes against stale parallel checks.
+    const meta=saved.metadata||{},status=saved.status==='completed'?'completed':saved.status==='failed'?(meta.paymentState==='refunded'?'refunded':'failed'):bridge.status
+    const result={...bridge,status,...(meta.destinationTxHash?{destinationTxHash:meta.destinationTxHash}:{}),...(status==='refunded'?{refundAsset:meta.refundAsset,refundNetwork:meta.refundNetwork,refundAmount:meta.refundAmount}:{})}
+    return {ok:true,status,hash,txHash:hash,accepted:Boolean(record.transactionId||record.hash),bridge:result,quote:outboundBridgePreview(q)}
+  }
+  const handler = async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store')
     let reserved = false
     try {
@@ -150,13 +167,9 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         const record = (await d.read())?.requests[id]
         if (!record) return res.json({ok:true,hash:null})
         if (record.owner !== identity.userId || record.wallet !== wallet) throw fail('Payment not found.', 404)
+        if(record.bridgeQuoteToken)return res.json(await reconcileOutbound(identity.userId,record.bridgeQuoteToken))
         if (notBroadcast(record)) return rejected(res)
         const hash = await resolveAccepted(id,record,embedded.id,c).catch(() => null)
-        if(record.bridgeQuoteToken){
-          const q=openOutboundBridge(record.bridgeQuoteToken,identity.userId)
-          const bridge=hash?await d.outbound.status(q,hash as Hex).catch(()=>({status:'pending' as const})):{status:'pending' as const}
-          return res.json({ok:true,hash,accepted:Boolean(record.transactionId||record.hash),bridge,quote:outboundBridgePreview(q)})
-        }
         return res.json({ok:true,hash,accepted:Boolean(record.transactionId || record.hash)})
       }
       // Public token sends and explicitly enabled outbound bridges share the
@@ -243,6 +256,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (existing?.hash) return res.json({ok:true,hash:existing.hash})
       if (existing && notBroadcast(existing)) return rejected(res)
       if (existing) return res.status(409).json({ok:false,error:'This transfer is already being checked. View Activity before retrying.',code:'sponsor_outcome_unknown'})
+      if(req.body?.purpose==='bridge')await journalOutbound(identity.userId,req.body.bridgeQuoteToken,null,'pending')
       const upstream = await d.fetch(canonical.url, {
         method:'POST', redirect:'error', signal:AbortSignal.timeout(30_000),
         headers:{...canonical.headers,'Content-Type':'application/json','Authorization':'Basic '+Buffer.from(`${c.appId}:${c.secret}`).toString('base64'),'privy-authorization-signature':signature},
@@ -297,5 +311,8 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       })
     }
   }
+  return Object.assign(handler,{reconcileOutbound})
 }
-export default createXLayerSponsorshipHandler()
+const handler=createXLayerSponsorshipHandler()
+export const reconcileXLayerOutboundBridge=handler.reconcileOutbound
+export default handler

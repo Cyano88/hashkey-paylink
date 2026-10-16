@@ -1,3 +1,4 @@
+import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
 import { readPocketNotificationActivity } from './activity.js'
 import { reconcileUsdtBridge } from './usdt-bridge.js'
 import { reconcileXLayerBridge } from './xlayer-bridge.js'
@@ -27,6 +28,7 @@ type Dependencies = {
   sendPush: typeof sendPocketPush
   readContext: typeof readPocketNotificationActivity
   reconcileUsdt: typeof reconcileUsdtBridge
+  reconcileXLayerOutbound: typeof reconcileXLayerOutboundBridge
   reconcileXLayer: typeof reconcileXLayerBridge
   now: () => number
 }
@@ -56,6 +58,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
     readContext: readPocketNotificationActivity,
     reconcileUsdt: reconcileUsdtBridge,
     reconcileXLayer: reconcileXLayerBridge,
+    reconcileXLayerOutbound:reconcileXLayerOutboundBridge,
     now: Date.now,
     ...overrides,
   }
@@ -81,7 +84,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       // Recover bridge context before generic transfer notifications race it.
       for (const action of actions.filter(item => ['wallet.usdt-bridge','wallet.xlayer-bridge'].includes(item.action) && ['started','submitted'].includes(item.status) && item.metadata?.quoteToken).slice(0, 4)) {
         try {
-          const bridge = await (action.action==='wallet.xlayer-bridge'?dependencies.reconcileXLayer:dependencies.reconcileUsdt)(ownerId, action.metadata!.quoteToken)
+          const bridge = await (action.action==='wallet.xlayer-bridge'?(action.metadata?.execution==='privy'?dependencies.reconcileXLayerOutbound:dependencies.reconcileXLayer):dependencies.reconcileUsdt)(ownerId, action.metadata!.quoteToken)
           for (const hash of [bridge.txHash, 'destinationTxHash' in bridge?bridge.destinationTxHash:undefined]) if (hash) ignoredHashes.add(hash.toLowerCase())
           if (bridge.status === 'completed'||bridge.status==='refunded') notificationContext = await dependencies.readContext(ownerId)
         } catch { /* The reconciliation worker retries without announcing success. */ }
