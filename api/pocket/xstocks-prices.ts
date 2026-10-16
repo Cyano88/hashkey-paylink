@@ -18,8 +18,8 @@ export function parseStockMarketPrices(rows: unknown, addresses: string[], now =
   }
   return result
 }
-export async function readStockMarketPrices(addresses: string[], fetcher = fetch) {
-  const now = Date.now(), needed = addresses.filter(a => !pending.has(a) && now - (attempts.get(a) || 0) >= 30_000)
+export async function readStockMarketPrices(addresses: string[], fetcher = fetch, maxAgeMs = 60_000) {
+  const now = Date.now(), needed = addresses.filter(a => !pending.has(a) && (now - (attempts.get(a) || 0) >= 30_000 || now - (cache.get(a)?.fetchedAt || 0) >= maxAgeMs && now - (attempts.get(a) || 0) >= 1000))
   if (needed.length) {
     needed.forEach(a => attempts.set(a, now))
     const work = (async () => {
@@ -36,7 +36,7 @@ export async function readStockMarketPrices(addresses: string[], fetcher = fetch
     needed.forEach(a => pending.set(a, work))
   }
   await Promise.all([...new Set(addresses.flatMap(a => pending.has(a) ? [pending.get(a)!] : []))])
-  return Object.fromEntries(addresses.flatMap(a => { const q = cache.get(a); return q && Date.now() - q.fetchedAt < 60_000 ? [[a, q]] : [] }))
+  return Object.fromEntries(addresses.flatMap(a => { const q = cache.get(a); return q && Date.now() - q.fetchedAt < maxAgeMs ? [[a, q]] : [] }))
 }
 export default async function handler(req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')

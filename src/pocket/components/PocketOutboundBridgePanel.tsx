@@ -1,3 +1,4 @@
+import {LIFI_DESTINATIONS,type OutboundDestination} from '../lib/pocketLifiOutbound'
 import {POCKET_XLAYER_MINIMUM_AMOUNT} from '../lib/pocketXLayerMinimum'
 import {useEffect,useRef,useState} from 'react'
 import {formatUnits,parseUnits,type Address} from 'viem'
@@ -8,10 +9,11 @@ import {SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 import {beginPocketOperation,endPocketOperation,readPocketOperations,trackPocketOperation,POCKET_OPERATIONS_UPDATED} from '../lib/pocketOperationRecovery'
 import {POCKET_BRIDGE_NETWORKS,pocketBridgeNetworkLabel} from '../lib/pocketBridgeNetworks'
 import type usePocketStockWallet from '../hooks/usePocketStockWallet'
-type Props={owner:string;asset:'USDC'|'USDT';wallet:ReturnType<typeof usePocketStockWallet>;getAccessToken():Promise<string|null>;ensureWallet(network:'base'):Promise<{address:string}|null>;onSource(network:string):void;onBusyChange(value:boolean):void;onTracked(id:string,asset?:'USDC'|'USDT'):void;refresh():Promise<unknown>}
+type Props={owner:string;asset:'USDC'|'USDT';wallet:ReturnType<typeof usePocketStockWallet>;getAccessToken():Promise<string|null>;ensureWallet(network:OutboundDestination):Promise<{address:string}|null>;onSource(network:string):void;onBusyChange(value:boolean):void;onTracked(id:string,asset?:'USDC'|'USDT'):void;refresh():Promise<unknown>}
 export default function PocketOutboundBridgePanel(p:Props){
+ const [network,setNetwork]=useState<OutboundDestination>('base')
  const [amount,setAmount]=useState(''),[review,setReview]=useState<OutboundBridgeReview|null>(null),[quoting,setQuoting]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[generation,refreshQuote]=useState(0),[pending,setPending]=useState<any>(null)
- const [displayReview,setDisplayReview]=useState<{scope:string;asset:string;amount:string;review:OutboundBridgeReview}|null>(null)
+ const [displayReview,setDisplayReview]=useState<{scope:string;asset:string;network:OutboundDestination;amount:string;review:OutboundBridgeReview}|null>(null)
  const version=useRef(0),scope=useRef(p.owner+':'+p.wallet.address),mounted=useRef(true),locked=useRef(false),active=useRef<string|null>(null)
  scope.current=p.owner+':'+p.wallet.address
  const current=(key:string)=>mounted.current&&scope.current===key
@@ -35,24 +37,25 @@ export default function PocketOutboundBridgePanel(p:Props){
   setQuoting(true)
   const timer=setTimeout(()=>void(async()=>{
    try{
-    const destination=await p.ensureWallet('base');if(!destination)throw Error('Open your Base wallet to continue.')
+    const destination=await p.ensureWallet(network);if(!destination)throw Error('Open your '+pocketBridgeNetworkLabel(network)+' wallet to continue.')
     if(n!==version.current||!current(key))return
-    const next=await quoteOutboundBridge({owner:p.wallet.address!,destination:destination.address as Address,asset:p.asset,amount},p.getAccessToken)
-    if(n===version.current&&current(key)){setReview(next);setDisplayReview({scope:key,asset:p.asset,amount,review:next})}
+    const next=await quoteOutboundBridge({owner:p.wallet.address!,destination:destination.address as Address,asset:p.asset,amount,network},p.getAccessToken)
+    if(n===version.current&&current(key)){setReview(next);setDisplayReview({scope:key,asset:p.asset,network,amount,review:next})}
    }catch(e){if(n===version.current&&current(key))setError((e as Error).message)}finally{if(n===version.current&&current(key))setQuoting(false)}
   })(),450)
   return()=>{clearTimeout(timer);version.current++}
- },[amount,p.asset,p.owner,p.wallet.address,generation,pending?.quote.id,busy,principalShortfall])
+ },[network,amount,p.asset,p.owner,p.wallet.address,generation,pending?.quote.id,busy,principalShortfall])
  useEffect(()=>{if(!review||busy)return;const timer=setTimeout(()=>refreshQuote(n=>n+1),Math.max(0,review.quote.expiresAt-Date.now()));return()=>clearTimeout(timer)},[review,busy])
  const change=(value:string)=>{version.current++;setReview(null);setError('');setAmount(value)}
  // The Privy wallet hook owns preparation and PIN approval; do not run the registered Circle form preparer.
  const prepareOutbound=async()=>{}
  async function submit(){
   if(locked.current||quoting||!review||pending||review.quote.expiresAt<=Date.now())return
-  const approved=structuredClone(review),key=scope.current,owner=p.owner,saved={quote:approved.quote,quoteToken:approved.quoteToken}
+  let approved=structuredClone(review),saved={quote:approved.quote,quoteToken:approved.quoteToken};const key=scope.current,owner=p.owner
   locked.current=true;setBusy(true);setError('');let persisted=false
   try{
-   const result=await p.wallet.bridgeOutbound(approved,()=>{
+   const result=await p.wallet.bridgeOutbound(approved,(fresh)=>{
+    if(fresh){approved=fresh;saved={quote:fresh.quote,quoteToken:fresh.quoteToken}}
     if(!current(key))throw Error('Your Pocket account changed.')
     beginPocketOperation(owner,approved.quote.id)
     try{trackPocketOperation(owner,'bridge',saved);persisted=true;active.current=approved.quote.id}catch(e){endPocketOperation(owner,approved.quote.id);throw e}
@@ -64,10 +67,10 @@ export default function PocketOutboundBridgePanel(p:Props){
    if(current(key))setError((e as Error).message)
   }finally{endPocketOperation(owner,approved.quote.id);locked.current=false;if(current(key)){setBusy(false);setReview(null)}}
  }
- const previousQuote=displayReview?.scope===scope.current&&displayReview.asset===p.asset&&displayReview.amount===amount?displayReview.review.quote:null
+ const previousQuote=displayReview?.scope===scope.current&&displayReview.asset===p.asset&&displayReview.network===network&&displayReview.amount===amount?displayReview.review.quote:null
  const shortfall=principalShortfall||(!!review&&units!=null&&parseUnits(review.quote.total,6)>units),q=pending?.quote||review?.quote||(!principalShortfall?previousQuote:null)
- return <PocketBridgeForm exactQuoteAmounts asset={pending?.quote.asset||p.asset} source="xlayer" destination="base" sources={[{value:'xlayer',label:'X Layer'},...POCKET_BRIDGE_NETWORKS.filter(n=>p.asset==='USDC'||!['arc','solana'].includes(n)).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))]} destinations={[{value:'base',label:'Base'}]} onSource={p.onSource} onDestination={()=>{}} disabled={busy||!!pending} amount={pending?.quote.amount||amount} onAmount={change} balance={balance} maxDisabled={balance===undefined} onMax={()=>change(Math.max(0,(balance||0)-Number(review?.quote.networkFee||0)).toFixed(6).replace(/\.?0+$/,''))} quote={q} quoteLoading={quoting&&!q} amountHint={shortfall?'Insufficient funds':!pending&&Number(amount)>0&&Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT?'Minimum '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+p.asset:undefined}>
-  {q?.conversion&&<p className="text-xs text-gray-500 dark:text-gray-400">Converts through USDC before bridging. Any unused USDC stays in your X Layer wallet. If the bridge cannot finish, your refund may arrive as USDC on X Layer.</p>}
+ return <PocketBridgeForm exactQuoteAmounts asset={pending?.quote.asset||p.asset} source="xlayer" destination={pending?.quote.destination||network} sources={[{value:'xlayer',label:'X Layer'},...POCKET_BRIDGE_NETWORKS.filter(n=>p.asset==='USDC'||!['arc','solana'].includes(n)).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))]} destinations={['base',...(p.asset==='USDT'?LIFI_DESTINATIONS:[])].map(value=>({value,label:pocketBridgeNetworkLabel(value as OutboundDestination)}))} onSource={p.onSource} onDestination={value=>{version.current++;setReview(null);setError('');setNetwork(value as OutboundDestination)}} disabled={busy||!!pending} amount={pending?.quote.amount||amount} onAmount={change} balance={balance} maxDisabled={balance===undefined} onMax={()=>change(Math.max(0,(balance||0)-Number(review?.quote.networkFee||0)).toFixed(6).replace(/\.?0+$/,''))} quote={q} quoteLoading={quoting&&!q} amountHint={shortfall?'Insufficient funds':!pending&&Number(amount)>0&&Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT?'Minimum '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+p.asset:undefined}>
+  {q?.conversion&&<details className="text-xs text-gray-500 dark:text-gray-400"><summary className="cursor-pointer">Route details</summary><p className="pt-1">Converts USDT0 through USDC to USDT. Unused USDC stays in your X Layer wallet. A refund may arrive as USDC on X Layer.</p></details>}
   {pending&&active.current!==pending.quote.id?<button className="pocket-cta-primary w-full" onClick={()=>p.onTracked(pending.quote.id,pending.quote.asset)}>View bridge progress</button>:error&&!review&&!quoting&&!pending?<button className="pocket-cta-primary w-full" onClick={()=>refreshQuote(n=>n+1)}>Try again</button>:<PocketSlideAction approvalRequired={false} onPrepare={prepareOutbound} status={busy?'pending':pending?'submitted':'idle'} loadingContent={quoting} disabled={busy||quoting||!!pending||!review||shortfall||balance===undefined||review.quote.expiresAt<=Date.now()} onConfirm={()=>void submit()} labels={{idle:'Confirm bridge',disabled:shortfall?'Insufficient balance':quoting?'Updating amount':!amount?'Enter bridge amount':'Amount unavailable',pending:'Preparing bridge',submitted:'Bridging '+p.asset,successful:'Bridge successful'}}/>}
   {error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
  </PocketBridgeForm>

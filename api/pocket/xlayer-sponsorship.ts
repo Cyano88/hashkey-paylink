@@ -130,7 +130,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   }
   async function journalOutbound(owner:string,token:string,hash:string|null,status:string,details:{status?:string;destinationTxHash?:string;refundAsset?:string;refundNetwork?:string;refundAmount?:string}={}){
     const q=openOutboundBridge(token,owner),preview=outboundBridgePreview(q)
-    return d.journal({ownerId:owner,idempotencyKey:'pocket:xlayer-bridge:'+q.fee.intentId,action:'wallet.xlayer-bridge',resourceId:q.fee.intentId,status:status==='completed'?'completed':['failed','refunded'].includes(status)?'failed':'submitted',metadata:{execution:'privy',quoteToken:token,source:'xlayer',destination:'base',amount:preview.amount,assetSymbol:q.fee.asset,walletAddress:q.fee.walletAddress,paymentState:status,...(hash?{txHash:hash}:{}),...(details.destinationTxHash?{destinationTxHash:details.destinationTxHash}:{}),...(status==='refunded'?{refundAsset:details.refundAsset!,refundNetwork:details.refundNetwork!,refundAmount:details.refundAmount!,refundTxHash:details.destinationTxHash!}:{})}})
+    return d.journal({ownerId:owner,idempotencyKey:'pocket:xlayer-bridge:'+q.fee.intentId,action:'wallet.xlayer-bridge',resourceId:q.fee.intentId,status:status==='completed'?'completed':['failed','refunded'].includes(status)?'failed':'submitted',metadata:{execution:'privy',quoteToken:token,source:'xlayer',destination:q.destination,amount:preview.amount,assetSymbol:q.fee.asset,walletAddress:q.fee.walletAddress,paymentState:status,...(hash?{txHash:hash}:{}),...(details.destinationTxHash?{destinationTxHash:details.destinationTxHash}:{}),...(status==='refunded'?{refundAsset:details.refundAsset!,refundNetwork:details.refundNetwork!,refundAmount:details.refundAmount!,refundTxHash:details.destinationTxHash!}:{})}})
   }
   async function reconcileOutbound(owner:string,token:string){
     const q=openOutboundBridge(token,owner),record=(await d.read())?.requests[q.fee.intentId]
@@ -196,8 +196,8 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (req.body?.action === 'quote') {
         await d.billingGuard(wallet)
         if(req.body?.purpose==='bridge'){
-          if(!d.reimbursement||req.body.destination!=='base')throw fail('Outbound bridging is not available for this route.',503)
-          const q=await d.outbound.quote({ownerId:identity.userId,walletId:embedded.id,walletAddress:wallet as Hex,asset:req.body.asset,amount:String(req.body.amount||'')},d.reimbursement.estimate,d.reimbursement.pricing)
+          if(!d.reimbursement||!['base','arbitrum','ethereum','polygon'].includes(req.body.destination))throw fail('Outbound bridging is not available for this route.',503)
+          const q=await d.outbound.quote({ownerId:identity.userId,walletId:embedded.id,walletAddress:wallet as Hex,asset:req.body.asset,amount:String(req.body.amount||''),destination:req.body.destination},d.reimbursement.estimate,d.reimbursement.pricing)
           return res.json({ok:true,bridgeQuoteToken:sealOutboundBridge(q),quote:outboundBridgePreview(q),request:makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:q.fee.intentId,expiresAt:q.fee.expiresAt,calls:q.fee.calls})})
         }
         if(req.body?.purpose!==undefined||!d.reimbursement)throw fail('Reimbursed transfers are not available yet.',503)
@@ -328,7 +328,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       const error = reason as Error & { status?: number }
       return res.status(reserved ? 502 : error.status || 503).json({ok:false,
         code:reserved?'sponsor_outcome_unknown':'pocket_sponsor_not_submitted',
-        error:reserved?'This transfer could not be confirmed. Check Activity before retrying.':error.status?error.message:'Sponsored transfers are temporarily unavailable.',
+        error:reserved?'This transfer could not be confirmed. Check Activity before retrying.':error.status?error.message:req.body?.action==='quote'&&req.body?.purpose==='bridge'?'Could not refresh the bridge quote. Try again.':'Sponsored transfers are temporarily unavailable.',
       })
     }
   }

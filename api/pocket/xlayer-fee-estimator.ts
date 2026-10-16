@@ -94,6 +94,6 @@ export function configuredXLayerReimbursement(env:NodeJS.ProcessEnv=process.env,
     return body.result
    }catch{return unavailable()}
   }
-  return {pricing,estimate:createXLayerFeeEstimator({rpc,policy,prices:addresses=>readStockMarketPrices(addresses,fetcher)})}
+  return {pricing,estimate:createXLayerFeeEstimator({rpc,policy,prices:addresses=>readStockMarketPrices(addresses,fetcher,10_000)})}
  }catch{return undefined}
 }

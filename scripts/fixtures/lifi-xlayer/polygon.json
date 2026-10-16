@@ -1,0 +1,456 @@
+{
+  "type": "lifi",
+  "id": "1c9561ee-cbd1-4195-b2dc-237b29a7c542:0",
+  "tool": "layerswap",
+  "toolDetails": {
+    "key": "layerswap",
+    "name": "Layerswap",
+    "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/bridges/layerswap.svg"
+  },
+  "action": {
+    "fromToken": {
+      "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+      "chainId": 196,
+      "symbol": "USD₮0",
+      "decimals": 6,
+      "name": "USD₮0",
+      "coinKey": "USD₮0",
+      "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+      "priceUSD": "0.9985339996",
+      "tags": [
+        "stablecoin"
+      ],
+      "verificationStatus": "verified",
+      "verificationStatusBreakdown": [
+        {
+          "provider": "hypernative",
+          "result": "verified",
+          "providerResult": "accept"
+        }
+      ]
+    },
+    "fromAmount": "1000000",
+    "toToken": {
+      "address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+      "chainId": 137,
+      "symbol": "USDT",
+      "decimals": 6,
+      "name": "USDT",
+      "coinKey": "USDT",
+      "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+      "priceUSD": "0.9972139337",
+      "tags": [
+        "stablecoin"
+      ],
+      "verificationStatus": "verified",
+      "verificationStatusBreakdown": [
+        {
+          "provider": "hypernative",
+          "result": "verified",
+          "providerResult": "accept"
+        }
+      ]
+    },
+    "fromChainId": 196,
+    "toChainId": 137,
+    "slippage": 0.005,
+    "fromAddress": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+    "toAddress": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1"
+  },
+  "estimate": {
+    "tool": "layerswap",
+    "approvalAddress": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+    "toAmountMin": "930578",
+    "toAmount": "935254",
+    "fromAmount": "1000000",
+    "feeCosts": [
+      {
+        "name": "LIFI Fixed Fee",
+        "description": "Fixed LIFI fee, independent of any other fee",
+        "token": {
+          "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+          "chainId": 196,
+          "symbol": "USD₮0",
+          "decimals": 6,
+          "name": "USD₮0",
+          "coinKey": "USD₮0",
+          "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+          "priceUSD": "0.9985339996",
+          "tags": [
+            "stablecoin"
+          ],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        },
+        "amount": "2500",
+        "amountUSD": "0.0025",
+        "percentage": "0.0025",
+        "included": true,
+        "feeSplit": {
+          "lifiFee": "2500",
+          "integratorFee": "0",
+          "recipients": [
+            {
+              "name": "lifi",
+              "type": "FIXED",
+              "fee": "2500"
+            }
+          ]
+        }
+      },
+      {
+        "name": "LayerSwap fee",
+        "description": "LayerSwap bridge fee",
+        "percentage": "0.0624",
+        "token": {
+          "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+          "chainId": 196,
+          "symbol": "USD₮0",
+          "decimals": 6,
+          "name": "USD₮0",
+          "coinKey": "USD₮0",
+          "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+          "priceUSD": "0.9985339996",
+          "tags": [
+            "stablecoin"
+          ],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        },
+        "amount": "62246",
+        "amountUSD": "0.06219",
+        "included": true
+      }
+    ],
+    "gasCosts": [
+      {
+        "type": "SEND",
+        "price": "21000000",
+        "estimate": "228551",
+        "limit": "297116",
+        "amount": "4799571000000",
+        "amountUSD": "0.0006",
+        "token": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "chainId": 196,
+          "symbol": "OKB",
+          "decimals": 18,
+          "name": "OKB",
+          "coinKey": "OKB",
+          "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0xe538905cf8410324e03a5a23c1c177a474d59b2b/b58d6980429c56560d9241765bdf9c2b.png",
+          "priceUSD": "117.88",
+          "tags": [],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        }
+      }
+    ],
+    "executionDuration": 5,
+    "fromAmountUSD": "0.9985",
+    "toAmountUSD": "0.9326"
+  },
+  "includedSteps": [
+    {
+      "id": "2c07034c-e48a-4c78-948c-c50641e9c910",
+      "type": "protocol",
+      "action": {
+        "fromChainId": 196,
+        "fromAmount": "1000000",
+        "fromToken": {
+          "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+          "chainId": 196,
+          "symbol": "USD₮0",
+          "decimals": 6,
+          "name": "USD₮0",
+          "coinKey": "USD₮0",
+          "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+          "priceUSD": "0.9985339996",
+          "tags": [
+            "stablecoin"
+          ],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        },
+        "toChainId": 196,
+        "toToken": {
+          "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+          "chainId": 196,
+          "symbol": "USD₮0",
+          "decimals": 6,
+          "name": "USD₮0",
+          "coinKey": "USD₮0",
+          "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+          "priceUSD": "0.9985339996",
+          "tags": [
+            "stablecoin"
+          ],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        },
+        "slippage": 0.005,
+        "fromAddress": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+        "toAddress": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE"
+      },
+      "estimate": {
+        "fromAmount": "1000000",
+        "toAmount": "997500",
+        "toAmountMin": "997500",
+        "tool": "feeCollection",
+        "approvalAddress": "0xCE40449B773a3E6E5e769ADb4e567179d4828cbd",
+        "gasCosts": [
+          {
+            "type": "SEND",
+            "price": "21000000",
+            "estimate": "130000",
+            "limit": "169000",
+            "amount": "2730000000000",
+            "amountUSD": "0.0003",
+            "token": {
+              "address": "0x0000000000000000000000000000000000000000",
+              "chainId": 196,
+              "symbol": "OKB",
+              "decimals": 18,
+              "name": "OKB",
+              "coinKey": "OKB",
+              "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0xe538905cf8410324e03a5a23c1c177a474d59b2b/b58d6980429c56560d9241765bdf9c2b.png",
+              "priceUSD": "117.88",
+              "tags": [],
+              "verificationStatus": "verified",
+              "verificationStatusBreakdown": [
+                {
+                  "provider": "hypernative",
+                  "result": "verified",
+                  "providerResult": "accept"
+                }
+              ]
+            }
+          }
+        ],
+        "feeCosts": [
+          {
+            "name": "LIFI Fixed Fee",
+            "description": "Fixed LIFI fee, independent of any other fee",
+            "token": {
+              "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+              "chainId": 196,
+              "symbol": "USD₮0",
+              "decimals": 6,
+              "name": "USD₮0",
+              "coinKey": "USD₮0",
+              "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+              "priceUSD": "0.9985339996",
+              "tags": [
+                "stablecoin"
+              ],
+              "verificationStatus": "verified",
+              "verificationStatusBreakdown": [
+                {
+                  "provider": "hypernative",
+                  "result": "verified",
+                  "providerResult": "accept"
+                }
+              ]
+            },
+            "amount": "2500",
+            "amountUSD": "0.0025",
+            "percentage": "0.0025",
+            "included": true,
+            "feeSplit": {
+              "lifiFee": "2500",
+              "integratorFee": "0",
+              "recipients": [
+                {
+                  "name": "lifi",
+                  "type": "FIXED",
+                  "fee": "2500"
+                }
+              ]
+            }
+          }
+        ],
+        "executionDuration": 0
+      },
+      "tool": "feeCollection",
+      "toolDetails": {
+        "key": "feeCollection",
+        "name": "Integrator Fee",
+        "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/protocols/feeCollection.svg"
+      }
+    },
+    {
+      "id": "daa84ce1-2fcb-491a-a4ef-57a88a048af3",
+      "type": "cross",
+      "action": {
+        "fromChainId": 196,
+        "fromAmount": "997500",
+        "fromToken": {
+          "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+          "chainId": 196,
+          "symbol": "USD₮0",
+          "decimals": 6,
+          "name": "USD₮0",
+          "coinKey": "USD₮0",
+          "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+          "priceUSD": "0.9985339996",
+          "tags": [
+            "stablecoin"
+          ],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        },
+        "toChainId": 137,
+        "toToken": {
+          "address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+          "chainId": 137,
+          "symbol": "USDT",
+          "decimals": 6,
+          "name": "USDT",
+          "coinKey": "USDT",
+          "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+          "priceUSD": "0.9972139337",
+          "tags": [
+            "stablecoin"
+          ],
+          "verificationStatus": "verified",
+          "verificationStatusBreakdown": [
+            {
+              "provider": "hypernative",
+              "result": "verified",
+              "providerResult": "accept"
+            }
+          ]
+        },
+        "slippage": 0.005,
+        "fromAddress": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+        "toAddress": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+        "destinationGasConsumption": "0"
+      },
+      "estimate": {
+        "tool": "layerswap",
+        "fromAmount": "997500",
+        "toAmount": "935254",
+        "toAmountMin": "930578",
+        "gasCosts": [
+          {
+            "type": "SEND",
+            "price": "21000000",
+            "estimate": "210000",
+            "limit": "273000",
+            "amount": "4410000000000",
+            "amountUSD": "0.0005",
+            "token": {
+              "address": "0x0000000000000000000000000000000000000000",
+              "chainId": 196,
+              "symbol": "OKB",
+              "decimals": 18,
+              "name": "OKB",
+              "coinKey": "OKB",
+              "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0xe538905cf8410324e03a5a23c1c177a474d59b2b/b58d6980429c56560d9241765bdf9c2b.png",
+              "priceUSD": "117.88",
+              "tags": [],
+              "verificationStatus": "verified",
+              "verificationStatusBreakdown": [
+                {
+                  "provider": "hypernative",
+                  "result": "verified",
+                  "providerResult": "accept"
+                }
+              ]
+            }
+          }
+        ],
+        "executionDuration": 5,
+        "approvalAddress": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+        "feeCosts": [
+          {
+            "name": "LayerSwap fee",
+            "description": "LayerSwap bridge fee",
+            "percentage": "0.0624",
+            "token": {
+              "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+              "chainId": 196,
+              "symbol": "USD₮0",
+              "decimals": 6,
+              "name": "USD₮0",
+              "coinKey": "USD₮0",
+              "logoURI": "https://static.debank.com/image/xlayer_token/logo_url/0x779ded0c9e1022225f8e0630b35a9b54be713736/afa2c807fd8f0c581379ce62722abed8.png",
+              "priceUSD": "0.9985339996",
+              "tags": [
+                "stablecoin"
+              ],
+              "verificationStatus": "verified",
+              "verificationStatusBreakdown": [
+                {
+                  "provider": "hypernative",
+                  "result": "verified",
+                  "providerResult": "accept"
+                }
+              ]
+            },
+            "amount": "62246",
+            "amountUSD": "0.06219",
+            "included": true
+          }
+        ]
+      },
+      "tool": "layerswap",
+      "toolDetails": {
+        "key": "layerswap",
+        "name": "Layerswap",
+        "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/bridges/layerswap.svg"
+      }
+    }
+  ],
+  "integrator": "lifi-api",
+  "stepSimulation": {
+    "status": "success",
+    "gasSource": "simulation"
+  },
+  "transactionRequest": {
+    "value": "0x0",
+    "to": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+    "data": "0x4c279d6b00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000220000000000000000000000000000000000000000000000000000000000000042062ee4166242adc645cdeb935738192ba41e595e06bcb586913793e8b453bc1b3000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000779ded0c9e1022225f8e0630b35a9b54be713736000000000000000000000000f3853789e1d4f227bca68e522240f1ca139babd100000000000000000000000000000000000000000000000000000000000f387c00000000000000000000000000000000000000000000000000000000000000890000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000096c6179657273776170000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000086c6966692d61706900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000020000000000000000000000000ce40449b773a3e6e5e769adb4e567179d4828cbd000000000000000000000000ce40449b773a3e6e5e769adb4e567179d4828cbd000000000000000000000000779ded0c9e1022225f8e0630b35a9b54be713736000000000000000000000000779ded0c9e1022225f8e0630b35a9b54be71373600000000000000000000000000000000000000000000000000000000000f424000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000a4332d746b000000000000000000000000779ded0c9e1022225f8e0630b35a9b54be71373600000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000001000000000000000000000000c06ebbefd94032b85424d51906e2a335efae264b00000000000000000000000000000000000000000000000000000000000009c400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000135d6b10000000000000000000000002fc617e933a52713247ce25730f6695920b3befe000000000000000000000000f3853789e1d4f227bca68e522240f1ca139babd1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000006ad2b53400000000000000000000000000000000000000000000000000000000000000419dfb8d25f28c1ca7b5019004cc30a83708462f455b9aedbe937601eb7e490df07803f460153c853007e5c92f0bdf4284d89bdf566cea56dc7000996ad6bd363e1c00000000000000000000000000000000000000000000000000000000000000",
+    "from": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+    "chainId": 196,
+    "gasPrice": "0x1406f40",
+    "gasLimit": "0x4889c"
+  },
+  "transactionId": "0x62ee4166242adc645cdeb935738192ba41e595e06bcb586913793e8b453bc1b3",
+  "recommendedSlippage": null
+}
