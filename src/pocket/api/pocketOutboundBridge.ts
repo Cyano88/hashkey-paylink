@@ -20,7 +20,7 @@ export function validateOutboundBridge(review:OutboundBridgeReview,owner:Address
   const token=outboundTokens[asset],approval=(units:bigint)=>({to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'approve',args:[depository,units]})})
   const directCalls=[approval(0n),approval(sent),{to:depository,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[owner,token,sent,q.orderId]})},approval(0n),{to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,fee]})}]
   if(q.conversion&&(asset!=='USDT'||!Array.isArray(q.refundOptions)||q.refundOptions.length!==2||!q.refundOptions.some(r=>r.network==='xlayer'&&r.asset==='USDC'&&r.recipient.toLowerCase()===owner.toLowerCase())||!q.refundOptions.some(r=>r.network==='base'&&r.asset==='USDT'&&r.recipient.toLowerCase()===destination.toLowerCase())))throw Error()
-  const calls=q.conversion?[...xlayerConversionCalls(q.conversion,owner,sent.toString(),q.orderId,now),directCalls.at(-1)!]:directCalls
+  const calls=q.conversion?[...xlayerConversionCalls(q.conversion,owner,sent.toString(),q.orderId,now),directCalls[directCalls.length-1]]:directCalls
   const walletId=review.request.url.match(/^https:\/\/api\.privy\.io\/v1\/wallets\/([a-zA-Z0-9]{10,64})\/rpc$/)?.[1],appId=review.request.headers['privy-app-id']
   if(!walletId||!appId)throw Error()
   const expected=makeSponsoredBatchRequest({appId,walletId,attemptId:q.id,expiresAt:q.expiresAt,calls}),actual=structuredClone(review.request)
