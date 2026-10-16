@@ -10,7 +10,7 @@ function fixture(){
  const rpc=async(method,params)=>{methods.push(method);switch(method){
   case 'eth_chainId':return state.chain
   case 'eth_getCode':return state.code
-  case 'eth_call':if(params[0].to.toLowerCase()==='0x420000000000000000000000000000000000000f'){const decoded=decodeFunctionData({abi:parseAbi(['function getL1FeeUpperBound(uint256) view returns(uint256)']),data:params[0].data});assert.ok(decoded.args[0]>1024n);return state.l1}return '0x0'
+  case 'eth_call':if(params[0].to.toLowerCase()==='0xd6cedde84be40893d153be9d467cd6ad37875b28')return '0x'+'0'.repeat(24)+'0000000071727de22e5e9d8baf0edac6f37da032';if(params[0].to.toLowerCase()==='0x420000000000000000000000000000000000000f'){const decoded=decodeFunctionData({abi:parseAbi(['function getL1FeeUpperBound(uint256) view returns(uint256)']),data:params[0].data});assert.ok(decoded.args[0]>1024n);return state.l1}return '0x0'
   case 'eth_estimateUserOperationGas':return {callGasLimit:'0xc350',verificationGasLimit:'0x7530',preVerificationGas:'0x4e20'}
   case 'rundler_getUserOperationGasPrice':return {blockNumber:'0x1',suggested:{maxFeePerGas:state.gasPrice}}
   case 'eth_gasPrice':return state.gasPrice
@@ -27,7 +27,8 @@ f.state.l1='0xe8d4a51000' // 1e12 wei = 100 USD micros at $100/OKB
 assert.equal((await estimate(input)).feeUnits,'1385')
 f.state.stable=0.5;assert.equal((await estimate(input)).feeUnits,'2770','stablecoin conversion must not assume a dollar peg')
 assert.ok(f.methods.every(m=>!m.includes('send')&&!m.includes('sign')&&!m.includes('Balance')))
-for(const edit of [s=>s.chain='0x7a0',s=>s.priceAge=30000,s=>s.blockAge=31000,s=>s.stable=0,s=>s.stable=NaN,s=>s.code='0x',s=>s.gasPrice='bad',s=>s.clock=now+31000]){
+const freshAccount=fixture();freshAccount.state.code='0x';assert.equal((await createXLayerFeeEstimator({...freshAccount,policy})(input)).feeUnits,'1275','first-use estimate includes the authorization allowance')
+for(const edit of [s=>s.chain='0x7a0',s=>s.priceAge=30000,s=>s.blockAge=31000,s=>s.stable=0,s=>s.stable=NaN,s=>s.code='0x6000',s=>s.gasPrice='bad',s=>s.clock=now+31000]){
  f=fixture();edit(f.state);await assert.rejects(()=>createXLayerFeeEstimator({...f,policy})(input))
 }
 f=fixture();await assert.rejects(()=>createXLayerFeeEstimator({...f,policy:{...policy,maxFeeUnits:100n}})(input))

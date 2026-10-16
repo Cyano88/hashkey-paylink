@@ -21,7 +21,8 @@ function validatePolicy(p:Policy){
 }
 /** Conservative estimate for the verified Privy Kernel, single-operation,
  * zero-fee BSO path. Not a Privy invoice or an enforced maximum gas spend.
- * First-time wallets/other delegates remain rejected by batch simulation. */
+ * Empty-code wallets use a code-only delegation simulation. Other delegates
+ * remain rejected. Privy still owns the actual authorized upgrade/submission. */
 export function createXLayerFeeEstimator(d:{rpc:XLayerCostRpc;prices(addresses:string[]):Promise<Record<string,MarketPrice>>;policy:Policy;now?:()=>number}):XLayerFeeEstimator{
  const policy=structuredClone(d.policy);validatePolicy(policy)
  const now=d.now||Date.now

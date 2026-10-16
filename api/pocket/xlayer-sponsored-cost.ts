@@ -25,15 +25,21 @@ export function encodeXLayerSponsoredBatch(calls:XLayerCall[]):Hex{
 export async function estimateXLayerSponsoredBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:XLayerCall[]){
  if(!isAddress(wallet)||await rpc('eth_chainId',[])!=='0xc4')return invalid()
  const code=await rpc('eth_getCode',[wallet,'latest'])
- // Other delegates and first-time upgrades need their own verified estimation path.
- if(!same(code,'0xef0100'+kernel.slice(2)))return invalid()
+ const requiresDelegation=code==='0x'
+ // Never replace another delegation. A code-only override models Privy's
+ // first-use upgrade without inventing funds, allowances or initialized storage.
+ if(!requiresDelegation&&!same(code,'0xef0100'+kernel.slice(2)))return invalid()
+ if(requiresDelegation){
+  const entrypoint=await rpc('eth_call',[{to:kernel,data:encodeFunctionData({abi:parseAbi(['function entrypoint() view returns(address)']),functionName:'entrypoint'})},'latest'])
+  if(!same(entrypoint,'0x'+'0'.repeat(24)+XLAYER_ENTRY_POINT.slice(2)))return invalid()
+ }
  const nonce=await rpc('eth_call',[{to:XLAYER_ENTRY_POINT,data:encodeFunctionData({abi:entryPoint07Abi,functionName:'getNonce',args:[wallet,0n]})},'latest'])
  quantity(nonce)
  const callData=encodeXLayerSponsoredBatch(calls)
- const result=await rpc('eth_estimateUserOperationGas',[{sender:wallet,nonce,callData,callGasLimit:'0x0',verificationGasLimit:'0x0',preVerificationGas:'0x0',maxFeePerGas:'0x0',maxPriorityFeePerGas:'0x0',signature:stub},XLAYER_ENTRY_POINT])
+ const result=await rpc('eth_estimateUserOperationGas',[{sender:wallet,nonce,callData,callGasLimit:'0x0',verificationGasLimit:'0x0',preVerificationGas:'0x0',maxFeePerGas:'0x0',maxPriorityFeePerGas:'0x0',signature:stub},XLAYER_ENTRY_POINT,...(requiresDelegation?[{[wallet]:{code:'0xef0100'+kernel.slice(2)}}]:[])])
  const callGas=quantity(result?.callGasLimit),verificationGas=quantity(result?.verificationGasLimit),preVerificationGas=quantity(result?.preVerificationGas)
  if(callGas===0n||verificationGas===0n||preVerificationGas===0n||callGas+verificationGas+preVerificationGas>10000000n)return invalid()
- return {callData,callGas,verificationGas,preVerificationGas,totalGas:callGas+verificationGas+preVerificationGas}
+ return {callData,callGas,verificationGas,preVerificationGas,totalGas:callGas+verificationGas+preVerificationGas,requiresDelegation}
 }
 
 export type XLayerCostBinding={transactionHash:Hex;userOperationHash:Hex;wallet:Hex;callData:Hex}
