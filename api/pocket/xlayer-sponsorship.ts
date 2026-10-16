@@ -135,7 +135,20 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   async function reconcileOutbound(owner:string,token:string){
     const q=openOutboundBridge(token,owner),record=(await d.read())?.requests[q.fee.intentId]
     if(!record||record.owner!==owner||record.wallet!==q.fee.walletAddress.toLowerCase()||record.bridgeQuoteToken!==token)throw Error('Bridge recovery reference is unavailable.')
-    const hash=await resolveAccepted(q.fee.intentId,record,q.fee.walletId,d.config()).catch(()=>null)
+    let hash=await resolveAccepted(q.fee.intentId,record,q.fee.walletId,d.config()).catch(()=>null)
+    // Recover older accepted batches whose response identifier was not saved.
+    // Provider candidates are never trusted without the exact canonical deposit and fee proof.
+    if(!hash&&!notBroadcast(record)){
+      const recovered=await d.outbound.recoverSource(q).catch(()=>null)
+      if(recovered){
+        await d.mutate(current=>{
+          const saved=current?.requests[q.fee.intentId]
+          if(!saved||saved.fingerprint!==record.fingerprint||saved.bridgeQuoteToken!==token||saved.hash&&saved.hash!==recovered)throw Error('Bridge recovery mismatch.')
+          saved.hash=recovered;return current!
+        })
+        hash=recovered
+      }
+    }
     const bridge=notBroadcast(record)?{status:'failed' as const}:hash?await d.outbound.status(q,hash as Hex):{status:'pending' as const}
     const saved=await journalOutbound(owner,token,hash,bridge.status,bridge)
     // The shared journal protects terminal outcomes against stale parallel checks.
@@ -275,12 +288,13 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       const userOperationHash = result?.data?.user_operation_hash
       if (upstream.ok && !hash && result?.data?.caip2 === 'eip155:196' &&
           typeof transactionId === 'string' && /^[a-zA-Z0-9_-]{10,128}$/.test(transactionId) &&
-          typeof userOperationHash === 'string' && /^0x[0-9a-f]{64}$/i.test(userOperationHash)) {
+          (userOperationHash == null || typeof userOperationHash === 'string' && /^0x[0-9a-f]{64}$/i.test(userOperationHash))) {
         let accepted: Record | undefined
         await d.mutate(current => {
           const record = current?.requests[id]
           if (!record || record.fingerprint !== fingerprint) throw Error('Payment reservation unavailable.')
-          record.transactionId=transactionId; record.userOperationHash=userOperationHash
+          record.transactionId=transactionId
+          if(userOperationHash)record.userOperationHash=userOperationHash
           accepted={...record}
           return current!
         })

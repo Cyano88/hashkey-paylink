@@ -65,6 +65,16 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    if(w.id!==q.destinationWalletId||!same(w.address,q.destinationAddress))invalid()
    await refreshXLayerReimbursement(q.fee,outboundBridgeCalls(q),estimate,d.now)
   },
+  async recoverSource(q:XLayerOutboundQuote):Promise<Hex|null>{
+   if(!d.apiKey())return null
+   const r=await d.fetch('https://api.relay.link/intents/status/v3?requestId='+encodeURIComponent(q.requestId),{headers:{'x-api-key':d.apiKey()},redirect:'error',signal:AbortSignal.timeout(15000)})
+   if(!r.ok)return null
+   const status=await r.json()
+   if(status.originChainId!==196||!Array.isArray(status.inTxHashes)||status.inTxHashes.length!==1||!hash(status.inTxHashes[0]))return null
+   const candidate=status.inTxHashes[0] as Hex,source=await receipt('xlayer',candidate)
+   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
+   return source&&xlayerBridgeSourceProven(binding,source,candidate)?candidate:null
+  },
   async status(q:XLayerOutboundQuote,sourceHash:Hex){
    const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,refundOptions:q.refundOptions,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
    const source=await receipt('xlayer',sourceHash)

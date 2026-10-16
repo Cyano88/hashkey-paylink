@@ -161,3 +161,15 @@ for(const override of [{wallet_id:'wrong-wallet'},{caip2:'eip155:1'},{id:'differ
  assert.equal(Object.values(f.store.requests)[0].hash,undefined);
 }
 console.log('PASS sponsored operation accepted before hash; durable recovery; exact wallet/network/operation binding; no duplicate broadcasts.');
+
+// Privy's documented batch response has no user_operation_hash.
+submits=0;ready=false;
+f=fixture({fetch:async(url,init)=>{
+ if(init.method==='POST'){submits++;return Response.json({method:'wallet_sendCalls',data:{transaction_id:providerId,caip2:'eip155:196'}})}
+ return Response.json({id:providerId,wallet_id:walletId,caip2:'eip155:196',transaction_hash:ready?hash:null});
+}});
+const batchPayment=body();assert.equal((await f.call(batchPayment)).status,202);
+assert.equal(Object.values(f.store.requests)[0].transactionId,providerId);
+await f.call(batchPayment);assert.equal(submits,1);
+ready=true;assert.equal((await f.call({action:'status',wallet,attemptId:batchPayment.request.headers['privy-idempotency-key']})).body.hash,hash);
+assert.equal(submits,1);console.log('PASS documented transaction-id-only batch acceptance and recovery without resending.');

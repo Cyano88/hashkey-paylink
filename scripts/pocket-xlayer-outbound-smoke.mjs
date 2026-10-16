@@ -88,3 +88,16 @@ assert.equal((await call(quoteRequest)).status,403)
 const recovered=await call({action:'status',wallet:input.sender,attemptId:send.request.headers['privy-idempotency-key']})
 assert.equal(recovered.body.bridge.status,'completed','recovery remains available when outbound flag is disabled')
 console.log('PASS outbound Relay validation, finite approval/reset/deposit plus fee batch, owner/destination binding, exact signed relay, duplicate prevention, persisted recovery, and destination receipt required for success. No funds moved.')
+
+assert.equal(await outbound.recoverSource(q),hash);
+status.originChainId=1;assert.equal(await outbound.recoverSource(q),null);status.originChainId=196;
+status.inTxHashes=[hash,outHash];assert.equal(await outbound.recoverSource(q),null);status.inTxHashes=[hash];
+state.reorg=true;assert.equal(await outbound.recoverSource(q),null);state.reorg=false;
+state.source.logs.splice(1,1);assert.equal(await outbound.recoverSource(q),null);state.source=structuredClone(source);
+state.source.logs[2].data=encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'bytes32'}],[input.sender,stablecoinAddress('xlayer','USDC'),BigInt(input.amountUnits),'0x'+'f'.repeat(64)]);
+assert.equal(await outbound.recoverSource(q),null);state.source=structuredClone(source);
+const attemptId=send.request.headers['privy-idempotency-key'];delete store.requests[attemptId].hash;
+store.requests[attemptId].providerFailure={status:200};journal=null;
+const repaired=await handler.reconcileOutbound('owner',quoted.body.bridgeQuoteToken);
+assert.equal(repaired.hash,hash);assert.equal(repaired.status,'completed');assert.equal(store.requests[attemptId].hash,hash);assert.equal(broadcasts,1);
+console.log('PASS orphaned batch recovery requires canonical exact-order deposit and fee; no duplicate broadcast.');
