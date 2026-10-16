@@ -74,7 +74,7 @@ export async function readPocketWallets({
     headers: { authorization: `Bearer ${accessToken}` },
   })
   const data = await response.json().catch(() => undefined)
-  if (!response.ok) throw new Error(walletLinkErrorMessage(data))
+  if (!response.ok) throw new Error(response.status >= 500 ? 'Wallet details are temporarily unavailable. Try again.' : response.status === 401 ? 'Sign in again to load your wallet details.' : isRecord(data) && data.error ? walletLinkErrorMessage(data) : 'Could not load wallet details. Try again.')
   return parsePocketWalletsRead(data)
 }
 
