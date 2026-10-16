@@ -52,14 +52,14 @@ export default function PocketSwapPage() {
   const [xlayerEnabled,setXlayerEnabled]=useState(false),[xlayerSelected,setXlayerSelected]=useState(false)
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   useEffect(()=>{
-    let disposed=false;setXlayerEnabled(false);setUsdtXlayerEnabled(false);setXlayerSelected(false);setUsdtReturn({})
-    if(authenticated&&email)void xlayerBridgeRequest(getAccessToken).then(data=>{if(disposed)return;setXlayerEnabled(data.enabled===true);setUsdtXlayerEnabled(data.usdtEnabled===true);for(const pending of data.pending||[])trackPocketOperation(email,'bridge',pending)}).catch(()=>{})
-    return()=>{disposed=true}
+    let disposed=false,timer:ReturnType<typeof setTimeout>|undefined;setXlayerEnabled(false);setUsdtXlayerEnabled(false);setXlayerSelected(false);setUsdtReturn({})
+    const load=()=>{if(authenticated&&email)void xlayerBridgeRequest(getAccessToken).then(data=>{if(disposed)return;setXlayerEnabled(data.enabled===true);setUsdtXlayerEnabled(data.usdtEnabled===true);for(const pending of data.pending||[])trackPocketOperation(email,'bridge',pending)}).catch(()=>{if(!disposed)timer=setTimeout(load,5000)})};load()
+    return()=>{disposed=true;clearTimeout(timer)}
   },[authenticated,email,getAccessToken])
   useEffect(()=>{
-    let disposed=false;setOutboundEnabled(false);setOutboundSelected(false)
-    if(authenticated&&email&&stockWallet.address)void sponsoredTransferRequest({action:'bridge-capabilities',wallet:stockWallet.address},getAccessToken).then((data:any)=>{if(disposed)return;setOutboundEnabled(data.enabled===true);for(const pending of data.pending||[])trackPocketOperation(email,'bridge',pending)}).catch(()=>{})
-    return()=>{disposed=true}
+    let disposed=false,timer:ReturnType<typeof setTimeout>|undefined;setOutboundEnabled(false);setOutboundSelected(false)
+    const load=()=>{if(authenticated&&email&&stockWallet.address)void sponsoredTransferRequest({action:'bridge-capabilities',wallet:stockWallet.address},getAccessToken).then((data:any)=>{if(disposed)return;setOutboundEnabled(data.enabled===true);for(const pending of data.pending||[])trackPocketOperation(email,'bridge',pending)}).catch(()=>{if(!disposed)timer=setTimeout(load,5000)})};load()
+    return()=>{disposed=true;clearTimeout(timer)}
   },[authenticated,email,stockWallet.address,getAccessToken])
   useEffect(()=>setActiveBridge(null),[email])
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
