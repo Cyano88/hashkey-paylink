@@ -24,8 +24,8 @@ export function validateSponsoredStablecoinQuote(q:SponsoredStablecoinQuote,now=
  for(const c of actual.body.params.calls){if(typeof c.to!=='string')return fail();c.to=c.to.toLowerCase()}
  if(canonical(actual)!==canonical(expected))return fail()
 }
-export async function quoteSponsoredStablecoin(owner:Address,intent:StablecoinIntent,deps:Dependencies):Promise<SponsoredStablecoinQuote>{
- const attemptId=crypto.randomUUID(),captured=structuredClone(intent)
+export async function quoteSponsoredStablecoin(owner:Address,intent:StablecoinIntent,deps:Dependencies,attemptId:string=crypto.randomUUID()):Promise<SponsoredStablecoinQuote>{
+ const captured=structuredClone(intent)
  const result=await sponsoredTransferRequest({action:'quote',wallet:owner,intent:captured,attemptId},deps.getAccessToken,deps.fetcher).catch(error=>{
   if(error instanceof SponsoredTransferNotSubmitted)throw error
   throw new SponsoredTransferNotSubmitted('Could not check the network fee. Review the transfer again.')
@@ -34,6 +34,18 @@ export async function quoteSponsoredStablecoin(owner:Address,intent:StablecoinIn
  const quote={...result,owner,intent:captured,attemptId} as SponsoredStablecoinQuote
  validateSponsoredStablecoinQuote(quote)
  return quote
+}
+// Called only after PIN approval. The reviewed quote was validated before PIN;
+// refresh its signing window without increasing the debit the user approved.
+export async function refreshApprovedStablecoinQuote(approved:SponsoredStablecoinQuote,deps:Dependencies){
+ const captured=structuredClone(approved)
+ deps.assertCurrent()
+ const fresh=await quoteSponsoredStablecoin(captured.owner,captured.intent,deps,captured.attemptId)
+ if(fresh.owner!==captured.owner||canonical(fresh.intent)!==canonical(captured.intent)
+   ||fresh.request.url!==captured.request.url||fresh.request.headers['privy-app-id']!==captured.request.headers['privy-app-id']
+   ||BigInt(fresh.feeUnits)>BigInt(captured.feeUnits)||BigInt(fresh.totalUnits)>BigInt(captured.totalUnits))
+   throw new SponsoredTransferNotSubmitted('Network fee or wallet changed. Review the transfer again.')
+ return fresh
 }
 export async function sendSponsoredStablecoin(approved:SponsoredStablecoinQuote,deps:Dependencies&{sign(request:SponsoredStablecoinQuote['request']):Promise<{signature:string}>}){
  let dispatched=false

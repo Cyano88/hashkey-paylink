@@ -7,7 +7,7 @@ import {sendOutboundBridge,validateOutboundBridge,outboundTokens,type OutboundBr
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthorizationSignature, useSendTransaction, useWallets } from '@privy-io/react-auth'
 import {sendSponsoredTransfer,sponsoredTransferRequest} from '../api/pocketSponsoredTransfer'
-import {quoteSponsoredStablecoin,sendSponsoredStablecoin,validateSponsoredStablecoinQuote} from '../api/pocketSponsoredStablecoin'
+import {quoteSponsoredStablecoin,refreshApprovedStablecoinQuote,sendSponsoredStablecoin,validateSponsoredStablecoinQuote} from '../api/pocketSponsoredStablecoin'
 import {isXLayerSendStablecoin} from '../lib/pocketStockSendMinimum'
 import {SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 import {reconcileSponsoredStockAttempt} from '../lib/pocketStockSubmission'
@@ -121,10 +121,12 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     finally{inFlight.current=false;if(scope.current===key)setBusy(false)}
   }
   const send = async (review: StockTransfer, hooks?: {beforeSubmit?:()=>Promise<void>;onSubmitted?:(hash:Hex)=>void}) => {
+    review=structuredClone(review)
     if(!wallet)throw Error('Your XStocks wallet is reconnecting. Try again in a moment.')
     if (!address || inFlight.current || !!localStorage.getItem('pocket.xstocks.signing:'+ownerKey)) throw Error('A wallet submission is still being checked in Activity.')
     const key = ownerKey
     if (review.owner !== address || review.expiresAt <= Date.now()) throw Error('This review expired. Review the transfer again.')
+    if(review.reimbursement)validateSponsoredStablecoinQuote(review.reimbursement)
     inFlight.current = true; setBusy(true); setError('')
     try {
       await requestPocketPaymentApproval()
@@ -136,7 +138,6 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       if(fresh.sponsored&&isXLayerSendStablecoin(fresh.to)){
         const q=review.reimbursement
         if(!q||q.owner!==address||q.intent.recipient!==review.recipient||q.intent.amountUnits!==review.units.toString()||q.intent.asset!==review.asset.symbol)throw Error('Review the transfer fee before sending.')
-        validateSponsoredStablecoinQuote(q)
         const balance=await stockClient.readContract({address:fresh.to,abi:stockTokenAbi,functionName:'balanceOf',args:[address]})
         if(balance<BigInt(q.totalUnits))throw Error('Insufficient '+review.asset.symbol+' balance including the network fee.')
       }
@@ -144,11 +145,13 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       await ensurePocketXLayerWallet(() => walletRef.current, address, () => { if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.') })
       await hooks?.beforeSubmit?.()
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
+      const current=()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}
+      const reimbursement=review.reimbursement ? await refreshApprovedStablecoinQuote(review.reimbursement,{getAccessToken,assertCurrent:current}) : undefined
       // Pocket owns review and approval. Privy provides signing without a second transaction modal.
-      return await runStockSubmission({key, kind:'send',sponsored:!!fresh.sponsored,attemptId:review.reimbursement?.attemptId,
+      return await runStockSubmission({key, kind:'send',sponsored:!!fresh.sponsored,attemptId:reimbursement?.attemptId,
         details:{recipient:review.recipient,amount:review.amount,symbol:review.asset.symbol,at:Date.now()},
         wait:hash=>stockClient.waitForTransactionReceipt({hash,timeout:30_000}),
-        send: attemptId => review.reimbursement ? sendSponsoredStablecoin(review.reimbursement,{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}}) : fresh.sponsored&&fresh.data ? sendSponsoredTransfer({owner:address,to:fresh.to,data:fresh.data,attemptId},{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}}) : sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
+        send: attemptId => reimbursement ? sendSponsoredStablecoin(reimbursement,{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:current}) : fresh.sponsored&&fresh.data ? sendSponsoredTransfer({owner:address,to:fresh.to,data:fresh.data,attemptId},{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:current}) : sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
         onPending: next => { if(scope.current===key) {setPending(next);hooks?.onSubmitted?.(next.hash)} },
         onUncertain: value => { if(scope.current===key) setUncertain(value) },
       })
