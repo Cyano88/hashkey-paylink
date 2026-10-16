@@ -62,6 +62,7 @@ export function settleStockPending(pending: StockPending, success: boolean): Sto
 }
 export async function runStockSubmission(options: {
  sponsored?:boolean;
+ attemptId?:string;
  key: string; kind: NonNullable<StockPending['kind']>; xpayPaymentId?:string;
  gift?:StockPending['gift']; details?:StockPending['details'];
  send: (attemptId:string) => Promise<{ hash: Hex }>;
@@ -84,7 +85,8 @@ export async function runStockSubmission(options: {
  // previous submission has no known transaction hash. Known-hash attempts
  // remain independently trackable and do not take this signing lock.
  if(localStorage.getItem(signingKey(key))||readStockAttempts(key).some(r=>r.status==='pending'&&!r.hash))throw Object.assign(new Error('A payment is still being checked. View Activity before trying again.'),{transactionPending:true})
- const id=crypto.randomUUID()
+ const id=options.attemptId||crypto.randomUUID()
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)||readStockAttempts(key).some(r=>r.id===id))throw new SponsoredTransferNotSubmitted('Review the transfer again before sending.')
  const draft:StockPending={key,kind,id,details,xpayPaymentId,gift,...(options.sponsored?{relay:'privy' as const}:{}),hash:'' as Hex,status:'pending'}
  localStorage.setItem(signingKey(key), String(Date.now()))
  try{saveStockAttempt(draft)}catch(reason){localStorage.removeItem(signingKey(key));throw reason}

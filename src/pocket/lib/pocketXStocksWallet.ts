@@ -15,7 +15,7 @@ export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 
 // OKX's native-token identifier for X Layer market-price requests.
 export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 export type StockHolding = { asset: StockAsset; units: bigint; decimals: number }
-export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; sponsored?: boolean; expiresAt: number }
+export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; sponsored?: boolean; expiresAt: number; reimbursement?:import('../api/pocketSponsoredStablecoin').SponsoredStablecoinQuote }
 
 export function stockAmountUnits(amount: string, decimals: number) {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36 || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amount) || (amount.split('.')[1]?.length || 0) > decimals) throw Error('Enter a valid amount within the asset precision.')

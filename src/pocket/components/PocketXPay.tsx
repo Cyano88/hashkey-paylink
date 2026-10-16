@@ -20,7 +20,7 @@ import PocketArcTokenPicker from './PocketArcTokenPicker'
 import PocketPaymentSuccess from './PocketPaymentSuccess'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { stockPickerTokens } from '../lib/pocketStockPickerTokens'
-import { stockAssets, stockUsdc, prepareStockTransfer, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
+import { stockAssets, stockUsdc, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
 import { stockTransferGasLabel } from '../lib/pocketXLayerSponsorship'
 import { formatStockQuantity } from '../lib/pocketStockDisplay'
 import { xpayRequest } from '../api/pocketXPayClient'
@@ -90,7 +90,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
   const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID(),checkoutId:paymentContext?.checkoutId||new URLSearchParams(location.search).get('xpay_checkout_id')||undefined})
   if(scopeRef.current!==currentScope)return
   const asset=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===data.payment.token)!
-  const transfer=await prepareStockTransfer(wallet.address,asset,data.payment.recipient,data.payment.amount)
+  const transfer=await wallet.prepareTransfer(asset,data.payment.recipient,data.payment.amount)
   setPayment(data.payment);setReview(transfer)
  })
  const pay=()=>run(async()=>{
@@ -101,9 +101,10 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
   // A materially higher fee needs a separate confirmation before PIN approval.
   let transfer=review
   if(review.expiresAt<=Date.now()){
-   transfer=await prepareStockTransfer(review.owner,review.asset,review.recipient,review.amount)
+   transfer=await wallet.prepareTransfer(review.asset,review.recipient,review.amount)
    if(scopeRef.current!==currentScope)throw Error('Your Pocket account changed.')
    setReview(transfer)
+   if(transfer.reimbursement)throw Error('Review the refreshed network fee before paying.')
    if(transfer.fee>review.fee*120n/100n)throw Error('Network fee changed. Review the updated fee before paying.')
   }
   if(p.expiresAt<=Date.now()){setNow(Date.now());throw Error('This amount has expired. Update it and review before paying.')}

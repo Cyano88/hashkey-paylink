@@ -6,6 +6,8 @@ import usePocketEmbeddedWallet from './usePocketEmbeddedWallet'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthorizationSignature, useSendTransaction, useWallets } from '@privy-io/react-auth'
 import {sendSponsoredTransfer,sponsoredTransferRequest} from '../api/pocketSponsoredTransfer'
+import {quoteSponsoredStablecoin,sendSponsoredStablecoin,validateSponsoredStablecoinQuote} from '../api/pocketSponsoredStablecoin'
+import {isXLayerSendStablecoin} from '../lib/pocketStockSendMinimum'
 import {SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 import {reconcileSponsoredStockAttempt} from '../lib/pocketStockSubmission'
 import { getAddress, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from 'viem'
@@ -89,6 +91,18 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     if(embedded.length>1){setError('Multiple embedded wallets found. Wallet selection needs review.');return}
     setError('');setup.retry()
   }
+  const prepareTransfer=async(asset:StockTransfer['asset'],recipient:string,amount:string):Promise<StockTransfer>=>{
+    if(!address)throw Error('Your Pocket wallet is reconnecting.')
+    const key=ownerKey,current=()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}
+    const review=await prepareStockTransfer(address,asset,recipient,amount)
+    current()
+    if(!review.sponsored||!isXLayerSendStablecoin(review.to))return review
+    const reimbursement=await quoteSponsoredStablecoin(address,{asset:asset.symbol as 'USDC'|'USDT',recipient:review.recipient,amountUnits:review.units.toString()},{getAccessToken,assertCurrent:current})
+    const balance=await stockClient.readContract({address:review.to,abi:stockTokenAbi,functionName:'balanceOf',args:[address]})
+    current()
+    if(balance<BigInt(reimbursement.totalUnits))throw Error('Insufficient '+asset.symbol+' balance including the network fee.')
+    return {...review,reimbursement,expiresAt:Math.min(review.expiresAt,reimbursement.expiresAt)}
+  }
   const send = async (review: StockTransfer, hooks?: {beforeSubmit?:()=>Promise<void>;onSubmitted?:(hash:Hex)=>void}) => {
     if(!wallet)throw Error('Your XStocks wallet is reconnecting. Try again in a moment.')
     if (!address || inFlight.current || !!localStorage.getItem('pocket.xstocks.signing:'+ownerKey)) throw Error('A wallet submission is still being checked in Activity.')
@@ -102,15 +116,22 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
       const fresh = await prepareStockTransfer(address, review.asset, review.recipient, review.amount)
       if (!!fresh.sponsored !== !!review.sponsored) throw Error('Gas payment changed. Review this transfer again.')
+      if(fresh.sponsored&&isXLayerSendStablecoin(fresh.to)){
+        const q=review.reimbursement
+        if(!q||q.owner!==address||q.intent.recipient!==review.recipient||q.intent.amountUnits!==review.units.toString()||q.intent.asset!==review.asset.symbol)throw Error('Review the transfer fee before sending.')
+        validateSponsoredStablecoinQuote(q)
+        const balance=await stockClient.readContract({address:fresh.to,abi:stockTokenAbi,functionName:'balanceOf',args:[address]})
+        if(balance<BigInt(q.totalUnits))throw Error('Insufficient '+review.asset.symbol+' balance including the network fee.')
+      }
       if (fresh.fee > review.fee * 120n / 100n) throw Error('Network fee changed. Review this transfer again.')
       await ensurePocketXLayerWallet(() => walletRef.current, address, () => { if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.') })
       await hooks?.beforeSubmit?.()
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
       // Pocket owns review and approval. Privy provides signing without a second transaction modal.
-      return await runStockSubmission({key, kind:'send',sponsored:!!fresh.sponsored,
+      return await runStockSubmission({key, kind:'send',sponsored:!!fresh.sponsored,attemptId:review.reimbursement?.attemptId,
         details:{recipient:review.recipient,amount:review.amount,symbol:review.asset.symbol,at:Date.now()},
         wait:hash=>stockClient.waitForTransactionReceipt({hash,timeout:30_000}),
-        send: attemptId => fresh.sponsored&&fresh.data ? sendSponsoredTransfer({owner:address,to:fresh.to,data:fresh.data,attemptId},{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}}) : sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
+        send: attemptId => review.reimbursement ? sendSponsoredStablecoin(review.reimbursement,{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}}) : fresh.sponsored&&fresh.data ? sendSponsoredTransfer({owner:address,to:fresh.to,data:fresh.data,attemptId},{getAccessToken,sign:generateAuthorizationSignature,assertCurrent:()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}}) : sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
         onPending: next => { if(scope.current===key) {setPending(next);hooks?.onSubmitted?.(next.hash)} },
         onUncertain: value => { if(scope.current===key) setUncertain(value) },
       })
@@ -246,5 +267,5 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
   const reconcileGift=(id:string,operation:'funding'|'claim'|'refund',hash:Hex)=>{
     settleStockGiftProof(ownerKey,id,operation,hash);setPending(readStockPending(ownerKey));setUncertain(!!localStorage.getItem('pocket.xstocks.signing:'+ownerKey))
   }
-  return { signGift, recoverGiftFunding, reconcileGift, attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !address && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
+  return { prepareTransfer, signGift, recoverGiftFunding, reconcileGift, attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !address && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
 }

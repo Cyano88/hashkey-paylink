@@ -6,7 +6,7 @@ import PocketSlideAction from './PocketSlideAction'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketTransactionSheet from './PocketTransactionSheet'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { stockNotificationsRequest } from '../api/pocketStockNotificationsClient'
@@ -14,7 +14,7 @@ import PocketArcTokenPicker from './PocketArcTokenPicker'
 import { stockPickerTokens } from '../lib/pocketStockPickerTokens'
 import { formatStockQuantity } from '../lib/pocketStockDisplay'
 import { Copy } from './PocketIcons'
-import { prepareStockTransfer, stockAssets, stockGasAsset, stockUsdc, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
+import { stockAssets, stockGasAsset, stockUsdc, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
 import { stockTransferGasLabel, xLayerTransferSponsorshipEnabled } from '../lib/pocketXLayerSponsorship'
 import type usePocketStockWallet from '../hooks/usePocketStockWallet'
 
@@ -34,12 +34,13 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
   const [resultOpen, setResultOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [review, setReview] = useState<StockTransfer | null>(null)
+  const reviewGeneration=useRef(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [reconnectWallet, setReconnectWallet] = useState(false)
   const [copied, setCopied] = useState(false)
   const asset = symbol === 'OKB' ? stockGasAsset : [stockUsdc, ...stockAssets].find(a => a.symbol === symbol)!
-  useEffect(() => { setReview(null); setReviewOpen(false); setError('') }, [symbol, recipient, amount, wallet.address, view])
+  useEffect(() => { reviewGeneration.current++;setReview(null); setReviewOpen(false); setError('') }, [symbol, recipient, amount, wallet.address, view])
   const tokens = stockPickerTokens(wallet.displaySnapshot || wallet.snapshot)
   const assetPicker = <PocketArcTokenPicker label="Asset to send" value={asset.address} excluded="" tokens={tokens} disabled={busy || wallet.busy} networkLabel="X Layer" clean initialLimit={100} balancesLoading={!wallet.displaySnapshot && !wallet.snapshot && !wallet.error} onChange={t => {setSymbol(t.symbol);setRequestSent(false)}} discover={async () => {throw Error('This contract is not in the supported XStocks list.')}} />
   const fundingAsset = fundingShortfall(error||wallet.actionError,asset.symbol) || (amountExceedsBalance(amount,tokens.find(t=>t.address===asset.address)?.balance,!wallet.balanceStale&&!wallet.balanceError) ? asset.symbol : null)
@@ -48,7 +49,8 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
   const prepare = async () => {
     if (!wallet.address || busy) return
     setReviewOpen(true); setBusy(true); setError('')
-    try { setReview(await prepareStockTransfer(wallet.address, asset, recipient.trim(), amount.trim())) }
+    const generation=reviewGeneration.current
+    try { const next=await wallet.prepareTransfer(asset, recipient.trim(), amount.trim());if(generation===reviewGeneration.current)setReview(next) }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not prepare this transfer.') }
     finally { setBusy(false) }
   }
@@ -88,7 +90,7 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
     </>}
     {reviewOpen && !resultOpen && <PocketBottomSheet title="Confirm send" showCloseButton dismissOnBackdrop={false} dismissible={!busy && !wallet.busy} onClose={()=>{setReviewOpen(false);setReview(null)}}>
       <PocketConfirmationDetails amount={(review?.amount || amount) + ' ' + (review?.asset.symbol || asset.symbol)} rows={[
-        ['Wallet address', <span className="break-all">{review?.recipient || recipient}</span>], ['Network', 'X Layer'], ...(review ? [['Gas', stockTransferGasLabel(review, fee => stockQuantity(fee, 18))] as [string,string]] : []),
+        ['Wallet address', <span className="break-all">{review?.recipient || recipient}</span>], ['Network', 'X Layer'], ...(review?.reimbursement ? [['Network fee',stockQuantity(BigInt(review.reimbursement.feeUnits),6)+' '+review.asset.symbol],['Total',stockQuantity(BigInt(review.reimbursement.totalUnits),6)+' '+review.asset.symbol]] as [string,string][] : review ? [['Gas', stockTransferGasLabel(review, fee => stockQuantity(fee, 18))] as [string,string]] : []),
       ]} />
       <div className="mt-5"><PocketFundingAction flow="transfer" {...fundingProps}><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy || wallet.busy ? 'pending' : 'idle'} disabled={pending || !review} onConfirm={()=>void send()} labels={{idle:'Confirm send',disabled:'Transaction pending',pending:review?'Sending':'Checking fees'}} /></PocketFundingAction></div>
       {!fundingAsset && error && <p role="alert" className="mt-3 text-xs text-red-500">{error}</p>}
