@@ -38,4 +38,12 @@ assert.ok(configuredXLayerReimbursement(env))
 for(const key of Object.keys(env))assert.equal(configuredXLayerReimbursement({...env,[key]:''}),undefined)
 assert.equal(configuredXLayerReimbursement({...env,POCKET_XLAYER_FEE_MARGIN_BPS:'0'}),undefined)
 assert.equal(configuredXLayerReimbursement({...env,PRIVATE_RPC_URL_XLAYER:'http://unsafe.invalid'}),undefined)
+const observed={...env,POCKET_XLAYER_FEE_POLICY:'observed_cost',POCKET_XLAYER_OBSERVED_COST_USD_MICROS:'285',POCKET_XLAYER_MIN_FEE_UNITS:'10000',POCKET_XLAYER_PROVIDER_FEE_BPS:'',POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS:''}
+assert.ok(configuredXLayerReimbursement(observed),'Observed policy must not require invented provider terms')
+for(const edit of [{POCKET_XLAYER_OBSERVED_COST_USD_MICROS:''},{POCKET_XLAYER_OBSERVED_COST_USD_MICROS:'284'},{POCKET_XLAYER_MIN_FEE_UNITS:'9999'},{POCKET_XLAYER_FEE_POLICY:'unknown'}])assert.equal(configuredXLayerReimbursement({...observed,...edit}),undefined)
+f=fixture()
+const observedEstimator=createXLayerFeeEstimator({...f,policy:{...policy,providerBps:0,providerFixedUsdMicros:0n,observedCostUsdMicros:285n,pricing:{marginBps:2500,minimumFeeUnits:'10000'}}})
+assert.equal((await observedEstimator(input)).feeUnits,'535','Observed cost allowance is added to full network estimate')
+f.state.gasPrice='0x2540be400'
+assert.ok(BigInt((await observedEstimator(input)).feeUnits)>10000n,'Rising gas must increase estimate beyond the floor')
 console.log('PASS complete-cost arithmetic, L1 bound, 7702 allowance, provider fees, depeg conversion, fresh prices/blocks, ceiling and missing-config rejection. Synthetic billing terms only; no transactions.')

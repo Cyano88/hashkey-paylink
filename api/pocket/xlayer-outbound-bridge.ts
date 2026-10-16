@@ -1,3 +1,4 @@
+import {POCKET_XLAYER_MINIMUM_AMOUNT,POCKET_XLAYER_MINIMUM_UNITS} from '../../src/pocket/lib/pocketXLayerMinimum.js'
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto'
 import {createPublicClient,encodeFunctionData,formatUnits,getAddress,http,isAddress,parseAbi,parseUnits,type Hex} from 'viem'
 import {base,xLayer} from 'viem/chains'
@@ -49,6 +50,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
  return {
   async quote(input:{ownerId:string;walletId:string;walletAddress:Hex;asset:'USDC'|'USDT';amount:string},estimate:XLayerFeeEstimator,pricing:XLayerReimbursementPolicy){
    if(!['USDC','USDT'].includes(input.asset)||!/^\d{1,12}(\.\d{1,6})?$/.test(input.amount)||parseUnits(input.amount,6)<=0n)invalid()
+   if(parseUnits(input.amount,6)<POCKET_XLAYER_MINIMUM_UNITS)throw Error('Minimum bridge amount is '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+input.asset+'.')
    await networks();const w=await d.destination(input.ownerId),amountUnits=parseUnits(input.amount,6).toString()
    const route=await d.route({asset:input.asset,source:'xlayer',destination:'base',sender:input.walletAddress,recipient:w.address,amountUnits},d.apiKey(),d.fetch)
    if(route.source!=='xlayer'||route.destination!=='base'||route.asset!==input.asset||route.amountUnits!==amountUnits||route.execution.kind!=='evm'||!hash(route.requestId))invalid()

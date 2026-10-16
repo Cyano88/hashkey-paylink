@@ -1,4 +1,5 @@
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
+import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
 import {reconcileUsdtBridge} from './usdt-bridge.js'
 import {reconcileXLayerBridge} from './xlayer-bridge.js'
 import type { Request, Response } from 'express'
@@ -19,6 +20,7 @@ import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalE
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
 type Dependencies = {
+  auditXLayerBilling:typeof checkXLayerBillingCoverage
   executions: PaymentExecutionRepository
   reconcilePaycrest: typeof reconcilePaycrestOrderPayment
   reconcileBill: typeof reconcilePocketBillExecutionByResource
@@ -252,6 +254,7 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
 
 export async function runPocketReconciliation(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    auditXLayerBilling:checkXLayerBillingCoverage,
     executions: paymentExecutionRepository, reconcilePaycrest: reconcilePaycrestOrderPayment,
     reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
     syncCheckout: syncHostedCheckoutExecution, expireCheckout: expireHostedCheckoutExecution,
@@ -278,6 +281,8 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch(error){results.push({id:record.id,kind:'wallet_bridge',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
+  try { await dependencies.auditXLayerBilling() }
+  catch(error){results.push({id:'xlayer-sponsorship-billing',kind:'operations',result:'error',message:errorText(error)})}
   const threshold = submittedReviewThresholdMs()
   const remaining = await dependencies.executions.listUnresolved(1000)
   const stale = remaining.filter(intent => dependencies.now() - intent.updatedAt > threshold)

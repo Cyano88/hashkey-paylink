@@ -9,6 +9,7 @@ import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../re
 import { makeSponsoredRequest, makeSponsoredBatchRequest, type SponsoredRequest } from '../../src/pocket/lib/pocketSponsoredRequest.js'
 import {quoteXLayerReimbursement,openXLayerReimbursement,sealXLayerReimbursement,refreshXLayerReimbursement,type XLayerFeeEstimator,type XLayerReimbursementPolicy,type XLayerFeeQuote} from './xlayer-reimbursement.js'
 import {configuredXLayerReimbursement} from './xlayer-fee-estimator.js'
+import {checkXLayerBillingCoverage,type XLayerCoverage} from './xlayer-billing-guard.js'
 import {createXLayerOutboundBridge,openOutboundBridge,sealOutboundBridge,outboundBridgePreview} from './xlayer-outbound-bridge.js'
 import catalogue from '../../src/pocket/lib/pocketXStocksCatalog.json' with { type: 'json' }
 import { stockClient, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
@@ -22,7 +23,7 @@ const contracts = new Set([
   ...catalogue.assets.map(a => a.address.toLowerCase()),
 ])
 const transferAbi = parseAbi(['function transfer(address,uint256) returns(bool)'])
-type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; bridgeQuoteToken?:string; providerFailure?: {status:number;code?:string;message?:string;cause?:string;requestId?:string} }
+type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; bridgeQuoteToken?:string; coverage?:XLayerCoverage; providerFailure?: {status:number;code?:string;message?:string;cause?:string;requestId?:string} }
 // Privy documents this exact 400 error as not broadcast. Other errors remain
 // uncertain. Keep the durable reservation: a duplicate must never send again.
 const notBroadcast = (record: Record) => !record.hash && !record.transactionId && !record.userOperationHash && record.providerFailure?.status === 400 && record.providerFailure?.code === 'transaction_broadcast_failure'
@@ -103,8 +104,9 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   reimbursement: {estimate:XLayerFeeEstimator;pricing:XLayerReimbursementPolicy};
   outbound:ReturnType<typeof createXLayerOutboundBridge>;
   journal:typeof recordCirclePocketAction;
+  billingGuard:typeof checkXLayerBillingCoverage;
 }> = {}) {
-  const d = { journal:recordCirclePocketAction, identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, reimbursement:configuredXLayerReimbursement(), outbound:createXLayerOutboundBridge(), ...overrides }
+  const d = { billingGuard:checkXLayerBillingCoverage, journal:recordCirclePocketAction, identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, reimbursement:configuredXLayerReimbursement(), outbound:createXLayerOutboundBridge(), ...overrides }
   async function resolveAccepted(id: string, record: Record, walletId: string, c: Config) {
     if (record.hash || !record.transactionId) return record.hash || null
     const response = await d.fetch(`https://api.privy.io/v1/transactions/${record.transactionId}`, {
@@ -179,6 +181,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if(req.body?.purpose==='bridge'&&!c.outboundBridge)throw fail('Outbound bridging is not available yet.',403)
       if (req.body?.purpose === 'earn' && !c.earnEnabled) throw fail('Earn is not available yet.',403)
       if (req.body?.action === 'quote') {
+        await d.billingGuard(wallet)
         if(req.body?.purpose==='bridge'){
           if(!d.reimbursement||req.body.destination!=='base')throw fail('Outbound bridging is not available for this route.',503)
           const q=await d.outbound.quote({ownerId:identity.userId,walletId:embedded.id,walletAddress:wallet as Hex,asset:req.body.asset,amount:String(req.body.amount||'')},d.reimbursement.estimate,d.reimbursement.pricing)
@@ -211,6 +214,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         if(!isDeepStrictEqual(request,canonical))throw fail('Payment request does not match the approved bridge.')
         if(!reserved){try{await d.outbound.preflight(q,d.reimbursement.estimate)}catch{throw fail('Bridge quote changed or expired. Review the bridge again.',422)}}
         validated={id:q.fee.intentId,canonical,wallet,token:q.fee.calls[0].to,units:BigInt(q.fee.amountUnits)}
+        approved=q.fee
       }else if(req.body?.quoteToken!==undefined){
         if(earn||!d.reimbursement)throw fail('Reimbursed transfers are not available yet.',503)
         const transfer=reimbursementTransfer(req.body.intent,identity.userId,embedded.id,wallet,possibleId,c,d.now())
@@ -225,7 +229,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         validated=validateSponsoredRequest(request, embedded.id, c, d.now(), earn)
         // Public stablecoin sends must not bypass reimbursement via the legacy
         // single-call route. Existing allowlisted pilot and Earn are separate.
-        if(!earn&&c.publicTransfers&&!c.wallets.includes(wallet)&&isXLayerSendStablecoin(validated.token))throw fail('Review the transfer fee before sending.',422)
+        if(!earn&&(d.reimbursement||c.publicTransfers&&!c.wallets.includes(wallet))&&isXLayerSendStablecoin(validated.token))throw fail('Review the transfer fee before sending.',422)
       }
       const { id, canonical, wallet: from, token, units } = validated
       if (from !== wallet) throw fail('Payment wallet does not match your Pocket wallet.', 403)
@@ -237,6 +241,9 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         } else if(req.body?.purpose!=='bridge')try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
       }
       const fingerprint = createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
+      if(approved&&!reserved&&!isDeepStrictEqual(approved.pricing,d.reimbursement?.pricing))throw fail('Transfer fee policy changed. Review the transfer again.',422)
+      if(!reserved)await d.billingGuard(wallet)
+      if(!reserved&&Number(canonical.headers['privy-request-expiry'])<=d.now())throw fail('Payment approval expired. Review the transfer again.',422)
       let existing: Record | undefined
       await d.mutate(current => {
         const store = current || { requests:{} }
@@ -249,7 +256,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         // neither retries nor restarts can silently broadcast another transfer.
         const recent = Object.values(store.requests).filter(r => r.at > d.now() - 86_400_000)
         if (recent.length >= 50 || recent.filter(r => r.wallet === wallet || r.owner === identity.userId).length >= 10) throw fail('Sponsored transfer limit reached. Try again tomorrow.', 429)
-        store.requests[id] = {fingerprint,wallet,owner:identity.userId,at:d.now(),...(req.body?.purpose==='bridge'?{bridgeQuoteToken:req.body.bridgeQuoteToken}:{})}
+        store.requests[id] = {fingerprint,wallet,owner:identity.userId,at:d.now(),...(approved?{coverage:{walletId:embedded.id!,asset:approved.asset,feeUnits:approved.networkFeeUnits}}:{}),...(req.body?.purpose==='bridge'?{bridgeQuoteToken:req.body.bridgeQuoteToken}:{})}
         return store
       })
       reserved = true

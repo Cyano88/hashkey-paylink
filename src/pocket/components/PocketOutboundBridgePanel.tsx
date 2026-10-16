@@ -1,3 +1,4 @@
+import {POCKET_XLAYER_MINIMUM_AMOUNT} from '../lib/pocketXLayerMinimum'
 import {useEffect,useRef,useState} from 'react'
 import {formatUnits,type Address} from 'viem'
 import PocketBridgeForm from './PocketBridgeForm'
@@ -28,7 +29,7 @@ export default function PocketOutboundBridgePanel(p:Props){
  },[p.owner,p.wallet.address])
  useEffect(()=>{
   const n=++version.current,key=scope.current;setReview(null);setError('');setQuoting(false)
-  if(busy||pending||!p.wallet.address||!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<=0)return
+  if(busy||pending||!p.wallet.address||!/^\d+(\.\d{1,6})?$/.test(amount)||Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT)return
   setQuoting(true)
   const timer=setTimeout(()=>void(async()=>{
    try{
@@ -60,7 +61,7 @@ export default function PocketOutboundBridgePanel(p:Props){
   }finally{endPocketOperation(owner,approved.quote.id);locked.current=false;if(current(key)){setBusy(false);setReview(null)}}
  }
  const shortfall=!!review&&units!=null&&Number(review.quote.total)>Number(formatUnits(units,6)),q=pending?.quote||review?.quote
- return <PocketBridgeForm exactQuoteAmounts asset={pending?.quote.asset||p.asset} source="xlayer" destination="base" sources={[{value:'xlayer',label:'X Layer'},...POCKET_BRIDGE_NETWORKS.filter(n=>p.asset==='USDC'||!['arc','solana'].includes(n)).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))]} destinations={[{value:'base',label:'Base'}]} onSource={p.onSource} onDestination={()=>{}} disabled={busy||!!pending} amount={pending?.quote.amount||amount} onAmount={change} balance={balance} maxDisabled={balance===undefined} onMax={()=>change(Math.max(0,(balance||0)-Number(review?.quote.networkFee||0)).toFixed(6).replace(/\.?0+$/,''))} quote={q} quoteLoading={quoting} amountHint={shortfall?'Insufficient funds':undefined}>
+ return <PocketBridgeForm exactQuoteAmounts asset={pending?.quote.asset||p.asset} source="xlayer" destination="base" sources={[{value:'xlayer',label:'X Layer'},...POCKET_BRIDGE_NETWORKS.filter(n=>p.asset==='USDC'||!['arc','solana'].includes(n)).map(value=>({value,label:pocketBridgeNetworkLabel(value)}))]} destinations={[{value:'base',label:'Base'}]} onSource={p.onSource} onDestination={()=>{}} disabled={busy||!!pending} amount={pending?.quote.amount||amount} onAmount={change} balance={balance} maxDisabled={balance===undefined} onMax={()=>change(Math.max(0,(balance||0)-Number(review?.quote.networkFee||0)).toFixed(6).replace(/\.?0+$/,''))} quote={q} quoteLoading={quoting} amountHint={shortfall?'Insufficient funds':!pending&&Number(amount)>0&&Number(amount)<POCKET_XLAYER_MINIMUM_AMOUNT?'Minimum '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+p.asset:undefined}>
   {pending&&active.current!==pending.quote.id?<button className="pocket-cta-primary w-full" onClick={()=>p.onTracked(pending.quote.id,pending.quote.asset)}>View bridge progress</button>:error&&!review&&!quoting&&!pending?<button className="pocket-cta-primary w-full" onClick={()=>refreshQuote(n=>n+1)}>Try again</button>:<PocketSlideAction approvalRequired={false} status={busy?'pending':pending?'submitted':'idle'} loadingContent={quoting} disabled={busy||!!pending||!review||shortfall||balance===undefined||review.quote.expiresAt<=Date.now()} onConfirm={()=>void submit()} labels={{idle:'Confirm bridge',disabled:shortfall?'Insufficient balance':quoting?'Updating amount':!amount?'Enter bridge amount':'Amount unavailable',pending:'Preparing bridge',submitted:'Bridging '+p.asset,successful:'Bridge successful'}}/>}
   {error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
  </PocketBridgeForm>

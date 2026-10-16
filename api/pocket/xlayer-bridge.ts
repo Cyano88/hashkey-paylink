@@ -1,3 +1,4 @@
+import {POCKET_XLAYER_MINIMUM_AMOUNT,POCKET_XLAYER_MINIMUM_UNITS} from '../../src/pocket/lib/pocketXLayerMinimum.js'
 import type {Request,Response} from 'express'
 import {xlayerBridgeWalletEligible} from './xlayer-bridge-access.js'
 import {PrivyClient} from '@privy-io/server-auth'
@@ -109,6 +110,7 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
     const amount=String(req.body.amount||'')
     if(!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,6)<=0n)fail('Enter a '+asset+' amount.')
     await verifyNetworks()
+    if(parseUnits(amount,6)<POCKET_XLAYER_MINIMUM_UNITS)fail('Minimum bridge amount is '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+asset+'.')
     const w=await d.wallets(userId),amountUnits=parseUnits(amount,6).toString()
     const route=await d.quote({asset,source:'base',destination:'xlayer',sender:w.walletAddress,recipient:w.destinationAddress,amountUnits},d.apiKey(),d.fetch,{allowXLayerUsdcRefund:asset==='USDT'})
     if(route.execution.kind!=='evm')throw Error('Unsupported bridge execution.')

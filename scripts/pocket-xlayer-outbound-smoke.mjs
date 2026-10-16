@@ -22,6 +22,14 @@ const outbound=createXLayerOutboundBridge({now:()=>now,apiKey:()=>'fixture',dest
 let estimates=0
 const estimate=async i=>{estimates++;assert.equal(i.calls.length,5);return {feeUnits:'100',expiresAt:now+25000,estimateId:'synthetic'}}
 const pricing={marginBps:2500,minimumFeeUnits:'0'}
+for(const asset of ['USDC','USDT'])for(const amount of ['0.5','0.999999']){
+ await assert.rejects(()=>outbound.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset,amount},estimate,pricing),/Minimum bridge amount is 1/)
+}
+assert.equal(estimates,0,'Below-minimum requests must not reach gas estimation')
+for(const asset of ['USDC','USDT']){
+ const minimumBoundary=createXLayerOutboundBridge({client:()=>({getChainId:async()=>{throw Error('minimum accepted')}})})
+ await assert.rejects(()=>minimumBoundary.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset,amount:'1'},estimate,pricing),/minimum accepted/)
+}
 const q=await outbound.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6)},estimate,pricing)
 const sealed=sealOutboundBridge(q)
 assert.deepEqual(openOutboundBridge(sealed,'owner'),q);assert.throws(()=>openOutboundBridge(sealed,'someone-else'))
@@ -40,16 +48,22 @@ state.source.logs.splice(1,1);assert.equal((await outbound.status(q,hash)).statu
 state.delivery.logs=[];assert.equal((await outbound.status(q,hash)).status,'needs_attention');state.delivery=structuredClone(destinationReceipt)
 requests.requests[0].recipient=input.sender;assert.equal((await outbound.status(q,hash)).status,'needs_attention');requests.requests[0].recipient=input.recipient
 
-let store, broadcasts=0, sent, enabled=true, journal
+let store, broadcasts=0, sent, enabled=true, journal, billingBlocked=false
 const recordJournal=async input=>{if(journal&&['completed','failed'].includes(journal.status))return journal;journal={...input,id:'journal-fixture',createdAt:now,updatedAt:now};return journal}
-const handler=createXLayerSponsorshipHandler({journal:recordJournal,identity:async()=>({userId:'owner'}),user:async()=>({linkedAccounts:[{type:'wallet',walletClientType:'privy',chainType:'ethereum',address:input.sender,id:'fixturewallet123'}]}),config:()=>({appId:'fixture',secret:'synthetic',enabled:true,wallets:[],publicTransfers:true,outboundBridge:enabled}),durable:()=>true,now:()=>now,reimbursement:{estimate,pricing},outbound,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},fetch:async(url,init)=>{assert.equal(journal.metadata.execution,'privy','durable Activity record must exist before broadcast');broadcasts++;sent=JSON.parse(init.body);return Response.json({data:{hash}})}})
+const handler=createXLayerSponsorshipHandler({billingGuard:async()=>{if(billingBlocked)throw Error("Cost coverage unavailable")},journal:recordJournal,identity:async()=>({userId:'owner'}),user:async()=>({linkedAccounts:[{type:'wallet',walletClientType:'privy',chainType:'ethereum',address:input.sender,id:'fixturewallet123'}]}),config:()=>({appId:'fixture',secret:'synthetic',enabled:true,wallets:[],publicTransfers:true,outboundBridge:enabled}),durable:()=>true,now:()=>now,reimbursement:{estimate,pricing},outbound,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},fetch:async(url,init)=>{assert.equal(journal.metadata.execution,'privy','durable Activity record must exist before broadcast');broadcasts++;sent=JSON.parse(init.body);return Response.json({data:{hash}})}})
 const call=async body=>{const result={status:200};const res={setHeader(){},status(n){result.status=n;return res},json(body){result.body=body;return result}};await handler({method:'POST',body},res);return result}
 const quoteRequest={action:'quote',purpose:'bridge',wallet:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6),destination:'base'}
 const quoted=await call(quoteRequest);assert.equal(quoted.status,200,JSON.stringify(quoted.body));assert.equal(broadcasts,0)
 const send={action:'send',purpose:'bridge',wallet:input.sender,bridgeQuoteToken:quoted.body.bridgeQuoteToken,request:quoted.body.request,signature:'a'.repeat(88)}
 const bad=structuredClone(send);bad.request.body.params.calls.pop();assert.equal((await call(bad)).status,400);assert.equal(broadcasts,0)
+billingBlocked=true
+const stopped=await call(send);assert.equal(stopped.body.code,'pocket_sponsor_not_submitted');assert.equal(broadcasts,0);assert.equal(store,undefined)
+billingBlocked=false
 assert.equal((await call(send)).body.hash,hash);assert.deepEqual(sent,send.request.body);assert.ok(Object.values(store.requests)[0].bridgeQuoteToken)
+assert.deepEqual(Object.values(store.requests)[0].coverage,{walletId:'fixturewallet123',asset:'USDC',feeUnits:'125'})
+billingBlocked=true
 assert.equal((await call(send)).body.hash,hash);assert.equal(broadcasts,1)
+billingBlocked=false
 const capability=await call({action:'bridge-capabilities',wallet:input.sender})
 assert.equal(capability.body.enabled,true);assert.equal(capability.body.pending.length,1)
 assert.equal(capability.body.pending[0].quote.execution,'privy');assert.equal(capability.body.pending[0].quote.walletAddress.toLowerCase(),input.sender.toLowerCase())

@@ -10,12 +10,13 @@ const tokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c
 const oracle='0x420000000000000000000000000000000000000F'
 const oracleAbi=parseAbi(['function getL1FeeUpperBound(uint256) view returns(uint256)'])
 type MarketPrice={usd:number;fetchedAt:number}
-type Policy={providerBps:number;providerFixedUsdMicros:bigint;maxFeeUnits:bigint;pricing:XLayerReimbursementPolicy}
+type Policy={providerBps:number;providerFixedUsdMicros:bigint;maxFeeUnits:bigint;pricing:XLayerReimbursementPolicy;observedCostUsdMicros?:bigint}
 const unavailable=():never=>{throw Error('X Layer fee estimation is unavailable. Review the transfer again.')}
 const ceil=(a:bigint,b:bigint)=>(a+b-1n)/b
 function hex(v:unknown){if(typeof v!=='string'||!/^0x[0-9a-f]{1,64}$/i.test(v))return unavailable();return BigInt(v)}
 function validatePolicy(p:Policy){
  if(!Number.isSafeInteger(p.providerBps)||p.providerBps<0||p.providerBps>10000||p.providerFixedUsdMicros<0n||p.maxFeeUnits<=0n||p.maxFeeUnits>=2n**64n)unavailable()
+ if(p.observedCostUsdMicros!==undefined&&(p.observedCostUsdMicros<285n||BigInt(p.pricing.minimumFeeUnits)<10000n))unavailable()
  if(!/^(0|[1-9]\d{0,19})$/.test(p.pricing.minimumFeeUnits))unavailable()
  if(priceXLayerReimbursement(1n,p.pricing.marginBps,BigInt(p.pricing.minimumFeeUnits))>p.maxFeeUnits)unavailable()
 }
@@ -56,12 +57,15 @@ export function createXLayerFeeEstimator(d:{rpc:XLayerCostRpc;prices(addresses:s
   if(!Number.isSafeInteger(okb8)||!Number.isSafeInteger(stable8)||stable8<=0)unavailable()
   const networkWei=totalGas*price+l1
   const networkUsdMicros=ceil(networkWei*BigInt(okb8),10n**20n)
-  const fullUsdMicros=ceil(networkUsdMicros*BigInt(10000+policy.providerBps),10000n)+policy.providerFixedUsdMicros
+  // Observed mode adds the historical all-in cost as an allowance, rather than
+  // pretending it is Privy's contractual surcharge. The margin and floor then
+  // apply to this conservative estimate. Actual billing is monitored separately.
+  const fullUsdMicros=ceil(networkUsdMicros*BigInt(10000+policy.providerBps),10000n)+policy.providerFixedUsdMicros+(policy.observedCostUsdMicros??0n)
   const feeUnits=ceil(fullUsdMicros*100000000n,BigInt(stable8))
   if(priceXLayerReimbursement(feeUnits,policy.pricing.marginBps,BigInt(policy.pricing.minimumFeeUnits))>policy.maxFeeUnits)unavailable()
   const expiresAt=Math.min(started+30000,okb.fetchedAt+30000,stable.fetchedAt+30000,blockTime+30000)
   if(expiresAt<=now())unavailable()
-  const estimateId=createHash('sha256').update(JSON.stringify({input,blockHash:block.hash,gas:String(totalGas),gasPrice:String(price),l1:String(l1),okb8,stable8,providerBps:policy.providerBps,providerFixedUsdMicros:String(policy.providerFixedUsdMicros),expiresAt})).digest('hex')
+  const estimateId=createHash('sha256').update(JSON.stringify({input,blockHash:block.hash,gas:String(totalGas),gasPrice:String(price),l1:String(l1),okb8,stable8,providerBps:policy.providerBps,providerFixedUsdMicros:String(policy.providerFixedUsdMicros),observedCostUsdMicros:String(policy.observedCostUsdMicros??''),expiresAt})).digest('hex')
   return {feeUnits:feeUnits.toString(),expiresAt,estimateId}
  }
 }
@@ -72,7 +76,11 @@ export function configuredXLayerReimbursement(env:NodeJS.ProcessEnv=process.env,
  try{
   const integer=(name:string)=>{const v=env[name];if(!v||!/^(0|[1-9]\d{0,19})$/.test(v))return unavailable();return BigInt(v)}
   const pricing={marginBps:Number(integer('POCKET_XLAYER_FEE_MARGIN_BPS')),minimumFeeUnits:integer('POCKET_XLAYER_MIN_FEE_UNITS').toString()}
-  const policy={pricing,providerBps:Number(integer('POCKET_XLAYER_PROVIDER_FEE_BPS')),providerFixedUsdMicros:integer('POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS'),maxFeeUnits:integer('POCKET_XLAYER_MAX_FEE_UNITS')}
+  const mode=env.POCKET_XLAYER_FEE_POLICY||'provider_terms'
+  if(!['provider_terms','observed_cost'].includes(mode))unavailable()
+  const policy:Policy=mode==='observed_cost'
+   ?{pricing,providerBps:0,providerFixedUsdMicros:0n,observedCostUsdMicros:integer('POCKET_XLAYER_OBSERVED_COST_USD_MICROS'),maxFeeUnits:integer('POCKET_XLAYER_MAX_FEE_UNITS')}
+   :{pricing,providerBps:Number(integer('POCKET_XLAYER_PROVIDER_FEE_BPS')),providerFixedUsdMicros:integer('POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS'),maxFeeUnits:integer('POCKET_XLAYER_MAX_FEE_UNITS')}
   validatePolicy(policy)
   const url=new URL(env.PRIVATE_RPC_URL_XLAYER||'')
   if(url.protocol!=='https:'||url.username||url.password)unavailable()
