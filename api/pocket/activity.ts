@@ -60,7 +60,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
     settlementType: 'wallet_swap', paycrestStatus: record.status === 'started' || record.status === 'submitted' ? 'processing' : record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
   }
-  if (!['wallet.bridge','wallet.usdt-bridge'].includes(record.action) || !record.metadata) return undefined
+  if (!['wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge'].includes(record.action) || !record.metadata) return undefined
   const source = record.metadata.source || 'USDC'
   const destination = record.metadata.destination || 'destination'
   return {

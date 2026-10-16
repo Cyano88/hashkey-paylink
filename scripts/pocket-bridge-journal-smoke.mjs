@@ -18,5 +18,11 @@ try {
  await recordCirclePocketAction({...input,ownerId:'fixture-b',status:'submitted'})
  assert.equal((await listCirclePocketActions('fixture-a',500,'wallet.bridge',true)).length,0)
  assert.equal((await listCirclePocketActions('fixture-b',500,'wallet.bridge',true)).length,1)
+ const xlayer={ownerId:'fixture-xlayer',idempotencyKey:'fixture-xlayer',action:'wallet.xlayer-bridge',metadata:{quoteToken:'signed-quote',source:'base',destination:'xlayer',amount:'1'}}
+ await recordCirclePocketAction({...xlayer,status:'submitted'})
+ const final=await recordCirclePocketAction({...xlayer,status:'completed',metadata:{...xlayer.metadata,destinationTxHash:'verified'}})
+ const stale=await recordCirclePocketAction({...xlayer,status:'submitted'})
+ assert.equal(stale.status,'completed');assert.equal(stale.updatedAt,final.updatedAt);assert.equal(stale.metadata.destinationTxHash,'verified')
+ await assert.rejects(()=>recordCirclePocketAction({...xlayer,status:'completed',metadata:{...xlayer.metadata,quoteToken:'replacement'}}),/do not match/)
  console.log('Pocket bridge journal retry tests passed.')
 } finally { await rm(dir,{recursive:true,force:true}) }
