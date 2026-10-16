@@ -230,7 +230,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       {selected && (
         <>
           <button type="button" aria-label="Close purchase confirmation" onClick={() => { if (!buying) setSelected(null) }} className="fixed inset-0 z-40 bg-gray-950/30 backdrop-blur-[2px] dark:bg-black/60" />
-          <div data-pocket-sheet role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="pocket-sheet-surface fixed bottom-[calc(5.25rem+var(--pocket-safe-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-[#262626] dark:bg-[#121212]">
+          <div data-pocket-sheet role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" style={{maxHeight:'calc(100dvh - var(--pocket-safe-top, 0px) - 5.25rem - var(--pocket-safe-bottom, 0px) - 1rem)'}} className="pocket-sheet-surface fixed bottom-[calc(5.25rem+var(--pocket-safe-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-[#262626] dark:bg-[#121212]">
             <div className="flex justify-center pt-2.5"><span className="h-1 w-9 rounded-full bg-gray-200 dark:bg-white/15" /></div>
             <div className="p-5 pt-3.5">
               <div className="flex items-center gap-3">
@@ -243,11 +243,11 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                 </div>
               </div>
 
-              <p className="mt-4 line-clamp-2 text-sm font-semibold leading-5 text-gray-900 dark:text-white">{selected.description}</p>
+              <p className="mt-4 break-words text-sm font-semibold leading-5 text-gray-900 dark:text-white">{selected.description}</p>
               <div className="mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gray-50/80 dark:border-[#262626] dark:bg-[#121212]">
                 <div className="flex items-center justify-between gap-4 px-3.5 py-3">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Service</span>
-                  <span className="max-w-[65%] truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{selected.provider}</span>
+                  <span className="max-w-[65%] break-words text-right text-xs font-semibold text-gray-900 dark:text-gray-100">{selected.provider}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-3.5 py-3 dark:border-[#262626]">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Pay from App Pay</span>
