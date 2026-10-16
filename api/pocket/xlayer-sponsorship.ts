@@ -7,6 +7,7 @@ import { verifiedPrivyUser } from '../privy-circle-link.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import { makeSponsoredRequest, makeSponsoredBatchRequest, type SponsoredRequest } from '../../src/pocket/lib/pocketSponsoredRequest.js'
 import {quoteXLayerReimbursement,openXLayerReimbursement,sealXLayerReimbursement,refreshXLayerReimbursement,type XLayerFeeEstimator,type XLayerReimbursementPolicy,type XLayerFeeQuote} from './xlayer-reimbursement.js'
+import {configuredXLayerReimbursement} from './xlayer-fee-estimator.js'
 import catalogue from '../../src/pocket/lib/pocketXStocksCatalog.json' with { type: 'json' }
 import { stockClient, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { readStockMarketPrices } from './xstocks-prices.js'
@@ -98,7 +99,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   mutate: typeof mutate; read: typeof read; minimum:typeof minimum; earnPreflight:typeof preflightEarnSponsorship; durable: () => boolean; fetch: typeof fetch; now: () => number;
   reimbursement: {estimate:XLayerFeeEstimator;pricing:XLayerReimbursementPolicy};
 }> = {}) {
-  const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, ...overrides }
+  const d = { identity:verifiedPrivyUser, user:loadUser, config:configuration, mutate, read, minimum, earnPreflight:preflightEarnSponsorship, durable:hasRenderDurableStore, fetch, now:Date.now, reimbursement:configuredXLayerReimbursement(), ...overrides }
   async function resolveAccepted(id: string, record: Record, walletId: string, c: Config) {
     if (record.hash || !record.transactionId) return record.hash || null
     const response = await d.fetch(`https://api.privy.io/v1/transactions/${record.transactionId}`, {

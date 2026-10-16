@@ -38,4 +38,4 @@ for(const [asset,token] of [['USDC','0xb6ceceab302e2e4948951ee7843fc24e92933061'
  const floored=await quoteXLayerReimbursement(binding,calls,now+60000,estimate,{...pricing,minimumFeeUnits:'500'},()=>now)
  assert.equal(floored.networkFeeUnits,'500')
 }
-console.log('PASS USDC/USDT full-batch reimbursement, exact treasury/total binding, owner and intent isolation, expiry, missing estimate and unstable fee rejection. Synthetic estimator only; production adapter not connected.')
+console.log('PASS USDC/USDT full-batch reimbursement, exact treasury/total binding, owner and intent isolation, expiry, missing estimate and unstable fee rejection. This suite uses a synthetic estimator; no funds moved.')
