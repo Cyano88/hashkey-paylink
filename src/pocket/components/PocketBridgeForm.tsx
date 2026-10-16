@@ -21,7 +21,7 @@ type Props = {
 export default function PocketBridgeForm(p:Props){
   if(p.hidden)return null
   const sourceAsset=p.asset==='USDT'&&p.source==='xlayer'?'USDT0':p.asset
-  const destinationAsset=p.asset==='USDT'&&['xlayer','arbitrum','polygon'].includes(p.destination)?'USDT0':p.asset
+  const destinationAsset=p.asset==='USDT'&&['xlayer','arbitrum'].includes(p.destination)?'USDT0':p.asset
   const review=(value:string)=>p.exactQuoteAmounts?value.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1'):formatPocketDisplayAmount(value)
   return <section hidden={p.hidden} className="flex min-h-0 flex-1 flex-col gap-3 bg-transparent">
     <PocketExchangeLayout amountHint={p.amountHint}
@@ -41,3 +41,4 @@ export default function PocketBridgeForm(p:Props){
     <div className="mt-auto shrink-0 space-y-2">{p.children}<PocketAmountKeypad value={p.amount} onChange={p.onAmount} disabled={p.disabled}/></div>
   </section>
 }
+
