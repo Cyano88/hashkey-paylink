@@ -1,4 +1,5 @@
 import type {Request,Response} from 'express'
+import {xlayerBridgeWalletEligible} from './xlayer-bridge-access.js'
 import {PrivyClient} from '@privy-io/server-auth'
 import {createPublicClient,getAddress,http,parseAbi,parseUnits,formatUnits,type Hex} from 'viem'
 import {base} from 'viem/chains'
@@ -25,10 +26,8 @@ async function wallets(owner:string){
 }
 async function enabled(owner:string){
  if(process.env.POCKET_XLAYER_BRIDGE_ENABLED!=='true')return false
- const allowed=(process.env.POCKET_XLAYER_BRIDGE_WALLETS||'').toLowerCase().split(',').map(v=>v.trim()).filter(Boolean)
- if(!allowed.length)return false
  const linked=await wallets(owner).catch(()=>null)
- return !!linked&&allowed.includes(linked.destinationAddress.toLowerCase())
+ return !!linked&&xlayerBridgeWalletEligible(linked.destinationAddress)
 }
 const defaults={identity:verifiedPrivyUser,wallets,client,quote:quoteRelayStablecoin,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,usdtEnabled:()=>process.env.POCKET_XLAYER_USDT_BRIDGE_ENABLED==='true',apiKey:()=>process.env.RELAY_API_KEY||''}
 const key=(q:XLayerBridgeQuote)=>'pocket:xlayer-bridge:'+q.id

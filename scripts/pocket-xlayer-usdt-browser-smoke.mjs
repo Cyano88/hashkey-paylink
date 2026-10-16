@@ -20,8 +20,8 @@ try{
  mkdirSync('output/playwright',{recursive:true})
  for(const width of [320,393])for(const theme of ['light','dark']){await p.setViewportSize({width,height:852});await p.evaluate(t=>document.documentElement.classList.toggle('dark',t==='dark'),theme);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await p.screenshot({path:'output/playwright/xlayer-usdt-bridge-'+width+'-'+theme+'.png'})}
  await p.getByRole('button',{name:'Select destination network'}).click();assert.equal(await p.getByRole('option',{name:'X Layer',exact:true}).count(),1);await p.getByRole('option',{name:'X Layer',exact:true}).click()
- await p.getByRole('button',{name:'Confirm bridge',exact:true}).click();await p.getByText('Bridging',{exact:true}).waitFor()
- assert.equal(executes,1);assert.equal(await p.evaluate(()=>window.approvals),1)
+ const ctaClass=await p.getByRole('button',{name:'Confirm bridge',exact:true}).getAttribute('class');await p.getByRole('button',{name:'Confirm bridge',exact:true}).click();await p.getByRole('button',{name:'Bridging USDT',exact:true}).waitFor();assert.equal(await p.getByRole('dialog').count(),0,'in-flight bridge must stay on the shared CTA');assert.equal(await p.getByRole('button',{name:'Bridging USDT',exact:true}).getAttribute('aria-busy'),'true')
+ assert.equal(await p.getByRole('button',{name:'Bridging USDT',exact:true}).getAttribute('class'),ctaClass,'reuse identical shared CTA styling');await p.screenshot({path:'output/playwright/xlayer-usdt-processing-cta.png'});assert.equal(executes,1);assert.equal(await p.evaluate(()=>window.approvals),1)
  assert.equal(await p.getByText('Bridge successful',{exact:true}).count(),0,'wallet approval must not be shown as delivery success')
  assert.equal(await p.evaluate(()=>window.activity()[0].assetSymbol),'USDT')
  assert.equal(await p.evaluate(()=>window.records()[0].pending.txHash),'0x'+'a'.repeat(64))
