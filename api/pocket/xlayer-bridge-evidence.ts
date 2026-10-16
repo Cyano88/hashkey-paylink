@@ -1,5 +1,5 @@
 import {decodeEventLog, parseAbi, type Hex} from 'viem'
-import {RELAY_STABLECOIN_CHAINS, stablecoinAddress, type RelayStablecoinInput} from './xlayer-bridge-provider.js'
+import {RELAY_STABLECOIN_CHAINS, stablecoinAddress, type RelayStablecoinInput, type RelayStablecoinRefund} from './xlayer-bridge-provider.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
 type Network = RelayStablecoinInput['source']
@@ -8,6 +8,9 @@ export type XLayerBridgeBinding = RelayStablecoinInput & {
   orderId:string; requestId:string; minimumUnits:string
   // Populate only from the verified, owner-bound fee quote, never provider status.
   networkFeeUnits?:string; reimbursementTreasury?:string
+  // Only the plan validated from the order and bound into an owner-signed quote.
+  // Never populate this from a status response or untrusted request body.
+  refundOptions?:RelayStablecoinRefund[]
 }
 const transfer = parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const deposit = parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
@@ -76,7 +79,7 @@ export function solanaStablecoinDelta(tx:any,asset:Asset,owner:string,hash:strin
 
 type DeliveryCheck = {status:'pending'|'needs_attention'} | {
   status:'verify_delivery'; outcome:'completed'|'refunded'; network:Network;
-  recipient:string; hash:string; exactUnits:string|null; minimumUnits:string; maximumUnits:string
+  recipient:string; asset:Asset; hash:string; exactUnits:string|null; minimumUnits:string; maximumUnits:string
 }
 /** Provider success is only a candidate for onchain verification, never terminal success. */
 export function xlayerBridgeDeliveryCandidate(q:XLayerBridgeBinding,sourceHash:string,status:any,requests:any):DeliveryCheck {
@@ -88,19 +91,32 @@ export function xlayerBridgeDeliveryCandidate(q:XLayerBridgeBinding,sourceHash:s
   if(!Array.isArray(requests?.requests)||requests.requests.length!==1)return {status:'pending'}
   const request=requests.requests[0]
   if(!same('xlayer',request.id,q.requestId)||!same('xlayer',request.protocol?.orderId,q.orderId)||request.protocol?.hubType!=='onchain'||request.status!==status.status||!same(q.source,request.user,q.sender)||!same(q.destination,request.recipient,q.recipient)||!Array.isArray(request.data?.inTxs)||!request.data.inTxs.some((t:any)=>same(q.source,t.txHash,sourceHash)&&t.chainId===RELAY_STABLECOIN_CHAINS[q.source].id&&t.status==='success'))return attention
-  let network=q.destination,recipient=q.recipient,exactUnits:string|null=null
+  let network=q.destination,recipient=q.recipient,asset=q.asset,exactUnits:string|null=null
   if(status.status==='refund'){
     const refund=request.data.refundCurrencyData
     if(refund?.currency?.chainId===RELAY_STABLECOIN_CHAINS[q.source].id){network=q.source;recipient=q.sender}
     else if(refund?.currency?.chainId!==RELAY_STABLECOIN_CHAINS[q.destination].id)return attention
-    // Conversion routes are deliberately unsupported until their refund assets are validated.
-    if(!same(network,refund.currency.address,stablecoinAddress(network,q.asset))||refund.currency.decimals!==6||!units(refund.amount)||BigInt(refund.amount)<=0n||BigInt(refund.amount)>BigInt(q.amountUnits))return attention
+    if(q.refundOptions!==undefined){
+      // Fail closed on malformed, duplicate, wrong-wallet or broadened plans.
+      const plan=q.refundOptions
+      if(!Array.isArray(plan)||plan.length!==2||new Set(plan.map(r=>r?.network)).size!==2)return attention
+      for(const r of plan){
+        const origin=r?.network===q.source
+        if(!r||!origin&&r.network!==q.destination||!same(r.network,r.recipient,origin?q.sender:q.recipient))return attention
+        const alternate=q.asset==='USDT'&&q.source==='base'&&q.destination==='xlayer'&&!origin&&r.asset==='USDC'
+        if(r.asset!==q.asset&&!alternate)return attention
+      }
+      const selected=plan.find(r=>r.network===network)
+      if(!selected)return attention
+      asset=selected.asset
+    }
+    if(!same(network,refund.currency.address,stablecoinAddress(network,asset))||refund.currency.decimals!==6||!units(refund.amount)||BigInt(refund.amount)<=0n||BigInt(refund.amount)>BigInt(q.amountUnits))return attention
     exactUnits=refund.amount
   }else if(status.destinationChainId!==RELAY_STABLECOIN_CHAINS[q.destination].id)return attention
   if(!Array.isArray(request.data.outTxs)||!Array.isArray(status.txHashes))return {status:'pending'}
   const outputs=request.data.outTxs.filter((t:any)=>t.status==='success'&&t.chainId===RELAY_STABLECOIN_CHAINS[network].id&&status.txHashes.some((h:unknown)=>same(network,h,t.txHash)))
   if(outputs.length!==1||!hashValid(network,outputs[0].txHash))return attention
-  return {status:'verify_delivery',outcome:status.status==='refund'?'refunded':'completed',network,recipient,hash:outputs[0].txHash,exactUnits,minimumUnits:q.minimumUnits,maximumUnits:q.amountUnits}
+  return {status:'verify_delivery',outcome:status.status==='refund'?'refunded':'completed',network,recipient,asset,hash:outputs[0].txHash,exactUnits,minimumUnits:q.minimumUnits,maximumUnits:q.amountUnits}
 }
 
 export function xlayerBridgeDeliveryProven(candidate:DeliveryCheck,netReceived:bigint|null):boolean {

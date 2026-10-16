@@ -9,7 +9,7 @@ export type EvmBridgeFeeBinding={ownerId:string;walletId:string;walletAddress:st
 export type EvmBridgeFeeQuote=EvmBridgeFeeBinding&{version:1;bridgeCallData:Hex;callData:Hex;networkFeeUnits:string;totalUnits:string;issuedAt:number;expiresAt:number}
 const fail=()=>{throw Object.assign(Error('Bridge quote changed or expired. Review a new quote.'),{status:409})}
 function valid(input:EvmBridgeFeeBinding){
- if(!input.ownerId||!input.walletId||!isAddress(input.walletAddress)||!isAddress(input.tokenAddress)||!input.destinationAddress||!['USDC','USDT'].includes(input.asset)||!['base','arbitrum','ethereum','polygon','arc'].includes(input.source)||!['base','arbitrum','ethereum','polygon','arc','solana','xlayer'].includes(input.destination)||input.source===input.destination||(input.asset==='USDT'&&(input.source==='arc'||input.destination==='arc'||input.destination==='xlayer')))fail()
+ if(!input.ownerId||!input.walletId||!isAddress(input.walletAddress)||!isAddress(input.tokenAddress)||!input.destinationAddress||!['USDC','USDT'].includes(input.asset)||!['base','arbitrum','ethereum','polygon','arc'].includes(input.source)||!['base','arbitrum','ethereum','polygon','arc','solana','xlayer'].includes(input.destination)||input.source===input.destination||(input.asset==='USDT'&&(input.source==='arc'||input.destination==='arc'||input.destination==='xlayer'&&input.source!=='base')))fail()
  // X Layer is a destination only here. Circle cannot estimate a Privy-sponsored source batch.
  if(input.destination==='xlayer'&&(!isAddress(input.destinationAddress)||/^0x0{40}$/i.test(input.destinationAddress)))fail()
  for(const value of [input.amountUnits,input.bridgeDebitUnits])if(!/^[1-9]\d{0,77}$/.test(value)||BigInt(value)>=2n**256n)fail()

@@ -17,6 +17,6 @@ export function assertSolanaBridgeMessage(transaction:Transaction,quote:SolanaBr
  const approved=Transaction.from(Buffer.from(quote.transaction,'base64'))
  if(!transaction.serializeMessage().equals(approved.serializeMessage()))throw Error('Bridge transaction changed after review.')
  // Both the sponsor and ephemeral CCTP signer must retain their approved signatures.
- for(const signature of approved.signatures)if(signature.signature&&!transaction.signatures.some(s=>s.publicKey.equals(signature.publicKey)&&s.signature?.equals(signature.signature)))throw Error('Bridge sponsor signature changed.')
+ for(const signature of approved.signatures){const signed=signature.signature;if(signed&&!transaction.signatures.some(s=>s.publicKey.equals(signature.publicKey)&&s.signature?.equals(signed)))throw Error('Bridge sponsor signature changed.')}
  if(!transaction.verifySignatures(requireAllSignatures))throw Error('Invalid bridge signatures.')
 }

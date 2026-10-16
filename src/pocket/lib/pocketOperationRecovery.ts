@@ -9,7 +9,11 @@ export type PocketOperation = {
 }
 const executing = new Set<string>()
 export const beginPocketOperation=(owner:string,id:string)=>executing.add(owner.trim().toLowerCase()+':'+id)
-export const endPocketOperation=(owner:string,id:string)=>executing.delete(owner.trim().toLowerCase()+':'+id)
+export const endPocketOperation=(owner:string,id:string)=>{
+ const removed=executing.delete(owner.trim().toLowerCase()+':'+id)
+ if(removed&&typeof window!=='undefined')window.dispatchEvent(new Event(POCKET_OPERATIONS_UPDATED))
+ return removed
+}
 export const pocketOperationExecuting=(owner:string,id:string)=>executing.has(owner.trim().toLowerCase()+':'+id)
 const prefix = (owner: string) => 'pocket:operation:v1:' + encodeURIComponent(owner.trim().toLowerCase()) + ':'
 export function readPocketOperations(owner: string, storage: Storage = localStorage): PocketOperation[] {
@@ -44,7 +48,7 @@ export function mergePocketOperations(rows: PocketActivityRow[], records: Pocket
     const p = record.pending, q = p.quote, source = record.kind === 'bridge' ? 'wallet-bridge' : 'wallet-swap'
     const network = record.kind === 'bridge' ? q.source : 'arc'
     const index = result.findIndex(row => row.source === source && row.chain === network && (row.providerReference === q.id || (p.txHash && (network==='solana'?row.txHash===p.txHash:row.txHash?.toLowerCase()===p.txHash.toLowerCase()))))
-    const local: PocketActivityRow = {eventId: 'operation:' + record.id, providerReference: q.id, txHash: p.txHash || '', chain: network, payer: p.walletAddress || q.walletAddress || 'Pocket wallet', amount: q.amount, assetSymbol: record.kind === 'bridge' ? 'USDT' : q.tokenIn.symbol, ts: record.createdAt, source, direction: 'out', paycrestStatus: record.state, destination: q.destination || q.tokenOut?.symbol, memo: record.kind === 'bridge' ? 'Bridge' : 'Swap'}
+    const local: PocketActivityRow = {eventId: 'operation:' + record.id, providerReference: q.id, txHash: p.txHash || '', chain: network, payer: p.walletAddress || q.walletAddress || 'Pocket wallet', amount: q.amount, ...(record.state==='refunded'?{refundAsset:p.refundAsset,refundAmount:p.refundAmount,refundNetwork:p.refundNetwork,refundTxHash:p.refundTxHash}:{}), assetSymbol: record.kind === 'bridge' ? q.rail==='xlayer'?(q.asset==='USDT'?'USDT':'USDC'):'USDT' : q.tokenIn.symbol, ts: record.createdAt, source, direction: 'out', paycrestStatus: record.state, destination: q.destination || q.tokenOut?.symbol, memo: record.kind === 'bridge' ? 'Bridge' : 'Swap'}
     if (index < 0) result.push(local)
     else if (!['completed', 'failed', 'refunded'].includes(result[index].paycrestStatus || '')) result[index] = {...result[index], paycrestStatus: record.state}
   }
