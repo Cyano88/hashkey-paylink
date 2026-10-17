@@ -26,8 +26,9 @@ export function sealNativeSend(q:NativeSendQuote){const payload=Buffer.from(JSON
 export function openNativeSend(token:string,ownerId:string,recovery=false,now=Date.now()):NativeSendQuote{
  if(typeof token!=='string'||token.length>12000)fail();const [payload,signature,extra]=token.split('.');if(!payload||!signature||extra)fail();const actual=Buffer.from(signature,'base64url'),expected=mac(payload);if(actual.length!==expected.length||!timingSafeEqual(actual,expected))fail()
  const q=JSON.parse(Buffer.from(payload,'base64url').toString()) as NativeSendQuote;validateBinding(q)
- if(q.ownerId!==ownerId||q.version!==1||! /^[0-9a-f-]{36}$/i.test(q.id)||q.asset!==nativeEvmNetworks[q.network].symbol||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt-q.issuedAt!==45000||!recovery&&q.expiresAt<=now)fail()
- if(!/^[1-9]\d{0,77}$/.test(q.feeUnits)||nativeAmountUnits(q.amount).toString()!==q.amountUnits||BigInt(q.totalUnits)!==BigInt(q.amountUnits)+BigInt(q.feeUnits)||BigInt(q.totalUnits)>=2n**256n||q.callData!==nativeSendCallData(q,BigInt(q.feeUnits)))fail();return q
+ if(q.ownerId!==ownerId||q.version!==1||! /^[0-9a-f-]{36}$/i.test(q.id)||q.asset!==nativeEvmNetworks[q.network].symbol||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt-q.issuedAt!==45000)fail()
+ if(!/^[1-9]\d{0,77}$/.test(q.feeUnits)||nativeAmountUnits(q.amount).toString()!==q.amountUnits||BigInt(q.totalUnits)!==BigInt(q.amountUnits)+BigInt(q.feeUnits)||BigInt(q.totalUnits)>=2n**256n||q.callData!==nativeSendCallData(q,BigInt(q.feeUnits)))fail();
+ if(!recovery&&q.expiresAt<=now)throw Object.assign(Error('Fee estimate expired. Tap Continue to refresh it.'),{status:409,code:'NATIVE_QUOTE_EXPIRED'});return q
 }
 export type NativeCallTrace={type?:string;from?:string;to?:string;input?:string;value?:string;error?:string;revertReason?:string;calls?:NativeCallTrace[]}
 /** A successful bundler receipt can contain a reverted wallet operation. */
