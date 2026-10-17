@@ -53,6 +53,7 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
   if(record.action.startsWith('gift.'))return giftActivityRow(record)
   if (record.action === 'wallet.swap' && record.metadata) return {
     eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash || '', chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',

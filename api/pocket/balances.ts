@@ -1,3 +1,4 @@
+import {readPocketNativeBalances} from './native-balances.js'
 import { supportsPocketUsdt } from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { readCircleDisplayBalance } from './circle-display-balances.js'
 import { pocketBalanceRevision } from '../../src/pocket/lib/pocketBalanceRevision.js'
@@ -30,6 +31,7 @@ import {
 } from '../../src/pocket/lib/pocketSchemas.js'
 
 type PocketBalancesHandlerDependencies = {
+  readNativeBalances?: typeof readPocketNativeBalances
   readDisplayBalance?: typeof readCircleDisplayBalance
   readMigrationPlan?(userId:string):Promise<MigrationPlan|undefined>
   readWalletUpdate?(userId: string): Promise<PocketWalletUpdateRecord | undefined>
@@ -130,6 +132,7 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
+      if(req.query?.assets === 'native') return res.json({ok:true,rows:await (dependencies.readNativeBalances??readPocketNativeBalances)(identity.userId,dependencies.readLink)})
       if (req.query?.routing === 'bank') {
         // Routing-only snapshot: never publish this partial set as a home total.
         const networks: PocketNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'polygon']

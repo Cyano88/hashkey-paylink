@@ -1,3 +1,4 @@
+import {reconcileNativeSend} from './native-send-reconciliation.js'
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
 import {reconcileUsdtBridge} from './usdt-bridge.js'
@@ -20,6 +21,7 @@ import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalE
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
 type Dependencies = {
+  reconcileNative: typeof reconcileNativeSend
   auditXLayerBilling:typeof checkXLayerBillingCoverage
   executions: PaymentExecutionRepository
   reconcilePaycrest: typeof reconcilePaycrestOrderPayment
@@ -254,6 +256,7 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
 
 export async function runPocketReconciliation(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    reconcileNative:reconcileNativeSend,
     auditXLayerBilling:checkXLayerBillingCoverage,
     executions: paymentExecutionRepository, reconcilePaycrest: reconcilePaycrestOrderPayment,
     reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
@@ -279,6 +282,11 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     if(record.action!=='wallet.xlayer-bridge'||!record.metadata?.quoteToken)continue
     try{const result=await (record.metadata.execution==='privy'?dependencies.reconcileXLayerOutbound:dependencies.reconcileXLayer)(record.ownerId,record.metadata.quoteToken);results.push({id:record.id,kind:'wallet_bridge',result:['completed','refunded'].includes(result.status)?'reconciled':result.status==='needs_attention'?'review':'unchanged'})}
     catch(error){results.push({id:record.id,kind:'wallet_bridge',result:'error',message:errorText(error)})}
+  }
+  for(const record of await dependencies.listBridges('wallet.native-send',Math.min(limit,20))){
+    if(record.action!=='wallet.native-send')continue
+    try{const result=await dependencies.reconcileNative(record);results.push({id:record.id,kind:'native_send',result:['completed','failed'].includes(result.status)?'reconciled':'unchanged'})}
+    catch(error){results.push({id:record.id,kind:'native_send',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
   try { await dependencies.auditXLayerBilling() }

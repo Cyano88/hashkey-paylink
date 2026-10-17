@@ -1305,3 +1305,31 @@ export async function circleMigrationRequest<T extends Record<string, unknown>>(
   if (!userToken || userToken.length > 8_000 || !path.startsWith('/v1/w3s/')) throw new Error('Invalid migration provider request.')
   return circleJson<T>(path, { migrationInternal:true, method: body ? 'POST' : 'GET', signal: AbortSignal.timeout(15_000), userToken, apiKey: circleApiKey({chain}), ...(body ? {body: JSON.stringify(body)} : {}) })
 }
+
+/** Native transfer estimates use the same owned SCA and ordinary mutation boundary as stablecoin sends. */
+export async function estimateCircleNativeSend(input: {chain: Exclude<CircleGasStationEvmChain,'arc'>;userToken:string;walletId:string;walletAddress:string;callData:string}) {
+  if(!input.userToken||input.userToken.length>8000)throw Object.assign(Error('Unlock your wallet to continue.'),{status:409})
+  const owned=await readCircleUserWallet(input.userToken,input.chain,input.walletId)
+  requireCircleGasStationEvmWallet({...input,wallets:owned?[owned]:[]})
+  const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken:input.userToken,apiKey:circleApiKey({chain:input.chain}),body:JSON.stringify({walletId:input.walletId,contractAddress:input.walletAddress,callData:input.callData})})
+  const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee
+  if(!fee)throw Error('Network fee unavailable.')
+  return fee
+}
+
+export async function createCircleNativeSolanaChallenge(input:{userToken:string;walletId:string;walletAddress:string;rawTransaction:string}) {
+  await verifyCircleSolanaSigningWallet(input)
+  return circleJson<{challengeId?:string}>('/v1/w3s/user/sign/transaction',{method:'POST',userToken:input.userToken,apiKey:circleApiKey(),body:JSON.stringify({walletId:input.walletId,rawTransaction:input.rawTransaction,memo:'Pocket SOL transfer'})})
+}
+
+/** Recover only a unique server-issued native-send reference, without creating another challenge. */
+export async function recoverCircleNativeSendChallenge(input:{chain:Exclude<CircleGasStationEvmChain,'arc'>;userToken:string;walletId:string;walletAddress:string;refId:string}) {
+  if(!input.userToken||input.userToken.length>8000||!/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(input.refId))throw Error('Invalid native transfer recovery request.')
+  const owned=await readCircleUserWallet(input.userToken,input.chain,input.walletId)
+  requireCircleGasStationEvmWallet({...input,wallets:owned?[owned]:[]})
+  const {findNativeSendChallenge}=await import('./pocket/native-send-challenge-recovery.js')
+  return findNativeSendChallenge({...input,blockchain:EVM_CHAINS[input.chain].blockchain},async path=>{
+    try{return await circleJson(path,{method:'GET',userToken:input.userToken,apiKey:circleApiKey({chain:input.chain}),signal:AbortSignal.timeout(10000)})}
+    catch(e){if((e as {status?:number}).status===404)return {};throw e}
+  })
+}
