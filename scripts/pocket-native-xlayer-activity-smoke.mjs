@@ -17,3 +17,19 @@ for(const reverse of [false,true]){
 }
 // Exact real transaction fixture is used locally below; no credentials in fixtures.
 console.log('PASS native swap event emitter/owner/pair/duplicate rejection, both native directions, exact amounts, deduplication and shared swap activity mapping')
+import {encodeFunctionData} from 'viem'
+import {readFileSync} from 'node:fs'
+const abi=JSON.parse(readFileSync(new URL('../src/pocket/lib/pocketOkxRouterAbi.json',import.meta.url),'utf8'))
+const input=encodeFunctionData({abi,functionName:'dagSwapTo',args:[1n,owner,{fromToken:BigInt(stockUsdc.address),toToken:OKX_NATIVE,fromTokenAmount:500000n,minReturnAmount:1n,deadLine:9999999999n},[]]})
+const blockHash='0x'+'b'.repeat(64),transferEvent=parseAbiItem('event Transfer(address indexed from,address indexed to,uint256 value)')
+const transferLog={address:stockUsdc.address,logIndex:1,topics:encodeEventTopics({abi:[transferEvent],args:{from:owner,to:router}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[500000n])}
+const tx={hash,from:owner,to:router,input,blockHash},receipt={status:'success',blockHash,blockNumber:1n,logs:[transferLog,log(stockUsdc.address,OKX_NATIVE)]}
+let store=normalizeStockNotices();store.wallets.user={address:owner,since:1}
+const deps={read:async()=>store,mutate:async fn=>{const next=structuredClone(store);fn(next);store=next;return next},asset:async address=>({address,symbol:'USDC',decimals:6}),client:{getChainId:async()=>196,getTransaction:async()=>tx,getTransactionReceipt:async()=>receipt,getBlock:async()=>({hash:blockHash,timestamp:10n})}}
+await reconcileStockTradeActivity('user',hash,deps);await reconcileStockTradeActivity('user',hash,deps);assert.equal(Object.values(store.notices).filter(n=>n.trade).length,1)
+for(const scenario of ['foreign','reverted','reorg','wrong-chain','no-event','before-registration']){
+ store=normalizeStockNotices();store.wallets.user={address:scenario==='foreign'?router:owner,since:scenario==='before-registration'?20000:1}
+ const client={...deps.client,getChainId:async()=>scenario==='wrong-chain'?1:196,getTransactionReceipt:async()=>({...receipt,status:scenario==='reverted'?'reverted':receipt.status,logs:scenario==='no-event'?[transferLog]:receipt.logs}),getBlock:async()=>({hash:scenario==='reorg'?'other':blockHash,timestamp:10n})}
+ await assert.rejects(()=>reconcileStockTradeActivity('user',hash,{...deps,client}));assert.equal(Object.keys(store.notices).length,0)
+}
+console.log('PASS recovery canonical receipt, ownership, registration boundary, wrong chain, missing native evidence and repeat recovery')
