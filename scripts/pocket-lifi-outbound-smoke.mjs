@@ -23,6 +23,10 @@ for(const destination of ['arbitrum','ethereum','polygon']){
  const fetcher=async()=>({ok:true,json:async()=>status})
  assert.equal((await lifiDelivery(p,hash,async()=>delivered,fetcher)).status,'completed')
  assert.equal((await lifiDelivery(p,hash,async()=>null,fetcher)).status,'pending')
+ const batch={...status,fromAddress:EVM_PLATFORM_TREASURY,batchStatus:[structuredClone(status)]}
+ assert.equal((await lifiDelivery(p,hash,async()=>delivered,async()=>({ok:true,json:async()=>batch}))).status,'completed','sponsored batch selects the unique owner-bound operation')
+ batch.batchStatus.push(structuredClone(status));assert.equal((await lifiDelivery(p,hash,async()=>delivered,async()=>({ok:true,json:async()=>batch}))).status,'needs_attention','ambiguous batch is rejected')
+ batch.batchStatus=[{...status,fromAddress:EVM_PLATFORM_TREASURY}];assert.equal((await lifiDelivery(p,hash,async()=>delivered,async()=>({ok:true,json:async()=>batch}))).status,'needs_attention','wrong operation owner rejected')
  status.transactionId=destHash;assert.equal((await lifiDelivery(p,hash,async()=>delivered,fetcher)).status,'needs_attention')
 }
 console.log('PASS LI.FI three-chain fixed-token calldata, bounded fee, finite approvals, owner/recipient tampering, exact source event/debit/reimbursement, and canonical destination receipt checks. No funds moved.')

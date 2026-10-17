@@ -29,7 +29,17 @@ export async function lifiDelivery(p:LifiOutboundPlan,hash:Hex,receipt:(network:
  const waiting={status:'pending' as const,sourceConfirmed:true},attention={status:'needs_attention' as const,sourceConfirmed:true}
  const r=await fetcher('https://li.quest/v1/status?'+new URLSearchParams({txHash:hash,fromChain:'196',toChain:String(POCKET_USDT_ASSETS[p.destination].chainId),bridge:'layerswap'}),{signal:AbortSignal.timeout(15000),redirect:'error'})
  if(!r.ok)return waiting
- const b=await r.json();if(['PENDING','NOT_FOUND'].includes(b.status))return waiting
+ const response=await r.json()
+ // Sponsored ERC-4337 transactions are submitted by a bundler. LI.FI's outer
+ // fromAddress describes that transaction; select the unique bridge operation.
+ // The caller already proved its exact source event, owner debit and fee.
+ let b=response
+ if(Array.isArray(response.batchStatus)){
+  const matches=response.batchStatus.filter((item:any)=>same(item.transactionId,p.transactionId))
+  if(matches.length!==1)return attention
+  b=matches[0]
+ }
+ if(['PENDING','NOT_FOUND'].includes(b.status))return waiting
  if(!same(b.transactionId,p.transactionId)||!same(b.sending?.txHash,hash)||b.sending?.chainId!==196||!same(b.sending?.token?.address,sourceToken)||!same(b.fromAddress,p.owner)||!same(b.toAddress,p.recipient)||b.tool!=='layerswap')return attention
  // A provider failure alone never proves a refund or permits a second submission.
  if(b.status!=='DONE'||!['COMPLETED','REFUNDED'].includes(b.substatus))return attention
