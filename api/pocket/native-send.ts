@@ -1,3 +1,4 @@
+import {nativeSendPilotAllowed} from './native-send-pilot.js'
 import type {Request,Response} from 'express'
 import {nativeEvmExecutionEnabled} from './native-evm-gas-policy.js'
 import {getAddress,isAddress,type Hex} from 'viem'
@@ -20,17 +21,18 @@ export function createNativeSendHandler(overrides:Partial<typeof defaults>={}){
   const identity=await d.identity(req)
   if(req.method==='GET'){
    const pending=(await d.list(identity.userId,500,actionName,true)).filter(a=>a.metadata?.network!=='solana'&&['started','submitted'].includes(a.status)&&a.metadata?.quoteToken).map(a=>({quote:openNativeSend(a.metadata!.quoteToken,identity.userId,true,d.now()),quoteToken:a.metadata!.quoteToken,challengeId:a.metadata?.challengeId,status:a.status}))
-   return res.json({ok:true,enabled:d.enabled(),pending})
+   const enabled=d.enabled()||nativeSendPilotAllowed(identity.userId,await d.readLink(circleLinkKey(identity.userId,'base','payment')),'base',d.now())
+   return res.json({ok:true,enabled,pending})
   }
   const action=req.body?.action
   if(!['quote','execute','status'].includes(action))return res.status(400).json({ok:false,error:'Unsupported transfer action.'})
-  if(action!=='status'&&!d.enabled())return res.status(409).json({ok:false,error:'Native transfers are not available yet.'})
   const ownerId=identity.userId,token=String(req.body?.quoteToken||'')
   const q=action==='quote'?null:openNativeSend(token,ownerId,true,d.now())
   const network=(q?.network||req.body?.network) as NativeEvmNetwork
   if(!Object.hasOwn(nativeEvmNetworks,network))return res.status(400).json({ok:false,error:'Choose a supported network.'})
   const link=await d.readLink(circleLinkKey(ownerId,network,'payment'))
   if(!link||link.privyUserId!==ownerId||link.chain!==network||(link.purpose??'payment')!=='payment'||link.circleBlockchain!==nativeEvmNetworks[network].blockchain)return res.status(409).json({ok:false,error:'Reconnect your wallet on this network.'})
+  if(action!=='status'&&!d.enabled()&&!nativeSendPilotAllowed(ownerId,link,network,d.now()))return res.status(409).json({ok:false,error:'Native transfers are not available yet.'})
   const walletAddress=getAddress(link.circleWalletAddress),walletId=link.circleWalletId,userToken=String(req.body?.circleUserToken||'')
   if(q&&(q.walletId!==walletId||q.walletAddress.toLowerCase()!==walletAddress.toLowerCase()))return res.status(409).json({ok:false,error:'Your wallet changed. Reopen this transfer.'})
   const verifyNetwork=async()=>{if(Number(BigInt(await d.rpc<string>(network,'eth_chainId',[])))!==nativeEvmNetworks[network].id)throw Error('Transaction network mismatch.')}
