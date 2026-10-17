@@ -1,9 +1,11 @@
 import {circleLinkKey,type CircleLinkRecord} from '../privy-circle-link.js'
+import {createHmac} from 'node:crypto'
+import {okxCredentials} from './xstocks-swap-provider.js'
 import {pocketNativeOnNetwork,type PocketNativeBalance} from '../../src/pocket/lib/pocketNativeAssets.js'
 
 const networks=['ethereum','base','arbitrum','polygon','solana'] as const
 const chains={ethereum:'ETH',base:'BASE',arbitrum:'ARB',polygon:'MATIC',solana:'SOL'} as const
-const priceIds={ETH:'ethereum',POL:'polygon-ecosystem-token',SOL:'solana'} as const
+const priceAssets=[{symbol:'ETH',chainIndex:'1',tokenContractAddress:'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'},{symbol:'POL',chainIndex:'137',tokenContractAddress:'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'},{symbol:'SOL',chainIndex:'501',tokenContractAddress:'11111111111111111111111111111111'}] as const
 
 /** Provider display reads only. Never feeds a payment quote or changes RPC use. */
 export async function fetchCircleNativeBalance(link:CircleLinkRecord,fetcher=fetch) {
@@ -44,10 +46,14 @@ export function createNativeBalanceReader(read=fetchCircleNativeBalance,fetcher=
   if(prices&&now()-prices.at<60000)return prices.values
   if(pricePending)return pricePending
   pricePending=(async()=>{try{
-   const r=await fetcher('https://api.coingecko.com/api/v3/simple/price?ids=ethereum,polygon-ecosystem-token,solana&vs_currencies=usd&include_last_updated_at=true',{signal:AbortSignal.timeout(5000)})
+   const c=okxCredentials();if(!c.key||!c.secret||!c.passphrase)throw Error('Price unavailable')
+   const path='/api/v6/dex/market/price',body=JSON.stringify(priceAssets.map(({chainIndex,tokenContractAddress})=>({chainIndex,tokenContractAddress}))),timestamp=new Date(now()).toISOString()
+   const signature=createHmac('sha256',c.secret).update(timestamp+'POST'+path+body).digest('base64')
+   const r=await fetcher('https://web3.okx.com'+path,{method:'POST',headers:{'Content-Type':'application/json','OK-ACCESS-KEY':c.key,'OK-ACCESS-SIGN':signature,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp},body,signal:AbortSignal.timeout(5000),redirect:'error'})
    if(!r.ok)throw Error('Price unavailable')
    const b=await r.json(),values:Partial<Record<string,number>>={}
-   for(const [symbol,id] of Object.entries(priceIds)){const p=b[id];if(Number.isFinite(p?.usd)&&p.usd>0&&Number.isFinite(p.last_updated_at)&&now()-p.last_updated_at*1000<180000&&p.last_updated_at*1000<=now()+30000)values[symbol]=p.usd}
+   if(String(b.code)!=='0'||!Array.isArray(b.data))throw Error('Price unavailable')
+   for(const asset of priceAssets){const matches=b.data.filter((p:any)=>String(p.chainIndex)===asset.chainIndex&&p.tokenContractAddress===asset.tokenContractAddress);if(matches.length!==1)continue;const p=matches[0],usd=Number(p.price),time=Number(p.time);if(Number.isFinite(usd)&&usd>0&&Number.isFinite(time)&&now()-time<60000&&time<=now()+5000)values[asset.symbol]=usd}
    prices={at:now(),values};return values
   }catch{return {}}})().finally(()=>{pricePending=undefined})
   return pricePending
