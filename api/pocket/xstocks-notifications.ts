@@ -4,7 +4,7 @@ import { PrivyClient } from '@privy-io/server-auth'
 import { getAddress, isAddress } from 'viem'
 import { verifiedPrivyUser, localCurrencyProfileRepository } from '../local-currency-profile.js'
 import { stockAmountUnits } from '../../src/pocket/lib/pocketXStocksWallet.js'
-import { hydrateStockActivity, readStockNotices, mutateStockNotices, stockNoticeAsset, stockNoticeClient, addStockRequest, decideStockRequest, type StockRequest } from './xstocks-notifications-store.js'
+import { reconcileStockTradeActivity, hydrateStockActivity, readStockNotices, mutateStockNotices, stockNoticeAsset, stockNoticeClient, addStockRequest, decideStockRequest, type StockRequest } from './xstocks-notifications-store.js'
 const publicRequest=(r:StockRequest,owner:string)=>({id:r.id,direction:r.payer===owner?'incoming':'outgoing',senderPocketId:r.senderPocketId,payerPocketId:r.payerPocketId,address:r.address,token:r.token,symbol:r.symbol,amount:r.amount,status:r.status,at:r.at,updatedAt:r.updatedAt,txHash:r.hash?.split(':')[0]||''})
 export default async function handler(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store')
@@ -24,7 +24,8 @@ export default async function handler(req:Request,res:Response){
    if(!user.linkedAccounts.some(a=>a.type==='wallet'&&a.chainType==='ethereum'&&a.walletClientType==='privy'&&a.address.toLowerCase()===wallet.toLowerCase()))return res.status(403).json({ok:false,error:'This is not your embedded stock wallet.'})
    const head=await stockNoticeClient.getBlock();if(Date.now()-Number(head.timestamp)*1000>60000)throw Error('X Layer unavailable')
    await mutateStockNotices(s=>{if(s.wallets[owner]?.address.toLowerCase()!==wallet.toLowerCase())s.wallets[owner]={address:getAddress(wallet),since:Date.now()}})
-  }else if(action==='mark-read'){await mutateStockNotices(s=>{s.reads[owner]=Date.now()})}
+  }else if(action==='reconcile-trade'){await reconcileStockTradeActivity(owner,String(req.body.hash||''))}
+  else if(action==='mark-read'){await mutateStockNotices(s=>{s.reads[owner]=Date.now()})}
   else if(action==='accept'||action==='decline'){await mutateStockNotices(s=>decideStockRequest(s,owner,String(req.body.id||''),action))}
   else if(action==='create-request'){
    const pocketId=String(req.body.pocketId||''),eventId=String(req.body.eventId||'')
