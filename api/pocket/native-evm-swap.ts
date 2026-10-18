@@ -40,11 +40,20 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    const walletId=link.circleWalletId,walletAddress=getAddress(link.circleWalletAddress),userToken=String(req.body.circleUserToken||'')
    if(q&&(q.walletId!==walletId||q.walletAddress.toLowerCase()!==walletAddress.toLowerCase()))return res.status(409).json({ok:false,error:'Your wallet changed. Reopen this swap.'})
    const estimate=(callData:Hex)=>d.estimate({chain:network,userToken,walletId,walletAddress,callData})
+   // Fee convergence rechecks affordability against one request-local balance.
+   // A later quote or execution always reads the network and balance again.
+   const quoteReads=new Map<string,Promise<string>>()
+   const preflightRead=(method:string,params:unknown[])=>{
+    if(action!=='quote')return d.rpc<string>(network,method,params)
+    const key=JSON.stringify([method,params]),existing=quoteReads.get(key)
+    if(existing)return existing
+    const read=d.rpc<string>(network,method,params);quoteReads.set(key,read);return read
+   }
    const preflight=async(quote:NativeEvmSwapQuote)=>{
-    if(Number(BigInt(await d.rpc<string>(network,'eth_chainId',[])))!==nativeEvmNetworks[network].id)throw Error('Swap network mismatch.')
+    if(Number(BigInt(await preflightRead('eth_chainId',[])))!==nativeEvmNetworks[network].id)throw Error('Swap network mismatch.')
     const {tokenIn}=nativeSwapPair(network,quote.from,quote.to)
-    if(tokenIn.native)return BigInt(await d.rpc<string>(network,'eth_getBalance',[walletAddress,'pending']))>=BigInt(quote.amountUnits)+BigInt(quote.feeUnits)
-    const balance=await d.rpc<string>(network,'eth_call',[{to:tokenIn.address,data:encodeFunctionData({abi:balanceAbi,functionName:'balanceOf',args:[walletAddress]})},'pending'])
+    if(tokenIn.native)return BigInt(await preflightRead('eth_getBalance',[walletAddress,'pending']))>=BigInt(quote.amountUnits)+BigInt(quote.feeUnits)
+    const balance=await preflightRead('eth_call',[{to:tokenIn.address,data:encodeFunctionData({abi:balanceAbi,functionName:'balanceOf',args:[walletAddress]})},'pending'])
     // The native output covers reimbursement after the swap in the same atomic batch.
     return BigInt(balance)>=BigInt(quote.amountUnits)
    }
