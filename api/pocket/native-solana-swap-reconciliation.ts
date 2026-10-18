@@ -11,8 +11,10 @@ export function solSwapReceiptOutput(q:SolSwapQuote,receipt:any):bigint|null{
  const approved=VersionedTransaction.deserialize(Buffer.from(q.transaction,'base64'))
  if(!receipt?.meta||receipt.meta.err||!Buffer.from(receipt.transaction.message.serialize()).equals(Buffer.from(approved.message.serialize())))return null
  const meta=receipt.meta,keys=receipt.transaction.message.getAccountKeys({accountKeysFromLookups:meta.loadedAddresses})
- if(keys.get(0)?.toBase58()!==q.walletAddress||!Number.isSafeInteger(meta.fee)||String(meta.fee)!==q.feeUnits)return null
- if(![meta.preBalances?.[0],meta.postBalances?.[0]].every(n=>Number.isSafeInteger(n)&&n>=0))return null
+ const walletIndex=q.sponsorship?1:0
+ if(keys.get(0)?.toBase58()!==(q.sponsorship?.sponsor||q.walletAddress)||keys.get(walletIndex)?.toBase58()!==q.walletAddress||!Number.isSafeInteger(meta.fee)||String(meta.fee)!==q.feeUnits)return null
+ if(![meta.preBalances?.[walletIndex],meta.postBalances?.[walletIndex]].every(n=>Number.isSafeInteger(n)&&n>=0))return null
+ if(q.sponsorship&&(![meta.preBalances?.[0],meta.postBalances?.[0]].every(n=>Number.isSafeInteger(n)&&n>=0)||meta.preBalances[0]!==meta.postBalances[0]))return null
  const {tokenIn,tokenOut}=nativeSwapPair('solana',q.from,q.to),stable=tokenIn.native?tokenOut:tokenIn
  const wallet=new PublicKey(q.walletAddress),token=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
  const ata=PublicKey.findProgramAddressSync([wallet.toBuffer(),token.toBuffer(),new PublicKey(stable.address).toBuffer()],new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'))[0].toBase58()
@@ -21,10 +23,10 @@ export function solSwapReceiptOutput(q:SolSwapQuote,receipt:any):bigint|null{
  let stableDelta=0n,found=false
  for(const index of new Set([...before.keys(),...after.keys()])){const delta=(after.get(index)||0n)-(before.get(index)||0n);if(keys.get(index)?.toBase58()===ata){stableDelta=delta;found=true}else if(delta!==0n)return null}
  if(!found)return null
- const nativeDelta=BigInt(meta.postBalances[0])-BigInt(meta.preBalances[0]),fee=BigInt(q.feeUnits),rent=BigInt(q.rentUnits)
+ const nativeDelta=BigInt(meta.postBalances[walletIndex])-BigInt(meta.preBalances[walletIndex]),fee=BigInt(q.feeUnits),rent=BigInt(q.rentUnits)
  if(tokenIn.native){if(nativeDelta!==-BigInt(q.amountUnits)-fee-rent||stableDelta<BigInt(q.minimumOutUnits))return null;return stableDelta}
  if(stableDelta!==-BigInt(q.amountUnits)||nativeDelta+fee<BigInt(q.minimumOutUnits))return null
- return nativeDelta+fee
+ return q.sponsorship?nativeDelta:nativeDelta+fee
 }
 const defaults={rpc:()=>new Connection(getRpc(),'confirmed'),record:recordCirclePocketAction}
 export async function reconcileNativeSolanaSwap(record:CirclePocketActionRecord,overrides:Partial<typeof defaults>={}){
@@ -37,7 +39,7 @@ export async function reconcileNativeSolanaSwap(record:CirclePocketActionRecord,
  const raw=record.metadata.signedTransaction,hash=record.metadata.txHash
  const finish=async(status:'completed'|'failed',amountOut?:string)=>{const saved=await d.record({...record,status,metadata:{...record.metadata,...(amountOut?{amountOut}:{})}});return {status:saved.status,txHash:saved.metadata?.txHash,amountOut:saved.metadata?.amountOut}}
  if(hash){
-  if(!raw||bs58.encode(verifyNativeSolanaSwapSignature(q.transaction,raw,q.walletAddress).signatures[0])!==hash)throw Error('Invalid swap signature.')
+  if(!raw||bs58.encode(verifyNativeSolanaSwapSignature(q.transaction,raw,q.walletAddress,q.sponsorship?.sponsor,true).signatures[0])!==hash)throw Error('Invalid swap signature.')
   const receipt=await rpc.getTransaction(hash,{commitment:'confirmed',maxSupportedTransactionVersion:0})
   if(receipt?.meta){
    if(!Buffer.from(receipt.transaction.message.serialize()).equals(Buffer.from(VersionedTransaction.deserialize(Buffer.from(q.transaction,'base64')).message.serialize())))throw Error('Swap message mismatch.')

@@ -1,7 +1,7 @@
 import type {Request,Response} from 'express'
 import {Connection} from '@solana/web3.js'
 import bs58 from 'bs58'
-import {getRpc} from '../relay-solana.js'
+import {getRpc,loadRelayer} from '../relay-solana.js'
 import {verifiedPrivyUser,circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
@@ -11,7 +11,7 @@ import {verifiedNativeSolanaSwapPreflight} from './native-solana-swap-verified-p
 import {verifyNativeSolanaSwapSignature} from './native-solana-swap-preflight.js'
 import {reconcileNativeSolanaSwap} from './native-solana-swap-reconciliation.js'
 const actionName='wallet.native-swap'
-const defaults={identity:verifiedPrivyUser,readLink:readCircleLink,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,approval:consumePocketPaymentApproval,challenge:createCircleNativeSolanaChallenge,rpc:()=>new Connection(getRpc(),'confirmed'),quote:quoteNativeSolanaSwap,preflight:verifiedNativeSolanaSwapPreflight,enabled:()=>process.env.POCKET_NATIVE_SOL_SWAP_ENABLED==='true',now:Date.now}
+const defaults={identity:verifiedPrivyUser,readLink:readCircleLink,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,approval:consumePocketPaymentApproval,challenge:createCircleNativeSolanaChallenge,rpc:()=>new Connection(getRpc(),'confirmed'),quote:quoteNativeSolanaSwap,preflight:verifiedNativeSolanaSwapPreflight,relayer:loadRelayer,enabled:()=>process.env.POCKET_NATIVE_SOL_SWAP_ENABLED==='true',now:Date.now}
 export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  return async(req:Request,res:Response)=>{
@@ -36,7 +36,7 @@ export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>
     openSolSwap(token,ownerId,false,d.now())
     if(!await d.approval(String(req.headers['x-pocket-payment-approval']||''),ownerId))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
     if(await rpc.getBlockHeight('confirmed')>q.lastValidBlockHeight)return res.status(409).json({ok:false,error:'Swap estimate expired. Review a new amount.'})
-    const proof=await d.preflight(solSwapIntent(q),q.instructions,q.lookupAddresses,SOL_SWAP_POLICY,rpc,q)
+    const proof=await d.preflight(solSwapIntent(q),q.instructions,q.lookupAddresses,SOL_SWAP_POLICY,rpc,q,q.sponsorship)
     if(proof.transaction!==q.transaction||proof.networkFeeLamports!==q.feeUnits||proof.effects.newAccountRentLamports!==q.rentUnits||q.expiresAt<=d.now())return res.status(409).json({ok:false,error:'Swap costs changed. Review a new estimate.'})
     const metadata={network:'solana',quoteToken:token,walletAddress:q.walletAddress,amount:q.amount,assetSymbol:q.from,toAsset:q.to,intentFingerprint:'solana:'+q.walletId}
     const claim=await d.claim({ownerId,idempotencyKey:key,action:actionName,metadata,dedupe:{metadataKey:'intentFingerprint',metadataValue:metadata.intentFingerprint,statuses:['started','submitted']}})
@@ -50,7 +50,18 @@ export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>
    if(['completed','failed'].includes(existing.status))return res.json({ok:true,status:existing.status,txHash:existing.metadata?.txHash,amountOut:existing.metadata?.amountOut})
    if(action==='submit'){
     if(!existing.metadata?.challengeId)throw Error('Swap approval is not ready.')
-    const raw=String(req.body.signedTransaction||''),signed=verifyNativeSolanaSwapSignature(q.transaction,raw,q.walletAddress),hash=bs58.encode(signed.signatures[0])
+    let raw=String(req.body.signedTransaction||'')
+    const signed=verifyNativeSolanaSwapSignature(q.transaction,raw,q.walletAddress,q.sponsorship?.sponsor)
+    if(q.sponsorship){
+     if(existing.metadata.signedTransaction&&existing.metadata.txHash)return res.json({ok:true,...await reconcileNativeSolanaSwap(existing,{rpc:()=>rpc,record:d.record})})
+     if(await rpc.getBlockHeight('confirmed')>q.lastValidBlockHeight)return res.json({ok:true,...await reconcileNativeSolanaSwap(existing,{rpc:()=>rpc,record:d.record})})
+     const proof=await d.preflight(solSwapIntent(q),q.instructions,q.lookupAddresses,SOL_SWAP_POLICY,rpc,q,q.sponsorship)
+     if(proof.transaction!==q.transaction||proof.networkFeeLamports!==q.feeUnits||proof.effects.newAccountRentLamports!==q.rentUnits)throw Error('Swap costs changed.')
+     const relayer=d.relayer();if(relayer.publicKey.toBase58()!==q.sponsorship.sponsor)throw Error('Swap sponsor changed.')
+     signed.sign([relayer]);raw=Buffer.from(signed.serialize()).toString('base64')
+     verifyNativeSolanaSwapSignature(q.transaction,raw,q.walletAddress,q.sponsorship.sponsor,true)
+    }
+    const hash=bs58.encode(signed.signatures[0])
     if(existing.metadata.txHash&&existing.metadata.txHash!==hash)throw Error('Swap signature changed.')
     const saved=await d.record({...existing,status:'submitted',metadata:{...existing.metadata,signedTransaction:raw,txHash:hash}})
     if(['completed','failed'].includes(saved.status))return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash,amountOut:saved.metadata?.amountOut})

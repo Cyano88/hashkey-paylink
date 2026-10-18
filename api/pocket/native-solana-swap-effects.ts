@@ -27,7 +27,7 @@ function token(a:Account){
 }
 /** Strict net-effect check for trusted preflight evidence, never a client body.
  * Same-slot snapshots avoid interpreting unrelated changes as swap proceeds.
- * Native gas is paid directly by the wallet; no paymaster reimbursement here.
+ * Sponsored output repays the exact fee and temporary funding atomically.
  */
 export function inspectNativeSolanaSwapEffects(input:Input,evidence:Evidence){
  for(const key of ['wallet','from','to','amountUnits','expectedOutUnits','minimumOutUnits'] as const)if(evidence.intent?.[key]!==input[key])fail()
@@ -43,8 +43,16 @@ export function inspectNativeSolanaSwapEffects(input:Input,evidence:Evidence){
  // RPC simulation represents a closed account either as null or an empty,
  // zero-lamport system account. Neither representation may retain any value.
  const closed=(a:Account|null)=>a===null||a.owner===SYSTEM&&!a.executable&&a.lamports===0n&&a.data.length===0
- if(!funds?.before||!funds.after||!target?.after||!wrapped||!closed(wrapped.before)||!closed(wrapped.after))fail()
- for(const a of [funds.before,funds.after])if(a.owner!==SYSTEM||a.executable||a.data.length)fail()
+ const sponsorship=evidence.sponsorship
+ if(sponsorship&&tokenIn.native)fail()
+ if(!funds||!funds.before&&!sponsorship||!funds.after||!target?.after||!wrapped||!closed(wrapped.before)||!closed(wrapped.after))fail()
+ for(const a of [funds.before,funds.after])if(a&&(a.owner!==SYSTEM||a.executable||a.data.length))fail()
+ if(sponsorship){
+  const sponsor=rows.get(sponsorship.sponsor)
+  if(sponsorship.sponsor===input.wallet||!sponsor?.before||!sponsor.after)fail()
+  for(const a of [sponsor.before,sponsor.after])if(a.owner!==SYSTEM||a.executable||a.data.length)fail()
+  if(sponsor.before.lamports!==sponsor.after.lamports||sponsor.before.lamports<BigInt(sponsorship.temporaryFundingLamports)+BigInt(evidence.networkFeeLamports))fail()
+ }
  const after=token(target.after),before=target.before?token(target.before):null
  if(after.owner!==input.wallet||after.mint!==stable.address||before&&(before.owner!==input.wallet||before.mint!==stable.address))fail()
  // Existing token accounts may change only their amount; never authorities/rent.
@@ -57,13 +65,14 @@ export function inspectNativeSolanaSwapEffects(input:Input,evidence:Evidence){
   if([input.wallet,stableAddress,temp].includes(address))continue
   // Unsupported token programs cannot be assumed harmless.
   if([row.before?.owner,row.after?.owner].includes('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'))fail()
-  const owned=[row.before,row.after].some(a=>a?.owner===TOKEN&&a.data.length===165&&new PublicKey(a.data.subarray(32,64)).toBase58()===input.wallet)
+  const owned=[row.before,row.after].some(a=>a?.owner===TOKEN&&a.data.length===165&&[input.wallet,sponsorship?.sponsor].includes(new PublicKey(a.data.subarray(32,64)).toBase58()))
   if(owned&&(!row.before||!row.after||row.before.owner!==row.after.owner||row.before.executable!==row.after.executable||row.before.lamports!==row.after.lamports||!row.before.data.equals(row.after.data)))fail()
  }
  if(!/^[1-9]\d*$/.test(evidence.networkFeeLamports))fail()
- const fee=BigInt(evidence.networkFeeLamports),rent=target.before?0n:target.after.lamports,delta=after.amount-(before?.amount??0n),nativeDelta=funds.after.lamports-funds.before.lamports
+ const fee=BigInt(evidence.networkFeeLamports),rent=target.before?0n:target.after.lamports,delta=after.amount-(before?.amount??0n),nativeDelta=funds.after.lamports-(funds.before?.lamports??0n)
  let received:bigint
  if(tokenIn.native){if(-nativeDelta!==BigInt(input.amountUnits)+fee+rent||delta<BigInt(input.minimumOutUnits))fail();received=delta}
  else {if(delta!==-BigInt(input.amountUnits)||nativeDelta+fee<BigInt(input.minimumOutUnits))fail();received=nativeDelta+fee}
- return {executionAvailable:false as const,accountEffectsVerified:true as const,gasPayment:'native-wallet' as const,networkFeeLamports:fee.toString(),newAccountRentLamports:rent.toString(),receivedUnits:received.toString()}
+ if(sponsorship&&BigInt(input.minimumOutUnits)<=fee)fail()
+ return {executionAvailable:false as const,accountEffectsVerified:true as const,gasPayment:sponsorship?'sponsored-output' as const:'native-wallet' as const,networkFeeLamports:fee.toString(),newAccountRentLamports:rent.toString(),receivedUnits:received.toString()}
 }
