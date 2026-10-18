@@ -48,3 +48,9 @@ failPage=false;await scanCircleNativeHistory(link,request,deps);assert.ok(cursor
 reads=[];await scanCircleNativeHistory(link,request,deps);assert.equal(reads.filter(p=>p.includes('/transactions')).length,1,'completed backfill only refreshes head')
 assert.throws(()=>nativeHistoryNextPage('<https://evil.example'+path+'&pageAfter=x>; rel="next"',path));assert.throws(()=>nativeHistoryNextPage('<https://api.circle.com'+path.replace('walletIds=wallet','walletIds=foreign')+'&pageAfter=x>; rel="next"',path));
 console.log('PASS all native networks, exact amounts, fee grouping and isolation, action precedence, pending validation, X Layer coverage, durable paginated backfill and ownership checks')
+
+const requestTx={id:'request-leg',hash,at:1,title:'Sent',body:'Sent',transfer:{token:stockUsdt.address,symbol:'USDT',amount:'1',from:address,to:recipient,direction:'out'}};
+const paidRequest={id:'paid-request',txHash:hash,direction:'incoming',address:recipient,symbol:'USDT',amount:'1',status:'paid',at:1,updatedAt:2,payerPocketId:'1',senderPocketId:'2'};
+const requestRows=pocketStockNoticeActivity([requestTx],address,[paidRequest]);assert.equal(requestRows.length,1);assert.equal(requestRows[0].source,'request');assert.equal(requestRows[0].direction,'out');
+assert.equal(mergePocketActivityRows([{...base,chain:'xlayer',source:'wallet-transfer'}],requestRows).length,1,'cached stock transfer replaced by paid request action');
+console.log('PASS paid request retains action in unified activity and replaces cached raw transfer');

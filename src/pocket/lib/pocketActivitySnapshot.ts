@@ -88,7 +88,7 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   for(const row of values){
     if(row.source==='wallet-bridge'&&row.destinationTxHash&&row.destination)contextual.add(transactionKey({...row,chain:row.destination,txHash:row.destinationTxHash})+':in')
   }
-  return values.filter(row => !['wallet-deposit', 'wallet-withdrawal'].includes(row.source || '')
+  return values.filter(row => !['wallet-deposit', 'wallet-withdrawal', 'wallet-transfer'].includes(row.source || '')
     || (!contextual.has(transactionKey(row) + ':' + (row.direction || 'in'))
       && !(row.source === 'wallet-deposit' && refundDeposits.has(refundKey(row)))))
     .sort((a, b) => b.ts - a.ts || rowKey(a).localeCompare(rowKey(b)))

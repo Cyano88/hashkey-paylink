@@ -139,7 +139,7 @@ async function enrichEarnTransfers(transfers:ConfirmedStockTransfer[]){
 export async function readPocketEarnNoticeActivity(owner:string){
  if(!hasRenderDurableStore())return {payments:[],merchants:[],collections:[]}
  void hydrateStockActivity(owner).catch(()=>undefined)
- const s=await readStockNotices(),payments=pocketStockNoticeActivity(Object.values(s.notices).filter(n=>n.owner===owner),s.wallets[owner]?.address||'')
+ const s=await readStockNotices(),payments=pocketStockNoticeActivity(Object.values(s.notices).filter(n=>n.owner===owner),s.wallets[owner]?.address||'',Object.values(s.requests).filter(r=>r.sender===owner||r.payer===owner).map(r=>({id:r.id,direction:r.payer===owner?'incoming':'outgoing',senderPocketId:r.senderPocketId,payerPocketId:r.payerPocketId,address:r.address,token:r.token,symbol:r.symbol,amount:r.amount,status:r.status,at:r.at,updatedAt:r.updatedAt,txHash:r.hash?.split(':')[0]})))
  return {payments,merchants:[],collections:[]}
 }
 
