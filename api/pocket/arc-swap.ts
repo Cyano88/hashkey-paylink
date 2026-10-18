@@ -93,6 +93,7 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
         return res.json({ ok: true, status: 'failed', error: 'Circle confirmed this swap did not complete. Request a new quote to retry.' })
       }
       providerHash = providerState.txHash
+      if(providerState.status==='awaiting_approval'&&!providerHash)return res.json({ok:true,status:'awaiting_approval',challengeId:existing.metadata.challengeId})
     }
     const hash = providerHash || existing?.metadata?.txHash || String(req.body.txHash ?? '')
     if (!hash) return res.json({ ok: true, status: !existing && quote.expiresAt <= Date.now() ? 'not_submitted' : 'pending', challengeId: existing?.metadata?.challengeId })
