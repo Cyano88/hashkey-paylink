@@ -55,10 +55,10 @@ function validateSwap(quote: StockSwapQuote, owner: Address, now: number, allowe
 
 // OKX v1.0.7 CommissionLib: recognize only the two-word, positive-slippage-only
 // trailer. No partner commission or dual-charge trailer is supported.
-export function readStockSwapFee(quote: StockSwapQuote) {
+export function readStockSwapFee(quote: Pick<StockSwapQuote, 'tx' | 'expectedOut' | 'decimalsOut'>, feeAbi: Abi = routerAbi as Abi) {
   const fail = () => { throw Error('Unsupported provider fee encoding.') }
-  const decoded = decodeFunctionData({ abi: routerAbi as Abi, data: quote.tx.data })
-  const canonical = encodeFunctionData({ abi: routerAbi as Abi, functionName: decoded.functionName, args: decoded.args }).toLowerCase()
+  const decoded = decodeFunctionData({ abi: feeAbi, data: quote.tx.data })
+  const canonical = encodeFunctionData({ abi: feeAbi, functionName: decoded.functionName, args: decoded.args }).toLowerCase()
   const raw = quote.tx.data.toLowerCase()
   if (!raw.startsWith(canonical)) return fail()
   const tail = raw.slice(canonical.length)

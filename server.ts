@@ -1,3 +1,4 @@
+import pocketNativeEvmSwapHandler from './api/pocket/native-evm-swap.js'
 import pocketNativeSendHandler from './api/pocket/native-send.js'
 import foodDemoHandler from './api/food-demo.js'
 import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
@@ -416,6 +417,7 @@ app.all('/api/pocket/bridge/solana/submit', relayLimiter, pocketSolanaCctpSubmit
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
+app.all('/api/pocket/native-evm-swap', strictLimiter, pocketNativeEvmSwapHandler)
 app.all('/api/pocket/wallet-update/status', readLimiter, pocketWalletUpdateStatusHandler)
 app.all('/api/pocket/wallet-update/flow', strictLimiter, pocketMigrationFlowHandler)
 app.all('/api/pocket/wallet-update/recovery', strictLimiter, pocketMigrationLegacyFlowHandler)
