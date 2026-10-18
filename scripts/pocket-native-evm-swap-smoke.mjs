@@ -8,6 +8,11 @@ let count=0
 for(const network of ['ethereum','base','arbitrum','polygon'])for(const stable of ['USDC','USDT'])for(const reverse of [false,true]){
  const {q,trace,out,now}=await fixture(network,reverse,stable);count++
  assert.equal(q.feeUnits,'15000000000000');assert.equal(nativeSwapOutput(q,trace),out)
+ const selfCall=structuredClone(trace);selfCall.from=q.walletAddress;
+ assert.equal(nativeSwapOutput(q,selfCall),out,'Circle self-dispatched executeBatch must verify without counting its envelope as an outgoing payment');
+ const delegated=structuredClone(selfCall);delegated.calls=[{type:'DELEGATECALL',from:q.walletAddress,to:'0x'+'9'.repeat(40),input:q.callData,calls:delegated.calls}];
+ assert.equal(nativeSwapOutput(q,delegated),out,'Circle proxy delegate envelope preserves exact outgoing proof');
+ const extra=structuredClone(delegated);extra.calls[0].calls.push({type:'CALL',from:q.walletAddress,to:wallet,input:'0x',value:'0x1'});assert.equal(nativeSwapOutput(q,extra),null,'unexpected additional wallet transfer still rejected');
  const calls=decodeFunctionData({abi:NATIVE_SWAP_BATCH_ABI,data:q.callData}).args[0];assert.equal(calls.length,reverse?5:2)
  const token=sealNativeEvmSwap(q);assert.deepEqual(openNativeEvmSwap(token,owner,false,now),JSON.parse(JSON.stringify(q)))
  assert.throws(()=>openNativeEvmSwap(token,'other'));assert.throws(()=>openNativeEvmSwap(token+'x',owner));assert.throws(()=>openNativeEvmSwap(token,owner,false,now+45001));assert.ok(openNativeEvmSwap(token,owner,true,now+45001))

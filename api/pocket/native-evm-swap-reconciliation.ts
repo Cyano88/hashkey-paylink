@@ -11,7 +11,8 @@ export function nativeSwapOutput(q:NativeEvmSwapQuote,trace:Trace):bigint|null{
  const walk=(node:Trace,visit:(node:Trace)=>void,failed=false,depth=0)=>{if(depth>100)throw Error('Trace too deep.');const reverted=failed||!!node.error||!!node.revertReason;if(!reverted)visit(node);for(const child of node.calls||[])walk(child,visit,reverted,depth+1)}
  walk(trace,node=>{if(node.type==='CALL'&&sameSwapAddress(node.to,q.walletAddress)&&sameSwapAddress(node.input,q.callData))matches.push(node)})
  if(matches.length!==1)return null
- const outgoing:Trace[]=[];walk(matches[0],node=>{if(node.type==='CALL'&&sameSwapAddress(node.from,q.walletAddress))outgoing.push(node)})
+ // Circle can self-dispatch executeBatch. The matched envelope is not a batch payment.
+ const outgoing:Trace[]=[];walk(matches[0],node=>{if(node!==matches[0]&&node.type==='CALL'&&sameSwapAddress(node.from,q.walletAddress))outgoing.push(node)})
  const expected=nativeSwapCalls(q)
  if(outgoing.length!==expected.length||outgoing.some((call,i)=>!sameSwapAddress(call.to,expected[i].target)||!sameSwapAddress(call.input||'0x',expected[i].data)||BigInt(call.value||'0')!==expected[i].value))return null
  const router=outgoing.find(node=>sameSwapAddress(node.to,q.tx.to)&&sameSwapAddress(node.input,q.tx.data))
