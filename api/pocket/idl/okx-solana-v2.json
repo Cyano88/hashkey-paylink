@@ -1,0 +1,1308 @@
+{
+  "address": "proVF4pMXVaYqmy4NjniPh4pqKNfMmsihgd4wdkCX3u",
+  "metadata": {
+    "name": "OKX: DEX Router",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "create_token_account",
+      "discriminator": [
+        147,
+        241,
+        123,
+        100,
+        244,
+        132,
+        174,
+        118
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "owner"
+        },
+        {
+          "name": "token_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "token_mint"
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "swap_tob",
+      "discriminator": [
+        170,
+        41,
+        85,
+        177,
+        132,
+        80,
+        31,
+        53
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "source_token_account",
+          "writable": true
+        },
+        {
+          "name": "destination_token_account",
+          "writable": true
+        },
+        {
+          "name": "source_mint"
+        },
+        {
+          "name": "destination_mint"
+        },
+        {
+          "name": "commission_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "platform_fee_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "sa_authority",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "source_token_sa",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "destination_token_sa",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "source_token_program",
+          "optional": true
+        },
+        {
+          "name": "destination_token_program",
+          "optional": true
+        },
+        {
+          "name": "associated_token_program",
+          "optional": true,
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "optional": true,
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  95,
+                  95,
+                  101,
+                  118,
+                  101,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "SwapArgs"
+            }
+          }
+        },
+        {
+          "name": "commission_info",
+          "type": "u32"
+        },
+        {
+          "name": "platform_fee_rate",
+          "type": "u16"
+        },
+        {
+          "name": "trim_rate",
+          "type": "u8"
+        }
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "AccountsType",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "TransferHookInput"
+          },
+          {
+            "name": "TransferHookOutput"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Dex",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "SplTokenSwap"
+          },
+          {
+            "name": "StableSwap"
+          },
+          {
+            "name": "Whirlpool"
+          },
+          {
+            "name": "MeteoraDynamicpool"
+          },
+          {
+            "name": "GoonfiV2WithSig"
+          },
+          {
+            "name": "RaydiumStableSwap"
+          },
+          {
+            "name": "RaydiumClmmSwap"
+          },
+          {
+            "name": "AldrinExchangeV1"
+          },
+          {
+            "name": "AldrinExchangeV2"
+          },
+          {
+            "name": "LifinityV1"
+          },
+          {
+            "name": "LifinityV2"
+          },
+          {
+            "name": "RaydiumClmmSwapV2"
+          },
+          {
+            "name": "FluxBeam"
+          },
+          {
+            "name": "MeteoraDlmm"
+          },
+          {
+            "name": "RaydiumCpmmSwap"
+          },
+          {
+            "name": "OpenBookV2"
+          },
+          {
+            "name": "WhirlpoolV2"
+          },
+          {
+            "name": "Phoenix"
+          },
+          {
+            "name": "ObricV2"
+          },
+          {
+            "name": "SanctumAddLiq"
+          },
+          {
+            "name": "SanctumRemoveLiq"
+          },
+          {
+            "name": "SanctumNonWsolSwap"
+          },
+          {
+            "name": "SanctumWsolSwap"
+          },
+          {
+            "name": "PumpfunBuy",
+            "fields": [
+              {
+                "name": "is_cash_back",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "PumpfunSell",
+            "fields": [
+              {
+                "name": "is_cash_back",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "StabbleSwap"
+          },
+          {
+            "name": "SanctumRouter"
+          },
+          {
+            "name": "MeteoraVaultDeposit"
+          },
+          {
+            "name": "MeteoraVaultWithdraw"
+          },
+          {
+            "name": "Saros"
+          },
+          {
+            "name": "MeteoraLst"
+          },
+          {
+            "name": "Solfi"
+          },
+          {
+            "name": "QualiaSwap"
+          },
+          {
+            "name": "Zerofi"
+          },
+          {
+            "name": "PumpfunammBuy",
+            "fields": [
+              {
+                "name": "is_cash_back",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "PumpfunammSell",
+            "fields": [
+              {
+                "name": "is_cash_back",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Virtuals"
+          },
+          {
+            "name": "VertigoBuy"
+          },
+          {
+            "name": "VertigoSell"
+          },
+          {
+            "name": "PerpetualsAddLiq"
+          },
+          {
+            "name": "PerpetualsRemoveLiq"
+          },
+          {
+            "name": "PerpetualsSwap"
+          },
+          {
+            "name": "RaydiumLaunchpad"
+          },
+          {
+            "name": "LetsBonkFun"
+          },
+          {
+            "name": "Woofi"
+          },
+          {
+            "name": "MeteoraDbc"
+          },
+          {
+            "name": "MeteoraDlmmSwap2"
+          },
+          {
+            "name": "MeteoraDAMMV2"
+          },
+          {
+            "name": "Gavel"
+          },
+          {
+            "name": "BoopfunBuy"
+          },
+          {
+            "name": "BoopfunSell"
+          },
+          {
+            "name": "MeteoraDbc2"
+          },
+          {
+            "name": "GooseFX"
+          },
+          {
+            "name": "Dooar"
+          },
+          {
+            "name": "Numeraire"
+          },
+          {
+            "name": "SaberDecimalWrapperDeposit"
+          },
+          {
+            "name": "SaberDecimalWrapperWithdraw"
+          },
+          {
+            "name": "SarosDlmm"
+          },
+          {
+            "name": "OneDexSwap"
+          },
+          {
+            "name": "Manifest"
+          },
+          {
+            "name": "ByrealClmm"
+          },
+          {
+            "name": "PancakeSwapV3Swap"
+          },
+          {
+            "name": "PancakeSwapV3SwapV2"
+          },
+          {
+            "name": "Tessera"
+          },
+          {
+            "name": "SolRfq",
+            "fields": [
+              {
+                "name": "rfq_id",
+                "type": "u64"
+              },
+              {
+                "name": "expected_maker_amount",
+                "type": "u64"
+              },
+              {
+                "name": "expected_taker_amount",
+                "type": "u64"
+              },
+              {
+                "name": "maker_send_amount",
+                "type": "u64"
+              },
+              {
+                "name": "taker_send_amount",
+                "type": "u64"
+              },
+              {
+                "name": "expiry",
+                "type": "u64"
+              },
+              {
+                "name": "maker_use_native_sol",
+                "type": "bool"
+              },
+              {
+                "name": "taker_use_native_sol",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Humidifi"
+          },
+          {
+            "name": "HeavenBuy"
+          },
+          {
+            "name": "HeavenSell"
+          },
+          {
+            "name": "SolfiV2"
+          },
+          {
+            "name": "Goonfi"
+          },
+          {
+            "name": "MoonitBuy"
+          },
+          {
+            "name": "MoonitSell"
+          },
+          {
+            "name": "RaydiumSwapV2"
+          },
+          {
+            "name": "Whalestreet"
+          },
+          {
+            "name": "SugarMoneyBuy",
+            "fields": [
+              {
+                "name": "bonding_curve_bump",
+                "type": "u8"
+              },
+              {
+                "name": "bonding_curve_sol_associated_account_bump",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "SugarMoneySell",
+            "fields": [
+              {
+                "name": "bonding_curve_bump",
+                "type": "u8"
+              },
+              {
+                "name": "bonding_curve_sol_associated_account_bump",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "MeteoraDAMMV2Swap2"
+          },
+          {
+            "name": "AlphaQ"
+          },
+          {
+            "name": "FutarchyAmm"
+          },
+          {
+            "name": "PumpfunBuyV2"
+          },
+          {
+            "name": "PumpfunSellV2"
+          },
+          {
+            "name": "HumidifiSwap2",
+            "fields": [
+              {
+                "name": "swap_id",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "Scorch",
+            "fields": [
+              {
+                "name": "id",
+                "type": "u128"
+              }
+            ]
+          },
+          {
+            "name": "JupiterLendDeposit"
+          },
+          {
+            "name": "JupiterLendRedeem"
+          },
+          {
+            "name": "TaurusFi"
+          },
+          {
+            "name": "BisonFi"
+          },
+          {
+            "name": "GoonfiV2"
+          },
+          {
+            "name": "Quantum"
+          },
+          {
+            "name": "BoopfunBuy2"
+          },
+          {
+            "name": "BoopfunSell2"
+          },
+          {
+            "name": "ByrealClmm2"
+          },
+          {
+            "name": "Dooar2"
+          },
+          {
+            "name": "HeavenBuy2"
+          },
+          {
+            "name": "HeavenSell2"
+          },
+          {
+            "name": "MoonitBuy2"
+          },
+          {
+            "name": "MoonitSell2"
+          },
+          {
+            "name": "SaberDecimalWrapperDeposit2"
+          },
+          {
+            "name": "SaberDecimalWrapperWithdraw2"
+          },
+          {
+            "name": "ByrealPropAmm"
+          },
+          {
+            "name": "SanctumPrefundSwapViaStake",
+            "fields": [
+              {
+                "name": "swap_id",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "AbyssAmm"
+          },
+          {
+            "name": "Aquifer"
+          },
+          {
+            "name": "WhalestreetV2",
+            "fields": [
+              {
+                "name": "auth_amount_in",
+                "type": "u64"
+              },
+              {
+                "name": "auth",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "SolfiV2WithSig",
+            "fields": [
+              {
+                "name": "unix_timestamp",
+                "type": "u64"
+              },
+              {
+                "name": "msg_amount_in",
+                "type": "u64"
+              },
+              {
+                "name": "expect_amount_out",
+                "type": "u64"
+              },
+              {
+                "name": "slippage",
+                "type": "u16"
+              },
+              {
+                "name": "user_request_slot",
+                "type": "u64"
+              },
+              {
+                "name": "signature",
+                "type": {
+                  "array": [
+                    "u8",
+                    64
+                  ]
+                }
+              },
+              {
+                "name": "recovery_id",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "FusionAmm"
+          },
+          {
+            "name": "ScaleAmmBuy"
+          },
+          {
+            "name": "ScaleAmmSell"
+          },
+          {
+            "name": "ScaleVmmBuy"
+          },
+          {
+            "name": "ScaleVmmSell"
+          },
+          {
+            "name": "PumpfunBuy3"
+          },
+          {
+            "name": "PumpfunSell3"
+          },
+          {
+            "name": "PumpfunammBuy2"
+          },
+          {
+            "name": "PumpfunammSell2"
+          },
+          {
+            "name": "Riptide"
+          },
+          {
+            "name": "ZerofiSwapV2"
+          },
+          {
+            "name": "TaurusFiV2"
+          },
+          {
+            "name": "SolRfqV2",
+            "fields": [
+              {
+                "name": "taker_side",
+                "type": {
+                  "defined": {
+                    "name": "RfqSide"
+                  }
+                }
+              },
+              {
+                "name": "rfq_id",
+                "type": "u64"
+              },
+              {
+                "name": "expire_at",
+                "type": "i64"
+              },
+              {
+                "name": "levels",
+                "type": {
+                  "vec": {
+                    "defined": {
+                      "name": "RfqLevel"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "FluxMM",
+            "fields": [
+              {
+                "name": "swap_id",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "MeteoraDlmmSwap2Hook",
+            "fields": [
+              {
+                "name": "remaining_accounts_info",
+                "type": {
+                  "defined": {
+                    "name": "RemainingAccountsInfo"
+                  }
+                }
+              },
+              {
+                "name": "bin_array_count",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "BisonFiWithSig",
+            "fields": [
+              {
+                "name": "unix_timestamp",
+                "type": "u64"
+              },
+              {
+                "name": "msg_amount_in",
+                "type": "u64"
+              },
+              {
+                "name": "expect_amount_out",
+                "type": "u64"
+              },
+              {
+                "name": "slippage",
+                "type": "u16"
+              },
+              {
+                "name": "user_request_slot",
+                "type": "u64"
+              },
+              {
+                "name": "signature",
+                "type": {
+                  "array": [
+                    "u8",
+                    64
+                  ]
+                }
+              },
+              {
+                "name": "recovery_id",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "MeteoraDbcSwapWithHook",
+            "fields": [
+              {
+                "name": "base_hook_count",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "ZerofiSwapV4"
+          },
+          {
+            "name": "Moonpay"
+          },
+          {
+            "name": "BinaryFi"
+          },
+          {
+            "name": "Archer",
+            "fields": [
+              {
+                "name": "maker_book_count",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "DynamicRouteV1",
+            "fields": [
+              {
+                "defined": {
+                  "name": "DynamicRouteSpec"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Flint"
+          },
+          {
+            "name": "RaydiumStableSwapV2"
+          },
+          {
+            "name": "Kipseli"
+          },
+          {
+            "name": "Hadron"
+          },
+          {
+            "name": "DenaliPropAmm"
+          },
+          {
+            "name": "ZerofiWithSig",
+            "fields": [
+              {
+                "name": "signature",
+                "type": {
+                  "array": [
+                    "u8",
+                    40
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Native",
+            "fields": [
+              {
+                "name": "quote_data",
+                "type": "bytes"
+              }
+            ]
+          },
+          {
+            "name": "HumidifiSwapRouter",
+            "fields": [
+              {
+                "name": "router_id",
+                "type": "u64"
+              },
+              {
+                "name": "claimed_ms",
+                "type": "u64"
+              },
+              {
+                "name": "seed_rng",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              },
+              {
+                "name": "token",
+                "type": {
+                  "array": [
+                    "u8",
+                    16
+                  ]
+                }
+              },
+              {
+                "name": "end_user",
+                "type": "pubkey"
+              }
+            ]
+          },
+          {
+            "name": "Deriverse"
+          },
+          {
+            "name": "MSwap"
+          },
+          {
+            "name": "ByrealClmm3"
+          },
+          {
+            "name": "JupiterLendAmm",
+            "fields": [
+              {
+                "name": "oracle_accounts_count",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "Flowdesk"
+          },
+          {
+            "name": "TesseraV2"
+          },
+          {
+            "name": "GatorSwap",
+            "fields": [
+              {
+                "name": "tox_engaged",
+                "type": "bool"
+              },
+              {
+                "name": "ref_account_count",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "NativePamm"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DynamicCandidate",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Manifest"
+          },
+          {
+            "name": "Tessera"
+          },
+          {
+            "name": "GoonfiV2"
+          },
+          {
+            "name": "HumidifiSwap2",
+            "fields": [
+              {
+                "name": "swap_id",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "SolfiV2"
+          },
+          {
+            "name": "Scorch",
+            "fields": [
+              {
+                "name": "id",
+                "type": "u128"
+              }
+            ]
+          },
+          {
+            "name": "BisonFi"
+          },
+          {
+            "name": "RaydiumSwapV2"
+          },
+          {
+            "name": "RaydiumClmmSwapV2"
+          },
+          {
+            "name": "WhirlpoolV2"
+          },
+          {
+            "name": "BisonFiWithSig",
+            "fields": [
+              {
+                "name": "unix_timestamp",
+                "type": "u64"
+              },
+              {
+                "name": "msg_amount_in",
+                "type": "u64"
+              },
+              {
+                "name": "expect_amount_out",
+                "type": "u64"
+              },
+              {
+                "name": "slippage",
+                "type": "u16"
+              },
+              {
+                "name": "user_request_slot",
+                "type": "u64"
+              },
+              {
+                "name": "signature",
+                "type": {
+                  "array": [
+                    "u8",
+                    64
+                  ]
+                }
+              },
+              {
+                "name": "recovery_id",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "Quantum"
+          },
+          {
+            "name": "Zerofi"
+          },
+          {
+            "name": "AlphaQ"
+          },
+          {
+            "name": "FluxMM",
+            "fields": [
+              {
+                "name": "swap_id",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "HumidifiSwapRouter",
+            "fields": [
+              {
+                "name": "router_id",
+                "type": "u64"
+              },
+              {
+                "name": "claimed_ms",
+                "type": "u64"
+              },
+              {
+                "name": "seed_rng",
+                "type": {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                }
+              },
+              {
+                "name": "token",
+                "type": {
+                  "array": [
+                    "u8",
+                    16
+                  ]
+                }
+              },
+              {
+                "name": "end_user",
+                "type": "pubkey"
+              }
+            ]
+          },
+          {
+            "name": "ScorchV2",
+            "fields": [
+              {
+                "name": "id",
+                "type": "u128"
+              }
+            ]
+          },
+          {
+            "name": "TesseraV2"
+          },
+          {
+            "name": "ZerofiWithSig",
+            "fields": [
+              {
+                "name": "signature",
+                "type": {
+                  "array": [
+                    "u8",
+                    40
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "DynamicRouteSpec",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "candidates",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "DynamicCandidate"
+                }
+              }
+            }
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "SelectionMode"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RemainingAccountsInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "slices",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "RemainingAccountsSlice"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RemainingAccountsSlice",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "accounts_type",
+            "type": {
+              "defined": {
+                "name": "AccountsType"
+              }
+            }
+          },
+          {
+            "name": "length",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RfqLevel",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "base_atoms",
+            "type": "u64"
+          },
+          {
+            "name": "quote_atoms",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RfqSide",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Bid"
+          },
+          {
+            "name": "Ask"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Route",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "dex",
+            "type": {
+              "defined": {
+                "name": "Dex"
+              }
+            }
+          },
+          {
+            "name": "weight",
+            "type": "u16"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SelectionMode",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Auto"
+          },
+          {
+            "name": "Forced",
+            "fields": [
+              "u8"
+            ]
+          },
+          {
+            "name": "Hint",
+            "fields": [
+              "u8"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "amount_in",
+            "type": "u64"
+          },
+          {
+            "name": "expect_amount_out",
+            "type": "u64"
+          },
+          {
+            "name": "slippage",
+            "type": "u16"
+          },
+          {
+            "name": "routes",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Route"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1317,9 +1317,9 @@ export async function estimateCircleNativeSend(input: {chain: Exclude<CircleGasS
   return fee
 }
 
-export async function createCircleNativeSolanaChallenge(input:{userToken:string;walletId:string;walletAddress:string;rawTransaction:string}) {
+export async function createCircleNativeSolanaChallenge(input:{userToken:string;walletId:string;walletAddress:string;rawTransaction:string;purpose?:'swap'}) {
   await verifyCircleSolanaSigningWallet(input)
-  return circleJson<{challengeId?:string}>('/v1/w3s/user/sign/transaction',{method:'POST',userToken:input.userToken,apiKey:circleApiKey(),body:JSON.stringify({walletId:input.walletId,rawTransaction:input.rawTransaction,memo:'Pocket SOL transfer'})})
+  return circleJson<{challengeId?:string}>('/v1/w3s/user/sign/transaction',{method:'POST',userToken:input.userToken,apiKey:circleApiKey(),body:JSON.stringify({walletId:input.walletId,rawTransaction:input.rawTransaction,memo:input.purpose==='swap'?'Pocket Solana swap':'Pocket SOL transfer'})})
 }
 
 /** Recover only a unique server-issued native-send reference, without creating another challenge. */

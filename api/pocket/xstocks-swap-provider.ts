@@ -23,7 +23,14 @@ export async function okxGet(path: string, query: Record<string, string>, fetche
     'OK-ACCESS-PASSPHRASE': credentials.passphrase!, 'OK-ACCESS-TIMESTAMP': timestamp,
   }, signal: AbortSignal.timeout(20_000), redirect: 'error' })
   const body = await response.json() as any
-  if (!response.ok || body.code !== '0' || !Array.isArray(body.data) || !body.data.length) fail('No executable quote is available for this pair and amount. Please try again.', 503)
+  if (!response.ok || body?.code !== '0') fail('No executable quote is available for this pair and amount. Please try again.', 503)
+  // Solana's instruction endpoint returns a single object, unlike quote/swap.
+  // This only normalizes the transport; execution must still validate every instruction.
+  if (path === 'swap-instruction' && query.chainIndex === '501') {
+    if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data) || !Object.keys(body.data).length) fail('Swap instructions are unavailable. Please try again.', 503)
+    return body.data
+  }
+  if (!Array.isArray(body.data) || !body.data.length) fail('No executable quote is available for this pair and amount. Please try again.', 503)
   return body.data[0]
 }
 export async function quoteStockSwap(input: { owner: Address; tokenIn: string; tokenOut: string; amount: string }) {

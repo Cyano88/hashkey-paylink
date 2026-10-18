@@ -24,7 +24,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Method not allowed.'})
    const {userId:ownerId}=await d.identity(req)
    if(req.method==='GET'){
-    const pending=(await d.list(ownerId,500,actionName,true)).filter(r=>['started','submitted'].includes(r.status)&&r.metadata?.quoteToken).map(r=>({quote:nativeSwapReview(openNativeEvmSwap(r.metadata!.quoteToken,ownerId,true,d.now())),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,status:r.status}))
+    const pending=(await d.list(ownerId,500,actionName,true)).filter(r=>r.metadata?.network!=='solana'&&['started','submitted'].includes(r.status)&&r.metadata?.quoteToken).map(r=>({quote:nativeSwapReview(openNativeEvmSwap(r.metadata!.quoteToken,ownerId,true,d.now())),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,status:r.status}))
     const requested=req.query?.network
     if(requested!==undefined&&(typeof requested!=='string'||!Object.hasOwn(nativeEvmNetworks,requested)))return res.status(400).json({ok:false,error:'Choose a supported swap network.'})
     return res.json({ok:true,enabled:d.enabled(requested as NativeEvmNetwork|undefined),pending})

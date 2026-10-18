@@ -1,3 +1,4 @@
+import {reconcileNativeSolanaSwap} from './native-solana-swap-reconciliation.js'
 import {reconcileNativeEvmSwap} from './native-evm-swap-reconciliation.js'
 import {reconcileNativeSend} from './native-send-reconciliation.js'
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
@@ -22,6 +23,7 @@ import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalE
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
 type Dependencies = {
+  reconcileSolanaSwap:typeof reconcileNativeSolanaSwap
   reconcileNativeSwap: typeof reconcileNativeEvmSwap
   reconcileNative: typeof reconcileNativeSend
   auditXLayerBilling:typeof checkXLayerBillingCoverage
@@ -258,6 +260,7 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
 
 export async function runPocketReconciliation(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    reconcileSolanaSwap:reconcileNativeSolanaSwap,
     reconcileNativeSwap:reconcileNativeEvmSwap,
     reconcileNative:reconcileNativeSend,
     auditXLayerBilling:checkXLayerBillingCoverage,
@@ -293,7 +296,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
   }
   for(const record of await dependencies.listBridges('wallet.native-swap',Math.min(limit,20))){
     if(record.action!=='wallet.native-swap')continue
-    try{const result=await dependencies.reconcileNativeSwap(record);results.push({id:record.id,kind:'native_swap',result:['completed','failed'].includes(result.status)?'reconciled':'unchanged'})}
+    try{const result=await (record.metadata?.network==='solana'?dependencies.reconcileSolanaSwap:dependencies.reconcileNativeSwap)(record);results.push({id:record.id,kind:'native_swap',result:['completed','failed'].includes(result.status)?'reconciled':'unchanged'})}
     catch(error){results.push({id:record.id,kind:'native_swap',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
