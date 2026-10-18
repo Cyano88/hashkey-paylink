@@ -5,7 +5,7 @@ import routerAbi from '../../src/pocket/lib/pocketOkxRouterAbi.json' with {type:
 import {readStockSwapFee} from '../../src/pocket/lib/pocketXStocksSwap.js'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
-import {bufferedNativeFee,nativeEvmNetworks,type NativeEvmNetwork} from './native-send-quote.js'
+import {bufferedNativeFee,nativeAmountUnits,nativeEvmNetworks,type NativeEvmNetwork} from './native-send-quote.js'
 import {nativeSwapUnits,quoteNativeSwap} from './native-swap-quote.js'
 import {okxGet} from './xstocks-swap-provider.js'
 // Reviewed against OKX contract documentation. API-returned addresses must match before use.
@@ -64,8 +64,10 @@ export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(
  const checkBalance=async()=>{if(affordable&&!await affordable(q))throw Object.assign(Error(`Insufficient ${tokenIn.symbol} for this swap${tokenIn.native?' and network fee':''}.`),{status:409})}
  await checkBalance()
  for(let pass=0;pass<4;pass++){
-  const fee=bufferedNativeFee(await estimate(q.callData))
-  if(fee<=BigInt(q.feeUnits))return validateNativeEvmSwap(q,false,now())
+  const estimateAmount=await estimate(q.callData)
+  // Keep the existing buffered cap when it still covers this exact batch.
+  if(nativeAmountUnits(estimateAmount)<=BigInt(q.feeUnits))return validateNativeEvmSwap(q,false,now())
+  const fee=bufferedNativeFee(estimateAmount)
   if(tokenOut.native&&fee>=BigInt(q.minimumOutUnits))throw Object.assign(Error('Swap amount is too small to cover the network fee.'),{status:409})
   q.feeUnits=String(fee);q.callData=nativeSwapBatch(q)
   await checkBalance()

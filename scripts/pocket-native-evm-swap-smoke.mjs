@@ -28,7 +28,7 @@ for(const network of ['ethereum','base','arbitrum','polygon'])for(const stable o
 }
 const {q:rounded,binding,provider,response}=await fixture()
 rounded.expectedOutUnits='1000001';assert.ok(validateNativeEvmSwap(rounded));rounded.expectedOutUnits='1000002';assert.throws(()=>validateNativeEvmSwap(rounded))
-let rising=0;await assert.rejects(()=>quoteNativeEvmSwap(binding,async()=> String(++rising),provider),/fees changed|details changed/)
+let rising=0;await assert.rejects(()=>quoteNativeEvmSwap(binding,async()=> String(2**++rising),provider),/fees changed|details changed/)
 const bad=structuredClone(response);bad.tx.minReceiveAmount='1';await assert.rejects(()=>quoteNativeEvmSwap(binding,async()=> '0.00001',async()=>bad))
 // A Circle fee can exceed the remaining native balance. Never simulate that
 // unaffordable second batch and misreport its revert as a broken swap route.

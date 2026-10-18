@@ -5,7 +5,7 @@ import {verifiedPrivyUser,circleLinkKey,readCircleLink} from '../privy-circle-li
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import {estimateCircleNativeSend,createCircleGasStationEvmChallenge,readCircleEvmChallenge,recoverCircleNativeSendChallenge} from '../circle-solana-email.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
-import {nativeEvmNetworks,bufferedNativeFee,type NativeEvmNetwork} from './native-send-quote.js'
+import {nativeEvmNetworks,nativeAmountUnits,type NativeEvmNetwork} from './native-send-quote.js'
 import {nativeSendRpc} from './native-send-reconciliation.js'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.js'
 import {openNativeEvmSwap,quoteNativeEvmSwap,sealNativeEvmSwap,type NativeEvmSwapQuote} from './native-evm-swap-quote.js'
@@ -68,7 +68,8 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     openNativeEvmSwap(token,ownerId,false,d.now())
     if(!await d.approval(String(req.headers['x-pocket-payment-approval']||''),ownerId))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
     if(!await preflight(quote))return res.status(409).json({ok:false,error:'Insufficient balance for this swap and fee.'})
-    if(bufferedNativeFee(await estimate(quote.callData))>BigInt(quote.feeUnits)||quote.expiresAt<=d.now())return res.status(409).json({ok:false,error:'Network fees changed. Review the updated estimate.'})
+    // The quoted reimbursement already includes its safety buffer.
+    if(nativeAmountUnits(await estimate(quote.callData))>BigInt(quote.feeUnits)||quote.expiresAt<=d.now())return res.status(409).json({ok:false,error:'Network fees changed. Review the updated estimate.'})
     const metadata={quoteToken:token,network,walletAddress,amount:quote.amount,assetSymbol:quote.from,toAsset:quote.to,intentFingerprint:network+':'+walletId}
     const claim=await d.claim({ownerId,idempotencyKey:key,action:actionName,metadata,dedupe:{metadataKey:'intentFingerprint',metadataValue:metadata.intentFingerprint,statuses:['started','submitted']}})
     if(!claim.claimed)return res.status(409).json({ok:false,error:'A swap from this wallet is still being checked.'})
