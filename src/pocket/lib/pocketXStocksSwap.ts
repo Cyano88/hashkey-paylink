@@ -4,13 +4,13 @@ import { stockAssets, stockGasAsset, stockUsdc, stockUsdt, stockAmountUnits, typ
 
 // Circle native USDC on X Layer. Bridged versions are deliberately distinct.
 export { stockUsdc }
-export const swapAssets = [stockUsdc, stockGasAsset, ...stockAssets]
+export const swapAssets = [stockUsdc, stockUsdt, stockGasAsset, ...stockAssets]
 export const OKX_NATIVE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 export const OKX_XLAYER_ROUTER = '0x7c5bee2a8091c3ef39072f64f18fac913060aeaf'
 export const OKX_XLAYER_SPENDER = '0x8b773d83bc66be128c60e07e17c8901f7a64f000'
 export type StockSwapQuote = {
   id: string; chainId: 196; owner: Address; tokenIn: StockAsset; tokenOut: StockAsset; amount: string; amountUnits: string;
-  decimalsIn: number; decimalsOut: number; expectedOut: string; minimumOut: string; minimumOutUnits: string; expiresAt: number;
+  outputUsdPrice?:number; decimalsIn: number; decimalsOut: number; expectedOut: string; minimumOut: string; minimumOutUnits: string; expiresAt: number;
   positiveSlippageFee?: { capPercent: number; recipient: Address }; gasFee: string; priceImpact: string; approvalRequired: boolean; spender: Address;
   tx: { from: Address; to: Address; data: Hex; value: string };
 }
@@ -18,6 +18,14 @@ export const sameStockAddress = (a: unknown, b: string) => typeof a === 'string'
 export const okxTokenAddress = (a: StockAsset) => a.address === 'native' ? OKX_NATIVE : a.address
 export function validateStockSwap(quote: StockSwapQuote, owner: Address, now = Date.now()) {
   return validateSwap(quote, owner, now, swapAssets)
+}
+/** Keep the approved route while it is usable; refresh only when its lifetime is nearly spent. */
+export async function stockExecutionQuote(review:StockSwapQuote,owner:Address,refresh:()=>Promise<StockSwapQuote>,now=Date.now()) {
+  if(review.expiresAt>now+10_000){validateStockSwap(review,owner,now);return review}
+  const fresh=await refresh()
+  validateStockSwap(fresh,owner)
+  if(JSON.stringify(fresh.positiveSlippageFee)!==JSON.stringify(review.positiveSlippageFee)||fresh.amountUnits!==review.amountUnits||fresh.tokenIn.address!==review.tokenIn.address||fresh.tokenOut.address!==review.tokenOut.address||BigInt(fresh.minimumOutUnits)<BigInt(review.minimumOutUnits)||Number(fresh.gasFee)>Number(review.gasFee)*1.2)throw Error('Price or network fee changed. Review the updated amount.')
+  return fresh
 }
 // A separate, fixed pair for bridge funding. This does not enable USDT trading.
 export function validateXLayerBridgeSwap(quote: StockSwapQuote, owner: Address, now = Date.now()) {

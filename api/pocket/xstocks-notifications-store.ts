@@ -9,7 +9,7 @@ import { mutateDurableJson, readDurableJson, hasRenderDurableStore } from '../re
 import { stockAssets, stockUsdc, stockUsdt, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { formatStockQuantity } from '../../src/pocket/lib/pocketStockDisplay.js'
 import { sendPocketPush, pocketPushConfigured, listPocketPushOwners } from './push-devices.js'
-export type StockNotice = { pushSuppressed?:boolean; tradeChecked?:boolean; trade?:{action:'buy'|'sell'|'swap';input:{symbol:string;amount:string};output:{symbol:string;amount:string}}; id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
+export type StockNotice = { pushSuppressed?:boolean; tradeChecked?:boolean; trade?:{feeAmount?:string;action:'buy'|'sell'|'swap';input:{symbol:string;amount:string};output:{symbol:string;amount:string}}; id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
 export type StockRequest = { id: string; eventId: string; sender: string; payer: string; senderPocketId: string; payerPocketId: string; address: string; payerAddress: string; token: string; symbol: string; amount: string; units: string; decimals: number; status: 'pending' | 'accepted' | 'declined' | 'paid'; at: number; updatedAt: number; hash?: string }
 export type StockNoticeStore = { wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
 export const STOCK_NOTICE_KEY = 'hashpaylink:pocket-xstocks-notifications:v1'
@@ -162,8 +162,7 @@ export async function reconcileStockTradeActivity(owner:string,hash:string,overr
  const id=owner+':trade:'+hash.toLowerCase();if(snapshot.notices[id])return
  if(await d.client.getChainId()!==196)throw Error('Wrong activity chain')
  const [tx,receipt]=await Promise.all([d.client.getTransaction({hash:hash as Address}),d.client.getTransactionReceipt({hash:hash as Address})])
- if(tx.from.toLowerCase()!==wallet.address.toLowerCase())throw Object.assign(Error('Transaction does not belong to this wallet.'),{status:403})
- const proof=stockTradeProof(tx,receipt);if(!proof)throw Object.assign(Error('Confirmed swap is not available.'),{status:409})
+ const proof=stockTradeProof(tx,receipt);if(proof&&proof.owner!==wallet.address.toLowerCase())throw Object.assign(Error('Transaction does not belong to this wallet.'),{status:403});if(!proof)throw Object.assign(Error('Confirmed swap is not available.'),{status:409})
  const block=await d.client.getBlock({blockNumber:receipt.blockNumber});if(block.hash!==receipt.blockHash||tx.blockHash!==receipt.blockHash)throw Error('Transaction block changed')
  const at=Number(block.timestamp)*1000;if(at<wallet.since)throw Object.assign(Error('Transaction predates wallet registration.'),{status:409})
  const transfers:ConfirmedStockTransfer[]=nativeTradeLegs(proof,receipt.logs,at)

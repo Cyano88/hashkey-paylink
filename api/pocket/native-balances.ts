@@ -15,13 +15,14 @@ export async function fetchCircleNativeBalance(link:CircleLinkRecord,fetcher=fet
  const signal=AbortSignal.timeout(8000)
  const request=async(path:string)=>{const r=await fetcher('https://api.circle.com'+path,{headers:{Authorization:'Bearer '+key},signal,redirect:'error'});if(!r.ok)throw Error('Native balance unavailable.');return {body:await r.json(),next:/;\s*rel="next"/.test(r.headers.get('link')||'')}}
  const path='/v1/w3s/wallets/'+encodeURIComponent(link.circleWalletId)
- const {body:{data:{wallet}={}}}=await request(path)
+ // Fetch identity and first balance page together; publish only after both validate.
+ const [{body:{data:{wallet}={}}},firstPage]=await Promise.all([request(path),request(path+'/balances?'+new URLSearchParams({includeAll:'true',pageSize:'50'}))])
  const same=(a:string,b:string)=>link.chain==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
  if(!wallet||wallet.id!==link.circleWalletId||wallet.blockchain!==chain||typeof wallet.address!=='string'||!same(wallet.address,link.circleWalletAddress))throw Error('Wallet binding changed.')
  let cursor='',found:number|undefined
  const seen=new Set<string>()
  for(let page=0;page<10;page++){
-  const {body,next}=await request(path+'/balances?'+new URLSearchParams({includeAll:'true',pageSize:'50',...(cursor?{pageAfter:cursor}:{})}))
+  const {body,next}=page===0?firstPage:await request(path+'/balances?'+new URLSearchParams({includeAll:'true',pageSize:'50',...(cursor?{pageAfter:cursor}:{})}))
   const rows=body?.data?.tokenBalances
   if(!Array.isArray(rows))throw Error('Incomplete native balance.')
   for(const row of rows){

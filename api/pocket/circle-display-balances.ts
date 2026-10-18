@@ -11,8 +11,7 @@ async function fetchCircleBalances(link:CircleLinkRecord,fetcher:typeof fetch,in
  const request=async(path:string)=>{const r=await fetcher('https://api.circle.com'+path,{headers:{Authorization:'Bearer '+key},signal,redirect:'error'});if(!r.ok)throw Error('Circle balance unavailable.');const body=await r.json();if(!body.data)throw Error('Invalid Circle response.');return {data:body.data,next:/;\s*rel="next"/.test(r.headers.get('link')||'')}}
  const path='/v1/w3s/wallets/'+encodeURIComponent(link.circleWalletId)
  // The authenticated handler supplies the owner link; verify the provider wallet binding too.
- const {data:{wallet}}=await request(path)
- if(!wallet||wallet.id!==link.circleWalletId||wallet.blockchain!==chain||typeof wallet.address!=='string'||!same(wallet.address,link.circleWalletAddress,solana))throw Error('Circle wallet binding changed.')
+
  const readToken=async(token:string)=>{
   const {data,next}=await request(path+'/balances?'+new URLSearchParams({includeAll:'true',tokenAddress:token,pageSize:'50'}))
   if(next||!Array.isArray(data.tokenBalances)||data.tokenBalances.length>1)throw Error('Incomplete Circle balance.')
@@ -21,7 +20,8 @@ async function fetchCircleBalances(link:CircleLinkRecord,fetcher:typeof fetch,in
   if(!t||t.blockchain!==chain||typeof t.tokenAddress!=='string'||!same(t.tokenAddress,token,solana)||t.decimals!==6||t.isNative===true||typeof row.amount!=='string'||!/^\d{1,78}(?:\.\d{1,6})?$/.test(row.amount))throw Error('Invalid Circle token balance.')
   const balance=Number(row.amount);if(!Number.isFinite(balance)||balance<0)throw Error('Invalid Circle amount.');return balance
  }
- const [balance,usdt]=await Promise.all([readToken(token),includeUsdt&&supportsPocketUsdt(link.chain)?readToken(POCKET_USDT_ASSETS[link.chain].address).catch(()=>undefined):undefined])
+ const [{data:{wallet}},balance,usdt]=await Promise.all([request(path),readToken(token),includeUsdt&&supportsPocketUsdt(link.chain)?readToken(POCKET_USDT_ASSETS[link.chain].address).catch(()=>undefined):undefined])
+ if(!wallet||wallet.id!==link.circleWalletId||wallet.blockchain!==chain||typeof wallet.address!=='string'||!same(wallet.address,link.circleWalletAddress,solana))throw Error('Circle wallet binding changed.')
  return {balance,...(usdt===undefined?{}:{usdt})}
 }
 export async function fetchCircleDisplayBalance(link:CircleLinkRecord,fetcher=fetch){return (await fetchCircleBalances(link,fetcher,false)).balance}

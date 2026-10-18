@@ -1,3 +1,4 @@
+import {swapTokenUsdPrice} from '../../src/pocket/lib/pocketSwapUsd.js'
 import {xLayer} from 'viem/chains'
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createPublicClient, http, formatUnits, getAddress, parseAbi, type Address } from 'viem'
@@ -45,6 +46,7 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
   const tokenIn = assets.find(a => sameStockAddress(a.address, input.tokenIn))
   const tokenOut = assets.find(a => sameStockAddress(a.address, input.tokenOut))
   if (!tokenIn || !tokenOut || sameStockAddress(tokenIn.address, tokenOut.address)) fail('Choose two different supported assets.')
+  if(!bridge&&[tokenIn,tokenOut].some(a=>a.symbol==='USDT')&&![tokenIn,tokenOut].some(a=>a.address==='native'))fail('Choose USDT and OKB for this swap.')
   if (input.amount.length > 80) fail('Invalid amount.')
   const client = bridge ? createPublicClient({chain:xLayer,transport:http(process.env.PRIVATE_RPC_URL_XLAYER,{timeout:15000,retryCount:0})}) : stockClient
   if(bridge){if(!process.env.PRIVATE_RPC_URL_XLAYER||await client.getChainId()!==196)fail('X Layer connection could not be verified.',503)}
@@ -70,7 +72,7 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
   const gas = BigInt(tx.gas || tx.gasLimit || '0'), gasPrice = BigInt(tx.gasPrice || '0')
   if (gas <= 0n || gas > 30_000_000n || gasPrice <= 0n) fail('Could not estimate the network fee.', 502)
   const quote: StockSwapQuote = { id: randomUUID(), chainId: 196, owner: input.owner, tokenIn, tokenOut, amount: formatUnits(units, decimalsIn), amountUnits: String(units), decimalsIn, decimalsOut,
-    expectedOut: formatUnits(out, decimalsOut), minimumOut: formatUnits(minimum, decimalsOut), minimumOutUnits: String(minimum), expiresAt: Date.now() + 45_000,
+    outputUsdPrice:swapTokenUsdPrice(route.toToken?.tokenUnitPrice), expectedOut: formatUnits(out, decimalsOut), minimumOut: formatUnits(minimum, decimalsOut), minimumOutUnits: String(minimum), expiresAt: Date.now() + 45_000,
     gasFee: formatUnits((gas + (approvalRequired ? 120_000n : 0n)) * gasPrice * 120n / 100n, 18), priceImpact: String(impact), approvalRequired, spender: getAddress(OKX_XLAYER_SPENDER),
     tx: { from: input.owner, to: getAddress(tx.to), data: tx.data, value: String(tx.value || '0') } }
   const providerFee = readStockSwapFee(quote)

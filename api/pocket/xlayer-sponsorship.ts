@@ -1,3 +1,6 @@
+import {readSponsoredSwapOutcome,type SponsoredSwapEvidence} from './xlayer-swap-settlement.js'
+import {encodeXLayerSponsoredBatch} from './xlayer-sponsored-cost.js'
+import {verifySponsoredSwap} from './xlayer-swap-sponsorship.js'
 import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
@@ -23,7 +26,7 @@ const contracts = new Set([
   ...catalogue.assets.map(a => a.address.toLowerCase()),
 ])
 const transferAbi = parseAbi(['function transfer(address,uint256) returns(bool)'])
-type Record = { fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; bridgeQuoteToken?:string; coverage?:XLayerCoverage; providerFailure?: {status:number;code?:string;message?:string;cause?:string;requestId?:string} }
+type Record = { swap?:SponsoredSwapEvidence; fingerprint: string; wallet: string; owner: string; at: number; hash?: string; transactionId?: string; userOperationHash?: string; bridgeQuoteToken?:string; coverage?:XLayerCoverage; providerFailure?: {status:number;code?:string;message?:string;cause?:string;requestId?:string} }
 // Privy documents this exact 400 error as not broadcast. Other errors remain
 // uncertain. Keep the durable reservation: a duplicate must never send again.
 const notBroadcast = (record: Record) => !record.hash && !record.transactionId && !record.userOperationHash && record.providerFailure?.status === 400 && record.providerFailure?.code === 'transaction_broadcast_failure'
@@ -185,12 +188,13 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         if(record.bridgeQuoteToken)return res.json(await reconcileOutbound(identity.userId,record.bridgeQuoteToken))
         if (notBroadcast(record)) return rejected(res)
         const hash = await resolveAccepted(id,record,embedded.id,c).catch(() => null)
-        return res.json({ok:true,hash,accepted:Boolean(record.transactionId || record.hash)})
+        const status=record.swap&&hash?await readSponsoredSwapOutcome(hash as Hex,record.swap).catch(()=>'pending' as const):undefined
+        return res.json({ok:true,hash,accepted:Boolean(record.transactionId || record.hash),...(record.swap?{status:status||'pending'}:{})})
       }
       // Public token sends and explicitly enabled outbound bridges share the
       // verified wallet gate. Earn retains its separate existing pilot gate.
-      if (!c.enabled || !(c.wallets.includes(wallet) || c.publicTransfers && (req.body?.purpose === undefined||req.body?.purpose==='bridge'))) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
-      if (req.body?.purpose !== undefined && !['earn','bridge'].includes(req.body.purpose)) throw fail('Unsupported sponsorship purpose.')
+      if (!c.enabled || !(c.wallets.includes(wallet) || c.publicTransfers && (req.body?.purpose === undefined||req.body?.purpose==='bridge'||req.body?.purpose==='swap'))) throw fail('Sponsored transfers are not enabled for this wallet.', 403)
+      if (req.body?.purpose !== undefined && !['earn','bridge','swap'].includes(req.body.purpose)) throw fail('Unsupported sponsorship purpose.')
       if(req.body?.purpose==='bridge'&&!c.outboundBridge)throw fail('Outbound bridging is not available yet.',403)
       if (req.body?.purpose === 'earn' && !c.earnEnabled) throw fail('Earn is not available yet.',403)
       if (req.body?.action === 'quote') {
@@ -216,9 +220,17 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (req.body?.purpose === 'earn' && !earn) throw fail('Earn intent is missing.')
       const signature = req.body?.signature
       if (typeof signature !== 'string' || !/^[A-Za-z0-9+/=]{32,512}$/.test(signature)) throw fail('Payment authorization is missing.')
+      let swapEvidence:SponsoredSwapEvidence|undefined
       let approved:XLayerFeeQuote|undefined
       let validated:ReturnType<typeof validateSponsoredRequest>|{id:string;canonical:ReturnType<typeof makeSponsoredBatchRequest>;wallet:string;token:string;units:bigint}
-      if(req.body?.purpose==='bridge'){
+      if(req.body?.purpose==='swap'){
+        if(!d.reimbursement)throw fail('Swap fee service is temporarily unavailable.',503)
+        const {q,fee}=await verifySponsoredSwap({routeToken:req.body.routeToken,feeToken:req.body.feeToken,ownerId:identity.userId,walletId:embedded.id,wallet},d.reimbursement.estimate,reserved)
+        const canonical=makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:fee.intentId,expiresAt:fee.expiresAt,calls:fee.calls})
+        if(possibleId!==fee.intentId||!isDeepStrictEqual(request,canonical))throw fail('Swap authorization changed.',422)
+        validated={id:fee.intentId,canonical,wallet,token:q.tokenIn.address,units:BigInt(q.amountUnits)};approved=fee
+        swapEvidence={callData:encodeXLayerSponsoredBatch(fee.calls),owner:wallet,input:q.tokenIn.address,inputUnits:q.amountUnits,minimumOutUnits:q.minimumOutUnits,feeUnits:fee.networkFeeUnits}
+      }else if(req.body?.purpose==='bridge'){
         if(!d.reimbursement)throw fail('Outbound bridging is not available yet.',503)
         let q
         try{q=openOutboundBridge(req.body.bridgeQuoteToken,identity.userId)}catch{throw fail('Bridge quote changed. Review the bridge again.',422)}
@@ -251,7 +263,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if(!reserved) {
         if (earn) {
           try { await d.earnPreflight(earn, wallet as `0x${string}`) } catch { throw fail('Could not prepare this Earn transaction. Refresh your balance and try again.',422) }
-        } else if(req.body?.purpose!=='bridge')try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
+        } else if(req.body?.purpose!=='bridge'&&req.body?.purpose!=='swap')try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
       }
       const fingerprint = createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
       if(approved&&!reserved&&!isDeepStrictEqual(approved.pricing,d.reimbursement?.pricing))throw fail('Transfer fee policy changed. Review the transfer again.',422)
@@ -269,7 +281,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         // neither retries nor restarts can silently broadcast another transfer.
         const recent = Object.values(store.requests).filter(r => r.at > d.now() - 86_400_000)
         if (recent.length >= 50 || recent.filter(r => r.wallet === wallet || r.owner === identity.userId).length >= 10) throw fail('Sponsored transfer limit reached. Try again tomorrow.', 429)
-        store.requests[id] = {fingerprint,wallet,owner:identity.userId,at:d.now(),...(approved?{coverage:{walletId:embedded.id!,asset:approved.asset,feeUnits:approved.networkFeeUnits}}:{}),...(req.body?.purpose==='bridge'?{bridgeQuoteToken:req.body.bridgeQuoteToken}:{})}
+        store.requests[id] = {...(swapEvidence?{swap:swapEvidence}:{}),fingerprint,wallet,owner:identity.userId,at:d.now(),...(approved?{coverage:{walletId:embedded.id!,asset:approved.asset,feeUnits:approved.networkFeeUnits}}:{}),...(req.body?.purpose==='bridge'?{bridgeQuoteToken:req.body.bridgeQuoteToken}:{})}
         return store
       })
       reserved = true

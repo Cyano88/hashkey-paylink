@@ -1,3 +1,7 @@
+import {quoteSponsoredSwap} from './xlayer-swap-sponsorship.js'
+import {configuredXLayerReimbursement} from './xlayer-fee-estimator.js'
+import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
+import {reimbursedSwapAsset} from '../../src/pocket/lib/pocketSponsoredSwap.js'
 import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
 import { getAddress, isAddress } from 'viem'
@@ -20,7 +24,15 @@ export function createStockSwapHandler(overrides: Partial<{identity:typeof verif
     if (!owns) return res.status(403).json({ ok: false, error: 'This wallet is not your Pocket embedded wallet.' })
     if (req.body?.action === 'quote') {
       const quote = await quoteStockSwap({ owner: getAddress(wallet), tokenIn: String(req.body.tokenIn || ''), tokenOut: String(req.body.tokenOut || ''), amount: String(req.body.amount || '') })
-      return res.json({ ok: true, quote, quoteToken: sealStockQuote(quote, identity.userId) })
+      let sponsorship
+      if(reimbursedSwapAsset(quote)){
+        const config=configuredXLayerReimbursement(),embedded=user.linkedAccounts.find(a=>a.type==='wallet'&&a.walletClientType==='privy'&&a.chainType==='ethereum'&&a.address.toLowerCase()===wallet.toLowerCase()) as {id?:string}|undefined
+        const allowed=process.env.POCKET_XLAYER_TRANSFER_PUBLIC_ENABLED==='true'||(process.env.POCKET_XLAYER_SPONSORSHIP_WALLETS||'').toLowerCase().split(',').map(s=>s.trim()).includes(wallet.toLowerCase())
+        if(!config||!embedded?.id||process.env.POCKET_XLAYER_SPONSORSHIP_ENABLED!=='true'||!allowed)throw Object.assign(Error('Swap fee service is temporarily unavailable.'),{status:503})
+        await checkXLayerBillingCoverage(wallet)
+        sponsorship=await quoteSponsoredSwap(quote,identity.userId,embedded.id,(process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID)!,config.estimate,config.pricing)
+      }
+      return res.json({ ok: true, quote, quoteToken: sealStockQuote(quote, identity.userId),...(sponsorship?{sponsorship}:{}) })
     }
     if (req.body?.action === 'verify') {
       const quote = openStockQuote(String(req.body.quoteToken || ''), identity.userId)

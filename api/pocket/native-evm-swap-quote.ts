@@ -19,7 +19,7 @@ export const NATIVE_SWAP_BATCH_ABI=parseAbi(['function executeBatch((address tar
 const swapAbi=[...routerAbi,...COMPACT_V3_ABI] as Abi
 const approveAbi=parseAbi(['function approve(address spender,uint256 amount) returns(bool)'])
 export type NativeEvmSwapBinding={ownerId:string;walletId:string;walletAddress:Hex;network:NativeEvmNetwork;from:string;to:string;amount:string}
-export type NativeEvmSwapQuote=NativeEvmSwapBinding&{version:1;id:string;amountUnits:string;expectedOutUnits:string;minimumOutUnits:string;priceImpact:string;tx:{from:Hex;to:Hex;data:Hex;value:string};spender:Hex;feeUnits:string;callData:Hex;issuedAt:number;expiresAt:number;positiveSlippageFee?:{capPercent:number;recipient:Hex}}
+export type NativeEvmSwapQuote=NativeEvmSwapBinding&{version:1;id:string;amountUnits:string;outputUsdPrice?:number;expectedOutUnits:string;minimumOutUnits:string;priceImpact:string;tx:{from:Hex;to:Hex;data:Hex;value:string};spender:Hex;feeUnits:string;callData:Hex;issuedAt:number;expiresAt:number;positiveSlippageFee?:{capPercent:number;recipient:Hex}}
 const fail=()=>{throw Object.assign(Error('Swap details changed. Review the amount and fee again.'),{status:409})}
 export const sameSwapAddress=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 export function nativeSwapCalls(q:NativeEvmSwapQuote,fee=BigInt(q.feeUnits)){
@@ -58,7 +58,7 @@ export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(
  const spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
  if(!tokenIn.native){const approval=await read('approve-transaction',{chainIndex:String(nativeEvmNetworks[binding.network].id),tokenContractAddress:tokenIn.address,approveAmount:String(units)});if(!sameSwapAddress(approval?.dexContractAddress,spender))fail()}
  if(!data?.tx)fail()
- const q:NativeEvmSwapQuote={...binding,amount:preview.amount,version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:'1',callData:'0x',issuedAt,expiresAt:issuedAt+45000}
+ const q:NativeEvmSwapQuote={...binding,amount:preview.amount,outputUsdPrice:preview.outputUsdPrice,version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:'1',callData:'0x',issuedAt,expiresAt:issuedAt+45000}
  try{q.positiveSlippageFee=readStockSwapFee({tx:q.tx,expectedOut:preview.expectedOut,decimalsOut:tokenOut.decimals},swapAbi)}catch{throw Object.assign(Error('This swap route is not supported yet. Try another pair.'),{status:422})}
  q.callData=nativeSwapBatch(q);validateNativeEvmSwap(q,false,now())
  const checkBalance=async()=>{if(affordable&&!await affordable(q))throw Object.assign(Error(`Insufficient ${tokenIn.symbol} for this swap${tokenIn.native?' and network fee':''}.`),{status:409})}
