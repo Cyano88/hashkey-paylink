@@ -13,8 +13,10 @@ const rowKey = (row: PocketActivityRow) => isBank(row) && (row.bankOrderId || ro
 
 /** Merge observed history. Absence from a bounded/provider response is not deletion. */
 export function mergePocketActivityRows(previous: PocketActivityRow[], incoming: PocketActivityRow[]) {
-  const rows = new Map(previous.map(row => [rowKey(row), row]))
-  for (const row of incoming) {
+  const normalize = (row: PocketActivityRow): PocketActivityRow => !row.memo?.trim() && ['earn-deposit','earn-withdraw'].includes(row.source || '')
+    ? {...row,memo:row.source === 'earn-deposit' ? 'Added to Earn' : 'Withdrawn from Earn'} : row
+  const rows = new Map(previous.map(normalize).map(row => [rowKey(row), row]))
+  for (const row of incoming.map(normalize)) {
     let old = rows.get(rowKey(row))
     for (const [key,candidate] of rows) {
       const sameHash = transactionKey(candidate) === transactionKey(row) && candidate.source === row.source && candidate.eventId === row.eventId

@@ -54,3 +54,6 @@ const paidRequest={id:'paid-request',txHash:hash,direction:'incoming',address:re
 const requestRows=pocketStockNoticeActivity([requestTx],address,[paidRequest]);assert.equal(requestRows.length,1);assert.equal(requestRows[0].source,'request');assert.equal(requestRows[0].direction,'out');
 assert.equal(mergePocketActivityRows([{...base,chain:'xlayer',source:'wallet-transfer'}],requestRows).length,1,'cached stock transfer replaced by paid request action');
 console.log('PASS paid request retains action in unified activity and replaces cached raw transfer');
+
+for(const source of ['earn-deposit','earn-withdraw']){const row={...base,source,memo:''};for(const [old,incoming] of [[[row],[]],[[],[row]]])assert.ok(isPocketActivityReadData({payments:mergePocketActivityRows(old,incoming),merchants:[],collections:[]}),'legacy blank Earn memo cannot reject the entire feed')}
+console.log('PASS legacy Earn rows keep full activity response valid');
