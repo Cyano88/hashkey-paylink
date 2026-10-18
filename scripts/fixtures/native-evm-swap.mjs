@@ -1,12 +1,12 @@
-﻿import {readFileSync} from 'node:fs'
+import {readFileSync} from 'node:fs'
 import {encodeFunctionData,getAddress,formatUnits} from 'viem'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.ts'
 import {nativeSwapUnits} from '../../api/pocket/native-swap-quote.ts'
 import {NATIVE_SWAP_CONTRACTS,quoteNativeEvmSwap,nativeSwapCalls} from '../../api/pocket/native-evm-swap-quote.ts'
 const abi=JSON.parse(readFileSync(new URL('../../src/pocket/lib/pocketOkxRouterAbi.json',import.meta.url),'utf8'))
 export const owner='owner',wallet='0x'+'1'.repeat(40),hash='0x'+'a'.repeat(64)
-export async function fixture(network='base',reverse=false,stable='USDC'){
- const now=Date.now(),symbol=network==='polygon'?'POL':'ETH',from=reverse?stable:symbol,to=reverse?symbol:stable,pair=nativeSwapPair(network,from,to),input=reverse?'1':'0.01',units=nativeSwapUnits(input,pair.tokenIn.decimals),out=reverse?1000000000000000n:1000000n,min=out*995n/1000n
+export async function fixture(network='base',reverse=false,stable='USDC',small=false){
+ const now=Date.now(),symbol=network==='polygon'?'POL':'ETH',from=reverse?stable:symbol,to=reverse?symbol:stable,pair=nativeSwapPair(network,from,to),input=reverse?(small?'0.1':'1'):'0.01',units=nativeSwapUnits(input,pair.tokenIn.decimals),out=reverse?1000000000000000n:(small?100000n:1000000n),min=out*995n/1000n
  const contracts=NATIVE_SWAP_CONTRACTS[network]
  const data=encodeFunctionData({abi,functionName:'smartSwapByOrderId',args:[1n,{fromToken:BigInt(pair.tokenIn.address),toToken:getAddress(pair.tokenOut.address),fromTokenAmount:units,minReturnAmount:min,deadLine:BigInt(Math.floor(now/1000)+300)},[],[],[]]})
  const response={routerResult:{chainIndex:{base:'8453',ethereum:'1',arbitrum:'42161',polygon:'137'}[network],fromTokenAmount:String(units),toTokenAmount:String(out),priceImpactPercent:'0',fromToken:{tokenContractAddress:pair.tokenIn.address,decimal:String(pair.tokenIn.decimals),taxRate:'0'},toToken:{tokenContractAddress:pair.tokenOut.address,decimal:String(pair.tokenOut.decimals),taxRate:'0'}},tx:{from:wallet,to:getAddress(contracts.router),data,value:reverse?'0':String(units),minReceiveAmount:String(min)}}

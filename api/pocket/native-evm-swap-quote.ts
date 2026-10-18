@@ -33,7 +33,7 @@ export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Da
  const {tokenIn,tokenOut}=nativeSwapPair(q.network,q.from,q.to),contracts=NATIVE_SWAP_CONTRACTS[q.network]
  if(!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt-q.issuedAt!==45000||!recovery&&q.expiresAt<=now)fail()
  for(const value of [q.amountUnits,q.expectedOutUnits,q.minimumOutUnits,q.feeUnits])if(typeof value!=='string'||!/^[1-9]\d{0,77}$/.test(value)||BigInt(value)>=2n**256n)fail()
- if(nativeSwapUnits(q.amount,tokenIn.decimals)!==BigInt(q.amountUnits)||(!tokenIn.native&&BigInt(q.amountUnits)<500000n)||(!tokenOut.native&&BigInt(q.expectedOutUnits)<500000n))fail()
+ if(nativeSwapUnits(q.amount,tokenIn.decimals)!==BigInt(q.amountUnits))fail()
  const out=BigInt(q.expectedOutUnits),min=BigInt(q.minimumOutUnits)
  if(tokenOut.native&&BigInt(q.feeUnits)>=min)fail()
  if(min>out||min<out*995n/1000n||! /^-?\d+(?:\.\d+)?$/.test(q.priceImpact)||Math.abs(Number(q.priceImpact))>3)fail()
@@ -53,7 +53,6 @@ export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Da
 export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now,affordable?:(quote:NativeEvmSwapQuote)=>Promise<boolean>){
  if(!Object.hasOwn(nativeEvmNetworks,binding.network)||!isAddress(binding.walletAddress))fail()
  const issuedAt=now(),{tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to),units=nativeSwapUnits(binding.amount,tokenIn.decimals)
- if(!tokenIn.native&&units<500000n)fail()
  const data=await read('swap',{chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',autoSlippage:'false',priceImpactProtectionPercent:'3'})
  const preview=await quoteNativeSwap(binding,async()=>data?.routerResult,now)
  const spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)

@@ -17,6 +17,9 @@ process.env.POCKET_SWAP_QUOTE_SECRET='sponsored-swap-fixture-'.repeat(4)
 for(const {input,instructions:all} of fixtures.filter(f=>f.input.from!=='SOL')){
  const instructions=all.filter(i=>i.programId!=='ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'||i.accounts[2].pubkey===input.wallet)
  const router=instructions.find(i=>Buffer.from(i.data,'base64').subarray(0,8).toString('hex')==='aa2955b184501f35'),stable=router.accounts[1].pubkey,temp=router.accounts[2].pubkey,mint=router.accounts[3].pubkey
+ // Exercise a real encoded sub-0.50 route, not only an indicative preview.
+ input.amountUnits='100000';input.expectedOutUnits=String(BigInt(input.expectedOutUnits)/10n);input.minimumOutUnits=String(BigInt(input.expectedOutUnits)*995n/1000n)
+ const routeBytes=Buffer.from(router.data,'base64');routeBytes.writeBigUInt64LE(BigInt(input.amountUnits),16);routeBytes.writeBigUInt64LE(BigInt(input.expectedOutUnits),24);router.data=routeBytes.toString('base64')
  const addresses=[...new Set(instructions.flatMap(i=>i.accounts.filter(a=>!a.isSigner).map(a=>a.pubkey)))].filter(a=>a!==input.wallet).map(a=>new PublicKey(a))
  const table=new AddressLookupTableAccount({key:Keypair.generate().publicKey,state:{deactivationSlot:18446744073709551615n,lastExtendedSlot:1,lastExtendedSlotStartIndex:0,addresses}})
  const loan=Buffer.from(instructions.find(i=>i.programId===SYSTEM).data,'base64').readBigUInt64LE(4)
@@ -37,6 +40,8 @@ for(const {input,instructions:all} of fixtures.filter(f=>f.input.from!=='SOL')){
  assert.equal(wi,1);assert.equal(solSwapReceiptOutput(q,receipt),BigInt(input.expectedOutUnits)-BigInt(fee));const bad=structuredClone(receipt.meta);bad.postBalances[0]--;assert.equal(solSwapReceiptOutput(q,{...receipt,meta:bad}),null)
  sponsorLoss=1;await assert.rejects(()=>verifiedNativeSolanaSwapPreflight(input,instructions,[table.key.toBase58()],policy,rpc,undefined,sponsorship));sponsorLoss=0
  feeValue=200001;await assert.rejects(()=>verifiedNativeSolanaSwapPreflight(input,instructions,[table.key.toBase58()],policy,rpc,undefined,sponsorship));feeValue=fee
+ const tiny=structuredClone(instructions),tinyRouter=tiny.find(i=>i===router||Buffer.from(i.data,'base64').subarray(0,8).toString('hex')==='aa2955b184501f35'),tinyBytes=Buffer.from(tinyRouter.data,'base64');tinyBytes.writeBigUInt64LE(100000n,24);tinyRouter.data=tinyBytes.toString('base64')
+ await assert.rejects(()=>verifiedNativeSolanaSwapPreflight({...input,expectedOutUnits:'100000',minimumOutUnits:'99500'},tiny,[table.key.toBase58()],policy,rpc,undefined,sponsorship),e=>e.status===409&&/too small to cover/.test(e.message))
  await assert.rejects(()=>verifiedNativeSolanaSwapPreflight(input,instructions,[table.key.toBase58()],policy,rpc,undefined,{...sponsorship,temporaryFundingLamports:String(loan+1n)}))
  console.log('PASS',input.from+'->SOL','zero-SOL quote, exact sponsor repayment, net quote/minimum/receipt, fee cap and loan tampering')
 }

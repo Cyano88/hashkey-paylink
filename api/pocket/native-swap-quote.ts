@@ -1,4 +1,4 @@
-﻿import {randomUUID} from 'node:crypto'
+import {randomUUID} from 'node:crypto'
 import {formatUnits,parseUnits} from 'viem'
 import {nativeSwapNetwork,nativeSwapPair,type NativeSwapNetwork} from '../../src/pocket/lib/pocketNativeSwap.js'
 import {okxGet} from './xstocks-swap-provider.js'
@@ -12,7 +12,6 @@ export function nativeSwapUnits(amount:string,decimals:number){
 export async function quoteNativeSwap(input:{network:NativeSwapNetwork;from:string;to:string;amount:string},read:typeof okxGet=okxGet,now:()=>number=Date.now){
  const network=nativeSwapNetwork(input.network),{tokenIn,tokenOut}=nativeSwapPair(network,input.from,input.to)
  const units=nativeSwapUnits(input.amount,tokenIn.decimals)
- if(!tokenIn.native&&units<500000n)fail('Minimum swap amount is 0.5 '+tokenIn.symbol+'.',400)
  const requestedAt=now()
  const route=await read('quote',{chainIndex:chainIndex[network],fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),swapMode:'exactIn',priceImpactProtectionPercent:'3'})
  if(now()-requestedAt>15000)fail('This estimate expired. Refresh the amount.',503)
@@ -25,6 +24,5 @@ export async function quoteNativeSwap(input:{network:NativeSwapNetwork;from:stri
  const impact=route.priceImpactPercent
  if(typeof impact!=='string'||! /^-?\d+(?:\.\d+)?$/.test(impact)||!Number.isFinite(Number(impact))||Math.abs(Number(impact))>3)fail('Price impact is unavailable or too high.',422)
  const output=BigInt(route.toTokenAmount)
- if(!tokenOut.native&&output<500000n)fail('Minimum swap output is 0.5 '+tokenOut.symbol+'.',400)
  return {id:randomUUID(),network,tokenIn,tokenOut,amount:formatUnits(units,tokenIn.decimals),amountUnits:String(units),expectedOut:formatUnits(output,tokenOut.decimals),expectedOutUnits:String(output),priceImpact:impact,issuedAt:requestedAt,expiresAt:requestedAt+15000,indicative:true as const,executionAvailable:false as const}
 }
