@@ -5,10 +5,10 @@ export function collapsePocketAssetMoves(rows:PocketActivityRow[]):PocketActivit
  const identity=(chain:string,hash:string)=>chain.toLowerCase()+':'+(chain.toLowerCase()==='solana'?hash:hash.toLowerCase())
  const add=(chain:string|undefined,hash:string|undefined)=>{if(chain&&hash)hashes.add(identity(chain,hash))}
  for(const row of rows){
-  if(row.source!=='wallet-bridge'&&row.source!=='wallet-swap'&&row.source!=='gift')continue
+  if(row.source!=='wallet-bridge'&&row.source!=='wallet-swap'&&row.source!=='gift'&&!['stock-buy','stock-sell','stock-swap','earn-deposit','earn-withdraw'].includes(row.source||''))continue
   add(row.chain,row.txHash)
   if(row.source==='gift')add(row.chain,row.refundTxHash)
   if(row.source==='wallet-bridge')add(row.destination||row.bridge?.destination,row.destinationTxHash||row.bridge?.destinationTxHash)
  }
- return rows.filter(row=>!['wallet-deposit','wallet-withdrawal'].includes(row.source||'')||!hashes.has(identity(row.chain,row.txHash)))
+ return rows.filter(row=>!['wallet-deposit','wallet-withdrawal','wallet-transfer'].includes(row.source||'')||!hashes.has(identity(row.chain,row.txHash)))
 }

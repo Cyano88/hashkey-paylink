@@ -23,5 +23,5 @@ assert.equal(mergePocketActivityRows(merged,[main,fee])[0].source,'bank-withdraw
 assert.equal(mergePocketActivityRows(merged,[{...bank,accountName:undefined,recipient:undefined,bankName:undefined}])[0].accountName,'TEST RECIPIENT')
 const snapshot=mergePocketActivitySnapshot({payments:[main,fee],merchants:[],collections:[]},{payments:[bank],merchants:[],collections:[]});assert.equal(snapshot.payments.length,1)
 assert.equal(bankPayoutActivityRow({...bank,txHash:''},main.payer),null)
-assert.equal(pocketActivityShortDate(new Date(2026,8,28).getTime()),'28:09:26')
+assert.equal(pocketActivityShortDate(new Date(2026,8,28).getTime()),'Sep 28')
 console.log('PASS: fee grouping, ordinary sends preserved, cached bank labels, receipt fees and date format')

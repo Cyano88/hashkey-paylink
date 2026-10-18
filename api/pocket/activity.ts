@@ -1,3 +1,4 @@
+import { nativeHistoryNetworks, readPocketNativeHistory } from './native-wallet-activity.js'
 import {readPocketEarnNoticeActivity} from './xstocks-notifications-store.js'
 import {giftActivityRow} from './gifts/receipts.js'
 import { collapsePocketAssetMoves } from '../../src/pocket/lib/pocketAssetMoveActivity.js'
@@ -53,7 +54,11 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
-  if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
+  if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,feeAmount:record.metadata.feeAmount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
+  if(record.action==='wallet.native-swap'&&record.metadata){
+    const m=record.metadata
+    return {eventId:'pocket-native-swap:'+record.id,txHash:m.txHash||'',chain:m.network,payer:m.walletAddress,memo:m.assetSymbol+' to '+m.toAsset,amount:m.amount,assetSymbol:m.assetSymbol,ts:record.createdAt,source:'wallet-swap',contextLabel:m.amount+' '+m.assetSymbol+' to '+(m.amountOut?m.amountOut+' ':'')+m.toAsset,settlementType:'wallet_swap',paycrestStatus:['started','submitted'].includes(record.status)?'processing':record.status,activityLabel:'Token swap',direction:'out'}
+  }
   if(record.action.startsWith('gift.'))return giftActivityRow(record)
   if (record.action === 'wallet.swap' && record.metadata) return {
     eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash || '', chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',
@@ -315,7 +320,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
   const contextualTxHashes = new Set([...externalPayments,...posPurchases].map(row => row.chain + ":" + row.txHash.toLowerCase()))
   const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
     .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.chain + ":" + row.txHash.toLowerCase()))
-    .filter((row, index, rows) => rows.findIndex(candidate => candidate.chain === row.chain && candidate.txHash === row.txHash && (
+    .filter((row, index, rows) => rows.findIndex(candidate => candidate.chain === row.chain && candidate.txHash === row.txHash && (Boolean(row.txHash) || candidate.eventId === row.eventId) && (
       candidate.source === row.source && (!['wallet-deposit','wallet-withdrawal'].includes(row.source || '') || candidate.eventId === row.eventId) || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
     )) === index)
     .sort((a, b) => b.ts - a.ts)
@@ -438,7 +443,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   transformSnapshot: transformPocketActivitySnapshot,
-  sources: { earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
+  sources: { ...Object.fromEntries(nativeHistoryNetworks.map(network=>['native-'+network,(owner:string)=>readPocketNativeHistory(owner,network)])), earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])) },
 })

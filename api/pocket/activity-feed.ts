@@ -140,7 +140,7 @@ export async function persistObservedWalletActivity(owner: string, payments: Poc
   const observedAt = Date.now()
   await pocketActivityStore.mutate(activityFeedKey(owner), previous => {
     const feed: ActivityFeed = previous ?? { version: 1, sources: {} }
-    return { version: 1, sources: { ...feed.sources, wallets: {
+    return { ...feed, version: 1, sources: { ...feed.sources, wallets: {
       snapshot: mergePocketActivitySnapshot(feed.sources.wallets?.snapshot, { payments, merchants: [], collections: [] }),
       startedAt: observedAt, updatedAt: feed.sources.wallets?.updatedAt ?? 0,
     } } }

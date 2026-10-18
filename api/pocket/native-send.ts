@@ -1,7 +1,7 @@
 import {nativeSendPilotAllowed} from './native-send-pilot.js'
 import type {Request,Response} from 'express'
 import {nativeEvmExecutionEnabled} from './native-evm-gas-policy.js'
-import {getAddress,isAddress,type Hex} from 'viem'
+import {formatUnits,getAddress,isAddress,type Hex} from 'viem'
 import {circleLinkKey,readCircleLink,verifiedPrivyUser} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
@@ -54,7 +54,7 @@ export function createNativeSendHandler(overrides:Partial<typeof defaults>={}){
    const balance=BigInt(await d.rpc<string>(network,'eth_getBalance',[walletAddress,'pending']))
    if(balance<BigInt(quote.totalUnits))return res.status(409).json({ok:false,error:'Insufficient '+quote.asset+' to cover the amount and fee.'})
    if(bufferedNativeFee(await estimate(quote.callData))>BigInt(quote.feeUnits)||quote.expiresAt<=d.now())return res.status(409).json({ok:false,error:'Network fees changed. Review the updated estimate.'})
-   const metadata={quoteToken:token,network,walletAddress,recipient:quote.recipient,amount:quote.amount,assetSymbol:quote.asset,intentFingerprint:network+':'+walletId}
+   const metadata={quoteToken:token,network,walletAddress,recipient:quote.recipient,amount:quote.amount,feeAmount:formatUnits(BigInt(quote.feeUnits),18),assetSymbol:quote.asset,intentFingerprint:network+':'+walletId}
    const claim=await d.claim({ownerId,idempotencyKey:key,action:actionName,metadata,dedupe:{metadataKey:'intentFingerprint',metadataValue:metadata.intentFingerprint,statuses:['started','submitted']}})
    if(!claim.claimed)return res.status(409).json({ok:false,error:'A transfer from this wallet is still being checked.'})
    // Persist before any provider write. An ambiguous provider response never releases this claim.

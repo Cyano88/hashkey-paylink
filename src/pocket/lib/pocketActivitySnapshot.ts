@@ -4,6 +4,7 @@ import type { PocketActivityReadData, PocketActivityRow } from './pocketSchemas'
 const transactionKey = (row: PocketActivityRow) => JSON.stringify([
   row.chain.toLowerCase(), /^0x/i.test(row.txHash) ? row.txHash.toLowerCase() : row.txHash,
 ])
+const decimalIdentity = (value: string) => value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
 const isBank = (row:PocketActivityRow) => String(row.source || '').replace(/_/g,'-').startsWith('bank-')
 const rowKey = (row: PocketActivityRow) => isBank(row) && (row.bankOrderId || row.providerReference)
   ? JSON.stringify([row.chain.toLowerCase(),row.bankOrderId || row.providerReference,row.source]) : JSON.stringify([
@@ -44,28 +45,46 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     }))
     rows.set(rowKey(row), { ...row, ...retainedDetails, ...savedStatus, ...retainedSettlement, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
   }
-  // Fees are a second USDC log in the same payment batch, not a second send.
-  // A standalone transfer to treasury, a different sender/chain, or an ambiguous
-  // multi-recipient transaction must remain visible.
-  const observed = [...rows.values()]
+  // Durable native-send records own their exact principal. Do not show the
+  // indexer's copy of that same transfer as another send.
+  const observed = [...rows.values()].filter(row => !row.txHash || row.eventId.startsWith('pocket-native-send:') || ![...rows.values()].some(parent =>
+    parent.eventId.startsWith('pocket-native-send:') && parent.txHash && transactionKey(parent) === transactionKey(row)
+    && row.source === 'wallet-withdrawal' && parent.assetSymbol === row.assetSymbol
+    && parent.payer.toLowerCase() === row.payer.toLowerCase() && parent.recipient?.toLowerCase() === row.recipient?.toLowerCase()
+    && decimalIdentity(parent.amount) === decimalIdentity(row.amount)))
+  // Same-batch reimbursement belongs to its one unambiguous principal.
+  // Never suppress a standalone treasury transfer or a different asset/owner.
   const feeRows = new Set<PocketActivityRow>()
-  const fees = new Map<string, string>()
+  const fees = new Map<PocketActivityRow, string>()
+  const outgoing = (row: PocketActivityRow) => ['wallet-withdrawal','wallet-transfer'].includes(row.source || '') && row.direction === 'out'
+  const asset = (row: PocketActivityRow) => (row.assetSymbol || 'USDC').toUpperCase().replace(/^USDT0$/, 'USDT')
   for (const fee of observed) {
-    if (fee.source !== 'wallet-withdrawal' || fee.direction !== 'out' || !/^0x[0-9a-f]{64}$/i.test(fee.txHash)
-      || fee.recipient?.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase() || fee.assetSymbol && fee.assetSymbol !== 'USDC') continue
-    const peers = observed.filter(row => row !== fee && row.source === 'wallet-withdrawal' && row.direction === 'out'
+    if (!outgoing(fee) || !/^0x[0-9a-f]{64}$/i.test(fee.txHash)
+      || fee.recipient?.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase()
+      || !['USDC','USDT','ETH','POL','OKB'].includes(asset(fee))) continue
+    const peers = observed.filter(row => row !== fee && outgoing(row)
       && transactionKey(row) === transactionKey(fee) && row.payer.toLowerCase() === fee.payer.toLowerCase()
       && row.recipient && row.recipient.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase()
-      && (!row.assetSymbol || row.assetSymbol === 'USDC'))
-    if (peers.length !== 1) continue
+      && asset(row) === asset(fee))
+    const feePeers = observed.filter(row => outgoing(row) && transactionKey(row) === transactionKey(fee)
+      && row.payer.toLowerCase() === fee.payer.toLowerCase() && asset(row) === asset(fee)
+      && row.recipient?.toLowerCase() === EVM_PLATFORM_TREASURY.toLowerCase())
+    if (peers.length !== 1 || feePeers.length !== 1) continue
     feeRows.add(fee)
-    fees.set(transactionKey(fee), fee.amount)
+    fees.set(peers[0], fee.amount)
+    // A bank/payment action replaces the raw principal in the visible feed.
+    // Carry its reimbursement to that same owner and asset's receipt too.
+    const parents = observed.filter(row => row.txHash && row.direction === 'out'
+      && row.source && !['wallet-deposit','wallet-withdrawal','wallet-transfer'].includes(row.source)
+      && transactionKey(row) === transactionKey(fee)
+      && row.payer.toLowerCase() === fee.payer.toLowerCase() && asset(row) === asset(fee))
+    if (parents.length === 1) fees.set(parents[0], fee.amount)
   }
-  const values = observed.filter(row => !feeRows.has(row)).map(row => row.direction === 'out' && fees.has(transactionKey(row))
-    ? { ...row, feeAmount: fees.get(transactionKey(row)) } : row)
+  const values = observed.filter(row => !feeRows.has(row)).map(row => fees.has(row)
+    ? { ...row, feeAmount: fees.get(row) } : row)
   const refundKey = (row: PocketActivityRow) => transactionKey(row) + ':' + (row.assetSymbol || 'USDC') + ':' + Number(row.amount)
   const refundDeposits = new Set(values.filter(row => ['bills','esim'].includes(row.source || '') && row.refundTxHash).map(row => refundKey({ ...row, txHash: row.refundTxHash! })))
-  const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
+  const contextual = new Set(values.filter(row => row.txHash && row.source && !['wallet-deposit', 'wallet-withdrawal', 'wallet-transfer'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
   for(const row of values){
     if(row.source==='wallet-bridge'&&row.destinationTxHash&&row.destination)contextual.add(transactionKey({...row,chain:row.destination,txHash:row.destinationTxHash})+':in')
   }

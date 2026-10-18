@@ -603,9 +603,10 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
   // A durable operation can fail before broadcast. Its operation ID is the
   // receipt identity; requiring a chain hash hides unrelated payment history.
   const unbroadcastOperation = value.txHash === ''
-    && ['processing', 'failed', 'cancelled', 'expired'].includes(String(value.paycrestStatus))
+    && ['processing', 'failed', 'cancelled', 'expired', 'submitted', 'started', 'awaiting_approval', 'needs_review'].includes(String(value.paycrestStatus))
     && ((value.source === 'wallet-bridge' && value.settlementType === 'wallet_bridge' && /^pocket-bridge:[a-zA-Z0-9-]+$/.test(String(value.eventId)))
-      || (value.source === 'wallet-swap' && value.settlementType === 'wallet_swap' && /^pocket-swap:[a-zA-Z0-9-]+$/.test(String(value.eventId))))
+      || (value.source === 'wallet-swap' && value.settlementType === 'wallet_swap' && /^pocket-(?:native-)?swap:[a-zA-Z0-9-]+$/.test(String(value.eventId)))
+      || (value.source === 'wallet-withdrawal' && value.settlementType === 'wallet_transfer' && /^pocket-native-send:[a-zA-Z0-9-]+$/.test(String(value.eventId))))
   return isNonEmptyString(value.eventId, 256)
     && (isNonEmptyString(value.txHash, 256) || unbroadcastOperation || value.fundingOnly === true && value.txHash === '' && Array.isArray(value.paymentFunding) && value.paymentFunding.length > 0)
     && (value.fundingOnly === undefined || typeof value.fundingOnly === 'boolean')
@@ -623,7 +624,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.contextLabel, 500)
     && isOptionalBoundedString(value.settlementType, 80)
     && isOptionalBoundedString(value.amountNgn, 80)
-    && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d+(?:\.\d{1,6})?$/.test(value.feeAmount))
+    && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.feeAmount))
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)
     && isOptionalBoundedString(value.xpayCheckoutId, 40)
