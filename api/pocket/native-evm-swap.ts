@@ -49,7 +49,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     return BigInt(balance)>=BigInt(quote.amountUnits)
    }
    if(action==='quote'){
-    const quote=await d.quote({ownerId,walletId,walletAddress,network,from:req.body.from,to:req.body.to,amount:req.body.amount},estimate,undefined,d.now)
+    const quote=await d.quote({ownerId,walletId,walletAddress,network,from:req.body.from,to:req.body.to,amount:req.body.amount},estimate,undefined,d.now,preflight)
     return res.json({ok:true,quote:nativeSwapReview(quote),quoteToken:sealNativeEvmSwap(quote),sufficientBalance:await preflight(quote)})
    }
    const quote=q!,key='pocket:native-swap:'+quote.id

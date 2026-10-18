@@ -25,4 +25,17 @@ const {q:rounded,binding,provider,response}=await fixture()
 rounded.expectedOutUnits='1000001';assert.ok(validateNativeEvmSwap(rounded));rounded.expectedOutUnits='1000002';assert.throws(()=>validateNativeEvmSwap(rounded))
 let rising=0;await assert.rejects(()=>quoteNativeEvmSwap(binding,async()=> String(++rising),provider),/fees changed|details changed/)
 const bad=structuredClone(response);bad.tx.minReceiveAmount='1';await assert.rejects(()=>quoteNativeEvmSwap(binding,async()=> '0.00001',async()=>bad))
+// A Circle fee can exceed the remaining native balance. Never simulate that
+// unaffordable second batch and misreport its revert as a broken swap route.
+for(const network of ['ethereum','base','arbitrum','polygon']){
+ const f=await fixture(network,false);let estimates=0;
+ const balance=BigInt(f.q.amountUnits)+100n;
+ await assert.rejects(()=>quoteNativeEvmSwap(f.binding,async()=>{estimates++;return '0.001575488117592848'},f.provider,Date.now,async q=>BigInt(q.amountUnits)+BigInt(q.feeUnits)<=balance),e=>e.status===409&&/Insufficient .*network fee/.test(e.message));
+ assert.equal(estimates,1,'stop before an unaffordable batch is re-estimated');
+ estimates=0;
+ await assert.rejects(()=>quoteNativeEvmSwap(f.binding,async()=>{estimates++;return '0.00001'},f.provider,Date.now,async()=>false),/Insufficient/);assert.equal(estimates,0);
+ const reverse=await fixture(network,true);estimates=0;
+ await assert.rejects(()=>quoteNativeEvmSwap(reverse.binding,async()=>{estimates++;return '1'},reverse.provider),/too small to cover the network fee/);assert.equal(estimates,1);
+}
+console.log('PASS native balance and output-funded fee shortfalls stop before a reverting second estimate on all EVM networks');
 console.log('PASS '+count+' EVM swap directions: exact calldata/batch/approval/fee, sealed owner and expiry, malicious mutation rejection, exact onchain output and reimbursement proof')

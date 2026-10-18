@@ -50,7 +50,7 @@ export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Da
  if(JSON.stringify(positiveSlippageFee)!==JSON.stringify(q.positiveSlippageFee)||q.callData!==nativeSwapBatch(q)||BigInt(q.tx.value)+BigInt(q.feeUnits)>=2n**256n)fail()
  return q
 }
-export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now){
+export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now,affordable?:(quote:NativeEvmSwapQuote)=>Promise<boolean>){
  if(!Object.hasOwn(nativeEvmNetworks,binding.network)||!isAddress(binding.walletAddress))fail()
  const issuedAt=now(),{tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to),units=nativeSwapUnits(binding.amount,tokenIn.decimals)
  if(!tokenIn.native&&units<500000n)fail()
@@ -62,10 +62,14 @@ export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(
  const q:NativeEvmSwapQuote={...binding,amount:preview.amount,version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:'1',callData:'0x',issuedAt,expiresAt:issuedAt+45000}
  try{q.positiveSlippageFee=readStockSwapFee({tx:q.tx,expectedOut:preview.expectedOut,decimalsOut:tokenOut.decimals},swapAbi)}catch{throw Object.assign(Error('This swap route is not supported yet. Try another pair.'),{status:422})}
  q.callData=nativeSwapBatch(q);validateNativeEvmSwap(q,false,now())
+ const checkBalance=async()=>{if(affordable&&!await affordable(q))throw Object.assign(Error(`Insufficient ${tokenIn.symbol} for this swap${tokenIn.native?' and network fee':''}.`),{status:409})}
+ await checkBalance()
  for(let pass=0;pass<4;pass++){
   const fee=bufferedNativeFee(await estimate(q.callData))
   if(fee<=BigInt(q.feeUnits))return validateNativeEvmSwap(q,false,now())
+  if(tokenOut.native&&fee>=BigInt(q.minimumOutUnits))throw Object.assign(Error('Swap amount is too small to cover the network fee.'),{status:409})
   q.feeUnits=String(fee);q.callData=nativeSwapBatch(q)
+  await checkBalance()
  }
  throw Object.assign(Error('Network fees changed. Refresh the swap estimate.'),{status:409})
 }
