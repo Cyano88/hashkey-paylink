@@ -16,6 +16,7 @@ const row = (overrides) => ({
   title: 'USDC moved',
   amount: '1',
   currency: 'USDC',
+  assetSymbol: 'USDC',
   chain: 'base',
   ts: now - 31_000,
   source: overrides.direction === 'in' ? 'wallet-deposit' : 'wallet-withdrawal',
@@ -102,7 +103,7 @@ const movePushes=[]
 await runPocketMoneyPushWorker({configured:()=>true,listOwners:async()=>['moves'],readWallets:async()=>[],listActions:async()=>[],listRequests:async()=>[],readActivity:async()=>[row({txHash:sourceHash,direction:'out'}),row({txHash:mintHash,direction:'in'}),row({txHash:billHash,direction:'out'}),row({txHash:billHash,direction:'in'})],readContext:async()=>[
  {...row({txHash:sourceHash,direction:'out'}),source:'wallet-bridge',chain:'arc',destination:'base',destinationTxHash:mintHash,paycrestStatus:'completed'},
  {...row({txHash:billHash,direction:'out'}),source:'wallet-swap',chain:'arc',contextLabel:'1 USDC to 1 token',paycrestStatus:'completed'}],sendPush:async(owner,event,input)=>movePushes.push(input),now:()=>now})
-assert.deepEqual(movePushes.map(n=>n.title).sort(),['Bridge successful','Swap completed'])
+assert.deepEqual(movePushes.map(n=>n.title).sort(),['Bridge successful','Swap successful'])
 console.log('PASS standalone bridge and swap each send one scoped push; all underlying sends and receipts remain silent.')
 
 const giftPushes=[],giftHash='0x'+'f'.repeat(64)
@@ -116,3 +117,8 @@ const feePushes=[]
 await runPocketMoneyPushWorker({...giftDeps,listActions:async()=>[],readContext:async()=>[],readActivity:async()=>[row({txHash:outgoingHash,payer:'0xpayer',direction:'out',recipient:'0xrecipient',amount:'1'}),row({txHash:outgoingHash,payer:'0xpayer',eventId:'ordinary-fee',direction:'out',recipient:EVM_PLATFORM_TREASURY,amount:'0.0025'})],sendPush:async(owner,event,input)=>feePushes.push(input)})
 assert.equal(feePushes.length,1);assert.equal(feePushes[0].body,'1 USDC sent on Base.');assert(!JSON.stringify(feePushes).includes('0.0025'))
 console.log('PASS normal USDC send emits one principal push and no platform-fee push.')
+
+const suppressed=[]
+await runPocketMoneyPushWorker({...giftDeps,listActions:async()=>[{action:'wallet.native-swap',metadata:{txHash:giftHash}}],readContext:async()=>[],readActivity:async()=>[row({txHash:giftHash,direction:'out',assetSymbol:'USDT'}),row({txHash:giftHash,direction:'in',assetSymbol:'SOL'})],sendPush:async(owner,event,input)=>suppressed.push(input)})
+assert.equal(suppressed.length,0,'Native swap suppresses transfer legs even before context is indexed')
+console.log('PASS native swap journal suppresses duplicate transfer pushes during delayed context')

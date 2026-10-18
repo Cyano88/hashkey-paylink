@@ -57,13 +57,13 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
   if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,feeAmount:record.metadata.feeAmount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
   if(record.action==='wallet.native-swap'&&record.metadata){
     const m=record.metadata
-    return {eventId:'pocket-native-swap:'+record.id,txHash:m.txHash||'',chain:m.network,payer:m.walletAddress,memo:m.assetSymbol+' to '+m.toAsset,amount:m.amount,assetSymbol:m.assetSymbol,ts:record.createdAt,source:'wallet-swap',contextLabel:m.amount+' '+m.assetSymbol+' to '+(m.amountOut?m.amountOut+' ':'')+m.toAsset,settlementType:'wallet_swap',paycrestStatus:['started','submitted'].includes(record.status)?'processing':record.status,activityLabel:'Token swap',direction:'out'}
+    return {eventId:'pocket-native-swap:'+record.id,txHash:m.txHash||'',chain:m.network,payer:m.walletAddress,memo:m.assetSymbol+' to '+m.toAsset,amount:m.amount,assetSymbol:m.assetSymbol,ts:record.createdAt,statusUpdatedAt:record.updatedAt,source:'wallet-swap',contextLabel:m.amount+' '+m.assetSymbol+' to '+(m.amountOut?m.amountOut+' ':'')+m.toAsset,settlementType:'wallet_swap',paycrestStatus:['started','submitted'].includes(record.status)?'processing':record.status,activityLabel:'Token swap',direction:'out'}
   }
   if(record.action.startsWith('gift.'))return giftActivityRow(record)
   if (record.action === 'wallet.swap' && record.metadata) return {
     eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash || '', chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',
     memo: record.metadata.tokenIn + ' to ' + record.metadata.tokenOut, amount: record.metadata.amount || '0', assetSymbol: record.metadata.tokenIn || 'USDC', providerReference: record.resourceId || record.idempotencyKey.replace(/^pocket:arc-swap:/,''), ts: record.createdAt,
-    source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
+    statusUpdatedAt: record.updatedAt, source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
     settlementType: 'wallet_swap', paycrestStatus: record.status === 'started' || record.status === 'submitted' ? 'processing' : record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
   }
   if (!['wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge'].includes(record.action) || !record.metadata) return undefined
@@ -78,7 +78,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     memo: `${source} to ${destination}`,
     amount: record.metadata.amount || '0',
     ts: record.createdAt,
-    source: 'wallet-bridge',
+    statusUpdatedAt: record.updatedAt, source: 'wallet-bridge',
     merchantId: record.id,
     contextLabel: `${source} to ${destination}`,
     settlementType: 'wallet_bridge',
@@ -86,7 +86,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     activityLabel: record.action === 'wallet.usdt-bridge' || record.metadata.assetSymbol === 'USDT' ? 'USDT bridge' : 'USDC bridge',
     assetSymbol: record.action === 'wallet.usdt-bridge' || record.metadata.assetSymbol === 'USDT' ? 'USDT' : 'USDC',
     destinationTxHash: record.metadata.destinationTxHash,
-    ...(record.action==='wallet.xlayer-bridge'&&record.metadata.paymentState==='refunded'?{refundAsset:record.metadata.refundAsset==='USDT'?'USDT' as const:'USDC' as const,refundAmount:record.metadata.refundAmount,refundNetwork:record.metadata.refundNetwork,refundTxHash:record.metadata.refundTxHash||record.metadata.destinationTxHash}:{}),
+    ...(record.metadata.paymentState==='refunded'?{refundAsset:(record.metadata.refundAsset||record.metadata.assetSymbol||(record.action==='wallet.usdt-bridge'?'USDT':'USDC'))==='USDT'?'USDT' as const:'USDC' as const,refundAmount:record.metadata.refundAmount,refundNetwork:record.metadata.refundNetwork,refundTxHash:record.metadata.refundTxHash||record.metadata.destinationTxHash}:{}),
     direction: 'out',
     recipient: destination,
     destination,
@@ -455,3 +455,5 @@ export async function readPocketNotificationActivity(owner:string) {
  const routes=await listCirclePocketActions(owner,500,'bank-withdraw.route')
  return mergePocketActivityRows([],rows).map(row=>row.source==='wallet-bridge'&&routes.some(r=>r.metadata?.source===row.chain&&r.metadata?.txHash?.toLowerCase()===row.txHash.toLowerCase())?{...row,fundingParent:row.fundingParent||'bank-withdraw:linked'}:row)
 }
+
+

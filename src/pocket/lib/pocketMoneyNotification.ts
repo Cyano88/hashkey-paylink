@@ -1,3 +1,4 @@
+import {pocketExchangeNotification} from './pocketExchangeNotification'
 import { formatStockQuantity } from './pocketStockDisplay'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isIncomingPosPayment } from './pocketPurchaseKind'
@@ -8,6 +9,7 @@ const amount=(value:string,currency:string)=>currency==='NGN'?'\u20a6'+Number(va
 export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice|null {
  const source=(row.source||'').replace(/_/g,'-'),state=(row.bankSettlementStatus||row.paycrestStatus||'').toLowerCase()
  if(row.fundingOnly||row.fundingParent||source==='request'||source==='collection')return null
+ if(source==='wallet-swap'||source==='wallet-bridge')return pocketExchangeNotification(row)
  const refunded=['refunded','reversed'].includes(state),refundAvailable=state==='refund available',failed=['failed','rejected','cancelled','canceled','expired','reverted'].includes(state)
  const bank=source==='bank-withdraw',bill=source==='bills',merchant=isIncomingPosPayment(row)||source==='bank-receive',purchase=source==='purchase'||source==='xpay'
  const success=(bank?['settled','completed']:bill?['delivered']:['confirmed','completed','successful','success','settled','paid']).includes(state)
@@ -28,3 +30,4 @@ export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice
  const status=refunded?'refunded':refundAvailable?'refund-available':failed?'failed':'completed'
  return {eventId:tag+':'+status,title:refundAvailable?'Refund available':refunded?(gift?'Gift refunded':'Refund completed'):failed?(source==='wallet-bridge'?'Bridge failed':kind+' failed'):bank?'Bank transfer successful':bill?kind+' purchase successful':source==='wallet-bridge'?'Bridge successful':kind,body,path:'/activity?receipt='+encodeURIComponent(bank?(row.bankOrderId||row.providerReference||row.eventId):row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
 }
+

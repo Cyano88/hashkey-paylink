@@ -35,8 +35,8 @@ export function recordStockTradeNotices(s:StockNoticeStore,transfers:ConfirmedSt
   const action=!inStock&&outStock?'buy':inStock&&!outStock?'sell':'swap'
   const paid=formatStockQuantity(formatUnits(spent,input.decimals))+' '+input.symbol
   const got=formatStockQuantity(formatUnits(received,output.decimals))+' '+output.symbol
-  const title=action==='buy'?'Stock purchased':action==='sell'?'Stock sold':'Swap complete'
-  const body=action==='buy'?got+' added to your investments.':action==='sell'?paid+' sold. '+got+' added to your Pocket balance.':paid+' swapped for '+got+'.'
+  const title=action==='buy'?'Stock purchased':action==='sell'?'Stock sold':'Swap successful'
+  const body=action==='buy'?got+' added to your investments.':action==='sell'?paid+' sold. '+got+' added to your Pocket balance.':paid+' swapped for '+got+' on X Layer.'
   for(const [owner,wallet] of Object.entries(s.wallets)){
    if(wallet.address.toLowerCase()!==proof.owner||input.at<wallet.since)continue
    const id=owner+':trade:'+proof.hash
@@ -58,3 +58,4 @@ export function nativeTradeLegs(proof:StockTradeProof,logs:readonly {address:str
  const event=matches[0],incoming=proof.output==='native'
  return [{id:proof.hash+':native',hash:proof.hash,from:incoming?OKX_XLAYER_ROUTER:proof.owner,to:incoming?proof.owner:OKX_XLAYER_ROUTER,token:'native',symbol:'OKB',units:String(incoming?event.returnAmount:event.fromAmount),decimals:18,at}]
 }
+

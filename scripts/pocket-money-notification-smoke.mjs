@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {pocketMoneyNotification as notice} from '../src/pocket/lib/pocketMoneyNotification.ts'
 import {upsertPocketNotice} from '../api/pocket/notification-store.ts'
 import {pocketNotificationPath} from '../src/pocket/lib/pocketNotificationPath.ts'
-const row={eventId:'bank',source:'bank-withdraw',chain:'base',payer:'fixture',memo:'Bank transfer',amount:'3.7',amountNgn:'5000',fiatCurrency:'NGN',accountName:'Emmanuel Onoja',bankName:'OPay',bankOrderId:'order',ts:1000,statusUpdatedAt:2000,txHash:'0x'+'1'.repeat(64),bankSettlementStatus:'settled',paycrestStatus:'successful',direction:'out'}
+const row={eventId:'bank',source:'bank-withdraw',chain:'base',payer:'fixture',memo:'Bank transfer',amount:'3.7',assetSymbol:'USDC',amountNgn:'5000',fiatCurrency:'NGN',accountName:'Emmanuel Onoja',bankName:'OPay',bankOrderId:'order',ts:1000,statusUpdatedAt:2000,txHash:'0x'+'1'.repeat(64),bankSettlementStatus:'settled',paycrestStatus:'successful',direction:'out'}
 const n=notice(row);assert.equal(n.title,'Bank transfer successful');assert.equal(n.body,'Your \u20a65,000 transfer to Emmanuel Onoja at OPay was successful.');assert.equal(n.occurredAt,2000);assert.equal(n.path,'/activity?receipt=order')
 assert.equal(notice({...row,bankSettlementStatus:'settling'}),null,'verified funding must not announce bank delivery')
 assert.match(notice({...row,fiatCurrency:'UGX',amountNgn:'50000',bankName:'Airtel Money'}).body,/UGX 50,000.*Airtel Money/)
@@ -37,3 +37,4 @@ assert.equal(stockGift.amount,'0.000009999999999999','display formatting must no
 assert.equal(notice({...stockGift,source:'wallet-deposit'}).title,'NVDAx received')
 assert.match(notice({...stockGift,source:'wallet-deposit'}).body,/on X Layer/)
 console.log('PASS stock gift and transfer push display, status gating and unchanged exact quantity')
+
