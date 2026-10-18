@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto'
+import { curatedArcPaymentTokens, isArcPaymentAddress } from '../../src/pocket/lib/pocketArcPaymentAssets.ts'
 import { decodeEventLog, decodeFunctionData, encodeFunctionData, formatUnits, getAddress, isAddress, parseAbi, parseUnits, type Address, type Hex } from 'viem'
 
 export const ARC_SWAP_CHAIN_ID = 5042
@@ -34,15 +35,17 @@ async function provider(path: string, fetcher = fetch) {
 }
 export async function readArcSwapToken(address: string, fetcher = fetch): Promise<ArcSwapToken> {
   if (!isAddress(address) || /^0x0{40}$/i.test(address)) fail('Enter a valid Arc token contract address.')
+  if (!isArcPaymentAddress(address)) fail('Unsupported Arc payment token.')
   const data = await provider('/token?' + new URLSearchParams({ chain: '5042', token: address }), fetcher)
   const token = swapToken(data)
   if (!same(token.address, address)) fail('Token discovery returned a different contract.', 502)
+  if (!curatedArcPaymentTokens([token]).length) fail('Unsupported Arc token metadata.', 502)
   return token
 }
 export async function readArcSwapTokens(fetcher = fetch): Promise<ArcSwapToken[]> {
   const data = await provider('/tokens?chains=5042', fetcher)
   if (!Array.isArray(data.tokens?.['5042'])) fail('Arc token discovery is unavailable.', 503)
-  return data.tokens['5042'].flatMap((item: unknown) => { try { return [swapToken(item)] } catch { return [] } })
+  return curatedArcPaymentTokens(data.tokens['5042'].flatMap((item: unknown) => { try { return [swapToken(item)] } catch { return [] } }))
 }
 export function validateArcSwapQuote(data: any, input: { walletAddress: Address; tokenIn: ArcSwapToken; tokenOut: ArcSwapToken; amountUnits: bigint }) {
   const action = data?.action, tx = data?.transactionRequest, estimate = data?.estimate
@@ -67,6 +70,7 @@ export function validateArcSwapQuote(data: any, input: { walletAddress: Address;
   return { min, out, tx }
 }
 export async function quoteArcSwap(input: { ownerId: string; walletId: string; walletAddress: Address; tokenIn: string; tokenOut: string; amount: string }, fetcher = fetch): Promise<ArcSwapQuote> {
+  if (![input.tokenIn, input.tokenOut].every(isArcPaymentAddress)) fail('Unsupported Arc payment token.')
   const tokens = await readArcSwapTokens(fetcher)
   const [tokenIn, tokenOut] = await Promise.all([input.tokenIn, input.tokenOut].map(address =>
     tokens.find(token => same(token.address, address)) ?? readArcSwapToken(address, fetcher)))
@@ -103,6 +107,8 @@ export function openArcSwapQuote(token: string, ownerId: string, allowExpired = 
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) fail('Invalid swap quote.')
   const quote = JSON.parse(Buffer.from(parts[0], 'base64url').toString()) as ArcSwapQuote
   if (quote.ownerId !== ownerId || quote.chainId !== 5042) fail('This quote belongs to another wallet.', 403)
+  // Historical operations must remain recoverable after catalog changes.
+  if (!allowExpired && curatedArcPaymentTokens([quote.tokenIn, quote.tokenOut]).length !== 2) fail('Unsupported Arc payment token.')
   if (!allowExpired && quote.expiresAt <= Date.now()) fail('Quote expired. Review a new quote before confirming.', 409)
   return quote
 }
