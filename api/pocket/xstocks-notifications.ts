@@ -12,6 +12,10 @@ export default async function handler(req:Request,res:Response){
   if(req.method!=='GET'&&req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId
   if(req.method==='GET'){
+   if(req.query?.basis==='1'){
+    const {readStockBasis}=await import('./stock-cost-basis.js')
+    return res.json({ok:true,basis:await readStockBasis(owner,await readStockNotices())})
+   }
    // Serve saved activity immediately; historical metadata RPCs must not block reads.
    if(req.query?.activity==='1')void hydrateStockActivity(owner).catch(()=>undefined)
    const s=await readStockNotices(),notices=Object.values(s.notices).filter(n=>n.owner===owner && req.query?.activity==='1').sort((a,b)=>b.at-a.at).slice(0,100)
