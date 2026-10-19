@@ -1,3 +1,5 @@
+import {quoteStockMaximum} from './xstocks-max.js'
+import {stockClient,stockTokenAbi,stockUsdc,stockUsdt} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {quoteSponsoredSwap} from './xlayer-swap-sponsorship.js'
 import {configuredXLayerReimbursement} from './xlayer-fee-estimator.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
@@ -23,7 +25,9 @@ export function createStockSwapHandler(overrides: Partial<{identity:typeof verif
     const owns = user.linkedAccounts.some(a => a.type === 'wallet' && a.chainType === 'ethereum' && a.walletClientType === 'privy' && a.address.toLowerCase() === wallet.toLowerCase())
     if (!owns) return res.status(403).json({ ok: false, error: 'This wallet is not your Pocket embedded wallet.' })
     if (req.body?.action === 'quote') {
-      const quote = await quoteStockSwap({ owner: getAddress(wallet), tokenIn: String(req.body.tokenIn || ''), tokenOut: String(req.body.tokenOut || ''), amount: String(req.body.amount || '') })
+      const input={owner:getAddress(wallet),tokenIn:String(req.body.tokenIn||''),tokenOut:String(req.body.tokenOut||'')}
+      const prepare=async(amount:string)=>{
+      const quote = await quoteStockSwap({...input,amount})
       let sponsorship
       if(reimbursedSwapAsset(quote)){
         const config=configuredXLayerReimbursement(),embedded=user.linkedAccounts.find(a=>a.type==='wallet'&&a.walletClientType==='privy'&&a.chainType==='ethereum'&&a.address.toLowerCase()===wallet.toLowerCase()) as {id?:string}|undefined
@@ -32,6 +36,17 @@ export function createStockSwapHandler(overrides: Partial<{identity:typeof verif
         await checkXLayerBillingCoverage(wallet)
         sponsorship=await quoteSponsoredSwap(quote,identity.userId,embedded.id,(process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID)!,config.estimate,config.pricing)
       }
+      return {quote,sponsorship}
+      }
+      let review
+      if(req.body.max==='true'&&(input.tokenIn==='native'||[stockUsdc.address,stockUsdt.address].some(a=>a.toLowerCase()===input.tokenIn.toLowerCase()))){
+        if(await stockClient.getChainId()!==196)throw Error('X Layer connection unavailable.')
+        const native=input.tokenIn==='native'
+        const balance=native?await stockClient.getBalance({address:input.owner}):await stockClient.readContract({address:getAddress(input.tokenIn),abi:stockTokenAbi,functionName:'balanceOf',args:[input.owner]})
+        const reserve=native?0n:BigInt(configuredXLayerReimbursement()?.pricing.minimumFeeUnits||'0')
+        review=await quoteStockMaximum(balance,native?18:6,reserve,prepare)
+      }else review=await prepare(String(req.body.amount||''))
+      const {quote,sponsorship}=review
       return res.json({ ok: true, quote, quoteToken: sealStockQuote(quote, identity.userId),...(sponsorship?{sponsorship}:{}) })
     }
     if (req.body?.action === 'verify') {
