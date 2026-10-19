@@ -182,6 +182,8 @@ export type PocketActivityRow = {
   payer: string
   memo: string
   feeAsset?: string
+  serviceFeeAmount?: string
+  serviceFeeAsset?: string
   feeAmount?: string
   amount: string
   ts: number
@@ -625,6 +627,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.contextLabel, 500)
     && isOptionalBoundedString(value.settlementType, 80)
     && isOptionalBoundedString(value.amountNgn, 80)
+    && (value.serviceFeeAmount === undefined || typeof value.serviceFeeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.serviceFeeAmount))
+    && isOptionalBoundedString(value.serviceFeeAsset, 40)
     && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.feeAmount))
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)

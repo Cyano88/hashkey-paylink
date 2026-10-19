@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeFunctionData,getAddress} from 'viem'
 import {stockUsdc,stockUsdt,stockGasAsset,stockAssets} from '../src/pocket/lib/pocketXStocksWallet.ts'
-import {OKX_NATIVE,OKX_XLAYER_ROUTER,OKX_XLAYER_SPENDER} from '../src/pocket/lib/pocketXStocksSwap.ts'
+import {readStockServiceFee,OKX_STOCK_FEE_RECIPIENT,OKX_NATIVE,OKX_XLAYER_ROUTER,OKX_XLAYER_SPENDER} from '../src/pocket/lib/pocketXStocksSwap.ts'
 import {sponsoredSwapCalls,validateSponsoredSwap} from '../src/pocket/lib/pocketSponsoredSwap.ts'
 import {swapFeeBinding,verifySponsoredSwap} from '../api/pocket/xlayer-swap-sponsorship.ts'
 import {quoteXLayerReimbursement,sealXLayerReimbursement} from '../api/pocket/xlayer-reimbursement.ts'
@@ -18,9 +18,10 @@ import {createXLayerSponsorshipHandler} from '../api/pocket/xlayer-sponsorship.t
 process.env.POCKET_SWAP_QUOTE_SECRET='test-only-quote-secret-at-least-thirty-two-characters'
 const owner='owner',walletId='fixturewalletid12345',wallet=getAddress('0x'+'1'.repeat(40)),abi=JSON.parse(readFileSync('src/pocket/lib/pocketOkxRouterAbi.json','utf8'))
 const pricing={marginBps:2500,minimumFeeUnits:'10000'}
-for(const tokenIn of [stockUsdc,stockUsdt])for(const tokenOut of [stockGasAsset,stockAssets[0]]){
+for(const tokenIn of [stockUsdc,stockUsdt])for(const tokenOut of [stockGasAsset,stockAssets[0]])for(const service of tokenOut.address==='native'?[false]:[false,true]){
  const outAddress=tokenOut.address==='native'?OKX_NATIVE:tokenOut.address
- const q={id:crypto.randomUUID(),chainId:196,owner:wallet,tokenIn,tokenOut,amount:'1',amountUnits:'1000000',decimalsIn:6,decimalsOut:18,expectedOut:'0.001',minimumOut:'0.000995',minimumOutUnits:'995000000000000',expiresAt:Date.now()+45000,gasFee:'0.00001',priceImpact:'0',approvalRequired:true,spender:getAddress(OKX_XLAYER_SPENDER),tx:{from:wallet,to:getAddress(OKX_XLAYER_ROUTER),value:'0',data:encodeFunctionData({abi,functionName:'uniswapV3SwapToWithBaseRequest',args:[1n,wallet,{fromToken:BigInt(tokenIn.address),toToken:getAddress(outAddress),fromTokenAmount:1000000n,minReturnAmount:995000000000000n,deadLine:BigInt(Math.floor(Date.now()/1000)+300)},[1n]]})}}
+ const q={id:crypto.randomUUID(),chainId:196,owner:wallet,tokenIn,tokenOut,amount:'1',amountUnits:'1000000',decimalsIn:6,decimalsOut:18,expectedOut:'0.001',minimumOut:'0.000995',minimumOutUnits:'995000000000000',expiresAt:Date.now()+45000,gasFee:'0.00001',priceImpact:'0',approvalRequired:true,spender:getAddress(OKX_XLAYER_SPENDER),tx:{from:wallet,to:getAddress(OKX_XLAYER_ROUTER),value:'0',data:encodeFunctionData({abi,functionName:'uniswapV3SwapToWithBaseRequest',args:[1n,wallet,{fromToken:BigInt(tokenIn.address),toToken:getAddress(outAddress),fromTokenAmount:service?997500n:1000000n,minReturnAmount:995000000000000n,deadLine:BigInt(Math.floor(Date.now()/1000)+300)},[1n]]})}}
+ if(service){const word=n=>n.toString(16).padStart(64,'0');q.tx.data+=word((0x22220afc2aaan<<208n)|(2000000n<<160n)|BigInt(EVM_PLATFORM_TREASURY))+word((1n<<255n)|BigInt(tokenIn.address))+word((0x22220afc2aaan<<208n)|(500000n<<160n)|BigInt(OKX_STOCK_FEE_RECIPIENT));q.serviceFee=readStockServiceFee(q.tx.data)}
  const calls=sponsoredSwapCalls(q);assert.equal(calls.length,4)
  const estimate=async i=>{assert.equal(i.calls.length,5);assert.equal(i.calls[2].data,q.tx.data);return {feeUnits:'8000',expiresAt:Date.now()+25000,estimateId:'fixture'}}
  const fee=await quoteXLayerReimbursement(swapFeeBinding(q,owner,walletId),calls,q.expiresAt,estimate,pricing)
@@ -35,7 +36,9 @@ for(const tokenIn of [stockUsdc,stockUsdt])for(const tokenOut of [stockGasAsset,
  const hash='0x'+'b'.repeat(64),outer={hash,from:OKX_XLAYER_ROUTER,to:XLAYER_ENTRY_POINT,input:encodeFunctionData({abi:entryPoint07Abi,functionName:'handleOps',args:[[op],wallet]})}
  const operationLog={address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:eventAbi,args:{userOpHash:hash,sender:wallet,paymaster:'0x'+'0'.repeat(40)}}),data:encodeAbiParameters(parseAbiParameters('uint256,bool,uint256,uint256'),[0n,true,0n,1n])}
  const feeLog={address:tokenIn.address,topics:encodeEventTopics({abi:transferAbi,args:{from:wallet,to:EVM_PLATFORM_TREASURY}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[BigInt(fee.networkFeeUnits)])}
- const receipt={status:'success',logs:[operationLog,feeLog]},proof=stockTradeProof(outer,receipt)
+ const serviceAbi=parseAbi(['event CommissionFromTokenRecord(address fromTokenAddress,uint256 commissionAmount,address referrerAddress,uint256 commissionRate)']);const serviceLogs=service?[[EVM_PLATFORM_TREASURY,2000n,2000000n],[OKX_STOCK_FEE_RECIPIENT,500n,500000n]].map(([recipient,units,rate])=>({address:OKX_XLAYER_ROUTER,topics:encodeEventTopics({abi:serviceAbi}),data:encodeAbiParameters(parseAbiParameters('address,uint256,address,uint256'),[tokenIn.address,units,recipient,rate])})):[]
+ const receipt={status:'success',logs:[operationLog,feeLog,...serviceLogs]},proof=stockTradeProof(outer,receipt)
+ if(service){assert.equal(proof.serviceFeeUnits,'2500');assert.equal(stockTradeProof(outer,{...receipt,logs:[operationLog,feeLog]}),undefined)}
  assert.equal(proof?.owner,wallet.toLowerCase());assert.equal(proof.feeUnits,'10000');assert.equal(proof.inputUnits,'1000000')
  assert.equal(stockTradeProof(outer,{...receipt,logs:[operationLog]}),undefined)
  assert.equal(stockTradeProof(outer,{...receipt,status:'reverted'}),undefined)

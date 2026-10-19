@@ -31,6 +31,6 @@ export async function readSponsoredSwapOutcome(hash:Hex,e:SponsoredSwapEvidence,
   if(received<=0n||received<BigInt(e.minimumOutUnits))throw Error('Swap output unavailable')
  }
  const spent=parseEventLogs({abi:transfers,logs:r.logs.filter(l=>same(l.address,e.input))}).reduce((n,l)=>n+(same(l.args.from,e.owner)?l.args.value:0n)-(same(l.args.to,e.owner)?l.args.value:0n),0n)
- if(spent!==BigInt(e.inputUnits)+BigInt(e.feeUnits))throw Error('Swap debit unavailable')
+ if(spent!==BigInt(proof.spentUnits||e.inputUnits)+BigInt(e.feeUnits))throw Error('Swap debit unavailable')
  return 'completed'
 }

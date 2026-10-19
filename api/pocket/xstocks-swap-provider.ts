@@ -1,3 +1,5 @@
+import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {readStockServiceFee} from '../../src/pocket/lib/pocketXStocksSwap.js'
 import {swapTokenUsdPrice} from '../../src/pocket/lib/pocketSwapUsd.js'
 import {xLayer} from 'viem/chains'
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -53,7 +55,8 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
   else await assertStockChain()
   const [decimalsIn, decimalsOut] = await Promise.all([tokenIn, tokenOut].map(a => a.address === 'native' ? Promise.resolve(18) : client.readContract({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'decimals' })))
   const units = stockAmountUnits(input.amount, decimalsIn)
-  const data = await okxGet('swap', { chainIndex: '196', fromTokenAddress: okxTokenAddress(tokenIn), toTokenAddress: okxTokenAddress(tokenOut), amount: String(units), userWalletAddress: input.owner, swapReceiverAddress: input.owner, slippagePercent: bridge ? '0.24' : '0.5', swapMode: 'exactIn', autoSlippage: 'false', priceImpactProtectionPercent: '3' })
+  const serviceFeeEnabled=!bridge&&stockAssets.some(a=>sameStockAddress(a.address,tokenOut.address))&&[stockUsdc.address,stockUsdt.address,'native'].some(a=>sameStockAddress(a,tokenIn.address))
+  const data = await okxGet('swap', {...(serviceFeeEnabled?{feePercent:'0.25',fromTokenReferrerWalletAddress:EVM_PLATFORM_TREASURY}:{}), chainIndex: '196', fromTokenAddress: okxTokenAddress(tokenIn), toTokenAddress: okxTokenAddress(tokenOut), amount: String(units), userWalletAddress: input.owner, swapReceiverAddress: input.owner, slippagePercent: bridge ? '0.24' : '0.5', swapMode: 'exactIn', autoSlippage: 'false', priceImpactProtectionPercent: '3' })
   const route = data.routerResult, tx = data.tx
   if (!route || !tx || String(route.chainIndex) !== '196' || String(route.fromTokenAmount) !== String(units)
     || !sameStockAddress(route.fromToken?.tokenContractAddress, okxTokenAddress(tokenIn)) || !sameStockAddress(route.toToken?.tokenContractAddress, okxTokenAddress(tokenOut))
@@ -75,6 +78,9 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
     outputUsdPrice:swapTokenUsdPrice(route.toToken?.tokenUnitPrice), expectedOut: formatUnits(out, decimalsOut), minimumOut: formatUnits(minimum, decimalsOut), minimumOutUnits: String(minimum), expiresAt: Date.now() + 45_000,
     gasFee: formatUnits((gas + (approvalRequired ? 120_000n : 0n)) * gasPrice * 120n / 100n, 18), priceImpact: String(impact), approvalRequired, spender: getAddress(OKX_XLAYER_SPENDER),
     tx: { from: input.owner, to: getAddress(tx.to), data: tx.data, value: String(tx.value || '0') } }
+  const serviceFee=readStockServiceFee(quote.tx.data)
+  if(serviceFeeEnabled&&!serviceFee||!serviceFeeEnabled&&serviceFee)fail('Stock service fee could not be verified.',502)
+  if(serviceFee)quote.serviceFee=serviceFee
   const providerFee = readStockSwapFee(quote)
   if (providerFee) quote.positiveSlippageFee = providerFee
   if(bridge)validateXLayerBridgeSwap(quote,input.owner)

@@ -17,6 +17,8 @@ export type PocketActivityRow = {
   payer: string
   memo: string
   feeAsset?: string
+  serviceFeeAmount?: string
+  serviceFeeAsset?: string
   feeAmount?: string
   amount: string
   ts: number
