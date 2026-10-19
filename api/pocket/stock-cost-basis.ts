@@ -8,6 +8,7 @@ import {type StockBasis} from '../../src/pocket/lib/pocketStockPnl.js'
 import {stockInvestmentNotices} from './stock-investment-ledger.js'
 import {readStockShareEvidence,stockSharePositions,underlyingStockPositions,type ShareEvidence} from './stock-share-basis.js'
 import {recoverStockInvestments} from './stock-investment-recovery.js'
+import {readStockOpenings} from './stock-opening-value.js'
 type CostCache={costs:Record<string,string>;retry:Record<string,number>}
 const key='pocket:stock-cost-basis:v2',jobs=new Map<string,Promise<void>>()
 type ShareCache={evidence:Record<string,ShareEvidence>;retry:Record<string,number>}
@@ -79,6 +80,7 @@ export async function readStockBasis(owner:string,s:StockNoticeStore):Promise<St
   })().catch(()=>undefined).finally(()=>jobs.delete(owner));jobs.set(owner,job)
  }
  const evidence=Object.fromEntries(Object.entries(shares.evidence).filter(([k])=>k.startsWith(scope)).map(([k,v])=>[k.slice(scope.length),v]))
- const {positions,shareTokens}=stockSharePositions(notices,cached.costs,evidence)
+ const openings=await readStockOpenings(owner,wallet.address)
+ const {positions,shareTokens}=stockSharePositions(notices,cached.costs,evidence,openings)
  return {wallet:wallet.address,positions:await underlyingStockPositions(positions,shareTokens)}
 }

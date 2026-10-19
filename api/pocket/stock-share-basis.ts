@@ -4,6 +4,7 @@ import {buildStockBasis,type BasisNotice,type StockBasis} from '../../src/pocket
 import {stockNoticeClient,stockNoticeAsset,type StockNotice} from './xstocks-notifications-store.js'
 
 export type ShareEvidence={tokens:Record<string,{incoming:string;outgoing:string;decimals:number}>}
+export type StockOpening={at:number;quantity:string;costUsd:string;shares:boolean}
 const shareEvent=parseAbiItem('event TransferShares(address indexed from,address indexed to,uint256 value)')
 const addresses=new Set(stockAssets.map(a=>a.address.toLowerCase()))
 export async function readStockShareEvidence(hash:string,wallet:string):Promise<ShareEvidence>{
@@ -28,18 +29,19 @@ export async function readStockShareEvidence(hash:string,wallet:string):Promise<
 // Rebase tokens emit immutable TransferShares alongside nominal Transfer events.
 // Account in those shares, then convert only the remaining quantity at today's
 // multiplier. A split/rebase changes quantity, never the original dollars paid.
-export function stockSharePositions(notices:StockNotice[],costs:Record<string,string>,evidence:Record<string,ShareEvidence>){
+export function stockSharePositions(notices:StockNotice[],costs:Record<string,string>,evidence:Record<string,ShareEvidence>,openings:Record<string,StockOpening>={}){
  const adapted:BasisNotice[]=[],shareTokens=new Set<string>(),unknown=new Set<string>(),seenRaw=new Set<string>()
  const bySymbol=new Map(stockAssets.map(a=>[a.symbol,a.address.toLowerCase()]))
  for(const n of notices){
-  const relevant=n.trade?[bySymbol.get(n.trade.input.symbol),bySymbol.get(n.trade.output.symbol)].filter(Boolean) as string[]:n.transfer&&addresses.has(n.transfer.token.toLowerCase())?[n.transfer.token.toLowerCase()]:[]
+  const involved=n.trade?[bySymbol.get(n.trade.input.symbol),bySymbol.get(n.trade.output.symbol)].filter(Boolean) as string[]:n.transfer&&addresses.has(n.transfer.token.toLowerCase())?[n.transfer.token.toLowerCase()]:[]
+  const relevant=involved.filter(a=>!openings[a]||n.at>openings[a].at)
   if(!relevant.length)continue
   const hash=n.hash?.toLowerCase(),proof=hash?evidence[hash]:undefined
   if(!proof){relevant.forEach(a=>unknown.add(a));continue}
-  relevant.forEach(a=>{if(proof.tokens[a])shareTokens.add(a)})
+  relevant.forEach(a=>{if(proof.tokens[a])shareTokens.add(a);else if(openings[a]?.shares)unknown.add(a)})
   if(n.trade){
    const trade=structuredClone(n.trade)
-   for(const side of ['input','output'] as const){const token=bySymbol.get(trade[side].symbol),p=token&&proof.tokens[token];if(!p)continue
+   for(const side of ['input','output'] as const){const token=bySymbol.get(trade[side].symbol),p=token&&proof.tokens[token];if(!p||(token&&openings[token]&&n.at<=openings[token].at))continue
     const delta=side==='input'?BigInt(p.outgoing)-BigInt(p.incoming):BigInt(p.incoming)-BigInt(p.outgoing)
     if(delta<=0n){unknown.add(token!);continue}
     trade[side].amount=formatUnits(delta,p.decimals)
@@ -54,6 +56,13 @@ export function stockSharePositions(notices:StockNotice[],costs:Record<string,st
   }
  }
  const positions=buildStockBasis(adapted,stockAssets,costs)
+ for(const [token,opening] of Object.entries(openings)){
+  const asset=stockAssets.find(a=>a.address.toLowerCase()===token);if(!asset)continue
+  const id='opening:'+token
+  const first:BasisNotice={id,hash:id,at:opening.at,trade:{input:{symbol:'USD',amount:opening.costUsd},output:{symbol:asset.symbol,amount:opening.quantity}}}
+  positions[token]=buildStockBasis([first,...adapted.filter(n=>n.at>opening.at)],[asset],{...costs,[id]:opening.costUsd})[token]
+  if(opening.shares)shareTokens.add(token)
+ }
  for(const token of unknown)positions[token]={quantity:positions[token]?.quantity||'0',costUsd:null}
  return {positions,shareTokens}
 }
