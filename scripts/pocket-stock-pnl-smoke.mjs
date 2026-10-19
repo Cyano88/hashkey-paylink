@@ -30,3 +30,5 @@ assert.equal(historicalClose([['60000','1','2','1','1.5','10','15','1']],70000),
 assert.throws(()=>historicalClose([['0','1','2','1','1.5','10','15','1']],70000),/Missing/)
 assert.throws(()=>historicalClose([['60000','1','2','1','1.5','10','15','0']],70000),/Missing/)
 console.log('PASS stock P&L: average cost, partial sale, duplicate legs, tiny shares, incomplete history, portfolio reconciliation, fee accounting, historical native cost and candle freshness')
+
+assert.equal(historicalClose([['60000','1','2','1','1.5','10','15','15','1']],70000,9),1.5)
