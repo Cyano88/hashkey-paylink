@@ -3,7 +3,7 @@ import {entryPoint07Abi} from 'viem/account-abstraction'
 import {stockClient} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {stockTradeProof,nativeTradeLegs} from './stock-trade-notifications.js'
 import {XLAYER_ENTRY_POINT} from './xlayer-sponsored-cost.js'
-export type SponsoredSwapEvidence={callData:Hex;owner:string;input:string;inputUnits:string;minimumOutUnits:string;feeUnits:string}
+export type SponsoredSwapEvidence={callData:Hex;owner:string;input:string;output?:string;inputUnits:string;minimumOutUnits:string;feeUnits:string}
 const events=parseAbi(['event UserOperationEvent(bytes32 indexed userOpHash,address indexed sender,address indexed paymaster,uint256 nonce,bool success,uint256 actualGasCost,uint256 actualGasUsed)'])
 const transfers=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const same=(a:string|undefined|null,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
@@ -21,8 +21,15 @@ export async function readSponsoredSwapOutcome(hash:Hex,e:SponsoredSwapEvidence,
  if(!event[0].args.success)return 'failed'
  const proof=stockTradeProof(tx,r)
  if(!proof||proof.owner!==e.owner.toLowerCase()||proof.input!==e.input.toLowerCase()||proof.inputUnits!==e.inputUnits||proof.feeUnits!==e.feeUnits)throw Error('Swap effects unavailable')
- const native=nativeTradeLegs(proof,r.logs,Number(block.timestamp)*1000)
- if(native.length!==1||BigInt(native[0].units)<BigInt(e.minimumOutUnits))throw Error('Swap output unavailable')
+ const output=e.output||'native' // Existing durable attempts predate token-output sponsorship.
+ if(!same(proof.output,output))throw Error('Swap output changed')
+ if(output==='native'){
+  const native=nativeTradeLegs(proof,r.logs,Number(block.timestamp)*1000)
+  if(native.length!==1||BigInt(native[0].units)<BigInt(e.minimumOutUnits))throw Error('Swap output unavailable')
+ }else{
+  const received=parseEventLogs({abi:transfers,logs:r.logs.filter(l=>same(l.address,output))}).reduce((n,l)=>n+(same(l.args.to,e.owner)?l.args.value:0n)-(same(l.args.from,e.owner)?l.args.value:0n),0n)
+  if(received<=0n||received<BigInt(e.minimumOutUnits))throw Error('Swap output unavailable')
+ }
  const spent=parseEventLogs({abi:transfers,logs:r.logs.filter(l=>same(l.address,e.input))}).reduce((n,l)=>n+(same(l.args.from,e.owner)?l.args.value:0n)-(same(l.args.to,e.owner)?l.args.value:0n),0n)
  if(spent!==BigInt(e.inputUnits)+BigInt(e.feeUnits))throw Error('Swap debit unavailable')
  return 'completed'

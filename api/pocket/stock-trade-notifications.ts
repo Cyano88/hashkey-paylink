@@ -8,7 +8,7 @@ import type {ConfirmedStockTransfer,StockNoticeStore} from './xstocks-notificati
 export type StockTradeProof={hash:string;owner:string;input:string;output:string;inputUnits?:string;feeUnits?:string}
 export function stockTradeProof(tx:{hash:string;from:string;to:string|null;input:Hex},receipt:{status:string;logs?:readonly any[]}):StockTradeProof|undefined {
  const sponsored=sponsoredSwapTradeCall(tx,receipt)
- if(sponsored){const proof=stockTradeProof(sponsored.tx,{status:receipt.status});return proof&&proof.input===sponsored.input&&proof.output==='native'&&proof.inputUnits===sponsored.inputUnits?{...proof,feeUnits:sponsored.feeUnits}:undefined}
+ if(sponsored){const proof=stockTradeProof(sponsored.tx,{status:receipt.status});return proof&&proof.input===sponsored.input&&(proof.output==='native'||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&proof.inputUnits===sponsored.inputUnits?{...proof,feeUnits:sponsored.feeUnits}:undefined}
  if(receipt.status!=='success'||tx.to?.toLowerCase()!==OKX_XLAYER_ROUTER.toLowerCase())return
  try {
   const decoded=decodeFunctionData({abi:routerAbi as Abi,data:tx.input})

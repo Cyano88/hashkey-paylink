@@ -7,7 +7,7 @@ import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeFunctionData,getAddress} from 'viem'
-import {stockUsdc,stockUsdt,stockGasAsset} from '../src/pocket/lib/pocketXStocksWallet.ts'
+import {stockUsdc,stockUsdt,stockGasAsset,stockAssets} from '../src/pocket/lib/pocketXStocksWallet.ts'
 import {OKX_NATIVE,OKX_XLAYER_ROUTER,OKX_XLAYER_SPENDER} from '../src/pocket/lib/pocketXStocksSwap.ts'
 import {sponsoredSwapCalls,validateSponsoredSwap} from '../src/pocket/lib/pocketSponsoredSwap.ts'
 import {swapFeeBinding,verifySponsoredSwap} from '../api/pocket/xlayer-swap-sponsorship.ts'
@@ -18,8 +18,9 @@ import {createXLayerSponsorshipHandler} from '../api/pocket/xlayer-sponsorship.t
 process.env.POCKET_SWAP_QUOTE_SECRET='test-only-quote-secret-at-least-thirty-two-characters'
 const owner='owner',walletId='fixturewalletid12345',wallet=getAddress('0x'+'1'.repeat(40)),abi=JSON.parse(readFileSync('src/pocket/lib/pocketOkxRouterAbi.json','utf8'))
 const pricing={marginBps:2500,minimumFeeUnits:'10000'}
-for(const tokenIn of [stockUsdc,stockUsdt]){
- const q={id:crypto.randomUUID(),chainId:196,owner:wallet,tokenIn,tokenOut:stockGasAsset,amount:'1',amountUnits:'1000000',decimalsIn:6,decimalsOut:18,expectedOut:'0.001',minimumOut:'0.000995',minimumOutUnits:'995000000000000',expiresAt:Date.now()+45000,gasFee:'0.00001',priceImpact:'0',approvalRequired:true,spender:getAddress(OKX_XLAYER_SPENDER),tx:{from:wallet,to:getAddress(OKX_XLAYER_ROUTER),value:'0',data:encodeFunctionData({abi,functionName:'uniswapV3SwapToWithBaseRequest',args:[1n,wallet,{fromToken:BigInt(tokenIn.address),toToken:getAddress(OKX_NATIVE),fromTokenAmount:1000000n,minReturnAmount:995000000000000n,deadLine:BigInt(Math.floor(Date.now()/1000)+300)},[1n]]})}}
+for(const tokenIn of [stockUsdc,stockUsdt])for(const tokenOut of [stockGasAsset,stockAssets[0]]){
+ const outAddress=tokenOut.address==='native'?OKX_NATIVE:tokenOut.address
+ const q={id:crypto.randomUUID(),chainId:196,owner:wallet,tokenIn,tokenOut,amount:'1',amountUnits:'1000000',decimalsIn:6,decimalsOut:18,expectedOut:'0.001',minimumOut:'0.000995',minimumOutUnits:'995000000000000',expiresAt:Date.now()+45000,gasFee:'0.00001',priceImpact:'0',approvalRequired:true,spender:getAddress(OKX_XLAYER_SPENDER),tx:{from:wallet,to:getAddress(OKX_XLAYER_ROUTER),value:'0',data:encodeFunctionData({abi,functionName:'uniswapV3SwapToWithBaseRequest',args:[1n,wallet,{fromToken:BigInt(tokenIn.address),toToken:getAddress(outAddress),fromTokenAmount:1000000n,minReturnAmount:995000000000000n,deadLine:BigInt(Math.floor(Date.now()/1000)+300)},[1n]]})}}
  const calls=sponsoredSwapCalls(q);assert.equal(calls.length,4)
  const estimate=async i=>{assert.equal(i.calls.length,5);assert.equal(i.calls[2].data,q.tx.data);return {feeUnits:'8000',expiresAt:Date.now()+25000,estimateId:'fixture'}}
  const fee=await quoteXLayerReimbursement(swapFeeBinding(q,owner,walletId),calls,q.expiresAt,estimate,pricing)
@@ -40,10 +41,11 @@ for(const tokenIn of [stockUsdc,stockUsdt]){
  assert.equal(stockTradeProof(outer,{...receipt,status:'reverted'}),undefined)
  assert.equal(stockTradeProof(outer,{...receipt,logs:[{...operationLog,data:encodeAbiParameters(parseAbiParameters('uint256,bool,uint256,uint256'),[0n,false,0n,1n])},feeLog]}),undefined)
  const orderAbi=parseAbi(['event OrderRecord(address fromToken,address toToken,address sender,uint256 fromAmount,uint256 returnAmount)'])
- const orderLog={address:OKX_XLAYER_ROUTER,topics:encodeEventTopics({abi:orderAbi}),data:encodeAbiParameters(parseAbiParameters('address,address,address,uint256,uint256'),[tokenIn.address,OKX_NATIVE,wallet,1000000n,1000000000000000n])}
+ const orderLog={address:OKX_XLAYER_ROUTER,topics:encodeEventTopics({abi:orderAbi}),data:encodeAbiParameters(parseAbiParameters('address,address,address,uint256,uint256'),[tokenIn.address,outAddress,wallet,1000000n,1000000000000000n])}
  const debitLog={address:tokenIn.address,topics:encodeEventTopics({abi:transferAbi,args:{from:wallet,to:OKX_XLAYER_ROUTER}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[1000000n])}
- const blockHash='0x'+'c'.repeat(64),full={...receipt,transactionHash:hash,blockHash,blockNumber:1n,logs:[...receipt.logs,orderLog,debitLog]}
- const evidence={owner:wallet,input:tokenIn.address,inputUnits:q.amountUnits,minimumOutUnits:q.minimumOutUnits,feeUnits:fee.networkFeeUnits,callData:op.callData}
+ const outputLog={address:outAddress,topics:encodeEventTopics({abi:transferAbi,args:{from:OKX_XLAYER_ROUTER,to:wallet}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[1000000000000000n])}
+ const blockHash='0x'+'c'.repeat(64),full={...receipt,transactionHash:hash,blockHash,blockNumber:1n,logs:[...receipt.logs,orderLog,debitLog,...(tokenOut.address==='native'?[]:[outputLog])]}
+ const evidence={owner:wallet,input:tokenIn.address,...(tokenOut.address==='native'?{}:{output:tokenOut.address}),inputUnits:q.amountUnits,minimumOutUnits:q.minimumOutUnits,feeUnits:fee.networkFeeUnits,callData:op.callData}
  const client={getChainId:async()=>196,getTransaction:async()=>({...outer,blockHash}),getTransactionReceipt:async()=>full,getBlock:async()=>({hash:blockHash,timestamp:1n})}
  assert.equal(await readSponsoredSwapOutcome(hash,evidence,client),'completed')
  assert.equal(await readSponsoredSwapOutcome(hash,evidence,{...client,getTransactionReceipt:async()=>({...full,status:'reverted'})}),'failed')
@@ -51,9 +53,14 @@ for(const tokenIn of [stockUsdc,stockUsdt]){
  assert.equal(await readSponsoredSwapOutcome(hash,evidence,{...client,getTransactionReceipt:async()=>({...full,logs:[failedEvent]})}),'failed')
  for(const changed of [{...evidence,minimumOutUnits:'999999999999999999'},{...evidence,callData:'0x'},{...evidence,inputUnits:'2'},{...evidence,feeUnits:'1'}])await assert.rejects(readSponsoredSwapOutcome(hash,changed,client))
  await assert.rejects(readSponsoredSwapOutcome(hash,evidence,{...client,getBlock:async()=>({hash:'0x'+'d'.repeat(64),timestamp:1n})}))
+ if(tokenOut.address!=='native'){
+  await assert.rejects(readSponsoredSwapOutcome(hash,{...evidence,output:stockAssets[1].address},client))
+  await assert.rejects(readSponsoredSwapOutcome(hash,evidence,{...client,getTransactionReceipt:async()=>({...full,logs:full.logs.filter(l=>l!==outputLog)})}))
+  await assert.rejects(readSponsoredSwapOutcome(hash,evidence,{...client,getTransactionReceipt:async()=>({...full,logs:full.logs.map(l=>l===outputLog?{...l,data:encodeAbiParameters(parseAbiParameters('uint256'),[1n])}:l)})}))
+ }
  const notices={wallets:{owner:{address:wallet,since:0}},notices:{}}
- const legs=[{id:hash+':1',hash,from:wallet,to:OKX_XLAYER_ROUTER,token:tokenIn.address.toLowerCase(),symbol:tokenIn.symbol,units:q.amountUnits,decimals:6,at:1},{id:hash+':2',hash,from:wallet,to:EVM_PLATFORM_TREASURY,token:tokenIn.address.toLowerCase(),symbol:tokenIn.symbol,units:fee.networkFeeUnits,decimals:6,at:1},...nativeTradeLegs(proof,full.logs,1)]
- recordStockTradeNotices(notices,legs,[proof]);const trade=Object.values(notices.notices)[0].trade;assert.equal(trade.input.amount,'1');assert.equal(trade.feeAmount,'0.01');assert.equal(trade.output.symbol,'OKB')
+ const legs=[{id:hash+':1',hash,from:wallet,to:OKX_XLAYER_ROUTER,token:tokenIn.address.toLowerCase(),symbol:tokenIn.symbol,units:q.amountUnits,decimals:6,at:1},{id:hash+':2',hash,from:wallet,to:EVM_PLATFORM_TREASURY,token:tokenIn.address.toLowerCase(),symbol:tokenIn.symbol,units:fee.networkFeeUnits,decimals:6,at:1},...(tokenOut.address==='native'?nativeTradeLegs(proof,full.logs,1):[{id:hash+':out',hash,from:OKX_XLAYER_ROUTER,to:wallet,token:tokenOut.address.toLowerCase(),symbol:tokenOut.symbol,units:'1000000000000000',decimals:18,at:1}])]
+ recordStockTradeNotices(notices,legs,[proof]);const trade=Object.values(notices.notices)[0].trade;assert.equal(trade.input.amount,'1');assert.equal(trade.feeAmount,'0.01');assert.equal(trade.output.symbol,tokenOut.symbol);assert.equal(trade.action,tokenOut.address==='native'?'swap':'buy')
  let store,broadcasts=0;const handler=createXLayerSponsorshipHandler({identity:async()=>({userId:owner}),user:async()=>({linkedAccounts:[{type:'wallet',chainType:'ethereum',walletClientType:'privy',address:wallet,id:walletId}]}),config:()=>({appId:'fixture',secret:'fixture',enabled:true,publicTransfers:true,wallets:[]}),durable:()=>true,billingGuard:async()=>{},reimbursement:{estimate,pricing},read:async()=>store,mutate:async fn=>(store=fn(store)),fetch:async()=>{broadcasts++;return new Response(JSON.stringify({data:{hash:'0x'+'a'.repeat(64)}}))}})
  const body={action:'send',purpose:'swap',wallet,routeToken,feeToken,request,signature:'a'.repeat(88)}
  const call=async b=>{const result={status:200};await handler({method:'POST',body:b},{setHeader(){},status(n){result.status=n;return this},json(x){result.body=x;return this}});return result}

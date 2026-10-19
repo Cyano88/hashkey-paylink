@@ -229,7 +229,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         const canonical=makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:fee.intentId,expiresAt:fee.expiresAt,calls:fee.calls})
         if(possibleId!==fee.intentId||!isDeepStrictEqual(request,canonical))throw fail('Swap authorization changed.',422)
         validated={id:fee.intentId,canonical,wallet,token:q.tokenIn.address,units:BigInt(q.amountUnits)};approved=fee
-        swapEvidence={callData:encodeXLayerSponsoredBatch(fee.calls),owner:wallet,input:q.tokenIn.address,inputUnits:q.amountUnits,minimumOutUnits:q.minimumOutUnits,feeUnits:fee.networkFeeUnits}
+        swapEvidence={callData:encodeXLayerSponsoredBatch(fee.calls),owner:wallet,input:q.tokenIn.address,output:q.tokenOut.address,inputUnits:q.amountUnits,minimumOutUnits:q.minimumOutUnits,feeUnits:fee.networkFeeUnits}
       }else if(req.body?.purpose==='bridge'){
         if(!d.reimbursement)throw fail('Outbound bridging is not available yet.',503)
         let q

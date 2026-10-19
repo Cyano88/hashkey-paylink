@@ -9,7 +9,7 @@ const tokenAbi=parseAbi(['function approve(address,uint256) returns(bool)','func
 const events=parseAbi(['event UserOperationEvent(bytes32 indexed userOpHash,address indexed sender,address indexed paymaster,uint256 nonce,bool success,uint256 actualGasCost,uint256 actualGasUsed)'])
 const transfers=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase()
-/** Only the known atomic five-call native-output swap shape is classified. */
+/** Only the known atomic five-call reimbursed swap shape is classified. */
 export function sponsoredSwapTradeCall(tx:{hash:string;to:string|null;input:Hex},receipt:{status:string;logs?:readonly any[]}){
  if(receipt.status!=='success'||!tx.to||!same(tx.to,XLAYER_ENTRY_POINT)||!receipt.logs)return
  try{
