@@ -163,6 +163,7 @@ export function validatePocketSignedSolanaTransaction(input: { tx: string; requi
   const txBytes = decodeSignedTransaction(input.tx)
   const transaction = Transaction.from(txBytes)
   const requiredSigner = parseSolanaAddress('Linked wallet address', input.requiredSigner)
+  if (requiredSigner.equals(relayer.publicKey)) throw new Error('Relayer cannot authorize a customer transfer')
   if (!transaction.recentBlockhash) throw new Error('Signed Solana transaction is missing a blockhash')
   if (!transaction.feePayer?.equals(relayer.publicKey)) {
     throw new Error('Signed Solana transaction has an invalid fee payer')
@@ -238,12 +239,16 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
   catch { res.status(503).json({ ok: false, error: 'Solana relay not configured' }); return }
 
   try {
+    const fromPubkey = parseSolanaAddress('Sender address', from)
+    // Sponsorship must never authorize spending the sponsor's own tokens.
+    if (fromPubkey.equals(relayer.publicKey)) {
+      res.status(403).json({ ok: false, error: 'Relayer cannot be the transfer sender' }); return
+    }
     const asset = baseStablecoin(req.body.asset)
     if (asset === 'USDT' && mode === 'withdraw') throw new Error('USDT sends require a payment fee quote.')
     const mint = asset === 'USDT' ? new PublicKey(POCKET_USDT_ASSETS.solana.address) : USDC_MINT
     const connection = new Connection(getRpc(), 'confirmed')
 
-    const fromPubkey = parseSolanaAddress('Sender address', from)
     const toPubkey   = parseSolanaAddress('Recipient address', to)
 
     const totalRaw       = parseUsdcAmount(amount)
@@ -452,3 +457,4 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     res.status(500).json({ ok: false, error: msg })
   }
 }
+
