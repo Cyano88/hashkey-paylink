@@ -235,6 +235,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     memo: value.memo,
     amount: value.amount,
     ...(value.assetSymbol !== undefined ? {assetSymbol:value.assetSymbol} : {}),
+    ...(value.feeAsset !== undefined ? { feeAsset: value.feeAsset } : {}),
     ...(value.feeAmount !== undefined ? { feeAmount: value.feeAmount } : {}),
     ts: value.ts,
     ...(value.statusUpdatedAt !== undefined ? {statusUpdatedAt:value.statusUpdatedAt} : {}),
