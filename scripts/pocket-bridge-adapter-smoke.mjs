@@ -87,3 +87,9 @@ console.log('Circle Pocket bridge adapter smoke tests passed, including all 30 d
 
 const solQuote=await request(handler,{body:{action:'quote',source:'solana',destination:'base',amount:'2'}})
 assert.equal(solQuote.statusCode,200);assert.equal(solQuote.body.quote.total,'2.5915');assert.equal(solQuote.body.quote.fee,'0.5915');assert.equal(solQuote.body.quote.receive,'2');assert.equal(solQuote.body.quote.quoteToken,'fixture')
+
+const cashRecorded = await request(handler, {body:{action:'record',source:'arc',destination:'base',amount:'0.5',txHash:'0xcash',status:'submitted',purpose:'cash'}})
+assert.equal(cashRecorded.statusCode,200)
+assert.equal(records.at(-1).metadata.purpose,'cash')
+const invalidCash = await request(handler, {body:{action:'record',source:'base',destination:'arc',amount:'0.5',txHash:'0xcash',purpose:'cash'}})
+assert.equal(invalidCash.statusCode,400)

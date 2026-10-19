@@ -42,7 +42,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
         const actions = await dependencies.listActions(identity.userId, 500, 'wallet.bridge', true)
         return res.json({ ok: true, pending: actions.filter(item => item.ownerId === identity.userId && item.action === 'wallet.bridge' && !item.metadata?.fundingParent && (item.status === 'started' || item.status === 'submitted')).map(item => ({
           id: item.id, source: item.metadata?.source, destination: item.metadata?.destination,
-          amount: item.metadata?.amount, txHash: item.metadata?.txHash, createdAt: item.createdAt,
+          amount: item.metadata?.amount, txHash: item.metadata?.txHash, createdAt: item.createdAt, ...(item.metadata?.purpose==='cash'?{purpose:'cash'}:{}),
         })) })
       }
       if (action === 'status') {
@@ -60,6 +60,8 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
       if (action === 'record') {
         const source = network(req.body?.source)
         const destination = network(req.body?.destination)
+        const purpose=req.body?.purpose
+        if(purpose!==undefined&&(purpose!=='cash'||destination!=='base'||req.body?.funding))throw Object.assign(new Error('Invalid Cash funding reference.'),{status:400})
         const amount = String(req.body?.amount ?? '').trim()
         parseUsdcAmount(amount)
         const txHash = String(req.body?.txHash ?? '').trim()
@@ -86,7 +88,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
           action: 'wallet.bridge',
           status: complete ? 'completed' : 'submitted',
           resourceId: txHash,
-          metadata: { ...(funding ? {fundingParent:funding.key,fundingPayment:JSON.stringify(funding.payment)} : {}), source, destination, amount, paymentState: complete ? 'confirmed' : 'submitted', txHash, ...(destinationTxHash ? { destinationTxHash } : {}) },
+          metadata: { ...(purpose==='cash'?{purpose:'cash'}:{}), ...(funding ? {fundingParent:funding.key,fundingPayment:JSON.stringify(funding.payment)} : {}), source, destination, amount, paymentState: complete ? 'confirmed' : 'submitted', txHash, ...(destinationTxHash ? { destinationTxHash } : {}) },
         })
         await dependencies.appendLedger({
           eventKey: `wallet-bridge:${record.id}:${record.status}:${record.updatedAt}`,

@@ -85,7 +85,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     contextLabel: `${source} to ${destination}`,
     settlementType: 'wallet_bridge',
     paycrestStatus: record.metadata.paymentState === 'refunded' ? 'refunded' : record.status === 'completed' ? 'completed' : record.status === 'failed' ? 'failed' : 'processing',
-    activityLabel: record.action === 'wallet.usdt-bridge' || record.metadata.assetSymbol === 'USDT' ? 'USDT bridge' : 'USDC bridge',
+    activityLabel: record.action==='wallet.bridge'&&record.metadata.purpose==='cash'&&destination==='base'?'Cash funding':record.action === 'wallet.usdt-bridge' || record.metadata.assetSymbol === 'USDT' ? 'USDT bridge' : 'USDC bridge',
     assetSymbol: record.action === 'wallet.usdt-bridge' || record.metadata.assetSymbol === 'USDT' ? 'USDT' : 'USDC',
     destinationTxHash: record.metadata.destinationTxHash,
     ...(record.metadata.paymentState==='refunded'?{refundAsset:(record.metadata.refundAsset||record.metadata.assetSymbol||(record.action==='wallet.usdt-bridge'?'USDT':'USDC'))==='USDT'?'USDT' as const:'USDC' as const,refundAmount:record.metadata.refundAmount,refundNetwork:record.metadata.refundNetwork,refundTxHash:record.metadata.refundTxHash||record.metadata.destinationTxHash}:{}),

@@ -1,3 +1,4 @@
+import {pocketExchangeNotification} from '../src/pocket/lib/pocketExchangeNotification.ts'
 import assert from 'node:assert/strict'
 import {pocketMoneyNotification as notice} from '../src/pocket/lib/pocketMoneyNotification.ts'
 const networks={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer'}
@@ -13,3 +14,8 @@ for(const [chain,label] of Object.entries(networks))for(const assetSymbol of ['U
  }
 }
 console.log('PASS all seven networks, both stablecoins, bridge routes, precise output display, malformed context, status gates, refunds, stable dedup IDs and silent funding')
+
+const cashRow={eventId:'pocket-bridge:cash',source:'wallet-bridge',chain:'arc',destination:'base',assetSymbol:'USDC',amount:'0.5',txHash:'0xcash',paycrestStatus:'completed',activityLabel:'Cash funding',ts:1}
+assert.equal(pocketExchangeNotification(cashRow).title,'Added to cash balance')
+assert.equal(pocketExchangeNotification({...cashRow,paycrestStatus:'processing'}),null)
+assert.equal(pocketExchangeNotification({...cashRow,activityLabel:'USDC bridge'}).title,'Bridge successful')
