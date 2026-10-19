@@ -11,7 +11,7 @@ export function buildStockBasis(notices:BasisNotice[],assets:{symbol:string;addr
  const position=(address:string)=>{let p=positions.get(address);if(!p){p={quantity:0n,cost:0n,known:true};positions.set(address,p)}return p}
  const amount=(s:string)=>{if(!/^(0|[1-9]\d*)(\.\d{1,36})?$/.test(s))throw Error('Invalid basis amount');return parseUnits(s,36)}
  const add=(address:string,quantity:bigint,cost:string|undefined)=>{const p=position(address);p.quantity+=quantity;if(cost===undefined)p.known=false;else p.cost+=amount(cost)}
- const remove=(address:string,quantity:bigint)=>{const p=position(address);if(quantity>p.quantity){p.known=false;p.quantity=0n;p.cost=0n;return}p.cost=p.quantity?p.cost*(p.quantity-quantity)/p.quantity:0n;p.quantity-=quantity}
+ const remove=(address:string,quantity:bigint)=>{const p=position(address);if(quantity>p.quantity){p.known=false;p.quantity=0n;p.cost=0n;return}p.cost=p.quantity?p.cost*(p.quantity-quantity)/p.quantity:0n;p.quantity-=quantity;if(p.quantity===0n)p.known=true}
  const unique=[...new Map(notices.map(n=>[n.id,n])).values()].sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id))
  const trades=new Set(unique.filter(n=>n.trade&&n.hash).map(n=>n.hash!.toLowerCase()))
  const seen=new Set<string>()

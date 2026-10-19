@@ -32,3 +32,5 @@ assert.throws(()=>historicalClose([['60000','1','2','1','1.5','10','15','0']],70
 console.log('PASS stock P&L: average cost, partial sale, duplicate legs, tiny shares, incomplete history, portfolio reconciliation, fee accounting, historical native cost and candle freshness')
 
 assert.equal(historicalClose([['60000','1','2','1','1.5','10','15','15','1']],70000,9),1.5)
+
+const closed=buildStockBasis([buy('unknown','1',1),{...sale,at:2},buy('fresh','1',3)],[asset],{fresh:'50'});assert.equal(closed[asset.address].costUsd,'50','Fully disposed shares do not poison the cost of a later position')
