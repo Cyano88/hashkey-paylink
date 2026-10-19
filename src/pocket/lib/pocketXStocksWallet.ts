@@ -54,7 +54,9 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
       ])).flat()
       for(const log of logs)changed.add(log.address.toLowerCase())
     }
-    assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase()))
+    // Rebase multipliers can change a held balance without a Transfer event.
+    const held=new Set(previous.holdings.map(h=>h.asset.address.toLowerCase()))
+    assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase())||held.has(asset.address.toLowerCase()))
   }
   const balances = assets.length ? await client.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []
   if (balances.some(r => r.status !== 'success')) throw Error('Some stock balances could not be verified.')

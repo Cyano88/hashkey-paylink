@@ -21,10 +21,11 @@ Object.assign(stockClient,{getChainId:async()=>196,getBlock:async(args)=>({numbe
 try {
  const full=await readStockHoldings(address);assert.equal(scanned[0],808);assert.equal(full.holdings.length,0)
  block++;changed=true;scanned=[];const delta=await readStockHoldings(address,full);assert.equal(scanned[0],1);assert.equal(delta.holdings[0].units,2n*10n**18n)
- block++;changed=false;scanned=[];const unchanged=await readStockHoldings(address,delta);assert.equal(scanned.length,0);assert.equal(unchanged.holdings[0].units,2n*10n**18n)
+ stockClient.multicall=async({contracts})=>{scanned.push(contracts.length);return contracts.map(c=>({status:'success',result:c.address.toLowerCase()===asset.address.toLowerCase()?3n*10n**18n:0n}))}
+ block++;changed=false;scanned=[];const unchanged=await readStockHoldings(address,delta);assert.deepEqual(scanned,[1,4],'held stocks refresh without scanning the catalogue');assert.equal(unchanged.holdings[0].units,3n*10n**18n,'Rebase changes are observed even with no transfer logs')
  const ranges=[];stockClient.getLogs=async({fromBlock,toBlock})=>{assert.ok(toBlock-fromBlock<100n);ranges.push([fromBlock,toBlock]);return []};block=350n;await readStockHoldings(address,unchanged);assert.equal(ranges.length,6);assert.deepEqual(ranges.filter((_,i)=>i%2===0),[[90n,189n],[190n,289n],[290n,350n]])
  block=99n;await assert.rejects(readStockHoldings(address,unchanged),/behind/)
- console.log('PASS: shared request deduplication, TTL, quiet failed refresh, expiry, owner isolation, forced refresh, 808-contract baseline to 1-contract delta, unchanged no scan, lagging node rejection.')
+ console.log('PASS: shared request deduplication, TTL, quiet failed refresh, expiry, owner isolation, forced refresh, 808-contract baseline to 1-contract delta, rebase without transfer logs, lagging node rejection.')
 }finally{Object.assign(stockClient,old)}
 
 let lateResolve, timeoutSignal
@@ -32,3 +33,4 @@ const bounded=createStockBalanceCache(async(_a,_p,signal)=>{timeoutSignal=signal
 await bounded.load('slow',address);assert.equal(bounded.peek('slow').busy,false);assert.ok(bounded.peek('slow').error);assert.equal(timeoutSignal.aborted,true)
 lateResolve(fixture());await Promise.resolve();assert.equal(bounded.peek('slow').snapshot,undefined)
 console.log('PASS: stalled balance request times out, aborts transport, clears loading and ignores late result.')
+
