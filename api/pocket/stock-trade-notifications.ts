@@ -3,7 +3,7 @@ import {decodeEventLog,parseAbiItem,decodeFunctionData,formatUnits,type Abi,type
 import routerAbi from '../../src/pocket/lib/pocketOkxRouterAbi.json'
 import {OKX_XLAYER_ROUTER,OKX_NATIVE} from '../../src/pocket/lib/pocketXStocksSwap.js'
 import {stockAssets} from '../../src/pocket/lib/pocketXStocksWallet.js'
-import {formatStockQuantity} from '../../src/pocket/lib/pocketStockDisplay.js'
+import {formatPocketAssetAmount} from '../../src/pocket/lib/pocketAmountDisplay.js'
 import type {ConfirmedStockTransfer,StockNoticeStore} from './xstocks-notifications-store.js'
 export type StockTradeProof={hash:string;owner:string;input:string;output:string;inputUnits?:string;feeUnits?:string}
 export function stockTradeProof(tx:{hash:string;from:string;to:string|null;input:Hex},receipt:{status:string;logs?:readonly any[]}):StockTradeProof|undefined {
@@ -33,8 +33,8 @@ export function recordStockTradeNotices(s:StockNoticeStore,transfers:ConfirmedSt
   if(!input||!output||spent<=0n||received<=0n||proof.input===proof.output)continue
   const inStock=stockAssets.some(a=>a.address.toLowerCase()===proof.input),outStock=stockAssets.some(a=>a.address.toLowerCase()===proof.output)
   const action=!inStock&&outStock?'buy':inStock&&!outStock?'sell':'swap'
-  const paid=formatStockQuantity(formatUnits(spent,input.decimals))+' '+input.symbol
-  const got=formatStockQuantity(formatUnits(received,output.decimals))+' '+output.symbol
+  const paid=formatPocketAssetAmount(formatUnits(spent,input.decimals),input.symbol)+' '+input.symbol
+  const got=formatPocketAssetAmount(formatUnits(received,output.decimals),output.symbol)+' '+output.symbol
   const title=action==='buy'?'Stock purchased':action==='sell'?'Stock sold':'Swap successful'
   const body=action==='buy'?got+' added to your investments.':action==='sell'?paid+' sold. '+got+' added to your Pocket balance.':paid+' swapped for '+got+' on X Layer.'
   for(const [owner,wallet] of Object.entries(s.wallets)){
