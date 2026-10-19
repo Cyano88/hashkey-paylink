@@ -1,4 +1,5 @@
 import type {PocketActivityRow} from '../models/pocketActivity'
+import {isCashConversion} from './pocketCashConversion'
 import {formatStockQuantity} from './pocketStockDisplay'
 
 const networks:Record<string,string>={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer'}
@@ -12,6 +13,12 @@ export function pocketExchangeNotification(row:PocketActivityRow){
  const network=networks[row.chain],destination=networks[row.destination||'']
  if(!network||!swap&&!destination)return null
  const paid=quantity(row.amount,row.assetSymbol),kind=swap?'Swap':'Bridge'
+ if(isCashConversion(row)){
+  const received=(row.contextLabel||'').match(/^\d+(?:\.\d+)? USDT to (\d+(?:\.\d+)?) USDC$/)?.[1]
+  if(refunded||!failed&&!valid(received))return null
+  const tag='pocket-payment:cash-conversion:'+row.eventId
+  return {eventId:tag+':'+(failed?'failed':'completed'),title:failed?'Cash funding failed':'Cash added',body:failed?'Your cash top-up was not completed. Open for details.':quantity(received!,'USD')+' added to your cash balance.',path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
+ }
  let title=kind+' successful',body=swap?`Your swap on ${network} completed.`:`${paid} bridged from ${network} to ${destination}.`
  if(swap&&!failed&&!refunded){
   const legs=(row.contextLabel||'').match(/^(\d+(?:\.\d+)?) ([A-Za-z0-9]+) (?:to|\u2192) (\d+(?:\.\d+)?) ([A-Za-z0-9]+)$/)

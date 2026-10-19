@@ -23,7 +23,7 @@ export async function listPendingSolanaUsdtBridges(ownerId:string){
 }
 async function journal(r:SolanaUsdtBridgeRecord){
  if(!r.signedTransaction)return
- await recordCirclePocketAction({ownerId:r.ownerId,idempotencyKey:'pocket:solana-usdt-bridge:'+r.id,action:'wallet.usdt-bridge',status:r.phase==='completed'?'completed':['source_failed','refunded'].includes(r.phase)?'failed':'submitted',resourceId:r.id,metadata:{quoteToken:'solana:'+r.id,provider:'relay',assetSymbol:'USDT',source:'solana',destination:r.quote.destination,amount:formatUnits(BigInt(r.quote.amountUnits),6),txHash:r.signature||'',...(r.settlement?{destinationTxHash:r.settlement.transactionHash,...(r.phase==='refunded'?{paymentState:'refunded',refundTxHash:r.settlement.transactionHash,refundAmount:formatUnits(BigInt(r.settlement.amountUnits),6),refundNetwork:r.settlement.network}:{})}:{})}})
+ await recordCirclePocketAction({ownerId:r.ownerId,idempotencyKey:'pocket:solana-usdt-bridge:'+r.id,action:'wallet.usdt-bridge',status:r.phase==='completed'?'completed':['source_failed','refunded'].includes(r.phase)?'failed':'submitted',resourceId:r.id,metadata:{quoteToken:'solana:'+r.id,provider:'relay',assetSymbol:'USDT',source:'solana',destination:r.quote.destination,destinationAddress:r.destinationAddress,amount:formatUnits(BigInt(r.quote.amountUnits),6),txHash:r.signature||'',...(r.settlement?{destinationTxHash:r.settlement.transactionHash,...(r.phase==='completed'?{settledAmountUnits:r.settlement.amountUnits}:{}),...(r.phase==='refunded'?{paymentState:'refunded',refundTxHash:r.settlement.transactionHash,refundAmount:formatUnits(BigInt(r.settlement.amountUnits),6),refundNetwork:r.settlement.network}:{})}:{})}})
 }
 const defaultDependencies={verifyUser:verifiedPrivyUser,state:createSolanaUsdtBridgeState,readLink:readCircleLink,enabled:solanaUsdtBridgeEnabled,reconcile:reconcileSolanaUsdtSettlement,journal,rpc:()=>new Connection(getRpc(),'confirmed')}
 export async function recoverSolanaUsdtBridge(ownerId:string,id:string,deps=defaultDependencies){
@@ -36,7 +36,7 @@ export async function recoverSolanaUsdtBridge(ownerId:string,id:string,deps=defa
  if(['source_confirmed','completed','refunded'].includes(current.phase)){
   const result=await deps.reconcile(ownerId,id)
   await deps.journal(await state.read(ownerId,id))
-  return {ok:true,...result,txHash:current.signature,sourceConfirmed:true,destinationTxHash:'settlement' in result?result.settlement?.transactionHash:undefined}
+  return {ok:true,...result,...(result.status==='completed'&&'settlement' in result&&result.settlement?{amountOut:formatUnits(BigInt(result.settlement.amountUnits),6)}:{}),txHash:current.signature,sourceConfirmed:true,destinationTxHash:'settlement' in result?result.settlement?.transactionHash:undefined}
  }
  await deps.journal(current)
  return {ok:true,status:current.phase==='source_failed'?'failed':current.phase==='quoted'?'not_submitted':current.phase==='awaiting_approval'?'awaiting_approval':'pending',txHash:current.signature,challengeId:current.challengeId}

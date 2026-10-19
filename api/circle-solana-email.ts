@@ -1324,7 +1324,8 @@ export async function createCircleNativeSolanaChallenge(input:{userToken:string;
 
 /** Recover only a unique server-issued native-send reference, without creating another challenge. */
 export async function recoverCircleNativeSendChallenge(input:{chain:Exclude<CircleGasStationEvmChain,'arc'>;userToken:string;walletId:string;walletAddress:string;refId:string}) {
-  if(!input.userToken||input.userToken.length>8000||!/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(input.refId))throw Error('Invalid native transfer recovery request.')
+  const validReference=/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(input.refId)||(input.chain==='base'&&/^pocket:cash-conversion:[0-9a-f-]{36}$/i.test(input.refId))
+  if(!input.userToken||input.userToken.length>8000||!validReference)throw Error('Invalid transfer recovery request.')
   const owned=await readCircleUserWallet(input.userToken,input.chain,input.walletId)
   requireCircleGasStationEvmWallet({...input,wallets:owned?[owned]:[]})
   const {findNativeSendChallenge}=await import('./pocket/native-send-challenge-recovery.js')

@@ -89,6 +89,7 @@ export async function claimCirclePocketAction(input: {
   idempotencyKey: string
   action: string
   metadata?: Record<string, string>
+  dedupeAlso?: Array<{metadataKey:string;metadataValue:string;statuses:CirclePocketActionStatus[]}>
   dedupe?: {
     metadataKey: string
     metadataValue: string
@@ -103,12 +104,13 @@ export async function claimCirclePocketAction(input: {
       && record.action === input.action
     ))
     if (existing) return { record: existing, claimed: false }
-    const conflict = input.dedupe && Object.values(store.actions).find(record => (
+    const rules = [...(input.dedupe ? [input.dedupe] : []), ...(input.dedupeAlso || [])]
+    const conflict = Object.values(store.actions).find(record => (
       record.ownerId === input.ownerId
       && record.action === input.action
-      && record.metadata?.[input.dedupe!.metadataKey] === input.dedupe!.metadataValue
-      && input.dedupe!.statuses.includes(record.status)
-      && (record.status !== 'started' || !input.dedupe!.startedAfter || record.updatedAt >= input.dedupe!.startedAfter)
+      && rules.some(rule => record.metadata?.[rule.metadataKey] === rule.metadataValue
+        && rule.statuses.includes(record.status)
+        && (record.status !== 'started' || !('startedAfter' in rule) || typeof rule.startedAfter !== 'number' || !rule.startedAfter || record.updatedAt >= rule.startedAfter))
     ))
     if (conflict) return { record: conflict, claimed: false }
     const now = Date.now()
@@ -154,12 +156,12 @@ export async function recordCirclePocketAction(input: {
     }
     // Bridge recovery can retry after a worker has already finalized the action.
     // Keep terminal state and the event timestamp stable for ledger deduplication.
-    if (['wallet.usdt-bridge','wallet.xlayer-bridge','wallet.native-send','wallet.native-swap'].includes(input.action) && existing) {
+    if (['wallet.usdt-bridge','wallet.xlayer-bridge','wallet.native-send','wallet.native-swap','wallet.cash-conversion'].includes(input.action) && existing) {
       for (const key of ['quoteToken', 'source', 'destination', 'amount']) {
         if (existing.metadata?.[key] !== input.metadata?.[key]) throw new Error('Bridge details do not match the saved transfer.')
       }
       if (existing.status === 'completed' || existing.status === 'failed') return existing
-      if(['wallet.native-send','wallet.native-swap'].includes(input.action)){
+      if(['wallet.native-send','wallet.native-swap','wallet.cash-conversion'].includes(input.action)){
         for(const key of ['network','walletAddress','recipient','assetSymbol','toAsset','challengeId','txHash','signedTransaction']){
           if(existing.metadata?.[key] && input.metadata?.[key] !== undefined && existing.metadata[key] !== input.metadata[key])throw new Error('Native transfer evidence cannot change.')
         }

@@ -85,22 +85,30 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       await recordCirclePocketAction({ownerId:identity.userId,idempotencyKey:journalKey,action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,challengeId:result.challengeId}})
       return res.json({ok:true,challengeId:result.challengeId})
     }
-    return res.json(await reconcileUsdtBridge(identity.userId,quoteToken,{txHash:req.body.txHash,circleUserToken:req.body.circleUserToken}))
+    return res.json(await reconcileUsdtBridge(identity.userId,quoteToken,{txHash:req.body.txHash,circleUserToken:req.body.circleUserToken,retireUnsubmitted:req.body.retireUnsubmitted===true}))
   }catch(reason){const error=reason as Error&{status?:number};console.error('[pocket-usdt-bridge]',{action:req.body?.action||req.method,reason:error.message});return res.status(error.status||503).json({ok:false,error:error.status?error.message:req.body?.action==='quote'?'Could not refresh the bridge quote. Try again.':'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
 }
 
 // Shared by the authenticated status route and background reconciliation.
-const recoveryDefaults={findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
-export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string}={},overrides:Partial<typeof recoveryDefaults>={}){
+const recoveryDefaults={claimAction:claimCirclePocketAction,findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
+export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string;retireUnsubmitted?:boolean}={},overrides:Partial<typeof recoveryDefaults>={}){
   if(quoteToken.startsWith('solana:'))return recoverSolanaUsdtBridge(ownerId,quoteToken.slice(7))
   const deps={...recoveryDefaults,...overrides}
   const q=openUsdtBridgeQuote(quoteToken,ownerId,true),journalKey='pocket:usdt-bridge:'+q.id
   const existing=await deps.findAction(ownerId,journalKey,ACTION)
   const meta:Record<string,string>={...metadata(q,quoteToken),...(existing?.metadata||{})}
-    if(!existing)return {ok:true,status:'not_submitted'}
+    if(!existing){
+      if(!input.retireUnsubmitted||q.expiresAt>Date.now())return {ok:true,status:'not_submitted'}
+      // Reserve the same key atomically before retiring an expired unsigned draft.
+      // A delayed execute can no longer create a provider challenge after this wins.
+      const claim=await deps.claimAction({ownerId,idempotencyKey:journalKey,action:ACTION,metadata:meta})
+      if(!claim.claimed)return reconcileUsdtBridge(ownerId,quoteToken,{...input,retireUnsubmitted:false},overrides)
+      await deps.recordAction({ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,paymentState:'not_submitted'}})
+      return {ok:true,status:'not_submitted',reason:'approval_expired'}
+    }
     if(existing.status==='completed'){
-      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:q.provider},recordedAt:existing.updatedAt})
-      return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash}
+      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:q.provider,...(meta.settledAmountUnits?{settledAmountUnits:meta.settledAmountUnits,settledAmount:formatUnits(BigInt(meta.settledAmountUnits),6)}:{})},recordedAt:existing.updatedAt})
+      return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash,...(meta.settledAmountUnits?{amountOut:formatUnits(BigInt(meta.settledAmountUnits),6),settlement:{network:q.destination,transactionHash:meta.destinationTxHash,amountUnits:meta.settledAmountUnits}}:{})}
     }
     if(existing.status==='failed'){
       if(meta.paymentState==='not_submitted')return {ok:true,status:'not_submitted',reason:'approval_expired'}
@@ -157,7 +165,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       const delivery=await deps.relayDelivery(q,txHash)
       if(!('settlement' in delivery))return {ok:true,...delivery,txHash,sourceConfirmed:true}
       const settlement=delivery.settlement,refunded=delivery.status==='refunded'
-      await deps.recordAction({ownerId,idempotencyKey:journalKey,action:ACTION,status:refunded?'failed':'completed',resourceId:q.id,metadata:{...meta,txHash,sourceConfirmed:'true',destinationTxHash:settlement.transactionHash,paymentState:delivery.status,...(refunded?{refundNetwork:settlement.network,refundTxHash:settlement.transactionHash,refundAmount:formatUnits(BigInt(settlement.amountUnits),6),refundAmountUnits:settlement.amountUnits}:{})}})
+      await deps.recordAction({ownerId,idempotencyKey:journalKey,action:ACTION,status:refunded?'failed':'completed',resourceId:q.id,metadata:{...meta,txHash,sourceConfirmed:'true',destinationTxHash:settlement.transactionHash,paymentState:delivery.status,...(refunded?{refundNetwork:settlement.network,refundTxHash:settlement.transactionHash,refundAmount:formatUnits(BigInt(settlement.amountUnits),6),refundAmountUnits:settlement.amountUnits}:{settledAmountUnits:settlement.amountUnits})}})
       // Terminal reads retry the journal-to-ledger write gap without another payment.
       return reconcileUsdtBridge(ownerId,quoteToken,input,overrides)
     }
@@ -171,12 +179,17 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     const destinationTxHash=String(delivery.receiving?.txHash||'')
     if(!/^0x[0-9a-f]{64}$/i.test(destinationTxHash))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const destinationReceipt=await deps.client(q.destination).getTransactionReceipt({hash:destinationTxHash as Hex}).catch(()=>null)
+    if(!destinationReceipt||!sameAddress(destinationReceipt.transactionHash,destinationTxHash)||destinationReceipt.logs.some(log=>log.removed))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
+    const destinationRpc=deps.client(q.destination)
+    if(await destinationRpc.getChainId()!==POCKET_USDT_ASSETS[q.destination].chainId)return {ok:true,status:'needs_attention',txHash,sourceConfirmed:true}
+    const destinationBlock=await destinationRpc.getBlock({blockNumber:destinationReceipt.blockNumber})
+    if(!sameAddress(destinationBlock.hash,destinationReceipt.blockHash))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const received=destinationReceipt?.status==='success'?destinationReceipt.logs.reduce((sum,log)=>{
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.destination].address))return sum
       try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.to,q.destinationAddress)?BigInt(event.args.value):0n)-(sameAddress(event.args.from,q.destinationAddress)?BigInt(event.args.value):0n)}catch{return sum}
     },0n):0n
     if(received<BigInt(q.minimumUnits))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
-    const completed=await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash,sourceConfirmed:'true',paymentState:'completed'}})
-    await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:ownerId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{destinationTxHash,provider:'across'},recordedAt:completed.updatedAt})
-    return {ok:true,status:'completed',txHash,destinationTxHash}
+    const completed=await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash,sourceConfirmed:'true',paymentState:'completed',settledAmountUnits:String(received)}})
+    await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:ownerId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{destinationTxHash,provider:'across',settledAmountUnits:String(received),settledAmount:formatUnits(received,6)},recordedAt:completed.updatedAt})
+    return {ok:true,status:'completed',txHash,destinationTxHash,amountOut:formatUnits(received,6),settlement:{network:q.destination,transactionHash:destinationTxHash,amountUnits:String(received)}}
 }

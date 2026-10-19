@@ -1,4 +1,5 @@
 import { nativeHistoryNetworks, readPocketNativeHistory } from './native-wallet-activity.js'
+import {cashConversionActivity} from '../../src/pocket/lib/pocketCashConversion.js'
 import {readPocketEarnNoticeActivity} from './xstocks-notifications-store.js'
 import {giftActivityRow} from './gifts/receipts.js'
 import { collapsePocketAssetMoves } from '../../src/pocket/lib/pocketAssetMoveActivity.js'
@@ -54,6 +55,7 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if(record.action==='wallet.cash-conversion'&&record.metadata){const m=record.metadata;return cashConversionActivity({id:record.idempotencyKey.replace(/^pocket:cash-conversion:/,''),wallet:m.walletAddress,amount:m.amount,amountOut:m.amountOut,fee:m.feeAmount,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
   if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,feeAmount:record.metadata.feeAmount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
   if(record.action==='wallet.native-swap'&&record.metadata){
     const m=record.metadata

@@ -1,6 +1,7 @@
 import {createExchangeRateLimit} from './api/pocket/exchange-rate-limit.js'
 import pocketNativeSolanaSwapHandler from './api/pocket/native-solana-swap.js'
 import pocketNativeEvmSwapHandler from './api/pocket/native-evm-swap.js'
+import pocketCashConversionHandler from './api/pocket/cash-conversion.js'
 import pocketNativeSendHandler from './api/pocket/native-send.js'
 import foodDemoHandler from './api/food-demo.js'
 import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
@@ -421,6 +422,7 @@ app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
 app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
+app.all('/api/pocket/cash-conversion', exchangeLimiter, pocketCashConversionHandler)
 app.all('/api/pocket/native-solana-swap', exchangeLimiter, pocketNativeSolanaSwapHandler)
 app.all('/api/pocket/wallet-update/status', readLimiter, pocketWalletUpdateStatusHandler)
 app.all('/api/pocket/wallet-update/flow', strictLimiter, pocketMigrationFlowHandler)

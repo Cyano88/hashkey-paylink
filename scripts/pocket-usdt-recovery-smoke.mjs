@@ -18,17 +18,17 @@ const bridge={transactionId,bridge:'across',integrator:'hashpaylink',referrer:wa
 const event=USDT_TRANSFER_ABI.find(x=>x.name==='LiFiTransferStarted')
 const startLog={address:USDT_BRIDGE_ROUTER,topics:encodeEventTopics({abi:USDT_TRANSFER_ABI,eventName:'LiFiTransferStarted'}),data:encodeAbiParameters(event.inputs,[bridge])}
 const sourceReceipt={status:'success',logs:[transfer(tokenIn,wallet,USDT_BRIDGE_ROUTER,1000000n),startLog]}
-const destinationReceipt={status:'success',logs:[transfer(tokenOut,USDT_BRIDGE_ROUTER,recipient,994438n)]}
+const destinationReceipt={transactionHash:destinationTxHash,blockNumber:1n,blockHash:'0x'+'44'.repeat(32),status:'success',logs:[transfer(tokenOut,USDT_BRIDGE_ROUTER,recipient,994438n)]}
 const record={id:'record',ownerId:'owner',action:'wallet.usdt-bridge',status:'submitted',metadata:{quoteToken},updatedAt:Date.now()}
 let stored=record,ledger=[],writes=[]
-const deps={findAction:async()=>stored,recordAction:async input=>{writes.push(input);stored={...stored,...input};return stored},appendLedger:async input=>{ledger.push(input)},readActivity:async()=>[{assetSymbol:'USDT',direction:'out',ts:Date.now(),txHash}],client:network=>({getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:destinationReceipt}),fetch:async()=>({ok:true,json:async()=>({status:'DONE',substatus:'COMPLETED',sending:{txHash},receiving:{chainId:'8453',txHash:destinationTxHash}})})}
+const deps={findAction:async()=>stored,recordAction:async input=>{writes.push(input);stored={...stored,...input};return stored},appendLedger:async input=>{ledger.push(input)},readActivity:async()=>[{assetSymbol:'USDT',direction:'out',ts:Date.now(),txHash}],client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:destinationReceipt}),fetch:async()=>({ok:true,json:async()=>({status:'DONE',substatus:'COMPLETED',sending:{txHash},receiving:{chainId:'8453',txHash:destinationTxHash}})})}
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},deps)).status,'completed','lost SDK hash must recover from exact onchain quote event')
-assert.equal(ledger[0].asset,'USDT');assert.equal(stored.metadata.destinationTxHash,destinationTxHash)
-await reconcileUsdtBridge('owner',quoteToken,{},deps);assert.equal(ledger.length,2,'completed records retry idempotent ledger append')
+assert.equal(stored.metadata.settledAmountUnits,'994438');assert.equal(ledger[0].asset,'USDT');assert.equal(stored.metadata.destinationTxHash,destinationTxHash)
+const replay=await reconcileUsdtBridge('owner',quoteToken,{},deps);assert.equal(replay.amountOut,'0.994438');assert.equal(replay.settlement.amountUnits,'994438');assert.equal(ledger.length,2,'completed records retry idempotent ledger append')
 stored=record
-assert.equal((await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:{status:'success',logs:[transfer(tokenIn,USDT_BRIDGE_ROUTER,recipient,994438n)]}})})).status,'pending','wrong destination asset cannot complete bridge')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:{status:'success',logs:[transfer(tokenIn,USDT_BRIDGE_ROUTER,recipient,994438n)]}})})).status,'pending','wrong destination asset cannot complete bridge')
 stored=record
-assert.equal((await reconcileUsdtBridge('owner',quoteToken,{}, {...deps,client:()=>({getTransactionReceipt:async()=>({status:'success',logs:[]})})})).status,'pending','unrelated wallet debit cannot recover quote')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{}, {...deps,client:()=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>({status:'success',logs:[]})})})).status,'pending','unrelated wallet debit cannot recover quote')
 await assert.rejects(()=>reconcileUsdtBridge('other',quoteToken,{},deps))
 
 const row={eventId:'bridge',source:'wallet-bridge',chain:'arbitrum',destination:'base',payer:wallet,amount:'1',assetSymbol:'USDT',ts:Date.now()-40000,txHash,destinationTxHash,paycrestStatus:'completed',direction:'out'}
@@ -52,7 +52,7 @@ const chargedToken=sealUsdtBridgeQuote(charged)
 for(const destination of [EVM_PLATFORM_TREASURY,recipient]){
  stored=record
  const fundedReceipt={...sourceReceipt,logs:[...sourceReceipt.logs,transfer(tokenIn,wallet,destination,3000n)]}
- const result=await reconcileUsdtBridge('owner',chargedToken,{txHash},{...deps,client:network=>({getTransactionReceipt:async()=>network==='arbitrum'?fundedReceipt:destinationReceipt})})
+ const result=await reconcileUsdtBridge('owner',chargedToken,{txHash},{...deps,client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?fundedReceipt:destinationReceipt})})
  assert.equal(result.status,destination===EVM_PLATFORM_TREASURY?'completed':'needs_attention','exact reimbursement recipient is required')
 }
 stored=record
@@ -74,3 +74,36 @@ assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps)).sta
 stored={...record,metadata:{...record.metadata,challengeId:'unknown-challenge'}}
 const unknown=await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps);assert.equal(unknown.requiresWalletSession,true);assert.equal(stored.status,'submitted','missing hash or expired quote alone cannot clear an unknown payment')
 console.log('PASS verified unsubmitted approval retirement and missing-session recovery requirement')
+// Cash handoff must preserve actual net delivery, including across restarts.
+for(const [label,change,expected] of [
+ ['net output',r=>({...r,logs:[transfer(tokenOut,USDT_BRIDGE_ROUTER,recipient,1000000n),transfer(tokenOut,recipient,wallet,4000n)]}),'completed'],
+ ['wrong receipt',r=>({...r,transactionHash:txHash}),'pending'],
+ ['removed log',r=>({...r,logs:r.logs.map(log=>({...log,removed:true}))}),'pending'],
+ ['reorg',r=>({...r,blockHash:'0x'+'55'.repeat(32)}),'pending'],
+ ['net below minimum',r=>({...r,logs:[...r.logs,transfer(tokenOut,recipient,wallet,1n)]}),'pending'],
+]){
+ stored=structuredClone(record)
+ const receipt=change(destinationReceipt)
+ const result=await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({...deps.client(network),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:receipt})})
+ assert.equal(result.status,expected,label)
+ if(expected==='completed'){
+  assert.equal(result.amountOut,'0.996');assert.equal(stored.metadata.settledAmountUnits,'996000')
+  const replay=await reconcileUsdtBridge('owner',quoteToken,{},deps)
+  assert.equal(replay.amountOut,'0.996');assert.deepEqual(replay.settlement,result.settlement)
+ }else assert.equal(result.settlement,undefined,label+' cannot fund a conversion')
+}
+stored=structuredClone(record)
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({...deps.client(network),getChainId:async()=>1})})).status,'needs_attention')
+stored={...record,status:'completed',metadata:{...record.metadata,destinationTxHash}}
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},deps)).amountOut,undefined,'old completion never substitutes its quote for actual output')
+console.log('PASS Cash bridge handoff: exact net output, durable replay, canonical block/chain/hash, removed-log rejection and legacy unknown output.')
+// Retiring an expired draft must win a journal claim before it can report no debit.
+stored=null;let retiredClaims=0
+const retireDeps={...deps,claimAction:async input=>{retiredClaims++;stored={...record,...input,status:'started'};return{claimed:true,record:stored}}}
+const retired=await reconcileUsdtBridge('owner',quoteToken,{retireUnsubmitted:true},retireDeps)
+assert.equal(retired.reason,'approval_expired');assert.equal(retiredClaims,1);assert.equal(stored.status,'failed')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{retireUnsubmitted:true},retireDeps)).reason,'approval_expired');assert.equal(retiredClaims,1)
+stored=null
+const racing=await reconcileUsdtBridge('owner',quoteToken,{retireUnsubmitted:true},{...deps,readActivity:async()=>[],claimAction:async()=>{stored={...record,metadata:{...record.metadata,challengeId:'in-flight'}};return{claimed:false,record:stored}}})
+assert.equal(racing.status,'pending');assert.equal(stored.status,'submitted','a concurrent source submission cannot be retired')
+console.log('PASS expired pre-submit Cash draft retirement is atomic with a racing source execution.')

@@ -1,5 +1,6 @@
 import {reconcileNativeSolanaSwap} from './native-solana-swap-reconciliation.js'
 import {reconcileNativeEvmSwap} from './native-evm-swap-reconciliation.js'
+import {reconcileCashConversion} from './cash-conversion-reconciliation.js'
 import {reconcileNativeSend} from './native-send-reconciliation.js'
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
@@ -23,6 +24,7 @@ import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalE
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
 type Dependencies = {
+  reconcileCash:typeof reconcileCashConversion
   reconcileSolanaSwap:typeof reconcileNativeSolanaSwap
   reconcileNativeSwap: typeof reconcileNativeEvmSwap
   reconcileNative: typeof reconcileNativeSend
@@ -260,6 +262,7 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
 
 export async function runPocketReconciliation(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    reconcileCash:reconcileCashConversion,
     reconcileSolanaSwap:reconcileNativeSolanaSwap,
     reconcileNativeSwap:reconcileNativeEvmSwap,
     reconcileNative:reconcileNativeSend,
@@ -298,6 +301,11 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     if(record.action!=='wallet.native-swap')continue
     try{const result=await (record.metadata?.network==='solana'?dependencies.reconcileSolanaSwap:dependencies.reconcileNativeSwap)(record);results.push({id:record.id,kind:'native_swap',result:['completed','failed'].includes(result.status)?'reconciled':'unchanged'})}
     catch(error){results.push({id:record.id,kind:'native_swap',result:'error',message:errorText(error)})}
+  }
+  for(const record of await dependencies.listBridges('wallet.cash-conversion',Math.min(limit,20))){
+    if(record.action!=='wallet.cash-conversion')continue
+    try{const result=await dependencies.reconcileCash(record);results.push({id:record.id,kind:'cash_conversion',result:['completed','failed'].includes(result.status)?'reconciled':'unchanged'})}
+    catch(error){results.push({id:record.id,kind:'cash_conversion',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
   try { await dependencies.auditXLayerBilling() }
