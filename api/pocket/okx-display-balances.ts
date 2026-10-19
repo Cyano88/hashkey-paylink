@@ -1,4 +1,5 @@
 import {POCKET_EARN_DISPLAY_TOKENS} from '../../src/pocket/lib/pocketEarnDisplayAssets.js'
+import {canonicalStockHoldings} from './stock-display-holdings.js'
 import {createHmac} from 'node:crypto'
 import {createPublicClient,getAddress,http,parseUnits,type Address} from 'viem'
 import {okxCredentials} from './xstocks-swap-provider.js'
@@ -35,7 +36,8 @@ export async function fetchOkxDisplayBalances(owner:Address,previous?:StockBalan
  // Token decimals are contract metadata, cached per server process, not a recurring balance read.
  if(unknown.length){const client=createPublicClient({chain:pocketXLayer,transport:http(process.env.XLAYER_RPC_URL||pocketXLayer.rpcUrls.default.http[0],{retryCount:0,timeout:5000,fetchOptions:{signal}})});const results=await client.multicall({contracts:unknown.map(address=>({address:getAddress(address),abi:stockTokenAbi,functionName:'decimals' as const}))});results.forEach((r,i)=>{if(r.status!=='success'||!Number.isInteger(r.result)||r.result<0||r.result>36)throw Error('Token precision unavailable.');precision.set(unknown[i],Number(r.result))})}
  const units=(key:string)=>{const r=rows.get(key)!;const value=exactBalanceUnits(r.balance,precision.get(key)!);if(r.rawBalance!==undefined&&r.rawBalance!==''&&(typeof r.rawBalance!=='string'||!/^\d+$/.test(r.rawBalance)||BigInt(r.rawBalance)!==value))throw Error('Conflicting OKX balance units.');return value}
- return {source:'okx',holdings:held.map(([k])=>({asset:catalog.get(k)!,units:units(k),decimals:precision.get(k)!})),cash:units(cashKey),usdt:units(usdtKey),earn:{usdc:units(POCKET_EARN_DISPLAY_TOKENS[0]),usdt:units(POCKET_EARN_DISPLAY_TOKENS[1])},gas:units(''),complete:true,blockNumber:null,blockHash:null,fullScanAt:started,observedAt:started}
+ const holdings=await canonicalStockHoldings(owner,held.map(([k])=>({asset:catalog.get(k)!,units:units(k),decimals:precision.get(k)!})))
+ return {source:'okx',holdings,cash:units(cashKey),usdt:units(usdtKey),earn:{usdc:units(POCKET_EARN_DISPLAY_TOKENS[0]),usdt:units(POCKET_EARN_DISPLAY_TOKENS[1])},gas:units(''),complete:true,blockNumber:null,blockHash:null,fullScanAt:started,observedAt:started}
 }
 export function createStockDisplayReader(provider=fetchOkxDisplayBalances,rpc=readStockHoldings,now=Date.now){
  // A provider failure belongs to this wallet, not every Pocket user.
