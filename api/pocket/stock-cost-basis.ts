@@ -4,9 +4,15 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {okxCredentials} from './xstocks-swap-provider.js'
 import {stockNoticeClient,type StockNoticeStore} from './xstocks-notifications-store.js'
 import {stockAssets,stockGasPriceAddress} from '../../src/pocket/lib/pocketXStocksWallet.js'
-import {buildStockBasis,type StockBasis} from '../../src/pocket/lib/pocketStockPnl.js'
+import {type StockBasis} from '../../src/pocket/lib/pocketStockPnl.js'
+import {stockInvestmentNotices} from './stock-investment-ledger.js'
+import {readStockShareEvidence,stockSharePositions,underlyingStockPositions,type ShareEvidence} from './stock-share-basis.js'
+import {recoverStockInvestments} from './stock-investment-recovery.js'
 type CostCache={costs:Record<string,string>;retry:Record<string,number>}
 const key='pocket:stock-cost-basis:v2',jobs=new Map<string,Promise<void>>()
+type ShareCache={evidence:Record<string,ShareEvidence>;retry:Record<string,number>}
+const shareKey='pocket:stock-share-evidence:v1'
+const recoveryAttempts=new Map<string,number>()
 // Historical USD conversion is indicative, never today's OKB price applied to
 // an old purchase. Persist completed results; no price/RPC work on idle refresh.
 export function historicalClose(rows:unknown,at:number,columns=8){
@@ -52,14 +58,27 @@ export async function purchaseCost(n:StockNoticeStore['notices'][string],wallet:
 }
 export async function readStockBasis(owner:string,s:StockNoticeStore):Promise<StockBasis|null>{
  const wallet=s.wallets[owner];if(!wallet)return null
- const notices=Object.values(s.notices).filter(n=>n.owner===owner&&n.at>=wallet.since)
+ const notices=stockInvestmentNotices(s,owner)
  const cached=await readDurableJson<CostCache>(key)||{costs:{},retry:{}}
+ const shares=await readDurableJson<ShareCache>(shareKey)||{evidence:{},retry:{}}
+ const scope=wallet.address.toLowerCase()+':'
+ const relevant=notices.filter(n=>n.hash&&(n.trade||stockAssets.some(a=>a.address.toLowerCase()===n.transfer?.token.toLowerCase())))
+ const missing=[...new Set(relevant.map(n=>n.hash!.toLowerCase()))].filter(h=>!shares.evidence[scope+h]&&(shares.retry[scope+h]||0)<Date.now()).slice(0,4)
  const purchases=notices.filter(n=>n.trade&&stockAssets.some(a=>a.symbol===n.trade!.output.symbol)&&n.hash)
  const eligible=purchases.filter(n=>!cached.costs[n.hash!.toLowerCase()]&&(cached.retry[n.hash!.toLowerCase()]||0)<Date.now()).slice(0,4)
- if(eligible.length&&!jobs.has(owner)&&jobs.size<4){
-  const job=(async()=>{for(const n of eligible){const hash=n.hash!.toLowerCase();let cost:string|undefined;try{cost=await purchaseCost(n,wallet.address)}catch{/* Unknown cost stays unknown. */}
+ const recover=(recoveryAttempts.get(owner)||0)<Date.now()
+ if((eligible.length||missing.length||recover)&&!jobs.has(owner)&&jobs.size<4){
+  const job=(async()=>{
+   for(const hash of missing){let proof:ShareEvidence|undefined;try{proof=await readStockShareEvidence(hash,wallet.address)}catch{/* Keep unverified quantities out of P&L. */}
+    await mutateDurableJson<ShareCache>(shareKey,old=>{const next=old||{evidence:{},retry:{}};if(proof){next.evidence[scope+hash]=proof;delete next.retry[scope+hash]}else next.retry[scope+hash]=Date.now()+300000;return next})
+   }
+   for(const n of eligible){const hash=n.hash!.toLowerCase();let cost:string|undefined;try{cost=await purchaseCost(n,wallet.address)}catch{/* Unknown cost stays unknown. */}
    await mutateDurableJson<CostCache>(key,old=>{const next=old||{costs:{},retry:{}};if(cost){next.costs[hash]=cost;delete next.retry[hash]}else next.retry[hash]=Date.now()+300000;return next})
-  }})().catch(()=>undefined).finally(()=>jobs.delete(owner));jobs.set(owner,job)
+  }
+  if(recover){recoveryAttempts.set(owner,Date.now()+60000);await recoverStockInvestments(owner,wallet.address)}
+  })().catch(()=>undefined).finally(()=>jobs.delete(owner));jobs.set(owner,job)
  }
- return {wallet:wallet.address,positions:buildStockBasis(notices,stockAssets,cached.costs)}
+ const evidence=Object.fromEntries(Object.entries(shares.evidence).filter(([k])=>k.startsWith(scope)).map(([k,v])=>[k.slice(scope.length),v]))
+ const {positions,shareTokens}=stockSharePositions(notices,cached.costs,evidence)
+ return {wallet:wallet.address,positions:await underlyingStockPositions(positions,shareTokens)}
 }

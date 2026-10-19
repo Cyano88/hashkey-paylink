@@ -1,4 +1,5 @@
 import {pocketStockNoticeActivity} from '../../src/pocket/lib/pocketStockNoticeActivity.js'
+import {archiveStockInvestments} from './stock-investment-ledger.js'
 import {stockTradeProof,nativeTradeLegs,recordStockTradeNotices,type StockTradeProof} from './stock-trade-notifications.js'
 import {classifyEarnTransfer} from './earn-notifications.js'
 import {pocketEarnCompletion,type PocketEarnMovement} from '../../src/pocket/lib/pocketEarnNotice.js'
@@ -11,11 +12,11 @@ import { formatStockQuantity } from '../../src/pocket/lib/pocketStockDisplay.js'
 import { sendPocketPush, pocketPushConfigured, listPocketPushOwners } from './push-devices.js'
 export type StockNotice = { pushSuppressed?:boolean; tradeChecked?:boolean; trade?:{serviceFeeAmount?:string;feeAmount?:string;action:'buy'|'sell'|'swap';input:{symbol:string;amount:string};output:{symbol:string;amount:string}}; id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
 export type StockRequest = { id: string; eventId: string; sender: string; payer: string; senderPocketId: string; payerPocketId: string; address: string; payerAddress: string; token: string; symbol: string; amount: string; units: string; decimals: number; status: 'pending' | 'accepted' | 'declined' | 'paid'; at: number; updatedAt: number; hash?: string }
-export type StockNoticeStore = { wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
+export type StockNoticeStore = { investments?: Record<string,Record<string,StockNotice>>; wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
 export const STOCK_NOTICE_KEY = 'hashpaylink:pocket-xstocks-notifications:v1'
-export const normalizeStockNotices = (s?: StockNoticeStore): StockNoticeStore => ({wallets:s?.wallets||{},notices:s?.notices||{},requests:s?.requests||{},reads:s?.reads||{},cursor:s?.cursor,cursorHash:s?.cursorHash})
+export const normalizeStockNotices = (s?: StockNoticeStore): StockNoticeStore => ({investments:s?.investments||{},wallets:s?.wallets||{},notices:s?.notices||{},requests:s?.requests||{},reads:s?.reads||{},cursor:s?.cursor,cursorHash:s?.cursorHash})
 export const readStockNotices = async () => normalizeStockNotices(await readDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY))
-export const mutateStockNotices = (fn: (s: StockNoticeStore) => void) => mutateDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY, current => {const s=normalizeStockNotices(current);fn(s);return s})
+export const mutateStockNotices = (fn: (s: StockNoticeStore) => void) => mutateDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY, current => {const s=normalizeStockNotices(current);archiveStockInvestments(s);fn(s);archiveStockInvestments(s);return s})
 export const stockNoticeClient = createPublicClient({chain:xLayer,transport:http(process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',{timeout:10000,retryCount:0})})
 const allowed = new Map([stockUsdc,stockUsdt,...stockAssets].map(a=>[a.address.toLowerCase(),a]))
 const decimals = new Map<string,number>([[stockUsdc.address.toLowerCase(),6],[stockUsdt.address.toLowerCase(),6],['native',18]])
@@ -94,7 +95,7 @@ async function runStockNotifications(){
    await enrichEarnTransfers(transfers)
    const tradeProofs=await confirmedTradeProofs(transfers)
    const endBlock=await stockNoticeClient.getBlock({blockNumber:end});if(endBlock.hash!==blocks.get(end)?.hash)throw Error('Stock notification chain changed')
-   await mutateStockNotices(s=>{if(s.cursor!==snapshot.cursor||s.cursorHash!==snapshot.cursorHash)return;transfers.forEach(t=>recordStockTransfer(s,t));recordStockTradeNotices(s,transfers,tradeProofs);s.cursor=String(end);s.cursorHash=endBlock.hash;const cutoff=Date.now()-45*86400000;Object.entries(s.notices).forEach(([id,n])=>{if(n.at<cutoff)delete s.notices[id]});Object.entries(s.requests).forEach(([id,r])=>{if(r.updatedAt<cutoff&&(r.status==='paid'||r.status==='declined'))delete s.requests[id]})})
+   await mutateStockNotices(s=>{if(s.cursor!==snapshot.cursor||s.cursorHash!==snapshot.cursorHash)return;transfers.forEach(t=>recordStockTransfer(s,t));recordStockTradeNotices(s,transfers,tradeProofs);archiveStockInvestments(s);s.cursor=String(end);s.cursorHash=endBlock.hash;const cutoff=Date.now()-45*86400000;Object.entries(s.notices).forEach(([id,n])=>{if(n.at<cutoff)delete s.notices[id]});Object.entries(s.requests).forEach(([id,r])=>{if(r.updatedAt<cutoff&&(r.status==='paid'||r.status==='declined'))delete s.requests[id]})})
   }
  }
 }
