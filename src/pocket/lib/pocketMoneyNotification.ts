@@ -17,6 +17,13 @@ export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice
  if(source==='bank-withdraw'&&state==='expired'&&row.txHash)return null
  if(!success&&!refunded&&!refundAvailable&&!failed)return null
  if(!row.txHash)return null
+ if(source==='esim'){
+  if(!success&&!refunded&&!failed)return null
+  const status=refunded?'refunded':failed?'failed':'completed'
+  const tag='pocket-payment:esim:'+row.eventId
+  const plan=row.contextLabel||row.memo||'eSIM'
+  return {eventId:tag+':'+status,tag,title:refunded?'eSIM refunded':failed?'eSIM purchase failed':'eSIM ready',body:refunded?`Your eSIM payment of ${amount(row.amount,row.assetSymbol||'USDC')} was refunded.`:failed?'Your eSIM purchase was not completed. Open for details.':`Your ${plan} is ready to install.`,path:'/activity?receipt='+encodeURIComponent(row.eventId),occurredAt:row.statusUpdatedAt||row.ts}
+ }
  if(bank&&(!row.amountNgn||!Number.isFinite(Number(row.amountNgn))||Number(row.amountNgn)<=0))return null
  const local=(bank||bill)&&row.amountNgn&&['NGN','UGX'].includes(row.fiatCurrency||'NGN')?amount(row.amountNgn,row.fiatCurrency||'NGN'):amount(row.assetSymbol?formatStockQuantity(row.amount):row.amount,row.assetSymbol||'USDC')
  const gift=source==='gift'

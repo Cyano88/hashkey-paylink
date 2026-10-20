@@ -11,6 +11,6 @@ export function esimActivityRow(item: EsimIntent): PocketActivityRow | null {
     amount: item.state === 'refunded' ? item.price.total : item.totalDebit || item.price.total,
     feeAmount: item.state === 'refunded' ? undefined : formatUnits(parseUnits(item.price.platformFee, 6) + parseUnits(item.networkFee || '0', 6), 6),
     assetSymbol: item.asset, txHash: item.txHash, ...(item.refundTxHash ? { refundTxHash: item.refundTxHash } : {}),
-    ts: item.createdAt, paycrestStatus: status, direction: 'out', settlementType: 'esim_purchase',
+    ts: item.createdAt, statusUpdatedAt: item.updatedAt, paycrestStatus: status, direction: 'out', settlementType: 'esim_purchase',
   }
 }
