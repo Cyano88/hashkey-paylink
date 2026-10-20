@@ -78,7 +78,9 @@ export function readStockSwapFee(quote: Pick<StockSwapQuote, 'tx' | 'expectedOut
   const raw = quote.tx.data.toLowerCase()
   if (!raw.startsWith(canonical)) return fail()
   let tail = raw.slice(canonical.length)
-  const service=stockServiceTrailer(quote.tx.data)
+  // Compact native routes use their supplied ABI and cannot carry a stock fee.
+  // Unknown trailers still fail the strict positive-slippage checks below.
+  const service=routerAbi.some(method=>method.name===decoded.functionName)?stockServiceTrailer(quote.tx.data):undefined
   if(service)tail=tail.slice(0,-service.length)
   if (!tail) return undefined
   if (tail.length !== 128) return fail()
