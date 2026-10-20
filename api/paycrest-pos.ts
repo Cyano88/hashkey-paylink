@@ -364,7 +364,7 @@ export async function createPaycrestOfframpOrder(input: {
   if (token === 'USDT') {
     if (!usdtPayoutAllowed({wallet:input.payerWallet,account:input.accountNumber,bankCode:input.bankCode,amount:input.amountNgn})) throw Error('USDT bank payouts are not available yet.')
     if ((input.fiatCurrency || 'NGN') !== 'NGN') throw Error('USDT bank payouts currently support Nigeria only.')
-    if (input.source !== 'bank-withdraw') throw Error('USDT is only available for direct bank payouts.')
+    if (input.source !== 'bank-withdraw') throw Error('USDT is only available for bank cashouts.')
     const {readPaycrestBaseUsdtSupport}=await import('./paycrest-usdt.js')
     await readPaycrestBaseUsdtSupport()
   }

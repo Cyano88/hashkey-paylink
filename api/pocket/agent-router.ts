@@ -53,7 +53,7 @@ const ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRoute, 'source' | 
     action: { label: 'Open Requests', url: '/activity/collections' },
   },
   'bank-payout': {
-    answer: 'Direct bank payout sends Naira to a verified Nigerian bank account from available Pocket USDC. Pocket shows the live quote and requires your confirmation before submission.',
+    answer: 'Bank cashout sends Naira to a verified Nigerian bank account from available Pocket USDC. Pocket shows the live quote and requires your confirmation before submission.',
     action: { label: 'Bank payout', url: '/move/bank' },
   },
   'retail-pos': {

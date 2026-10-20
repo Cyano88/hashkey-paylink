@@ -665,7 +665,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
         memo: isBankSendOrder
           ? (link?.display_name || 'Bank send funding')
           : isBankWithdrawOrder
-            ? 'Direct bank payout'
+            ? 'Bank cashout'
           : isBankReceiveOrder
             ? 'Bank receive payment'
             : 'Retail POS payment',
@@ -683,7 +683,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
           ? `${order.destination_network || link?.destination_network || 'base'} USDC ${shortAddress(order.destination_address || link?.destination_address || '')}`.trim()
           : order.bank_name
             ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
-            : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
+            : isBankWithdrawOrder ? 'Bank cashout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
         fiatCurrency: order.fiat_currency || 'NGN',
@@ -895,7 +895,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const sourceToken = baseStablecoin(body.source_asset)
   if (sourceToken === 'USDT' && !usdtPayoutAllowed({wallet:body.wallet_address,account:body.account_number,bankCode:body.bank_code,amount:body.amount})) throw ngPosRequestError(503, 'USDT bank payouts are not available yet.')
   if (sourceToken === 'USDT' && country !== 'NG') throw ngPosRequestError(400, 'USDT bank payouts currently support Nigeria only.')
-  if (sourceToken === 'USDT' && !directPayout) throw ngPosRequestError(400, 'USDT requires a direct bank payout.')
+  if (sourceToken === 'USDT' && !directPayout) throw ngPosRequestError(400, 'USDT requires a bank cashout.')
   const merchantSource = directPayout ? 'bank-withdraw' : 'bank-receive'
   const existingMerchant = Object.values(store.merchants).find(merchant => (
     merchant.owner_id === ownerId && merchant.source === merchantSource && merchant.idempotency_key === idempotencyKey
@@ -943,7 +943,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const ownerEmail = session.email || suppliedOwnerEmail
   const ownerFirstName = cleanText(body.owner_first_name, '')
   const ownerLastName = cleanText(body.owner_last_name, '')
-  const displayName = cleanText(body.display_name || body.memo, directPayout ? 'Direct bank payout' : 'Bank receive')
+  const displayName = cleanText(body.display_name || body.memo, directPayout ? 'Bank cashout' : 'Bank receive')
   const useSavedBank = body.use_saved_bank === true || body.use_saved_bank === 'true'
   const savedBankMerchant = useSavedBank
     ? Object.values(store.merchants ?? {})

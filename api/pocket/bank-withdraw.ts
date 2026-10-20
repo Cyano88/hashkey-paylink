@@ -318,7 +318,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
             && replay.metadata.bankName === text(req.body?.bank_name, 160)
             && replay.metadata.bankLast4 === accountNumber.slice(-4)
             && replay.metadata.accountName === text(req.body?.account_name, 200)
-            && replay.metadata.memo === (text(req.body?.memo, 180) || 'Direct bank payout')
+            && text(replay.metadata.memo, 180).replace(/^Direct bank payout$/i, 'Bank cashout') === (text(req.body?.memo, 180) || 'Bank cashout').replace(/^Direct bank payout$/i, 'Bank cashout')
             && (!replay.metadata.beneficiaryFingerprint || replay.metadata.beneficiaryFingerprint === requestedBeneficiary)
           if (!sameRequest) {
             return res.status(409).json({ ok: false, error: 'This payment retry belongs to different payout details. Start a new payment.' })
@@ -343,7 +343,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
             account_number: accountNumber,
             flexible_amount: false,
             direct_payout: true,
-            display_name: text(req.body?.memo) || 'Direct bank payout',
+            display_name: text(req.body?.memo) || 'Bank cashout',
             client_origin: text(req.body?.client_origin),
           },
         } as Request
@@ -373,7 +373,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
             accountName: text(req.body?.account_name, 200),
             amountNgn: amount,
             fiatCurrency: currency,
-            memo: text(req.body?.memo, 180) || 'Direct bank payout',
+            memo: text(req.body?.memo, 180) || 'Bank cashout',
           },
         })
         const authorized = execution.intent.state === 'prepared'
