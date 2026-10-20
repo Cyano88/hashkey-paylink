@@ -6,7 +6,7 @@ import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
 import { parseUnits } from 'viem'
-import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner, ownsNgPosMerchant, listPocketBankRecipients } from '../ng-pos.js'
+import ngPosHandler, { paycrestActivityTimestamp, createNgPosBankReceive, listNgPosHistoryForOwner, ownsNgPosMerchant, listPocketBankRecipients } from '../ng-pos.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
 import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
@@ -104,6 +104,7 @@ function payoutNextAction(order: any, execution?: PaymentExecutionIntent, route?
 export function publicOrder(order: any, execution?: PaymentExecutionIntent, route?: BankPayoutRoute) {
   return {
     intentId: text(order?.intent_id),
+    createdAt: paycrestActivityTimestamp(order || {}),
     orderId: text(order?.paycrest_order_id),
     merchantId: text(order?.merchant_id),
     amountNgn: text(order?.amount_ngn),
