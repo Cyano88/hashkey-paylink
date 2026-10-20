@@ -1,21 +1,23 @@
 import {pocketExchangeNotification} from './pocketExchangeNotification'
 import { formatStockQuantity } from './pocketStockDisplay'
 import type { PocketActivityRow } from '../models/pocketActivity'
+import { pocketBankStatus } from './pocketBankStatus'
 import { isIncomingPosPayment } from './pocketPurchaseKind'
 export type PocketMoneyNotice = { eventId:string; title:string; body:string; path:string; tag:string; occurredAt:number }
 const labels:Record<string,string>={base:'Base',arc:'Arc',polygon:'Polygon',arbitrum:'Arbitrum',ethereum:'Ethereum',solana:'Solana',xlayer:'X Layer'}
 const amount=(value:string,currency:string)=>currency==='NGN'?'\u20a6'+Number(value).toLocaleString('en-NG',{maximumFractionDigits:2}):currency==='UGX'?'UGX '+Number(value).toLocaleString('en-UG',{maximumFractionDigits:2}):value+' '+currency
 /** Notification truth follows the original purchase, never its funding debit. */
 export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice|null {
- const source=(row.source||'').replace(/_/g,'-'),state=(row.bankSettlementStatus||row.paycrestStatus||'').toLowerCase()
+ const source=(row.source||'').trim().toLowerCase().replace(/_/g,'-'),state=(row.bankSettlementStatus||row.paycrestStatus||'').trim().toLowerCase().replace(/_/g,' ')
  if(row.fundingOnly||row.fundingParent||source==='request'||source==='collection')return null
  if(source==='wallet-swap'||source==='wallet-bridge')return pocketExchangeNotification(row)
  const refunded=['refunded','reversed'].includes(state),refundAvailable=state==='refund available',failed=['failed','rejected','cancelled','canceled','expired','reverted'].includes(state)
  const bank=source==='bank-withdraw',bill=source==='bills',merchant=isIncomingPosPayment(row)||source==='bank-receive',purchase=source==='purchase'||source==='xpay'
- const success=(bank?['settled','completed']:bill?['delivered']:['confirmed','completed','successful','success','settled','paid']).includes(state)
+ const success=bank?pocketBankStatus(state)==='successful':(bill?['delivered']:['confirmed','completed','successful','success','settled','paid']).includes(state)
+ if(source==='bank-withdraw'&&state==='expired'&&row.txHash)return null
  if(!success&&!refunded&&!refundAvailable&&!failed)return null
  if(!row.txHash)return null
- if(bank&&(!row.amountNgn||!Number.isFinite(Number(row.amountNgn))))return null
+ if(bank&&(!row.amountNgn||!Number.isFinite(Number(row.amountNgn))||Number(row.amountNgn)<=0))return null
  const local=(bank||bill)&&row.amountNgn&&['NGN','UGX'].includes(row.fiatCurrency||'NGN')?amount(row.amountNgn,row.fiatCurrency||'NGN'):amount(row.assetSymbol?formatStockQuantity(row.amount):row.amount,row.assetSymbol||'USDC')
  const gift=source==='gift'
  const kind=gift?(row.direction==='in'?'Gift received':'Gift funded'):bank?'Bank transfer':bill?({airtime:'Airtime',data:'Data',electricity:'Electricity',tv:'TV'}[row.billCategory||'airtime']):merchant?'XPay payment':purchase?'Payment':source==='wallet-bridge'?'Bridge':source==='wallet-swap'?'Swap completed':row.direction==='in'?(row.assetSymbol||'USDC')+' received':(row.assetSymbol||'USDC')+' sent'
