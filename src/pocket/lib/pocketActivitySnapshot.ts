@@ -6,7 +6,9 @@ const transactionKey = (row: PocketActivityRow) => JSON.stringify([
 ])
 const decimalIdentity = (value: string) => value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
 const isBank = (row:PocketActivityRow) => String(row.source || '').replace(/_/g,'-').startsWith('bank-')
-const rowKey = (row: PocketActivityRow) => isBank(row) && (row.bankOrderId || row.providerReference)
+const durableBsc = (row:PocketActivityRow) => row.eventId.startsWith('pocket-bsc-swap:')
+const terminalBsc = (row:PocketActivityRow) => durableBsc(row)&&['completed','failed'].includes(row.paycrestStatus||'')
+const rowKey = (row: PocketActivityRow) => durableBsc(row) ? JSON.stringify([row.chain,row.source,row.eventId]) : isBank(row) && (row.bankOrderId || row.providerReference)
   ? JSON.stringify([row.chain.toLowerCase(),row.bankOrderId || row.providerReference,row.source]) : JSON.stringify([
   row.providerReference ? row.chain + ':' + row.providerReference : transactionKey(row), row.source || '', row.direction || '', row.eventId,
 ])
@@ -15,7 +17,8 @@ const rowKey = (row: PocketActivityRow) => isBank(row) && (row.bankOrderId || ro
 export function mergePocketActivityRows(previous: PocketActivityRow[], incoming: PocketActivityRow[]) {
   const normalize = (row: PocketActivityRow): PocketActivityRow => !row.memo?.trim() && ['earn-deposit','earn-withdraw'].includes(row.source || '')
     ? {...row,memo:row.source === 'earn-deposit' ? 'Added to Earn' : 'Withdrawn from Earn'} : row
-  const rows = new Map(previous.map(normalize).map(row => [rowKey(row), row]))
+  const rows = new Map<string,PocketActivityRow>()
+  for(const row of previous.map(normalize)){const old=rows.get(rowKey(row));if(old&&terminalBsc(old)&&!terminalBsc(row))continue;rows.set(rowKey(row),row)}
   for (const row of incoming.map(normalize)) {
     let old = rows.get(rowKey(row))
     for (const [key,candidate] of rows) {
@@ -28,6 +31,7 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
       const sameBill = row.source === 'bills' && candidate.source === 'bills' && row.chain === candidate.chain && row.eventId === candidate.eventId
       if(alias || sameOrder || sameBill){if(!old || candidate.ts<old.ts)old=candidate;rows.delete(key)}
     }
+    if(old&&terminalBsc(old)&&durableBsc(row)&&!terminalBsc(row)){rows.set(rowKey(old),old);continue}
     if (row.fundingOnly && old && !old.fundingOnly) { rows.set(rowKey(old), {...old,paymentFunding:row.paymentFunding || old.paymentFunding}); continue }
     // The current source owns mutable fields, including removal of refund actions.
     const bank = String(row.source || '').replace(/_/g, '-').startsWith('bank-')

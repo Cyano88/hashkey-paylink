@@ -1,3 +1,4 @@
+import {readBscWalletActivity} from './bsc-wallet-activity.js'
 import {bscSwapActivity} from '../../src/pocket/lib/pocketBscActivity.js'
 import { nativeHistoryNetworks, readPocketNativeHistory } from './native-wallet-activity.js'
 import {cashConversionActivity} from '../../src/pocket/lib/pocketCashConversion.js'
@@ -450,7 +451,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   transformSnapshot: transformPocketActivitySnapshot,
-  sources: { ...Object.fromEntries(nativeHistoryNetworks.map(network=>['native-'+network,(owner:string)=>readPocketNativeHistory(owner,network)])), earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
+  sources: { bsc: async owner=>({payments:await readBscWalletActivity(owner),merchants:[],collections:[]}), ...Object.fromEntries(nativeHistoryNetworks.map(network=>['native-'+network,(owner:string)=>readPocketNativeHistory(owner,network)])), earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])) },
 })

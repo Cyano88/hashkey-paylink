@@ -34,7 +34,7 @@ export function createBscSwapHandler(d:Dependencies){
    const action=req.body?.action
    if(!['quote','prepare','submit','status','cancel','balances','capabilities'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
    // Recovery and cancellation remain available when new execution is disabled.
-   if(!['status','cancel','capabilities'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'BNB Chain swaps are not available yet.'})
+   if(!['status','cancel','capabilities','balances'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'BNB Chain swaps are not available yet.'})
    const wallet=req.body?.wallet
    if(typeof wallet!=='string'||!isAddress(wallet))return res.status(400).json({ok:false,error:'Reconnect your wallet.'})
    const user=await d.user(userId)

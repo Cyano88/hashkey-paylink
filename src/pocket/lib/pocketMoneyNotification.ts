@@ -3,7 +3,7 @@ import { formatStockQuantity } from './pocketStockDisplay'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isIncomingPosPayment } from './pocketPurchaseKind'
 export type PocketMoneyNotice = { eventId:string; title:string; body:string; path:string; tag:string; occurredAt:number }
-const labels:Record<string,string>={base:'Base',arc:'Arc',polygon:'Polygon',arbitrum:'Arbitrum',ethereum:'Ethereum',solana:'Solana',xlayer:'X Layer'}
+const labels:Record<string,string>={base:'Base',arc:'Arc',polygon:'Polygon',arbitrum:'Arbitrum',ethereum:'Ethereum',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain'}
 const amount=(value:string,currency:string)=>currency==='NGN'?'\u20a6'+Number(value).toLocaleString('en-NG',{maximumFractionDigits:2}):currency==='UGX'?'UGX '+Number(value).toLocaleString('en-UG',{maximumFractionDigits:2}):value+' '+currency
 /** Notification truth follows the original purchase, never its funding debit. */
 export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice|null {

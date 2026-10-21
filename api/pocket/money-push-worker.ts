@@ -1,3 +1,5 @@
+import {readBscWalletActivity} from './bsc-wallet-activity.js'
+import {readBscWallet} from './bsc-wallet.js'
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
 import { readPocketNotificationActivity } from './activity.js'
 import { reconcileUsdtBridge } from './usdt-bridge.js'
@@ -47,8 +49,8 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
   const dependencies: Dependencies = {
     configured: pocketPushConfigured,
     listOwners: listPocketPushOwners,
-    readActivity: readPocketWalletChainActivity,
-    readWallets: readPocketLinkedWalletAddresses,
+    readActivity: async (owner,options)=>{const [circle,bsc]=await Promise.all([readPocketWalletChainActivity(owner,options),readBscWalletActivity(owner).catch(()=>[])]);return [...circle,...bsc]},
+    readWallets: async owner=>{const [circle,bsc]=await Promise.all([readPocketLinkedWalletAddresses(owner),readBscWallet(owner).catch(()=>null)]);return [...circle,...(bsc?[{network:'bsc',walletAddress:bsc.address}]:[])]},
     listActions: listCirclePocketActions,
     listRequests: pocketRequestRepository.listFor,
     markRequestPaid: pocketRequestRepository.markPaid,
@@ -102,9 +104,10 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         return (source === 'wallet-deposit' || source === 'wallet-withdrawal')
           && String(row.paycrestStatus ?? '').toLowerCase() === 'confirmed'
           && Boolean(row.txHash)
-          && row.ts >= cutoff
+          && row.ts >= (row.chain==='bsc'?dependencies.now()-24*60*60_000:cutoff)
       }
       const matchingAcceptedRequest = (row: (typeof rows)[number]) => requests.find(request => {
+        if(row.chain==='bsc')return false // BNB deposits cannot settle Circle request payments.
         if (row.assetSymbol && row.assetSymbol !== 'USDC') return false
         if (request.status !== 'accepted' || row.ts < request.updatedAt || Number(row.amount) !== Number(request.amount)) return false
         const senderAddress = request.senderAddress?.toLowerCase()

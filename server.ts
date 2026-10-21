@@ -1,3 +1,4 @@
+import pocketBscAccountHandler from './api/pocket/bsc-account.js'
 import pocketBscSwapHandler from './api/pocket/bsc-service.js'
 import {createExchangeRateLimit} from './api/pocket/exchange-rate-limit.js'
 import pocketNativeSolanaSwapHandler from './api/pocket/native-solana-swap.js'
@@ -422,6 +423,7 @@ app.all('/api/pocket/bridge/solana/submit', relayLimiter, pocketSolanaCctpSubmit
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
+app.get('/api/pocket/bsc-account', readLimiter, pocketBscAccountHandler)
 app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)
 app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
 app.all('/api/pocket/cash-conversion', exchangeLimiter, pocketCashConversionHandler)
