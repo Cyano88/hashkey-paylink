@@ -1,3 +1,4 @@
+import {reconcileBscSwaps} from './bsc-service.js'
 import {reconcileNativeSolanaSwap} from './native-solana-swap-reconciliation.js'
 import {reconcileNativeEvmSwap} from './native-evm-swap-reconciliation.js'
 import {reconcileCashConversion} from './cash-conversion-reconciliation.js'
@@ -24,6 +25,7 @@ import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalE
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
 type Dependencies = {
+  reconcileBsc:typeof reconcileBscSwaps
   reconcileCash:typeof reconcileCashConversion
   reconcileSolanaSwap:typeof reconcileNativeSolanaSwap
   reconcileNativeSwap: typeof reconcileNativeEvmSwap
@@ -262,6 +264,7 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
 
 export async function runPocketReconciliation(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    reconcileBsc:reconcileBscSwaps,
     reconcileCash:reconcileCashConversion,
     reconcileSolanaSwap:reconcileNativeSolanaSwap,
     reconcileNativeSwap:reconcileNativeEvmSwap,
@@ -308,6 +311,8 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch(error){results.push({id:record.id,kind:'cash_conversion',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
+  try { const bsc=await dependencies.reconcileBsc(Math.min(limit,20));if(bsc.checked)results.push({id:'bsc-swaps',kind:'wallet_swap',result:bsc.unresolved?'review':'reconciled'}) }
+  catch(error){results.push({id:'bsc-swaps',kind:'wallet_swap',result:'error',message:errorText(error)})}
   try { await dependencies.auditXLayerBilling() }
   catch(error){results.push({id:'xlayer-sponsorship-billing',kind:'operations',result:'error',message:errorText(error)})}
   const threshold = submittedReviewThresholdMs()

@@ -23,7 +23,11 @@ export function encodeXLayerSponsoredBatch(calls:XLayerCall[]):Hex{
 }
 /** Read-only simulation, not a Privy billing quote. No signing or broadcasting. */
 export async function estimateXLayerSponsoredBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:XLayerCall[]){
- if(!isAddress(wallet)||await rpc('eth_chainId',[])!=='0xc4')return invalid()
+ return estimatePrivySponsoredBatchGas(rpc,wallet,calls,196)
+}
+/** Shared Privy Kernel simulation; each caller must supply its fixed network. */
+export async function estimatePrivySponsoredBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:XLayerCall[],chainId:56|196){
+ if(![56,196].includes(chainId)||!isAddress(wallet)||await rpc('eth_chainId',[])!=='0x'+chainId.toString(16))return invalid()
  const code=await rpc('eth_getCode',[wallet,'latest'])
  const requiresDelegation=code==='0x'
  // Never replace another delegation. A code-only override models Privy's

@@ -10,10 +10,10 @@ for(const value of ['',null,' ','-1','NaN','1e6'])assert.throws(()=>xlayerBilled
 assert.throws(()=>xlayerBilledUsdMicros({value:'1',currency:'eur'}))
 const attempt={wallet,at:now-60000,hash,coverage:{walletId:'wallet1',asset:'USDC',feeUnits:'10000'}}
 const topics=encodeEventTopics({abi:parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)']),eventName:'Transfer',args:{from:wallet,to:EVM_PLATFORM_TREASURY}})
-function fixture(){
+function fixture(transactionSpend,additionalCoverage){
  let halted
  const s={billed:285n,usd:1,chain:'0xc4',missing:false,reorg:false,priceAge:0,status:'0x1',logs:[{address:token,topics,data:toHex(10000n,{size:32})}],reads:0}
- const guard=createXLayerBillingGuard({now:()=>now,readHalt:async()=>halted,halt:async value=>{halted||=value},prices:async()=>({[token]:{usd:s.usd,fetchedAt:now-s.priceAge}}),spend:async(id,start,end)=>{assert.equal(id,'wallet1');assert.equal(start,attempt.at-1000);assert.equal(end,now);s.reads++;return s.billed},rpc:async(method)=>{if(method==='eth_chainId')return s.chain;if(method==='eth_getTransactionReceipt')return s.missing?null:{transactionHash:hash,blockHash,blockNumber:'0x1',status:s.status,logs:s.logs};if(method==='eth_getBlockByNumber')return {hash:s.reorg?'0x'+'c'.repeat(64):blockHash};throw Error('Unexpected RPC')}})
+ const guard=createXLayerBillingGuard({transactionSpend,additionalCoverage,now:()=>now,readHalt:async()=>halted,halt:async value=>{halted||=value},prices:async()=>({[token]:{usd:s.usd,fetchedAt:now-s.priceAge}}),spend:async(id,start,end)=>{assert.equal(id,'wallet1');assert.equal(start,attempt.at-1000);assert.equal(end,now);s.reads++;return s.billed},rpc:async(method)=>{if(method==='eth_chainId')return s.chain;if(method==='eth_getTransactionReceipt')return s.missing?null:{transactionHash:hash,blockHash,blockNumber:'0x1',status:s.status,logs:s.logs};if(method==='eth_getBlockByNumber')return {hash:s.reorg?'0x'+'c'.repeat(64):blockHash};throw Error('Unexpected RPC')}})
  return {s,guard,get halted(){return halted}}
 }
 let f=fixture();await f.guard([attempt]);assert.equal(f.halted,undefined)
@@ -27,3 +27,12 @@ f=fixture();f.s.usd=0.5;f.s.billed=5000n;await assert.rejects(()=>f.guard([attem
 f=fixture();await f.guard([{...attempt,coverage:undefined}]);assert.equal(f.s.reads,0,'Legacy records are not counted as reimbursement')
 f=fixture();await f.guard([attempt],'0x2222222222222222222222222222222222222222');assert.equal(f.s.reads,0)
 console.log('PASS billing guard: proven collection, billed-cost halt, persistent stop, canonical receipts, reverts, missing evidence, duplicate hashes, depeg and wallet scope; no funds moved.')
+
+f=fixture(async records=>{assert.equal(records.length,1);return 285n});f.s.billed=999999999n;await f.guard([attempt]);assert.equal(f.halted,undefined);assert.equal(f.s.reads,0,'Transaction billing never reads mixed-chain wallet totals')
+f=fixture(async()=>{throw Error('billing pending')});await assert.rejects(()=>f.guard([attempt]),/billing pending/);assert.equal(f.halted,undefined)
+console.log('PASS X Layer transaction billing mode ignores wallet-wide costs and leaves missing invoices unresolved')
+
+f=fixture(undefined,async()=>[{walletId:'wallet1',at:attempt.at,hash:'0x'+'e'.repeat(64),coverageUsdMicros:10000n}]);f.s.billed=15000n;await f.guard([attempt]);assert.equal(f.halted,undefined)
+f.s.billed=19501n;await assert.rejects(()=>f.guard([attempt]),/paused/);assert.equal(f.halted.coverageUsdMicros,'19500')
+f=fixture(undefined,async()=>{throw Error('Unproven BSC fee')});await assert.rejects(()=>f.guard([attempt]),/Unproven/);assert.equal(f.halted,undefined)
+console.log('PASS combined-chain coverage: wallet invoice includes only independently proven BSC plus X Layer fees; no gas subtraction or historical ID guess')

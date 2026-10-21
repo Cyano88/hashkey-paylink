@@ -2,7 +2,7 @@ import type {PocketActivityRow} from '../models/pocketActivity'
 import {isCashConversion,isCashFunding} from './pocketCashConversion'
 import {formatStockQuantity} from './pocketStockDisplay'
 
-const networks:Record<string,string>={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer'}
+const networks:Record<string,string>={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain'}
 const valid=(value:string|undefined)=>!!value&&/^\d+(?:\.\d+)?$/.test(value)&&Number.isFinite(Number(value))&&Number(value)>0
 const quantity=(value:string,symbol:string)=>formatStockQuantity(value)+' '+symbol
 /** Exchange notifications use terminal journal truth, never a quote or a source-only confirmation. */

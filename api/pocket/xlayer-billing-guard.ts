@@ -1,10 +1,14 @@
+import {bscCollectedCoverage,type BscCollectedCoverage} from './bsc-collected-coverage.js'
+import {createBscRuntime} from './bsc-runtime.js'
+import type {BscOperationStore} from './bsc-operations.js'
+import {sumPrivyTransactionGas} from './privy-transaction-gas.js'
 import {encodeEventTopics,parseAbi} from 'viem'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {readStockMarketPrices} from './xstocks-prices.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
 export type XLayerCoverage={walletId:string;asset:'USDC'|'USDT';feeUnits:string}
-type Attempt={wallet:string;at:number;hash?:string;coverage?:XLayerCoverage;providerFailure?:{status:number;code?:string}}
+type Attempt={wallet:string;at:number;hash?:string;transactionId?:string;coverage?:XLayerCoverage;providerFailure?:{status:number;code?:string}}
 type Halt={haltedAt:number;reason:'billed_cost_exceeds_coverage';billedUsdMicros:string;coverageUsdMicros:string}
 const key='pocket:xlayer-billing-halt:v1'
 const tokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c9e1022225f8e0630b35a9b54be713736'}
@@ -21,13 +25,18 @@ export function xlayerBilledUsdMicros(b:any){
 export function createXLayerBillingGuard(d:{
  now():number;readHalt():Promise<Halt|undefined>;halt(value:Halt):Promise<unknown>;
  spend(walletId:string,start:number,end:number):Promise<bigint>;
+ transactionSpend?(records:Attempt[]):Promise<bigint>;
+ additionalCoverage?(wallet?:string):Promise<BscCollectedCoverage[]>;
  rpc(method:string,params:unknown[]):Promise<any>;
  prices:typeof readStockMarketPrices;
 }){
  return async(attempts:Attempt[],wallet?:string)=>{
   if(await d.readHalt())throw Error('X Layer sponsorship is paused for a fee review.')
   const now=d.now(),recent=attempts.filter(r=>r.coverage&&r.at>=now-28*86400000&&(!wallet||same(r.wallet,wallet)))
-  const walletIds=[...new Set(recent.map(r=>r.coverage!.walletId))]
+  const extra=await d.additionalCoverage?.(wallet)||[]
+  if(d.transactionSpend&&extra.length)return unavailable()
+  if(extra.some(r=>!Number.isSafeInteger(r.at)||r.at<now-28*86400000||r.at>now||typeof r.coverageUsdMicros!=='bigint'||r.coverageUsdMicros<0n)||new Set(extra.map(r=>r.hash.toLowerCase())).size!==extra.length)return unavailable()
+  const walletIds=[...new Set([...recent.map(r=>r.coverage!.walletId),...extra.map(r=>r.walletId)])]
   if(!walletIds.length)return
   if(await d.rpc('eth_chainId',[])!=='0xc4')return unavailable()
   const prices=await d.prices(Object.values(tokens))
@@ -37,7 +46,8 @@ export function createXLayerBillingGuard(d:{
    const records=recent.filter(r=>r.coverage!.walletId===walletId)
    const hashes=records.filter(r=>r.hash).map(r=>r.hash!.toLowerCase())
    if(new Set(hashes).size!==hashes.length)return unavailable()
-   let coverage=0n
+   const supplemental=extra.filter(r=>r.walletId===walletId)
+   let coverage=supplemental.reduce((sum,r)=>sum+r.coverageUsdMicros,0n)
    // An unresolved broadcast cannot be treated as a collected reimbursement.
    // Block further spending until canonical receipts can be checked; recovery
    // remains available through the existing status and reconciliation paths.
@@ -65,7 +75,7 @@ export function createXLayerBillingGuard(d:{
     }))
     coverage+=collected.reduce((sum,value)=>sum+value,0n)
    }
-   const billed=await d.spend(walletId,Math.max(0,Math.min(...records.map(r=>r.at))-1000),now)
+   const billed=d.transactionSpend?await d.transactionSpend(records):await d.spend(walletId,Math.max(0,Math.min(...records.map(r=>r.at),...supplemental.map(r=>r.at))-1000),now)
    if(billed<0n)return unavailable()
    if(billed>coverage){
     await d.halt({haltedAt:now,reason:'billed_cost_exceeds_coverage',billedUsdMicros:String(billed),coverageUsdMicros:String(coverage)})
@@ -86,6 +96,21 @@ export async function checkXLayerBillingCoverage(wallet?:string){
  const read=await readDurableJson<{requests:{[id:string]:Attempt}}>('pocket:xlayer-sponsorship:v1')
  const guard=createXLayerBillingGuard({now:Date.now,readHalt:()=>readDurableJson<Halt>(key),halt:value=>mutateDurableJson<Halt>(key,old=>old||value),prices:readStockMarketPrices,
   rpc:async(method,params)=>{const r=await fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(15000)});const b=await r.json();if(!r.ok||b.error||b.result===undefined)return unavailable();return b.result},
+  ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED==='true'?{additionalCoverage:async(wallet?:string)=>{
+   const store=await readDurableJson<BscOperationStore>('pocket:bsc-operations:v1')
+   const ops=Object.values(store?.operations||{})
+   if(!ops.length)return []
+   const runtime=createBscRuntime()
+   return bscCollectedCoverage(ops,{now:Date.now(),rpc:runtime.rpc,prices:runtime.readPrices},wallet)
+  }}:{}),
+  ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED!=='true'&&env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED==='true'?{transactionSpend:async(records:Attempt[])=>{
+   const sent=records.filter(r=>r.hash||!(r.providerFailure?.status===400&&r.providerFailure.code==='transaction_broadcast_failure'))
+   if(sent.some(r=>!r.hash||!r.transactionId||!r.coverage))return unavailable()
+   return sumPrivyTransactionGas(sent.map(r=>({transactionId:r.transactionId!,walletId:r.coverage!.walletId,chainId:196,hash:r.hash! as `0x${string}`})),async id=>{
+    const r=await fetch('https://api.privy.io/v1/transactions/'+encodeURIComponent(id),{redirect:'error',headers:{'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')},signal:AbortSignal.timeout(15000)})
+    if(!r.ok)return unavailable();return r.json()
+   })
+  }}:{}),
   spend:async(walletId,start,end)=>{
    const query=new URLSearchParams({wallet_ids:walletId,start_timestamp:String(start),end_timestamp:String(end)})
    const r=await fetch('https://api.privy.io/v1/apps/gas_spend?'+query,{redirect:'error',headers:{'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')},signal:AbortSignal.timeout(15000)})

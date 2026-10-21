@@ -333,6 +333,10 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       await d.mutate(current => {
         if (!current?.requests[id] || current.requests[id].fingerprint !== fingerprint) throw Error('Payment reservation unavailable.')
         current.requests[id].hash = hash
+        // Fast confirmations also carry billing/recovery identifiers. Retain
+        // them even when the response already contains the transaction hash.
+        if (typeof transactionId === 'string' && /^[a-zA-Z0-9_-]{10,128}$/.test(transactionId)) current.requests[id].transactionId = transactionId
+        if (typeof userOperationHash === 'string' && /^0x[0-9a-f]{64}$/i.test(userOperationHash)) current.requests[id].userOperationHash = userOperationHash
         return current
       })
       return res.json({ok:true,hash})
