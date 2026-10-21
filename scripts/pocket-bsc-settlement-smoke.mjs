@@ -15,8 +15,8 @@ const opAbi=parseAbi(['event UserOperationEvent(bytes32 indexed userOpHash,addre
 const orderAbi=parseAbi(['event OrderRecord(address fromToken,address toToken,address sender,uint256 fromAmount,uint256 returnAmount)'])
 const transfer=(token,from,to,value)=>({address:token,topics:encodeEventTopics({abi:transferAbi,eventName:'Transfer',args:{from,to}}),data:encodeAbiParameters([{type:'uint256'}],[value])})
 function fixture(q){
- const native=q.from==='BNB',input=POCKET_BSC.assets[q.from],output=POCKET_BSC.assets[q.to]
- const order={address:POCKET_BSC.router,topics:encodeEventTopics({abi:orderAbi,eventName:'OrderRecord'}),data:encodeAbiParameters([{type:'address'},{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'}],[input.address,output.address,q.walletAddress,BigInt(q.tradeInputUnits),BigInt(q.expectedOutUnits)])}
+ const native=q.from==='BNB',origin=native?q.walletAddress:'0x'+'7'.repeat(40),input=POCKET_BSC.assets[q.from],output=POCKET_BSC.assets[q.to]
+ const order={address:POCKET_BSC.router,topics:encodeEventTopics({abi:orderAbi,eventName:'OrderRecord'}),data:encodeAbiParameters([{type:'address'},{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'}],[input.address,output.address,origin,BigInt(q.tradeInputUnits),BigInt(q.expectedOutUnits)])}
  const logs=[order]
  let callData=q.tx.data
  if(native)logs.push(transfer(output.address,POCKET_BSC.router,q.walletAddress,BigInt(q.expectedOutUnits)))
@@ -25,7 +25,7 @@ function fixture(q){
   callData=encodeFunctionData({abi:entryPoint07Abi,functionName:'handleOps',args:[[op],q.walletAddress]})
   logs.push({address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:opAbi,eventName:'UserOperationEvent',args:{userOpHash:userOp,sender:q.walletAddress,paymaster:q.walletAddress}}),data:encodeAbiParameters([{type:'uint256'},{type:'bool'},{type:'uint256'},{type:'uint256'}],[1n,true,0n,1n])},transfer(input.address,q.walletAddress,POCKET_BSC.router,BigInt(q.tradeInputUnits)),transfer(input.address,q.walletAddress,EVM_PLATFORM_TREASURY,BigInt(q.reimbursementUnits)))
  }
- const s={chain:'0x38',head:'0x1e',missing:false,blockHash,tx:{hash,from:q.walletAddress,to:native?POCKET_BSC.router:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',chainId:'0x38',input:callData,value:toHex(BigInt(q.tx.value)),gas:toHex(BigInt(q.nativeGas?.gasLimit||'1')),maxFeePerGas:toHex(BigInt(q.nativeGas?.maxFeePerGas||'1'))},r:{transactionHash:hash,to:native?POCKET_BSC.router:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',status:'0x1',gasUsed:'0x5208',effectiveGasPrice:'0x1',logs}}
+ const s={chain:'0x38',head:'0x1e',missing:false,blockHash,tx:{hash,from:origin,to:native?POCKET_BSC.router:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',chainId:'0x38',input:callData,value:toHex(BigInt(q.tx.value)),gas:toHex(BigInt(q.nativeGas?.gasLimit||'1')),maxFeePerGas:toHex(BigInt(q.nativeGas?.maxFeePerGas||'1'))},r:{transactionHash:hash,to:native?POCKET_BSC.router:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',status:'0x1',gasUsed:'0x5208',effectiveGasPrice:'0x1',logs}}
  const rpc=async method=>{
   if(method==='eth_chainId')return s.chain
   if(method==='eth_getTransactionByHash')return s.tx
@@ -41,7 +41,7 @@ for(const q of quotes){
  f.s.head='0x1d';assert.equal((await f.read()).status,'pending')
  f=fixture(q);f.s.missing=true;assert.equal((await f.read()).status,'pending')
  f=fixture(q);f.s.r.status='0x0';assert.equal((await f.read()).status,'failed')
- for(const edit of [s=>s.chain='0xc4',s=>s.tx.chainId='0xc4',s=>s.blockHash='0x'+'d'.repeat(64),s=>s.r.logs=[],s=>s.tx.input='0x12345678',s=>s.r.logs.push(s.r.logs[0])]){
+ for(const edit of [s=>s.chain='0xc4',s=>s.tx.chainId='0xc4',s=>s.tx.from='0x'+'6'.repeat(40),s=>s.blockHash='0x'+'d'.repeat(64),s=>s.r.logs=[],s=>s.tx.input='0x12345678',s=>s.r.logs.push(s.r.logs[0])]){
   f=fixture(q);edit(f.s);await assert.rejects(f.read)
  }
  f=fixture(q);f.s.r.logs.pop();await assert.rejects(f.read,'Missing reimbursement or output must never report success')
