@@ -13,6 +13,7 @@ type Dependencies={
  runtime:ReturnType<typeof createBscRuntime>;
  operations:ReturnType<typeof createBscOperations>;
  now():number;
+ warmBilling?(walletId:string):void;
 }
 export function bscSwapReview(q:BscSwapQuote){
  const tokenIn=pocketBscAsset(q.from),tokenOut=pocketBscAsset(q.to)
@@ -41,6 +42,7 @@ export function createBscSwapHandler(d:Dependencies){
    const linked=user.linkedAccounts.filter(a=>a.type==='wallet'&&a.chainType==='ethereum'&&a.walletClientType==='privy'&&typeof a.address==='string'&&a.address.toLowerCase()===wallet.toLowerCase())
    if(linked.length!==1||typeof linked[0].id!=='string'||!/^[a-zA-Z0-9]{10,64}$/.test(linked[0].id))return res.status(403).json({ok:false,error:'Reconnect your Pocket wallet.'})
    const binding={ownerId:userId,walletId:linked[0].id as string,walletAddress:getAddress(wallet)}
+   if(action==='capabilities'||action==='quote')d.warmBilling?.(binding.walletId)
    if(action==='capabilities')return res.json({ok:true,enabled:d.enabled(),pending:(await d.operations.list(binding)).map(op=>({quote:bscSwapReview(op.quote),quoteToken:sealBscSwap(op.quote,d.secret,op.quote.issuedAt),startedAt:op.createdAt,sufficientBalance:true}))})
    if(action==='balances'){
     const balances=await Promise.all((['BNB','USDC','USDT'] as const).map(async asset=>[asset,formatUnits(await d.runtime.balance(asset,binding.walletAddress),18)]))
@@ -75,7 +77,7 @@ export function createBscSwapHandler(d:Dependencies){
    if((error as any)?.status===401)return res.status(401).json({ok:false,error:'Sign in again to continue.'})
    // Never leak provider diagnostics, RPC credentials or wallet SDK payloads.
    const message=error instanceof Error?error.message:''
-   const safe=/^(Insufficient (BNB|USDC|USDT)(\.| for the swap and network fee\.)|The amount is too small to cover the network fee\.|Confirm with your PIN or fingerprint\.|Your previous swap is still being confirmed\.|Swap confirmation is still being verified\.|Network fee changed\. Review the swap again\.)$/.test(message)
+   const safe=/^(Insufficient (BNB|USDC|USDT)(\.| for the swap and network fee\.)|The amount is too small to cover the network fee\.|Confirm with your PIN or fingerprint\.|Your previous swap is still being confirmed\.|Swap confirmation is still being verified\.|Network fee changed\. Review the swap again\.|Swap fees are still being verified\.|BNB Chain sponsorship is paused for a fee review\.)$/.test(message)
    return res.status(409).json({ok:false,error:safe?message:'Could not update this swap. Try again.'})
   }
  }

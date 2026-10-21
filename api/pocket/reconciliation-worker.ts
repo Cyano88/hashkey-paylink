@@ -311,7 +311,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch(error){results.push({id:record.id,kind:'cash_conversion',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
-  try { const bsc=await dependencies.reconcileBsc(Math.min(limit,20));if(bsc.checked)results.push({id:'bsc-swaps',kind:'wallet_swap',result:bsc.unresolved?'review':'reconciled'}) }
+  try { const bsc=await dependencies.reconcileBsc(Math.min(limit,20));if(bsc.checked||bsc.billingChecked)results.push({id:'bsc-swaps',kind:'wallet_swap',result:bsc.unresolved?'review':'reconciled'}) }
   catch(error){results.push({id:'bsc-swaps',kind:'wallet_swap',result:'error',message:errorText(error)})}
   try { await dependencies.auditXLayerBilling() }
   catch(error){results.push({id:'xlayer-sponsorship-billing',kind:'operations',result:'error',message:errorText(error)})}
