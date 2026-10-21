@@ -52,7 +52,10 @@ export function validateBscSwap(q: BscSwapQuote, now = Date.now(), recovery = fa
     || !same(base.toToken, output.address) || BigInt(base.fromTokenAmount) !== trade || BigInt(base.minReturnAmount) !== minimum
     || BigInt(base.deadLine) * 1000n < BigInt(q.expiresAt)) invalid()
   const feeTrailer = readStockSwapFee({tx: q.tx, expectedOut: formatUnits(expected, 18), decimalsOut: 18})
-  if (JSON.stringify(feeTrailer) !== JSON.stringify(q.positiveSlippageFee)) invalid()
+  // Postgres jsonb reorders object keys. Compare the signed fee values, not serialization order.
+  const quotedFee = q.positiveSlippageFee
+  if (feeTrailer ? !quotedFee || feeTrailer.capPercent !== quotedFee.capPercent || !same(quotedFee.recipient, feeTrailer.recipient)
+    : quotedFee !== undefined) invalid()
   return q
 }
 

@@ -84,6 +84,12 @@ console.log('PASS four BSC directions; exact stable reimbursement batch; native 
 
 for (const q of JSON.parse(readFileSync('scripts/fixtures/bsc-live-quotes.json', 'utf8'))) {
  validateBscSwap(q, q.issuedAt)
+ if(q.positiveSlippageFee){
+  const reordered={...q,positiveSlippageFee:{recipient:q.positiveSlippageFee.recipient,capPercent:q.positiveSlippageFee.capPercent}}
+  validateBscSwap(reordered,q.issuedAt)
+  assert.throws(()=>validateBscSwap({...reordered,positiveSlippageFee:{...reordered.positiveSlippageFee,capPercent:0}},q.issuedAt))
+  assert.throws(()=>validateBscSwap({...reordered,positiveSlippageFee:{...reordered.positiveSlippageFee,recipient:wallet}},q.issuedAt))
+ }
  assert.throws(() => validateBscSwap({...q, minimumOutUnits: String(BigInt(q.expectedOutUnits) * 995n / 1000n - 1n)}, q.issuedAt))
 }
 console.log('PASS captured real OKX BSC routes in all four directions; integer slippage flooring with no extra tolerance')
