@@ -6,10 +6,10 @@ import {OKX_XLAYER_ROUTER,OKX_NATIVE,readStockServiceFee,OKX_STOCK_FEE_RECIPIENT
 import {stockAssets} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {formatPocketAssetAmount} from '../../src/pocket/lib/pocketAmountDisplay.js'
 import type {ConfirmedStockTransfer,StockNoticeStore} from './xstocks-notifications-store.js'
-export type StockTradeProof={hash:string;owner:string;input:string;output:string;inputUnits?:string;spentUnits?:string;serviceFeeUnits?:string;feeUnits?:string}
+export type StockTradeProof={hash:string;owner:string;origin?:string;input:string;output:string;inputUnits?:string;spentUnits?:string;serviceFeeUnits?:string;feeUnits?:string}
 export function stockTradeProof(tx:{hash:string;from:string;to:string|null;input:Hex},receipt:{status:string;logs?:readonly any[]}):StockTradeProof|undefined {
  const sponsored=sponsoredSwapTradeCall(tx,receipt)
- if(sponsored){const proof=stockTradeProof(sponsored.tx,receipt);return proof&&proof.input===sponsored.input&&(proof.output==='native'||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&BigInt(sponsored.inputUnits)>=BigInt(proof.inputUnits||'0')&&BigInt(sponsored.inputUnits)-BigInt(proof.inputUnits||'0')<=(proof.serviceFeeUnits?2n:0n)?{...proof,inputUnits:sponsored.inputUnits,feeUnits:sponsored.feeUnits}:undefined}
+ if(sponsored){const proof=stockTradeProof(sponsored.tx,receipt);return proof&&proof.input===sponsored.input&&(proof.output==='native'||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&BigInt(sponsored.inputUnits)>=BigInt(proof.inputUnits||'0')&&BigInt(sponsored.inputUnits)-BigInt(proof.inputUnits||'0')<=(proof.serviceFeeUnits?2n:0n)?{...proof,origin:tx.from.toLowerCase(),inputUnits:sponsored.inputUnits,feeUnits:sponsored.feeUnits}:undefined}
  if(receipt.status!=='success'||tx.to?.toLowerCase()!==OKX_XLAYER_ROUTER.toLowerCase())return
  try {
   const decoded=decodeFunctionData({abi:routerAbi as Abi,data:tx.input})
@@ -61,9 +61,8 @@ const orderRecord=parseAbiItem('event OrderRecord(address fromToken,address toTo
 export function nativeTradeLegs(proof:StockTradeProof,logs:readonly {address:string;topics:readonly string[];data:string}[],at:number):ConfirmedStockTransfer[]{
  if(proof.input!=='native'&&proof.output!=='native')return []
  const token=(a:string)=>a.toLowerCase()===OKX_NATIVE?'native':a.toLowerCase()
- const matches=logs.flatMap(log=>{if(log.address.toLowerCase()!==OKX_XLAYER_ROUTER.toLowerCase())return [];try{const {args}=decodeEventLog({abi:[orderRecord],topics:log.topics as [Hex,...Hex[]],data:log.data as Hex});return args.sender.toLowerCase()===proof.owner&&token(args.fromToken)===proof.input&&token(args.toToken)===proof.output&&args.fromAmount>0n&&args.returnAmount>0n?[args]:[]}catch{return []}})
+ const matches=logs.flatMap(log=>{if(log.address.toLowerCase()!==OKX_XLAYER_ROUTER.toLowerCase())return [];try{const {args}=decodeEventLog({abi:[orderRecord],topics:log.topics as [Hex,...Hex[]],data:log.data as Hex});return args.sender.toLowerCase()===(proof.origin||proof.owner)&&token(args.fromToken)===proof.input&&token(args.toToken)===proof.output&&args.fromAmount>0n&&args.returnAmount>0n?[args]:[]}catch{return []}})
  if(matches.length!==1)return []
  const event=matches[0],incoming=proof.output==='native'
  return [{id:proof.hash+':native',hash:proof.hash,from:incoming?OKX_XLAYER_ROUTER:proof.owner,to:incoming?proof.owner:OKX_XLAYER_ROUTER,token:'native',symbol:'OKB',units:String(incoming?event.returnAmount:event.fromAmount+BigInt(proof.serviceFeeUnits||'0')),decimals:18,at}]
 }
-

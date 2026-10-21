@@ -44,13 +44,17 @@ for(const tokenIn of [stockUsdc,stockUsdt])for(const tokenOut of [stockGasAsset,
  assert.equal(stockTradeProof(outer,{...receipt,status:'reverted'}),undefined)
  assert.equal(stockTradeProof(outer,{...receipt,logs:[{...operationLog,data:encodeAbiParameters(parseAbiParameters('uint256,bool,uint256,uint256'),[0n,false,0n,1n])},feeLog]}),undefined)
  const orderAbi=parseAbi(['event OrderRecord(address fromToken,address toToken,address sender,uint256 fromAmount,uint256 returnAmount)'])
- const orderLog={address:OKX_XLAYER_ROUTER,topics:encodeEventTopics({abi:orderAbi}),data:encodeAbiParameters(parseAbiParameters('address,address,address,uint256,uint256'),[tokenIn.address,outAddress,wallet,1000000n,1000000000000000n])}
+ const orderLog={address:OKX_XLAYER_ROUTER,topics:encodeEventTopics({abi:orderAbi}),data:encodeAbiParameters(parseAbiParameters('address,address,address,uint256,uint256'),[tokenIn.address,outAddress,outer.from,1000000n,1000000000000000n])}
  const debitLog={address:tokenIn.address,topics:encodeEventTopics({abi:transferAbi,args:{from:wallet,to:OKX_XLAYER_ROUTER}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[1000000n])}
  const outputLog={address:outAddress,topics:encodeEventTopics({abi:transferAbi,args:{from:OKX_XLAYER_ROUTER,to:wallet}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[1000000000000000n])}
  const blockHash='0x'+'c'.repeat(64),full={...receipt,transactionHash:hash,blockHash,blockNumber:1n,logs:[...receipt.logs,orderLog,debitLog,...(tokenOut.address==='native'?[]:[outputLog])]}
  const evidence={owner:wallet,input:tokenIn.address,...(tokenOut.address==='native'?{}:{output:tokenOut.address}),inputUnits:q.amountUnits,minimumOutUnits:q.minimumOutUnits,feeUnits:fee.networkFeeUnits,callData:op.callData}
  const client={getChainId:async()=>196,getTransaction:async()=>({...outer,blockHash}),getTransactionReceipt:async()=>full,getBlock:async()=>({hash:blockHash,timestamp:1n})}
  assert.equal(await readSponsoredSwapOutcome(hash,evidence,client),'completed')
+ if(tokenOut.address==='native'){
+  assert.equal(proof.origin,outer.from.toLowerCase())
+  await assert.rejects(readSponsoredSwapOutcome(hash,evidence,{...client,getTransaction:async()=>({...outer,from:'0x'+'9'.repeat(40),blockHash})}))
+ }
  assert.equal(await readSponsoredSwapOutcome(hash,evidence,{...client,getTransactionReceipt:async()=>({...full,status:'reverted'})}),'failed')
  const failedEvent={...operationLog,data:encodeAbiParameters(parseAbiParameters('uint256,bool,uint256,uint256'),[0n,false,0n,1n])}
  assert.equal(await readSponsoredSwapOutcome(hash,evidence,{...client,getTransactionReceipt:async()=>({...full,logs:[failedEvent]})}),'failed')
