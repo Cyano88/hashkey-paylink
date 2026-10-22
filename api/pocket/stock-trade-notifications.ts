@@ -3,13 +3,13 @@ import {sponsoredSwapTradeCall} from './xlayer-swap-activity-proof.js'
 import {decodeEventLog,parseAbiItem,decodeFunctionData,formatUnits,type Abi,type Hex} from 'viem'
 import routerAbi from '../../src/pocket/lib/pocketOkxRouterAbi.json'
 import {OKX_XLAYER_ROUTER,OKX_NATIVE,readStockServiceFee,OKX_STOCK_FEE_RECIPIENT} from '../../src/pocket/lib/pocketXStocksSwap.js'
-import {stockAssets} from '../../src/pocket/lib/pocketXStocksWallet.js'
+import {stockAssets,stockUsdc,stockUsdt} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {formatPocketAssetAmount} from '../../src/pocket/lib/pocketAmountDisplay.js'
 import type {ConfirmedStockTransfer,StockNoticeStore} from './xstocks-notifications-store.js'
 export type StockTradeProof={hash:string;owner:string;origin?:string;input:string;output:string;inputUnits?:string;spentUnits?:string;serviceFeeUnits?:string;feeUnits?:string}
 export function stockTradeProof(tx:{hash:string;from:string;to:string|null;input:Hex},receipt:{status:string;logs?:readonly any[]}):StockTradeProof|undefined {
  const sponsored=sponsoredSwapTradeCall(tx,receipt)
- if(sponsored){const proof=stockTradeProof(sponsored.tx,receipt);return proof&&proof.input===sponsored.input&&(proof.output==='native'||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&BigInt(sponsored.inputUnits)>=BigInt(proof.inputUnits||'0')&&BigInt(sponsored.inputUnits)-BigInt(proof.inputUnits||'0')<=(proof.serviceFeeUnits?2n:0n)?{...proof,origin:tx.from.toLowerCase(),inputUnits:sponsored.inputUnits,feeUnits:sponsored.feeUnits}:undefined}
+ if(sponsored){const proof=stockTradeProof(sponsored.tx,receipt);return proof&&proof.input===sponsored.input&&(proof.output==='native'||[stockUsdc,stockUsdt].some(a=>a.address.toLowerCase()===proof.output)||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&BigInt(sponsored.inputUnits)>=BigInt(proof.inputUnits||'0')&&BigInt(sponsored.inputUnits)-BigInt(proof.inputUnits||'0')<=(proof.serviceFeeUnits?2n:0n)?{...proof,origin:tx.from.toLowerCase(),inputUnits:sponsored.inputUnits,feeUnits:sponsored.feeUnits}:undefined}
  if(receipt.status!=='success'||tx.to?.toLowerCase()!==OKX_XLAYER_ROUTER.toLowerCase())return
  try {
   const decoded=decodeFunctionData({abi:routerAbi as Abi,data:tx.input})

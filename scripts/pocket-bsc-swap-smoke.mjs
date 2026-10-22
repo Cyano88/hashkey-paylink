@@ -29,8 +29,10 @@ function fixture(stable, reverse = false) {
   }
   return {binding, d, requests}
 }
-for (const stable of ['USDC', 'USDT']) for (const reverse of [false, true]) {
+for (const stable of ['USDC', 'USDT']) for (let reverse of [false, true, 'stable']) {
+  const stablePair=reverse==='stable';if(stablePair)reverse=false
   const {binding, d, requests} = fixture(stable, reverse)
+  if(stablePair)binding.to=stable==='USDC'?'USDT':'USDC'
   const q = await quoteBscSwap(binding, d)
   assert.equal(q.reimbursementUnits, reverse ? '0' : String(fee))
   assert.equal(BigInt(q.tradeInputUnits) + BigInt(q.reimbursementUnits), BigInt(binding.totalInputUnits))

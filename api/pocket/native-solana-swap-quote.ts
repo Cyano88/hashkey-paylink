@@ -25,20 +25,20 @@ export async function quoteNativeSolanaSwap(binding:Binding,rpc:Connection,read:
  const instructions=await removeRedundantSolanaSwapSetup(binding.walletAddress,data.instructionLists,rpc)
  const intent={wallet:binding.walletAddress,from:binding.from,to:binding.to,amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:data.tx.minReceiveAmount}
  let sponsorship:SolSwapSponsorship|undefined
- if(!tokenIn.native){const funding=instructions.find(i=>i.programId==='11111111111111111111111111111111'),data=funding&&Buffer.from(funding.data,'base64');if(!data||data.length!==12||data.readUInt32LE()!==2)fail();sponsorship={sponsor:sponsorAddress(),temporaryFundingLamports:String(data!.readBigUInt64LE(4))}}
+ if(tokenOut.native){const funding=instructions.find(i=>i.programId==='11111111111111111111111111111111'),data=funding&&Buffer.from(funding.data,'base64');if(!data||data.length!==12||data.readUInt32LE()!==2)fail();sponsorship={sponsor:sponsorAddress(),temporaryFundingLamports:String(data!.readBigUInt64LE(4))}}
  const proof=await verifiedNativeSolanaSwapPreflight(intent,instructions,data.addressLookupTableAccount,SOL_SWAP_POLICY,rpc,undefined,sponsorship)
  const q:SolSwapQuote={...binding,amount:preview.amount,outputUsdPrice:preview.outputUsdPrice,version:1,network:'solana',id:randomUUID(),...intent,walletAddress:binding.walletAddress,feeUnits:proof.networkFeeLamports,rentUnits:proof.effects.newAccountRentLamports,transaction:proof.transaction,lastValidBlockHeight:proof.lastValidBlockHeight,instructions,lookupAddresses:data.addressLookupTableAccount,issuedAt,expiresAt:issuedAt+45000,...(sponsorship?{sponsorship}:{})}
  validateSolSwap(q,binding.ownerId,false,now());return q
 }
 export function solSwapReview(q:SolSwapQuote){const {tokenIn,tokenOut}=nativeSwapPair('solana',q.from,q.to),deduct=q.sponsorship?BigInt(q.feeUnits):0n;return {id:q.id,network:q.network,walletAddress:q.walletAddress,tokenIn,tokenOut,amount:q.amount,outputUsdPrice:q.outputUsdPrice,expectedOut:formatUnits(BigInt(q.expectedOutUnits)-deduct,tokenOut.decimals),minimumOut:formatUnits(BigInt(q.minimumOutUnits)-deduct,tokenOut.decimals),fee:formatUnits(BigInt(q.feeUnits),9),feeAsset:'SOL',feeFromOutput:!!q.sponsorship,rent:formatUnits(BigInt(q.rentUnits),9),expiresAt:q.expiresAt,providerPriceImprovementFee:true}}
 function validateSolSwap(q:SolSwapQuote,owner:string,recovery:boolean,now:number){
- const {tokenIn}=nativeSwapPair('solana',q.from,q.to)
+ const {tokenIn,tokenOut}=nativeSwapPair('solana',q.from,q.to)
  if(q.version!==1||q.network!=='solana'||q.ownerId!==owner||!q.walletId||! /^[0-9a-f-]{36}$/i.test(q.id)||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.expiresAt-q.issuedAt!==45000||q.issuedAt>now+5000||!recovery&&q.expiresAt<=now||!Number.isSafeInteger(q.lastValidBlockHeight)||q.lastValidBlockHeight<=0)fail()
  for(const value of [q.amountUnits,q.expectedOutUnits,q.minimumOutUnits,q.feeUnits])if(typeof value!=='string'||!/^[1-9]\d{0,19}$/.test(value))fail()
  if(nativeSwapUnits(q.amount,tokenIn.decimals)!==BigInt(q.amountUnits)||!/^\d{1,19}$/.test(q.rentUnits)||BigInt(q.feeUnits)>BigInt(SOL_SWAP_POLICY.maximumNetworkFeeLamports)||BigInt(q.minimumOutUnits)>BigInt(q.expectedOutUnits)||BigInt(q.minimumOutUnits)<BigInt(q.expectedOutUnits)*995n/1000n)fail()
  if(typeof q.transaction!=='string'||q.transaction.length>1644||!Array.isArray(q.instructions)||q.instructions.length>16||!Array.isArray(q.lookupAddresses)||q.lookupAddresses.length>8)fail()
  const bytes=Buffer.from(q.transaction,'base64'),tx=VersionedTransaction.deserialize(bytes)
- if(q.sponsorship&&(tokenIn.native||q.rentUnits!=='0'||BigInt(q.minimumOutUnits)<=BigInt(q.feeUnits)||q.sponsorship.sponsor===q.walletAddress||!PublicKey.isOnCurve(new PublicKey(q.sponsorship.sponsor).toBytes())||! /^[1-9]\d{0,9}$/.test(q.sponsorship.temporaryFundingLamports)))fail()
+ if(q.sponsorship&&(!tokenOut.native||tokenIn.native||q.rentUnits!=='0'||BigInt(q.minimumOutUnits)<=BigInt(q.feeUnits)||q.sponsorship.sponsor===q.walletAddress||!PublicKey.isOnCurve(new PublicKey(q.sponsorship.sponsor).toBytes())||! /^[1-9]\d{0,9}$/.test(q.sponsorship.temporaryFundingLamports)))fail()
  if(bytes.toString('base64')!==q.transaction||!Buffer.from(tx.serialize()).equals(bytes)||tx.message.version!==0||tx.message.header.numRequiredSignatures!==(q.sponsorship?2:1)||tx.message.staticAccountKeys[0].toBase58()!==(q.sponsorship?.sponsor||q.walletAddress)||q.sponsorship&&tx.message.staticAccountKeys[1].toBase58()!==q.walletAddress||tx.signatures.some(s=>s.some(b=>b!==0)))fail()
  return q
 }

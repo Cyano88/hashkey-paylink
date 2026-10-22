@@ -19,12 +19,12 @@ function fixture(q){
  const order={address:POCKET_BSC.router,topics:encodeEventTopics({abi:orderAbi,eventName:'OrderRecord'}),data:encodeAbiParameters([{type:'address'},{type:'address'},{type:'address'},{type:'uint256'},{type:'uint256'}],[input.address,output.address,origin,BigInt(q.tradeInputUnits),BigInt(q.expectedOutUnits)])}
  const logs=[order]
  let callData=q.tx.data
- if(native)logs.push(transfer(output.address,POCKET_BSC.router,q.walletAddress,BigInt(q.expectedOutUnits)))
- else{
+ if(!native){
   const op={sender:q.walletAddress,nonce:1n,initCode:'0x',callData:encodeXLayerSponsoredBatch(bscSponsoredSwapCalls(q,q.issuedAt)),accountGasLimits:toHex(0n,{size:32}),preVerificationGas:0n,gasFees:toHex(0n,{size:32}),paymasterAndData:'0x',signature:'0x'}
   callData=encodeFunctionData({abi:entryPoint07Abi,functionName:'handleOps',args:[[op],q.walletAddress]})
   logs.push({address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:opAbi,eventName:'UserOperationEvent',args:{userOpHash:userOp,sender:q.walletAddress,paymaster:q.walletAddress}}),data:encodeAbiParameters([{type:'uint256'},{type:'bool'},{type:'uint256'},{type:'uint256'}],[1n,true,0n,1n])},transfer(input.address,q.walletAddress,POCKET_BSC.router,BigInt(q.tradeInputUnits)),transfer(input.address,q.walletAddress,EVM_PLATFORM_TREASURY,BigInt(q.reimbursementUnits)))
  }
+ if(!output.native)logs.push(transfer(output.address,POCKET_BSC.router,q.walletAddress,BigInt(q.expectedOutUnits)))
  const s={chain:'0x38',head:'0x1e',missing:false,blockHash,tx:{hash,from:origin,to:native?POCKET_BSC.router:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',chainId:'0x38',input:callData,value:toHex(BigInt(q.tx.value)),gas:toHex(BigInt(q.nativeGas?.gasLimit||'1')),maxFeePerGas:toHex(BigInt(q.nativeGas?.maxFeePerGas||'1'))},r:{transactionHash:hash,to:native?POCKET_BSC.router:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',status:'0x1',gasUsed:'0x5208',effectiveGasPrice:'0x1',logs}}
  const rpc=async method=>{
   if(method==='eth_chainId')return s.chain
@@ -35,6 +35,13 @@ function fixture(q){
   throw Error('Unexpected RPC')
  }
  return {s,rpc,read:()=>readBscSwapSettlement(q,hash,rpc,native?undefined:userOp)}
+}
+const routerAbi=JSON.parse(readFileSync('src/pocket/lib/pocketOkxRouterAbi.json','utf8'))
+for(const from of ['USDT','USDC']){
+ const q=structuredClone(quotes.find(q=>q.from===from)),to=from==='USDT'?'USDC':'USDT'
+ q.to=to;delete q.positiveSlippageFee
+ q.tx.data=encodeFunctionData({abi:routerAbi,functionName:'smartSwapByOrderId',args:[1n,{fromToken:BigInt(POCKET_BSC.assets[from].address),toToken:POCKET_BSC.assets[to].address,fromTokenAmount:BigInt(q.tradeInputUnits),minReturnAmount:BigInt(q.minimumOutUnits),deadLine:BigInt(Math.floor(q.issuedAt/1000)+300)},[],[],[]]})
+ quotes.push(q)
 }
 for(const q of quotes){
  let f=fixture(q);assert.deepEqual(await f.read(),{status:'completed',amountOutUnits:q.expectedOutUnits,...(q.from==='BNB'?{nativeFeeUnits:'21000'}:{})})

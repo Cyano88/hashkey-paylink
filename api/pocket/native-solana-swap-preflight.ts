@@ -19,7 +19,7 @@ export async function preflightNativeSolanaSwap(input:Input,instructions:SolanaS
  if(await rpc.getGenesisHash()!==MAINNET)fail()
  const rent=await rpc.getMinimumBalanceForRentExemption(165,'confirmed');if(!positive(rent))fail()
  const inspected=inspectNativeSolanaSwapEnvelope(input,instructions,{tokenAccountRentLamports:String(rent),maximumPriorityFeeLamports:policy.maximumPriorityFeeLamports})
- if(sponsorship&&input.from==='SOL')fail()
+ if(sponsorship&&input.to!=='SOL')fail()
  const tables:import('@solana/web3.js').AddressLookupTableAccount[]=[]
  for(const address of lookupAddresses){
   const key=new PublicKey(address),result=await rpc.getAddressLookupTable(key,{commitment:'confirmed'})
@@ -43,6 +43,11 @@ export async function preflightNativeSolanaSwap(input:Input,instructions:SolanaS
  if(!writable.length||writable.length>64)fail()
  const before=await rpc.getMultipleAccountsInfoAndContext(writable,{commitment:'confirmed'})
  if(!positive(before.context.slot)||before.value.length!==writable.length)fail()
+ if(input.from!=='SOL'&&input.to!=='SOL'){
+  const balance=before.value[writable.findIndex(k=>k.toBase58()===input.wallet)]?.lamports??0
+  const missing=instructions.filter(i=>i.programId==='ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'&&i.accounts[2]?.pubkey===input.wallet&&!before.value[writable.findIndex(k=>k.toBase58()===i.accounts[1]?.pubkey)]).length
+  if(!Number.isSafeInteger(balance)||BigInt(balance)<BigInt(fee!)+BigInt(rent)*BigInt(missing))throw Object.assign(Error('Insufficient SOL for the network fee and token account rent.'),{status:409})
+ }
  const simulated=await rpc.simulateTransaction(transaction,{commitment:'confirmed',sigVerify:false,replaceRecentBlockhash:false,minContextSlot:before.context.slot,accounts:{encoding:'base64',addresses:writable.map(k=>k.toBase58())}})
  if(simulated.value.err||simulated.context.slot<before.context.slot||!simulated.value.accounts||simulated.value.accounts.length!==writable.length||!positive(simulated.value.unitsConsumed??null))fail()
  return {executionAvailable:false as const,requiresEffectValidation:true as const,intent:{...input},sponsorship,writableAddresses:writable.map(key=>key.toBase58()),inspection:inspected,transaction:Buffer.from(raw).toString('base64'),wallet:input.wallet,lastValidBlockHeight:block.lastValidBlockHeight,networkFeeLamports:String(fee),snapshotSlot:before.context.slot,simulationSlot:simulated.context.slot,unitsConsumed:simulated.value.unitsConsumed,accounts:writable.map((key,index)=>({address:key.toBase58(),before:before.value[index],after:simulated.value.accounts![index]}))}

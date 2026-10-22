@@ -29,7 +29,7 @@ export async function stockExecutionQuote(review:StockSwapQuote,owner:Address,re
   if(JSON.stringify(fresh.serviceFee)!==JSON.stringify(review.serviceFee)||JSON.stringify(fresh.positiveSlippageFee)!==JSON.stringify(review.positiveSlippageFee)||fresh.amountUnits!==review.amountUnits||fresh.tokenIn.address!==review.tokenIn.address||fresh.tokenOut.address!==review.tokenOut.address||BigInt(fresh.minimumOutUnits)<BigInt(review.minimumOutUnits)||Number(fresh.gasFee)>Number(review.gasFee)*1.2)throw Error('Price or network fee changed. Review the updated amount.')
   return fresh
 }
-// A separate, fixed pair for bridge funding. This does not enable USDT trading.
+// Bridge funding retains its fixed pair and stricter slippage policy.
 export function validateXLayerBridgeSwap(quote: StockSwapQuote, owner: Address, now = Date.now()) {
   if (!sameStockAddress(quote.tokenIn.address, stockUsdt.address) || !sameStockAddress(quote.tokenOut.address, stockUsdc.address)) throw Error('Unsupported bridge conversion.')
   validateSwap(quote, owner, now, [stockUsdt, stockUsdc])
@@ -78,7 +78,9 @@ export function readStockSwapFee(quote: Pick<StockSwapQuote, 'tx' | 'expectedOut
   const raw = quote.tx.data.toLowerCase()
   if (!raw.startsWith(canonical)) return fail()
   let tail = raw.slice(canonical.length)
-  const service=stockServiceTrailer(quote.tx.data)
+  // Compact native routes use their supplied ABI and cannot carry a stock fee.
+  // Unknown trailers still fail the strict positive-slippage checks below.
+  const service=routerAbi.some(method=>method.name===decoded.functionName)?stockServiceTrailer(quote.tx.data):undefined
   if(service)tail=tail.slice(0,-service.length)
   if (!tail) return undefined
   if (tail.length !== 128) return fail()

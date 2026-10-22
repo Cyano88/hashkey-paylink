@@ -1,3 +1,4 @@
+import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 ﻿import {decodeEventLog,formatUnits,parseAbi,type Hex} from 'viem'
 import {recordCirclePocketAction,type CirclePocketActionRecord} from '../circle-pocket-action-journal.js'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.js'
@@ -17,7 +18,12 @@ export function nativeSwapOutput(q:NativeEvmSwapQuote,trace:Trace):bigint|null{
  if(outgoing.length!==expected.length||outgoing.some((call,i)=>!sameSwapAddress(call.to,expected[i].target)||!sameSwapAddress(call.input||'0x',expected[i].data)||BigInt(call.value||'0')!==expected[i].value))return null
  const router=outgoing.find(node=>sameSwapAddress(node.to,q.tx.to)&&sameSwapAddress(node.input,q.tx.data))
  if(!router)return null
- const {tokenOut}=nativeSwapPair(q.network,q.from,q.to);let amount=0n
+ const {tokenIn,tokenOut}=nativeSwapPair(q.network,q.from,q.to);let amount=0n
+ if(q.version===2){
+  const feeCall=outgoing[outgoing.length-1];let paid=0n
+  walk(feeCall,node=>{for(const log of node.logs||[]){if(!sameSwapAddress(log.address,tokenIn.address))continue;try{const e=decodeEventLog({abi:transferAbi,data:log.data,topics:log.topics as [Hex,...Hex[]]});if(sameSwapAddress(e.args.from,q.walletAddress)&&sameSwapAddress(e.args.to,EVM_PLATFORM_TREASURY))paid+=e.args.value}catch{}}})
+  if(paid!==BigInt(q.stableFeeUnits!))return null
+ }
  walk(router,node=>{
   if(tokenOut.native){
    if(node.type==='CALL'&&sameSwapAddress(node.to,q.walletAddress))amount+=BigInt(node.value||'0')
@@ -50,7 +56,7 @@ export async function reconcileNativeEvmSwap(record:CirclePocketActionRecord,ove
  if(revertedNativeBatch(q,trace))return failed()
  const gross=nativeSwapOutput(q,trace)
  if(gross===null)return {status:'pending'}
- const {tokenOut}=nativeSwapPair(q.network,q.from,q.to),net=gross-(tokenOut.native?BigInt(q.feeUnits):0n)
+ const {tokenOut}=nativeSwapPair(q.network,q.from,q.to),net=gross-(q.version===1&&tokenOut.native?BigInt(q.feeUnits):0n)
  const saved=await d.record({...record,status:'completed',metadata:{...record.metadata!,amountOut:formatUnits(net,tokenOut.decimals)}})
  return {status:saved.status,txHash:saved.metadata?.txHash,amountOut:saved.metadata?.amountOut}
 }

@@ -16,6 +16,7 @@ export function solSwapReceiptOutput(q:SolSwapQuote,receipt:any):bigint|null{
  if(![meta.preBalances?.[walletIndex],meta.postBalances?.[walletIndex]].every(n=>Number.isSafeInteger(n)&&n>=0))return null
  if(q.sponsorship&&(![meta.preBalances?.[0],meta.postBalances?.[0]].every(n=>Number.isSafeInteger(n)&&n>=0)||meta.preBalances[0]!==meta.postBalances[0]))return null
  const {tokenIn,tokenOut}=nativeSwapPair('solana',q.from,q.to),stable=tokenIn.native?tokenOut:tokenIn
+ if(!tokenIn.native&&!tokenOut.native)return stableReceiptOutput(q,meta,keys)
  const wallet=new PublicKey(q.walletAddress),token=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
  const ata=PublicKey.findProgramAddressSync([wallet.toBuffer(),token.toBuffer(),new PublicKey(stable.address).toBuffer()],new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'))[0].toBase58()
  const balances=(rows:any[])=>{const map=new Map<number,bigint>();for(const row of rows||[]){if(row.owner!==q.walletAddress)continue;if(!Number.isInteger(row.accountIndex)||map.has(row.accountIndex)||!/^\d+$/.test(row.uiTokenAmount?.amount||''))throw Error('Invalid token balance evidence.');if(keys.get(row.accountIndex)?.toBase58()===ata&&(row.mint!==stable.address||row.uiTokenAmount.decimals!==stable.decimals))throw Error('Invalid swap token evidence.');map.set(row.accountIndex,BigInt(row.uiTokenAmount.amount))}return map}
@@ -27,6 +28,33 @@ export function solSwapReceiptOutput(q:SolSwapQuote,receipt:any):bigint|null{
  if(tokenIn.native){if(nativeDelta!==-BigInt(q.amountUnits)-fee-rent||stableDelta<BigInt(q.minimumOutUnits))return null;return stableDelta}
  if(stableDelta!==-BigInt(q.amountUnits)||nativeDelta+fee<BigInt(q.minimumOutUnits))return null
  return q.sponsorship?nativeDelta:nativeDelta+fee
+}
+function stableReceiptOutput(q:SolSwapQuote,meta:any,keys:{get(index:number):PublicKey|undefined}):bigint|null{
+ if(q.sponsorship)return null
+ const {tokenIn,tokenOut}=nativeSwapPair('solana',q.from,q.to),wallet=new PublicKey(q.walletAddress)
+ const ata=(mint:string)=>PublicKey.findProgramAddressSync([wallet.toBuffer(),new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA').toBuffer(),new PublicKey(mint).toBuffer()],new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'))[0].toBase58()
+ const source=ata(tokenIn.address),output=ata(tokenOut.address)
+ const balances=(rows:any[])=>{
+  const result=new Map<number,bigint>()
+  for(const row of rows||[]){
+   const address=keys.get(row.accountIndex)?.toBase58(),expected=address===source?tokenIn:address===output?tokenOut:null
+   if(expected&&(row.owner!==q.walletAddress||row.mint!==expected.address||row.uiTokenAmount?.decimals!==expected.decimals))throw Error('Invalid swap token evidence.')
+   if(row.owner!==q.walletAddress)continue
+   if(!Number.isInteger(row.accountIndex)||result.has(row.accountIndex)||!/^\d+$/.test(row.uiTokenAmount?.amount||''))throw Error('Invalid token balance evidence.')
+   result.set(row.accountIndex,BigInt(row.uiTokenAmount.amount))
+  }
+  return result
+ }
+ const before=balances(meta.preTokenBalances),after=balances(meta.postTokenBalances)
+ let spent:bigint|undefined,received:bigint|undefined
+ for(const index of new Set([...before.keys(),...after.keys()])){
+  const delta=(after.get(index)||0n)-(before.get(index)||0n),address=keys.get(index)?.toBase58()
+  if(address===source){if(!before.has(index)||!after.has(index))return null;spent=delta}
+  else if(address===output){if(!after.has(index))return null;received=delta}
+  else if(delta!==0n)return null
+ }
+ if(spent!==-BigInt(q.amountUnits)||received===undefined||received<BigInt(q.minimumOutUnits)||BigInt(meta.preBalances[0])-BigInt(meta.postBalances[0])!==BigInt(q.feeUnits)+BigInt(q.rentUnits))return null
+ return received
 }
 const defaults={rpc:()=>new Connection(getRpc(),'confirmed'),record:recordCirclePocketAction}
 export async function reconcileNativeSolanaSwap(record:CirclePocketActionRecord,overrides:Partial<typeof defaults>={}){

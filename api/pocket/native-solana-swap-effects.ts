@@ -34,6 +34,7 @@ export function inspectNativeSolanaSwapEffects(input:Input,evidence:Evidence){
  if(!Array.isArray(evidence.writableAddresses)||evidence.writableAddresses.length!==evidence.accounts.length||new Set(evidence.writableAddresses).size!==evidence.writableAddresses.length||evidence.writableAddresses.some((address,index)=>evidence.accounts[index]?.address!==address))fail()
  if(evidence.wallet!==input.wallet||evidence.snapshotSlot!==evidence.simulationSlot||!Number.isSafeInteger(evidence.snapshotSlot)||evidence.snapshotSlot<=0||evidence.inspection.amountUnits!==input.amountUnits||evidence.inspection.minimumOutUnits!==input.minimumOutUnits)fail()
  const {tokenIn,tokenOut}=nativeSwapPair('solana',input.from,input.to),stable=tokenIn.native?tokenOut:tokenIn
+ if(!tokenIn.native&&!tokenOut.native)return inspectStableEffects(input,evidence)
  const wallet=new PublicKey(input.wallet),mint=new PublicKey(stable.address)
  const stableAddress=PublicKey.findProgramAddressSync([wallet.toBuffer(),new PublicKey(TOKEN).toBuffer(),mint.toBuffer()],new PublicKey(ATA))[0].toBase58()
  const temp=PublicKey.findProgramAddressSync([new PublicKey(WSOL).toBuffer(),wallet.toBuffer()],new PublicKey(SOLANA_SWAP_ROUTER))[0].toBase58()
@@ -75,4 +76,41 @@ export function inspectNativeSolanaSwapEffects(input:Input,evidence:Evidence){
  else {if(delta!==-BigInt(input.amountUnits)||nativeDelta+fee<BigInt(input.minimumOutUnits))fail();received=nativeDelta+fee}
  if(sponsorship&&BigInt(input.minimumOutUnits)<=fee)fail()
  return {executionAvailable:false as const,accountEffectsVerified:true as const,gasPayment:sponsorship?'sponsored-output' as const:'native-wallet' as const,networkFeeLamports:fee.toString(),newAccountRentLamports:rent.toString(),receivedUnits:received.toString()}
+}
+
+/** Stable pairs debit one canonical ATA and credit the other. SOL pays only
+ * the exact network fee and any newly created output account rent. */
+function inspectStableEffects(input:Input,evidence:Evidence){
+ if(evidence.sponsorship)fail()
+ const {tokenIn,tokenOut}=nativeSwapPair('solana',input.from,input.to)
+ const wallet=new PublicKey(input.wallet)
+ const ata=(mint:string)=>PublicKey.findProgramAddressSync([wallet.toBuffer(),new PublicKey(TOKEN).toBuffer(),new PublicKey(mint).toBuffer()],new PublicKey(ATA))[0].toBase58()
+ const sourceAddress=ata(tokenIn.address),outputAddress=ata(tokenOut.address)
+ const rows=new Map(evidence.accounts.map(a=>[a.address,{before:account(a.before),after:account(a.after)}]))
+ const funds=rows.get(input.wallet),source=rows.get(sourceAddress),output=rows.get(outputAddress)
+ if(!funds?.before||!funds.after||!source?.before||!source.after||!output?.after)fail()
+ for(const a of [funds.before,funds.after])if(a.owner!==SYSTEM||a.executable||a.data.length)fail()
+ const check=(row:{before:Account|null;after:Account|null},mint:string,creation:boolean)=>{
+  if(!row.after)fail()
+  const after=token(row.after),before=row.before?token(row.before):null
+  if(after.owner!==input.wallet||after.mint!==mint||before&&(before.owner!==input.wallet||before.mint!==mint))fail()
+  if(row.before){
+   if(row.before.lamports!==row.after.lamports||!row.before.data.subarray(0,64).equals(row.after.data.subarray(0,64))||!row.before.data.subarray(72).equals(row.after.data.subarray(72)))fail()
+  }else{
+   if(!creation||row.after.lamports!==BigInt(evidence.inspection.temporaryRentLamports))fail()
+   const d=row.after.data;if(d.readUInt32LE(72)||d.readUInt32LE(109)||d.readBigUInt64LE(121)||d.readUInt32LE(129))fail()
+  }
+  return after.amount-(before?.amount??0n)
+ }
+ const spent=check(source,tokenIn.address,false),received=check(output,tokenOut.address,true)
+ for(const [address,row] of rows){
+  if([input.wallet,sourceAddress,outputAddress].includes(address))continue
+  if([row.before?.owner,row.after?.owner].includes('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'))fail()
+  const owned=[row.before,row.after].some(a=>a?.owner===TOKEN&&a.data.length===165&&new PublicKey(a.data.subarray(32,64)).toBase58()===input.wallet)
+  if(owned&&(!row.before||!row.after||row.before.owner!==row.after.owner||row.before.executable!==row.after.executable||row.before.lamports!==row.after.lamports||!row.before.data.equals(row.after.data)))fail()
+ }
+ if(!/^[1-9]\d*$/.test(evidence.networkFeeLamports))fail()
+ const fee=BigInt(evidence.networkFeeLamports),rent=output.before?0n:output.after.lamports
+ if(spent!==-BigInt(input.amountUnits)||received<BigInt(input.minimumOutUnits)||funds.before.lamports-funds.after.lamports!==fee+rent)fail()
+ return {executionAvailable:false as const,accountEffectsVerified:true as const,gasPayment:'native-wallet' as const,networkFeeLamports:String(fee),newAccountRentLamports:String(rent),receivedUnits:String(received)}
 }

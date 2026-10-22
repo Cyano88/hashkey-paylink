@@ -26,5 +26,5 @@ for (const stable of ['USDC', 'USDT']) {
   }
   assert.throws(() => planBscSwapFunding({...native, amountUnits: String(2n ** 256n - 1n)}))
 }
-for (const pair of [['USDC', 'USDT'], ['BNB', 'BNB'], ['ETH', 'USDC'], ['__proto__', 'BNB']]) assert.throws(() => bscSwapGasPolicy(...pair))
+for (const pair of [['USDC', 'USDC'], ['BNB', 'BNB'], ['ETH', 'USDC'], ['__proto__', 'BNB']]) assert.throws(() => bscSwapGasPolicy(...pair))
 console.log('PASS BSC input-stablecoin reimbursement, 18-decimal conservation, BNB gas reserve, balance boundaries and invalid policy/amount rejection; no signing or broadcast')

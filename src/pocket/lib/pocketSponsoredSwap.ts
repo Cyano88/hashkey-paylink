@@ -6,7 +6,7 @@ import {makeSponsoredBatchRequest} from './pocketSponsoredRequest'
 const approve=parseAbi(['function approve(address,uint256) returns(bool)'])
 const transfer=parseAbi(['function transfer(address,uint256) returns(bool)'])
 export type SponsoredSwapReview={feeToken:string;feeUnits:string;totalUnits:string;expiresAt:number;request:ReturnType<typeof makeSponsoredBatchRequest>}
-export function reimbursedSwapAsset(q:StockSwapQuote){return (q.tokenOut.address==='native'||stockAssets.some(a=>a.address.toLowerCase()===q.tokenOut.address.toLowerCase()))&&[stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase()].includes(q.tokenIn.address.toLowerCase())?q.tokenIn.symbol as 'USDC'|'USDT':undefined}
+export function reimbursedSwapAsset(q:StockSwapQuote){return (q.tokenOut.address==='native'||[stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase()].includes(q.tokenOut.address.toLowerCase())||stockAssets.some(a=>a.address.toLowerCase()===q.tokenOut.address.toLowerCase()))&&[stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase()].includes(q.tokenIn.address.toLowerCase())?q.tokenIn.symbol as 'USDC'|'USDT':undefined}
 export function sponsoredSwapCalls(q:StockSwapQuote){
  validateStockSwap(q,q.owner)
  if(!reimbursedSwapAsset(q)||q.tx.value!=='0')throw Error('Unsupported sponsored swap.')

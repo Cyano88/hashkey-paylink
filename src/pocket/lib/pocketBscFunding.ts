@@ -12,7 +12,7 @@ function units(value: string): bigint {
 export function bscSwapGasPolicy(input: PocketBscAsset, output: PocketBscAsset) {
   pocketBscAsset(input)
   pocketBscAsset(output)
-  if (input === output || (input !== 'BNB' && output !== 'BNB')) throw Error('Choose BNB and USDC or USDT.')
+  if (input === output) throw Error('Choose two different supported assets.')
   return input === 'BNB'
     ? {mode: 'native' as const, gasAsset: 'BNB' as const, reimbursementAsset: null}
     : {mode: 'stablecoin-reimbursement' as const, gasAsset: 'BNB' as const, reimbursementAsset: input}

@@ -17,6 +17,6 @@ export function nativeSwapAssets(network:NativeSwapNetwork):NativeSwapAsset[]{
 }
 export function nativeSwapPair(network:NativeSwapNetwork,from:string,to:string){
  const assets=nativeSwapAssets(network),tokenIn=assets.find(a=>a.symbol===from),tokenOut=assets.find(a=>a.symbol===to)
- if(!tokenIn||!tokenOut||tokenIn.native===tokenOut.native)throw Error('Choose a native asset and USDC or USDT.')
+ if(!tokenIn||!tokenOut||tokenIn.symbol===tokenOut.symbol)throw Error('Choose two different supported assets.')
  return {tokenIn,tokenOut}
 }
