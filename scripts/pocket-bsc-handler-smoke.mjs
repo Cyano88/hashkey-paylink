@@ -26,6 +26,7 @@ f=fixture();assert.equal((await f.request({quoteToken:token+'x'})).code,409);ass
 f=fixture();assert.equal((await f.request({action:'balances'})).value.balances.USDT,'1')
 f=fixture();f.s.submitThrows=true;f.s.state='pending';r=await f.request({action:'submit',authorization:'signature'});assert.equal(r.code,202);assert.equal(r.value.status,'pending');assert.ok(!JSON.stringify(r.value).includes('diagnostic'))
 f=fixture();f.s.submitThrows=true;f.s.readThrows=true;r=await f.request({action:'submit',authorization:'signature'});assert.equal(r.code,503);assert.equal(r.value.code,'swap_outcome_unknown')
+f=fixture();f.s.submitThrows=true;r=await f.request({action:'submit',authorization:'signature'});assert.equal(r.code,409);assert.equal(r.value.code,'swap_not_submitted');assert.ok(!JSON.stringify(r.value).includes('diagnostic'))
 f=fixture();assert.equal((await f.request({},'GET')).code,405)
 f=fixture();f.s.enabled=false;f.s.state='pending';r=await f.request({action:'capabilities'});assert.equal(r.code,200);assert.equal(r.value.enabled,false);assert.equal(r.value.pending.length,1);assert.equal(r.value.pending[0].quote.network,'bsc');
 console.log('PASS BSC HTTP boundary: authenticated ownership, duplicate wallet rejection, sealed quote binding, execution gate with recovery retained, balances, PIN forwarding and unknown-submission response; disabled capabilities retain authenticated recovery')

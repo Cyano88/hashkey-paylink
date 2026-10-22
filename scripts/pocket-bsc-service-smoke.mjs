@@ -51,3 +51,17 @@ console.log('PASS failed receipts: only actual native gas is recorded; reverted 
 
 f=fixture(quotes[0]);f.env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED='false';f.env.POCKET_PRIVY_COMBINED_BILLING_ENABLED='true';assert.equal(f.service.enabled(),true);await f.service.operations.prepare(quotes[0],'pin');assert.equal(f.s.sharedChecks,1)
 console.log('PASS BSC combined billing mode invokes existing wallet-wide coverage guard before new sponsorship')
+
+// The configured quote margin absorbs small cost movements; the approved fee
+// and transfer stay fixed. A real coverage shortfall must still block sending.
+{
+ const q=quotes.find(q=>q.from!=='BNB'),f=fixture(q)
+ const original=f.service.runtime.estimateSponsored
+ let covered=true
+ f.service.runtime.estimateSponsored=async()=>({...(await original()),feeUnits:String(BigInt(q.reimbursementUnits)+1n),coverageFeeUnits:String(BigInt(q.reimbursementUnits)+(covered?-1n:1n))})
+ await f.service.operations.prepare(q,'pin')
+ covered=false;await assert.rejects(()=>f.service.operations.submit(q.id,q,'wallet-signature'),/fee changed/);assert.equal(f.s.send,0)
+ covered=true;await f.service.operations.submit(q.id,q,'wallet-signature');assert.equal(f.s.send,1)
+ assert.equal(f.store.operations[q.id].quote.reimbursementUnits,q.reimbursementUnits)
+}
+console.log('PASS fixed signed fee absorbs covered price movement; uncovered cost blocks submission')

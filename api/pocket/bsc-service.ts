@@ -63,7 +63,7 @@ export function createBscService(overrides:Partial<typeof defaults>={}){
     if(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED==='true')await d.sharedBilling(q.walletAddress)
     await billing(Object.values((await d.read())?.operations||{}),q.walletId)
     const fee=await runtime.estimateSponsored(q,bscSponsoredSwapCalls(q,d.now()))
-    if(fee.expiresAt<=d.now()||BigInt(fee.feeUnits)>BigInt(q.reimbursementUnits))throw Error('Network fee changed. Review the swap again.')
+    if(fee.expiresAt<=d.now()||BigInt(fee.coverageFeeUnits??fee.feeUnits)>BigInt(q.reimbursementUnits))throw Error('Network fee changed. Review the swap again.')
    }else{
     const gas=await runtime.estimateNative(q)
     if(BigInt(gas.gasLimit)>BigInt(q.nativeGas!.gasLimit)||BigInt(gas.maxFeePerGas)>BigInt(q.nativeGas!.maxFeePerGas))throw Error('Network fee changed. Review the swap again.')

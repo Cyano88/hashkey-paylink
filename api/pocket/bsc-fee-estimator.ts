@@ -44,8 +44,12 @@ export function createBscFeeEstimator(d: {rpc: XLayerCostRpc; prices(asset: 'USD
   // BSC is an L1: no X Layer L1 data fee or OP-stack oracle call.
   const networkWei = (gas.totalGas + 25000n) * (suggested > nativePrice ? suggested : nativePrice)
   const fee = priceBscSponsorship(networkWei, prices.bnb, prices.stable, policy, now())
+  // The quoted margin is a reserve for changes before submission, not a second
+  // margin that must be rebuilt on top of every fresh estimate. Keep provider
+  // charges, allowance and minimum fee in the coverage floor.
+  const coverageFee = priceBscSponsorship(networkWei, prices.bnb, prices.stable, {...policy, marginBps: 0}, now())
   const expiresAt = Math.min(q.expiresAt, prices.bnb.observedAt + 30000, prices.stable.observedAt + 30000, blockTime + 30000)
   if (expiresAt <= now()) return fail()
-  return {feeUnits: String(fee), expiresAt}
+  return {feeUnits: String(fee), coverageFeeUnits: String(coverageFee), expiresAt}
  }
 }

@@ -72,6 +72,10 @@ export function createBscSwapHandler(d:Dependencies){
     try{
      const op=await d.operations.read(attempted.id,attempted.binding)
      if(['submitting','pending','completed','failed','not_submitted'].includes(op.state))return res.status(202).json(result(op))
+     if(op.state==='prepared'){
+      const message=error instanceof Error?error.message:''
+      return res.status(409).json({ok:false,code:'swap_not_submitted',error:message==='Network fee changed. Review the swap again.'?message:'Could not prepare this swap. Refresh the quote.'})
+     }
     }catch{return res.status(503).json({ok:false,status:'pending',code:'swap_outcome_unknown',error:'Still confirming your swap.'})}
    }
    if((error as any)?.status===401)return res.status(401).json({ok:false,error:'Sign in again to continue.'})

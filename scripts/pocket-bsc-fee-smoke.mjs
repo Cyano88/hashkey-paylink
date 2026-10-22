@@ -6,6 +6,10 @@ const policy={providerBps:1000,providerAllowanceUsdMicros:1000n,marginBps:2500,m
 assert.equal(priceBscSponsorship(100000000000000n,bnb,stable,policy,now),111250000000000000n)
 assert.equal(priceBscSponsorship(100000000000000n,bnb,{...stable,scaled8:50000000n},policy,now),222500000000000000n)
 assert.equal(priceBscSponsorship(1n,bnb,stable,policy,now),policy.minimumFeeUnits)
+const approved=priceBscSponsorship(100000000000000n,bnb,stable,policy,now)
+assert.ok(priceBscSponsorship(101000000000000n,bnb,stable,{...policy,marginBps:0},now)<approved)
+assert.ok(priceBscSponsorship(130000000000000n,bnb,stable,{...policy,marginBps:0},now)>approved)
+assert.equal(priceBscSponsorship(1n,bnb,stable,{...policy,marginBps:0},now),policy.minimumFeeUnits)
 for(const mutation of [{observedAt:now-30000},{observedAt:now+5001},{scaled8:0n},{scaled8:-1n}])assert.throws(()=>priceBscSponsorship(1n,{...bnb,...mutation},stable,policy,now))
 for(const change of [{providerBps:-1},{providerBps:10001},{marginBps:NaN},{providerAllowanceUsdMicros:-1n},{maximumFeeUnits:1n}])assert.throws(()=>priceBscSponsorship(1n,bnb,stable,{...policy,...change},now))
 let called=[]
