@@ -57,6 +57,7 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if (['cancelled', 'not_submitted'].includes(record.status) && !record.metadata?.txHash) return undefined
   if(record.action==='wallet.bsc-swap'&&record.metadata){const m=record.metadata;return bscSwapActivity({id:m.operationId,wallet:m.walletAddress,from:m.from,to:m.to,amount:m.amount,amountOut:m.amountOut,fee:m.feeEstimated==='false'?m.fee:undefined,feeAsset:m.feeAsset,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
   if(record.action==='wallet.cash-conversion'&&record.metadata){const m=record.metadata;return cashConversionActivity({id:record.idempotencyKey.replace(/^pocket:cash-conversion:/,''),wallet:m.walletAddress,amount:m.amount,amountOut:m.amountOut,fee:m.feeAmount,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
   if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,feeAmount:record.metadata.feeAmount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
@@ -434,7 +435,9 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
     const [hashes, history, bankRoutes, assetActions] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false }), listCirclePocketActions(owner, 500, 'bank-withdraw.route'), listCirclePocketActions(owner, 500)])
     const bankRows = history.payments.map(sanitizedActivityRow)
     const assetRows = assetActions.flatMap(record => { const row = bridgeActivityRow(record); return row ? [row] : [] })
-    const linkedRows = mergePocketActivityRows(snapshot.payments, assetRows).map(row => {
+    const closedApprovals = new Set(assetActions.filter(record=>record.action==='wallet.swap'&&['cancelled','not_submitted'].includes(record.status)&&!record.metadata?.txHash).map(record=>record.resourceId||record.idempotencyKey.replace(/^pocket:arc-swap:/,'')))
+    const retained = snapshot.payments.filter(row=>!(row.source==='wallet-swap'&&row.chain==='arc'&&!row.txHash&&closedApprovals.has(row.providerReference||'')&&!['completed','confirmed','paid','success','successful','refunded'].includes(row.paycrestStatus||'')))
+    const linkedRows = mergePocketActivityRows(retained, assetRows).map(row => {
       if (row.source !== 'wallet-bridge' || row.fundingParent) return row
       const route = bankRoutes.find(item => item.metadata?.txHash?.toLowerCase() === row.txHash.toLowerCase() && item.metadata?.source === row.chain)
       const parent = route?.metadata?.intentId && bankRows.find(item => item.source === 'bank-withdraw' && item.providerReference === route.metadata!.intentId)
@@ -445,7 +448,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
       hashes.add(funding.txHash.toLowerCase())
       if (funding.destinationTxHash) hashes.add(funding.destinationTxHash.toLowerCase())
     }
-    return { ...snapshot, groupedTransactionHashes: [...hashes], payments: payments.filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
+    return { ...snapshot, dismissedSwapApprovalIds:[...new Set([...(snapshot.dismissedSwapApprovalIds||[]),...closedApprovals])], groupedTransactionHashes: [...hashes], payments: payments.filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
   }
 
 export default createDurablePocketActivityHandler({

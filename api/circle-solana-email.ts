@@ -1286,13 +1286,13 @@ export async function readCircleEvmChallenge(input: { chain: CircleGasStationEvm
   const transactionId = Array.isArray(ids) && typeof ids[0] === 'string' ? ids[0] : ''
   if (!transactionId) {
     const state = String(challenge.status ?? challenge.state ?? '').toUpperCase()
-    if (['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state)) return { status: 'failed' as const, notSubmitted: true }
+    if (['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state)) return { status: 'failed' as const, notSubmitted: true, approvalOutcome: ['CANCELLED', 'CANCELED'].includes(state) ? 'cancelled' as const : state === 'EXPIRED' ? 'expired' as const : 'rejected' as const }
     return { status: state === 'PENDING' ? 'awaiting_approval' as const : 'pending' as const }
   }
   const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken, apiKey: circleApiKey({ chain: input.chain }) })
   const tx = data.transaction
   if (!tx || tx.walletId !== input.walletId || tx.blockchain !== EVM_CHAINS[input.chain].blockchain) return { status: 'pending' as const }
-  if (String(tx.state ?? tx.status).toUpperCase() === 'FAILED') return { status: 'failed' as const }
+  if (String(tx.state ?? tx.status).toUpperCase() === 'FAILED') return { status: 'failed' as const, txHash: typeof tx.txHash === 'string' ? tx.txHash : undefined }
   return { status: 'pending' as const, txHash: typeof tx.txHash === 'string' ? tx.txHash : undefined }
 }
 

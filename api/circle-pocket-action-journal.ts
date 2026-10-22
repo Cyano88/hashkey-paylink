@@ -13,7 +13,7 @@ const JOURNAL_PATH = process.env.CIRCLE_POCKET_ACTION_STORE
 const JOURNAL_STORE_KEY = (process.env.CIRCLE_POCKET_ACTION_STORE_KEY ?? 'hashpaylink:circle-pocket-actions').trim()
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 
-export type CirclePocketActionStatus = 'started' | 'submitted' | 'completed' | 'failed'
+export type CirclePocketActionStatus = 'started' | 'submitted' | 'completed' | 'failed' | 'cancelled' | 'not_submitted'
 export type CirclePocketActionRecord = {
   id: string
   ownerId: string
@@ -143,6 +143,13 @@ export async function recordCirclePocketAction(input: {
       && record.idempotencyKey === input.idempotencyKey
       && record.action === input.action
     ))
+    if(input.action==='wallet.swap'&&existing){
+      // Cancellation and status reads can race. Persisted transaction evidence wins.
+      if(existing.status==='completed'||(existing.status==='failed'&&existing.metadata?.txHash))return existing
+      if(['cancelled','not_submitted'].includes(input.status)&&existing.metadata?.txHash)return existing
+      if(['cancelled','not_submitted'].includes(existing.status)&&['started','submitted'].includes(input.status)&&!input.metadata?.txHash)return existing
+      input.metadata={...existing.metadata,...input.metadata}
+    }
     if (input.action.startsWith('gift.') && existing) {
       for (const field of ['txHash','network','amount','giftId']) if (existing.metadata?.[field] !== input.metadata?.[field]) throw new Error('Gift receipt does not match its saved transfer.')
       const oldState = existing.metadata?.state, nextState = input.metadata?.state
