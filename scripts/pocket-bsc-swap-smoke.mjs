@@ -4,12 +4,14 @@ import {encodeFunctionData, decodeFunctionData, getAddress, parseAbi} from 'viem
 import {POCKET_BSC} from '../src/pocket/lib/pocketBsc.ts'
 import {bscSponsoredSwapCalls, bscSwapRequest, validateBscSwap} from '../src/pocket/lib/pocketBscSwap.ts'
 import {quoteBscSwap, sealBscSwap, openBscSwap} from '../api/pocket/bsc-swap-quote.ts'
+import {normalizeBscProviderCall} from '../api/pocket/bsc-provider-call.ts'
 import {makeSponsoredBatchRequest} from '../src/pocket/lib/pocketSponsoredRequest.ts'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
 const abi = JSON.parse(readFileSync('src/pocket/lib/pocketOkxRouterAbi.json', 'utf8'))
 const erc20 = parseAbi(['function approve(address,uint256) returns(bool)', 'function transfer(address,uint256) returns(bool)'])
 const wallet = getAddress('0x' + '1'.repeat(40)), now = Date.now(), secret = 'bsc-fixture-secret-'.repeat(3)
 const fee = 26736000000000000n
+const compactAbi = parseAbi(['function unxswapTo(uint256 srcToken,uint256 amount,uint256 minReturn,address receiver,bytes32[] pools) payable returns(uint256)'])
 function fixture(stable, reverse = false) {
   const binding = {ownerId: 'fixtureOwner', walletId: 'fixturewallet1234', walletAddress: wallet, from: reverse ? 'BNB' : stable, to: reverse ? stable : 'BNB', totalInputUnits: '1000000000000000000'}
   const requests = []
@@ -81,6 +83,31 @@ for (const stable of ['USDC', 'USDT']) for (let reverse of [false, true, 'stable
     const r = await d.read(p, query); if (r.routerResult) r.routerResult.fromToken.decimal = '6'; return r
   }}))
 }
+for (const stable of ['USDC','USDT']) for (const reverse of [true,false]) {
+  const {binding,d}=fixture(stable,reverse)
+  const base=await quoteBscSwap(binding,d)
+  const token=BigInt(POCKET_BSC.assets[base.from].address), order=123n
+  const pools=['0x'+'12'.repeat(32)]
+  const args=[token|(order<<160n),BigInt(base.tradeInputUnits),BigInt(base.minimumOutUnits),wallet,pools]
+  const compact=(values=args,tail='')=>({...base,tx:{...base.tx,data:encodeFunctionData({abi:compactAbi,functionName:'unxswapTo',args:values})+tail}})
+  const normalized=normalizeBscProviderCall(compact())
+  validateBscSwap(normalized,now)
+  const decoded=decodeFunctionData({abi,data:normalized.tx.data})
+  assert.equal(decoded.functionName,'unxswapToWithBaseRequest')
+  assert.equal(decoded.args[0],order);assert.deepEqual(decoded.args[3],pools)
+  assert.equal(decoded.args[2].toToken.toLowerCase(),POCKET_BSC.assets[base.to].address.toLowerCase())
+  assert.ok(decoded.args[2].deadLine*1000n>=BigInt(base.expiresAt))
+  for(const [index,value] of [[0,1n],[1,1n],[2,1n],[3,POCKET_BSC.spender],[4,[]]]){
+    const bad=[...args];bad[index]=value;assert.throws(()=>normalizeBscProviderCall(compact(bad)))
+  }
+  assert.throws(()=>normalizeBscProviderCall(compact(args,'00')))
+  assert.throws(()=>normalizeBscProviderCall(compact(args,'00'.repeat(64))))
+  const zeroReceiver=[...args];zeroReceiver[3]='0x'+'0'.repeat(40)
+  validateBscSwap(normalizeBscProviderCall(compact(zeroReceiver)),now)
+  if(reverse){const zeroSource=[...args];zeroSource[0]=order<<160n;validateBscSwap(normalizeBscProviderCall(compact(zeroSource)),now)}
+  assert.throws(()=>validateBscSwap({...base,tx:{...base.tx,data:'0x12345678'}},now))
+}
+console.log('PASS compact BSC routes preserve pools/order/minimum, bind output/deadline, reject recipient/input/minimum/trailer changes and unknown selectors')
 assert.equal(makeSponsoredBatchRequest({appId: 'app', walletId: 'wallet', attemptId: 'attempt', expiresAt: now + 1000, calls: []}).body.caip2, 'eip155:196')
 console.log('PASS four BSC directions; exact stable reimbursement batch; native gas caps; chain/owner/wallet/route/expiry binding; shortfalls, 18 decimals, bounded fee convergence; X Layer request unchanged. Fixtures only, no broadcast.')
 

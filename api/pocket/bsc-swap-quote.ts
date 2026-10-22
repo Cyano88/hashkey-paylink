@@ -4,6 +4,7 @@ import {POCKET_BSC, pocketBscAsset, type PocketBscAsset} from '../../src/pocket/
 import {bscSwapGasPolicy} from '../../src/pocket/lib/pocketBscFunding.js'
 import {bscSponsoredSwapCalls, validateBscSwap, type BscSwapQuote} from '../../src/pocket/lib/pocketBscSwap.js'
 import {readStockSwapFee} from '../../src/pocket/lib/pocketXStocksSwap.js'
+import {normalizeBscProviderCall} from './bsc-provider-call.js'
 
 export type BscSwapBinding = {ownerId: string; walletId: string; walletAddress: Hex; from: PocketBscAsset; to: PocketBscAsset; totalInputUnits: string}
 type Dependencies = {
@@ -36,11 +37,11 @@ export async function quoteBscSwap(binding: BscSwapBinding, d: Dependencies): Pr
     if (!route || String(route.chainIndex) !== '56' || route.fromTokenAmount !== String(trade)
       || route.fromToken?.tokenContractAddress?.toLowerCase() !== input.address.toLowerCase() || route.toToken?.tokenContractAddress?.toLowerCase() !== output.address.toLowerCase()
       || Number(route.fromToken?.decimal) !== 18 || Number(route.toToken?.decimal) !== 18 || !integer(route.toTokenAmount)) fail()
-    const q: BscSwapQuote = {...binding, version: 1, chainId: 56, id, tradeInputUnits: String(trade), reimbursementUnits: String(fee),
+    const q: BscSwapQuote = normalizeBscProviderCall({...binding, version: 1, chainId: 56, id, tradeInputUnits: String(trade), reimbursementUnits: String(fee),
       nativeGasReserveUnits: policy.mode === 'native' ? '21000' : '0',
       ...(policy.mode === 'native' ? {nativeGas: {gasLimit: '21000', maxFeePerGas: '1', maxPriorityFeePerGas: '0'}} : {}),
       expectedOutUnits: route.toTokenAmount, minimumOutUnits: data.tx?.minReceiveAmount, priceImpact: String(route.priceImpactPercent),
-      issuedAt, expiresAt: issuedAt + 30000, tx: {from: data.tx?.from, to: data.tx?.to, data: data.tx?.data, value: String(data.tx?.value ?? '0')}}
+      issuedAt, expiresAt: issuedAt + 30000, tx: {from: data.tx?.from, to: data.tx?.to, data: data.tx?.data, value: String(data.tx?.value ?? '0')}})
     q.positiveSlippageFee = readStockSwapFee({tx: q.tx, expectedOut: formatUnits(BigInt(q.expectedOutUnits), 18), decimalsOut: 18})
     validateBscSwap(q, now())
     if (policy.mode === 'native') {
