@@ -37,7 +37,7 @@ export async function keyCommand(command, options, { fetcher, sessionStore, vaul
   const days = Number(options['expires-in-days'] ?? 30)
   if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId ?? '') || !name?.trim() || name.length > 60
     || !Number.isInteger(days) || days < 1 || days > 30 || !scopes.length || new Set(scopes).size !== scopes.length
-    || scopes.some(scope => !['project:read','checkout:read','checkout:create'].includes(scope) || !session.grant.scopes.includes(scope))) throw safeError('Invalid key inputs or permissions exceed the approved grant.')
+    || scopes.some(scope => !['project:read','checkout:read','checkout:create','agreement:read','agreement:create'].includes(scope) || !session.grant.scopes.includes(scope))) throw safeError('Invalid key inputs or permissions exceed the approved grant.')
   const vault = await vaultStore.read() ?? { keys: [], plans: [] }
   let entry = vault.keys.find(key => key.operationId === operationId && key.projectId === session.grant.projectId)
   const spec = { name: name.trim(), scopes, expiresInDays: days }

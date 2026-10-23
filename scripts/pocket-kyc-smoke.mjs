@@ -14,7 +14,7 @@ const {default:m}=await import('../.codex-temp/kyc-fixture.cjs')
 const sign=timestamp=>createHmac('sha256','fixture-secret').update(timestamp).update('fixture').update('sid_request').digest('base64')
 const response=(data)=>{const timestamp=new Date().toISOString();return{...data,timestamp,signature:sign(timestamp)}}
 globalThis.fetch=async(url,init)=>{const body=JSON.parse(init.body);state.calls.push({url,body});if(url.endsWith('/token'))return new Response(JSON.stringify({token:'fixture-session'}));if(state.result?.missing)return new Response(JSON.stringify({code:'2304'}),{status:400});return new Response(JSON.stringify(response(state.result)))}
-async function request(owner,body,callback=false){const r={code:200,setHeader(){},status(c){this.code=c;return this},json(b){this.body=b;return this}};await(callback?m.pocketKycCallback:m.default)({method:'POST',headers:{authorization:owner},body},r);return r}
+async function request(owner,body,callback=false){const r={code:200,setHeader(){},status(c){this.code=c;return this},json(b){this.body=b;return this}};await(callback?m.pocketLegacyKycCallback:m.pocketLegacyKyc)({method:'POST',headers:{authorization:owner},body},r);return r}
 assert.equal((await request('',{action:'start',consent:true})).code,401)
 assert.equal((await request('alice',{action:'start'})).code,400)
 const starts=await Promise.all([request('alice',{action:'start',consent:true,userId:'bob'}),request('alice',{action:'start',consent:true})]);assert.deepEqual(starts.map(r=>r.code).sort(),[200,409]);assert.equal(state.calls.filter(c=>c.url.endsWith('/token')).length,1)
@@ -123,3 +123,17 @@ console.log('PASS provisional review remains refreshable until final provider ve
 const missingDob=await request('missing-dob',{action:'start',consent:true});
 assert.equal((await passJob('missing-dob',missingDob,'bvn','Test Person','')).body.status,'review');
 console.log('PASS new BVN policy requires government ID type and matching attributes; legacy policy remains readable.')
+
+// Pausing enrollment must not mint tokens, change records, or mark anyone verified.
+const rolloutSnapshot = JSON.stringify([...state.values]);
+const rolloutCalls = state.calls.length;
+for (const action of ['start', 'resume']) {
+  const res = { code: 200, setHeader() {}, status(code) { this.code=code; return this }, json(body) { this.body=body; return this } };
+  await m.default({method:'POST',headers:{authorization:'alice'},body:{action,consent:true}},res);
+  assert.equal(res.code,503); assert.equal(res.body.code,'KYC_COMING_SOON'); assert.equal(res.body.retryable,false);
+}
+const unauthorizedRollout = { code:200,setHeader(){},status(code){this.code=code;return this},json(body){this.body=body;return this} };
+await m.default({method:'POST',headers:{},body:{action:'start'}},unauthorizedRollout);
+assert.equal(unauthorizedRollout.code,401);
+assert.equal(state.calls.length,rolloutCalls); assert.equal(JSON.stringify([...state.values]),rolloutSnapshot);
+console.log('PASS paused public enrollment preserves authentication and records, makes no provider calls, and never grants verification.');

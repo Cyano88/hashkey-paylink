@@ -1,4 +1,4 @@
-import type { CirclePocketWallet } from '../models/pocketWallet'
+﻿import type { CirclePocketWallet } from '../models/pocketWallet'
 
 /** Opaque revision binds a balance to the exact linked wallet, without returning its address. */
 export async function pocketBalanceRevision(network: string, wallet?: CirclePocketWallet) {

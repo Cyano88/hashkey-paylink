@@ -145,7 +145,7 @@ describe('Arc Agreement deployment simulation', () => {
     expect(() => evaluateArcAgreementDeploymentSimulation({
       ...valid,
       chainId: 8453,
-    })).to.throw(/not Arc Testnet/)
+    })).to.throw(/not Arc Mainnet/)
     expect(() => evaluateArcAgreementDeploymentSimulation({
       ...valid,
       usdcCode: '0x',

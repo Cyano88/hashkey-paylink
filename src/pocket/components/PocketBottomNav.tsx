@@ -1,4 +1,6 @@
-import { Home, Receipt, History, UserRound } from './PocketIcons'
+import { Home, Receipt, History, UserRound, TrendingUp, Wallet } from './PocketIcons'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { isXStocksPath, xStockNavPath } from '../lib/pocketRail'
 import { cn } from '../../lib/utils'
 
 export type PocketNavTab = 'home' | 'bills' | 'activity' | 'profile'
@@ -18,16 +20,21 @@ const items = [
 ] as const
 
 export default function PocketBottomNav({ active, disabled = false, keyboardOpen = false, onSelect }: PocketBottomNavProps) {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const stocks = isXStocksPath(pathname)
+  const visibleItems = stocks ? [items[0], { key: 'bills' as const, label: 'XStocks', icon: TrendingUp }, items[2], { key: 'profile' as const, label: 'Portfolio', icon: Wallet }] : items
   return (
     <nav
       aria-label="Pocket navigation"
+      style={{ display: keyboardOpen ? 'none' : undefined }}
       className={cn(
-        'pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.35rem,var(--pocket-safe-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] transition-transform duration-200 dark:border-[#262626] dark:bg-[#0b0b0b] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.24)]',
+        'pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.35rem,var(--pocket-safe-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-[#262626] dark:bg-[#0b0b0b] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.24)]',
         keyboardOpen && 'translate-y-full',
       )}
     >
       <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 gap-1">
-        {items.map(({ key, label, icon: Icon }) => {
+        {visibleItems.map(({ key, label, icon: Icon }) => {
           const selected = active === key
           return (
             <button
@@ -36,19 +43,19 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
               disabled={disabled}
               aria-disabled={disabled || undefined}
               aria-current={selected ? 'page' : undefined}
-              onClick={() => onSelect(key)}
+              onClick={() => stocks ? navigate(xStockNavPath(key)) : onSelect(key)}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected
-                  ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
-                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/[0.05] dark:hover:text-white/70',
+                  ? 'text-zinc-950 dark:text-white'
+                  : 'text-zinc-400 hover:text-zinc-950 dark:text-zinc-600 dark:hover:text-white',
               )}
             >
               <Icon
                 aria-hidden="true"
                 className={cn(
-                  'h-[19px] w-[19px] shrink-0 stroke-current',
-                  selected ? 'text-white stroke-[2.5] dark:text-gray-950' : 'text-gray-500 dark:text-white/50',
+                  'h-[22px] w-[22px] shrink-0 stroke-current',
+                  selected ? 'stroke-[2.5]' : 'stroke-[1.8]',
                 )}
               />
               <span>{label}</span>

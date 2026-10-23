@@ -100,7 +100,7 @@ export async function deleteDurableJson(key: string): Promise<void> {
   await requirePool().query('delete from render_durable_kv where store_key = $1', [key])
 }
 
-export async function mutateDurableJson<T>(key: string, mutate: (current: T | undefined) => T | Promise<T>): Promise<T> {
+export async function mutateDurableJson<T>(key: string, mutate: (current: T | undefined) => T | Promise<T>, afterMutation?: (client: pg.PoolClient, previous: T | undefined, next: T) => Promise<void>): Promise<T> {
   await ensureSchema()
   const client = await requirePool().connect()
   try {
@@ -115,7 +115,9 @@ export async function mutateDurableJson<T>(key: string, mutate: (current: T | un
     )
     const result = await client.query('select value from render_durable_kv where store_key = $1 for update', [key])
     const current = (result.rows[0]?.value ?? undefined) as T | undefined
+    const previous = afterMutation && current !== undefined ? structuredClone(current) : current
     const next = await mutate(current)
+    if (afterMutation) await afterMutation(client, previous, next)
     await client.query(
       `insert into render_durable_kv (store_key, value, updated_at)
         values ($1, $2::jsonb, now())

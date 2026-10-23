@@ -16,8 +16,6 @@ type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto' | '
 type CreatorReviewStatus = 'pending' | 'approved' | 'rejected'
 
 const CREATOR_CATEGORIES: Array<{ id: CreatorCategory; label: string; disabled?: boolean }> = [
-  { id: 'worldcup-news', label: 'World Cup News' },
-  { id: 'live-scores', label: 'Live Scores' },
   { id: 'crypto', label: 'Crypto' },
   { id: 'ebooks', label: 'Ebooks' },
   { id: 'developers', label: 'Developers' },

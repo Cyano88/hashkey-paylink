@@ -436,7 +436,7 @@ function AgreementDetail({
               <p className="mt-1 text-[11px] text-gray-400">{formatDate(agreement.payerAction.updatedAt)}</p>
             </div>
             <Status
-              label={agreement.payerAction.status.replaceAll('_', ' ')}
+              label={agreement.payerAction.status.replace(/_/g, ' ')}
               tone={agreement.payerAction.status === 'confirmed'
                 ? 'success'
                 : agreement.payerAction.status === 'manual_review' || agreement.payerAction.status === 'failed'
@@ -493,7 +493,7 @@ function AgreementDetail({
           <div className="mt-3 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold capitalize text-gray-800 dark:text-gray-200">{latest.action}</p>
-              <Status label={latest.status.replaceAll('_', ' ')} tone={latest.status === 'completed' ? 'success' : latest.status === 'failed' ? 'danger' : 'neutral'} />
+              <Status label={latest.status.replace(/_/g, ' ')} tone={latest.status === 'completed' ? 'success' : latest.status === 'failed' ? 'danger' : 'neutral'} />
             </div>
             <p className="mt-2 text-[11px] text-gray-400">{formatDate(latest.updatedAt)}</p>
           </div>
@@ -572,7 +572,7 @@ function ActionState({ action, workerEnabled }: { action: OperatorAction; worker
               ? 'Waiting for payer review'
               : action.status === 'queued' && !workerEnabled
               ? 'Reviewed · execution disabled'
-              : action.status.replaceAll('_', ' ')}
+              : action.status.replace(/_/g, ' ')}
           </p>
           <p className={cn('mt-1 text-[11px] leading-5', danger ? 'text-red-700/75 dark:text-red-200/70' : 'text-blue-700/75 dark:text-blue-200/70')}>
             {action.lastError

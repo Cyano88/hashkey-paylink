@@ -31,7 +31,7 @@ function formatUsdc(value: number) {
   return `${value.toLocaleString('en-US', { maximumFractionDigits: 6 })} USDC`
 }
 
-function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.location.origin) {
+export function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.location.origin) {
   const network = merchant.bank_configured ? 'base' : supportedMerchantNetworks(merchant.supported_networks)[0]
   const url = new URL('/pay', origin)
   url.searchParams.set('f', '1')

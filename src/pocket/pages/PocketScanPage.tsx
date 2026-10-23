@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from '../components/PocketIcons'
+import { xStockPath } from '../lib/pocketRail'
 import { parsePocketScanCode } from '../lib/pocketScanCode'
 import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 const PaymentPage=lazy(()=>import('../../pages/PaymentPage'))
@@ -15,6 +16,7 @@ export default function PocketScanPage() {
   pending.current=true;stop();setBusy(true);setError('');abort.current?.abort();const controller=new AbortController();abort.current=controller
   try {
    const code=parsePocketScanCode(raw)
+   if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true});return}
    const path=code.kind==='pos'?'/api/ng-pos?view=pocket-scan&merchant_id='+encodeURIComponent(code.id)+'&code='+encodeURIComponent(code.url):'/api/v2/checkouts?id='+encodeURIComponent(code.id)+'&attempt='+encodeURIComponent(code.attempt)
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})
    const data=await response.json()
@@ -60,9 +62,9 @@ export default function PocketScanPage() {
   return()=>{stop();abort.current?.abort();pending.current=false}
  },[location.search])
  useEffect(()=>{const hide=()=>{if(document.visibilityState!=='visible')stop()};document.addEventListener('visibilitychange',hide);return()=>document.removeEventListener('visibilitychange',hide)},[])
- const back=()=>{stop();abort.current?.abort();navigate(POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
- return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-5 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))] text-gray-950 dark:bg-black dark:text-white'>
-  <div className='mx-auto w-full max-w-[480px]'>
+ const back=()=>{stop();abort.current?.abort();navigate(new URLSearchParams(location.search).get('rail')==='xstocks'?xStockPath('home'):POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
+ return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white'>
+  <div className='mx-auto w-full max-w-[462px]'>
    <header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>
    {checkout?<section aria-label='Payment review'><Suspense fallback={<p role='status'>Opening payment review...</p>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back}}/></Suspense></section>:<>
     <p className='mb-4 text-center text-sm text-gray-500'>Scan a Hash PayLink merchant or checkout QR.</p>

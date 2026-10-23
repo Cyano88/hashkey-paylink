@@ -61,7 +61,7 @@ export async function quoteStockSwap(input: { owner: Address; tokenIn: string; t
   return quote
 }
 function secret() {
-  const value = process.env.POCKET_SWAP_QUOTE_SECRET || process.env.PRIVY_APP_SECRET || ''
+  const value = process.env.POCKET_SWAP_QUOTE_SECRET || ''
   if (value.length < 32) fail('Quote verification is not configured.', 503)
   return value
 }

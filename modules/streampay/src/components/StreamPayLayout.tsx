@@ -1,13 +1,10 @@
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { Mail, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { StreamPayHeader } from './StreamPayHeader'
-import { StreamAgentHash } from './StreamAgentHash'
 import { useStreamPayPath } from '../lib/useStreamPayPath'
 
 export function StreamPayLayout() {
-  const { pathname } = useLocation()
-  const showLegacyCreatorAgent = pathname.startsWith('/creator') || pathname.startsWith('/gate')
   const docsTo = useStreamPayPath('/docs')
 
   return (
@@ -57,7 +54,6 @@ export function StreamPayLayout() {
           </a>
         </p>
       </footer>
-      {showLegacyCreatorAgent && <StreamAgentHash />}
     </div>
   )
 }

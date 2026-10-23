@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import PocketKycGate from '../components/PocketKycGate'
+import PocketVerifiedNameGate from '../components/PocketVerifiedNameGate'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -15,7 +15,7 @@ import {
 } from '../features/move/PocketPosPanels'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor, pocketApiUrl } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 
 const POS_COUNTRIES = [
   { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live' as const, copy: 'Receive Naira in your bank account.' },
@@ -28,28 +28,8 @@ export default function PocketMovePosPage() {
   const [searchParams] = useSearchParams()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const [identityVerified, setIdentityVerified] = useState<boolean | null>(null)
-  const [verifiedIdentityName, setVerifiedIdentityName] = useState('')
-  const [verificationPending, setVerificationPending] = useState(false)
-  const [verificationError, setVerificationError] = useState('')
-  useEffect(() => {
-    let current = true
-    setIdentityVerified(null)
-    setVerifiedIdentityName('')
-    setVerificationError('')
-    setVerificationPending(false)
-    if (!authenticated) return
-    void (async () => {
-      try {
-        const token = await getAccessToken()
-        const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', headers: { authorization: `Bearer ${token || ''}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'eligibility' }), signal: AbortSignal.timeout(15000) })
-        const data = await response.json()
-        if (!response.ok || data.ok !== true) throw new Error('Verification could not load. Please try again.')
-        if (current) { setVerificationPending(['pending', 'review'].includes(data.status) && !data.canResume); setIdentityVerified(data.verified === true); setVerifiedIdentityName(data.verified === true && typeof data.legalName === 'string' ? data.legalName : '') }
-      } catch { if (current) { setIdentityVerified(false); setVerificationError('Verification could not load. Please try again from Profile.') } }
-    })()
-    return () => { current = false }
-  }, [authenticated, email, getAccessToken])
+  const verifiedIdentityName = profile.profile?.nameStatus === 'bank_resolved' ? profile.profile.resolvedName : ''
+  const identityVerified = Boolean(verifiedIdentityName)
   const profileReady = Boolean(verifiedIdentityName && email)
   const stepParam = searchParams.get('posStep')
   const routeStep: PocketPosRouteStep = stepParam === 'setup' || stepParam === 'ready' ? stepParam : 'country'
@@ -83,7 +63,7 @@ export default function PocketMovePosPage() {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  if (authenticated && (!profile.loaded || profile.busy || identityVerified === null)) {
+  if (authenticated && (!profile.loaded || profile.busy)) {
     return <PocketLoadingState active="home" />
   }
 
@@ -92,7 +72,7 @@ export default function PocketMovePosPage() {
       <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title="POS" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone>
         {authenticated && !identityVerified && (
-          <PocketKycGate pending={verificationPending} error={verificationError} onClose={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+          <PocketVerifiedNameGate />
         )}
 
         {authenticated && identityVerified && (!pos.country ? (

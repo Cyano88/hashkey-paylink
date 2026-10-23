@@ -1,3 +1,4 @@
+import { createArcDisplayBalanceReader } from './arc-display-balances.js'
 import type { Request, Response } from 'express'
 import { createPublicClient, formatUnits, getAddress, http, parseAbi, type Hex } from 'viem'
 import { arcChain } from '../../src/lib/chains.js'
@@ -8,6 +9,9 @@ import { type ArcSwapQuote, confirmedArcSwapAmount, openArcSwapQuote, quoteArcSw
 
 const TOKEN_ABI = parseAbi(['function balanceOf(address owner) view returns (uint256)'])
 const client = createPublicClient({ chain: arcChain, transport: http(process.env.PRIVATE_RPC_URL_ARC_MAINNET || 'https://rpc.mainnet.arc.io', { timeout: 15_000 }) })
+const readDisplayBalance = createArcDisplayBalanceReader({
+  read: (wallet, token) => client.readContract({ address: getAddress(token), abi: TOKEN_ABI, functionName: 'balanceOf', args: [getAddress(wallet)] }),
+})
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 export async function arcSwapQuotePreview(quote: ArcSwapQuote, readBalance: () => Promise<bigint> = () => client.readContract({ address: quote.tokenIn.address, abi: TOKEN_ABI, functionName: 'balanceOf', args: [quote.walletAddress] })) {
@@ -29,7 +33,7 @@ export default async function arcSwapHandler(req: Request, res: Response) {
         ? await Promise.all(tokens.map(async (token, index) => {
           if (index >= 50) return { ...token, balance: null, balanceStatus: 'unavailable' }
           try {
-            const balance = await client.readContract({ address: token.address, abi: TOKEN_ABI, functionName: 'balanceOf', args: [getAddress(link.circleWalletAddress)] })
+            const balance = await readDisplayBalance(identity.userId, link.circleWalletAddress, token.address)
             return { ...token, balance: formatUnits(balance, token.decimals), balanceStatus: 'ok' }
           } catch { return { ...token, balance: null, balanceStatus: 'unavailable' } }
         })) : tokens.map(token => ({ ...token, balance: null, balanceStatus: 'wallet_required' }))

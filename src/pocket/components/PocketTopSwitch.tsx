@@ -79,8 +79,8 @@ export default function PocketTopSwitch({
               'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',
               compact ? 'gap-1 px-1 text-[9px]' : 'gap-2 px-3 text-xs',
               active
-                ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
-                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
+                ? 'text-zinc-950 dark:text-white'
+                : 'text-zinc-400 hover:text-zinc-950 dark:text-zinc-600 dark:hover:text-white',
             ].join(' ')}
           >
             <Icon className={compact ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4'} />

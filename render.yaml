@@ -14,14 +14,10 @@ services:
         value: production
 
       # ── Frontend (baked in at build time by Vite) ──────────────────────────
-      - key: VITE_WALLETCONNECT_PROJECT_ID
-        sync: false                   # set manually in Render dashboard
       - key: VITE_AUTH_BRIDGE
         value: "hybrid"               # enables Privy-backed public PolyDesk sessions
       - key: VITE_PRIVY_APP_ID
         sync: false                   # browser-visible Privy app id
-      - key: VITE_FACTORY_V2
-        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
       - key: VITE_BASE_PAYMASTER_URL
         value: "/api/base-paymaster"   # optional Coinbase/CDP Base paymaster proxy
       - key: VITE_CIRCLE_PAYMASTER_ENABLED
@@ -56,8 +52,6 @@ services:
         sync: false
       - key: ARENA_ESCROW_FACTORY_ADDRESS_MAINNET
         sync: false                   # Server-side Arena escrow factory after multiplayer contract deploy
-      - key: VITE_ARENA_ESCROW_FACTORY_ADDRESS_MAINNET
-        sync: false                   # Browser-visible Arena escrow factory after deploy
       - key: ARENA_RELAYER_PRIVATE_KEY_MAINNET
         sync: false                   # Server-side Arena relayer key; must match deployed Arena factory relayer
       - key: CIRCLE_API_KEY
@@ -170,8 +164,6 @@ services:
         value: "https://app.hashpaylink.com"
       - key: PUBLIC_APP_URL
         value: "https://hashpaylink.com"
-      - key: CREATOR_ADMIN_KEY
-        sync: false                   # admin review key for /creator-admin approvals
       - key: CREATOR_OFFICIAL_WALLET
         sync: false                   # official StreamPay creator wallet used for official cards
       - key: CREATOR_WORLD_CUP_NEWS_URL
@@ -208,12 +200,6 @@ services:
         sync: false                   # scoped server token for PolyDesk funding checkout creation
       - key: RESEND_API_KEY
         sync: false                   # Resend API key for Hash PayLink transactional emails
-      - key: STREAM_INVITE_FROM_EMAIL
-        value: "no-reply@mail.hashpaylink.com"
-      - key: STREAM_INVITE_FROM_NAME
-        value: "StreamPay"
-      - key: AGENTIC_STREAMING_FROM_EMAIL
-        value: "no-reply@mail.hashpaylink.com"
       - key: ALERT_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
       - key: ZEROSCOUT_API_URL
@@ -250,20 +236,14 @@ services:
         value: "https://rpc.mainnet.arc.io"
 
       # ── Arbitrum + native USDC relayer (api/relay-arbitrum-usdc.ts + api/relay-v2.ts) ─
-      - key: RELAYER_PRIVATE_KEY_ARB
-        sync: false                   # Arbitrum relayer key — wallet needs ETH on Arbitrum
       - key: PRIVATE_RPC_URL_ARB
         value: "https://arb1.arbitrum.io/rpc"   # swap for Alchemy/QuickNode in prod
       - key: PAYLINK_FACTORY_V2_ARB
         value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
-      - key: VITE_FACTORY_V2_ARB
-        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
 
-      # ── V1 sweep keeper (api/sweep.ts + api/sweep-keeper.ts) ──────────────
-      - key: KEEPER_PRIVATE_KEY
-        sync: false                   # 0x-prefixed keeper wallet private key
-      - key: CRON_SECRET
-        sync: false                   # random string; authenticate sweep-keeper cron
+      # Operational endpoint authentication and historical payment indexing
+      - key: ADMIN_SECRET
+        sync: false                   # Authorization Bearer credential, at least 24 characters
       - key: FACTORY_FROM_BLOCK
         value: "45786000"             # Base block before the 0.2% router factory deployment
       - key: SOLANA_RPC_URL
@@ -280,23 +260,9 @@ services:
         sync: false                   # Builder API secret from Polymarket Builders dashboard
       - key: POLYMARKET_BUILDER_PASSPHRASE
         sync: false                   # Builder API passphrase from Polymarket Builders dashboard
-      - key: POLY_STREAM_PROVIDER
-        value: "sportmonks"
-      - key: POLY_STREAM_API_KEY
-        sync: false                   # Sportmonks or API-Football key for World Cup live board
-      - key: POLY_STREAM_LEAGUE_ID
-        value: "732"
-      - key: POLY_STREAM_SEASON
-        value: "2026"
-      - key: POLY_STREAM_FIXTURE_MODE
-        value: "auto"
-      - key: POLY_STREAM_LIMIT
-        value: "64"
-      - key: POLYMARKET_MATCH_URLS
-        sync: false                   # JSON map from fixture/team keys to eligible World Cup Polymarket URLs
 
-# ── External cron (sweep-keeper) ──────────────────────────────────────────────
-# Render free tier does not include cron jobs.
-# Continue using cron-job.org (free) pointing to:
-#   GET https://<your-render-app>.onrender.com/api/sweep-keeper
-#   Header: Authorization: Bearer <CRON_SECRET>
+      # Dedicated Pocket cryptographic secrets; never substitute provider credentials.
+      - key: POCKET_PIN_PEPPER
+        sync: false                   # preserve existing value to keep PIN hashes valid
+      - key: POCKET_SWAP_QUOTE_SECRET
+        sync: false                   # at least 32 characters; signs Arc/XStocks quotes

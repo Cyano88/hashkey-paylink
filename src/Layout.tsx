@@ -11,7 +11,8 @@ import { PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 import PocketNotificationButton from './pocket/components/PocketNotificationButton'
 import PocketHeaderIdentity from './pocket/components/PocketHeaderIdentity'
-import { CPurseIcon } from './pocket/components/CPurseIcon'
+import PocketRailSwitcher from './pocket/components/PocketRailSwitcher'
+import PocketRailTransition from './pocket/components/PocketRailTransition'
 import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute } from './pocket/lib/pocketRoutes'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
@@ -200,8 +201,9 @@ export default function Layout() {
   const pocketRoute = isPocketAppPage
     ? resolvePocketRoute(isPocketHost ? pathname : pathname.slice('/pocket'.length) || '/')
     : null
-  const isPocketImmersivePage = pocketRoute?.section === 'activity'
+  const isPocketImmersivePage = (pocketRoute?.section === 'xstocks' && pocketRoute.view !== 'home') || pocketRoute?.section === 'activity'
     || pocketRoute?.section === 'bills'
+    || pocketRoute?.section === 'move'
     || pocketRoute?.section === 'profile'
     || pocketRoute?.section === 'notifications'
     || (pocketRoute?.section === 'home' && pocketRoute.view !== 'overview')
@@ -395,12 +397,10 @@ export default function Layout() {
           {isPocketAppPage ? (
             <>
               {pocketRoute?.section !== 'activity' && (
-                <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
-                  <Link to={`${POCKET_BASE_PATH}/home`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
-                    <CPurseIcon size={32} title="" className="shrink-0" />
-                    <PocketHeaderIdentity />
-                  </Link>
-                  <PocketNotificationButton />
+                <div className="pocket-main-header pointer-events-auto">
+                  <div className="pocket-header-id"><PocketHeaderIdentity /></div>
+                  <PocketRailSwitcher />
+                  <div className="pocket-header-bell"><PocketNotificationButton /></div>
                 </div>
               )}
 
@@ -530,6 +530,7 @@ export default function Layout() {
         : isPayPage || isNgPosPage
         ? 'mx-auto w-full max-w-5xl flex-1 px-4 pb-8 pt-8 sm:px-6 sm:pt-10'
         : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
+        {isPocketAppPage && <PocketRailTransition />}
         <Outlet context={{
           selectedNet: selectedNet ?? 'base',
           onNetworkSelect: handleNetworkSelect,

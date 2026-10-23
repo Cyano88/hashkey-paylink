@@ -17,8 +17,9 @@ export default function PocketRouteShell({
   onSelect: (tab: PocketNavTab) => void
   navigationDisabled?: boolean
 }) {
-  const { pathname } = useLocation()
+  const { pathname, state, key: locationKey } = useLocation()
   const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const [inputFocused, setInputFocused] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(120)
   const [pullDistance, setPullDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -48,7 +49,7 @@ export default function PocketRouteShell({
     const scroller = scrollerRef.current
     if (!scroller) return
     const saved = Number(window.sessionStorage.getItem(`pocket:scroll:${pathname}`) || 0)
-    if (Number.isFinite(saved) && saved > 0) scroller.scrollTop = saved
+    scroller.scrollTop = Number.isFinite(saved) && saved > 0 ? saved : 0
     return () => {
       if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current)
       window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(scroller.scrollTop))
@@ -117,14 +118,23 @@ export default function PocketRouteShell({
   }
 
   useEffect(() => {
+    const editable = (target: EventTarget | null) => target instanceof HTMLElement && (target.matches('textarea, input:not([readonly]):not([disabled]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])') || target.isContentEditable)
+    let timer: ReturnType<typeof setTimeout>
+    const focus = () => { clearTimeout(timer); setInputFocused(editable(document.activeElement)) }
+    const blur = () => { clearTimeout(timer); timer = setTimeout(focus, 160) }
+    document.addEventListener('focusin', focus); document.addEventListener('focusout', blur)
+    return () => { clearTimeout(timer); document.removeEventListener('focusin', focus); document.removeEventListener('focusout', blur) }
+  }, [])
+
+  useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       let disposed = false
       const handles: Array<{ remove(): Promise<void> }> = []
       void Promise.all([
         Keyboard.addListener('keyboardWillShow', () => { if (!disposed) setKeyboardOpen(true) }),
         Keyboard.addListener('keyboardDidShow', () => { if (!disposed) setKeyboardOpen(true) }),
-        Keyboard.addListener('keyboardWillHide', () => { if (!disposed) setKeyboardOpen(false) }),
-        Keyboard.addListener('keyboardDidHide', () => { if (!disposed) setKeyboardOpen(false) }),
+        Keyboard.addListener('keyboardWillHide', () => { /* Keep navigation hidden until the keyboard is fully closed. */ }),
+        Keyboard.addListener('keyboardDidHide', () => { if (!disposed) { setKeyboardOpen(false); setInputFocused(false) } }),
       ]).then(next => handles.push(...next))
       return () => {
         disposed = true
@@ -173,7 +183,8 @@ export default function PocketRouteShell({
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#171717] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms', animationPlayState: refreshing ? 'running' : 'paused' }} /></span>
             </div>
             <div
-              className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))]"
+              key={locationKey}
+              className={`mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
               style={{
                 minHeight: `calc(100dvh - ${headerHeight}px)`,
                 paddingTop: 16,
@@ -184,7 +195,7 @@ export default function PocketRouteShell({
             </div>
           </div>
 
-          <PocketBottomNav active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen} onSelect={onSelect} />
+          <PocketBottomNav active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen || inputFocused} onSelect={onSelect} />
       </div>
     </div>
   )

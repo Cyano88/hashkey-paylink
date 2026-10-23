@@ -23,9 +23,8 @@ const SERVICE_SECRET = process.env.AGENT_WALLET_SERVICE_SECRET
 const DEFAULT_AGENT_SLUG = normalizeSlug(process.env.DEFAULT_AGENT_SLUG || 'hashpaylink-agent')
 const DEFAULT_AGENT_WALLET_ADDRESS = normalizeExpectedWallet(process.env.DEFAULT_AGENT_WALLET_ADDRESS)
 const DEFAULT_AGENT_WALLET_CHAIN = normalizeBalanceChain(process.env.DEFAULT_AGENT_WALLET_CHAIN ?? process.env.DEFAULT_AGENT_CHAIN, 'BASE')
-const DEFAULT_SCOUT_URL = `${(process.env.HASH_PAYLINK_BASE_URL ?? 'https://hashpaylink.com').replace(/\/+$/, '')}/api/x402/polymarket-scout`
 const ALLOWED_SERVICE_URLS = new Set(
-  (process.env.AGENT_WALLET_ALLOWED_SERVICE_URLS ?? process.env.X402_POLYMARKET_SCOUT_URL ?? DEFAULT_SCOUT_URL)
+  (process.env.AGENT_WALLET_ALLOWED_SERVICE_URLS ?? '')
     .split(',')
     .map(item => item.trim())
     .filter(Boolean),
@@ -1712,6 +1711,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const action = String(req.body?.action ?? '').trim().toLowerCase()
+  if (action === 'pay-lp-scout') return res.status(410).json({ ok: false, code: 'SCOUT_RETIRED', error: 'Polymarket Scout has moved out of Hash PayLink.' })
   const agentSlug = normalizeSlug(req.body?.agentSlug)
   const email = normalizeEmail(req.body?.email)
   const testnet = false
@@ -2079,21 +2079,15 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    if (action === 'pay-service' || action === 'pay-lp-scout') {
+    if (action === 'pay-service') {
       const secret = String(req.headers['x-agent-wallet-secret'] ?? req.body?.secret ?? '')
       const authorized = SERVICE_SECRET
         && secret.length === SERVICE_SECRET.length
         && crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(SERVICE_SECRET))
-      if (action === 'pay-service' && !authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
+      if (!authorized) return res.status(401).json({ ok: false, error: 'Unauthorized' })
 
-      const serviceUrl = action === 'pay-lp-scout'
-        ? withServiceParams(DEFAULT_SCOUT_URL, {
-            scoutMode: String(req.body?.scoutMode ?? 'best'),
-            context: String(req.body?.context ?? ''),
-            budget: String(req.body?.budget ?? ''),
-          })
-        : String(req.body?.serviceUrl ?? '').trim()
-      const allowlistedServiceUrl = action === 'pay-lp-scout' ? DEFAULT_SCOUT_URL : serviceUrl
+      const serviceUrl = String(req.body?.serviceUrl ?? '').trim()
+      const allowlistedServiceUrl = serviceUrl
       const sellerAgentSlug = normalizeSlug(req.body?.sellerAgentSlug) || DEFAULT_AGENT_SLUG
       const requested = cleanAmount(req.body?.maxAmount)
       const maxAmount = Math.min(requested ?? MAX_SERVICE_AMOUNT, MAX_SERVICE_AMOUNT)

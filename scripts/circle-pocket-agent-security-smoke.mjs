@@ -28,7 +28,7 @@ async function call(handler, { method = 'POST', headers = {}, query = {}, body =
 }
 
 const missingAskIdentity = await call(askHandler, {
-  body: { payer: 'spoofed', question: 'What is USDC?', accessMode: 'helper-free' },
+  body: { payer: 'spoofed', question: 'What is USDC?', helperMode: 'circle-pocket', accessMode: 'helper-free' },
 })
 assert.equal(missingAskIdentity.statusCode, 401)
 

@@ -13,9 +13,15 @@ for (const key of [undefined, '', 'TEST_API_KEY:fixture:fixture', 'arbitrary']) 
 }
 assert.equal(requireArcMainnetCircleKey('LIVE_API_KEY:fixture:fixture'), 'LIVE_API_KEY:fixture:fixture')
 assert.throws(() => createArcAgreementOperatorClient({ apiKey: 'TEST_API_KEY:fixture:fixture' }), /production/)
-assert.throws(() => requireArcMainnetAgreementRelease(), /not been reviewed/)
-assert.throws(() => authorizeArcAgreementActivation({ env: { ARC_AGREEMENTS_ENABLED: 'true' }, policy: {}, draft: {} }), /not been reviewed/)
+assert.deepEqual(requireArcMainnetAgreementRelease(), {
+  chainId: 5042,
+  factory: '0x161b94A03fB2880902f69dA42d23C1c9043412Bc',
+  operator: '0x988192DCc9f6F58d6BF9CF2D31697F5029F8a436',
+})
+assert.ok(Object.isFrozen(requireArcMainnetAgreementRelease()))
+assert.throws(() => authorizeArcAgreementActivation({ env: {}, policy: {}, draft: {} }), /disabled/)
+assert.throws(() => authorizeArcAgreementActivation({ env: { ARC_AGREEMENTS_ENABLED: 'true' }, policy: {}, draft: {} }), /ADDRESS_MAINNET/)
 assert.throws(() => arcAgreementRuntimeConfig({ ARC_AGREEMENT_FACTORY_ADDRESS: '0xe828795f52b3d6902b982ab7266aaae404d7cea5', ARC_AGREEMENT_OPERATOR_ADDRESS: '0xd55d6ba98eABeCeCD24C84e715b13157ee4fCb49' }), /ADDRESS_MAINNET/)
 assert.throws(() => assertArcAgreementNetwork({ chainId: 5042002, usdc: '0x3600000000000000000000000000000000000000' }), /5042/)
 assert.equal(assertArcAgreementNetwork({ chainId: 5042, usdc: '0x3600000000000000000000000000000000000000' }).chainId, 5042)
-console.log('Arc mainnet boundary checks passed: retired stores, test credentials, old chain and unreviewed activation rejected.')
+console.log('Arc mainnet boundary checks passed: retired stores, test credentials, old chain and incomplete activation configuration rejected.')

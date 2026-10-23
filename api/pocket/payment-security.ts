@@ -16,7 +16,7 @@ type ResetRecord = { version: 1; ownerId: string; previousAuthorizationHash: str
 type Dependencies = { verifyUser(req: Request): Promise<VerifiedLinkUser>; now(): number; random(size: number): Buffer }
 
 function pepper() {
-  const value = String(process.env.POCKET_PIN_PEPPER ?? process.env.PRIVY_APP_SECRET ?? '').trim()
+  const value = String(process.env.POCKET_PIN_PEPPER ?? '').trim()
   if (value) return value
   if (process.env.RENDER || process.env.NODE_ENV === 'production') throw Object.assign(new Error('Pocket payment security is not configured.'), { status: 503 })
   return 'local-pocket-pin-pepper'

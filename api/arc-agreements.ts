@@ -1,3 +1,5 @@
+import { assertLiveDeveloperRequest } from './developer-environment.js'
+import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
@@ -21,7 +23,7 @@ import { listArcAgreementPayerLifecycleActions } from './arc-agreement-payer-lif
 import { createArcAgreementDeveloperView } from './arc-agreement-developer-view.js'
 import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutMode, type DeveloperCheckoutPolicy } from './developer-projects.js'
 import { isVerifiedArcAgreementRecipient } from './arc-agreement-verified-recipients.js'
-import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
 
 const STORE_KEY = arcMainnetStoreKey('agreements', process.env.ARC_AGREEMENT_STORE_KEY_MAINNET)
 
@@ -86,7 +88,7 @@ type Dependencies = {
 const defaults: Dependencies = {
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
-  mutate: mutateDurableJson,
+  mutate: (key, update) => mutateWithDeveloperActivity('agreement', key, update),
   policy: resolveDeveloperApiKeyPolicy,
   hasActivationAttempt: async (partnerId, agreementId) => {
     try {
@@ -394,6 +396,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
   return async function arcAgreementsHandler(req: Request, res: Response) {
     noStore(res)
     try {
+      assertLiveDeveloperRequest(req)
       if (!dependencies.hasStore()) throw Object.assign(new Error('Agreement storage is not configured.'), { status: 503 })
       if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const policy = requirePreviewPolicy(await dependencies.policy(req))

@@ -22,6 +22,8 @@ const EVIDENCE: readonly EvidenceDefinition[] = [
   { id: 'factory-source', path: 'contracts/ArcAgreementFactory.sol' },
   { id: 'fee-on-transfer-test-token', path: 'contracts/test/MockFeeOnTransferERC20.sol' },
   { id: 'hardhat-config', path: 'hardhat.config.ts' },
+  { id: 'deployment-config-code', path: 'lib/arcAgreementDeploymentConfig.ts' },
+  { id: 'deployment-config-tests', path: 'test/ArcAgreementDeploymentConfig.test.ts' },
   { id: 'deployment-manifest-code', path: 'lib/arcAgreementDeploymentManifest.ts' },
   { id: 'deployment-simulation-code', path: 'lib/arcAgreementDeploymentSimulation.ts' },
   { id: 'deployment-simulation-entrypoint', path: 'scripts/arc-agreement-deployment-simulate.ts' },

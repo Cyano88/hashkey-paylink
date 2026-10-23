@@ -1,6 +1,6 @@
 # Hash PayLink CLI
 
-Version 0.3.0 provides owner-approved, project-scoped CLI access. It creates human
+Version 0.3.2 provides owner-approved, project-scoped CLI access. It creates human
 hosted checkouts and reads their recorded payment state. It can create scoped backend keys and hand them to a reviewed Render/Railway
 backend target. It cannot sign or transfer funds or configure settlement.
 
@@ -145,8 +145,8 @@ hashpaylink keys revoke --key-id key_YOUR_KEY_ID --json
 ```
 
 These `hpl_app_` credentials are restricted on the server to their approved
-checkout/project scopes, expire in 1-30 days, and cannot administer keys, use
-agreement APIs, sign, or withdraw. A key cannot receive a scope missing from
+approved scopes, expire in 1-30 days, and cannot administer keys, sign, or
+withdraw. Agreement read/draft scopes are described below. A key cannot receive a scope missing from
 the approving CLI grant. Existing ordinary developer keys are unchanged.
 
 **Backend keys outlive the one-hour CLI session.** Logging out or revoking CLI
@@ -192,8 +192,9 @@ hashpaylink hosting apply --plan PLAN_UUID --json
 Plans last 15 minutes and are bound to the selected Hash PayLink project, key,
 provider and target. `--backend` confirms the service is a backend; never point
 this at a frontend build that exposes environment values. Render static sites
-are rejected. The sole destination variable is `HASHPAYLINK_API_KEY`; there
-are no arbitrary variable names or `VITE_*` secret destinations.
+are rejected. Checkout uses `HASHPAYLINK_API_KEY`; Agreement handoff uses the
+separate destination described below. There are no arbitrary variable names
+or `VITE_*` secret destinations.
 
 Planning does not write provider configuration. If an existing value differs,
 planning requires an explicit `--replace`. Apply checks that the key remains
@@ -226,3 +227,24 @@ Adapter tests use synthetic credentials and mocked provider mutations.
 The implementation is not evidence that a particular live Render/Railway
 service has received a key. Live handoff requires an owner-approved project
 session plus a reviewed target plan and provider authorization.
+
+### Product and sandbox availability (0.3.1)
+
+Run `hashpaylink capabilities --json` to fetch the public product/network contract without logging in or sending credentials. The response distinguishes planned testnet networks from enabled payment execution. Sandbox keys and payments remain disabled; this command cannot create a test payment. Polymarket Funding has no sandbox route.
+
+### Agreement draft keys (0.3.2)
+
+For an active human project with the Agreements product, Arc Mainnet USDC routing and a configured signed webhook:
+
+```sh
+hashpaylink auth login --project dev_PROJECT_ID --scopes project:read,agreement:read,agreement:create,keys:manage --json
+# The project owner signs in, reviews permissions and enters the CLI confirmation code.
+hashpaylink auth complete --json
+hashpaylink keys create --name "Arc Agreement mainnet" --scopes project:read,agreement:read,agreement:create --expires-in-days 30 --idempotency-key arc_agreement_mainnet_v1 --json
+hashpaylink hosting plan --provider render --service srv_BACKEND_ID --product agreement --key-id key_KEY_ID --backend --json
+hashpaylink hosting apply --plan PLAN_UUID --json
+```
+
+`agreement:read` permits GET on `/api/v2/agreements`; `agreement:create` permits human draft creation at that exact path without an action or query. It cannot rotate payer links, request releases, register recipients, reach payer/agent signing routes, administer the project or activate escrow. Existing contract and pilot gates remain unchanged. No new Agreement create/status CLI command is added in this increment; the scoped credential is for the backend API integration.
+
+Agreement handoff is Render-only and writes `HASHPAYSTREAM_ARC_MAINNET_API_KEY`, leaving the retired test credential untouched. It requires Agreement read/create scopes and permits only optional project read in addition. Checkout handoff retains `HASHPAYLINK_API_KEY`. Neither flow accepts arbitrary or frontend variable names, prints the secret or triggers deployment. The app needs a separately reviewed integration/cutover to consume the mainnet variable. Key expiry remains at most 30 days; plan rotation before production use.

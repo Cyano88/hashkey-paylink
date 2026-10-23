@@ -51,7 +51,7 @@ export function createPocketMigrationExecutor(input:{ userId:string; userToken:s
         paymentExecutionRepository.listOwned(input.userId,undefined,['prepared','authorized','submitted','processing','needs_review']),
       ])
       const assetsAccountedFor=await migrationAssetsAccountedFor(plan,inventory)
-      if(!assetsAccountedFor)throw new Error('Your '+row.network+' wallet contains '+inventory.otherAssets.length+' additional non-USDC assets. Review these assets before continuing the wallet update.')
+      if(!assetsAccountedFor)throw new Error('Migration inventory could not be verified. Try again.')
       const otherPending=intents.some(intent=>intent.metadata.migrationRevision!==plan.revision && (intent.sourceNetwork===row.network || intent.settlementNetwork===row.network))
       return {revision:plan.revision,checkedAt,ownershipVerified:true,noPendingOperations:noPending&&!otherPending,assetsAccountedFor,feeApproved:quote?.id===input.feeQuoteId && feeQuoteMatches(quote,plan,row,fee),sourceUnits:units.toString()}
     },

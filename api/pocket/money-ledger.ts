@@ -81,12 +81,12 @@ export async function listPocketMoneyLedgerEvents(input: { ownerId: string; curs
   if (!hasRenderDurableStore()) {
     if (IS_RENDER) throw new Error('Durable Pocket money ledger storage is not configured.')
     const rows = [...localEvents.values()].filter(event => event.ownerId === input.ownerId && (event.recordedAt < beforeTime || (event.recordedAt === beforeTime && event.id < beforeId))).sort((a,b) => b.recordedAt-a.recordedAt || b.id.localeCompare(a.id))
-    const events = rows.slice(0, limit), last = events.at(-1), nextCursor = rows.length > limit && last ? Buffer.from(JSON.stringify({ recordedAt: last.recordedAt, id: last.id })).toString('base64url') : undefined
+    const events = rows.slice(0, limit), last = events[events.length - 1], nextCursor = rows.length > limit && last ? Buffer.from(JSON.stringify({ recordedAt: last.recordedAt, id: last.id })).toString('base64url') : undefined
     return { events, nextCursor }
   }
   await ensureSchema()
   const result = await queryDurablePostgres(`select id,event_key,owner_id,execution_id,rail,state,asset,amount,source_network,settlement_network,resource_id,provider_reference,transaction_hash,failure_code,metadata,recorded_at from pocket_money_ledger where owner_id=$1 and (recorded_at<$2 or (recorded_at=$2 and id<$3)) order by recorded_at desc,id desc limit $4`, [input.ownerId,beforeTime,beforeId,limit+1])
   const rows = result.rows.map((row: any) => ({ id: row.id,eventKey:row.event_key,ownerId:row.owner_id,executionId:row.execution_id,rail:row.rail,state:row.state,asset:row.asset,amount:row.amount,sourceNetwork:row.source_network,settlementNetwork:row.settlement_network,resourceId:row.resource_id||undefined,providerReference:row.provider_reference||undefined,transactionHash:row.transaction_hash||undefined,failureCode:row.failure_code||undefined,metadata:row.metadata??{},recordedAt:Number(row.recorded_at) })) as PocketMoneyLedgerEvent[]
-  const events = rows.slice(0,limit), last = events.at(-1), nextCursor = rows.length>limit && last ? Buffer.from(JSON.stringify({ recordedAt: last.recordedAt, id: last.id })).toString('base64url') : undefined
+  const events = rows.slice(0,limit), last = events[events.length - 1], nextCursor = rows.length>limit && last ? Buffer.from(JSON.stringify({ recordedAt: last.recordedAt, id: last.id })).toString('base64url') : undefined
   return { events, nextCursor }
 }

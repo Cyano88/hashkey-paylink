@@ -718,10 +718,6 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
     const replay = existingMerchant.creation_response ?? { ok: true, merchant: await publicMerchant(existingMerchant) }
     return { ...replay, replayed: true }
   }
-  if (preference === 'INSTANT_FIAT') {
-    const { requireProductionKyc } = await import('./pocket/kyc.js')
-    await requireProductionKyc(ownerId)
-  }
   let ownerEmail = cleanText(body.owner_email, '').toLowerCase()
   if (session.email && ownerEmail && session.email !== ownerEmail) {
     throw ngPosRequestError(403, 'Signed-in email does not match this payout profile.')
@@ -756,6 +752,12 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
     rawBankCode = savedBank.bank_code
     accountNumber = savedBank.account_number
     accountName = savedBank.account_name
+  }
+  if (preference === 'INSTANT_FIAT') {
+    const { assertBankAccountMatchesPocketName } = await import('./pocket/verified-bank-name.js')
+    const { verification } = await assertBankAccountMatchesPocketName(req, { bank_code: rawBankCode, bank_name: bankName, account_number: accountNumber })
+    accountName = verification.account_name
+    rawBankCode = verification.bank_code || rawBankCode
   }
   const bankCode = rawBankCode ? await resolvePaycrestInstitutionCode({ bankCode: rawBankCode, bankName }) : ''
   const hasBank = Boolean(bankCode && accountNumber.length === 10 && accountName)

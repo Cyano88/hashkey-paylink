@@ -3,14 +3,15 @@ import { PrivyClient } from '@privy-io/server-auth'
 import { getAddress, isAddress } from 'viem'
 import { verifiedPrivyUser, localCurrencyProfileRepository } from '../local-currency-profile.js'
 import { stockAmountUnits } from '../../src/pocket/lib/pocketXStocksWallet.js'
-import { readStockNotices, mutateStockNotices, stockNoticeAsset, stockNoticeClient, addStockRequest, decideStockRequest, type StockRequest } from './xstocks-notifications-store.js'
-const publicRequest=(r:StockRequest,owner:string)=>({id:r.id,direction:r.payer===owner?'incoming':'outgoing',senderPocketId:r.senderPocketId,payerPocketId:r.payerPocketId,address:r.address,token:r.token,symbol:r.symbol,amount:r.amount,status:r.status,at:r.at,updatedAt:r.updatedAt})
+import { hydrateStockActivity, readStockNotices, mutateStockNotices, stockNoticeAsset, stockNoticeClient, addStockRequest, decideStockRequest, type StockRequest } from './xstocks-notifications-store.js'
+const publicRequest=(r:StockRequest,owner:string)=>({id:r.id,direction:r.payer===owner?'incoming':'outgoing',senderPocketId:r.senderPocketId,payerPocketId:r.payerPocketId,address:r.address,token:r.token,symbol:r.symbol,amount:r.amount,status:r.status,at:r.at,updatedAt:r.updatedAt,txHash:r.hash?.split(':')[0]||''})
 export default async function handler(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store')
  try{
   if(req.method!=='GET'&&req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId
   if(req.method==='GET'){
+   if(req.query?.activity==='1')await hydrateStockActivity(owner).catch(()=>undefined)
    const s=await readStockNotices(),notices=Object.values(s.notices).filter(n=>n.owner===owner).sort((a,b)=>b.at-a.at).slice(0,100)
    return res.json({ok:true,notices:notices.map(({owner,delivered,...n})=>n),unread:notices.filter(n=>n.at>(s.reads[owner]||0)).length,requests:Object.values(s.requests).filter(r=>r.sender===owner||r.payer===owner).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,100).map(r=>publicRequest(r,owner))})
   }

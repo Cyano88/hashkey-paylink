@@ -23,23 +23,23 @@ const factory = '0x3333333333333333333333333333333333333333'
 const operator = '0x4444444444444444444444444444444444444444'
 const usdc = '0x3600000000000000000000000000000000000000'
 const escrow = '0x5555555555555555555555555555555555555555'
-assert.equal(ARC_AGREEMENT_NETWORK.chainId, 5_042_002)
+assert.equal(ARC_AGREEMENT_NETWORK.chainId, 5_042)
 assert.equal(ARC_AGREEMENT_NETWORK.circleDomain, 26)
 assert.equal(ARC_AGREEMENT_NETWORK.usdc, usdc)
-assert.equal(ARC_AGREEMENT_NETWORK.rpcFallbackUrl, 'https://arc-testnet.drpc.org')
-assert.deepEqual(assertArcAgreementNetwork({ chainId: 5_042_002, usdc }), { chainId: 5_042_002, usdc })
+assert.equal(ARC_AGREEMENT_NETWORK.rpcFallbackUrl, 'https://rpc.drpc.mainnet.arc.io')
+assert.deepEqual(assertArcAgreementNetwork({ chainId: 5_042, usdc }), { chainId: 5_042, usdc })
 assert.throws(
   () => assertArcAgreementNetwork({ chainId: 8453, usdc }),
-  /requires chain 5042002/,
+  /requires chain 5042/,
 )
 assert.throws(
-  () => assertArcAgreementNetwork({ chainId: 5_042_002, usdc: payer }),
-  /official Arc Testnet USDC/,
+  () => assertArcAgreementNetwork({ chainId: 5_042, usdc: payer }),
+  /official Arc Mainnet USDC/,
 )
 const runtime = arcAgreementRuntimeConfig({
-  ARC_AGREEMENT_FACTORY_ADDRESS: factory,
-  ARC_AGREEMENT_OPERATOR_ADDRESS: operator,
-  PRIVATE_RPC_URL_ARC: 'https://private-rpc.example/arc',
+  ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET: factory,
+  ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: operator,
+  PRIVATE_RPC_URL_ARC_MAINNET: 'https://private-rpc.example/arc',
   ARC_AGREEMENT_CONFIRMATION_BLOCKS: '7',
 })
 assert.equal(runtime.factory, factory)
@@ -47,25 +47,25 @@ assert.equal(runtime.operator, operator)
 assert.equal(runtime.confirmations, 7)
 assert.deepEqual(runtime.rpcUrls, [
   'https://private-rpc.example/arc',
-  'https://rpc.testnet.arc.network/',
-  'https://arc-testnet.drpc.org/',
+  'https://rpc.mainnet.arc.io/',
+  'https://rpc.drpc.mainnet.arc.io/',
 ])
 const publicRuntime = arcAgreementRuntimeConfig({
-  ARC_AGREEMENT_FACTORY_ADDRESS: factory,
-  ARC_AGREEMENT_OPERATOR_ADDRESS: operator,
+  ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET: factory,
+  ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: operator,
 })
 assert.deepEqual(publicRuntime.rpcUrls, [
-  'https://rpc.testnet.arc.network/',
-  'https://arc-testnet.drpc.org/',
+  'https://rpc.mainnet.arc.io/',
+  'https://rpc.drpc.mainnet.arc.io/',
 ])
 assert.throws(() => arcAgreementRuntimeConfig({
-  ARC_AGREEMENT_FACTORY_ADDRESS: factory,
-  ARC_AGREEMENT_OPERATOR_ADDRESS: factory,
+  ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET: factory,
+  ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: factory,
 }), /must be different/)
 assert.throws(() => arcAgreementRuntimeConfig({
-  ARC_AGREEMENT_FACTORY_ADDRESS: factory,
-  ARC_AGREEMENT_OPERATOR_ADDRESS: operator,
-  PRIVATE_RPC_URL_ARC: 'http://insecure.example',
+  ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET: factory,
+  ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: operator,
+  PRIVATE_RPC_URL_ARC_MAINNET: 'http://insecure.example',
 }), /must be an HTTPS URL/)
 
 const terms = arcAgreementTerms({
@@ -109,7 +109,7 @@ const values = {
 }
 const observedReads = []
 const client = {
-  getChainId: async () => 5_042_002,
+  getChainId: async () => 5_042,
   getBlockNumber: async () => 100n,
   readContract: async args => {
     observedReads.push(args)

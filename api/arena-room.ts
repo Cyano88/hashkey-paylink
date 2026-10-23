@@ -862,8 +862,11 @@ async function getQuestion(req: Request, res: Response) {
 }
 
 export default async function arenaRoomHandler(req: Request, res: Response) {
-  if (req.method === 'POST') return createRoom(req, res)
-  if (req.method === 'PATCH') return controlRoom(req, res)
+  if (req.method === 'POST') return res.status(410).json({ ok: false, code: 'ARENA_RETIRED', error: 'Legacy Arena room creation has been retired.' })
+  if (req.method === 'PATCH') {
+    if (!['cancel', 'settle', 'self-settle'].includes(String(req.body?.action ?? ''))) return res.status(410).json({ ok: false, code: 'ARENA_RETIRED' })
+    return controlRoom(req, res)
+  }
   if (req.method === 'GET') {
     if (req.query.mine === 'true' || req.query.mine === '1') return getMyRooms(req, res)
     if (typeof req.query.round !== 'undefined') return getQuestion(req, res)

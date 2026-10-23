@@ -18,11 +18,16 @@ export function requireArcMainnetCircleKey(value: unknown): string {
   return key
 }
 
-// No mainnet Agreement factory/operator deployment has been reviewed yet.
-// Populating this requires a separately reviewed deployment, not an env override.
+// Internally reviewed deployment; exact deployed source commit: 36ded4e52.
+// Deployment identity does not enable execution: runtime and project gates remain.
+// Evidence: docs/audits/ARC_MAINNET_DEPLOYMENT_VERIFIED_2026-09-24.md.
 export const ARC_MAINNET_AGREEMENT_RELEASE: Readonly<{
   chainId: number; factory: `0x${string}`; operator: `0x${string}`
-}> | null = null
+}> | null = Object.freeze({
+  chainId: 5042,
+  factory: '0x161b94A03fB2880902f69dA42d23C1c9043412Bc',
+  operator: '0x988192DCc9f6F58d6BF9CF2D31697F5029F8a436',
+})
 
 export function requireArcMainnetAgreementRelease(): Readonly<{ chainId: number; factory: `0x${string}`; operator: `0x${string}` }> {
   if (!ARC_MAINNET_AGREEMENT_RELEASE) {

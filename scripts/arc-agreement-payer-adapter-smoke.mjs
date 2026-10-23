@@ -33,7 +33,7 @@ const agreement = {
   id: agreementId,
   partnerId,
   checkoutMode: 'human',
-  environment: 'test',
+  environment: 'live',
   network: 'arc',
   template: 'fixed_unlock',
   externalId: 'order-1',
@@ -70,7 +70,7 @@ const policy = {
   defaultNetwork: 'arc',
   paymentOptions: [{ network: 'arc', recipient }],
   settlementMode: 'usdc',
-  environment: 'test',
+  environment: 'live',
   checkoutMode: 'human',
   capabilities: ['arc_agreements'],
   webhookConfigured: true,
@@ -83,7 +83,7 @@ const link = {
   purpose: 'payment',
   circleWalletId: 'wallet-test-1234',
   circleWalletAddress: payer,
-  circleBlockchain: 'ARC-TESTNET',
+  circleBlockchain: 'ARC',
   updatedAt: Date.now(),
 }
 const attempt = {
@@ -401,7 +401,7 @@ const linkedInCheckout = await request(handler, {
   action: 'link-wallet',
   agreementId,
   circleUserToken: 'circle-user-token',
-  wallet: { id: link.circleWalletId, address: payer, blockchain: 'ARC-TESTNET' },
+  wallet: { id: link.circleWalletId, address: payer, blockchain: 'ARC' },
 }, headers)
 assert.equal(linkedInCheckout.statusCode, 200)
 assert.equal(linkedInCheckout.body.payer.walletLinked, true)
@@ -480,7 +480,7 @@ assert.equal(atCapacity.body.error, 'This developer project has reached its acti
 
 const recipientMismatch = await request(createArcAgreementPayerHandler({
   ...dependencies,
-  prepareAttempt: async () => { throw new Error('Agreement recipient must match the project Arc Testnet recipient.') },
+  prepareAttempt: async () => { throw new Error('Agreement recipient must match the project Arc Mainnet recipient.') },
 }), {
   action: 'prepare',
   agreementId,
@@ -489,7 +489,7 @@ const recipientMismatch = await request(createArcAgreementPayerHandler({
 assert.equal(recipientMismatch.statusCode, 409)
 assert.equal(
   recipientMismatch.body.error,
-  "Agreement recipient does not match this project's configured Arc Testnet receiving address. Create a new agreement with the configured recipient.",
+  "Agreement recipient does not match this project's configured Arc Mainnet receiving address. Create a new agreement with the configured recipient.",
 )
 
 const challenge = await request(handler, {
@@ -758,7 +758,7 @@ assert.match(payerPageSource, /customer email named on this agreement/)
 assert.match(payerPageSource, /Contact support/)
 assert.match(payerPageSource, /mailto:support@hashpaylink\.com\?subject=HashPayStream%20agreement%20access/)
 assert.doesNotMatch(payerPageSource, /href="\/admin\/agreements"/)
-assert.match(payerPageSource, /provider=\{hashPayStreamCheckout \? 'hashpaylink' : 'circle'\}/)
+assert.match(payerPageSource, /<CheckoutTrustLine provider="hashpaylink" \/>/)
 const checkoutChromeSource = await readFile(new URL('../src/components/CheckoutChrome.tsx', import.meta.url), 'utf8')
 assert.match(checkoutChromeSource, /aria-label="Powered by Hash PayLink"/)
 assert.match(checkoutChromeSource, /src="\/hash-logo-modal-dark\.png"/)

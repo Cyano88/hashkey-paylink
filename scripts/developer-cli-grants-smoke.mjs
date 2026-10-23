@@ -57,7 +57,7 @@ const request = (method, originalUrl, body, query) => cliRequestScope({ method, 
 assert.equal(request('GET', '/api/v2/project'), 'project:read')
 assert.equal(request('GET', '/api/v2/checkouts?id=chk_12345678&purpose=status', undefined, { purpose: 'status' }), 'checkout:read')
 assert.equal(request('POST', '/api/v2/checkouts', { checkoutMode: 'human' }), 'checkout:create')
-for (const path of ['/api/v2/agreements', '/api/developer-projects', '/api/v2/checkouts/agent/pay', '/api/v2/checkouts?action=select-network']) assert.equal(request('POST', path, {}), null)
+for (const path of ['/api/v2/agreements/payer', '/api/developer-projects', '/api/v2/checkouts/agent/pay', '/api/v2/checkouts?action=select-network']) assert.equal(request('POST', path, {}), null)
 assert.equal(request('POST', '/api/v2/checkouts', { checkoutMode: 'agentic' }), null)
 assert.equal(request('GET', '/api/v2/checkouts?purpose=status&purpose=return', {}, { purpose: 'status' }), null)
 let output = ''
@@ -86,3 +86,11 @@ const inspected = await call({ action: 'inspect', id: session.grant.id }, 'Beare
 assert.ok(!JSON.stringify(inspected.body).includes('challenge'))
 assert.ok(!JSON.stringify(inspected.body).includes('codeHash'))
 console.log('CLI delegation integration passed: proof possession, owner/code approval, scope/route restrictions, replay, expiry, revocation and protected output.')
+
+await authCommand('auth logout', {}, { fetcher, sessionStore })
+const agreementLogin=await authCommand('auth login',{project:projectId,scopes:'project:read,agreement:read,agreement:create,keys:manage'},{fetcher,sessionStore})
+assert.equal((await call({action:'approve',id:session.grant.id,userCode:agreementLogin.userCode},'Bearer owner')).statusCode,200)
+assert.ok(await resolveCliGrant(session.token,'agreement:read',deps))
+assert.ok(await resolveCliGrant(session.token,'agreement:create',deps))
+assert.equal(await resolveCliGrant(session.token,'checkout:create',deps),null)
+console.log('Owner-approved Agreement draft grant excludes checkout permissions.')

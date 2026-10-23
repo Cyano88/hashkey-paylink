@@ -130,7 +130,7 @@
     "test:agentic-checkout-ui": "node scripts/agentic-checkout-ui-smoke.mjs",
     "test:receipt-security": "node --import tsx scripts/receipt-capability-security-smoke.mjs",
     "test:polymarket-funding-checkouts": "node --import tsx scripts/polymarket-funding-checkouts-adapter-smoke.mjs",
-    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:agentic-checkout-wallet-pay && npm run test:agentic-checkout-ui && npm run test:partner-access && npm run test:developer-projects && npm run test:arc-agreements && npm run test:arc-agreement-verified-recipients && npm run test:arc-agreement-reconciliation && npm run test:arc-agreement-webhooks && npm run test:arc-agreement-activation-policy && npm run test:arc-agreement-activation-attempts && npm run test:arc-agreement-activation-worker && npm run test:arc-agreement-lifecycle-worker && npm run test:arc-agreement-payer && npm run test:arc-agreement-agent && npm run test:arc-agreement-payer-lifecycle && npm run test:arc-agreement-operations && npm run test:arc-agreement-operator && npm run test:arc-agreement-operator-provision && npm run test:arc-agreement-operator-preflight && npm run test:arc-agreement-operator-status && npm run test:arc-agreement-operator-actions && npm run test:arc-agreement-operator-worker && npm run test:hashpaystream-arc-webhook && npm run test:hashpaystream-arc-agreements && npm run test:hashpaystream-agreement-gateway && npm run test:durable-store-security && npm run test:solana-token-security && npm run test:router-security && npm run test:polymarket-funding-checkouts && npm run test:usdc-transfer-verify && npm run test:paycrest-reconcile-policy && npm run test:payment-tx-lookup && npm run test:receipt-security && npm run test:pocket-contracts",
+    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:agentic-checkout-wallet-pay && npm run test:agentic-checkout-ui && npm run test:partner-access && npm run test:developer-projects && npm run test:arc-agreements && npm run test:arc-agreement-verified-recipients && npm run test:arc-agreement-reconciliation && npm run test:arc-agreement-webhooks && npm run test:arc-agreement-activation-policy && npm run test:arc-agreement-activation-attempts && npm run test:arc-agreement-activation-worker && npm run test:arc-agreement-lifecycle-worker && npm run test:arc-agreement-payer && npm run test:arc-agreement-agent && npm run test:arc-agreement-payer-lifecycle && npm run test:arc-agreement-operations && npm run test:arc-agreement-operator && npm run test:arc-agreement-operator-provision && npm run test:arc-agreement-operator-preflight && npm run test:arc-agreement-operator-status && npm run test:arc-agreement-operator-actions && npm run test:arc-agreement-operator-worker && npm run test:hashpaystream-arc-webhook && npm run test:hashpaystream-arc-agreements && npm run test:hashpaystream-agreement-gateway && npm run test:durable-store-security && npm run test:solana-token-security && npm run test:router-security && npm run test:polymarket-funding-checkouts && npm run test:usdc-transfer-verify && npm run test:paycrest-reconcile-policy && npm run test:payment-tx-lookup && npm run test:receipt-security && npm run test:pocket-contracts && npm run test:developer-activity",
     "test:pocket-x402-adapter": "node --import tsx scripts/pocket-x402-adapter-smoke.mjs",
     "test:pocket-x402-connect-adapter": "node --import tsx scripts/pocket-x402-connect-adapter-smoke.mjs",
     "test:pocket-x402-activate-adapter": "node --import tsx scripts/pocket-x402-activate-adapter-smoke.mjs",
@@ -141,7 +141,12 @@
     "preview": "vite preview --host 127.0.0.1",
     "start": "tsx server-entry.ts",
     "test:pocket-mobile-recovery": "node --import tsx scripts/pocket-wallet-readiness-smoke.mjs && node --import tsx scripts/pocket-bridge-recovery-smoke.mjs && node --import tsx scripts/pocket-bridge-journal-smoke.mjs && node --import tsx scripts/pocket-solana-recovery-smoke.mjs && node --import tsx scripts/pocket-bridge-activity-smoke.mjs",
-    "test:pocket-bridge-proof": "node --import tsx scripts/pocket-bridge-proof-smoke.mjs"
+    "test:pocket-bridge-proof": "node --import tsx scripts/pocket-bridge-proof-smoke.mjs",
+    "test:developer-sandbox-boundary": "node --import tsx scripts/developer-sandbox-boundary-smoke.mjs",
+    "test:developer-activity": "node --import tsx scripts/developer-activity-smoke.mjs && node scripts/developer-activity-atomic-smoke.mjs",
+    "migrate:developer-activity": "node --import tsx scripts/developer-activity-backfill.mjs",
+    "test:developer-activity:postgres": "node --import tsx scripts/developer-activity-postgres-smoke.mjs",
+    "check:developer-activity": "node --import tsx scripts/developer-activity-preflight.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
@@ -201,7 +206,8 @@
   "overrides": {
     "body-parser": "1.20.6",
     "axios": "^1.18.0",
-    "hono": "^4.13.2",
+    "hono": "^4.13.5",
+    "qs": "^6.16.0",
     "undici": "^6.28.0",
     "nanoid": "3.3.18",
     "socket.io-parser": "4.2.7",

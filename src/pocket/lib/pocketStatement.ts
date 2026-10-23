@@ -10,16 +10,17 @@ function cell(value: unknown) {
   return '"' + safe.replace(/"/g, '""') + '"'
 }
 export function pocketStatementCsv(rows: PocketActivityRow[]) {
+  const stocks=rows.some(row=>!!row.assetSymbol)
   const table = [
     ['Pocket transaction statement'],
     ['Scope', 'Currently loaded activity matching selected filters. Incoming POS excluded.'],
     ['Generated at (UTC)', new Date().toISOString()],
     [],
-    ['Date (UTC)', 'Description', 'Direction', 'Status', 'USDC amount', 'NGN amount', 'Network', 'Reference', 'Transaction hash'],
+    ['Date (UTC)', 'Description', 'Direction', 'Status', stocks?'Token amount':'USDC amount', stocks?'Asset':'NGN amount', 'Network', 'Reference', 'Transaction hash'],
     ...rows.filter(row => !isIncomingPosPayment(row)).map(row => [
       Number.isFinite(new Date(row.ts).getTime()) ? new Date(row.ts).toISOString() : '',
       pocketBankRecipientLabel(row) || row.activityLabel || row.memo || 'Transaction',
-      row.direction || '', pocketActivityStatus(row), row.amount, row.amountNgn || '',
+      row.direction || '', pocketActivityStatus(row), row.amount, stocks?row.assetSymbol||'USDC':row.amountNgn || '',
       row.chain, row.eventId, row.txHash,
     ]),
   ]

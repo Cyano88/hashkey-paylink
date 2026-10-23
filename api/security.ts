@@ -1,24 +1,17 @@
+import { adminBearerAuthorized, adminSecretConfigured } from './admin-auth.js'
 import type { Request, Response } from 'express'
 import dns from 'node:dns/promises'
 import net from 'node:net'
 
 export function requireAdminSecret(req: Request, res: Response): boolean {
-  const secret = process.env.ADMIN_SECRET ?? process.env.CRON_SECRET
-  if (!secret || secret.length < 24) {
+  if (!adminSecretConfigured()) {
     res.status(503).json({ ok: false, error: 'Admin secret is not configured' })
     return false
   }
-
-  const auth = req.headers.authorization ?? ''
-  const querySecret = Array.isArray(req.query.secret) ? req.query.secret[0] : req.query.secret
-  const bodySecret = typeof req.body?.secret === 'string' ? req.body.secret : undefined
-  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : querySecret ?? bodySecret
-
-  if (provided !== secret) {
+  if (!adminBearerAuthorized(req)) {
     res.status(401).json({ ok: false, error: 'unauthorized' })
     return false
   }
-
   return true
 }
 

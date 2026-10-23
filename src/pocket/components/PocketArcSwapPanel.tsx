@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { executeCircleEvmEmailChallenge, reconcileCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
+import usePocketPageVisible from '../hooks/usePocketPageVisible'
 import PocketArcTokenPicker from './PocketArcTokenPicker'
 import PocketSlideAction from './PocketSlideAction'
 import { pocketApiUrl } from '../lib/pocketRoutes'
@@ -10,6 +11,7 @@ type Pending = { quoteToken: string; quote: Quote; challengeId?: string; txHash?
 type Props = { enabled?: boolean; onBusyChange?(busy: boolean): void; email: string; getAccessToken(): Promise<string | null>; ensureWallet(): Promise<{ address: string } | null>; getSession(address: string): Promise<CircleEvmEmailSession>; refresh(): Promise<unknown> }
 
 export default function PocketArcSwapPanel(props: Props) {
+  const visible = usePocketPageVisible()
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [tokens, setTokens] = useState<Token[]>([])
   const [tokenIn, setTokenIn] = useState('0x3600000000000000000000000000000000000000')
@@ -50,7 +52,7 @@ export default function PocketArcSwapPanel(props: Props) {
     finally { setLoadingTokens(false) }
   }, [api])
   useEffect(() => { if (props.enabled !== false) void load() }, [load, props.enabled])
-  useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id) }, [])
+  useEffect(() => { if (!visible) return; setNow(Date.now()); const id = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id) }, [visible])
   function savePending(value: Pending | null) {
     if (value) sessionStorage.setItem(storageKey, JSON.stringify(value))
     else sessionStorage.removeItem(storageKey)
@@ -66,7 +68,7 @@ export default function PocketArcSwapPanel(props: Props) {
     } catch (reason) { setError((reason as Error).message); throw reason }
   }
   async function getQuote() {
-    if (locked.current || pending) return
+    if (locked.current || pending || document.visibilityState !== 'visible') return
     const version = ++requestVersion.current
     setStatus('quoting'); setError(''); setQuoted(null)
     try {
@@ -88,16 +90,16 @@ export default function PocketArcSwapPanel(props: Props) {
   useEffect(() => {
     if (pending || busy || approvalBusy) return
     requestVersion.current++; setQuoted(null)
-    if (props.enabled === false || !pairReady || !amountValid || catalogError) return
+    if (!visible || props.enabled === false || !pairReady || !amountValid || catalogError) return
     setStatus('quoting')
     const timer = window.setTimeout(() => void quoteRequest.current(), 500)
     return () => { window.clearTimeout(timer); requestVersion.current++ }
-  }, [tokenIn, tokenOut, amount, pairReady, amountValid, pending, busy, approvalBusy, catalogError, props.enabled, quoteRefresh])
+  }, [tokenIn, tokenOut, amount, pairReady, amountValid, pending, busy, approvalBusy, catalogError, props.enabled, quoteRefresh, visible])
   useEffect(() => {
-    if (!quoted || props.enabled === false || busy || approvalBusy || pending) return
+    if (!visible || !quoted || props.enabled === false || busy || approvalBusy || pending) return
     const timer = window.setTimeout(() => setQuoteRefresh(value => value + 1), Math.max(1000, quoted.quote.expiresAt - Date.now()))
     return () => window.clearTimeout(timer)
-  }, [quoted, props.enabled, busy, approvalBusy, pending])
+  }, [quoted, props.enabled, busy, approvalBusy, pending, visible])
   async function discover(address: string): Promise<Token> { const data = await api(undefined, address); return data.token }
   function choose(token: Token, side: 'in' | 'out') {
     invalidate(); setTokens(current => current.some(item => item.address.toLowerCase() === token.address.toLowerCase()) ? current : [...current, token])

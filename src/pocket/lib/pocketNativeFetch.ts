@@ -70,10 +70,15 @@ export function installPocketNativeFetch() {
   installed = true
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Inspect the URL without transferring a Request body. Constructing a new
+    // Request(input) consumes the original body even before a network call.
+    const url = new URL(input instanceof Request ? input.url : String(input), window.location.href)
+    const target = url.origin === window.location.origin && url.pathname.startsWith('/api/')
+      ? POCKET_ORIGIN + url.pathname + url.search
+      : url.href
+    if (!isPocketApiRequest(target)) return ORIGINAL_FETCH(input, init)
     let request = new Request(input, init)
-    const url=new URL(request.url)
-    if(url.origin===window.location.origin && url.pathname.startsWith('/api/'))request=new Request(POCKET_ORIGIN+url.pathname+url.search,request)
-    if (!isPocketApiRequest(request.url)) return ORIGINAL_FETCH(input, init)
+    if (request.url !== target) request = new Request(target, request)
     return nativePocketFetch(request)
   }
 }

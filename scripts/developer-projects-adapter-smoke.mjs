@@ -133,6 +133,12 @@ assert.equal(ready.body.project.settlementStatus, 'ready')
 assert.deepEqual(ready.body.project.allowedOrigins, ['https://polydesk.trade'])
 assert.equal(ready.body.project.brandImageUrl, 'https://polydesk.trade/brand/polydesk-mark-bw-transparent.png')
 
+const beforeInvalidEnvironment = JSON.stringify(store)
+for (const environment of ['sandbox', 'production', '', null, ['test'], { value: 'test' }]) {
+  const result = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Must not create', environment })
+  assert.equal(result.statusCode, 400)
+  assert.equal(JSON.stringify(store), beforeInvalidEnvironment, 'Invalid environment must not write a live key')
+}
 const generated = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Production backend' })
 assert.equal(generated.statusCode, 201)
 assert.match(generated.body.apiKey, /^hpl_live_/)
@@ -188,6 +194,17 @@ const agenticPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, po
 assert.equal(agenticPolicy.checkoutMode, 'agentic')
 assert.deepEqual(agenticPolicy.capabilities, ['hosted_checkout', 'arc_agreements'])
 assert.equal(agenticPolicy.environment, 'live')
+const savedAgent = structuredClone(store.projects[agenticProject.body.project.id])
+const legacyAgent = store.projects[agenticProject.body.project.id]
+legacyAgent.networks = ['arbitrum', 'arc']; legacyAgent.defaultNetwork = 'arbitrum'; legacyAgent.recipients.arbitrum = linkedWallet
+const restrictedPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret)
+assert.deepEqual(restrictedPolicy.paymentOptions.map(option => option.network), ['arc'])
+assert.equal(restrictedPolicy.defaultNetwork, 'arc')
+assert.equal((await request(handler, 'POST', { action: 'create-key', projectId: legacyAgent.id, name: 'Blocked legacy route', environment: 'live' })).statusCode, 409)
+assert.equal((await request(handler, 'PUT', { ...legacyAgent, action: 'configure', projectId: legacyAgent.id })).statusCode, 400)
+legacyAgent.networks = ['arbitrum']
+assert.equal(developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret), null)
+store.projects[savedAgent.id] = savedAgent
 
 activeIdentity = { userId: 'did:privy:operations', email: 'operations@example.com' }
 const operationsProjects = await request(handler, 'GET', undefined, { resource: 'admin' })
@@ -310,3 +327,13 @@ assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("
 assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 
 console.log('Developer projects adapter smoke tests passed.')
+
+// An Agreement-only project cannot configure other product networks.
+const agreementOnlyConfig={action:'configure',projectId:created.body.project.id,name:'Agreement fixture',website:'https://polydesk.trade',useCase:'Work Agreements for a synthetic service platform.',settlementMode:'usdc',capabilities:['arc_agreements'],arcMainnetChainId:5042,networks:['arc'],defaultNetwork:'arc',recipients:{arc:linkedWallet},allowedOrigins:['https://polydesk.trade'],webhookUrl:''}
+for(const network of ['base','arbitrum']) {
+ const response=await request(handler,'PUT',{...agreementOnlyConfig,networks:[network],defaultNetwork:network,recipients:{[network]:linkedWallet}})
+ assert.equal(response.statusCode,400)
+ assert.match(response.body.error,/Agreements support Arc only/)
+}
+assert.equal((await request(handler,'PUT',agreementOnlyConfig)).statusCode,200)
+console.log('Agreement-only project routing rejects Base/Arbitrum and accepts Arc.')

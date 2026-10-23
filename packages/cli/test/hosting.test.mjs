@@ -99,3 +99,35 @@ test('Railway uses exact project/environment/service, stdin and skip-deploys; ra
   assert.equal((await provider.read(target)).value,key)
   assert.equal(calls.filter(c=>c.input===key).length,1)
 })
+
+test('Agreement plan selects isolated mainnet variable and rejects checkout or mixed keys',async()=>{
+  const f=setup();
+  await assert.rejects(hostingCommand('hosting plan',{...options,product:'agreement'},f.deps));
+  f.deps.fetcher=async()=>Response.json({ok:true,projectId,keys:[{...metadata,scopes:['project:read','agreement:read','agreement:create']}]});
+  const planned=await hostingCommand('hosting plan',{...options,product:'agreement'},f.deps);
+  assert.equal(planned.plan.variable,'HASHPAYSTREAM_ARC_MAINNET_API_KEY');
+  assert.equal(f.writes(),0);
+  const applied=await hostingCommand('hosting apply',{plan:planned.plan.id},f.deps);
+  assert.equal(applied.variable,'HASHPAYSTREAM_ARC_MAINNET_API_KEY');
+  assert.equal(applied.verified,true);
+  f.deps.fetcher=async()=>Response.json({ok:true,projectId,keys:[{...metadata,scopes:['agreement:read','agreement:create','checkout:create']}]});
+  await assert.rejects(hostingCommand('hosting apply',{plan:planned.plan.id},f.deps));
+  await assert.rejects(hostingCommand('hosting plan',{...options,product:'arbitrary'},f.deps));
+})
+
+test('Render Agreement adapter updates only the isolated allowlisted variable',async()=>{
+ const calls=[];let value;
+ const provider=providerAdapter({env:{RENDER_API_KEY:'fixture'},fetcher:async(url,init)=>{
+ calls.push(url);
+ if(url.includes('/env-vars/')){
+ assert.ok(url.endsWith('/HASHPAYSTREAM_ARC_MAINNET_API_KEY'));
+ if(init.method==='PUT')value=JSON.parse(init.body).value;
+ return value?Response.json({value}):Response.json({},{status:404});
+ }
+ return Response.json({id:options.service,name:'Backend',type:'web_service'});
+ }});
+ const target={provider:'render',service:options.service,variable:'HASHPAYSTREAM_ARC_MAINNET_API_KEY'};
+ await provider.write(target,key);assert.equal((await provider.read(target)).value,key);
+ await assert.rejects(provider.write({...target,variable:'VITE_SECRET'},key));
+ assert.ok(calls.every(url=>!url.includes(key)));
+})

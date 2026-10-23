@@ -1,6 +1,6 @@
 import { getAddress, isAddress, type Address } from 'viem'
 
-export type CircleGasStationEvmChain = 'base' | 'arbitrum' | 'arc'
+export type CircleGasStationEvmChain = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
 
 export type CircleGasStationWalletRecord = {
   id: string
@@ -14,6 +14,8 @@ export const CIRCLE_GAS_STATION_EVM_NETWORKS = {
   base: { blockchain: 'BASE', environment: 'mainnet' },
   arbitrum: { blockchain: 'ARB', environment: 'mainnet' },
   arc: { blockchain: 'ARC', environment: 'mainnet' },
+  ethereum: { blockchain: 'ETH', environment: 'mainnet' },
+  polygon: { blockchain: 'MATIC', environment: 'mainnet' },
 } as const satisfies Record<CircleGasStationEvmChain, {
   blockchain: string
   environment: 'mainnet' | 'testnet'
@@ -25,7 +27,10 @@ function blockchainMatches(chain: CircleGasStationEvmChain, blockchain: string) 
   if (chain === 'arbitrum') {
     return ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'].includes(normalized)
   }
-  return ['ARC'].includes(normalized)
+  if (chain === 'arc') return normalized === 'ARC'
+  if (chain === 'ethereum') return normalized === 'ETH'
+  if (chain === 'polygon') return normalized === 'MATIC'
+  return false
 }
 
 function fail(message: string, status = 409) {

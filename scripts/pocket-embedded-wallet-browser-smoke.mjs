@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import{build}from'esbuild';
+const{chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
+const mocks={
+ '@privy-io/react-auth':`export const useCreateWallet=()=>({createWallet:window.createWallet})`,
+ './usePocketIdentity':`export default ()=>window.identity`
+};
+const entry=`import React from 'react';import{createRoot}from'react-dom/client';import useWallet from './src/pocket/hooks/usePocketEmbeddedWallet';const root=createRoot(document.getElementById('root'));window.created=0;window.createWallet=async()=>{window.created++;return await new Promise(r=>window.resolveCreate=r)};window.identity={ready:true,authenticated:true,user:{id:'new',linkedAccounts:[]}};function Probe(){const w=useWallet();return <div data-wallet={w.address||''} data-busy={w.busy} data-error={!!w.error}/>};window.render=()=>root.render(<><Probe/><Probe/></>);window.render();`;
+const b=await build({stdin:{contents:entry,resolveDir:process.cwd(),loader:'jsx'},bundle:true,write:false,format:'iife',jsx:'automatic',plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'mock'}:undefined);b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path]}))}}]});
+const browser=await chromium.launch({headless:true,channel:'chrome'});try{const p=await browser.newPage();await p.setContent('<div id="root"></div>');await p.addScriptTag({content:b.outputFiles[0].text});await p.waitForFunction(()=>window.created===1);await p.evaluate(()=>window.resolveCreate({address:'0x'+'1'.repeat(40)}));await p.waitForFunction(()=>[...document.querySelectorAll('[data-wallet]')].every(n=>n.dataset.wallet==='0x'+'1'.repeat(40)));
+await p.evaluate(()=>{window.identity={ready:true,authenticated:true,user:{id:'existing',linkedAccounts:[{type:'wallet',chainType:'ethereum',walletClientType:'privy',address:'0x'+'2'.repeat(40)}]}};window.render()});await p.waitForFunction(()=>[...document.querySelectorAll('[data-wallet]')].every(n=>n.dataset.wallet==='0x'+'2'.repeat(40)));assert.equal(await p.evaluate(()=>window.created),1);
+await p.evaluate(()=>{window.identity={ready:true,authenticated:false,user:null};window.render()});await p.waitForFunction(()=>[...document.querySelectorAll('[data-wallet]')].every(n=>n.dataset.wallet===''));assert.equal(await p.evaluate(()=>window.created),1);
+console.log('PASS: concurrent Pocket/XStocks mounts create once; existing wallet remains readable without signing readiness; logout clears exposed address.');}finally{await browser.close()}

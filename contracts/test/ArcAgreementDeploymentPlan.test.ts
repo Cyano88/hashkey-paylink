@@ -18,7 +18,7 @@ describe('Arc Agreement deployment plan', () => {
     expect(first).to.deep.equal(second)
     expect(first.broadcastAllowed).to.equal(false)
     expect(first.schemaVersion).to.equal(2)
-    expect(first.network.chainId).to.equal(5_042_002)
+    expect(first.network.chainId).to.equal(5_042)
     expect(first.network.usdc).to.equal('0x3600000000000000000000000000000000000000')
     expect(first.contracts.escrow.runtimeTemplateBytes).to.be.lessThan(24_576)
     expect(first.contracts.factory.runtimeTemplateBytes).to.be.lessThan(24_576)

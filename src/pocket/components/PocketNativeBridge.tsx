@@ -53,6 +53,8 @@ export default function PocketNativeBridge() {
       if (active) document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, Math.round((info.height || 0) / Math.max(1, window.devicePixelRatio || 1)))}px`)
     }).catch(() => undefined))
     syncInsets()
+    window.addEventListener('resize', syncInsets)
+    window.addEventListener('orientationchange', syncInsets)
     const syncStatusBar = () => {
       const lightSurface = document.documentElement.dataset.pocketLightSurface === 'true'
       const darkIcons = lightSurface || !document.documentElement.classList.contains('dark')
@@ -77,6 +79,7 @@ export default function PocketNativeBridge() {
     listeners.push(CapacitorApp.addListener('appStateChange', state => {
       if (state.isActive) {
         syncInsets()
+        syncStatusBar()
         window.dispatchEvent(new Event('focus'))
         document.dispatchEvent(new Event('visibilitychange'))
       }
@@ -89,6 +92,8 @@ export default function PocketNativeBridge() {
 
     return () => {
       active = false
+      window.removeEventListener('resize', syncInsets)
+      window.removeEventListener('orientationchange', syncInsets)
       document.documentElement.style.removeProperty('--pocket-status-bar-inset')
       document.documentElement.style.removeProperty('--pocket-navigation-bar-inset')
       themeObserver.disconnect()
@@ -98,7 +103,7 @@ export default function PocketNativeBridge() {
 
   if (!isPocketNativeRuntime() || online) return null
   return (
-    <div className="fixed inset-x-0 top-0 z-[100] bg-gray-950 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-center text-[11px] font-semibold text-white dark:bg-white dark:text-gray-950">
+    <div className="fixed inset-x-0 top-0 z-[100] bg-gray-950 px-4 pb-2 pt-[max(0.5rem,var(--pocket-safe-top))] text-center text-[11px] font-semibold text-white dark:bg-white dark:text-gray-950">
       Offline - balances and activity will update when you reconnect
     </div>
   )

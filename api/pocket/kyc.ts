@@ -1,3 +1,4 @@
+import pocketKycV3, { pocketKycV3Callback, requireV3ProductionKyc } from './kyc-v3.js'
 import { startKycPolicy, storedKycPolicy, matchesKycPolicy, type PocketKycContext } from './kyc-policy.js'
 import type { Request, Response } from 'express'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
@@ -37,6 +38,7 @@ function identityEvidence(config: SmileConfig, result: Record<string, any>) {
   return { legalName, identityMatch }
 }
 export async function requireProductionKyc(userId: string) {
+  try { return await requireV3ProductionKyc(userId) } catch (error) { if ((error as {status?:number}).status !== 403) throw error }
   const record = await readDurableJson<RecordState>(key(userId, 'production'))
   const job = completedPair(record?.jobs || [], 'production')
   if (!job?.legalName) throw fail('Complete identity verification before setting up your POS.', 403)
@@ -87,7 +89,7 @@ async function reconcile(config: SmileConfig, owner: string, selected: Job) {
   return saved.jobs.find(job => job.id === selected.id)!
 }
 
-export default async function pocketKyc(req: Request, res: Response) {
+export async function pocketLegacyKyc(req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
   try {
@@ -181,7 +183,7 @@ export default async function pocketKyc(req: Request, res: Response) {
   }
 }
 
-export async function pocketKycCallback(req: Request, res: Response) {
+export async function pocketLegacyKycCallback(req: Request, res: Response) {
   try {
     const config = smileConfig()
     const body = req.body || {}
@@ -196,4 +198,30 @@ export async function pocketKycCallback(req: Request, res: Response) {
     await reconcile(config, index.owner, job)
     return res.json({ ok: true })
   } catch { return res.status(503).json({ ok: false }) }
+}
+
+export default async function pocketKyc(req: Request, res: Response) {
+  // Enrollment is paused. Preserve records, results and callback reconciliation.
+  if (req.method === 'POST' && ['start', 'resume'].includes(req.body?.action)) {
+    res.setHeader('Cache-Control', 'no-store')
+    try { await verifiedPrivyUser(req) } catch { return res.status(401).json({ ok: false, error: 'Sign in to continue.' }) }
+    return res.status(503).json({ ok: false, code: 'KYC_COMING_SOON', error: 'Identity verification is coming soon.', retryable: false })
+  }
+  // Keep existing production eligibility and in-flight legacy status reconciliation.
+  if (req.body?.action === 'eligibility') return pocketLegacyKyc(req, res)
+  if (req.method === 'POST' && ['status', 'uploaded'].includes(req.body?.action)) {
+    try {
+      const identity = await verifiedPrivyUser(req), config = smileConfig()
+      const current = await readDurableJson<{jobs: unknown[]}>('hashpaylink:pocket-kyc:v3:' + config.environment + ':' + createHash('sha256').update(identity.userId).digest('hex'))
+      if (!current?.jobs.length) {
+        const previous = await readDurableJson<RecordState>(key(identity.userId, config.environment))
+        if (completedPair(previous?.jobs || [], config.environment) || previous?.jobs.some(job => ['pending','review'].includes(job.status) && (job.submitted || job.uploadReportedAt))) return pocketLegacyKyc(req, res)
+      }
+    } catch { /* The V3 handler returns the normal authenticated error response. */ }
+  }
+  return pocketKycV3(req, res)
+}
+export async function pocketKycCallback(req: Request,res: Response) {
+  if (req.headers['response-signature'] || req.query?.reference) return pocketKycV3Callback(req,res)
+  return pocketLegacyKycCallback(req,res)
 }

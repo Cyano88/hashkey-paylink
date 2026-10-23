@@ -1,3 +1,4 @@
+import { isRetiredSportsContent, RETIRED_SPORTS_MESSAGE } from '../../../src/lib/retiredSports.js'
 import { CheckpointRecoveryPending, checkpointRecoveryDeploymentBlock, createCheckpointRecoveryScan } from '../../../api/checkpoint-recovery-scan.js'
 import { readEvmRpc } from '../../../api/evm-read.js'
 import { readMainnetCheckpointFactory } from '../../../api/runtime-public-config.js'
@@ -114,7 +115,6 @@ const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL_MA
   || process.env.X402_FACILITATOR_URL_MAINNET?.trim()
   || 'https://gateway-api.circle.com'
 const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN_MAINNET?.trim() || 'ARC'
-const CREATOR_ADMIN_KEY = (process.env.CREATOR_ADMIN_KEY ?? '').trim()
 const CHECKPOINT_FACTORY_ADDRESS_MAINNET = readMainnetCheckpointFactory()
 
 type PaidRequest = Request & {
@@ -1576,20 +1576,7 @@ function absoluteMediaUrl(value: string) {
   return `${baseUrl()}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`
 }
 
-function requireCreatorAdmin(req: Request, res: Response) {
-  if (!CREATOR_ADMIN_KEY) {
-    res.status(503).json({ ok: false, error: 'Creator admin approval is not configured.' })
-    return false
-  }
-  const headerKey = String(req.headers['x-creator-admin-key'] ?? '').trim()
-  const bodyKey = String((req.body as { adminKey?: unknown } | undefined)?.adminKey ?? '').trim()
-  const queryKey = String((req.query as { adminKey?: string }).adminKey ?? '').trim()
-  if (headerKey !== CREATOR_ADMIN_KEY && bodyKey !== CREATOR_ADMIN_KEY && queryKey !== CREATOR_ADMIN_KEY) {
-    res.status(401).json({ ok: false, error: 'Admin approval key is invalid.' })
-    return false
-  }
-  return true
-}
+function requireCreatorAdmin(req: Request, res: Response) { res.status(410).json({ ok: false, code: 'CREATOR_RETIRED' }); return false }
 
 function creatorProofMessage(params: {
   contentId: string
@@ -1699,103 +1686,7 @@ async function creatorGatewayMiddleware(entry: ContentEntry) {
   return middleware
 }
 
-export async function storeContent(req: Request, res: Response) {
-  const {
-    contentId,
-    creator,
-    type,
-    content,
-    capRaw,
-    rateRaw,
-    mode,
-    title,
-    description,
-    authorName,
-    xHandle,
-    coverImage,
-    category,
-    issuedAt,
-    signature,
-    proofType,
-  } = (req.body ?? {}) as {
-    contentId?: string
-    creator?: string
-    type?: string
-    content?: string
-    capRaw?: number
-    rateRaw?: number
-    mode?: string
-    title?: string
-    description?: string
-    authorName?: string
-    xHandle?: string
-    coverImage?: string
-    category?: string
-    issuedAt?: number
-    signature?: string
-    proofType?: string
-  }
-
-  if (!contentId || !creator || !type || !content || !issuedAt || !signature) {
-    return res.status(400).json({ ok: false, error: 'contentId, creator, type, content, issuedAt, and signature are required' })
-  }
-  if (contentId.length > MAX_CONTENT_ID_LENGTH || content.length > MAX_CONTENT_LENGTH) {
-    return res.status(400).json({ ok: false, error: 'contentId or content is too large' })
-  }
-  if (type !== 'text' && type !== 'url' && type !== 'video') {
-    return res.status(400).json({ ok: false, error: 'type must be "text", "url", or "video"' })
-  }
-  const safeType = type as ContentEntry['type']
-  if (!isAddress(creator)) {
-    return res.status(400).json({ ok: false, error: 'creator must be a valid EVM address' })
-  }
-  const safeCapRaw = Math.max(0, Number(capRaw) || 0)
-  if (!isHexSignature(signature)) {
-    return res.status(400).json({ ok: false, error: 'creator signature is invalid' })
-  }
-  const safeRateRaw = Math.max(0, Number(rateRaw) || 0)
-  const safeCategory = cleanCategory(category)
-  const streamModeAllowed = safeType === 'text' || (safeType === 'video' && safeCategory === 'hashwatch') || safeCategory === 'live-scores'
-  const safeMode = mode === 'stream' && safeType !== 'url' && streamModeAllowed ? 'stream' : 'unlock'
-  const creatorVerified = await verifyCreatorProof({
-    contentId,
-    creator,
-    content,
-    capRaw: safeCapRaw,
-    issuedAt: Number(issuedAt),
-    signature,
-    proofType: proofType === 'typedData' ? 'typedData' : 'message',
-  }).catch(() => false)
-  if (!creatorVerified) {
-    return res.status(401).json({ ok: false, error: 'Creator wallet proof failed. Sign again and retry.' })
-  }
-
-  const existing = await readContentEntry(contentId)
-  if (existing && existing.creator.toLowerCase() !== creator.toLowerCase()) {
-    return res.status(409).json({ ok: false, error: 'contentId is already registered' })
-  }
-
-  await writeContentEntry(contentId, {
-    type: safeType,
-    content,
-    creator,
-    capRaw: safeCapRaw,
-    rateRaw: safeRateRaw,
-    mode: safeMode,
-    title: cleanMetaText(title, 100),
-    description: cleanMetaText(description, 180),
-    authorName: cleanMetaText(authorName, 80),
-    xHandle: cleanMetaText(xHandle, 40).replace(/^@+/, ''),
-    coverImage: String(coverImage ?? '').trim().slice(0, 120_000),
-    category: safeCategory,
-    reviewStatus: existing?.reviewStatus ?? 'pending',
-    reviewedAt: existing?.reviewedAt ?? null,
-    reviewNote: existing?.reviewNote ?? '',
-    ts: Date.now(),
-  })
-
-  return res.status(200).json({ ok: true, reviewStatus: existing?.reviewStatus ?? 'pending' })
-}
+export async function storeContent(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
 export async function listCreatorContent(req: Request, res: Response) {
   const { creator } = req.query as { creator?: string }
@@ -1811,7 +1702,7 @@ export async function listCreatorContent(req: Request, res: Response) {
     )
     return res.status(200).json({
       ok: true,
-      posts: result.rows.map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
+      posts: result.rows.filter(row => !isRetiredSportsContent(row.content_id, row.category, row.type)).map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
     })
   }
 
@@ -1824,29 +1715,7 @@ export async function listCreatorContent(req: Request, res: Response) {
   return res.status(200).json({ ok: true, posts })
 }
 
-export async function listApprovedCreatorContent(_req: Request, res: Response) {
-  if (pool) {
-    await ensureSchema()
-    const result = await pool.query(
-      `select * from streampay_creator_content
-       where review_status = 'approved'
-       order by coalesce(reviewed_at, updated_at) desc, updated_at desc
-       limit 50`,
-    )
-    return res.status(200).json({
-      ok: true,
-      posts: result.rows.map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
-    })
-  }
-
-  const posts = Array.from(store.entries())
-    .filter(([, entry]) => entry.reviewStatus === 'approved')
-    .sort((a, b) => (b[1].reviewedAt ?? b[1].ts) - (a[1].reviewedAt ?? a[1].ts))
-    .slice(0, 50)
-    .map(([contentId, entry]) => entryToPost(contentId, entry))
-
-  return res.status(200).json({ ok: true, posts })
-}
+export async function listApprovedCreatorContent(_req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
 type AgentContentCard = ReturnType<typeof entryToPost> & {
   priceUsdc: number
@@ -2108,7 +1977,7 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
     .map((match, index) => scoreEntryFromMatch(match as Record<string, unknown>, index))
 
   const officialEntries = Object.entries(OFFICIAL_CONTENT)
-    .filter(([contentId]) => contentId !== 'worldcup-scores' && (contentId !== 'worldcup-news' || !newsEntries.length))
+    .filter(([contentId, entry]) => !isRetiredSportsContent(contentId, entry.category, entry.type))
 
   const deduped = new Map<string, ContentEntry>()
   for (const [contentId, entry] of [
@@ -2117,7 +1986,7 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
     ...scoreEntries,
     ...approvedEntries,
   ] as Array<[string, ContentEntry]>) {
-    if (!deduped.has(contentId)) deduped.set(contentId, entry)
+    if (!isRetiredSportsContent(contentId, entry.category, entry.type) && !deduped.has(contentId)) deduped.set(contentId, entry)
   }
 
   if (!activeContentId && activeContentTitle) {
@@ -2250,69 +2119,11 @@ export async function buildHashpayStreamAgentContext(params: { creator?: unknown
   }
 }
 
-export async function getHashpayStreamAgentContext(req: Request, res: Response) {
-  return res.json(await buildHashpayStreamAgentContext({
-    creator: req.query.creator,
-    wallet: req.query.wallet,
-    date: req.query.date,
-  }))
-}
+export async function getHashpayStreamAgentContext(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
-export async function listCreatorAdminContent(req: Request, res: Response) {
-  if (!requireCreatorAdmin(req, res)) return
-  const status = cleanReviewStatus((req.query as { status?: string }).status || 'pending')
+export async function listCreatorAdminContent(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
-  if (pool) {
-    await ensureSchema()
-    const result = await pool.query(
-      `select * from streampay_creator_content
-       where review_status = $1
-       order by updated_at desc
-       limit 100`,
-      [status],
-    )
-    return res.status(200).json({
-      ok: true,
-      posts: result.rows.map(row => entryToPost(String(row.content_id), rowToContentEntry(row))),
-    })
-  }
-
-  const posts = Array.from(store.entries())
-    .filter(([, entry]) => entry.reviewStatus === status)
-    .sort((a, b) => b[1].ts - a[1].ts)
-    .slice(0, 100)
-    .map(([contentId, entry]) => entryToPost(contentId, entry))
-
-  return res.status(200).json({ ok: true, posts })
-}
-
-export async function reviewCreatorContent(req: Request, res: Response) {
-  if (!requireCreatorAdmin(req, res)) return
-  const { contentId, action, note } = (req.body ?? {}) as {
-    contentId?: string
-    action?: string
-    note?: string
-  }
-  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH) {
-    return res.status(400).json({ ok: false, error: 'contentId is required.' })
-  }
-  const reviewStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : null
-  if (!reviewStatus) {
-    return res.status(400).json({ ok: false, error: 'action must be approve or reject.' })
-  }
-
-  const existing = await readContentEntry(contentId)
-  if (!existing) return res.status(404).json({ ok: false, error: 'Content not found.' })
-  const updated: ContentEntry = {
-    ...existing,
-    reviewStatus,
-    reviewedAt: Date.now(),
-    reviewNote: cleanMetaText(note, 240),
-    ts: Date.now(),
-  }
-  await writeContentEntry(contentId, updated)
-  return res.status(200).json({ ok: true, post: entryToPost(contentId, updated) })
-}
+export async function reviewCreatorContent(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
 export async function getContent(req: Request, res: Response) {
   const { id, viewer, demo } = req.query as { id?: string; viewer?: string; demo?: string }
@@ -2611,28 +2422,7 @@ export async function saveCreatorCheckpointVault(req: Request, res: Response) {
   }
 }
 
-export async function getContentX402(req: PaidRequest, res: Response) {
-  const { id } = req.query as { id?: string }
-  if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
-
-  const entry = await readContentEntry(id)
-  if (!entry) {
-    return res.status(404).json({
-      ok: false,
-      error: 'Content not found. Ask the creator to re-generate the link.',
-    })
-  }
-  const middleware = await creatorGatewayMiddleware(entry)
-  return middleware(req, res, () => {
-    return res.status(200).json({
-      ok: true,
-      type: entry.type,
-      content: entry.content,
-      coverImage: entry.coverImage,
-      payment: req.payment ?? null,
-    })
-  })
-}
+export async function getContentX402(req: PaidRequest, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
 export async function unlockContentX402WithAgent(req: Request, res: Response) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -2674,43 +2464,8 @@ export async function unlockContentX402WithAgent(req: Request, res: Response) {
       })
     }
 
-    const paid = await payAgentX402Service({
-      agentSlug: safeAgentSlug,
-      sellerAgentSlug: '',
-      serviceUrl,
-      maxAmount,
-      paymentChain: CREATOR_AGENT_X402_PAY_CHAIN,
-      spendTitle: 'Unlocked creator content',
-      spendDetail: `Paid ${maxAmount.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} USDC to unlock ${shortId(contentId)}`,
-      resultTitle: 'Creator content unlocked',
-      resultDetail: entry.type === 'url' ? 'Private link revealed after x402 payment' : 'Article revealed after x402 payment',
-      result: { contentId, type: entry.type, creator: entry.creator },
-      appendResultActivity: true,
-    })
-    const response = paid.response as CreatorUnlockResponse | undefined
-    if (response?.ok === false) {
-      return res.status(502).json({ ok: false, error: response.error ?? 'Creator content service rejected the payment.' })
-    }
+    return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'New creator purchases have been retired.' })
 
-    await writeCreatorUnlock({
-      contentId,
-      agentSlug: safeAgentSlug,
-      walletAddress: paid.walletAddress,
-      paymentTransaction: response?.payment?.transaction ?? paid.proof?.transaction ?? '',
-      receiptActivityId: paid.receiptActivityId ?? '',
-      unlockedAt: Date.now(),
-    })
-
-    return res.status(200).json({
-      ok: true,
-      restored: false,
-      type: response?.type ?? entry.type,
-      content: response?.content ?? entry.content,
-      coverImage: entry.coverImage,
-      payment: response?.payment ?? null,
-      receiptActivityId: paid.receiptActivityId ?? null,
-      walletAddress: paid.walletAddress,
-    })
   } catch (err) {
     const error = err as Error & { status?: number; code?: string }
     const status = error.status && error.status >= 400 && error.status < 600 ? error.status : 502
@@ -2932,108 +2687,10 @@ async function readCreatorContentViews(contentId: string) {
     .reduce((sum, item) => sum + item.count, 0)
 }
 
-export async function recordCreatorContentView(req: Request, res: Response) {
-  const contentId = String(req.body?.contentId ?? '').trim()
-  const viewerKey = cleanViewerKey(req.body?.viewerKey)
-  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !viewerKey) {
-    return res.status(400).json({ ok: false, error: 'Invalid content view.' })
-  }
-  const entry = await readContentEntry(contentId)
-  if (!entry) return res.status(404).json({ ok: false, error: 'Content not found.' })
-  await ensureSchema()
-  if (pool) {
-    await pool.query(
-      `insert into streampay_creator_content_views (content_id, viewer_key, view_count, created_at, updated_at)
-       values ($1, $2, 1, now(), now())
-       on conflict (content_id, viewer_key) do update set updated_at = now()`,
-      [contentId, viewerKey],
-    )
-  } else {
-    const key = `${contentId}:${viewerKey}`
-    const existing = contentViewStore.get(key)
-    contentViewStore.set(key, {
-      contentId,
-      viewerKey,
-      count: existing?.count ?? 1,
-      updatedAt: Date.now(),
-    })
-  }
-  return res.json({ ok: true, viewCount: await readCreatorContentViews(contentId) })
-}
+export async function recordCreatorContentView(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
-export async function setCreatorReaction(req: Request, res: Response) {
-  const contentId = String(req.body?.contentId ?? '').trim()
-  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
-  const reaction = cleanReaction(req.body?.reaction)
-  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !walletAddress) return res.status(400).json({ ok: false, error: 'Invalid content or wallet.' })
-  if (!(await hasWalletUnlockedContent(contentId, walletAddress))) return res.status(403).json({ ok: false, error: 'Unlock this content before reacting.' })
-  await ensureSchema()
-  if (pool) {
-    if (reaction) {
-      await pool.query(
-        `insert into streampay_creator_reactions (content_id, wallet_address, reaction, updated_at)
-         values ($1, $2, $3, now())
-         on conflict (content_id, wallet_address) do update set reaction = excluded.reaction, updated_at = now()`,
-        [contentId, walletAddress, reaction],
-      )
-    } else {
-      await pool.query(`delete from streampay_creator_reactions where content_id = $1 and wallet_address = $2`, [contentId, walletAddress])
-    }
-  } else {
-    const key = `${contentId}:${walletAddress}`
-    if (reaction) reactionStore.set(key, { contentId, walletAddress, reaction, updatedAt: Date.now() })
-    else reactionStore.delete(key)
-  }
-  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
-}
+export async function setCreatorReaction(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
-export async function addCreatorComment(req: Request, res: Response) {
-  const contentId = String(req.body?.contentId ?? '').trim()
-  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
-  const body = cleanCommentBody(req.body?.body)
-  if (!contentId || contentId.length > MAX_CONTENT_ID_LENGTH || !walletAddress || body.length < 2) return res.status(400).json({ ok: false, error: 'Write a short comment first.' })
-  if (!(await hasWalletUnlockedContent(contentId, walletAddress))) return res.status(403).json({ ok: false, error: 'Unlock this content before commenting.' })
-  const commentId = randomUUID()
-  await ensureSchema()
-  if (pool) {
-    await pool.query(
-      `insert into streampay_creator_comments (comment_id, content_id, wallet_address, body, created_at, updated_at)
-       values ($1, $2, $3, $4, now(), now())`,
-      [commentId, contentId, walletAddress, body],
-    )
-  } else {
-    const now = Date.now()
-    commentStore.set(commentId, { id: commentId, contentId, walletAddress, body, createdAt: now, updatedAt: now })
-  }
-  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
-}
+export async function addCreatorComment(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }
 
-export async function setCreatorCommentReaction(req: Request, res: Response) {
-  const contentId = String(req.body?.contentId ?? '').trim()
-  const commentId = String(req.body?.commentId ?? '').trim()
-  const walletAddress = cleanWalletAddress(req.body?.walletAddress)
-  const reaction = cleanReaction(req.body?.reaction)
-  if (!contentId || !commentId || !walletAddress) return res.status(400).json({ ok: false, error: 'Invalid comment reaction.' })
-  if (!(await hasWalletUnlockedContent(contentId, walletAddress))) return res.status(403).json({ ok: false, error: 'Unlock this content before reacting.' })
-  await ensureSchema()
-  if (pool) {
-    const comment = await pool.query(`select 1 from streampay_creator_comments where comment_id = $1 and content_id = $2 limit 1`, [commentId, contentId])
-    if (!comment.rowCount) return res.status(404).json({ ok: false, error: 'Comment not found.' })
-    if (reaction) {
-      await pool.query(
-        `insert into streampay_creator_comment_reactions (comment_id, wallet_address, reaction, updated_at)
-         values ($1, $2, $3, now())
-         on conflict (comment_id, wallet_address) do update set reaction = excluded.reaction, updated_at = now()`,
-        [commentId, walletAddress, reaction],
-      )
-    } else {
-      await pool.query(`delete from streampay_creator_comment_reactions where comment_id = $1 and wallet_address = $2`, [commentId, walletAddress])
-    }
-  } else {
-    if (!commentStore.has(commentId)) return res.status(404).json({ ok: false, error: 'Comment not found.' })
-    const key = `${commentId}:${walletAddress}`
-    if (reaction) commentReactionStore.set(key, { commentId, walletAddress, reaction, updatedAt: Date.now() })
-    else commentReactionStore.delete(key)
-  }
-  return res.json({ ok: true, ...(await readCreatorSocial(contentId, walletAddress)) })
-}
+export async function setCreatorCommentReaction(req: Request, res: Response) { return res.status(410).json({ ok: false, code: 'CREATOR_RETIRED', error: 'Legacy creator services have been retired. Existing receipts and escrow recovery remain available.' }) }

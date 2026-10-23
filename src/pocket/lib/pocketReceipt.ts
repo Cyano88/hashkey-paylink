@@ -91,7 +91,7 @@ function receiptTitle(kind: PocketReceiptKind, row: PocketActivityRow) {
   if (normalizedSource(row) === 'ngpos' || normalizedSource(row) === 'pos') return 'Retail payment'
   if (normalizedSource(row) === 'collection') return row.activityLabel || 'Request payment'
   if (normalizedSource(row).startsWith('bank-')) return kind === 'money_out' ? 'Bank payout' : 'Bank funding'
-  return kind === 'money_out' ? 'USDC sent' : 'USDC received'
+  return kind === 'money_out' ? (row.assetSymbol || 'USDC') + ' sent' : (row.assetSymbol || 'USDC') + ' received'
 }
 
 export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPending?: boolean } = {}): PaylinkReceipt | null {
@@ -104,7 +104,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
   const reference = row.providerReference || row.billReference || row.txHash || row.eventId
   const bankDestination = [row.accountName, row.bankName, row.bankLast4 ? `****${row.bankLast4}` : ''].filter(Boolean).join(' · ')
   const recipient = row.recipient || (kind === 'app_purchase' ? row.memo : '') || row.contextLabel || row.merchantId || '-'
-  const destination = row.destination || bankDestination || row.contextLabel || `${row.chain || 'Base'} USDC wallet`
+  const destination = row.destination || bankDestination || row.contextLabel || `${row.chain || 'Base'} ${row.assetSymbol || 'USDC'} wallet`
 
   return {
     type: kind === 'bill_purchase' ? category : kind,
@@ -119,7 +119,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     memo: row.memo,
     amount: row.amount,
     amountNgn: row.amountNgn,
-    asset: 'USDC',
+    asset: row.assetSymbol || 'USDC',
     createdAt: row.ts,
     source,
     merchantId: row.merchantId,

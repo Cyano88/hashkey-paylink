@@ -2,6 +2,7 @@ import PocketActivityReceipt from '../components/PocketActivityReceipt'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isIncomingPosPayment, pocketBankRecipientLabel } from '../lib/pocketPurchaseKind'
 import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
+import { pocketWalletPreparationNotice } from '../lib/pocketWalletPreparationNotice'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ArrowRight, ChevronRight, Eye, EyeOff, QrCode, Send, Store, Deposit } from '../components/PocketIcons'
@@ -68,7 +69,7 @@ export default function PocketHomePage() {
   const hidden = '....'
 
   return <PocketRouteShell active="home" onSelect={tab => open(navPath(tab))}>
-    <PocketWalletUpdateCard key={email} notice={wallets.walletUpdate} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
+    <PocketWalletUpdateCard key={email} notice={pocketWalletPreparationNotice(wallets.walletUpdate, wallets.wallets)} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
     <section data-pocket-balance-card className="overflow-hidden rounded-[26px] bg-gray-950 px-5 py-4 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -97,6 +98,7 @@ export default function PocketHomePage() {
         {comingSoon ? <p className="text-sm font-semibold">Coming soon</p> : selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
       </div>
     </section>
+
 
     <section className="grid grid-cols-4 gap-2">
       {[
