@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
-import {encodeAbiParameters,encodeEventTopics} from 'viem'
+import {encodeAbiParameters,encodeEventTopics,parseAbi} from 'viem'
 import {reconcileUsdtBridge} from '../api/pocket/usdt-bridge.ts'
 import {sealUsdtBridgeQuote,USDT_TRANSFER_ABI,USDT_BRIDGE_ROUTER} from '../api/pocket/usdt-bridge-provider.ts'
 import {pocketMoneyNotification} from '../src/pocket/lib/pocketMoneyNotification.ts'
@@ -107,3 +107,20 @@ stored=null
 const racing=await reconcileUsdtBridge('owner',quoteToken,{retireUnsubmitted:true},{...deps,readActivity:async()=>[],claimAction:async()=>{stored={...record,metadata:{...record.metadata,challengeId:'in-flight'}};return{claimed:false,record:stored}}})
 assert.equal(racing.status,'pending');assert.equal(stored.status,'submitted','a concurrent source submission cannot be retired')
 console.log('PASS expired pre-submit Cash draft retirement is atomic with a racing source execution.')
+
+// Fee-enabled settlement requires canonical source proof and separate revenue accounting.
+{
+ const revenue={recipient:'0x3333333333333333333333333333333333333333',bps:10,amountUnits:'1000'}
+ const feeAbi=parseAbi(['event FeesForwarded(address indexed token,(address recipient,uint256 amount)[] distributions)'])
+ const feeEvent=feeAbi[0]
+ const collected={address:'0xce40449b773a3e6e5e769adb4e567179d4828cbd',topics:encodeEventTopics({abi:feeAbi,eventName:'FeesForwarded',args:{token:tokenIn}}),data:encodeAbiParameters(feeEvent.inputs.filter(i=>!i.indexed),[[{recipient:revenue.recipient,amount:1000n}]])}
+ const source={status:'success',transactionHash:txHash,blockNumber:1n,blockHash:destinationReceipt.blockHash,logs:[transfer(tokenIn,wallet,USDT_BRIDGE_ROUTER,1000000n),startLog,transfer(tokenIn,USDT_BRIDGE_ROUTER,revenue.recipient,1000n),collected]}
+ const signed=sealUsdtBridgeQuote({...q,revenue,networkFeeUnits:'0',totalUnits:'1000000'})
+ const reset=()=>{stored={...record,status:'submitted',metadata:{quoteToken:signed}};ledger=[]}
+ const dependencies={...deps,client:network=>({getChainId:async()=>network==='arbitrum'?42161:8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?source:destinationReceipt})}
+ reset();assert.equal((await reconcileUsdtBridge('owner',signed,{txHash},dependencies)).status,'completed')
+ assert.equal(ledger[0].metadata.bridgeRevenueUnits,'1000');assert.equal(ledger[0].metadata.bridgeRevenueRecipient,revenue.recipient);assert.equal(ledger[0].metadata.gasReimbursementUnits,'0')
+ reset();source.logs.pop();assert.equal((await reconcileUsdtBridge('owner',signed,{txHash},dependencies)).status,'needs_attention');assert.equal(ledger.length,0)
+ source.logs.push(collected);source.blockHash='0x'+'99'.repeat(32);reset();assert.equal((await reconcileUsdtBridge('owner',signed,{txHash},dependencies)).status,'pending');assert.equal(ledger.length,0)
+ console.log('PASS fee-enabled recovery: exact collection evidence and canonical source required; ledger separates Pocket revenue from gas.')
+}

@@ -1,3 +1,4 @@
+import {lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {readSponsoredSwapOutcome,type SponsoredSwapEvidence} from './xlayer-swap-settlement.js'
 import {encodeXLayerSponsoredBatch} from './xlayer-sponsored-cost.js'
 import {verifySponsoredSwap} from './xlayer-swap-sponsorship.js'
@@ -133,7 +134,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   }
   async function journalOutbound(owner:string,token:string,hash:string|null,status:string,details:{status?:string;destinationTxHash?:string;refundAsset?:string;refundNetwork?:string;refundAmount?:string}={}){
     const q=openOutboundBridge(token,owner),preview=outboundBridgePreview(q)
-    return d.journal({ownerId:owner,idempotencyKey:'pocket:xlayer-bridge:'+q.fee.intentId,action:'wallet.xlayer-bridge',resourceId:q.fee.intentId,status:status==='completed'?'completed':['failed','refunded'].includes(status)?'failed':'submitted',metadata:{execution:'privy',quoteToken:token,source:'xlayer',destination:q.destination,amount:preview.amount,assetSymbol:q.fee.asset,walletAddress:q.fee.walletAddress,paymentState:status,...(hash?{txHash:hash}:{}),...(details.destinationTxHash?{destinationTxHash:details.destinationTxHash}:{}),...(status==='refunded'?{refundAsset:details.refundAsset!,refundNetwork:details.refundNetwork!,refundAmount:details.refundAmount!,refundTxHash:details.destinationTxHash!}:{})}})
+    return d.journal({ownerId:owner,idempotencyKey:'pocket:xlayer-bridge:'+q.fee.intentId,action:'wallet.xlayer-bridge',resourceId:q.fee.intentId,status:status==='completed'?'completed':['failed','refunded'].includes(status)?'failed':'submitted',metadata:{...lifiRevenueMetadata(q.lifi?.revenue,q.fee.networkFeeUnits),execution:'privy',quoteToken:token,source:'xlayer',destination:q.destination,amount:preview.amount,assetSymbol:q.fee.asset,walletAddress:q.fee.walletAddress,paymentState:status,...(hash?{txHash:hash}:{}),...(details.destinationTxHash?{destinationTxHash:details.destinationTxHash}:{}),...(status==='refunded'?{refundAsset:details.refundAsset!,refundNetwork:details.refundNetwork!,refundAmount:details.refundAmount!,refundTxHash:details.destinationTxHash!}:{})}})
   }
   async function reconcileOutbound(owner:string,token:string){
     const q=openOutboundBridge(token,owner),record=(await d.read())?.requests[q.fee.intentId]

@@ -2,6 +2,8 @@ import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto'
 import {decodeFunctionData, encodeFunctionData, formatUnits, getAddress, pad, parseAbi, parseUnits, type Address, type Hex} from 'viem'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {assertLifiBridgeAvailable,deferLifiBridgeQuotes,lifiBridgeQuoteError} from './bridge-quote-error.js'
+import {lifiBridgeRevenue,lifiRevenueFraction} from './lifi-bridge-revenue.js'
+import {assertPocketBridgeRevenue,type PocketBridgeRevenue} from '../../src/pocket/lib/pocketBridgeRevenue.js'
 
 export const USDT_BRIDGE_NETWORKS = ['base','arbitrum','ethereum','polygon'] as const
 export type UsdtBridgeNetwork = typeof USDT_BRIDGE_NETWORKS[number]
@@ -21,11 +23,11 @@ export function usdtBridgeNetwork(value: unknown):UsdtBridgeNetwork {
   if(!USDT_BRIDGE_NETWORKS.includes(value as UsdtBridgeNetwork)) bridgeError('USDT bridging is available on supported EVM networks only.')
   return value as UsdtBridgeNetwork
 }
-export type UsdtBridgeQuote = {networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork|'solana';walletAddress:Address;destinationAddress:string;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;requestId?:string;provider:'across'|'relay'}
+export type UsdtBridgeQuote = {revenue?:PocketBridgeRevenue;networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork|'solana';walletAddress:Address;destinationAddress:string;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;requestId?:string;provider:'across'|'relay'}
 
 // Only audited Across V4 calls and its exact fee-forwarding step are accepted.
 // No token conversion, destination calls, native value, or arbitrary swap calls.
-export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork;walletAddress:Address;destinationAddress:Address;amountUnits:bigint}) {
+export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork;walletAddress:Address;destinationAddress:Address;amountUnits:bigint;revenue?:PocketBridgeRevenue}) {
   const from=POCKET_USDT_ASSETS[input.source],to=POCKET_USDT_ASSETS[input.destination]
   const a=data?.action,t=data?.transactionRequest,e=data?.estimate
   if(data?.tool!=='across'||!a||!t||!e||a.fromChainId!==from.chainId||a.toChainId!==to.chainId||t.chainId!==from.chainId
@@ -37,6 +39,7 @@ export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork
   if(minimum<=0n||receive<minimum||receive>input.amountUnits||minimum*10000n<receive*9950n) bridgeError('USDT bridge minimum received does not match the requested amount and slippage.',502)
   const decoded=decodeFunctionData({abi:USDT_BRIDGE_ABI,data:t.data as Hex}) as any
   const b=decoded.args[0],across=decoded.args[decoded.args.length-1] as any
+  if(input.revenue&&b.integrator!=='hashpaylink')bridgeError('Bridge integration changed.',502)
   if(b.bridge!=='across'||b.destinationChainId!==BigInt(to.chainId)||!sameAddress(b.sendingAssetId,from.address)||!sameAddress(b.receiver,input.destinationAddress)||b.hasDestinationCall
     ||!sameAddress(across.receiverAddress,pad(input.destinationAddress))||!sameAddress(across.refundAddress,pad(input.walletAddress))
     ||!sameAddress(across.sendingAssetId,pad(from.address))||!sameAddress(across.receivingAssetId,pad(to.address))||across.message!=='0x'
@@ -49,10 +52,12 @@ export function validateUsdtBridgeQuote(data:any,input:{source:UsdtBridgeNetwork
     if(!sameAddress(s.callTo,FEE_FORWARDER)||!sameAddress(s.approveTo,FEE_FORWARDER)||!sameAddress(s.sendingAssetId,from.address)||!sameAddress(s.receivingAssetId,from.address)||s.fromAmount!==input.amountUnits||!s.requiresDeposit) bridgeError('Unsupported USDT source operation.',502)
     const fees=decodeFunctionData({abi:FEE_ABI,data:s.callData})
     if(!sameAddress(fees.args[0],from.address)||fees.args[1].length>4) bridgeError('Unsupported bridge fee operation.',502)
+    if(input.revenue)assertPocketBridgeRevenue(input.amountUnits,input.revenue,fees.args[1])
     fee=fees.args[1].reduce((sum,item)=>sum+item.amount,0n)
     const listed=(e.feeCosts||[]).filter((f:any)=>f.name==='LIFI Fixed Fee'&&f.included===true&&sameAddress(f.token?.address,from.address)).reduce((sum:bigint,f:any)=>sum+BigInt(f.amount),0n)
     if(fee!==listed||fee>=input.amountUnits||b.minAmount!==input.amountUnits-fee||(BigInt(b.minAmount)*BigInt(across.outputAmountMultiplier)/10n**18n)<minimum) bridgeError('USDT bridge fee or delivery amount changed.',502)
   } else if(b.hasSourceSwaps||b.minAmount!==input.amountUnits) bridgeError('Unexpected USDT bridge input.',502)
+  if(input.revenue&&decoded.functionName!=='swapAndStartBridgeTokensViaAcrossV4')assertPocketBridgeRevenue(input.amountUnits,input.revenue,[])
   if(across.outputAmount<minimum) bridgeError('Bridge output is below the approved minimum.',502)
   return {callData:t.data as Hex,transactionId:b.transactionId,minimum,receive}
 }
@@ -61,14 +66,16 @@ export async function quoteUsdtBridge(input:Omit<UsdtBridgeQuote,'id'|'amountUni
   const units=parseUnits(input.amount,6)
   if(units<=0n) bridgeError('Enter an amount to bridge.')
   const from=POCKET_USDT_ASSETS[input.source],to=POCKET_USDT_ASSETS[input.destination]
+  const revenue=lifiBridgeRevenue(units)
   const query=new URLSearchParams({fromChain:String(from.chainId),toChain:String(to.chainId),fromToken:from.address,toToken:to.address,fromAmount:String(units),fromAddress:input.walletAddress,toAddress:input.destinationAddress,slippage:'0.005',allowBridges:'across',allowExchanges:'none',allowDestinationCall:'false',integrator:'hashpaylink'})
+  if(revenue)query.set('fee',lifiRevenueFraction(revenue.bps))
   assertLifiBridgeAvailable()
   const response=await fetcher('https://li.quest/v1/quote?'+query,{headers:process.env.LIFI_API_KEY?{'x-lifi-api-key':process.env.LIFI_API_KEY}:{},signal:AbortSignal.timeout(20000)})
   if(!response.ok){const body=await response.json().catch(()=>null);if(response.status===429)deferLifiBridgeQuotes(body,response.headers.get('retry-after'));lifiBridgeQuoteError(response.status,body,{sourceChainId:from.chainId,destinationChainId:to.chainId,sourceToken:from.address,destinationToken:to.address,bridge:'across'})}
-  const validated=validateUsdtBridgeQuote(await response.json(),{...input,amountUnits:units})
+  const validated=validateUsdtBridgeQuote(await response.json(),{...input,amountUnits:units,revenue})
   const approve=(amount:bigint)=>({target:getAddress(from.address),value:0n,data:encodeFunctionData({abi:APPROVE_ABI,functionName:'approve',args:[USDT_BRIDGE_ROUTER,amount]})})
   const callData=encodeFunctionData({abi:USDT_BATCH_ABI,functionName:'executeBatch',args:[[approve(0n),approve(units),{target:USDT_BRIDGE_ROUTER,value:0n,data:validated.callData},approve(0n)]]})
-  return {...input,id:randomUUID(),amount:formatUnits(units,6),amountUnits:String(units),receive:formatUnits(validated.receive,6),minimumReceive:formatUnits(validated.minimum,6),minimumUnits:String(validated.minimum),fee:formatUnits(units-validated.receive,6),expiresAt:Date.now()+45000,callData,transactionId:validated.transactionId,provider:'across'}
+  return {...input,...(revenue?{revenue}:{}),id:randomUUID(),amount:formatUnits(units,6),amountUnits:String(units),receive:formatUnits(validated.receive,6),minimumReceive:formatUnits(validated.minimum,6),minimumUnits:String(validated.minimum),fee:formatUnits(units-validated.receive,6),expiresAt:Date.now()+45000,callData,transactionId:validated.transactionId,provider:'across'}
 }
 function secret(){const value=process.env.POCKET_SWAP_QUOTE_SECRET||'';if(value.length<32)bridgeError('Stablecoin bridge signing is not configured.',503);return value}
 export function sealUsdtBridgeQuote(quote:UsdtBridgeQuote,key=secret()){const body=Buffer.from(JSON.stringify(quote)).toString('base64url');return body+'.'+createHmac('sha256',key).update('pocket-usdt-bridge-v1:'+body).digest('base64url')}

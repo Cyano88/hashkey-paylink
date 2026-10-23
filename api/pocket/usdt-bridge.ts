@@ -1,4 +1,5 @@
 import type {Request,Response} from 'express'
+import {lifiRevenueProven,lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {quoteEvmSolanaUsdt,solanaUsdtDestinationEnabled,relayUsdtDepositMatches,readEvmSolanaUsdtDelivery} from './evm-solana-usdt-bridge.js'
 import solanaUsdtBridgeHandler,{listPendingSolanaUsdtBridges,solanaUsdtBridgeEnabled,recoverSolanaUsdtBridge} from './solana-usdt-bridge-api.js'
 import {createPublicClient,decodeEventLog,formatUnits,parseUnits,getAddress,http,parseAbi,type Hex} from 'viem'
@@ -18,7 +19,7 @@ const chains={base,arbitrum,ethereum:mainnet,polygon}
 const BALANCE=parseAbi(['function balanceOf(address owner) view returns(uint256)'])
 const client=(network:UsdtBridgeNetwork)=>createPublicClient({chain:chains[network],transport:http(process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||undefined,{timeout:15000})})
 const preview=(q:UsdtBridgeQuote)=>{const {callData,ownerId,...value}=q;return value}
-const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({intentFingerprint:[q.walletAddress.toLowerCase(),q.source,q.destination,q.amountUnits].join(':'),quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
+const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),intentFingerprint:[q.walletAddress.toLowerCase(),q.source,q.destination,q.amountUnits].join(':'),quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
 
 export default async function usdtBridgeHandler(req:Request,res:Response){
   if(req.method==='POST'&&(req.body?.source==='solana'||String(req.body?.quoteToken||'').startsWith('solana:')))return solanaUsdtBridgeHandler(req,res)
@@ -107,13 +108,13 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       return {ok:true,status:'not_submitted',reason:'approval_expired'}
     }
     if(existing.status==='completed'){
-      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:q.provider,...(meta.settledAmountUnits?{settledAmountUnits:meta.settledAmountUnits,settledAmount:formatUnits(BigInt(meta.settledAmountUnits),6)}:{})},recordedAt:existing.updatedAt})
+      await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),destinationTxHash:meta.destinationTxHash,provider:q.provider,...(meta.settledAmountUnits?{settledAmountUnits:meta.settledAmountUnits,settledAmount:formatUnits(BigInt(meta.settledAmountUnits),6)}:{})},recordedAt:existing.updatedAt})
       return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash,...(meta.settledAmountUnits?{amountOut:formatUnits(BigInt(meta.settledAmountUnits),6),settlement:{network:q.destination,transactionHash:meta.destinationTxHash,amountUnits:meta.settledAmountUnits}}:{})}
     }
     if(existing.status==='failed'){
       if(meta.paymentState==='not_submitted')return {ok:true,status:'not_submitted',reason:'approval_expired'}
       if(meta.paymentState==='refunded'){
-        await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':refunded',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'refunded',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:meta.refundNetwork,resourceId:q.id,transactionHash:meta.txHash,metadata:{refundTxHash:meta.refundTxHash,refundAmount:meta.refundAmount,provider:q.provider},recordedAt:existing.updatedAt})
+        await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':refunded',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'refunded',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:meta.refundNetwork,resourceId:q.id,transactionHash:meta.txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),refundTxHash:meta.refundTxHash,refundAmount:meta.refundAmount,provider:q.provider},recordedAt:existing.updatedAt})
         return {ok:true,status:'refunded',txHash:meta.txHash,destinationTxHash:meta.refundTxHash,settlement:{network:meta.refundNetwork,transactionHash:meta.refundTxHash,amountUnits:meta.refundAmountUnits}}
       }
       return {ok:true,status:'failed'}
@@ -155,7 +156,13 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       if(q.destination==='solana'||!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false
       try {const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId&&sameAddress(event.args.bridgeData.receiver,q.destinationAddress)&&sameAddress(event.args.bridgeData.sendingAssetId,POCKET_USDT_ASSETS[q.source].address)&&event.args.bridgeData.destinationChainId===BigInt(POCKET_USDT_ASSETS[q.destination].chainId)}catch{return false}
     }))
-    if(!started)return {ok:true,status:'needs_attention'}
+    if(!started||!lifiRevenueProven(q.revenue,POCKET_USDT_ASSETS[q.source].address,receipt,txHash))return {ok:true,status:'needs_attention'}
+    if(q.revenue){
+      const sourceRpc=deps.client(q.source)
+      if(await sourceRpc.getChainId()!==POCKET_USDT_ASSETS[q.source].chainId)return {ok:true,status:'needs_attention',txHash}
+      const canonical=await sourceRpc.getBlock({blockNumber:receipt.blockNumber})
+      if(!sameAddress(canonical.hash,receipt.blockHash))return {ok:true,status:'pending',txHash}
+    }
     await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,txHash,sourceConfirmed:'true'}})
     if(q.provider==='relay'){
       const rpc=deps.client(q.source)
@@ -190,6 +197,6 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     },0n):0n
     if(received<BigInt(q.minimumUnits))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const completed=await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash,sourceConfirmed:'true',paymentState:'completed',settledAmountUnits:String(received)}})
-    await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:ownerId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{destinationTxHash,provider:'across',settledAmountUnits:String(received),settledAmount:formatUnits(received,6)},recordedAt:completed.updatedAt})
+    await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:ownerId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),destinationTxHash,provider:'across',settledAmountUnits:String(received),settledAmount:formatUnits(received,6)},recordedAt:completed.updatedAt})
     return {ok:true,status:'completed',txHash,destinationTxHash,amountOut:formatUnits(received,6),settlement:{network:q.destination,transactionHash:destinationTxHash,amountUnits:String(received)}}
 }

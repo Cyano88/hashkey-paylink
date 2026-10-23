@@ -4,12 +4,16 @@ import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {evmStablecoinDelta} from './xlayer-bridge-evidence.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 import {assertLifiBridgeAvailable,deferLifiBridgeQuotes,lifiBridgeQuoteError} from './bridge-quote-error.js'
+import {lifiBridgeRevenue,lifiRevenueFraction} from './lifi-bridge-revenue.js'
+import {lifiRevenueProven} from './lifi-revenue-evidence.js'
 const sourceToken='0x779ded0c9e1022225f8e0630b35a9b54be713736'
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const fail=(message:string):never=>{throw Object.assign(Error(message),{status:503})}
 export async function quoteLifiOutbound(input:{destination:LifiDestination;owner:Address;recipient:Address;amountUnits:string},fetcher=fetch){
  const target=POCKET_USDT_ASSETS[input.destination]
+ const revenue=lifiBridgeRevenue(BigInt(input.amountUnits))
  const params=new URLSearchParams({fromChain:'196',toChain:String(target.chainId),fromToken:sourceToken,toToken:target.address,fromAmount:input.amountUnits,fromAddress:input.owner,toAddress:input.recipient,slippage:'0.005',allowBridges:'layerswap',allowExchanges:'none',allowDestinationCall:'false'})
+ if(revenue){params.set('integrator','hashpaylink');params.set('fee',lifiRevenueFraction(revenue.bps))}
  assertLifiBridgeAvailable()
  const r=await fetcher('https://li.quest/v1/quote?'+params,{headers:process.env.LIFI_API_KEY?{'x-lifi-api-key':process.env.LIFI_API_KEY}:{},signal:AbortSignal.timeout(20000),redirect:'error'}),b=await r.json().catch(()=>null)
  if(r.status===429)deferLifiBridgeQuotes(b,r.headers.get('retry-after'))
@@ -19,9 +23,11 @@ export async function quoteLifiOutbound(input:{destination:LifiDestination;owner
  if(b.tool!=='layerswap'||a?.fromChainId!==196||a?.toChainId!==target.chainId||!same(a.fromAddress,input.owner)||!same(a.toAddress,input.recipient)||!same(a.fromToken?.address,sourceToken)||!same(a.toToken?.address,target.address)||a.fromToken?.decimals!==6||a.toToken?.decimals!==6||a.fromAmount!==input.amountUnits||e?.fromAmount!==input.amountUnits||!same(e.approvalAddress,LIFI_DIAMOND)||t.chainId!==196||!same(t.from,input.owner)||!same(t.to,LIFI_DIAMOND)||BigInt(t.value)!==0n)fail('This bridge route could not be verified. Try again.')
  const decoded=decodeFunctionData({abi:lifiAbi,data:t.data}),args=decoded.args as any
  const p:LifiOutboundPlan={...input,receiveUnits:e.toAmount,minimumUnits:e.toAmountMin,transactionId:args[0].transactionId,data:t.data,expiresAt:Math.min(Date.now()+30000,Number(args[decoded.functionName==='swapAndStartBridgeTokensViaLayerSwap'?2:1].deadline)*1000)}
+ if(revenue)p.revenue=revenue
  validateLifiPlan(p);return p
 }
 export function lifiSourceProven(p:LifiOutboundPlan,feeUnits:string,receipt:any,hash:Hex){
+ if(!lifiRevenueProven(p.revenue,sourceToken,receipt,hash))return false
  if(evmStablecoinDelta(receipt,'xlayer','USDT',p.owner,hash)!==-(BigInt(p.amountUnits)+BigInt(feeUnits))||evmStablecoinDelta(receipt,'xlayer','USDT',EVM_PLATFORM_TREASURY,hash)!==BigInt(feeUnits))return false
  const expected=validateLifiPlan(p,p.expiresAt-1).bridgeData
  const matches=receipt.logs.filter((l:any)=>{

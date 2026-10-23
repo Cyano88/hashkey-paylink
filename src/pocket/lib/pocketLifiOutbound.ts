@@ -1,5 +1,6 @@
 import {decodeFunctionData,encodeFunctionData,parseAbi,isAddress,type Address,type Hex} from 'viem'
 import {POCKET_USDT_ASSETS} from './pocketUsdtAssets.js'
+import {assertPocketBridgeRevenue,type PocketBridgeRevenue} from './pocketBridgeRevenue.js'
 export const LIFI_DESTINATIONS=['arbitrum','ethereum','polygon'] as const
 export type LifiDestination=typeof LIFI_DESTINATIONS[number]
 export type OutboundDestination='base'|LifiDestination
@@ -16,7 +17,7 @@ export const lifiAbi=parseAbi([
  'function forwardERC20Fees(address token,(address recipient,uint256 amount)[] distributions)',
  'function approve(address,uint256) returns(bool)',
 ])
-export type LifiOutboundPlan={destination:LifiDestination;owner:Address;recipient:Address;amountUnits:string;receiveUnits:string;minimumUnits:string;transactionId:Hex;data:Hex;expiresAt:number}
+export type LifiOutboundPlan={destination:LifiDestination;owner:Address;recipient:Address;amountUnits:string;receiveUnits:string;minimumUnits:string;transactionId:Hex;data:Hex;expiresAt:number;revenue?:PocketBridgeRevenue}
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const invalid=():never=>{throw Object.assign(Error('This bridge route could not be verified. Try again.'),{status:502})}
 export function validateLifiPlan(p:LifiOutboundPlan,now=Date.now()){
@@ -29,15 +30,21 @@ export function validateLifiPlan(p:LifiOutboundPlan,now=Date.now()){
  const args=decoded.args as any,bd=args[0],hasSwap=decoded.functionName==='swapAndStartBridgeTokensViaLayerSwap',ld=args[hasSwap?2:1]
  if(!same(bd.transactionId,p.transactionId)||bd.bridge!=='layerswap'||!same(bd.sendingAssetId,sourceToken)||!same(bd.receiver,p.recipient)||bd.destinationChainId!==BigInt(POCKET_USDT_ASSETS[p.destination].chainId)||bd.hasDestinationCall||bd.hasSourceSwaps!==hasSwap||!same(ld.refundRecipient,p.owner)||!isAddress(ld.depositoryReceiver)||/^0x0{40}$/i.test(ld.depositoryReceiver)||!/^0x0{64}$/i.test(ld.nonEVMReceiver)||!/^0x[0-9a-f]{130}$/i.test(ld.signature)||ld.deadline*1000n<BigInt(p.expiresAt))invalid()
  let providerFee=0n
+ if(p.revenue&&bd.integrator!=='hashpaylink')invalid()
  if(hasSwap){
   const swaps=args[1];if(swaps.length!==1)invalid();const s=swaps[0]
   // Only the published LI.FI fee forwarder is permitted. No arbitrary swaps/calls.
   if(!same(s.callTo,forwarder)||!same(s.approveTo,forwarder)||!same(s.sendingAssetId,sourceToken)||!same(s.receivingAssetId,sourceToken)||s.fromAmount!==principal||!s.requiresDeposit)invalid()
   const f=decodeFunctionData({abi:lifiAbi,data:s.callData});if(f.functionName!=='forwardERC20Fees')invalid()
-  const [token,distributions]=f.args as any;if(!same(token,sourceToken)||distributions.length!==1)invalid()
-  const fee=distributions[0];if(!isAddress(fee.recipient)||/^0x0{40}$/i.test(fee.recipient))invalid()
-  providerFee=fee.amount;if(providerFee<0n||providerFee>principal*25n/10000n)invalid()
+  const [token,distributions]=f.args as any;if(!same(token,sourceToken))invalid()
+  if(p.revenue){assertPocketBridgeRevenue(principal,p.revenue,distributions);providerFee=distributions.reduce((sum:bigint,f:{amount:bigint})=>sum+f.amount,0n)}
+  else{
+   if(distributions.length!==1)invalid()
+   const fee=distributions[0];if(!isAddress(fee.recipient)||/^0x0{40}$/i.test(fee.recipient))invalid()
+   providerFee=fee.amount;if(providerFee<0n||providerFee>principal*25n/10000n)invalid()
+  }
  }
+ if(p.revenue&&!hasSwap)assertPocketBridgeRevenue(principal,p.revenue,[])
  if(bd.minAmount!==principal-providerFee||bd.minAmount<receive)invalid()
  // Canonical ABI bytes exclude trailing or hidden execution data.
  if(encodeFunctionData({abi:lifiAbi,functionName:decoded.functionName,args:decoded.args as any}).toLowerCase()!==p.data.toLowerCase())invalid()

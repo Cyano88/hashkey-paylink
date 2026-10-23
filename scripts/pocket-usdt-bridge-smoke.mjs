@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {encodeFunctionData,pad} from 'viem'
+import {encodeFunctionData,pad,parseAbi} from 'viem'
 import {quoteUsdtBridge,validateUsdtBridgeQuote,USDT_BRIDGE_ABI,USDT_BRIDGE_ROUTER,openUsdtBridgeQuote,sealUsdtBridgeQuote,usdtBridgeNetwork} from '../api/pocket/usdt-bridge-provider.ts'
 import {bridgeFromActivityRow} from '../src/pocket/lib/pocketBridgeActivity.ts'
 
@@ -26,3 +26,23 @@ console.log('USDT bridge validation: valid route, recipient/refund/token/chain/a
 
 await quoteUsdtBridge({ownerId:'owner',walletId:'wallet',source:'arbitrum',destination:'base',walletAddress:wallet,destinationAddress:recipient,amount:'10'},async url=>{const u=new URL(url);assert.equal(u.searchParams.get('allowExchanges'),'none');assert.equal(u.searchParams.get('allowBridges'),'across');assert.equal(u.searchParams.get('allowDestinationCall'),'false');return Response.json(route())});
 console.log('PASS provider search excludes unaudited conversions while preserving route validation.');
+
+const revenue={recipient:'0x3333333333333333333333333333333333333333',bps:10,amountUnits:'10000'}
+const feeAbi=parseAbi(['function forwardERC20Fees(address token,(address recipient,uint256 amount)[] distributions)'])
+const distributions=[{recipient:'0x4444444444444444444444444444444444444444',amount:25000n},{recipient:revenue.recipient,amount:10000n}]
+function revenueRoute(fees=distributions){
+ const data=route();data.estimate.toAmount='9950000';data.estimate.toAmountMin='9950000';data.estimate.feeCosts=[{name:'LIFI Fixed Fee',included:true,token:{address:tokenIn},amount:'35000'}]
+ const step={callTo:'0xce40449b773a3e6e5e769adb4e567179d4828cbd',approveTo:'0xce40449b773a3e6e5e769adb4e567179d4828cbd',sendingAssetId:tokenIn,receivingAssetId:tokenIn,fromAmount:10000000n,requiresDeposit:true,callData:encodeFunctionData({abi:feeAbi,functionName:'forwardERC20Fees',args:[tokenIn,fees]})}
+ data.transactionRequest.data=encodeFunctionData({abi:USDT_BRIDGE_ABI,functionName:'swapAndStartBridgeTokensViaAcrossV4',args:[{...bridge,minAmount:9965000n,hasSourceSwaps:true},[step],{...across,outputAmount:9950000n}]})
+ return data
+}
+validateUsdtBridgeQuote(revenueRoute(),{...input,revenue})
+assert.throws(()=>validateUsdtBridgeQuote(route(),{...input,revenue}))
+for(const fees of [[distributions[0],{...distributions[1],recipient:wallet}],[distributions[0],{...distributions[1],amount:9999n}],[{...distributions[0],amount:25001n},distributions[1]],[...distributions,distributions[1]]])assert.throws(()=>validateUsdtBridgeQuote(revenueRoute(fees),{...input,revenue}))
+const saved={...process.env}
+Object.assign(process.env,{POCKET_BRIDGE_REVENUE_LIFI_ENABLED:'true',POCKET_BRIDGE_REVENUE_BPS:'10',POCKET_BRIDGE_REVENUE_EVM_ADDRESS:revenue.recipient,POCKET_BRIDGE_REVENUE_SOLANA_ADDRESS:'So11111111111111111111111111111111111111112',LIFI_API_KEY:'synthetic'})
+try{
+ const quoted=await quoteUsdtBridge({ownerId:'owner',walletId:'wallet',source:'arbitrum',destination:'base',walletAddress:wallet,destinationAddress:recipient,amount:'10'},async(url,options)=>{assert.equal(new URL(url).searchParams.get('fee'),'0.0010');assert.equal(options.headers['x-lifi-api-key'],'synthetic');return Response.json(revenueRoute())})
+ assert.deepEqual(quoted.revenue,revenue);assert.equal(quoted.fee,'0.05');assert.deepEqual(openUsdtBridgeQuote(sealUsdtBridgeQuote(quoted,key),'owner',false,key).revenue,revenue)
+}finally{for(const k of Object.keys(process.env))if(!(k in saved))delete process.env[k];Object.assign(process.env,saved)}
+console.log('PASS LI.FI revenue request, exact recipient/amount proof, provider fee ceiling and signed quote; existing single fee includes revenue once.')
