@@ -1,3 +1,4 @@
+import usdAccountHandler, { usdAccountWebhook } from './api/pocket/usd-account.js'
 import pocketBscAccountHandler from './api/pocket/bsc-account.js'
 import pocketBscSwapHandler from './api/pocket/bsc-service.js'
 import {createExchangeRateLimit} from './api/pocket/exchange-rate-limit.js'
@@ -286,6 +287,7 @@ const hashPayStreamArcWebhookLimiter = rateLimit({ name: 'hashpaystream-arc-webh
 
 app.post('/api/pocket/kyc/callback', rateLimit({ name: 'smile-callback', windowMs: 60_000, max: 120 }), express.json({ limit: '1536kb' }), pocketKycCallback)
 app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
+app.post('/api/pocket/usd-account/webhook', rateLimit({ name: 'usd-account-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), usdAccountWebhook)
 app.post('/api/pocket/bridge-sandbox/webhook', rateLimit({ name: 'bridge-sandbox-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), bridgeSandboxWebhook)
 app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
 app.post(
@@ -430,6 +432,7 @@ app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)
 app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
 app.all('/api/pocket/cash-conversion', exchangeLimiter, pocketCashConversionHandler)
 app.all('/api/pocket/bridge-sandbox', strictLimiter, bridgeSandboxHandler)
+app.all('/api/pocket/usd-account', strictLimiter, usdAccountHandler)
 app.all('/api/pocket/native-solana-swap', exchangeLimiter, pocketNativeSolanaSwapHandler)
 app.all('/api/pocket/wallet-update/status', readLimiter, pocketWalletUpdateStatusHandler)
 app.all('/api/pocket/wallet-update/flow', strictLimiter, pocketMigrationFlowHandler)
