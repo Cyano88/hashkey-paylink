@@ -83,6 +83,11 @@ export function validateRelayUsdtQuote(q:any,i:RelayUsdtInput,now=Date.now()){
 export async function quoteRelayUsdt(i:RelayUsdtInput,apiKey:string,fetcher=fetch){
  requireThat(apiKey.trim().length>0,'provider API key required')
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(relayUsdtRequest(i)),signal:AbortSignal.timeout(20000)})
- requireThat(response.ok,'quote unavailable')
+ if(!response.ok){
+  const failure=await response.json().catch(()=>null)
+  if([400,422].includes(response.status)&&failure?.errorCode==='AMOUNT_TOO_LOW')throw Object.assign(Error('Amount too small.'),{status:422})
+  if(response.status===429)throw Object.assign(Error('Bridge service is busy. Please try again shortly.'),{status:429})
+  throw Object.assign(Error('Bridge service is temporarily unavailable. Please try again.'),{status:503})
+ }
  return validateRelayUsdtQuote(await response.json(),i)
 }
