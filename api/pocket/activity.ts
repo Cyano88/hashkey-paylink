@@ -57,6 +57,7 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if(record.action==='wallet.bsc-bridge'&&record.metadata?.approvalCancelled==='true'&&!record.metadata.txHash)return undefined
   if (['cancelled', 'not_submitted'].includes(record.status) && !record.metadata?.txHash) return undefined
   if(record.action==='wallet.bsc-swap'&&record.metadata){const m=record.metadata;return bscSwapActivity({id:m.operationId,wallet:m.walletAddress,from:m.from,to:m.to,amount:m.amount,amountOut:m.amountOut,fee:m.feeEstimated==='false'?m.fee:undefined,feeAsset:m.feeAsset,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
   if(record.action==='wallet.cash-conversion'&&record.metadata){const m=record.metadata;return cashConversionActivity({id:record.idempotencyKey.replace(/^pocket:cash-conversion:/,''),wallet:m.walletAddress,amount:m.amount,amountOut:m.amountOut,fee:m.feeAmount,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
@@ -72,7 +73,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     statusUpdatedAt: record.updatedAt, source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
     settlementType: 'wallet_swap', paycrestStatus: record.status === 'started' || record.status === 'submitted' ? 'processing' : record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
   }
-  if (!['wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge'].includes(record.action) || !record.metadata) return undefined
+  if (!['wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge'].includes(record.action) || !record.metadata) return undefined
   const source = record.metadata.source || 'USDC'
   const destination = record.metadata.destination || 'destination'
   return {
@@ -96,7 +97,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     direction: 'out',
     recipient: destination,
     destination,
-    providerReference: record.resourceId || (['wallet.usdt-bridge','wallet.xlayer-bridge'].includes(record.action)?record.idempotencyKey.replace(/^pocket:(?:usdt|xlayer)-bridge:/,''):record.metadata.txHash),
+    providerReference: record.resourceId || (['wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge'].includes(record.action)?record.idempotencyKey.replace(/^pocket:(?:usdt|xlayer|bsc-inbound|bsc-outbound)-bridge:/,''):record.metadata.txHash),
   }
 }
 

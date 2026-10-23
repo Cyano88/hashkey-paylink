@@ -1,3 +1,5 @@
+import pocketBscInboundBridgeHandler from './api/pocket/bsc-inbound-bridge.js'
+import pocketBscOutboundBridgeHandler from './api/pocket/bsc-outbound-bridge.js'
 import usdAccountHandler, { usdAccountWebhook } from './api/pocket/usd-account.js'
 import pocketBscAccountHandler from './api/pocket/bsc-account.js'
 import pocketBscSwapHandler from './api/pocket/bsc-service.js'
@@ -466,6 +468,8 @@ app.post('/api/pocket/xlayer/sponsorship', exchangeLimiter, pocketXLayerSponsors
 app.all('/api/pocket/arc-swap',          exchangeLimiter, pocketArcSwapHandler)
 app.all('/api/pocket/usdt-bridge',       exchangeLimiter, pocketUsdtBridgeHandler)
 app.all('/api/pocket/xlayer-bridge', exchangeLimiter, pocketXLayerBridgeHandler)
+app.all('/api/pocket/bsc-inbound-bridge', exchangeLimiter, pocketBscInboundBridgeHandler)
+app.all('/api/pocket/bsc-outbound-bridge', exchangeLimiter, pocketBscOutboundBridgeHandler)
 app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)
 app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)
 app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler)

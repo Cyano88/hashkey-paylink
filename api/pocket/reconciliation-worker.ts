@@ -1,3 +1,5 @@
+import {reconcileBscInboundBridge} from './bsc-inbound-bridge.js'
+import {reconcileBscOutboundBridges} from './bsc-outbound-bridge.js'
 import {reconcileBscSwaps} from './bsc-service.js'
 import {reconcileNativeSolanaSwap} from './native-solana-swap-reconciliation.js'
 import {reconcileNativeEvmSwap} from './native-evm-swap-reconciliation.js'
@@ -311,6 +313,8 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch(error){results.push({id:record.id,kind:'cash_conversion',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
+  for(const record of await dependencies.listBridges('wallet.bsc-bridge',Math.min(limit,20))){if(record.metadata?.source==='base'&&record.metadata.quoteToken)try{await reconcileBscInboundBridge(record.ownerId,record.metadata.quoteToken)}catch{}}
+  try{await reconcileBscOutboundBridges(Math.min(limit,20))}catch{}
   try { const bsc=await dependencies.reconcileBsc(Math.min(limit,20));if(bsc.checked||bsc.billingChecked)results.push({id:'bsc-swaps',kind:'wallet_swap',result:bsc.unresolved?'review':'reconciled'}) }
   catch(error){results.push({id:'bsc-swaps',kind:'wallet_swap',result:'error',message:errorText(error)})}
   try { await dependencies.auditXLayerBilling() }

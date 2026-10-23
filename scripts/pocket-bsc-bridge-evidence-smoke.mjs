@@ -1,0 +1,20 @@
+﻿import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
+import {encodeAbiParameters,encodeEventTopics,parseAbi,parseAbiParameters} from 'viem'
+import {validateBscRelayQuote,RELAY_BSC_CHAINS,bscBridgeTokenAddress} from '../api/pocket/bsc-bridge-provider.ts'
+import {bscBridgeSourceProven,bscBridgeDeliveryCandidate,bscBridgeDeliveryProven,evmStablecoinDelta} from '../api/pocket/bsc-bridge-evidence.ts'
+import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+const owner='0xd7579fa0784288ef6eab335bc97d3c8ebc7ec435',other='0x'+'1'.repeat(40),hash='0x'+'a'.repeat(64),outHash='0x'+'b'.repeat(64)
+const transfer=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)']),deposit=parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
+for(const asset of ['USDC','USDT'])for(const inbound of [true,false]){
+ const raw=JSON.parse(readFileSync('scripts/fixtures/bsc-bridge/'+asset.toLowerCase()+'-'+(inbound?'in':'out')+'.json','utf8')),input={asset,source:inbound?'base':'bsc',destination:inbound?'bsc':'base',sender:owner,recipient:owner,amountUnits:inbound?'10000000':'10000000000000000000'}
+ const route=validateBscRelayQuote(raw,input,raw.protocol.v2.orderData.output.deadline*1000-7*86400000),fee=inbound?3000n:3000000000000000n,q={...input,orderId:route.orderId,requestId:route.requestId,minimumUnits:route.minimumUnits,networkFeeUnits:String(fee),reimbursementTreasury:EVM_PLATFORM_TREASURY}
+ const log=(network,from,to,amount)=>({address:bscBridgeTokenAddress(network,asset),data:encodeAbiParameters(parseAbiParameters('uint256'),[amount]),topics:encodeEventTopics({abi:transfer,eventName:'Transfer',args:{from,to}})})
+ const receipt={status:'success',transactionHash:hash,logs:[log(input.source,owner,RELAY_BSC_CHAINS[input.source].depository,BigInt(input.amountUnits)),log(input.source,owner,EVM_PLATFORM_TREASURY,fee),{address:RELAY_BSC_CHAINS[input.source].depository,data:encodeAbiParameters(parseAbiParameters('address,address,uint256,bytes32'),[owner,bscBridgeTokenAddress(input.source,asset),BigInt(input.amountUnits),route.orderId]),topics:encodeEventTopics({abi:deposit,eventName:'RelayErc20Deposit'})}]}
+ assert(bscBridgeSourceProven(q,receipt,hash));assert(!bscBridgeSourceProven(q,{...receipt,logs:receipt.logs.slice(1)},hash))
+ const status={status:'success',originChainId:RELAY_BSC_CHAINS[input.source].id,destinationChainId:RELAY_BSC_CHAINS[input.destination].id,inTxHashes:[hash],txHashes:[outHash]},requests={requests:[{id:route.requestId,status:'success',user:owner,recipient:owner,protocol:{orderId:route.orderId,hubType:'onchain'},data:{inTxs:[{txHash:hash,chainId:RELAY_BSC_CHAINS[input.source].id,status:'success'}],outTxs:[{txHash:outHash,chainId:RELAY_BSC_CHAINS[input.destination].id,status:'success'}]}}]}
+ const candidate=bscBridgeDeliveryCandidate(q,hash,status,requests);assert.equal(candidate.status,'verify_delivery');const delivered={status:'success',transactionHash:outHash,logs:[log(input.destination,other,owner,BigInt(route.receiveUnits))]};assert(bscBridgeDeliveryProven(candidate,evmStablecoinDelta(delivered,input.destination,asset,owner,outHash)));assert(!bscBridgeDeliveryProven(candidate,BigInt(route.minimumUnits)-1n));assert(!bscBridgeDeliveryProven(candidate,BigInt(candidate.maximumUnits)+1n));assert(!bscBridgeDeliveryProven(candidate,null))
+ // Destination refunds must be bounded in destination units, not copied source units.
+ status.status='refund';requests.requests[0].status='refund';requests.requests[0].data.refundCurrencyData={currency:{chainId:RELAY_BSC_CHAINS[input.destination].id,address:bscBridgeTokenAddress(input.destination,asset),decimals:inbound?18:6},amount:route.receiveUnits};const refund=bscBridgeDeliveryCandidate(q,hash,status,requests);assert.equal(refund.outcome,'refunded');assert(bscBridgeDeliveryProven(refund,BigInt(route.receiveUnits)));assert(!bscBridgeDeliveryProven(refund,BigInt(route.receiveUnits)-1n))
+ console.log('PASS '+asset+' '+input.source+' -> '+input.destination+' exact deposit, fee, delivery and decimal-aware refund evidence')
+}
