@@ -4,6 +4,7 @@ import {createExchangeRateLimit} from './api/pocket/exchange-rate-limit.js'
 import pocketNativeSolanaSwapHandler from './api/pocket/native-solana-swap.js'
 import pocketNativeEvmSwapHandler from './api/pocket/native-evm-swap.js'
 import pocketCashConversionHandler from './api/pocket/cash-conversion.js'
+import bridgeSandboxHandler, { bridgeSandboxWebhook } from './api/pocket/bridge-sandbox.js'
 import pocketNativeSendHandler from './api/pocket/native-send.js'
 import foodDemoHandler from './api/food-demo.js'
 import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
@@ -285,6 +286,7 @@ const hashPayStreamArcWebhookLimiter = rateLimit({ name: 'hashpaystream-arc-webh
 
 app.post('/api/pocket/kyc/callback', rateLimit({ name: 'smile-callback', windowMs: 60_000, max: 120 }), express.json({ limit: '1536kb' }), pocketKycCallback)
 app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
+app.post('/api/pocket/bridge-sandbox/webhook', rateLimit({ name: 'bridge-sandbox-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), bridgeSandboxWebhook)
 app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
 app.post(
   '/api/hashpaystream/arc-agreement-webhook',
@@ -427,6 +429,7 @@ app.get('/api/pocket/bsc-account', readLimiter, pocketBscAccountHandler)
 app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)
 app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
 app.all('/api/pocket/cash-conversion', exchangeLimiter, pocketCashConversionHandler)
+app.all('/api/pocket/bridge-sandbox', strictLimiter, bridgeSandboxHandler)
 app.all('/api/pocket/native-solana-swap', exchangeLimiter, pocketNativeSolanaSwapHandler)
 app.all('/api/pocket/wallet-update/status', readLimiter, pocketWalletUpdateStatusHandler)
 app.all('/api/pocket/wallet-update/flow', strictLimiter, pocketMigrationFlowHandler)
