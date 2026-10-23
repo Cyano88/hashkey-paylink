@@ -2,7 +2,21 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { generateKeyPairSync, createHash, sign } from 'node:crypto'
 import { verifyBridgeSandboxSignature } from '../api/pocket/bridge-sandbox-signature.ts'
-import { bridgeSandboxAllowed, bridgeSandboxFlowStatus, createBridgeSandboxService } from '../api/pocket/bridge-sandbox-service.ts'
+import { bridgeSandboxAllowed, bridgeSandboxFlowStatus, createBridgeSandboxService, bridgeSandboxRequest } from '../api/pocket/bridge-sandbox-service.ts'
+
+test('webhook activation PUT omits idempotency header; POST retains it', async () => {
+  const originalFetch=globalThis.fetch, originalKey=process.env.BRIDGE_SANDBOX_API_KEY, calls=[]
+  process.env.BRIDGE_SANDBOX_API_KEY='sk-test-fixture'
+  globalThis.fetch=async(url,options)=>{calls.push({url,options});return new Response('{}')}
+  try {
+    await bridgeSandboxRequest('/webhooks/fixture','PUT',{status:'active'},'ignored')
+    await bridgeSandboxRequest('/webhooks','POST',{},'stable')
+    assert.equal(calls[0].options.headers['Idempotency-Key'],undefined)
+    assert.equal(calls[1].options.headers['Idempotency-Key'],'stable')
+    assert.equal(calls[0].url,'https://api.sandbox.bridge.xyz/v0/webhooks/fixture')
+    assert.equal(calls[0].options.redirect,'error')
+  } finally { globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.BRIDGE_SANDBOX_API_KEY;else process.env.BRIDGE_SANDBOX_API_KEY=originalKey }
+})
 
 test('Bridge double-hashed signatures reject tampering, replay, future timestamps and single hashing', () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })

@@ -16,12 +16,12 @@ export async function bridgeSandboxRequest(path: string, method = 'GET', body?: 
   const apiKey = process.env.BRIDGE_SANDBOX_API_KEY || ''
   if (!/^sk-test[^\s]+$/.test(apiKey)) throw Error('Bridge sandbox key is not configured.')
   if (!/^\/[a-zA-Z0-9_/-]+$/.test(path) || path.includes('//')) throw Error('Invalid Bridge sandbox request.')
-  if (!['GET', 'POST', 'PUT'].includes(method) || (method !== 'GET' && !key)) throw Error('Missing Bridge request identity.')
+  if (!['GET', 'POST', 'PUT'].includes(method) || (method === 'POST' && !key)) throw Error('Missing Bridge request identity.')
   let response: globalThis.Response
   try {
     response = await fetch('https://api.sandbox.bridge.xyz/v0' + path, {
       method, redirect: 'error', signal: AbortSignal.timeout(20000),
-      headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
+      headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', ...(method === 'POST' && key ? { 'Idempotency-Key': key } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch { throw Error('Bridge sandbox is temporarily unavailable. Your test can be resumed.') }

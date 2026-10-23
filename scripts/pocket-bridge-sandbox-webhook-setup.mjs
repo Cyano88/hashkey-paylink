@@ -16,7 +16,7 @@ try {
   }
   const active = await bridgeSandboxRequest('/webhooks/' + config.id, 'PUT', {
     url, status: 'active', event_categories: ['customer', 'virtual_account.activity', 'liquidation_address.drain'],
-  }, config.key + '-activate')
+  })
   if (active.status !== 'active' || active.url !== url || createPublicKey(active.public_key).asymmetricKeyType !== 'rsa') throw Error('Webhook activation could not be verified.')
   await mutateDurableJson(storeKey, previous => ({ ...previous, publicKey: active.public_key, status: active.status }))
   console.log(JSON.stringify({ environment: 'sandbox', webhookId: config.id, url, status: 'active', publicKeySaved: true }))
