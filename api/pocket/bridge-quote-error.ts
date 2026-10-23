@@ -1,4 +1,15 @@
 type Route={sourceChainId:number;destinationChainId:number;sourceToken:string;destinationToken:string;bridge:string}
+let lifiAvailableAt=0
+export function assertLifiBridgeAvailable(now=Date.now()){
+ if(now<lifiAvailableAt)throw Object.assign(Error('Bridge service is busy. Please try again later.'),{status:429,retryAfterSeconds:Math.ceil((lifiAvailableAt-now)/1000)})
+}
+export function deferLifiBridgeQuotes(body:any,retryAfter:string|null,now=Date.now()){
+ const delay=/^\d+$/.test(retryAfter||'')?Number(retryAfter):retryAfter?Math.ceil((Date.parse(retryAfter)-now)/1000):NaN
+ const hint=typeof body?.message==='string'?body.message.match(/retry in (\d+) (second|minute|hour)s?/i):null
+ const seconds=Number.isFinite(delay)&&delay>0?delay:hint?Number(hint[1])*(hint[2].toLowerCase()==='hour'?3600:hint[2].toLowerCase()==='minute'?60:1):60
+ lifiAvailableAt=Math.max(lifiAvailableAt,now+Math.min(86400,Math.max(1,seconds))*1000)
+ assertLifiBridgeAvailable(now)
+}
 /** Classify only the requested direct route, never unrelated conversion alternatives. */
 export function lifiBridgeQuoteError(status:number,body:any,route:Route):never {
  const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()

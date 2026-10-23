@@ -3,14 +3,16 @@ import {lifiAbi,LIFI_DIAMOND,validateLifiPlan,type LifiOutboundPlan,type LifiDes
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {evmStablecoinDelta} from './xlayer-bridge-evidence.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
-import {lifiBridgeQuoteError} from './bridge-quote-error.js'
+import {assertLifiBridgeAvailable,deferLifiBridgeQuotes,lifiBridgeQuoteError} from './bridge-quote-error.js'
 const sourceToken='0x779ded0c9e1022225f8e0630b35a9b54be713736'
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const fail=(message:string):never=>{throw Object.assign(Error(message),{status:503})}
 export async function quoteLifiOutbound(input:{destination:LifiDestination;owner:Address;recipient:Address;amountUnits:string},fetcher=fetch){
  const target=POCKET_USDT_ASSETS[input.destination]
  const params=new URLSearchParams({fromChain:'196',toChain:String(target.chainId),fromToken:sourceToken,toToken:target.address,fromAmount:input.amountUnits,fromAddress:input.owner,toAddress:input.recipient,slippage:'0.005',allowBridges:'layerswap',allowExchanges:'none',allowDestinationCall:'false'})
- const r=await fetcher('https://li.quest/v1/quote?'+params,{signal:AbortSignal.timeout(20000),redirect:'error'}),b=await r.json().catch(()=>null)
+ assertLifiBridgeAvailable()
+ const r=await fetcher('https://li.quest/v1/quote?'+params,{headers:process.env.LIFI_API_KEY?{'x-lifi-api-key':process.env.LIFI_API_KEY}:{},signal:AbortSignal.timeout(20000),redirect:'error'}),b=await r.json().catch(()=>null)
+ if(r.status===429)deferLifiBridgeQuotes(b,r.headers.get('retry-after'))
  if(!r.ok)lifiBridgeQuoteError(r.status,b,{sourceChainId:196,destinationChainId:target.chainId,sourceToken,destinationToken:target.address,bridge:'layerswap'})
  if(!b?.transactionRequest)fail('Bridge service returned incomplete details. Please try again.')
  const a=b.action,t=b.transactionRequest,e=b.estimate
