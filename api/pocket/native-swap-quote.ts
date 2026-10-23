@@ -25,5 +25,5 @@ export async function quoteNativeSwap(input:{network:NativeSwapNetwork;from:stri
  const impact=route.priceImpactPercent
  if(typeof impact!=='string'||! /^-?\d+(?:\.\d+)?$/.test(impact)||!Number.isFinite(Number(impact))||Math.abs(Number(impact))>3)fail('Price impact is unavailable or too high.',422)
  const output=BigInt(route.toTokenAmount)
- return {id:randomUUID(),network,tokenIn,tokenOut,amount:formatUnits(units,tokenIn.decimals),amountUnits:String(units),expectedOut:formatUnits(output,tokenOut.decimals),expectedOutUnits:String(output),priceImpact:impact,issuedAt:requestedAt,expiresAt:requestedAt+15000,outputUsdPrice:swapTokenUsdPrice(route.toToken.tokenUnitPrice),indicative:true as const,executionAvailable:false as const}
+ return {id:randomUUID(),network,tokenIn,tokenOut,amount:formatUnits(units,tokenIn.decimals),amountUnits:String(units),expectedOut:formatUnits(output,tokenOut.decimals),expectedOutUnits:String(output),priceImpact:impact,issuedAt:requestedAt,expiresAt:requestedAt+15000,inputUsdPrice:swapTokenUsdPrice(route.fromToken.tokenUnitPrice),outputUsdPrice:swapTokenUsdPrice(route.toToken.tokenUnitPrice),indicative:true as const,executionAvailable:false as const}
 }

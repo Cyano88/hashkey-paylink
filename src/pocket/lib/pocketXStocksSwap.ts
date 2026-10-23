@@ -11,7 +11,7 @@ export const OKX_XLAYER_ROUTER = '0x7c5bee2a8091c3ef39072f64f18fac913060aeaf'
 export const OKX_XLAYER_SPENDER = '0x8b773d83bc66be128c60e07e17c8901f7a64f000'
 export type StockSwapQuote = {
   id: string; chainId: 196; owner: Address; tokenIn: StockAsset; tokenOut: StockAsset; amount: string; amountUnits: string;
-  outputUsdPrice?:number; decimalsIn: number; decimalsOut: number; expectedOut: string; minimumOut: string; minimumOutUnits: string; expiresAt: number;
+  inputUsdPrice?:number;outputUsdPrice?:number; decimalsIn: number; decimalsOut: number; expectedOut: string; minimumOut: string; minimumOutUnits: string; expiresAt: number;
   serviceFee?: StockServiceFee;
   positiveSlippageFee?: { capPercent: number; recipient: Address }; gasFee: string; priceImpact: string; approvalRequired: boolean; spender: Address;
   tx: { from: Address; to: Address; data: Hex; value: string };

@@ -53,7 +53,7 @@ export function createBscSwapHandler(d:Dependencies){
     if(typeof amount!=='string'||! /^(0|[1-9]\d{0,30})(?:\.\d{1,18})?$/.test(amount)||parseUnits(amount,18)<=0n)return res.status(400).json({ok:false,error:'Enter a valid amount.'})
     const q=await quoteBscSwap({...binding,from:req.body.from,to:req.body.to,totalInputUnits:String(parseUnits(amount,18))},d.runtime)
     const prices=await d.runtime.readPrices()
-    return res.json({ok:true,sufficientBalance:true,quote:{...bscSwapReview(q),outputUsdPrice:Number(prices[q.to].scaled8)/1e8},quoteToken:sealBscSwap(q,d.secret,d.now())})
+    return res.json({ok:true,sufficientBalance:true,quote:{...bscSwapReview(q),inputUsdPrice:Number(prices[q.from].scaled8)/1e8,outputUsdPrice:Number(prices[q.to].scaled8)/1e8},quoteToken:sealBscSwap(q,d.secret,d.now())})
    }
    const q=openBscSwap(String(req.body.quoteToken||''),binding,d.secret,d.now(),action!=='prepare')
    if(action==='prepare'){

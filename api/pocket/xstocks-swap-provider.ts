@@ -75,7 +75,7 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
   const gas = BigInt(tx.gas || tx.gasLimit || '0'), gasPrice = BigInt(tx.gasPrice || '0')
   if (gas <= 0n || gas > 30_000_000n || gasPrice <= 0n) fail('Could not estimate the network fee.', 502)
   const quote: StockSwapQuote = { id: randomUUID(), chainId: 196, owner: input.owner, tokenIn, tokenOut, amount: formatUnits(units, decimalsIn), amountUnits: String(units), decimalsIn, decimalsOut,
-    outputUsdPrice:swapTokenUsdPrice(route.toToken?.tokenUnitPrice), expectedOut: formatUnits(out, decimalsOut), minimumOut: formatUnits(minimum, decimalsOut), minimumOutUnits: String(minimum), expiresAt: Date.now() + 45_000,
+    inputUsdPrice:swapTokenUsdPrice(route.fromToken?.tokenUnitPrice),outputUsdPrice:swapTokenUsdPrice(route.toToken?.tokenUnitPrice), expectedOut: formatUnits(out, decimalsOut), minimumOut: formatUnits(minimum, decimalsOut), minimumOutUnits: String(minimum), expiresAt: Date.now() + 45_000,
     gasFee: formatUnits((gas + (approvalRequired ? 120_000n : 0n)) * gasPrice * 120n / 100n, 18), priceImpact: String(impact), approvalRequired, spender: getAddress(OKX_XLAYER_SPENDER),
     tx: { from: input.owner, to: getAddress(tx.to), data: tx.data, value: String(tx.value || '0') } }
   const serviceFee=readStockServiceFee(quote.tx.data)
