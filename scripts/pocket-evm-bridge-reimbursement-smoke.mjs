@@ -34,6 +34,11 @@ for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const ass
  count++
 }
 const blocked={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source:'base',destination:'xlayer',destinationAddress,asset:'USDC',tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1000000',bridgeCallData,providerExpiresAt:now+60000}
+let budgetCalls=0
+await assert.rejects(()=>quoteEvmBridgeFee(blocked,async()=>{budgetCalls++;return '0.000001'},rate,now,1000000n),e=>e.status===422&&/Insufficient USDC/.test(e.message))
+assert.equal(budgetCalls,0,'Known insufficient debit must not reach provider simulation')
+await assert.rejects(()=>quoteEvmBridgeFee(blocked,async()=>{budgetCalls++;return '0.000001'},rate,now,1002000n),e=>e.status===422&&/network fee/.test(e.message))
+assert.equal(budgetCalls,1,'Reimbursement shortfall must be checked before simulating the final batch')
 // Captured read-only Circle Arbitrum estimates: previously exhausted all four passes.
 const observed=['0.00001354560025','0.00001354953811575','0.00001355436499235','0.00001356010230575']
 let liveCalls=[]

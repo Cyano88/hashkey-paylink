@@ -18,7 +18,7 @@ const destinationReceipt={status:'success',transactionHash:outHash,blockHash,blo
 let state={destination:input.recipient,missingDelivery:false,reorg:false,wrongChain:false,quoteUnavailable:false,source:structuredClone(source),delivery:structuredClone(destinationReceipt)}
 const status={status:'success',originChainId:196,destinationChainId:8453,inTxHashes:[hash],txHashes:[outHash]}
 const requests={requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},status:'success',user:input.sender,recipient:input.recipient,data:{inTxs:[{txHash:hash,chainId:196,status:'success'}],outTxs:[{txHash:outHash,chainId:8453,status:'success'}]}}]}
-const outbound=createXLayerOutboundBridge({now:()=>now,apiKey:()=>'fixture',destination:async()=>({id:'circlebasewallet',address:state.destination}),route:async i=>{if(state.quoteUnavailable)throw Error('No direct route');assert.deepEqual({...i,sender:i.sender.toLowerCase()},{...input,sender:input.sender.toLowerCase()});return route},client:network=>({getChainId:async()=>state.wrongChain?1:network==='xlayer'?196:8453,getTransactionReceipt:async({hash:h})=>{if(network==='base'&&state.missingDelivery)throw Error('not mined');return network==='xlayer'?state.source:state.delivery},getBlock:async()=>({hash:state.reorg?'0x'+'d'.repeat(64):blockHash})}),fetch:async url=>Response.json(url.includes('/intents/status')?status:requests)})
+const outbound=createXLayerOutboundBridge({now:()=>now,apiKey:()=>'fixture',destination:async()=>({id:'circlebasewallet',address:state.destination}),route:async i=>{if(state.quoteUnavailable)throw Error('No direct route');assert.deepEqual({...i,sender:i.sender.toLowerCase()},{...input,sender:input.sender.toLowerCase()});return route},client:network=>({readContract:async()=>state.balance??1000000000n,getChainId:async()=>state.wrongChain?1:network==='xlayer'?196:8453,getTransactionReceipt:async({hash:h})=>{if(network==='base'&&state.missingDelivery)throw Error('not mined');return network==='xlayer'?state.source:state.delivery},getBlock:async()=>({hash:state.reorg?'0x'+'d'.repeat(64):blockHash})}),fetch:async url=>Response.json(url.includes('/intents/status')?status:requests)})
 let estimates=0
 const estimate=async i=>{estimates++;assert.equal(i.calls.length,5);return {feeUnits:'100',expiresAt:now+25000,estimateId:'synthetic'}}
 const pricing={marginBps:2500,minimumFeeUnits:'0'}
@@ -30,6 +30,8 @@ for(const asset of ['USDC','USDT']){
  const minimumBoundary=createXLayerOutboundBridge({client:()=>({getChainId:async()=>{throw Error('minimum accepted')}})})
  await assert.rejects(()=>minimumBoundary.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset,amount:'1'},estimate,pricing),/minimum accepted/)
 }
+state.balance=BigInt(input.amountUnits);const beforeBudget=estimates;
+await assert.rejects(()=>outbound.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6)},estimate,pricing),e=>e.status===422&&/Insufficient USDC/.test(e.message));assert.equal(estimates,beforeBudget);delete state.balance;
 const q=await outbound.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6)},estimate,pricing)
 const sealed=sealOutboundBridge(q)
 assert.deepEqual(openOutboundBridge(sealed,'owner'),q);assert.throws(()=>openOutboundBridge(sealed,'someone-else'))

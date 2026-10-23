@@ -21,7 +21,7 @@ function withRecovery(bridgeCallData:Hex,token:Hex,units:bigint){
  return encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[[...calls,{target:token,value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,units]})}]]})
 }
 /** Server-only: bridgeCallData must come from the validated provider/CCTP builder, never a request body. */
-export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallData:Hex;providerExpiresAt:number},estimate:(callData:Hex)=>Promise<string>,rateScaled8:bigint,now=Date.now()):Promise<EvmBridgeFeeQuote>{
+export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallData:Hex;providerExpiresAt:number},estimate:(callData:Hex)=>Promise<string>,rateScaled8:bigint,now=Date.now(),availableUnits?:bigint):Promise<EvmBridgeFeeQuote>{
  valid(input)
  if(!Number.isSafeInteger(input.providerExpiresAt)||input.providerExpiresAt<=now)fail()
  let units=1n
@@ -30,6 +30,10 @@ export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallDat
  // at most 0.1% AND 0.0001 source stablecoin of drift, never adds a markup.
  // Still simulate the exact final batch; larger changes must converge or fail.
  for(let pass=0;pass<4;pass++){
+  if(availableUnits!==undefined&&BigInt(input.bridgeDebitUnits)+units>availableUnits){
+   const maximum=BigInt(input.amountUnits)-(BigInt(input.bridgeDebitUnits)+units-availableUnits)
+   throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,maximumAmountUnits:(maximum>0n?maximum:0n).toString()})
+  }
   const callData=withRecovery(input.bridgeCallData,input.tokenAddress,units)
   const next=nativeFeeToUsdcUnits(await estimate(callData),rateScaled8)
   const relativeTolerance=units/1000n

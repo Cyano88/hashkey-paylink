@@ -1,6 +1,7 @@
 import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto'
 import {decodeFunctionData, encodeFunctionData, formatUnits, getAddress, pad, parseAbi, parseUnits, type Address, type Hex} from 'viem'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
+import {lifiBridgeQuoteError} from './bridge-quote-error.js'
 
 export const USDT_BRIDGE_NETWORKS = ['base','arbitrum','ethereum','polygon'] as const
 export type UsdtBridgeNetwork = typeof USDT_BRIDGE_NETWORKS[number]
@@ -60,9 +61,9 @@ export async function quoteUsdtBridge(input:Omit<UsdtBridgeQuote,'id'|'amountUni
   const units=parseUnits(input.amount,6)
   if(units<=0n) bridgeError('Enter an amount to bridge.')
   const from=POCKET_USDT_ASSETS[input.source],to=POCKET_USDT_ASSETS[input.destination]
-  const query=new URLSearchParams({fromChain:String(from.chainId),toChain:String(to.chainId),fromToken:from.address,toToken:to.address,fromAmount:String(units),fromAddress:input.walletAddress,toAddress:input.destinationAddress,slippage:'0.005',allowBridges:'across',allowDestinationCall:'false',integrator:'hashpaylink'})
+  const query=new URLSearchParams({fromChain:String(from.chainId),toChain:String(to.chainId),fromToken:from.address,toToken:to.address,fromAmount:String(units),fromAddress:input.walletAddress,toAddress:input.destinationAddress,slippage:'0.005',allowBridges:'across',allowExchanges:'none',allowDestinationCall:'false',integrator:'hashpaylink'})
   const response=await fetcher('https://li.quest/v1/quote?'+query,{headers:process.env.LIFI_API_KEY?{'x-lifi-api-key':process.env.LIFI_API_KEY}:{},signal:AbortSignal.timeout(20000)})
-  if(!response.ok) bridgeError('No USDT bridge route is available for this amount and network pair.',503)
+  if(!response.ok) lifiBridgeQuoteError(response.status,await response.json().catch(()=>null),{sourceChainId:from.chainId,destinationChainId:to.chainId,sourceToken:from.address,destinationToken:to.address,bridge:'across'})
   const validated=validateUsdtBridgeQuote(await response.json(),{...input,amountUnits:units})
   const approve=(amount:bigint)=>({target:getAddress(from.address),value:0n,data:encodeFunctionData({abi:APPROVE_ABI,functionName:'approve',args:[USDT_BRIDGE_ROUTER,amount]})})
   const callData=encodeFunctionData({abi:USDT_BATCH_ABI,functionName:'executeBatch',args:[[approve(0n),approve(units),{target:USDT_BRIDGE_ROUTER,value:0n,data:validated.callData},approve(0n)]]})

@@ -68,10 +68,12 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    const target=input.destination||'base'
    if(!['base',...LIFI_DESTINATIONS].includes(target)||target!=='base'&&input.asset!=='USDT')invalid()
    await networks(target);const w=await d.destination(input.ownerId,target),amountUnits=parseUnits(input.amount,6).toString()
+   const available=await d.client('xlayer').readContract({address:getAddress(stablecoinAddress('xlayer',input.asset)),abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[input.walletAddress]})
+   if(BigInt(amountUnits)>=available)throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422})
    if(target!=='base'){
     const lifi=await quoteLifiOutbound({destination:target,owner:input.walletAddress,recipient:w.address,amountUnits},d.fetch)
     const binding={ownerId:input.ownerId,walletId:input.walletId,walletAddress:input.walletAddress,asset:input.asset,amountUnits,intentId:randomUUID()}
-    const fee=await quoteXLayerReimbursement(binding,lifiOutboundCalls(lifi,d.now()),lifi.expiresAt,estimate,pricing,d.now)
+    const fee=await quoteXLayerReimbursement(binding,lifiOutboundCalls(lifi,d.now()),lifi.expiresAt,estimate,pricing,d.now,available)
     const q:XLayerOutboundQuote={version:1,source:'xlayer',destination:target,destinationWalletId:w.id,destinationAddress:w.address,orderId:lifi.transactionId,requestId:lifi.transactionId,receiveUnits:lifi.receiveUnits,minimumUnits:lifi.minimumUnits,refundOptions:[{network:'xlayer',asset:'USDT',recipient:input.walletAddress},{network:target,asset:'USDT',recipient:w.address}],lifi,fee}
     check(q,input.ownerId);return q
    }
@@ -82,7 +84,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    if(route.source!=='xlayer'||route.destination!=='base'||route.asset!==input.asset||route.amountUnits!==depositUnits||route.execution.kind!=='evm'||!hash(route.requestId))invalid()
    const binding={ownerId:input.ownerId,walletId:input.walletId,walletAddress:input.walletAddress,asset:input.asset,amountUnits,intentId:randomUUID()}
    const calls=outboundBridgeCalls({orderId:route.orderId,fee:{...binding,issuedAt:d.now()} as XLayerFeeQuote,conversion})
-   const fee=await quoteXLayerReimbursement(binding,calls,Math.min(route.expiresAt,swap?.expiresAt??route.expiresAt),estimate,pricing,d.now)
+   const fee=await quoteXLayerReimbursement(binding,calls,Math.min(route.expiresAt,swap?.expiresAt??route.expiresAt),estimate,pricing,d.now,available)
    const q:XLayerOutboundQuote={version:1,source:'xlayer',destination:'base',destinationWalletId:w.id,destinationAddress:w.address,orderId:route.orderId,requestId:route.requestId as Hex,receiveUnits:route.receiveUnits,minimumUnits:route.minimumUnits,refundOptions:route.refundOptions,...(conversion?{conversion}:{}),fee}
    check(q,input.ownerId);return q
   },

@@ -404,19 +404,24 @@ async function verifiedPayoutExemption(params: Record<string, string>, checkOnly
 }
 
 
+async function bridgeSourceBalance(chain:keyof typeof EVM_CHAINS,token:string,wallet:string){
+ const raw=await readEvmRpc(chain,'eth_call',[{to:token,data:'0x70a08231'+wallet.slice(2).padStart(64,'0')},'latest'])
+ if(typeof raw!=='string'||!/^0x[0-9a-f]{64}$/i.test(raw))throw Object.assign(Error('Balance could not be verified. Please try again.'),{status:503})
+ return BigInt(raw)
+}
 export async function quoteCircleEvmBatchRecovery(input:import('./pocket/evm-bridge-reimbursement.js').EvmBridgeFeeBinding&{userToken:string;bridgeCallData:import('viem').Hex;providerExpiresAt:number}) {
  const {userToken,...binding}=input
  const chain=input.source as keyof typeof EVM_CHAINS
  if(!userToken||userToken.length>8000)throw Object.assign(Error('Unlock Pocket to quote this bridge.'),{status:409})
  const owned=await readCircleUserWallet(userToken,chain,input.walletId)
  requireCircleGasStationEvmWallet({chain,walletId:input.walletId,walletAddress:input.walletAddress,wallets:owned?[owned]:[]})
- const rate=chain==='arc'?100_000_000n:await readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum',fetch,Date.now,input.asset)
+ const [rate,available]=await Promise.all([chain==='arc'?100_000_000n:readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum',fetch,Date.now,input.asset),bridgeSourceBalance(chain,input.tokenAddress,input.walletAddress)])
  return quoteEvmBridgeFee(binding,async callData=>{
   const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({walletId:input.walletId,contractAddress:input.walletAddress,callData})})
   const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee
   if(!fee)throw Error('Bridge fee is unavailable. Try again.')
   return fee
- },rate)
+ },rate,Date.now(),available)
 }
 
 export async function quoteCircleEvmBridge(input:{ownerId:string;userToken:string;walletId:string;walletAddress:string;chain:keyof typeof EVM_CHAINS;destination:PocketBridgeNetwork;destinationAddress:string;amountUnits:string}) {
@@ -462,13 +467,13 @@ export async function quoteCircleEvmBridge(input:{ownerId:string;userToken:strin
         ]],
       })
 
- const rate=chain==='arc'?100_000_000n:await readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum')
+ const [rate,available]=await Promise.all([chain==='arc'?100_000_000n:readNativeUsdcRate(chain==='polygon'?'polygon':'ethereum'),bridgeSourceBalance(chain,tokenAddress,walletAddress)])
  const priced=await quoteEvmBridgeFee({ownerId,walletId,walletAddress,source:chain,destination,destinationAddress,asset:'USDC',tokenAddress,amountUnits,bridgeDebitUnits:quote.totalUnits.toString(),bridgeCallData:batchCallData,providerExpiresAt:Date.now()+30000},async callData=>{
   const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({walletId,contractAddress:walletAddress,callData})})
   const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee
   if(!fee)throw Error('Bridge fee is unavailable. Try again.')
   return fee
- },rate)
+ },rate,Date.now(),available)
  return {source:chain,destination,amount:formatUnits(BigInt(amountUnits),6),receive:formatUnits(BigInt(amountUnits),6),fee:formatUnits(BigInt(priced.totalUnits)-BigInt(amountUnits),6),total:formatUnits(BigInt(priced.totalUnits),6),destinationAddress,expiresAt:priced.expiresAt,quoteToken:sealEvmBridgeFee(priced)}
 }
 

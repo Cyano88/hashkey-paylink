@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {encodeFunctionData,pad} from 'viem'
-import {validateUsdtBridgeQuote,USDT_BRIDGE_ABI,USDT_BRIDGE_ROUTER,openUsdtBridgeQuote,sealUsdtBridgeQuote,usdtBridgeNetwork} from '../api/pocket/usdt-bridge-provider.ts'
+import {quoteUsdtBridge,validateUsdtBridgeQuote,USDT_BRIDGE_ABI,USDT_BRIDGE_ROUTER,openUsdtBridgeQuote,sealUsdtBridgeQuote,usdtBridgeNetwork} from '../api/pocket/usdt-bridge-provider.ts'
 import {bridgeFromActivityRow} from '../src/pocket/lib/pocketBridgeActivity.ts'
 
 const wallet='0x1111111111111111111111111111111111111111',recipient='0x2222222222222222222222222222222222222222'
@@ -23,3 +23,6 @@ assert.throws(()=>openUsdtBridgeQuote(sealed+'x','owner',false,key))
 assert.throws(()=>openUsdtBridgeQuote(sealUsdtBridgeQuote({...q,expiresAt:0},key),'owner',false,key))
 assert.equal(bridgeFromActivityRow({assetSymbol:'USDT',source:'wallet-bridge',chain:'arbitrum',destination:'base'}),null)
 console.log('USDT bridge validation: valid route, recipient/refund/token/chain/amount/fee rejection, signed quotes, and CCTP isolation passed.')
+
+await quoteUsdtBridge({ownerId:'owner',walletId:'wallet',source:'arbitrum',destination:'base',walletAddress:wallet,destinationAddress:recipient,amount:'10'},async url=>{const u=new URL(url);assert.equal(u.searchParams.get('allowExchanges'),'none');assert.equal(u.searchParams.get('allowBridges'),'across');assert.equal(u.searchParams.get('allowDestinationCall'),'false');return Response.json(route())});
+console.log('PASS provider search excludes unaudited conversions while preserving route validation.');

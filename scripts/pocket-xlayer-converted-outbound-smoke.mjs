@@ -7,13 +7,14 @@ import {validateRelayStablecoinQuote,relayStablecoinRequest,stablecoinAddress,RE
 import {xlayerBridgeSourceProven,xlayerBridgeDeliveryCandidate,xlayerBridgeDeliveryProven} from '../api/pocket/xlayer-bridge-evidence.ts'
 import {validateOutboundBridge} from '../src/pocket/api/pocketOutboundBridge.ts'
 import {makeSponsoredBatchRequest} from '../src/pocket/lib/pocketSponsoredRequest.ts'
-import {validateStockSwap} from '../src/pocket/lib/pocketXStocksSwap.ts'
+import {validateXLayerBridgeSwap} from '../src/pocket/lib/pocketXStocksSwap.ts'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
 const q=JSON.parse(readFileSync('scripts/fixtures/relay-xlayer/USDT-converted-outbound.json','utf8')),now=q.fee.issuedAt,owner=q.fee.walletAddress,dest=q.destinationAddress
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-conversion-secret-not-production'
 const calls=outboundBridgeCalls(q),quote=outboundBridgePreview(q)
 assert.equal(calls.length,8)
-assert.throws(()=>validateStockSwap(q.conversion.swap,owner,now),'USDT bridge conversion must not enable Trade')
+validateXLayerBridgeSwap(q.conversion.swap,owner,now)
+assert.throws(()=>validateXLayerBridgeSwap(q.conversion.swap,dest,now),'Bridge conversion remains bound to its owner')
 const review={quote,quoteToken:'fixture',request:makeSponsoredBatchRequest({appId:'fixture',walletId:'fixturewallet123',attemptId:quote.id,expiresAt:quote.expiresAt,calls:q.fee.calls})}
 validateOutboundBridge(review,owner,dest,'USDT','1',now)
 assert.deepEqual(openOutboundBridge(sealOutboundBridge(q),q.fee.ownerId),q)
@@ -49,7 +50,7 @@ assert.equal(route.refundOptions.find(r=>r.network==='xlayer').asset,'USDC');ass
 assert.throws(()=>validateRelayStablecoinQuote(raw,{...i,inputAsset:undefined},fixture.now))
 assert.throws(()=>relayStablecoinRequest({...i,source:'base',destination:'xlayer'}))
 let estimated=0
-const backend=createXLayerOutboundBridge({now:()=>now,client:network=>({getChainId:async()=>network==='xlayer'?196:8453}),destination:async()=>({id:q.destinationWalletId,address:dest}),convert:async()=>q.conversion.swap,route:async input=>{assert.equal(input.inputAsset,'USDC');assert.equal(input.amountUnits,q.conversion.depositUnits);return {source:'xlayer',destination:'base',asset:'USDT',amountUnits:input.amountUnits,execution:{kind:'evm'},orderId:q.orderId,requestId:q.requestId,receiveUnits:q.receiveUnits,minimumUnits:q.minimumUnits,refundOptions:q.refundOptions,expiresAt:now+30000}}})
+const backend=createXLayerOutboundBridge({now:()=>now,client:network=>({readContract:async()=>1000000000n,getChainId:async()=>network==='xlayer'?196:8453}),destination:async()=>({id:q.destinationWalletId,address:dest}),convert:async()=>q.conversion.swap,route:async input=>{assert.equal(input.inputAsset,'USDC');assert.equal(input.amountUnits,q.conversion.depositUnits);return {source:'xlayer',destination:'base',asset:'USDT',amountUnits:input.amountUnits,execution:{kind:'evm'},orderId:q.orderId,requestId:q.requestId,receiveUnits:q.receiveUnits,minimumUnits:q.minimumUnits,refundOptions:q.refundOptions,expiresAt:now+30000}}})
 const result=await backend.quote({ownerId:'fixture',walletId:'fixturewallet123',walletAddress:owner,asset:'USDT',amount:'1'},async input=>{estimated++;assert.equal(input.calls.length,9);return {feeUnits:'285',expiresAt:now+25000,estimateId:'fixture'}},{marginBps:2500,minimumFeeUnits:'10000'})
 assert(estimated>=2);assert.equal(result.fee.totalUnits,'1010000');assert.deepEqual(result.conversion,q.conversion)
 console.log('PASS converted USDT: bounded atomic swap/deposit/reset batch; full fee estimate; client/server binding; tampering rejected; existing USDC protected; exact USDC refund evidence; Trade remains unchanged. No funds moved.')
