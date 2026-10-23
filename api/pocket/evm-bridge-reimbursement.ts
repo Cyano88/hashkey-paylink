@@ -26,11 +26,15 @@ export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallDat
  if(!Number.isSafeInteger(input.providerExpiresAt)||input.providerExpiresAt<=now)fail()
  let units=1n
  // Re-estimate the exact batch against the previously observed fee ceiling.
- // Small provider fluctuations need not reach an exact fixed point. No markup.
+ // Circle's live estimate can rise slightly on every call. Pocket absorbs
+ // at most 0.1% AND 0.0001 source stablecoin of drift, never adds a markup.
+ // Still simulate the exact final batch; larger changes must converge or fail.
  for(let pass=0;pass<4;pass++){
   const callData=withRecovery(input.bridgeCallData,input.tokenAddress,units)
   const next=nativeFeeToUsdcUnits(await estimate(callData),rateScaled8)
-  if(next<=units){
+  const relativeTolerance=units/1000n
+  const absorbedDrift=relativeTolerance<100n?relativeTolerance:100n
+  if(next<=units+absorbedDrift){
    const total=BigInt(input.bridgeDebitUnits)+units
    if(total>=2n**256n)fail()
    const {providerExpiresAt,...binding}=input

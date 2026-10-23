@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {decodeFunctionData,encodeFunctionData,parseAbi} from 'viem'
+import {decodeFunctionData,encodeFunctionData,formatUnits,parseAbi} from 'viem'
 import {quoteEvmBridgeFee,sealEvmBridgeFee,openEvmBridgeFee,refreshEvmBridgeFee} from '../api/pocket/evm-bridge-reimbursement.ts'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-bridge-test-key-not-production-123456789'
@@ -34,6 +34,22 @@ for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const ass
  count++
 }
 const blocked={ownerId:'owner',walletId:'wallet',walletAddress:wallet,source:'base',destination:'xlayer',destinationAddress,asset:'USDC',tokenAddress:token,amountUnits:'1000000',bridgeDebitUnits:'1000000',bridgeCallData,providerExpiresAt:now+60000}
+// Captured read-only Circle Arbitrum estimates: previously exhausted all four passes.
+const observed=['0.00001354560025','0.00001354953811575','0.00001355436499235','0.00001356010230575']
+let liveCalls=[]
+const drift=await quoteEvmBridgeFee({...blocked,source:'arbitrum',destination:'base'},async data=>{liveCalls.push(data);return observed[liveCalls.length-1]},rate,now)
+assert.equal(liveCalls.length,2);assert.equal(drift.networkFeeUnits,'40637')
+assert.equal(drift.callData,liveCalls.at(-1),'The exact returned batch was estimated successfully')
+assert.equal(decodeFunctionData({abi:transfer,data:decodeFunctionData({abi:batch,data:drift.callData}).args[0].at(-1).data}).args[1],40637n,'Drift is absorbed, never added to the user fee')
+// Tiny fees get no rounded-up tolerance; large fees remain capped at 100 micro-units.
+for(const [start,step]of [[2n,1n],[1000n,2n],[1000000n,101n]]){
+ let calls=0
+ await assert.rejects(()=>quoteEvmBridgeFee(blocked,async()=>formatUnits(start+BigInt(calls++)*step,6),100000000n,now),/estimate changed/)
+ assert.equal(calls,4)
+}
+let acceptedCalls=0
+const cap=await quoteEvmBridgeFee(blocked,async()=>++acceptedCalls===1?'1':'1.0001',100000000n,now)
+assert.equal(cap.networkFeeUnits,'1000000');assert.equal(acceptedCalls,2)
 for(const update of [{source:'xlayer',destination:'base'},{asset:'USDT',source:'ethereum'},{destinationAddress:'0x'+'0'.repeat(40)},{destinationAddress:'not-an-address'}]){
  await assert.rejects(()=>quoteEvmBridgeFee({...blocked,...update},async()=>{assert.fail('unsupported route must not reach Circle estimation')},rate,now))
 }
