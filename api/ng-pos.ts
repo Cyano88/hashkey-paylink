@@ -1,3 +1,4 @@
+import {isPocketBankActivityVisible} from '../src/pocket/lib/pocketBankActivityVisibility.js'
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
 import {requirePocketBasicKyc} from './pocket/kyc-level.js'
@@ -646,7 +647,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
     .filter(order => isVisiblePaycrestHistoryStatus(order.status))
     .filter(order => {
       const bankWithdraw = order.source === 'bank-withdraw' || merchantById.get(order.merchant_id)?.source === 'bank-withdraw'
-      return !bankWithdraw || Boolean(order.tx_hash) || pocketBankStatus(order.status) === 'failed'
+      return isPocketBankActivityVisible({source:bankWithdraw?'bank-withdraw':order.source,txHash:order.tx_hash})
     })
     .map(order => {
       const isBankSendOrder = order.source === 'bank-send'

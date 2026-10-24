@@ -1,3 +1,4 @@
+import {isPocketBankActivityVisible} from './pocketBankActivityVisibility'
 import { EVM_PLATFORM_TREASURY } from '../../lib/platformFees'
 import type { PocketActivityReadData, PocketActivityRow } from './pocketSchemas'
 
@@ -18,8 +19,8 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   const normalize = (row: PocketActivityRow): PocketActivityRow => !row.memo?.trim() && ['earn-deposit','earn-withdraw'].includes(row.source || '')
     ? {...row,memo:row.source === 'earn-deposit' ? 'Added to Earn' : 'Withdrawn from Earn'} : row
   const rows = new Map<string,PocketActivityRow>()
-  for(const row of previous.map(normalize)){const old=rows.get(rowKey(row));if(old&&terminalBsc(old)&&!terminalBsc(row))continue;rows.set(rowKey(row),row)}
-  for (const row of incoming.map(normalize)) {
+  for(const row of previous.filter(isPocketBankActivityVisible).map(normalize)){const old=rows.get(rowKey(row));if(old&&terminalBsc(old)&&!terminalBsc(row))continue;rows.set(rowKey(row),row)}
+  for (const row of incoming.filter(isPocketBankActivityVisible).map(normalize)) {
     let old = rows.get(rowKey(row))
     for (const [key,candidate] of rows) {
       const sameHash = transactionKey(candidate) === transactionKey(row) && candidate.source === row.source && candidate.eventId === row.eventId
