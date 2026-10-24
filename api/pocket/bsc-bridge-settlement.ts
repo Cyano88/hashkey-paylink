@@ -18,7 +18,7 @@ export function createBscBridgeSettlement(env:NodeJS.ProcessEnv=process.env,fetc
   const binding={asset:q.asset,source:q.source,destination:q.destination,sender:q.walletAddress,recipient:q.destinationAddress,amountUnits:q.amountUnits,minimumUnits:q.minimumOutUnits,orderId:q.orderId,requestId:q.requestId,networkFeeUnits:q.reimbursementUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
   if(!bscBridgeSourceProven(binding,r,hash))throw Error('Bridge deposit is still being verified.')
   const get=async(path:string)=>{const r=await fetcher('https://api.relay.link'+path,{headers:{'x-api-key':env.RELAY_API_KEY||''},signal:AbortSignal.timeout(12000),redirect:'error'});if(!r.ok)throw Error('Bridge delivery is still being verified.');return r.json()}
-  const [status,requests]=await Promise.all([get('/intents/status/v3?requestId='+q.requestId),get('/requests/v2?id='+q.requestId)])
+  const [status,requests]=await Promise.all([get('/intents/status/v3?requestId='+encodeURIComponent(q.requestId)),get('/requests/v3?'+new URLSearchParams({id:q.requestId,orderId:q.orderId,limit:'1'}))])
   const candidate=bscBridgeDeliveryCandidate(binding,hash,status,requests)
   if(candidate.status!=='verify_delivery'||!['base','bsc'].includes(candidate.network))return waiting
   const delivered=await receipt(candidate.network as 'base'|'bsc',candidate.hash as Hex);if(!delivered)return waiting
