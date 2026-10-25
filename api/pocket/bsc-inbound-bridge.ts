@@ -55,7 +55,7 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
   const existing=await d.find(owner,key(q),ACTION)
   if(!existing)return {ok:true,status:'not_submitted'}
   const meta:Record<string,string>={...metadata(q,token),...existing.metadata}
-  if(['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash)return {ok:true,status:'cancelled'}
+  if(['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash&&!input.txHash)return {ok:true,status:'cancelled'}
   if(existing.status==='completed'||existing.status==='failed'){
    const outcome=existing.status==='completed'?'completed':meta.paymentState==='refunded'?'refunded':'failed'
    if(outcome!=='failed')await d.ledger({eventKey:key(q)+':'+outcome,ownerId:owner,executionId:existing.id,rail:'wallet_bridge',state:outcome,asset:outcome==='refunded'?(meta.refundAsset||q.asset):q.asset,amount:outcome==='refunded'?meta.refundAmount:q.amount,sourceNetwork:q.source,settlementNetwork:outcome==='refunded'?meta.refundNetwork:'bsc',resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'relay'},recordedAt:existing.updatedAt})

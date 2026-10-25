@@ -50,7 +50,7 @@ await Promise.all([h.request(execute),h.request(execute)]);assert.equal(h.sends,
 assert.equal((await h.request(execute)).challengeId,'challenge');assert.equal(h.sends,1)
 const status={...execute,action:'status'}
 assert.equal((await h.request(status)).status,'awaiting_approval','approval is not completed bridging')
-assert.equal((await h.request({...status,action:'cancel'})).status,'awaiting_approval')
+assert.equal((await h.request({...status,action:'cancel'})).status,'cancelled')
 assert.equal([...h.records.values()][0].metadata.approvalCancelled,'true','Verified cancellation is hidden durably, without declaring an unsubmitted challenge settled')
 const depositLog={address:RELAY_BSC_CHAINS.base.depository,data:encodeAbiParameters(parseAbiParameters('address,address,uint256,bytes32'),[sender,bscBridgeTokenAddress('base','USDC'),10000000n,route.orderId]),topics:encodeEventTopics({abi:deposit,eventName:'RelayErc20Deposit'})}
 const sourceReceipt={status:'success',transactionHash:sourceHash,blockNumber:1n,blockHash,logs:[log('base',sender,RELAY_BSC_CHAINS.base.depository,10000000n),depositLog,log('base',sender,EVM_PLATFORM_TREASURY,3000n)]}

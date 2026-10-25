@@ -112,7 +112,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       await deps.recordAction({ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,paymentState:'not_submitted'}})
       return {ok:true,status:'not_submitted',reason:'approval_expired'}
     }
-    if(['cancelled','not_submitted'].includes(existing.status)&&!meta.txHash)return {ok:true,status:'cancelled'}
+    if(['cancelled','not_submitted'].includes(existing.status)&&!meta.txHash&&!input.txHash)return {ok:true,status:'cancelled'}
     if(existing.status==='completed'){
       await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),destinationTxHash:meta.destinationTxHash,provider:q.provider,...(meta.settledAmountUnits?{settledAmountUnits:meta.settledAmountUnits,settledAmount:formatUnits(BigInt(meta.settledAmountUnits),6)}:{})},recordedAt:existing.updatedAt})
       return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash,...(meta.settledAmountUnits?{amountOut:formatUnits(BigInt(meta.settledAmountUnits),6),settlement:{network:q.destination,transactionHash:meta.destinationTxHash,amountUnits:meta.settledAmountUnits}}:{})}
