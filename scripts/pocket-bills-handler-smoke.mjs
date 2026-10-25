@@ -553,3 +553,13 @@ try {
  console.log('PASS data, TV and electricity quotes and payment ledger bind to selected USDC or USDT.')
  console.log('PASS USDT bills rollout gate, quote asset binding and USDT ledger identity.')
 } finally {if(priorUsdtBills===undefined)delete process.env.POCKET_USDT_BILLS_ENABLED;else process.env.POCKET_USDT_BILLS_ENABLED=priorUsdtBills}
+
+for(const category of ['electricity','tv']){
+ const invalid=createPocketBillsVerifyHandler({...dependencies,provider:{...dependencies.provider,verifyCustomer:async()=>{throw new VtpassClientError({code:'VTPASS_CUSTOMER_NOT_VERIFIED',message:'This meter is not correct or is not a valid Ikeja Electric prepaid meter.',status:400})}}})
+ const result=await request(invalid,{category,service_id:category==='tv'?'dstv':'ikeja-electric',billers_code:'12345678901',variation_code:'prepaid'})
+ assert.equal(result.body.error.code,'VALIDATION_FAILED');assert.equal(result.body.error.reason,'VTPASS_CUSTOMER_NOT_VERIFIED');assert.equal(result.body.error.field,'billersCode');assert.equal(result.body.error.retryable,false)
+}
+const unavailable=createPocketBillsVerifyHandler({...dependencies,provider:{...dependencies.provider,verifyCustomer:async()=>{throw new VtpassClientError({code:'VTPASS_HTTP_ERROR',message:'Service unavailable',status:503,retryable:true})}}})
+const outage=await request(unavailable,{category:'electricity',service_id:'ikeja-electric',billers_code:'12345678901',variation_code:'prepaid'})
+assert.equal(outage.body.error.code,'PROVIDER_UNAVAILABLE');assert.equal(outage.body.error.retryable,true);assert.equal(outage.body.error.field,undefined)
+console.log('PASS account mismatch is field validation; actual provider outage remains retryable.')

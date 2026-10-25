@@ -254,7 +254,7 @@ function mapError(error: unknown): { status: number; code: PocketErrorCode; mess
   if (error instanceof VtpassClientError) {
     return {
       status: error.status,
-      code: error.code === 'VTPASS_ACCESS_DENIED' ? 'FORBIDDEN' : 'PROVIDER_UNAVAILABLE',
+      code: error.code === 'VTPASS_ACCESS_DENIED' ? 'FORBIDDEN' : error.status < 500 && /^(VTPASS_INVALID_|VTPASS_CUSTOMER_NOT_VERIFIED)/.test(error.code) ? 'VALIDATION_FAILED' : 'PROVIDER_UNAVAILABLE',
       message: error.message,
       retryable: error.retryable,
     }
@@ -285,7 +285,8 @@ function createResponder(req: Request, res: Response, requestId: string) {
     },
     fail(error: unknown, field?: string) {
       const mapped = mapError(error)
-      const reason = error instanceof PocketBillsStoreError ? error.code : undefined
+      const reason = error instanceof PocketBillsStoreError || error instanceof VtpassClientError ? error.code : undefined
+      if (!field && reason && /^(VTPASS_CUSTOMER_NOT_VERIFIED|VTPASS_INVALID_ACCOUNT)$/.test(reason)) field = 'billersCode'
       return res.status(mapped.status).json({
         ok: false,
         requestId,
