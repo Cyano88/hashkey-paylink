@@ -36,7 +36,7 @@ const same=(network:string,a:unknown,b:string)=>typeof a==='string'&&(network===
 function inputCheck(i:RelayStablecoinInput){
  requireThat(Object.prototype.hasOwnProperty.call(RELAY_STABLECOIN_CHAINS,i.source)&&Object.prototype.hasOwnProperty.call(RELAY_STABLECOIN_CHAINS,i.destination)&&i.source!==i.destination&&(i.source==='xlayer'||i.destination==='xlayer'),'unsupported route')
  requireThat(i.asset==='USDC'||i.asset==='USDT','unsupported asset')
- requireThat(i.inputAsset===undefined||i.inputAsset==='USDC'&&i.asset==='USDT'&&i.source==='xlayer'&&i.destination==='base','unsupported input asset')
+ requireThat(i.inputAsset===undefined||i.inputAsset==='USDC'&&i.asset==='USDT'&&i.source==='xlayer'&&i.destination!=='xlayer','unsupported input asset')
  requireThat(i.asset!=='USDT'||i.source!=='arc'&&i.destination!=='arc','USDT is not supported on Arc')
  requireThat(/^[1-9]\d{0,18}$/.test(i.amountUnits)&&BigInt(i.amountUnits)<2n**64n,'invalid amount')
  for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(network==='solana'?new PublicKey(address).toBase58()===address:/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address),'invalid wallet')

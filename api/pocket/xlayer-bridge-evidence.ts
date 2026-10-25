@@ -39,7 +39,7 @@ export function evmStablecoinDelta(receipt:any,network:Exclude<Network,'solana'>
 export function xlayerBridgeSourceProven(q:XLayerBridgeBinding,receipt:any,hash:string):boolean {
   if(q.source==='solana'||(q.source!=='xlayer'&&q.destination!=='xlayer')||!units(q.amountUnits)||BigInt(q.amountUnits)<=0n||!hashValid(q.source,q.orderId))return false
   const converted=q.depositAsset!==undefined||q.depositUnits!==undefined
-  if(converted&&(q.source!=='xlayer'||q.destination!=='base'||q.asset!=='USDT'||q.depositAsset!=='USDC'||!units(q.depositUnits)||BigInt(q.depositUnits)<=0n||BigInt(q.depositUnits)>BigInt(q.amountUnits)))return false
+  if(converted&&(q.source!=='xlayer'||q.destination==='xlayer'||q.asset!=='USDT'||q.depositAsset!=='USDC'||!units(q.depositUnits)||BigInt(q.depositUnits)<=0n||BigInt(q.depositUnits)>BigInt(q.amountUnits)))return false
   if(converted){const delta=evmStablecoinDelta(receipt,'xlayer','USDC',q.sender,hash);if(delta===null||delta<0n)return false}
   const hasFee=q.networkFeeUnits!==undefined||q.reimbursementTreasury!==undefined
   if(hasFee&&(!units(q.networkFeeUnits)||BigInt(q.networkFeeUnits)<=0n||!same(q.source,q.reimbursementTreasury,EVM_PLATFORM_TREASURY)||same(q.source,q.sender,EVM_PLATFORM_TREASURY)))return false
@@ -107,7 +107,7 @@ export function xlayerBridgeDeliveryCandidate(q:XLayerBridgeBinding,sourceHash:s
       for(const r of plan){
         const origin=r?.network===q.source
         if(!r||!origin&&r.network!==q.destination||!same(r.network,r.recipient,origin?q.sender:q.recipient))return attention
-        const alternate=q.asset==='USDT'&&r.asset==='USDC'&&(q.source!=='xlayer'&&q.destination==='xlayer'&&!origin||q.source==='xlayer'&&q.destination==='base'&&origin&&q.depositAsset==='USDC'&&units(q.depositUnits)&&BigInt(q.depositUnits)>0n&&BigInt(q.depositUnits)<=BigInt(q.amountUnits))
+        const alternate=q.asset==='USDT'&&r.asset==='USDC'&&(q.source!=='xlayer'&&q.destination==='xlayer'&&!origin||q.source==='xlayer'&&q.destination!=='xlayer'&&origin&&q.depositAsset==='USDC'&&units(q.depositUnits)&&BigInt(q.depositUnits)>0n&&BigInt(q.depositUnits)<=BigInt(q.amountUnits))
         if(r.asset!==q.asset&&!alternate)return attention
       }
       const selected=plan.find(r=>r.network===network)

@@ -201,7 +201,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (req.body?.action === 'quote') {
         await d.billingGuard(wallet)
         if(req.body?.purpose==='bridge'){
-          if(!d.reimbursement||!['base','arbitrum','ethereum','polygon'].includes(req.body.destination))throw fail('Outbound bridging is not available for this route.',503)
+          if(!d.reimbursement||!['base','arc','arbitrum','ethereum','polygon','solana'].includes(req.body.destination))throw fail('Outbound bridging is not available for this route.',503)
           const q=await d.outbound.quote({purpose:req.body.cashPurpose,ownerId:identity.userId,walletId:embedded.id,walletAddress:wallet as Hex,asset:req.body.asset,amount:String(req.body.amount||''),destination:req.body.destination},d.reimbursement.estimate,d.reimbursement.pricing)
           return res.json({ok:true,bridgeQuoteToken:sealOutboundBridge(q),quote:outboundBridgePreview(q),request:makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:q.fee.intentId,expiresAt:q.fee.expiresAt,calls:q.fee.calls})})
         }

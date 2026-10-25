@@ -3,7 +3,7 @@ import {POCKET_USDT_ASSETS} from './pocketUsdtAssets.js'
 import {assertPocketBridgeRevenue,type PocketBridgeRevenue} from './pocketBridgeRevenue.js'
 export const LIFI_DESTINATIONS=['arbitrum','ethereum','polygon'] as const
 export type LifiDestination=typeof LIFI_DESTINATIONS[number]
-export type OutboundDestination='base'|LifiDestination
+export type OutboundDestination=import('./pocketBridgeDestination.js').PocketCircleBridgeNetwork
 export const LIFI_DIAMOND='0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE'
 const forwarder='0xCE40449B773a3E6E5e769ADb4e567179d4828cbd'
 const sourceToken='0x779ded0c9e1022225f8e0630b35a9b54be713736'
