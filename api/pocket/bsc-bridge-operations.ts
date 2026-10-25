@@ -3,10 +3,10 @@ import type {Hex} from 'viem'
 import {bscOutboundRequest,validateBscOutbound,type BscOutboundQuote} from '../../src/pocket/lib/pocketBscOutboundBridge.js'
 
 export type BscBridgeOperationState='prepared'|'submitting'|'pending'|'completed'|'failed'|'refunded'|'cancelled'|'not_submitted'
-export type BscBridgeOperation={destinationTxHash?:string;refundAmount?:string;refundNetwork?:string;quote:BscOutboundQuote;fingerprint:string;state:BscBridgeOperationState;createdAt:number;updatedAt:number;hash?:Hex;transactionId?:string;userOperationHash?:Hex;amountOutUnits?:string;nativeFeeUnits?:string;publishedState?:BscBridgeOperationState;recoveryRequiredAt?:number;recoveryBlock?:string;recoveryCursor?:string}
+export type BscBridgeOperation={refundAsset?:'USDC'|'USDT';destinationTxHash?:string;refundAmount?:string;refundNetwork?:string;quote:BscOutboundQuote;fingerprint:string;state:BscBridgeOperationState;createdAt:number;updatedAt:number;hash?:Hex;transactionId?:string;userOperationHash?:Hex;amountOutUnits?:string;nativeFeeUnits?:string;publishedState?:BscBridgeOperationState;recoveryRequiredAt?:number;recoveryBlock?:string;recoveryCursor?:string}
 export type BscBridgeOperationStore={operations:Record<string,BscBridgeOperation>}
 export type BscBridgeOperationBinding=Pick<BscOutboundQuote,'ownerId'|'walletId'|'walletAddress'>
-export type BscBridgeSettlement={status:'pending'|'completed'|'failed'|'refunded';destinationTxHash?:string;refundAmount?:string;refundNetwork?:string;amountOutUnits?:string;nativeFeeUnits?:string}
+export type BscBridgeSettlement={refundAsset?:'USDC'|'USDT';status:'pending'|'completed'|'failed'|'refunded';destinationTxHash?:string;refundAmount?:string;refundNetwork?:string;amountOutUnits?:string;nativeFeeUnits?:string}
 type Dependencies={
  appId:string;now():number;
  // Must be durable, serialized, and transactional. No in-memory fallback.
@@ -161,7 +161,7 @@ export function createBscBridgeOperations(d:Dependencies){
    if(!terminal(saved.state)){
     if(recovered)saved.hash=op.hash
     delete saved.recoveryRequiredAt
-    saved.state=result.status;saved.updatedAt=d.now();if(result.destinationTxHash)saved.destinationTxHash=result.destinationTxHash;if(result.refundAmount)saved.refundAmount=result.refundAmount;if(result.refundNetwork)saved.refundNetwork=result.refundNetwork
+    saved.state=result.status;saved.updatedAt=d.now();if(result.destinationTxHash)saved.destinationTxHash=result.destinationTxHash;if(result.refundAmount)saved.refundAmount=result.refundAmount;if(result.refundNetwork)saved.refundNetwork=result.refundNetwork;if(result.refundAsset)saved.refundAsset=result.refundAsset
     if(result.status==='completed')saved.amountOutUnits=result.amountOutUnits
     if(result.nativeFeeUnits)saved.nativeFeeUnits=result.nativeFeeUnits
    }

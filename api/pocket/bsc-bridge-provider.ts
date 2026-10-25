@@ -57,7 +57,7 @@ export function bscRelaySolanaDeposit(sender:string,amount:bigint,orderId:Hex,as
  const data=Buffer.alloc(48);Buffer.from([11,156,96,218,39,163,180,19]).copy(data);data.writeBigUInt64LE(amount,8);Buffer.from(orderId.slice(2),'hex').copy(data,16)
  return new TransactionInstruction({programId:program,keys,data})
 }
-export function validateBscRelayQuote(q:any,i:BscRelayInput,now=Date.now()){
+export function validateBscRelayQuote(q:any,i:BscRelayInput,now=Date.now(),policy:{allowXLayerUsdcRefund?:boolean}={}){
  inputCheck(i)
  const source=RELAY_BSC_CHAINS[i.source],destination=RELAY_BSC_CHAINS[i.destination],from=bscBridgeTokenAddress(i.source,i.inputAsset||i.asset),to=bscBridgeTokenAddress(i.destination,i.asset)
  const protocol=q?.protocol?.v2,order=protocol?.orderData as Order
@@ -77,8 +77,9 @@ export function validateBscRelayQuote(q:any,i:BscRelayInput,now=Date.now()){
  const refundOptions:BscRelayRefund[]=refunds.map(r=>{
   const src=r.chainId===protocolChain(i.source)
   requireThat(src||r.chainId===protocolChain(i.destination),'unexpected refund chain')
-     requireThat(same(r.chainId,r.recipient,src?i.sender:i.recipient)&&same(r.chainId,r.currency,src?from:to)&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')
-  return {network:src?i.source:i.destination,asset:i.asset,recipient:src?i.sender:i.recipient}
+     const alternate=policy.allowXLayerUsdcRefund===true&&i.source==='bsc'&&i.destination==='xlayer'&&i.asset==='USDT'&&!src&&same('xlayer',r.currency,bscBridgeTokenAddress('xlayer','USDC'))
+  requireThat(same(r.chainId,r.recipient,src?i.sender:i.recipient)&&(alternate||same(r.chainId,r.currency,src?from:to))&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')
+  return {network:src?i.source:i.destination,asset:alternate?'USDC':i.asset,recipient:src?i.sender:i.recipient}
  })
  const details=protocol.paymentDetails
  requireThat(details?.chainId===protocolChain(i.source)&&same(i.source,details.depository,source.depository)&&same(i.source,details.currency,from)&&details.amount===i.amountUnits,'depository mismatch')
@@ -113,5 +114,5 @@ export async function quoteBscRelay(i:BscRelayInput,apiKey:string,fetcher=fetch)
  requireThat(apiKey.trim().length>0,'provider API key required')
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(bscRelayRequest(i)),signal:AbortSignal.timeout(20000)})
  if(!response.ok){const failure=await response.json().catch(()=>null);throw Object.assign(Error([400,422].includes(response.status)&&failure?.errorCode==='AMOUNT_TOO_LOW'?'Amount too small.':response.status===429?'Bridge service is busy. Please try again shortly.':'Bridge service is temporarily unavailable. Please try again.'),{status:[400,422].includes(response.status)&&failure?.errorCode==='AMOUNT_TOO_LOW'?422:response.status===429?429:503})}
- return validateBscRelayQuote(await response.json(),i,Date.now())
+ return validateBscRelayQuote(await response.json(),i,Date.now(),{allowXLayerUsdcRefund:i.source==='bsc'&&i.destination==='xlayer'})
 }

@@ -16,10 +16,10 @@ const hash='0x'+'a'.repeat(64),blockHash='0x'+'b'.repeat(64),solana='5tAUpyEjHsK
 const transferAbi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)']),depositAbi=parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
 for(const file of readdirSync('scripts/fixtures/reverse-bridge')){
  const {input,now,response}=JSON.parse(readFileSync('scripts/fixtures/reverse-bridge/'+file,'utf8')), {source,destination,asset}=input
- const route=source==='bsc'?validateBscRelayQuote(response,input,now):validateRelayStablecoinQuote(response,input,now)
+ const route=source==='bsc'?validateBscRelayQuote(response,input,now,{allowXLayerUsdcRefund:destination==='xlayer'}):validateRelayStablecoinQuote(response,input,now)
  const outHash=destination==='solana'?'3'.repeat(88):'0x'+'c'.repeat(64)
  if(source==='bsc'){
-  const q={version:1,id:randomUUID(),ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,destinationAddress:input.recipient,source,destination,asset,from:asset,amountUnits:input.amountUnits,receiveUnits:route.receiveUnits,minimumOutUnits:route.minimumUnits,reimbursementUnits:'1000000000000',totalInputUnits:String(BigInt(input.amountUnits)+1000000000000n),orderId:route.orderId,requestId:route.requestId,issuedAt:now,expiresAt:route.expiresAt}
+  const q={refundOptions:route.refundOptions,version:1,id:randomUUID(),ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,destinationAddress:input.recipient,source,destination,asset,from:asset,amountUnits:input.amountUnits,receiveUnits:route.receiveUnits,minimumOutUnits:route.minimumUnits,reimbursementUnits:'1000000000000',totalInputUnits:String(BigInt(input.amountUnits)+1000000000000n),orderId:route.orderId,requestId:route.requestId,issuedAt:now,expiresAt:route.expiresAt}
   validateBscOutbound(q,now);assert.equal(bscOutboundCalls(q,now).length,5)
   assert.throws(()=>validateBscOutbound({...q,destinationAddress:destination==='solana'?input.sender:solana},now))
   if(destination!=='base')assert.throws(()=>validateBscOutbound({...q,purpose:'cash'},now))
