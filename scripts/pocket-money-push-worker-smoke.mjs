@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { runPocketMoneyPushWorker } from '../api/pocket/money-push-worker.ts'
+import { runPocketMoneyPushWorker as runWorker } from '../api/pocket/money-push-worker.ts'
+
+const runPocketMoneyPushWorker = overrides => runWorker({readDeferred:async()=>[],saveDeferred:async()=>{},...overrides})
 
 const now = 2_000_000
 const incomingHash = `0x${'1'.repeat(64)}`
@@ -122,3 +124,26 @@ const suppressed=[]
 await runPocketMoneyPushWorker({...giftDeps,listActions:async()=>[{action:'wallet.native-swap',metadata:{txHash:giftHash}}],readContext:async()=>[],readActivity:async()=>[row({txHash:giftHash,direction:'out',assetSymbol:'USDT'}),row({txHash:giftHash,direction:'in',assetSymbol:'SOL'})],sendPush:async(owner,event,input)=>suppressed.push(input)})
 assert.equal(suppressed.length,0,'Native swap suppresses transfer legs even before context is indexed')
 console.log('PASS native swap journal suppresses duplicate transfer pushes during delayed context')
+
+// Every exchange network: transfer indexing may beat destination reconciliation.
+for(const chain of ['base','arc','arbitrum','ethereum','polygon','solana','bsc','xlayer']){
+ for(const asset of ['USDC','USDT']){
+  let actions=[{ownerId:'race',action:chain==='bsc'?'wallet.bsc-bridge':chain==='xlayer'?'wallet.xlayer-bridge':asset==='USDT'?'wallet.usdt-bridge':'wallet.bridge',status:'submitted',createdAt:now-60_000,metadata:{source:'other',destination:chain,assetSymbol:asset,txHash:sourceHash}}]
+  let held=[],sent=[],clock=now
+  const deps={configured:()=>true,listOwners:async()=>['race'],readWallets:async()=>[],listActions:async()=>actions,listRequests:async()=>[],readContext:async()=>[],readDeferred:async()=>held,saveDeferred:async(owner,rows)=>{held=rows},readActivity:async()=>[row({chain,assetSymbol:asset,txHash:mintHash,direction:'in'})],sendPush:async(owner,id,n)=>sent.push(n),now:()=>clock}
+  await runPocketMoneyPushWorker(deps);assert.equal(sent.length,0,chain+' '+asset+' must wait for journal');assert.equal(held.length,1)
+  actions=[{...actions[0],status:'completed',metadata:{...actions[0].metadata,destinationTxHash:mintHash}}]
+  await runPocketMoneyPushWorker(deps);assert.equal(sent.length,0);assert.equal(held.length,0)
+  // A genuine external deposit deferred on the same route is released even after lookback.
+  actions=[{...actions[0],status:'submitted',metadata:{...actions[0].metadata,destinationTxHash:undefined}}]
+  await runPocketMoneyPushWorker(deps);clock+=20*60_000
+  actions=[{...actions[0],status:'completed',metadata:{...actions[0].metadata,destinationTxHash:outgoingHash}}]
+  await runPocketMoneyPushWorker({...deps,readActivity:async()=>[]});assert.equal(sent.length,1);assert.equal(held.length,0)
+ }
+}
+console.log('PASS all eight networks and both stablecoins: delayed internal arrivals stay silent; unrelated deposits survive delayed reconciliation.')
+// Journal updated after the initial read must be used for suppression.
+let reads=0;const raced=[]
+await runPocketMoneyPushWorker({...giftDeps,listActions:async()=>++reads===1?[]:[{action:'wallet.bsc-bridge',status:'completed',metadata:{txHash:sourceHash,destinationTxHash:mintHash}}],readContext:async()=>[],readActivity:async()=>[row({txHash:mintHash,direction:'in'})],sendPush:async(owner,id,n)=>raced.push(n)})
+assert.equal(raced.length,0)
+console.log('PASS fresh journal re-read closes chain-indexing race.')

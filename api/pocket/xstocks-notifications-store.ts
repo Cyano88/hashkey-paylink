@@ -1,4 +1,6 @@
 import {pocketStockNoticeActivity} from '../../src/pocket/lib/pocketStockNoticeActivity.js'
+import {listCirclePocketActions} from '../circle-pocket-action-journal.js'
+import {exchangeTransferDisposition} from './exchange-transfer-notifications.js'
 import {archiveStockInvestments} from './stock-investment-ledger.js'
 import {stockTradeProof,nativeTradeLegs,recordStockTradeNotices,type StockTradeProof} from './stock-trade-notifications.js'
 import {classifyEarnTransfer} from './earn-notifications.js'
@@ -99,13 +101,21 @@ async function runStockNotifications(){
   }
  }
 }
-export async function deliverStockNotices(overrides:Partial<{configured:typeof pocketPushConfigured;listOwners:typeof listPocketPushOwners;read:typeof readStockNotices;send:typeof sendPocketPush;mutate:typeof mutateStockNotices}>={}){
- const d={configured:pocketPushConfigured,listOwners:listPocketPushOwners,read:readStockNotices,send:sendPocketPush,mutate:mutateStockNotices,...overrides}
+export async function deliverStockNotices(overrides:Partial<{configured:typeof pocketPushConfigured;listOwners:typeof listPocketPushOwners;read:typeof readStockNotices;send:typeof sendPocketPush;mutate:typeof mutateStockNotices;listActions:typeof listCirclePocketActions}>={}){
+ const d={configured:pocketPushConfigured,listOwners:listPocketPushOwners,read:readStockNotices,send:sendPocketPush,mutate:mutateStockNotices,listActions:listCirclePocketActions,...overrides}
  if(!d.configured())return
  const pushOwners=new Set(await d.listOwners())
  const snapshot=await d.read()
  const pending=Object.values(snapshot.notices).filter(n=>!n.delivered&&!n.pushSuppressed&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
- for(const n of pending){const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:(n.earn||n.trade||stockAssets.some(a=>a.address.toLowerCase()===n.transfer?.token.toLowerCase()))&&n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
+ const actions=new Map<string,Awaited<ReturnType<typeof listCirclePocketActions>>>()
+ for(const n of pending){
+  if(n.transfer&&!n.trade&&!n.earn){
+   if(!actions.has(n.owner))actions.set(n.owner,await d.listActions(n.owner,500))
+   const disposition=exchangeTransferDisposition({txHash:n.hash,chain:'xlayer',assetSymbol:n.transfer.symbol,direction:n.transfer.direction,ts:n.at},actions.get(n.owner)!)
+   if(disposition==='suppress'){await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].pushSuppressed=true});continue}
+   if(disposition==='defer'||Date.now()-n.at<30_000)continue
+  }
+  const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:(n.earn||n.trade||stockAssets.some(a=>a.address.toLowerCase()===n.transfer?.token.toLowerCase()))&&n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
 }
 
 const activityAttempts=new Map<string,number>()

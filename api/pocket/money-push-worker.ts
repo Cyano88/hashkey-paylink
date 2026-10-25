@@ -1,4 +1,6 @@
+import {readDeferredTransferPushes,saveDeferredTransferPushes} from './deferred-transfer-push.js'
 import {readBscWalletActivity} from './bsc-wallet-activity.js'
+import {exchangeTransferDisposition} from './exchange-transfer-notifications.js'
 import {readBscWallet} from './bsc-wallet.js'
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
 import { readPocketNotificationActivity } from './activity.js'
@@ -18,6 +20,8 @@ const acceptedRecoveryAttemptAt = new Map<string, number>()
 const ACCEPTED_RECOVERY_BACKOFF_MS = 10 * 60_000
 
 type Dependencies = {
+  readDeferred: typeof readDeferredTransferPushes
+  saveDeferred: typeof saveDeferredTransferPushes
   configured: () => boolean
   listOwners: typeof listPocketPushOwners
   readActivity: typeof readPocketWalletChainActivity
@@ -38,7 +42,7 @@ type Dependencies = {
 function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions>>) {
   const hashes = new Set<string>()
   for (const record of records) {
-    if (record.action !== 'wallet.bridge' && record.action !== 'wallet.usdt-bridge' && record.action !== 'wallet.xlayer-bridge' && record.action !== 'wallet.swap' && record.action !== 'wallet.native-swap' && record.action !== 'wallet.bsc-swap' && record.action !== 'wallet.cash-conversion' && record.action !== 'bank-withdraw.route' && record.action !== 'gift.sent' && record.action !== 'gift.received') continue
+    if (record.action !== 'wallet.bsc-bridge' && record.action !== 'wallet.bridge' && record.action !== 'wallet.usdt-bridge' && record.action !== 'wallet.xlayer-bridge' && record.action !== 'wallet.swap' && record.action !== 'wallet.native-swap' && record.action !== 'wallet.bsc-swap' && record.action !== 'wallet.cash-conversion' && record.action !== 'bank-withdraw.route' && record.action !== 'gift.sent' && record.action !== 'gift.received') continue
     const candidates = [record.resourceId, record.metadata?.txHash, record.metadata?.destinationTxHash, record.metadata?.refundTxHash]
     candidates.forEach(value => { if (value) hashes.add(String(value).toLowerCase()) })
   }
@@ -47,6 +51,8 @@ function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions
 
 export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    readDeferred: readDeferredTransferPushes,
+    saveDeferred: saveDeferredTransferPushes,
     configured: pocketPushConfigured,
     listOwners: listPocketPushOwners,
     readActivity: async (owner,options)=>{const [circle,bsc]=await Promise.all([readPocketWalletChainActivity(owner,options),readBscWalletActivity(owner).catch(()=>[])]);return [...circle,...bsc]},
@@ -79,7 +85,9 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         dependencies.listRequests(ownerId),
         dependencies.readContext(ownerId),
       ])
-      const rows = mergePocketActivityRows([],rawRows)
+      const deferred = await dependencies.readDeferred(ownerId)
+      const deferredIds = new Set(deferred.map(row=>row.eventId))
+      const rows = mergePocketActivityRows(deferred,rawRows)
       const ownWallets = new Set(wallets.map(item => item.walletAddress.toLowerCase()))
       const ignoredHashes = actionHashes(actions)
       let notificationContext = context
@@ -91,6 +99,10 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
           if (bridge.status === 'completed'||bridge.status==='refunded') notificationContext = await dependencies.readContext(ownerId)
         } catch { /* The reconciliation worker retries without announcing success. */ }
       }
+      // Chain reads and reconciliation can finish after the first journal read.
+      // Re-read before delivering any generic money movement notifications.
+      const currentActions = await dependencies.listActions(ownerId, 500)
+      for (const hash of actionHashes(currentActions)) ignoredHashes.add(hash)
       const cutoff = dependencies.now() - lookbackMs
       // Provider records own payment wording. Suppress the debit, fee logs,
       // refund deposit and every attached funding leg even before delivery.
@@ -104,7 +116,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         return (source === 'wallet-deposit' || source === 'wallet-withdrawal')
           && String(row.paycrestStatus ?? '').toLowerCase() === 'confirmed'
           && Boolean(row.txHash)
-          && row.ts >= (row.chain==='bsc'?dependencies.now()-24*60*60_000:cutoff)
+          && (deferredIds.has(row.eventId) || row.ts >= (row.chain==='bsc'?dependencies.now()-24*60*60_000:cutoff))
       }
       const matchingAcceptedRequest = (row: (typeof rows)[number]) => requests.find(request => {
         if(row.chain==='bsc')return false // BNB deposits cannot settle Circle request payments.
@@ -167,10 +179,13 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         }
       }
       requests.filter(item => item.status === 'paid' && item.transactionHash).forEach(item => ignoredHashes.add(item.transactionHash!.toLowerCase()))
+      const waiting: typeof rows = []
       const confirmed = rows.filter(row => {
         if (!isConfirmedMoney(row) || !row.txHash) return false
         // Allow durable purchase registration to catch up with chain indexing.
-        if(row.direction==='out' && dependencies.now()-row.ts<30_000)return false
+        const disposition=exchangeTransferDisposition(row,currentActions)
+        if(disposition==='suppress')return false
+        if(disposition==='defer'||dependencies.now()-row.ts<30_000){waiting.push(row);return false}
         if (ignoredHashes.has(row.txHash.toLowerCase()) || matchingAcceptedRequest(row)) return false
         const counterparty = row.direction === 'in' ? row.payer : row.recipient
         return !counterparty || !ownWallets.has(counterparty.toLowerCase())
@@ -181,6 +196,9 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         await dependencies.sendPush(ownerId,notice.eventId,notice)
         notifications += 1
       }
+      // Persist unresolved candidates so an unrelated genuine deposit is not lost
+      // when an exchange takes longer than the normal scan lookback.
+      if(waiting.length||deferred.length)await dependencies.saveDeferred(ownerId,waiting)
     } catch (error) {
       errors += 1
       console.error('[pocket-money-push] owner scan failed:', error instanceof Error ? error.message : String(error))
