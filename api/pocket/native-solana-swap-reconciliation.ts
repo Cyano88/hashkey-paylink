@@ -60,12 +60,12 @@ const defaults={rpc:()=>new Connection(getRpc(),'confirmed'),record:recordCircle
 export async function reconcileNativeSolanaSwap(record:CirclePocketActionRecord,overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  if(record.action!=='wallet.native-swap'||record.metadata?.network!=='solana')throw Error('Invalid Solana swap record.')
- if(['completed','failed'].includes(record.status))return {status:record.status,txHash:record.metadata.txHash,amountOut:record.metadata.amountOut}
+ if(['completed','failed','cancelled','not_submitted'].includes(record.status))return {status:record.status,txHash:record.metadata.txHash,amountOut:record.metadata.amountOut}
  const q=openSolSwap(record.metadata.quoteToken||'',record.ownerId,true)
  if(record.idempotencyKey!=='pocket:native-swap:'+q.id||record.metadata.walletAddress!==q.walletAddress)throw Error('Swap reference mismatch.')
  const rpc=d.rpc();if(await rpc.getGenesisHash()!=='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d')throw Error('Wrong Solana network.')
  const raw=record.metadata.signedTransaction,hash=record.metadata.txHash
- const finish=async(status:'completed'|'failed',amountOut?:string)=>{const saved=await d.record({...record,status,metadata:{...record.metadata,...(amountOut?{amountOut}:{})}});return {status:saved.status,txHash:saved.metadata?.txHash,amountOut:saved.metadata?.amountOut}}
+ const finish=async(status:'completed'|'failed'|'not_submitted',amountOut?:string)=>{const saved=await d.record({...record,status,metadata:{...record.metadata,...(amountOut?{amountOut}:{})}});return {status:saved.status,txHash:saved.metadata?.txHash,amountOut:saved.metadata?.amountOut}}
  if(hash){
   if(!raw||bs58.encode(verifyNativeSolanaSwapSignature(q.transaction,raw,q.walletAddress,q.sponsorship?.sponsor,true).signatures[0])!==hash)throw Error('Invalid swap signature.')
   const receipt=await rpc.getTransaction(hash,{commitment:'confirmed',maxSupportedTransactionVersion:0})
@@ -76,7 +76,7 @@ export async function reconcileNativeSolanaSwap(record:CirclePocketActionRecord,
    return {status:'pending',txHash:hash}
   }
  }
- if(await rpc.getBlockHeight('finalized')>q.lastValidBlockHeight){const state=hash?(await rpc.getSignatureStatuses([hash],{searchTransactionHistory:true})).value[0]:null;if(!state)return finish('failed')}
+ if(await rpc.getBlockHeight('finalized')>q.lastValidBlockHeight){const state=hash?(await rpc.getSignatureStatuses([hash],{searchTransactionHistory:true})).value[0]:null;if(!state)return finish(hash?'failed':'not_submitted')}
  else if(hash&&raw)await rpc.sendRawTransaction(Buffer.from(raw,'base64'),{skipPreflight:false,maxRetries:1}).catch(()=>{})
  return {status:hash?'pending':'awaiting_approval',challengeId:record.metadata.challengeId,txHash:hash}
 }

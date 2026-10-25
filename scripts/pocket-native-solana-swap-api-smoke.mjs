@@ -21,7 +21,7 @@ enabled=false;assert.equal((await call({action:'execute',quoteToken:token})).cod
 approval=false;assert.equal((await call({action:'execute',quoteToken:token})).code,403);assert.equal(writes,0);approval=true
 preflightChanged=true;assert.equal((await call({action:'execute',quoteToken:token})).code,409);assert.equal(writes,0);preflightChanged=false
 challengeFail=true;assert.equal((await call({action:'execute',quoteToken:token})).code,503);assert.equal(writes,1);await call({action:'execute',quoteToken:token});assert.equal(writes,1,'ambiguous request cannot create another challenge')
-height=1001;assert.equal((await call({action:'status',quoteToken:token})).result.status,'failed');assert.equal(broadcasts,0)
+height=1001;assert.equal((await call({action:'status',quoteToken:token})).result.status,'not_submitted');assert.equal(broadcasts,0)
 record=null;height=900;challengeFail=false;assert.equal((await call({action:'execute',quoteToken:token})).code,200);assert.equal(writes,2)
 assert.equal((await call({action:'submit',quoteToken:token,signedTransaction:raw})).code,503);assert.equal(broadcasts,0)
 enabled=false;assert.equal((await call({action:'submit',quoteToken:token,signedTransaction:signed})).code,200);assert.ok(broadcasts>0,'already approved recovery remains available while disabled');assert.equal(record.metadata.txHash,hash)
@@ -48,3 +48,18 @@ assert.equal(solSwapReceiptOutput(q,{...receipt,meta:{...receipt.meta,preTokenBa
 record={ownerId:owner,action:'wallet.native-swap',idempotencyKey:'pocket:native-swap:'+q.id,status:'submitted',metadata:{network:'solana',walletAddress:wallet,quoteToken:token,signedTransaction:signed,txHash:hash}};height=900
 const completed=await reconcileNativeSolanaSwap(record,{rpc:()=>({...rpc,getTransaction:async()=>receipt}),record:deps.record});assert.equal(completed.status,'completed');assert.equal(completed.amountOut,'1')
 console.log('PASS exact approved receipt, actual output, exact input and fee, no unrelated debit, canonical signed recovery')
+record={ownerId:owner,action:'wallet.native-swap',idempotencyKey:'pocket:native-swap:'+q.id,status:'submitted',metadata:{network:'solana',walletAddress:wallet,quoteToken:token,challengeId:'challenge'}}
+assert.equal((await call({action:'cancel',quoteToken:token})).result.status,'not_submitted')
+assert.equal(record.status,'cancelled')
+assert.equal((await call({action:'submit',quoteToken:token,signedTransaction:signed})).result.status,'not_submitted','late signature cannot revive cancelled draft')
+assert.equal((await call({},'GET')).result.pending.length,0)
+console.log('PASS Solana swap cancellation: durable, absent from pending, and late signed submission rejected.')
+
+// Cancellation wins after submit read but before the atomic signed write.
+record={ownerId:owner,action:'wallet.native-swap',idempotencyKey:'pocket:native-swap:'+q.id,status:'submitted',metadata:{network:'solana',walletAddress:wallet,quoteToken:token,challengeId:'challenge'}}
+const beforeBroadcasts=broadcasts
+const raceHandler=createNativeSolanaSwapHandler({...deps,record:async input=>input.metadata?.submissionClaim==='true'?{...record,status:'cancelled'}:deps.record(input)})
+let raceResult
+await raceHandler({method:'POST',body:{action:'submit',quoteToken:token,signedTransaction:signed},headers:{}},{setHeader(){},status(){return this},json(v){raceResult=v;return this}})
+assert.equal(raceResult.status,'not_submitted');assert.equal(broadcasts,beforeBroadcasts)
+console.log('PASS cancellation wins concurrent local submission without a broadcast.')

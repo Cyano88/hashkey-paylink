@@ -52,11 +52,13 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       const balance=await client(source).readContract({address:getAddress(POCKET_USDT_ASSETS[source].address),abi:BALANCE,functionName:'balanceOf',args:[q.walletAddress]})
       return res.json({ok:true,quote:preview(q),quoteToken:sealUsdtBridgeQuote(q),sufficientBalance:balance>=BigInt(q.totalUnits!)})
     }
-    if(action!=='execute'&&action!=='status'&&action!=='resume')bridgeError('Unsupported bridge action.')
+    if(action!=='execute'&&action!=='status'&&action!=='resume'&&action!=='cancel')bridgeError('Unsupported bridge action.')
     const quoteToken=String(req.body.quoteToken||''),q=openUsdtBridgeQuote(quoteToken,identity.userId,true)
     const journalKey='pocket:usdt-bridge:'+q.id
     const existing=await findCirclePocketAction(identity.userId,journalKey,ACTION)
     const meta:Record<string,string>={...metadata(q,quoteToken),...(existing?.metadata||{})}
+    if(action==='cancel')return res.json(await reconcileUsdtBridge(identity.userId,quoteToken,{circleUserToken:req.body.circleUserToken,cancelUnsigned:true}))
+    if(existing&&['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash)return res.json({ok:true,status:'cancelled'})
     if(action==='resume'){
       const state=await reconcileUsdtBridge(identity.userId,quoteToken,{circleUserToken:req.body.circleUserToken})
       if(state.status!=='awaiting_approval')return res.json(state)
@@ -95,7 +97,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
 
 // Shared by the authenticated status route and background reconciliation.
 const recoveryDefaults={claimAction:claimCirclePocketAction,findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
-export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string;retireUnsubmitted?:boolean}={},overrides:Partial<typeof recoveryDefaults>={}){
+export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string;retireUnsubmitted?:boolean;cancelUnsigned?:boolean}={},overrides:Partial<typeof recoveryDefaults>={}){
   if(quoteToken.startsWith('solana:'))return recoverSolanaUsdtBridge(ownerId,quoteToken.slice(7))
   const deps={...recoveryDefaults,...overrides}
   const q=openUsdtBridgeQuote(quoteToken,ownerId,true),journalKey='pocket:usdt-bridge:'+q.id
@@ -110,6 +112,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       await deps.recordAction({ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,paymentState:'not_submitted'}})
       return {ok:true,status:'not_submitted',reason:'approval_expired'}
     }
+    if(['cancelled','not_submitted'].includes(existing.status)&&!meta.txHash)return {ok:true,status:'cancelled'}
     if(existing.status==='completed'){
       await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:meta.txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),destinationTxHash:meta.destinationTxHash,provider:q.provider,...(meta.settledAmountUnits?{settledAmountUnits:meta.settledAmountUnits,settledAmount:formatUnits(BigInt(meta.settledAmountUnits),6)}:{})},recordedAt:existing.updatedAt})
       return {ok:true,status:'completed',txHash:meta.txHash,destinationTxHash:meta.destinationTxHash,...(meta.settledAmountUnits?{amountOut:formatUnits(BigInt(meta.settledAmountUnits),6),settlement:{network:q.destination,transactionHash:meta.destinationTxHash,amountUnits:meta.settledAmountUnits}}:{})}
@@ -136,6 +139,7 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       awaitingApproval=result.status==='awaiting_approval'
     }
     txHash=txHash||String(input.txHash||'')
+    if(!txHash&&awaitingApproval){if(input.cancelUnsigned){const saved=await deps.recordAction({...existing,status:'cancelled',metadata:{...meta,approvalCancelled:'true'}});return {ok:true,status:saved.metadata?.txHash?'pending':saved.status,txHash:saved.metadata?.txHash}}return {ok:true,status:'awaiting_approval',challengeId:meta.challengeId}}
     if(!txHash){
       const rows=await deps.readActivity(q.source,q.walletAddress,AbortSignal.timeout(8000)).catch(()=>[])
       const hashes=[...new Set(rows.filter(r=>r.assetSymbol==='USDT'&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)

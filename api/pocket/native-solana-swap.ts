@@ -21,7 +21,7 @@ export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>
    const {userId:ownerId}=await d.identity(req)
    if(req.method==='GET'){const pending=(await d.list(ownerId,500,actionName,true)).filter(r=>r.metadata?.network==='solana'&&['started','submitted'].includes(r.status)&&r.metadata.quoteToken).map(r=>({quote:solSwapReview(openSolSwap(r.metadata!.quoteToken,ownerId,true,d.now())),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId}));return res.json({ok:true,enabled:d.enabled(),pending})}
    const action=req.body?.action
-   if(!['quote','execute','submit','status'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
+   if(!['quote','execute','submit','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
    if(action==='quote'&&req.body.network!=='solana')return res.status(400).json({ok:false,error:'Select the Solana network.'})
    if(['quote','execute'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'Solana swaps are not available yet.'})
    const link=await d.readLink(circleLinkKey(ownerId,'solana','payment'))
@@ -31,6 +31,8 @@ export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>
    const token=String(req.body.quoteToken||''),q=openSolSwap(token,ownerId,true,d.now()),key='pocket:native-swap:'+q.id
    if(q.walletId!==link.circleWalletId||q.walletAddress!==link.circleWalletAddress)return res.status(409).json({ok:false,error:'Your Solana wallet changed. Reopen this swap.'})
    const existing=await d.find(ownerId,key,actionName)
+   if(existing&&['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash)return res.json({ok:true,status:'not_submitted',reason:'cancelled'})
+   if(action==='cancel'&&existing&&!existing.metadata?.txHash&&!existing.metadata?.signedTransaction){const saved=await d.record({...existing,status:'cancelled',metadata:{...existing.metadata!,approvalOutcome:'cancelled'}});return res.json({ok:true,status:saved.metadata?.txHash?'pending':saved.status==='cancelled'?'not_submitted':saved.status,txHash:saved.metadata?.txHash,reason:'cancelled'})}
    if(action==='execute'){
     if(existing)return res.json({ok:true,status:existing.status,challengeId:existing.metadata?.challengeId,txHash:existing.metadata?.txHash,amountOut:existing.metadata?.amountOut})
     openSolSwap(token,ownerId,false,d.now())
@@ -63,7 +65,8 @@ export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>
     }
     const hash=bs58.encode(signed.signatures[0])
     if(existing.metadata.txHash&&existing.metadata.txHash!==hash)throw Error('Swap signature changed.')
-    const saved=await d.record({...existing,status:'submitted',metadata:{...existing.metadata,signedTransaction:raw,txHash:hash}})
+    const saved=await d.record({...existing,status:'submitted',metadata:{...existing.metadata,signedTransaction:raw,txHash:hash,submissionClaim:'true'}})
+    if(['cancelled','not_submitted'].includes(saved.status)&&!saved.metadata?.txHash)return res.json({ok:true,status:'not_submitted',reason:'cancelled'})
     if(['completed','failed'].includes(saved.status))return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash,amountOut:saved.metadata?.amountOut})
     if(await rpc.getBlockHeight('confirmed')<=q.lastValidBlockHeight)await rpc.sendRawTransaction(Buffer.from(raw,'base64'),{skipPreflight:false,maxRetries:3})
     return res.json({ok:true,...await reconcileNativeSolanaSwap(saved,{rpc:()=>rpc,record:d.record})})

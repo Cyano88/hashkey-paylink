@@ -51,10 +51,11 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
   if(await rpc.getBlockNumber()<r.blockNumber+(network==='bsc'?14n:2n))return null
   return same(block.hash,r.blockHash)?r:null
  }
- async function reconcile(owner:string,q:BscInboundBridgeQuote,token:string,input:{txHash?:string;circleUserToken?:string}){
+ async function reconcile(owner:string,q:BscInboundBridgeQuote,token:string,input:{txHash?:string;circleUserToken?:string;cancelUnsigned?:boolean}){
   const existing=await d.find(owner,key(q),ACTION)
   if(!existing)return {ok:true,status:'not_submitted'}
   const meta:Record<string,string>={...metadata(q,token),...existing.metadata}
+  if(['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash)return {ok:true,status:'cancelled'}
   if(existing.status==='completed'||existing.status==='failed'){
    const outcome=existing.status==='completed'?'completed':meta.paymentState==='refunded'?'refunded':'failed'
    if(outcome!=='failed')await d.ledger({eventKey:key(q)+':'+outcome,ownerId:owner,executionId:existing.id,rail:'wallet_bridge',state:outcome,asset:outcome==='refunded'?(meta.refundAsset||q.asset):q.asset,amount:outcome==='refunded'?meta.refundAmount:q.amount,sourceNetwork:q.source,settlementNetwork:outcome==='refunded'?meta.refundNetwork:'bsc',resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'relay'},recordedAt:existing.updatedAt})
@@ -70,6 +71,7 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
    }
   }
   hash=hash||input.txHash||''
+  if(!hash&&awaiting){if(input.cancelUnsigned){const saved=await d.record({...existing,status:'cancelled',metadata:{...meta,approvalCancelled:'true'}});return {ok:true,status:saved.metadata?.txHash?'pending':saved.status,txHash:saved.metadata?.txHash}}return {ok:true,status:'awaiting_approval',challengeId:meta.challengeId}}
   if(!hash){
    const rows=await d.activity(q.source,q.walletAddress,AbortSignal.timeout(8000)).catch(()=>[])
    const candidates=[...new Set(rows.filter(r=>r.assetSymbol===q.asset&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
@@ -123,14 +125,10 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
    if(!['execute','status','resume','cancel'].includes(req.body?.action))fail('Unsupported bridge action.',400)
    const token=String(req.body.quoteToken||''),q=openBscInboundBridgeQuote(token,userId)
    const existing=await d.find(userId,key(q),ACTION)
-   if(req.body.action==='status')return res.json(await reconcile(userId,q,token,req.body))
-   if(req.body.action==='cancel'){
-    const state=await reconcile(userId,q,token,req.body)
-    if(existing&&!('txHash' in state&&state.txHash)&&['awaiting_approval','not_submitted'].includes(state.status))await d.record({ownerId:userId,idempotencyKey:key(q),action:ACTION,status:existing.status,resourceId:q.id,metadata:{...existing.metadata,...metadata(q,token),approvalCancelled:'true'}})
-    return res.json(state)
-   }
+   if(req.body.action==='status')return res.json(await reconcile(userId,q,token,{...req.body,cancelUnsigned:false}))
+   if(req.body.action==='cancel')return res.json(await reconcile(userId,q,token,{...req.body,cancelUnsigned:true}))
    if(req.body.action==='resume'){
-    const state=await reconcile(userId,q,token,req.body)
+    const state=await reconcile(userId,q,token,{...req.body,cancelUnsigned:false})
     if(state.status==='awaiting_approval'){
      const w=await d.wallets(userId,q.source)
      if(w.walletId!==q.walletId||!same(w.walletAddress,q.walletAddress)||!same(w.destinationAddress,q.destinationAddress))fail('Your linked wallets changed. This bridge remains saved for review.')
@@ -139,7 +137,7 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
     }
     return res.json(state)
    }
-   if(existing){if(['completed','failed'].includes(existing.status))return res.json(await reconcile(userId,q,token,req.body));if(existing.metadata?.challengeId)return res.json({ok:true,challengeId:existing.metadata.challengeId});fail('This bridge is already saved. Check its status before retrying.')}
+   if(existing){if(['completed','failed','cancelled','not_submitted'].includes(existing.status))return res.json(await reconcile(userId,q,token,{...req.body,cancelUnsigned:false}));if(existing.metadata?.challengeId)return res.json({ok:true,challengeId:existing.metadata.challengeId});fail('This bridge is already saved. Check its status before retrying.')}
    if(!await d.enabled(userId))fail('BNB Chain bridging is not available yet.')
    if(q.asset==='USDT'&&!d.usdtEnabled())fail('USDT bridging to BNB Chain is not available yet.')
    if(q.expiresAt<=d.now())fail('Quote expired. Review a new quote.')

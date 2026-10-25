@@ -168,6 +168,11 @@ export async function recordCirclePocketAction(input: {
         if (existing.metadata?.[key] !== input.metadata?.[key]) throw new Error('Bridge details do not match the saved transfer.')
       }
       if (existing.status === 'completed' || existing.status === 'failed') return existing
+      // Close/status/submit may race. Only transaction evidence may revive a
+      // cancelled approval; a new local submission must lose to cancellation.
+      if (['cancelled','not_submitted'].includes(input.status) && (existing.metadata?.txHash || existing.metadata?.signedTransaction)) return existing
+      if (['cancelled','not_submitted'].includes(existing.status) && ['started','submitted'].includes(input.status)
+        && (!input.metadata?.txHash || input.metadata?.submissionClaim === 'true')) return existing
       if(['wallet.native-send','wallet.native-swap','wallet.bsc-swap','wallet.cash-conversion'].includes(input.action)){
         for(const key of ['network','walletAddress','recipient','assetSymbol','toAsset','challengeId','txHash','signedTransaction']){
           if(existing.metadata?.[key] && input.metadata?.[key] !== undefined && existing.metadata[key] !== input.metadata[key])throw new Error('Native transfer evidence cannot change.')

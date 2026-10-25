@@ -31,3 +31,9 @@ enabled=false;clock+=50000
 const done=await call({action:'status',quoteToken:token});assert.equal(done.data.status,'completed');assert.equal(done.data.amountOut,'9.97');assert.equal(writes,1)
 assert.equal((await call({action:'status',quoteToken:token})).data.status,'completed')
 console.log('PASS Cash API: rollout/PIN/ownership/fee/expiry gates, insufficient input before provider quote, durable claim before challenge, no repeated signing on timeout/new quote, saved hash before proof, recovery after rollback and expiry, net USDC output.')
+record={...record,status:'submitted',metadata:{...record.metadata,txHash:undefined,challengeId:'challenge'}};provider={status:'awaiting_approval'}
+assert.equal((await call({action:'cancel',quoteToken:token,circleUserToken:'session'})).data.status,'not_submitted')
+assert.equal(record.status,'cancelled')
+assert.equal((await call({action:'status',quoteToken:token})).data.status,'not_submitted')
+assert.equal((await call({},'GET')).data.pending.length,0)
+console.log('PASS Cash conversion: cancelled approval stays out of pending recovery, including after rollout is disabled.')

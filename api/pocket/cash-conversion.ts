@@ -26,13 +26,13 @@ export function createCashConversionHandler(overrides:Partial<typeof defaults>={
    const {userId:ownerId}=await d.identity(req)
    if(req.method==='GET'){
     const fundingBridge=typeof req.query?.fundingBridge==='string'?req.query.fundingBridge:undefined
-    const pending=(await d.list(ownerId,500,CASH_CONVERSION_ACTION,!fundingBridge)).filter(r=>r.metadata?.quoteToken&&(fundingBridge?r.metadata.fundingBridge===fundingBridge&&r.status!=='failed':['started','submitted'].includes(r.status))).map(r=>({quote:cashConversionReview(openCashConversion(r.metadata!.quoteToken,ownerId,true,d.now())),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,status:r.status}))
+    const pending=(await d.list(ownerId,500,CASH_CONVERSION_ACTION,!fundingBridge)).filter(r=>r.metadata?.quoteToken&&(fundingBridge?r.metadata.fundingBridge===fundingBridge&&!['failed','cancelled','not_submitted'].includes(r.status):['started','submitted'].includes(r.status))).map(r=>({quote:cashConversionReview(openCashConversion(r.metadata!.quoteToken,ownerId,true,d.now())),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,status:r.status}))
     return res.json({ok:true,enabled:d.enabled(),multichainEnabled:d.enabled()&&d.multichain(),pending})
    }
    const action=req.body?.action,token=String(req.body?.quoteToken||'')
-   if(!['quote','execute','status'].includes(action))return res.status(400).json({ok:false,error:'Unsupported cash funding action.'})
+   if(!['quote','execute','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported cash funding action.'})
    // Rollback stops new quotes/execution, while already submitted funds keep recovery.
-   if(action!=='status'&&!d.enabled())return res.status(409).json({ok:false,error:'Cash conversion is not available yet.'})
+   if(!['status','cancel'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'Cash conversion is not available yet.'})
    const q=action==='quote'?null:openCashConversion(token,ownerId,true,d.now())
    if(action==='quote'&&(req.body.network!=='base'||req.body.from!=='USDT'||req.body.to!=='USDC'))return res.status(400).json({ok:false,error:'Choose USDT on Base to add to Cash.'})
    const link=await d.readLink(circleLinkKey(ownerId,'base','payment'))
@@ -63,6 +63,7 @@ export function createCashConversionHandler(overrides:Partial<typeof defaults>={
    }
    const quote=q!,key=CASH_CONVERSION_PREFIX+quote.id
    let existing=await d.find(ownerId,key,CASH_CONVERSION_ACTION)
+   if(existing&&['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash)return res.json({ok:true,status:'not_submitted',reason:'cancelled'})
    if(action==='execute'){
     if(existing)return res.json({ok:true,status:existing.status,challengeId:existing.metadata?.challengeId,txHash:existing.metadata?.txHash,amountOut:existing.metadata?.amountOut})
     openCashConversion(token,ownerId,false,d.now())
@@ -86,6 +87,7 @@ export function createCashConversionHandler(overrides:Partial<typeof defaults>={
    if(['completed','failed'].includes(existing.status)||existing.metadata?.txHash)return res.json({ok:true,...await reconcile()})
    if(!challengeId||!userToken)return res.json({ok:true,status:'pending',challengeId})
    const provider=await d.challengeStatus({chain:'base',userToken,walletId,walletAddress,challengeId})
+   if(!provider.txHash&&((action==='cancel'&&provider.status==='awaiting_approval')||('notSubmitted' in provider&&provider.notSubmitted===true))){const saved=await d.record({...existing,status:action==='cancel'?'cancelled':'not_submitted',metadata:{...existing.metadata!,approvalOutcome:action==='cancel'?'cancelled':'expired'}});return res.json({ok:true,status:saved.metadata?.txHash?'pending':['cancelled','not_submitted'].includes(saved.status)?'not_submitted':saved.status,txHash:saved.metadata?.txHash,reason:action==='cancel'?'cancelled':'approval_expired'})}
    if(provider.status==='failed'){const saved=await d.record({...existing,status:'failed'});return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash})}
    if(!provider.txHash)return res.json({ok:true,status:provider.status==='awaiting_approval'?'awaiting_approval':'pending',challengeId})
    if(!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid cash conversion reference.')

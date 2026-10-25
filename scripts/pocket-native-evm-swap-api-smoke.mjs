@@ -21,3 +21,13 @@ rpcDown=false;proof={type:'CALL'};assert.equal((await call({action:'status',quot
 const done=await call({action:'status',quoteToken:token});assert.equal(done.data.status,'completed');assert.equal(done.data.amountOut,'0.000985');assert.equal(writes,1)
 enabled=false;assert.equal((await call({action:'status',quoteToken:token})).data.status,'completed')
 console.log('PASS swap API: gate/PIN/fee/expiry, durable timeout claim, no repeat challenge, recovery during RPC outage, saved hash before proof, exact output confirmation without auth token, net review amount')
+for(const network of ['base','arbitrum','ethereum','polygon']){
+ enabled=false
+ const f=await fixture(network,true),sealed=sealNativeEvmSwap(f.q)
+ let saved={ownerId:owner,idempotencyKey:'pocket:native-swap:'+f.q.id,action:'wallet.native-swap',status:'submitted',metadata:{network,quoteToken:sealed,challengeId:'challenge',walletAddress:wallet}},state={status:'awaiting_approval'},reads=0
+ const cancelHandler=createNativeEvmSwapHandler({...d,now:()=>f.now,readLink:async()=>({privyUserId:owner,chain:network,purpose:'payment',circleBlockchain:{base:'BASE',arbitrum:'ARB',ethereum:'ETH',polygon:'MATIC'}[network],circleWalletId:f.q.walletId,circleWalletAddress:wallet}),find:async()=>saved,list:async()=>[saved],record:async r=>(saved=r),challengeStatus:async()=>state,rpc:async()=>{reads++;throw Error('must not scan the chain for an unapproved challenge')}})
+ const request=async action=>{let data;await cancelHandler({method:'POST',body:{action,quoteToken:sealed,circleUserToken:'session'},headers:{}},{setHeader(){},status(){return this},json(v){data=v}});return data}
+ assert.equal((await request('cancel')).status,'not_submitted');assert.equal(saved.status,'cancelled');assert.equal((await request('status')).status,'not_submitted');enabled=true;assert.equal((await request('execute')).status,'not_submitted');assert.equal(reads,0)
+ saved={...saved,status:'submitted'};state={status:'pending'};assert.equal((await request('cancel')).status,'pending');assert.equal(saved.status,'submitted','uncertain submission survives')
+}
+console.log('PASS all four EVM swap networks: durable cancellation, rollback-safe recovery, no stale re-execution, no unnecessary RPC scan, uncertain submission preserved.')

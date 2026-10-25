@@ -7,7 +7,7 @@ import type {prepareSolanaUsdtRelayTransaction} from './solana-usdt-relay-transa
 type Prepared=Awaited<ReturnType<typeof prepareSolanaUsdtRelayTransaction>>
 export type SolanaUsdtBridgeRecord={
  purpose?:'cash';id:string;ownerId:string;walletId:string;walletAddress:string;destinationAddress:string;
- quote:Prepared;phase:'quoted'|'authorizing'|'awaiting_approval'|'signed'|'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';
+ quote:Prepared;phase:'cancelled'|'quoted'|'authorizing'|'awaiting_approval'|'signed'|'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';
  settlement?:{network:'solana'|'base'|'arbitrum'|'bsc'|'xlayer';asset?:'USDC'|'USDT';transactionHash:string;amountUnits:string;verifiedAt:number};
  challengeId?:string;signedTransaction?:string;signature?:string;createdAt:number;updatedAt:number;
 }
@@ -71,6 +71,9 @@ export function createSolanaUsdtBridgeState(store:SolanaUsdtBridgeStore=durableS
     return {...r,challengeId,phase:'awaiting_approval',updatedAt:now()}
    })
    return {challengeId}
+  },
+  async cancelUnsigned(ownerId:string,id:string){
+   return store.update(id,current=>{const r=owned(current,ownerId);if(r.signedTransaction||r.signature||!['quoted','authorizing','awaiting_approval'].includes(r.phase))return r;return {...r,phase:'cancelled',updatedAt:now()}})
   },
   async expireUnsigned(ownerId:string,id:string,blockHeight:number){
    return store.update(id,current=>{

@@ -34,6 +34,7 @@ async function journal(r:SolanaUsdtBridgeRecord){
 const defaultDependencies={externalWallets:solanaBridgeWallets,reconcileExternal:reconcileSolanaExternalBridge,verifyUser:verifiedPrivyUser,state:createSolanaUsdtBridgeState,readLink:readCircleLink,enabled:solanaUsdtBridgeEnabled,reconcile:reconcileSolanaUsdtSettlement,journal,rpc:()=>new Connection(getRpc(),'confirmed')}
 export async function recoverSolanaUsdtBridge(ownerId:string,id:string,deps=defaultDependencies){
  const state=deps.state();let current=await state.read(ownerId,id)
+ if(current.phase==='cancelled')return {ok:true,status:'cancelled'}
  if(!current.signedTransaction&&['quoted','authorizing','awaiting_approval'].includes(current.phase)&&current.quote.expiresAt<=Date.now())current=await state.expireUnsigned(ownerId,id,await deps.rpc().getBlockHeight('confirmed'))
  // An expired unsigned approval never became a transfer. Do not report it as
  // a failed payment when a client recovers an old draft on page entry.
@@ -69,8 +70,9 @@ export function createSolanaUsdtBridgeHandler(overrides:Partial<typeof defaultDe
    const record=await state.register({...purpose,ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:from.circleWalletAddress,destinationAddress:to.circleWalletAddress,quote})
    return res.json({ok:true,...solanaUsdtBridgePreview(record),sufficientBalance:true})
   }
-  if(!['execute','submit','status','resume'].includes(body.action)||typeof body.quoteToken!=='string'||!body.quoteToken.startsWith('solana:'))return res.status(400).json({ok:false,error:'Invalid bridge request.'})
+  if(!['execute','submit','status','resume','cancel'].includes(body.action)||typeof body.quoteToken!=='string'||!body.quoteToken.startsWith('solana:'))return res.status(400).json({ok:false,error:'Invalid bridge request.'})
   const id=body.quoteToken.slice(7),r=await state.read(identity.userId,id)
+  if(body.action==='cancel'){const saved=await state.cancelUnsigned(identity.userId,id);if(saved.phase==='cancelled')return res.json({ok:true,status:'cancelled'});return res.json(await recoverSolanaUsdtBridge(identity.userId,id,deps))}
   if(body.action==='execute'||body.action==='resume'){
    const [from,to]=['bsc','xlayer'].includes(r.quote.destination)?await deps.externalWallets(identity.userId,r.quote.destination).then(({from,to})=>[from,to] as const):await Promise.all(['solana',r.quote.destination].map(n=>deps.readLink(circleLinkKey(identity.userId,n,'payment'))))
    if(!from||!to||from.circleWalletId!==r.walletId||from.circleWalletAddress!==r.walletAddress||to.circleWalletAddress.toLowerCase()!==r.destinationAddress.toLowerCase())throw Error('Linked bridge wallets changed.')

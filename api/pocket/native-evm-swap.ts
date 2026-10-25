@@ -31,11 +31,11 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     return res.json({ok:true,enabled:d.enabled(requested as NativeEvmNetwork|undefined),pending})
    }
    const action=req.body?.action,token=String(req.body?.quoteToken||'')
-   if(!['quote','execute','status'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
-   if(action!=='status'&&!d.enabled())return res.status(409).json({ok:false,error:'Native swaps are not available yet.'})
+   if(!['quote','execute','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
+   if(!['status','cancel'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'Native swaps are not available yet.'})
    const q=action==='quote'?null:openNativeEvmSwap(token,ownerId,true,d.now()),network=(q?.network||req.body.network) as NativeEvmNetwork
    if(!Object.hasOwn(nativeEvmNetworks,network))return res.status(400).json({ok:false,error:'Choose a supported swap network.'})
-   if(action!=='status'&&!d.enabled(network))return res.status(409).json({ok:false,error:'Swaps on this network are not available yet.'})
+   if(!['status','cancel'].includes(action)&&!d.enabled(network))return res.status(409).json({ok:false,error:'Swaps on this network are not available yet.'})
    const link=await d.readLink(circleLinkKey(ownerId,network,'payment'))
    if(!link||link.privyUserId!==ownerId||link.chain!==network||(link.purpose??'payment')!=='payment'||link.circleBlockchain!==nativeEvmNetworks[network].blockchain)return res.status(409).json({ok:false,error:'Reconnect your wallet on this network.'})
    const walletId=link.circleWalletId,walletAddress=getAddress(link.circleWalletAddress),userToken=String(req.body.circleUserToken||'')
@@ -66,6 +66,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    }
    const quote=q!,key='pocket:native-swap:'+quote.id
    let existing=await d.find(ownerId,key,actionName)
+   if(existing&&['cancelled','not_submitted'].includes(existing.status)&&!existing.metadata?.txHash)return res.json({ok:true,status:'not_submitted',reason:'cancelled'})
    if(action==='execute'){
     if(existing)return res.json({ok:true,status:existing.status,challengeId:existing.metadata?.challengeId,txHash:existing.metadata?.txHash,amountOut:existing.metadata?.amountOut})
     openNativeEvmSwap(token,ownerId,false,d.now())
@@ -93,6 +94,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    if(['completed','failed'].includes(existing.status)||existing.metadata?.txHash)return res.json({ok:true,...await reconcileNativeEvmSwap(existing,{rpc:d.rpc,record:d.record})})
    if(!challengeId||!userToken)return res.json({ok:true,status:'pending',challengeId})
    const provider=await d.challengeStatus({chain:network,userToken,walletId,walletAddress,challengeId})
+   if(!provider.txHash&&((action==='cancel'&&provider.status==='awaiting_approval')||('notSubmitted' in provider&&provider.notSubmitted===true))){const saved=await d.record({...existing,status:action==='cancel'?'cancelled':'not_submitted',metadata:{...existing.metadata!,approvalOutcome:action==='cancel'?'cancelled':'expired'}});return res.json({ok:true,status:saved.metadata?.txHash?'pending':['cancelled','not_submitted'].includes(saved.status)?'not_submitted':saved.status,txHash:saved.metadata?.txHash,reason:action==='cancel'?'cancelled':'approval_expired'})}
    if(provider.status==='failed'){const saved=await d.record({...existing,status:'failed'});return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash})}
    if(!provider.txHash)return res.json({ok:true,status:provider.status==='awaiting_approval'?'awaiting_approval':'pending',challengeId})
    if(!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid swap reference.')
