@@ -59,7 +59,7 @@ const destination=async(owner:string,network:OutboundDestination='base')=>{const
 const defaults={client,destination,route:quoteRelayStablecoin,convert:quoteXLayerBridgeSwap,fetch:globalThis.fetch,now:Date.now,solanaDelivery:readSolanaBridgeDelivery,apiKey:()=>process.env.RELAY_API_KEY||''}
 export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
- const networks=async(network:OutboundDestination='base')=>{if(await d.client('xlayer').getChainId()!==196||network!=='solana'&&await d.client(network).getChainId()!==chainMap[network].id)invalid()}
+ const networks=async(network:OutboundDestination='base')=>{const [sourceId,destinationId]=await Promise.all([d.client('xlayer').getChainId(),network==='solana'?Promise.resolve(null):d.client(network).getChainId()]);if(sourceId!==196||network!=='solana'&&destinationId!==chainMap[network].id)invalid()}
  const receipt=async(network:Exclude<OutboundDestination,'solana'>|'xlayer',txHash:Hex)=>{
   const rpc=d.client(network);if(await rpc.getChainId()!==chainMap[network].id)invalid()
   const r=await rpc.getTransactionReceipt({hash:txHash}).catch(()=>null);if(!r)return null
@@ -71,7 +71,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    if(parseUnits(input.amount,6)<POCKET_XLAYER_MINIMUM_UNITS)throw Error('Minimum bridge amount is '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+input.asset+'.')
    const target=input.destination||'base',purpose=cashBridgePurpose(input.purpose,input.destination||'base')
    if(!isPocketBridgeDestination(target)||target==='arc'&&input.asset==='USDT')invalid()
-   await networks(target);const w=await d.destination(input.ownerId,target),amountUnits=parseUnits(input.amount,6).toString()
+   const [,w]=await Promise.all([networks(target),d.destination(input.ownerId,target)]),amountUnits=parseUnits(input.amount,6).toString()
    const available=await d.client('xlayer').readContract({address:getAddress(stablecoinAddress('xlayer',input.asset)),abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[input.walletAddress]})
    if(BigInt(amountUnits)>=available)throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422})
    if(input.asset==='USDT'&&(LIFI_DESTINATIONS as readonly string[]).includes(target)){
