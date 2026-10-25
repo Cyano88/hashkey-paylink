@@ -1,3 +1,4 @@
+import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 ﻿import type {Request,Response} from 'express'
 import {PrivyClient} from '@privy-io/server-auth'
@@ -38,7 +39,7 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
  async function publish(op:BscBridgeOperation){
   if(['prepared','cancelled','not_submitted'].includes(op.state))return op
   const q=op.quote
-  await recordCirclePocketAction({ownerId:q.ownerId,idempotencyKey:'pocket:bsc-outbound-bridge:'+q.id,action:ACTION,status:op.state==='completed'?'completed':['failed','refunded'].includes(op.state)?'failed':'submitted',resourceId:q.id,metadata:{execution:'privy',quoteToken:sealBscOutbound(q,seal),source:q.source,destination:q.destination,assetSymbol:q.asset,amount:formatUnits(BigInt(q.amountUnits),18),walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,paymentState:op.state,...(op.hash?{txHash:op.hash}:{}),...(op.destinationTxHash?{destinationTxHash:op.destinationTxHash}:{}),...(op.refundAmount?{refundAmount:op.refundAmount,refundNetwork:op.refundNetwork||'',refundAsset:q.asset}:{})}})
+  await recordCirclePocketAction({ownerId:q.ownerId,idempotencyKey:'pocket:bsc-outbound-bridge:'+q.id,action:ACTION,status:op.state==='completed'?'completed':['failed','refunded'].includes(op.state)?'failed':'submitted',resourceId:q.id,metadata:{...cashBridgePurpose(q.purpose,q.destination),...(op.state==='completed'&&op.amountOutUnits?{cashReceivedAmount:formatUnits(BigInt(op.amountOutUnits),6)}:{}),execution:'privy',quoteToken:sealBscOutbound(q,seal),source:q.source,destination:q.destination,assetSymbol:q.asset,amount:formatUnits(BigInt(q.amountUnits),18),walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,paymentState:op.state,...(op.hash?{txHash:op.hash}:{}),...(op.destinationTxHash?{destinationTxHash:op.destinationTxHash}:{}),...(op.refundAmount?{refundAmount:op.refundAmount,refundNetwork:op.refundNetwork||'',refundAsset:q.asset}:{})}})
   if(['completed','refunded'].includes(op.state))await appendPocketMoneyLedgerEvent({eventKey:'pocket:bsc-outbound-bridge:'+q.id+':'+op.state,ownerId:q.ownerId,executionId:q.id,rail:'wallet_bridge',state:op.state as 'completed'|'refunded',asset:q.asset,amount:op.state==='refunded'?op.refundAmount||'0':formatUnits(BigInt(q.amountUnits),18),sourceNetwork:'bsc',settlementNetwork:op.state==='refunded'?op.refundNetwork||'bsc':'base',resourceId:q.id,transactionHash:op.hash,metadata:{destinationTxHash:op.destinationTxHash!,provider:'relay'},recordedAt:op.updatedAt})
   await mutate(store=>{const saved=store?.operations[q.id];if(saved&&saved.state===op.state)saved.publishedState=op.state;return store!})
   return op
@@ -52,10 +53,10 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
    if(action==='capabilities')return res.json({ok:true,enabled:enabled(),pending:(await operations.list(w)).map(op=>({quote:bscOutboundPreview(op.quote),quoteToken:sealBscOutbound(op.quote,seal),...(op.hash?{txHash:op.hash}:{})}))})
    if(action==='quote'){
     if(!enabled())fail('BNB Chain bridging is unavailable.')
-    const asset=req.body.asset,amount=req.body.amount
+    const purpose=cashBridgePurpose(req.body.purpose,req.body.destination);const asset=req.body.asset,amount=req.body.amount
     if(req.body.source!=='bsc'||req.body.destination!=='base'||!['USDC','USDT'].includes(asset)||typeof amount!=='string'||!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,18)<=0n)fail('Enter a valid bridge amount.',400)
     const units=String(parseUnits(amount,18)),route=await quoteBscRelay({asset,source:'bsc',destination:'base',sender:w.walletAddress,recipient:w.destinationAddress,amountUnits:units},env.RELAY_API_KEY!,fetcher)
-    const q:BscOutboundQuote={version:1,id:randomUUID(),...w,source:'bsc',destination:'base',asset,from:asset,amountUnits:units,minimumOutUnits:route.minimumUnits,receiveUnits:route.receiveUnits,reimbursementUnits:'1',totalInputUnits:String(BigInt(units)+1n),orderId:route.orderId as any,requestId:route.requestId as any,issuedAt:Date.now(),expiresAt:route.expiresAt}
+    const q:BscOutboundQuote={...purpose,version:1,id:randomUUID(),...w,source:'bsc',destination:'base',asset,from:asset,amountUnits:units,minimumOutUnits:route.minimumUnits,receiveUnits:route.receiveUnits,reimbursementUnits:'1',totalInputUnits:String(BigInt(units)+1n),orderId:route.orderId as any,requestId:route.requestId as any,issuedAt:Date.now(),expiresAt:route.expiresAt}
     for(let n=0;n<3;n++){const fee=await estimate(q,bscOutboundCalls(q));q.expiresAt=Math.min(q.expiresAt,fee.expiresAt);if(BigInt(fee.feeUnits)<=BigInt(q.reimbursementUnits))break;q.reimbursementUnits=fee.feeUnits;q.totalInputUnits=String(BigInt(units)+BigInt(fee.feeUnits));if(n===2)fail('Network fee changed. Review the bridge again.')}
     validateBscOutbound(q);return res.json({ok:true,quote:bscOutboundPreview(q),quoteToken:sealBscOutbound(q,seal),sufficientBalance:await runtime.balance(asset,w.walletAddress)>=BigInt(q.totalInputUnits)})
    }

@@ -1,3 +1,4 @@
+import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import type {Request,Response} from 'express'
 import {lifiRevenueProven,lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {quoteEvmSolanaUsdt,solanaUsdtDestinationEnabled,relayUsdtDepositMatches,readEvmSolanaUsdtDelivery} from './evm-solana-usdt-bridge.js'
@@ -19,7 +20,7 @@ const chains={base,arbitrum,ethereum:mainnet,polygon}
 const BALANCE=parseAbi(['function balanceOf(address owner) view returns(uint256)'])
 const client=(network:UsdtBridgeNetwork)=>createPublicClient({chain:chains[network],transport:http(process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||undefined,{timeout:15000})})
 const preview=(q:UsdtBridgeQuote)=>{const {callData,ownerId,...value}=q;return value}
-const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),intentFingerprint:[q.walletAddress.toLowerCase(),q.source,q.destination,q.amountUnits].join(':'),quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
+const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({...cashBridgePurpose(q.purpose,q.destination),...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),intentFingerprint:[q.walletAddress.toLowerCase(),q.source,q.destination,q.amountUnits].join(':'),quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
 
 export default async function usdtBridgeHandler(req:Request,res:Response){
   if(req.method==='POST'&&(req.body?.source==='solana'||String(req.body?.quoteToken||'').startsWith('solana:')))return solanaUsdtBridgeHandler(req,res)
@@ -41,8 +42,10 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       if(destination==='solana'&&(!solanaUsdtDestinationEnabled()||source!=='arbitrum'))bridgeError('This Solana bridge route is not available yet.',409)
       const [from,to]=await Promise.all([source,destination].map(n=>readCircleLink(circleLinkKey(identity.userId,n,'payment'))))
       if(!from||!to)bridgeError('Open both Pocket wallets before bridging.',409)
+      const purpose=cashBridgePurpose(req.body.purpose,destination)
       const binding={ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:getAddress(from.circleWalletAddress),source,amount:String(req.body.amount||'')}
       const q=destination==='solana'?await quoteEvmSolanaUsdt({...binding,destinationAddress:to.circleWalletAddress}):await quoteUsdtBridge({...binding,destination,destinationAddress:getAddress(to.circleWalletAddress)})
+      Object.assign(q,purpose)
       const priced=await quoteCircleEvmBatchRecovery({ownerId:identity.userId,walletId:q.walletId,walletAddress:q.walletAddress,source,destination,destinationAddress:q.destinationAddress,asset:'USDT',tokenAddress:getAddress(POCKET_USDT_ASSETS[source].address),amountUnits:q.amountUnits,bridgeDebitUnits:q.amountUnits,bridgeCallData:q.callData,providerExpiresAt:q.expiresAt,userToken:String(req.body.circleUserToken||'')})
       q.callData=priced.callData;q.networkFeeUnits=priced.networkFeeUnits;q.totalUnits=priced.totalUnits;q.total=formatUnits(BigInt(priced.totalUnits),6);q.reimbursementTreasury=EVM_PLATFORM_TREASURY;q.expiresAt=priced.expiresAt
       q.fee=formatUnits(BigInt(priced.networkFeeUnits)+parseUnits(q.fee,6),6)

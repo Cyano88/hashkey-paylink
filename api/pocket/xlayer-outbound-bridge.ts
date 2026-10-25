@@ -1,3 +1,4 @@
+import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import {quoteLifiOutbound,lifiSourceProven,lifiDelivery} from './lifi-outbound-bridge.js'
 import {lifiOutboundCalls,LIFI_DESTINATIONS,type LifiOutboundPlan,type OutboundDestination} from '../../src/pocket/lib/pocketLifiOutbound.js'
 import {quoteXLayerBridgeSwap} from './xstocks-swap-provider.js'
@@ -12,7 +13,7 @@ import {quoteXLayerReimbursement,openXLayerReimbursement,sealXLayerReimbursement
 import {evmStablecoinDelta,xlayerBridgeSourceProven,xlayerBridgeDeliveryCandidate,xlayerBridgeDeliveryProven} from './xlayer-bridge-evidence.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
-export type XLayerOutboundQuote={version:1;source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;destinationWalletId:string;destinationAddress:Hex;orderId:Hex;requestId:Hex;receiveUnits:string;minimumUnits:string;refundOptions:RelayStablecoinRefund[];conversion?:XLayerBridgeConversion;fee:XLayerFeeQuote}
+export type XLayerOutboundQuote={purpose?:'cash';version:1;source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;destinationWalletId:string;destinationAddress:Hex;orderId:Hex;requestId:Hex;receiveUnits:string;minimumUnits:string;refundOptions:RelayStablecoinRefund[];conversion?:XLayerBridgeConversion;fee:XLayerFeeQuote}
 const abi=parseAbi(['function approve(address,uint256) returns(bool)','function depositErc20(address,address,uint256,bytes32)'])
 const hash=(s:unknown):s is Hex=>typeof s==='string'&&/^0x[0-9a-f]{64}$/i.test(s)
 const units=(s:unknown):s is string=>typeof s==='string'&&/^[1-9]\d{0,19}$/.test(s)&&BigInt(s)<2n**64n
@@ -26,6 +27,7 @@ export function outboundBridgeCalls(q:Pick<XLayerOutboundQuote,'orderId'|'fee'|'
  return [approval(0n),approval(BigInt(q.fee.amountUnits)),{to:depository,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[q.fee.walletAddress,token,BigInt(q.fee.amountUnits),q.orderId]})},approval(0n)]
 }
 function check(q:XLayerOutboundQuote,owner:string){
+ cashBridgePurpose(q.purpose,q.destination)
  if(q?.version!==1||q.source!=='xlayer'||!['base',...LIFI_DESTINATIONS].includes(q.destination)||!q.destinationWalletId||!isAddress(q.destinationAddress)||!hash(q.orderId)||!hash(q.requestId)||q.fee?.ownerId!==owner||!['USDC','USDT'].includes(q.fee.asset)||!units(q.fee.amountUnits)||!units(q.receiveUnits)||!units(q.minimumUnits)||BigInt(q.minimumUnits)>BigInt(q.receiveUnits)||BigInt(q.receiveUnits)>BigInt(q.fee.amountUnits))invalid()
  if(q.lifi&&(q.destination!==q.lifi.destination||!same(q.destinationAddress,q.lifi.recipient)||!same(q.fee.walletAddress,q.lifi.owner)||q.fee.amountUnits!==q.lifi.amountUnits||q.receiveUnits!==q.lifi.receiveUnits||q.minimumUnits!==q.lifi.minimumUnits||q.orderId!==q.lifi.transactionId))invalid()
  if(!q.lifi&&q.destination!=='base')invalid()
@@ -43,7 +45,7 @@ export function openOutboundBridge(token:string,owner:string){
  if(extra||expected.length!==actual.length||!timingSafeEqual(expected,actual))invalid()
  const q=JSON.parse(Buffer.from(body,'base64url').toString()) as XLayerOutboundQuote;check(q,owner);return q
 }
-export function outboundBridgePreview(q:XLayerOutboundQuote){return {id:q.fee.intentId,rail:'xlayer' as const,execution:'privy' as const,...(q.lifi?{lifi:q.lifi}:{}),...(q.conversion?{conversion:q.conversion,refundOptions:q.refundOptions}:{}),walletAddress:q.fee.walletAddress,orderId:q.orderId,source:q.source,destination:q.destination,asset:q.fee.asset,amount:formatUnits(BigInt(q.fee.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),networkFee:formatUnits(BigInt(q.fee.networkFeeUnits),6),fee:formatUnits(BigInt(q.fee.totalUnits)-BigInt(q.receiveUnits),6),total:formatUnits(BigInt(q.fee.totalUnits),6),expiresAt:q.fee.expiresAt,destinationAddress:q.destinationAddress}}
+export function outboundBridgePreview(q:XLayerOutboundQuote){return {...(q.purpose?{purpose:q.purpose}:{}),id:q.fee.intentId,rail:'xlayer' as const,execution:'privy' as const,...(q.lifi?{lifi:q.lifi}:{}),...(q.conversion?{conversion:q.conversion,refundOptions:q.refundOptions}:{}),walletAddress:q.fee.walletAddress,orderId:q.orderId,source:q.source,destination:q.destination,asset:q.fee.asset,amount:formatUnits(BigInt(q.fee.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),networkFee:formatUnits(BigInt(q.fee.networkFeeUnits),6),fee:formatUnits(BigInt(q.fee.totalUnits)-BigInt(q.receiveUnits),6),total:formatUnits(BigInt(q.fee.totalUnits),6),expiresAt:q.fee.expiresAt,destinationAddress:q.destinationAddress}}
 const chainMap={base,xlayer:xLayer,arbitrum,ethereum:mainnet,polygon}
 const client=(network:OutboundDestination|'xlayer')=>{
  const url=process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||(network==='base'?process.env.PRIVATE_RPC_URL:network==='arbitrum'?process.env.PRIVATE_RPC_URL_ARB:undefined)
@@ -62,10 +64,10 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
   const block=await rpc.getBlock({blockNumber:r.blockNumber});return same(r.transactionHash,txHash)&&same(block.hash,r.blockHash)?r:null
  }
  return {
-  async quote(input:{ownerId:string;walletId:string;walletAddress:Hex;asset:'USDC'|'USDT';amount:string;destination?:OutboundDestination},estimate:XLayerFeeEstimator,pricing:XLayerReimbursementPolicy){
+  async quote(input:{purpose?:'cash';ownerId:string;walletId:string;walletAddress:Hex;asset:'USDC'|'USDT';amount:string;destination?:OutboundDestination},estimate:XLayerFeeEstimator,pricing:XLayerReimbursementPolicy){
    if(!['USDC','USDT'].includes(input.asset)||!/^\d{1,12}(\.\d{1,6})?$/.test(input.amount)||parseUnits(input.amount,6)<=0n)invalid()
    if(parseUnits(input.amount,6)<POCKET_XLAYER_MINIMUM_UNITS)throw Error('Minimum bridge amount is '+POCKET_XLAYER_MINIMUM_AMOUNT+' '+input.asset+'.')
-   const target=input.destination||'base'
+   const target=input.destination||'base',purpose=cashBridgePurpose(input.purpose,input.destination||'base')
    if(!['base',...LIFI_DESTINATIONS].includes(target)||target!=='base'&&input.asset!=='USDT')invalid()
    await networks(target);const w=await d.destination(input.ownerId,target),amountUnits=parseUnits(input.amount,6).toString()
    const available=await d.client('xlayer').readContract({address:getAddress(stablecoinAddress('xlayer',input.asset)),abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[input.walletAddress]})
@@ -74,7 +76,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
     const lifi=await quoteLifiOutbound({destination:target,owner:input.walletAddress,recipient:w.address,amountUnits},d.fetch)
     const binding={ownerId:input.ownerId,walletId:input.walletId,walletAddress:input.walletAddress,asset:input.asset,amountUnits,intentId:randomUUID()}
     const fee=await quoteXLayerReimbursement(binding,lifiOutboundCalls(lifi,d.now()),lifi.expiresAt,estimate,pricing,d.now,available)
-    const q:XLayerOutboundQuote={version:1,source:'xlayer',destination:target,destinationWalletId:w.id,destinationAddress:w.address,orderId:lifi.transactionId,requestId:lifi.transactionId,receiveUnits:lifi.receiveUnits,minimumUnits:lifi.minimumUnits,refundOptions:[{network:'xlayer',asset:'USDT',recipient:input.walletAddress},{network:target,asset:'USDT',recipient:w.address}],lifi,fee}
+    const q:XLayerOutboundQuote={...purpose,version:1,source:'xlayer',destination:target,destinationWalletId:w.id,destinationAddress:w.address,orderId:lifi.transactionId,requestId:lifi.transactionId,receiveUnits:lifi.receiveUnits,minimumUnits:lifi.minimumUnits,refundOptions:[{network:'xlayer',asset:'USDT',recipient:input.walletAddress},{network:target,asset:'USDT',recipient:w.address}],lifi,fee}
     check(q,input.ownerId);return q
    }
    const swap=input.asset==='USDT'?await d.convert({owner:input.walletAddress,amount:input.amount}):undefined
@@ -85,7 +87,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    const binding={ownerId:input.ownerId,walletId:input.walletId,walletAddress:input.walletAddress,asset:input.asset,amountUnits,intentId:randomUUID()}
    const calls=outboundBridgeCalls({orderId:route.orderId,fee:{...binding,issuedAt:d.now()} as XLayerFeeQuote,conversion})
    const fee=await quoteXLayerReimbursement(binding,calls,Math.min(route.expiresAt,swap?.expiresAt??route.expiresAt),estimate,pricing,d.now,available)
-   const q:XLayerOutboundQuote={version:1,source:'xlayer',destination:'base',destinationWalletId:w.id,destinationAddress:w.address,orderId:route.orderId,requestId:route.requestId as Hex,receiveUnits:route.receiveUnits,minimumUnits:route.minimumUnits,refundOptions:route.refundOptions,...(conversion?{conversion}:{}),fee}
+   const q:XLayerOutboundQuote={...purpose,version:1,source:'xlayer',destination:'base',destinationWalletId:w.id,destinationAddress:w.address,orderId:route.orderId,requestId:route.requestId as Hex,receiveUnits:route.receiveUnits,minimumUnits:route.minimumUnits,refundOptions:route.refundOptions,...(conversion?{conversion}:{}),fee}
    check(q,input.ownerId);return q
   },
   async preflight(q:XLayerOutboundQuote,estimate:XLayerFeeEstimator){
@@ -122,7 +124,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    if(!delivered)return {status:'pending' as const,sourceConfirmed:true}
    const delta=evmStablecoinDelta(delivered,candidate.network,candidate.asset,candidate.recipient,candidate.hash)
    if(!xlayerBridgeDeliveryProven(candidate,delta))return {status:'needs_attention' as const}
-   return {status:candidate.outcome,destinationTxHash:candidate.hash,sourceConfirmed:true,...(candidate.outcome==='refunded'?{refundAsset:candidate.asset,refundNetwork:candidate.network,refundAmount:formatUnits(delta!,6)}:{})}
+   return {status:candidate.outcome,destinationTxHash:candidate.hash,sourceConfirmed:true,...(candidate.outcome==='refunded'?{refundAsset:candidate.asset,refundNetwork:candidate.network,refundAmount:formatUnits(delta!,6)}:{cashReceivedAmount:formatUnits(delta!,6)})}
   },
  }
 }

@@ -5,7 +5,7 @@ import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees'
 import {makeSponsoredBatchRequest,SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 import {sponsoredTransferRequest} from './pocketSponsoredTransfer'
 
-export type OutboundBridgeQuote={id:string;rail:'xlayer';execution:'privy';source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;asset:'USDC'|'USDT';walletAddress:Address;destinationAddress:Address;orderId:`0x${string}`;amount:string;receive:string;minimumReceive:string;networkFee:string;fee:string;total:string;expiresAt:number;conversion?:XLayerBridgeConversion;refundOptions?:Array<{network:string;asset:'USDC'|'USDT';recipient:string}>}
+export type OutboundBridgeQuote={purpose?:'cash';id:string;rail:'xlayer';execution:'privy';source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;asset:'USDC'|'USDT';walletAddress:Address;destinationAddress:Address;orderId:`0x${string}`;amount:string;receive:string;minimumReceive:string;networkFee:string;fee:string;total:string;expiresAt:number;conversion?:XLayerBridgeConversion;refundOptions?:Array<{network:string;asset:'USDC'|'USDT';recipient:string}>}
 export type OutboundBridgeReview={quote:OutboundBridgeQuote;quoteToken:string;request:ReturnType<typeof makeSponsoredBatchRequest>}
 export const outboundTokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c9e1022225f8e0630b35a9b54be713736'} as const
 const depository='0x4cd00e387622c35bddb9b4c962c136462338bc31'
@@ -32,10 +32,10 @@ export function validateOutboundBridge(review:OutboundBridgeReview,owner:Address
   if(canonical(actual)!==canonical(expected))throw Error()
  }catch{throw new SponsoredTransferNotSubmitted('Bridge quote changed or expired. Review it again.')}
 }
-export async function quoteOutboundBridge(input:{owner:Address;destination:Address;network?:OutboundDestination;asset:'USDC'|'USDT';amount:string},getAccessToken:()=>Promise<string|null>){
- const result=await sponsoredTransferRequest({action:'quote',purpose:'bridge',wallet:input.owner,destination:input.network||'base',asset:input.asset,amount:input.amount},getAccessToken) as unknown as {quote:OutboundBridgeQuote;bridgeQuoteToken:string;request:OutboundBridgeReview['request']}
+export async function quoteOutboundBridge(input:{cashPurpose?:'cash';owner:Address;destination:Address;network?:OutboundDestination;asset:'USDC'|'USDT';amount:string},getAccessToken:()=>Promise<string|null>){
+ const result=await sponsoredTransferRequest({action:'quote',purpose:'bridge',...(input.cashPurpose?{cashPurpose:input.cashPurpose}:{}),wallet:input.owner,destination:input.network||'base',asset:input.asset,amount:input.amount},getAccessToken) as unknown as {quote:OutboundBridgeQuote;bridgeQuoteToken:string;request:OutboundBridgeReview['request']}
  const review={quote:result.quote,quoteToken:result.bridgeQuoteToken,request:result.request}
- if(review.quote.destination!==(input.network||'base'))throw new SponsoredTransferNotSubmitted('Bridge destination changed. Review it again.')
+ if(review.quote.purpose!==input.cashPurpose||review.quote.destination!==(input.network||'base'))throw new SponsoredTransferNotSubmitted('Bridge destination changed. Review it again.')
  validateOutboundBridge(review,input.owner,input.destination,input.asset,input.amount);return review
 }
 export async function sendOutboundBridge(review:OutboundBridgeReview,deps:{getAccessToken():Promise<string|null>;assertCurrent():void;sign(request:OutboundBridgeReview['request']):Promise<{signature:string}>;beforeDispatch():void;fetcher?:typeof fetch}){

@@ -23,7 +23,7 @@ export function usdtBridgeNetwork(value: unknown):UsdtBridgeNetwork {
   if(!USDT_BRIDGE_NETWORKS.includes(value as UsdtBridgeNetwork)) bridgeError('USDT bridging is available on supported EVM networks only.')
   return value as UsdtBridgeNetwork
 }
-export type UsdtBridgeQuote = {revenue?:PocketBridgeRevenue;networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork|'solana';walletAddress:Address;destinationAddress:string;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;requestId?:string;provider:'across'|'relay'}
+export type UsdtBridgeQuote = {purpose?:'cash';revenue?:PocketBridgeRevenue;networkFeeUnits?:string;totalUnits?:string;total?:string;reimbursementTreasury?:Address;id:string;ownerId:string;walletId:string;source:UsdtBridgeNetwork;destination:UsdtBridgeNetwork|'solana';walletAddress:Address;destinationAddress:string;amount:string;amountUnits:string;receive:string;minimumReceive:string;minimumUnits:string;fee:string;expiresAt:number;callData:Hex;transactionId:Hex;requestId?:string;provider:'across'|'relay'}
 
 // Only audited Across V4 calls and its exact fee-forwarding step are accepted.
 // No token conversion, destination calls, native value, or arbitrary swap calls.

@@ -33,6 +33,7 @@ for(const asset of ['USDC','USDT']){
 state.balance=BigInt(input.amountUnits);const beforeBudget=estimates;
 await assert.rejects(()=>outbound.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6)},estimate,pricing),e=>e.status===422&&/Insufficient USDC/.test(e.message));assert.equal(estimates,beforeBudget);delete state.balance;
 const q=await outbound.quote({ownerId:'owner',walletId:'fixturewallet123',walletAddress:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6)},estimate,pricing)
+assert.equal(q.purpose,undefined);assert.throws(()=>sealOutboundBridge({...q,purpose:'invalid'}));const cashSealed=sealOutboundBridge({...q,purpose:'cash'});assert.equal(openOutboundBridge(cashSealed,'owner').purpose,'cash');
 const sealed=sealOutboundBridge(q)
 assert.deepEqual(openOutboundBridge(sealed,'owner'),q);assert.throws(()=>openOutboundBridge(sealed,'someone-else'))
 const calls=outboundBridgeCalls(q),approve=parseAbi(['function approve(address,uint256) returns(bool)'])
@@ -54,7 +55,7 @@ let store, broadcasts=0, sent, enabled=true, journal, billingBlocked=false
 const recordJournal=async input=>{if(journal&&['completed','failed'].includes(journal.status))return journal;journal={...input,id:'journal-fixture',createdAt:now,updatedAt:now};return journal}
 const handler=createXLayerSponsorshipHandler({billingGuard:async()=>{if(billingBlocked)throw Error("Cost coverage unavailable")},journal:recordJournal,identity:async()=>({userId:'owner'}),user:async()=>({linkedAccounts:[{type:'wallet',walletClientType:'privy',chainType:'ethereum',address:input.sender,id:'fixturewallet123'}]}),config:()=>({appId:'fixture',secret:'synthetic',enabled:true,wallets:[],publicTransfers:true,outboundBridge:enabled}),durable:()=>true,now:()=>now,reimbursement:{estimate,pricing},outbound,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},fetch:async(url,init)=>{assert.equal(journal.metadata.execution,'privy','durable Activity record must exist before broadcast');broadcasts++;sent=JSON.parse(init.body);return Response.json({data:{hash}})}})
 const call=async body=>{const result={status:200};const res={setHeader(){},status(n){result.status=n;return res},json(body){result.body=body;return result}};await handler({method:'POST',body},res);return result}
-const quoteRequest={action:'quote',purpose:'bridge',wallet:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6),destination:'base'}
+const quoteRequest={action:'quote',purpose:'bridge',cashPurpose:'cash',wallet:input.sender,asset:'USDC',amount:formatUnits(BigInt(input.amountUnits),6),destination:'base'}
 const quoted=await call(quoteRequest);assert.equal(quoted.status,200,JSON.stringify(quoted.body));assert.equal(broadcasts,0)
 const send={action:'send',purpose:'bridge',wallet:input.sender,bridgeQuoteToken:quoted.body.bridgeQuoteToken,request:quoted.body.request,signature:'a'.repeat(88)}
 const bad=structuredClone(send);bad.request.body.params.calls.pop();assert.equal((await call(bad)).status,400);assert.equal(broadcasts,0)
@@ -78,7 +79,7 @@ assert.equal(journal.status,'submitted')
 await assert.rejects(()=>handler.reconcileOutbound('someone-else',quoted.body.bridgeQuoteToken))
 state.missingDelivery=false
 assert.equal((await handler.reconcileOutbound('owner',quoted.body.bridgeQuoteToken)).status,'completed')
-assert.equal(journal.status,'completed');assert.equal(journal.metadata.destinationTxHash,outHash)
+assert.equal(journal.status,'completed');assert.equal(journal.metadata.destinationTxHash,outHash);assert.equal(journal.metadata.purpose,'cash');assert.equal(journal.metadata.cashReceivedAmount,formatUnits(BigInt(q.receiveUnits),6))
 assert.equal(broadcasts,1,'background recovery must never sign or send')
 state.missingDelivery=true
 assert.equal((await handler.reconcileOutbound('owner',quoted.body.bridgeQuoteToken)).status,'completed','stale check must preserve terminal journal outcome')

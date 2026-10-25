@@ -1,3 +1,4 @@
+import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import type {Request,Response} from 'express'
 import {Connection,PublicKey} from '@solana/web3.js'
 import {formatUnits,parseUnits} from 'viem'
@@ -12,7 +13,7 @@ import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
 
 export const solanaUsdtBridgeEnabled=()=>process.env.POCKET_SOLANA_USDT_BRIDGE_ENABLED==='true'
 export function solanaUsdtBridgePreview(r:SolanaUsdtBridgeRecord){const q=r.quote;return {
- quote:{id:r.id,source:'solana',destination:q.destination,walletAddress:r.walletAddress,destinationAddress:r.destinationAddress,amount:formatUnits(BigInt(q.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),fee:formatUnits(BigInt(q.providerFeeUnits)+BigInt(q.networkFeeUnits),6),total:formatUnits(BigInt(q.totalUnits),6),networkFeeUnits:q.networkFeeUnits,expiresAt:q.expiresAt},
+ quote:{...(r.purpose?{purpose:r.purpose}:{}),id:r.id,source:'solana',destination:q.destination,walletAddress:r.walletAddress,destinationAddress:r.destinationAddress,amount:formatUnits(BigInt(q.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),fee:formatUnits(BigInt(q.providerFeeUnits)+BigInt(q.networkFeeUnits),6),total:formatUnits(BigInt(q.totalUnits),6),networkFeeUnits:q.networkFeeUnits,expiresAt:q.expiresAt},
  quoteToken:'solana:'+r.id,challengeId:r.challengeId,txHash:r.signature,sourceConfirmed:r.phase==='source_confirmed',awaitingApproval:r.phase==='awaiting_approval',
 }}
 export async function listPendingSolanaUsdtBridges(ownerId:string){
@@ -23,7 +24,7 @@ export async function listPendingSolanaUsdtBridges(ownerId:string){
 }
 async function journal(r:SolanaUsdtBridgeRecord){
  if(!r.signedTransaction)return
- await recordCirclePocketAction({ownerId:r.ownerId,idempotencyKey:'pocket:solana-usdt-bridge:'+r.id,action:'wallet.usdt-bridge',status:r.phase==='completed'?'completed':['source_failed','refunded'].includes(r.phase)?'failed':'submitted',resourceId:r.id,metadata:{quoteToken:'solana:'+r.id,provider:'relay',assetSymbol:'USDT',source:'solana',destination:r.quote.destination,destinationAddress:r.destinationAddress,amount:formatUnits(BigInt(r.quote.amountUnits),6),txHash:r.signature||'',...(r.settlement?{destinationTxHash:r.settlement.transactionHash,...(r.phase==='completed'?{settledAmountUnits:r.settlement.amountUnits}:{}),...(r.phase==='refunded'?{paymentState:'refunded',refundTxHash:r.settlement.transactionHash,refundAmount:formatUnits(BigInt(r.settlement.amountUnits),6),refundNetwork:r.settlement.network}:{})}:{})}})
+ await recordCirclePocketAction({ownerId:r.ownerId,idempotencyKey:'pocket:solana-usdt-bridge:'+r.id,action:'wallet.usdt-bridge',status:r.phase==='completed'?'completed':['source_failed','refunded'].includes(r.phase)?'failed':'submitted',resourceId:r.id,metadata:{...cashBridgePurpose(r.purpose,r.quote.destination),quoteToken:'solana:'+r.id,provider:'relay',assetSymbol:'USDT',source:'solana',destination:r.quote.destination,destinationAddress:r.destinationAddress,amount:formatUnits(BigInt(r.quote.amountUnits),6),txHash:r.signature||'',...(r.settlement?{destinationTxHash:r.settlement.transactionHash,...(r.phase==='completed'?{settledAmountUnits:r.settlement.amountUnits}:{}),...(r.phase==='refunded'?{paymentState:'refunded',refundTxHash:r.settlement.transactionHash,refundAmount:formatUnits(BigInt(r.settlement.amountUnits),6),refundNetwork:r.settlement.network}:{})}:{})}})
 }
 const defaultDependencies={verifyUser:verifiedPrivyUser,state:createSolanaUsdtBridgeState,readLink:readCircleLink,enabled:solanaUsdtBridgeEnabled,reconcile:reconcileSolanaUsdtSettlement,journal,rpc:()=>new Connection(getRpc(),'confirmed')}
 export async function recoverSolanaUsdtBridge(ownerId:string,id:string,deps=defaultDependencies){
@@ -49,6 +50,7 @@ export function createSolanaUsdtBridgeHandler(overrides:Partial<typeof defaultDe
   if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed.'})
   const identity=await deps.verifyUser(req),state=deps.state(),body=req.body||{}
   if(body.action==='quote'){
+   const purpose=cashBridgePurpose(body.purpose,body.destination)
    if(!deps.enabled())return res.status(409).json({ok:false,error:'Solana USDT bridging is not available yet.'})
    if(body.source!=='solana'||!['base','arbitrum'].includes(body.destination)||typeof body.amount!=='string'||!/^\d+(\.\d{1,6})?$/.test(body.amount)||parseUnits(body.amount,6)<=0n)throw Error('Choose a supported route and amount.')
    const [from,to]=await Promise.all(['solana',body.destination].map(n=>deps.readLink(circleLinkKey(identity.userId,n,'payment'))))
@@ -58,7 +60,7 @@ export function createSolanaUsdtBridgeHandler(overrides:Partial<typeof defaultDe
    const reply=await fetch('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(relayUsdtRequest(route)),signal:AbortSignal.timeout(20000)})
    if(!reply.ok)throw Error('Could not refresh the bridge quote.')
    const quote=await prepareSolanaUsdtRelayTransaction({quote:await reply.json(),route,connection:new Connection(getRpc(),'confirmed'),relayer:loadRelayer(),treasury:new PublicKey(process.env.SOLANA_TREASURY||'')})
-   const record=await state.register({ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:from.circleWalletAddress,destinationAddress:to.circleWalletAddress,quote})
+   const record=await state.register({...purpose,ownerId:identity.userId,walletId:from.circleWalletId,walletAddress:from.circleWalletAddress,destinationAddress:to.circleWalletAddress,quote})
    return res.json({ok:true,...solanaUsdtBridgePreview(record),sufficientBalance:true})
   }
   if(!['execute','submit','status','resume'].includes(body.action)||typeof body.quoteToken!=='string'||!body.quoteToken.startsWith('solana:'))return res.status(400).json({ok:false,error:'Invalid bridge request.'})

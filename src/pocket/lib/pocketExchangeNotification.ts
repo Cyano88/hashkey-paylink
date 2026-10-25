@@ -13,11 +13,13 @@ export function pocketExchangeNotification(row:PocketActivityRow){
  const network=networks[row.chain],destination=networks[row.destination||'']
  if(!network||!swap&&!destination)return null
  const paid=quantity(row.amount,row.assetSymbol),kind=swap?'Swap':'Bridge'
- if(isCashFunding(row)){
-  const received=isCashConversion(row)?(row.contextLabel||'').match(/^\d+(?:\.\d+)? USDT to (\d+(?:\.\d+)?) USDC$/)?.[1]:row.amount
-  if(refunded||!failed&&!valid(received))return null
+ if(isCashFunding(row)||row.cashFunding&&row.destination==='base'){
+  // A USDT bridge is only the first leg. Cash success belongs to the final USDC conversion.
+  if(row.cashFunding&&row.assetSymbol==='USDT'&&!failed&&!refunded)return null
+  const received=isCashConversion(row)?(row.contextLabel||'').match(/^\d+(?:\.\d+)? USDT to (\d+(?:\.\d+)?) USDC$/)?.[1]:row.cashReceivedAmount??(row.cashFunding?undefined:row.amount)
+  if(!failed&&!refunded&&!valid(received))return null
   const tag='pocket-payment:'+(isCashConversion(row)?'cash-conversion':'wallet-bridge')+':'+row.eventId
-  return {eventId:tag+':'+(failed?'failed':'completed'),title:failed?'Cash funding failed':'Added to cash balance',body:failed?'Your cash top-up was not completed. Open for details.':quantity(received!,'USD')+' added to your cash balance.',path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
+  return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),title:refunded?'Cash funding refunded':failed?'Cash funding failed':'Added to cash balance',body:refunded?'Your cash top-up was refunded. Open for details.':failed?'Your cash top-up was not completed. Open for details.':quantity(received!,'USD')+' added to your cash balance.',path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
  }
  let title=kind+' successful',body=swap?`Your swap on ${network} completed.`:`${paid} bridged from ${network} to ${destination}.`
  if(swap&&!failed&&!refunded){

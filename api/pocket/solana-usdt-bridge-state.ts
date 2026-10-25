@@ -6,7 +6,7 @@ import type {prepareSolanaUsdtRelayTransaction} from './solana-usdt-relay-transa
 
 type Prepared=Awaited<ReturnType<typeof prepareSolanaUsdtRelayTransaction>>
 export type SolanaUsdtBridgeRecord={
- id:string;ownerId:string;walletId:string;walletAddress:string;destinationAddress:string;
+ purpose?:'cash';id:string;ownerId:string;walletId:string;walletAddress:string;destinationAddress:string;
  quote:Prepared;phase:'quoted'|'authorizing'|'awaiting_approval'|'signed'|'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';
  settlement?:{network:'solana'|'base'|'arbitrum';transactionHash:string;amountUnits:string;verifiedAt:number};
  challengeId?:string;signedTransaction?:string;signature?:string;createdAt:number;updatedAt:number;
@@ -43,7 +43,7 @@ export function createSolanaUsdtBridgeState(store:SolanaUsdtBridgeStore=durableS
  return {
   read,
   // Server-only: prepared quotes must come from prepareSolanaUsdtRelayTransaction.
-  async register(input:{ownerId:string;walletId:string;walletAddress:string;destinationAddress:string;quote:Prepared}){
+  async register(input:{purpose?:'cash';ownerId:string;walletId:string;walletAddress:string;destinationAddress:string;quote:Prepared}){
    const q=input.quote,tx=decode(q.transaction)
    if(!input.ownerId||!input.walletId||q.source!=='solana'||!['base','arbitrum'].includes(q.destination)||q.asset!=='USDT'||q.appFeeUnits!=='0'||!Number.isSafeInteger(q.expiresAt)||q.expiresAt<=now()||q.walletAddress!==input.walletAddress||q.destinationAddress!==input.destinationAddress)throw Error('Invalid bridge quote.')
    if(!tx.verifySignatures(false)||tx.signatures.length!==2||!tx.signatures[0].signature||tx.signatures[1].publicKey.toBase58()!==input.walletAddress||tx.signatures[1].signature)throw Error('Invalid bridge signers.')
