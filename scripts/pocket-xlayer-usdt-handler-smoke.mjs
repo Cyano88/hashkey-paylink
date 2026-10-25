@@ -33,7 +33,7 @@ assert.equal(quoted.code,200);assert.equal(quoted.quote.asset,'USDT');assert.equ
 const execute={action:'execute',quoteToken:quoted.quoteToken,circleUserToken:'synthetic'}
 assert.notEqual((await h.request({...execute,quoteToken:quoted.quoteToken+'x'})).code,200)
 h.usdtEnabled=false;assert.equal((await h.request(quoteBody)).code,409);assert.equal((await h.request(execute)).code,409);h.usdtEnabled=true
-for(const source of ['xlayer','solana','arbitrum'])assert.equal((await h.request({...quoteBody,source})).code,409)
+for(const source of ['xlayer','unknown'])assert.equal((await h.request({...quoteBody,source})).code,409)
 h.identity='other';assert.notEqual((await h.request(execute)).code,200);assert.equal(h.sends,0);h.identity=owner
 h.changed=true;assert.equal((await h.request(execute)).code,409);h.changed=false
 await Promise.all([h.request(execute),h.request(execute)]);assert.equal(h.sends,1,'concurrent submission creates one challenge')

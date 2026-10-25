@@ -34,7 +34,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
         const q=openUsdtBridgeQuote(r.metadata!.quoteToken,identity.userId,true)
         return {quote:preview(q),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId,txHash:r.metadata?.txHash}
       })
-      return res.json({ok:true,pending:[...await listPendingSolanaUsdtBridges(identity.userId),...pending],solanaSourceEnabled:solanaUsdtBridgeEnabled(),solanaDestinationEnabled:solanaUsdtDestinationEnabled()})
+      return res.json({ok:true,pending:[...(await listPendingSolanaUsdtBridges(identity.userId)).filter(p=>!['bsc','xlayer'].includes(p.quote.destination)),...pending],solanaSourceEnabled:solanaUsdtBridgeEnabled(),solanaDestinationEnabled:solanaUsdtDestinationEnabled()})
     }
     const action=req.body?.action
     if(action==='quote'){

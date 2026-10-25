@@ -107,7 +107,7 @@ export function xlayerBridgeDeliveryCandidate(q:XLayerBridgeBinding,sourceHash:s
       for(const r of plan){
         const origin=r?.network===q.source
         if(!r||!origin&&r.network!==q.destination||!same(r.network,r.recipient,origin?q.sender:q.recipient))return attention
-        const alternate=q.asset==='USDT'&&r.asset==='USDC'&&(q.source==='base'&&q.destination==='xlayer'&&!origin||q.source==='xlayer'&&q.destination==='base'&&origin&&q.depositAsset==='USDC'&&units(q.depositUnits)&&BigInt(q.depositUnits)>0n&&BigInt(q.depositUnits)<=BigInt(q.amountUnits))
+        const alternate=q.asset==='USDT'&&r.asset==='USDC'&&(q.source!=='xlayer'&&q.destination==='xlayer'&&!origin||q.source==='xlayer'&&q.destination==='base'&&origin&&q.depositAsset==='USDC'&&units(q.depositUnits)&&BigInt(q.depositUnits)>0n&&BigInt(q.depositUnits)<=BigInt(q.amountUnits))
         if(r.asset!==q.asset&&!alternate)return attention
       }
       const selected=plan.find(r=>r.network===network)

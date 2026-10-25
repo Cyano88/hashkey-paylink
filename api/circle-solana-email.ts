@@ -1226,7 +1226,7 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...result })
     }
 
-    if (action === 'signOwnWalletBridge' && params.asset !== 'USDT') {
+    if (action === 'signOwnWalletBridge' && params.asset !== 'USDT' && !params.bridgeId) {
       const { validatePocketSolanaBridgeSigning } = await import('./pocket/solana-cctp-relay.js')
       await validatePocketSolanaBridgeSigning(req, params)
     }
@@ -1246,7 +1246,7 @@ export default async function handler(req: Request, res: Response) {
           memo: action === 'signOwnWalletBridge' && params.asset === 'USDT' ? 'Pocket USDT bridge on Solana' : memo || 'Hash PayLink USDC payment on Solana',
         }),
       })
-      const data = action === 'signOwnWalletBridge' && params.asset === 'USDT'
+      const data = action === 'signOwnWalletBridge' && (params.asset === 'USDT' || !!params.bridgeId)
         ? await (await import('./pocket/solana-usdt-bridge-signing.js')).authorizePocketSolanaUsdtBridge(req, params, async () => String((await sign()).challengeId || ''))
         : await sign()
       if (!data.challengeId) {

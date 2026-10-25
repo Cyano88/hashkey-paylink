@@ -43,7 +43,7 @@ for(const [network,testnet] of [['base',84532],['bsc',1952]]){
 }
 assert.notEqual((await h.request({...execute,quoteToken:quoted.quoteToken+'x'})).code,200)
 assert.equal((await h.request({...quoteBody,asset:'USDT'})).code,409)
-for(const source of ['bsc','solana','arbitrum'])assert.equal((await h.request({...quoteBody,source})).code,409)
+for(const source of ['bsc','unknown'])assert.equal((await h.request({...quoteBody,source})).code,409)
 h.identity='other';assert.notEqual((await h.request(execute)).code,200);assert.equal(h.sends,0);h.identity=owner
 h.changed=true;assert.equal((await h.request(execute)).code,409);h.changed=false
 await Promise.all([h.request(execute),h.request(execute)]);assert.equal(h.sends,1,'concurrent submission creates one challenge')

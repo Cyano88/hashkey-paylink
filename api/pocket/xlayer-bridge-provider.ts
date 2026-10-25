@@ -74,7 +74,7 @@ export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Da
   requireThat(src||r.chainId===i.destination,'unexpected refund chain')
   // Opt-in inspection only until signed quotes, review and recovery carry this plan.
   // Never permit an origin swap or arbitrary provider-selected refund token.
-  const alternate=policy.allowXLayerUsdcRefund===true&&i.asset==='USDT'&&i.source==='base'&&i.destination==='xlayer'&&!src&&same('xlayer',r.currency,stablecoinAddress('xlayer','USDC'))
+  const alternate=policy.allowXLayerUsdcRefund===true&&i.asset==='USDT'&&i.source!=='xlayer'&&i.destination==='xlayer'&&!src&&same('xlayer',r.currency,stablecoinAddress('xlayer','USDC'))
   requireThat(same(r.chainId,r.recipient,src?i.sender:i.recipient)&&(same(r.chainId,r.currency,src?from:to)||alternate)&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')
   return {network:r.chainId as RelayStablecoinNetwork,asset:alternate?'USDC':src?(i.inputAsset||i.asset):i.asset,recipient:src?i.sender:i.recipient}
  })
