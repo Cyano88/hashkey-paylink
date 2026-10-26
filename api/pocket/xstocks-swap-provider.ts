@@ -48,7 +48,7 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
   const tokenIn = assets.find(a => sameStockAddress(a.address, input.tokenIn))
   const tokenOut = assets.find(a => sameStockAddress(a.address, input.tokenOut))
   if (!tokenIn || !tokenOut || sameStockAddress(tokenIn.address, tokenOut.address)) fail('Choose two different supported assets.')
-  if(!bridge&&![tokenIn,tokenOut].every(a=>['USDC','USDT','USDe'].includes(a.symbol))&&[tokenIn,tokenOut].some(a=>a.symbol==='USDT')&&![tokenIn,tokenOut].some(a=>a.address==='native')&&!(tokenIn.symbol==='USDT'&&stockAssets.some(a=>sameStockAddress(a.address,tokenOut.address))))fail('Choose a supported stock or OKB for this swap.')
+  if(!bridge&&![tokenIn,tokenOut].every(a=>['USDC','USDT','USDe','USDG'].includes(a.symbol))&&[tokenIn,tokenOut].some(a=>a.symbol==='USDT')&&![tokenIn,tokenOut].some(a=>a.address==='native')&&!(tokenIn.symbol==='USDT'&&stockAssets.some(a=>sameStockAddress(a.address,tokenOut.address))))fail('Choose a supported stock or OKB for this swap.')
   if (input.amount.length > 80) fail('Invalid amount.')
   const client = bridge ? createPublicClient({chain:xLayer,transport:http(process.env.PRIVATE_RPC_URL_XLAYER,{timeout:15000,retryCount:0})}) : stockClient
   if(bridge){if(!process.env.PRIVATE_RPC_URL_XLAYER||await client.getChainId()!==196)fail('X Layer connection could not be verified.',503)}

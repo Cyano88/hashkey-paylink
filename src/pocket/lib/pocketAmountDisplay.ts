@@ -6,7 +6,7 @@ export function formatPocketAssetAmount(value:string|number,symbol:string){
  if(!Number.isFinite(Number(value)))return '\u2014'
  const asset=symbol.toUpperCase()
  if(['USD','EUR','NGN','UGX'].includes(asset))return formatPocketFiatValue(value,asset)
- return ['USDC','EURC','USDT','USDT0','USDE'].includes(asset)?formatPocketDisplayAmount(value):formatStockQuantity(value)
+ return ['USDC','EURC','USDT','USDT0','USDE','USDG'].includes(asset)?formatPocketDisplayAmount(value):formatStockQuantity(value)
 }
 export function formatPocketExchangeLabel(label:string){
  const match=label.match(/^([0-9]+(?:\.[0-9]+)?) ([A-Za-z0-9]+) (?:to|\u2192) ([0-9]+(?:\.[0-9]+)?) ([A-Za-z0-9]+)$/)

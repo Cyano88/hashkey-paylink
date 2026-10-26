@@ -1,8 +1,8 @@
 ﻿import type { Request, Response } from 'express'
 import { createHmac } from 'node:crypto'
 import { okxCredentials } from './xstocks-swap-provider.js'
-import { stockAssets, stockUsdc, stockUsdt,stockUsde, stockGasPriceAddress } from '../../src/pocket/lib/pocketXStocksWallet.js'
-const allowed = new Set([...stockAssets.map(a=>a.address.toLowerCase()),stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase(),stockGasPriceAddress,stockUsde.address.toLowerCase()])
+import { stockAssets, stockUsdc, stockUsdt,stockUsde,stockUsdg, stockGasPriceAddress } from '../../src/pocket/lib/pocketXStocksWallet.js'
+const allowed = new Set([...stockAssets.map(a=>a.address.toLowerCase()),stockUsdc.address.toLowerCase(),stockUsdt.address.toLowerCase(),stockGasPriceAddress,stockUsde.address.toLowerCase(),stockUsdg.address.toLowerCase()])
 type Price = { usd: number; fetchedAt: number; change: null; volume: number }
 const cache = new Map<string, Price>()
 const attempts = new Map<string, number>()

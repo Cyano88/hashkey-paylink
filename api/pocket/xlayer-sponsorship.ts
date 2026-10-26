@@ -1,4 +1,4 @@
-import {xLayerUsde} from '../../src/pocket/lib/pocketXLayerPaymentAssets.js'
+import {xLayerUsde,xLayerUsdg} from '../../src/pocket/lib/pocketXLayerPaymentAssets.js'
 import {lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {readSponsoredSwapOutcome,type SponsoredSwapEvidence} from './xlayer-swap-settlement.js'
 import {encodeXLayerSponsoredBatch} from './xlayer-sponsored-cost.js'
@@ -23,7 +23,7 @@ import { assertSponsoredSendMinimum, isXLayerSendStablecoin } from '../../src/po
 import { validateEarnSponsorship, preflightEarnSponsorship, type EarnIntent } from './earn-sponsorship.js'
 
 const contracts = new Set([
-  xLayerUsde.address.toLowerCase(),
+  xLayerUsde.address.toLowerCase(),xLayerUsdg.address.toLowerCase(),
   '0xb6ceceab302e2e4948951ee7843fc24e92933061',
   '0x779ded0c9e1022225f8e0630b35a9b54be713736',
   ...catalogue.assets.map(a => a.address.toLowerCase()),

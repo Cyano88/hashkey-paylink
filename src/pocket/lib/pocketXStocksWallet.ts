@@ -1,4 +1,4 @@
-import {xLayerUsde} from './pocketXLayerPaymentAssets'
+import {xLayerUsde,xLayerUsdg} from './pocketXLayerPaymentAssets'
 import {POCKET_EARN_DISPLAY_TOKENS} from './pocketEarnDisplayAssets'
 import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem, parseUnits, type Address, type Hex } from 'viem'
 import { xLayer } from 'viem/chains'
@@ -13,8 +13,9 @@ export type StockAsset = { symbol: string; name: string; address: string; icon: 
 export const stockAssets: StockAsset[] = catalogue.assets
 export const stockUsdc: StockAsset = { symbol: 'USDC', name: 'USD Coin', address: '0xB6CEceAB302E2E4948951eE7843FC24E92933061', icon: '' }
 export const stockUsdt: StockAsset = { symbol: 'USDT', name: 'Tether USD (USDT0)', address: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736', icon: '/brand/usdt.svg' }
+export const stockUsdg: StockAsset = xLayerUsdg
 export const stockUsde: StockAsset = xLayerUsde
-export const xLayerHoldingAssets: StockAsset[] = [stockUsde, ...stockAssets]
+export const xLayerHoldingAssets: StockAsset[] = [stockUsde,stockUsdg, ...stockAssets]
 export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '/brand/okb.png' }
 // OKX's native-token identifier for X Layer market-price requests.
 export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
@@ -59,7 +60,7 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
     }
     // Rebase multipliers can change a held balance without a Transfer event.
     const held=new Set(previous.holdings.map(h=>h.asset.address.toLowerCase()))
-    assets = xLayerHoldingAssets.filter(asset => asset.address===stockUsde.address||changed.has(asset.address.toLowerCase())||held.has(asset.address.toLowerCase()))
+    assets = xLayerHoldingAssets.filter(asset => (asset.address===stockUsde.address||asset.address===stockUsdg.address)||changed.has(asset.address.toLowerCase())||held.has(asset.address.toLowerCase()))
   }
   const balances = assets.length ? await client.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []
   if (balances.some(r => r.status !== 'success')) throw Error('Some stock balances could not be verified.')

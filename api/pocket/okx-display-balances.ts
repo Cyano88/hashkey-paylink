@@ -3,7 +3,7 @@ import {canonicalStockHoldings} from './stock-display-holdings.js'
 import {createHmac} from 'node:crypto'
 import {createPublicClient,getAddress,http,parseUnits,type Address} from 'viem'
 import {okxCredentials} from './xstocks-swap-provider.js'
-import {xLayerHoldingAssets,stockUsdc,stockUsdt,stockUsde,stockTokenAbi,pocketXLayer,readStockHoldings,type StockBalanceSnapshot} from '../../src/pocket/lib/pocketXStocksWallet.js'
+import {xLayerHoldingAssets,stockUsdc,stockUsdt,stockUsde,stockUsdg,stockTokenAbi,pocketXLayer,readStockHoldings,type StockBalanceSnapshot} from '../../src/pocket/lib/pocketXStocksWallet.js'
 const cashKey=stockUsdc.address.toLowerCase(),usdtKey=stockUsdt.address.toLowerCase(),catalog=new Map(xLayerHoldingAssets.map(a=>[a.address.toLowerCase(),a]))
 const precision=new Map<string,number>([['',18],[cashKey,6],[usdtKey,6],...POCKET_EARN_DISPLAY_TOKENS.map(token=>[token,6] as [string,number])])
 export function parseOkxBalanceRows(data:unknown,owner:string,allowEmpty=false){
@@ -30,7 +30,7 @@ export async function fetchOkxDisplayBalances(owner:Address,previous?:StockBalan
  const request=async(method:'GET'|'POST',path:string,input?:unknown)=>{const body=input?JSON.stringify(input):'',timestamp=new Date().toISOString();const r=await fetcher('https://web3.okx.com'+path,{method,headers:{'Content-Type':'application/json','OK-ACCESS-KEY':c.key!,'OK-ACCESS-PASSPHRASE':c.passphrase!,'OK-ACCESS-TIMESTAMP':timestamp,'OK-ACCESS-SIGN':createHmac('sha256',c.secret!).update(timestamp+method+path+body).digest('base64')},...(body?{body}:{}),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(6000)]):AbortSignal.timeout(6000),redirect:'error'});if(!r.ok)throw Error('OKX balances unavailable.');const j=await r.json();if(j.code!=='0')throw Error('OKX balances unavailable.');return parseOkxBalanceRows(j.data,owner,method==='GET')}
  const rows=await request('GET','/api/v6/dex/balance/all-token-balances-by-address?'+new URLSearchParams({address:owner,chains:'196',excludeRiskToken:'1'}))
  // Missing native/cash or previously held stocks need an explicit response, never an assumed zero.
- const required=[...new Set(['',cashKey,usdtKey,stockUsde.address.toLowerCase(),...POCKET_EARN_DISPLAY_TOKENS,...(previous?.holdings||[]).map(h=>h.asset.address.toLowerCase())])],missing=required.filter(k=>!rows.has(k)||[cashKey,usdtKey,...POCKET_EARN_DISPLAY_TOKENS].includes(k))
+ const required=[...new Set(['',cashKey,usdtKey,stockUsde.address.toLowerCase(),stockUsdg.address.toLowerCase(),...POCKET_EARN_DISPLAY_TOKENS,...(previous?.holdings||[]).map(h=>h.asset.address.toLowerCase())])],missing=required.filter(k=>!rows.has(k)||[cashKey,usdtKey,...POCKET_EARN_DISPLAY_TOKENS].includes(k))
  for(let i=0;i<missing.length;i+=20){const batch=missing.slice(i,i+20),explicit=await request('POST','/api/v6/dex/balance/token-balances-by-address',{address:owner,tokenContractAddresses:batch.map(tokenContractAddress=>({chainIndex:'196',tokenContractAddress})),excludeRiskToken:'1'});for(const key of batch){const row=explicit.get(key);if(!row)throw Error('OKX omitted a requested balance.');rows.set(key,row)}}
  const held=[...rows].filter(([k,r])=>catalog.has(k)&&/[1-9]/.test(r.balance)),unknown=held.map(([k])=>k).filter(k=>!precision.has(k))
  // Token decimals are contract metadata, cached per server process, not a recurring balance read.
