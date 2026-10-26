@@ -1,4 +1,4 @@
-import {decodeEventLog,decodeFunctionData,type Address,type Hex} from 'viem'
+import {formatUnits,decodeEventLog,decodeFunctionData,type Address,type Hex} from 'viem'
 import {lifiAbi,LIFI_DIAMOND,validateLifiPlan,type LifiOutboundPlan,type LifiDestination} from '../../src/pocket/lib/pocketLifiOutbound.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {evmStablecoinDelta} from './xlayer-bridge-evidence.js'
@@ -58,5 +58,5 @@ export async function lifiDelivery(p:LifiOutboundPlan,hash:Hex,receipt:(network:
  const delivered=await receipt(network,b.receiving.txHash);if(!delivered)return waiting
  const delta=evmStablecoinDelta(delivered,network,'USDT',owner,b.receiving.txHash)
  if(delta===null||delta<=0n||refund&&delta>BigInt(p.amountUnits)||!refund&&delta<BigInt(p.minimumUnits))return attention
- return {status:refund?'refunded' as const:'completed' as const,destinationTxHash:b.receiving.txHash,sourceConfirmed:true,...(refund?{refundAsset:'USDT',refundNetwork:'xlayer',refundAmount:(Number(delta)/1e6).toString()}:{})}
+ return {status:refund?'refunded' as const:'completed' as const,destinationTxHash:b.receiving.txHash,sourceConfirmed:true,...(refund?{refundAsset:'USDT',refundNetwork:'xlayer',refundAmount:formatUnits(delta,6)}:{cashReceivedAmount:formatUnits(delta,6)})}
 }

@@ -10,6 +10,7 @@ import {nativeSendRpc} from './native-send-reconciliation.js'
 import {nativeSwapUnits} from './native-swap-quote.js'
 import {CASH_CONVERSION_ACTION,CASH_CONVERSION_PREFIX,openCashConversion,quoteCashConversion,sealCashConversion,type CashConversionQuote} from './cash-conversion-quote.js'
 import {reconcileCashConversion} from './cash-conversion-reconciliation.js'
+import {cashFundingReference,cashDeliveredUnits} from '../../src/pocket/lib/pocketCashFundingReference.js'
 
 const balanceAbi=parseAbi(['function balanceOf(address owner) view returns(uint256)'])
 const defaults={multichain:()=>process.env.POCKET_CASH_MULTICHAIN_ENABLED==='true',identity:verifiedPrivyUser,readLink:readCircleLink,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,approval:consumePocketPaymentApproval,estimate:estimateCircleNativeSend,challenge:createCircleGasStationEvmChallenge,challengeStatus:readCircleEvmChallenge,recoverChallenge:recoverCircleNativeSendChallenge,rpc:nativeSendRpc,quote:quoteCashConversion,rate:readEthUsdcRate,now:Date.now,enabled:()=>process.env.POCKET_CASH_CONVERSION_ENABLED==='true'&&Boolean(process.env.PRIVATE_RPC_URL)}
@@ -48,11 +49,13 @@ export function createCashConversionHandler(overrides:Partial<typeof defaults>={
    const verifyFunding=async(units:bigint)=>{
     if(fundingBridge===undefined)return
     if(!d.multichain())throw Object.assign(Error('Cash funding from another network is not available yet.'),{status:409})
-    if(typeof fundingBridge!=='string'||!/^(evm|solana):[a-zA-Z0-9-]{1,80}$/.test(fundingBridge))throw Object.assign(Error('Cash funding reference is invalid.'),{status:400})
-    const [rail,id]=fundingBridge.split(':')
-    const bridge=await d.find(ownerId,(rail==='solana'?'pocket:solana-usdt-bridge:':'pocket:usdt-bridge:')+id,'wallet.usdt-bridge')
+    const reference=cashFundingReference(fundingBridge)
+    if(!reference)throw Object.assign(Error('Cash funding reference is invalid.'),{status:400})
+    const bridge=await d.find(ownerId,reference.key,reference.action)
     const m=bridge?.metadata
-    if(bridge?.status!=='completed'||m?.destination!=='base'||m?.destinationAddress?.toLowerCase()!==walletAddress.toLowerCase()||!m.settledAmountUnits||!/^[1-9]\d*$/.test(m.settledAmountUnits)||BigInt(m.settledAmountUnits)!==units||!/^0x[0-9a-f]{64}$/i.test(m.destinationTxHash||''))throw Object.assign(Error('Your bridge delivery is still being verified. Try again shortly.'),{status:409})
+    const external=reference.rail==='bsc'||reference.rail==='xlayer'
+    const delivered=external?cashDeliveredUnits(m?.cashReceivedAmount):typeof m?.settledAmountUnits==='string'&&/^[1-9]\d*$/.test(m.settledAmountUnits)?BigInt(m.settledAmountUnits):null
+    if(bridge?.status!=='completed'||m?.destination!=='base'||m?.destinationAddress?.toLowerCase()!==walletAddress.toLowerCase()||external&&(m?.source!==reference.rail||m?.assetSymbol!=='USDT'||m?.purpose!=='cash')||delivered!==units||!/^0x[0-9a-f]{64}$/i.test(m?.destinationTxHash||''))throw Object.assign(Error('Your top-up delivery is still being verified. Try again shortly.'),{status:409})
    }
    if(action==='quote'){
     const amount=req.body.amount,units=nativeSwapUnits(amount,6)

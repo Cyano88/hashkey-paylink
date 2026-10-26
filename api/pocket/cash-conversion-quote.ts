@@ -8,6 +8,7 @@ import {nativeFeeToUsdcUnits} from '../payment-network-fees.js'
 import {nativeSwapUnits} from './native-swap-quote.js'
 import {NATIVE_SWAP_CONTRACTS} from './native-evm-swap-quote.js'
 import {okxGet} from './xstocks-swap-provider.js'
+import {cashFundingReference} from '../../src/pocket/lib/pocketCashFundingReference.js'
 
 export const CASH_CONVERSION_ACTION='wallet.cash-conversion'
 export const CASH_CONVERSION_PREFIX='pocket:cash-conversion:'
@@ -18,7 +19,7 @@ export type CashConversionQuote=CashConversionBinding&{positiveSlippageFee?:{cap
 export const sameCashAddress=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const fail=():never=>{throw Object.assign(Error('Cash conversion details changed. Review the amount again.'),{status:409})}
 function binding(b:CashConversionBinding){
- if(b.fundingBridge!==undefined&&!/^(evm|solana):[a-zA-Z0-9-]{1,80}$/.test(b.fundingBridge))fail()
+ if(b.fundingBridge!==undefined&&!cashFundingReference(b.fundingBridge))fail()
  if(b.network!=='base'||b.from!=='USDT'||b.to!=='USDC'||!b.ownerId||!b.walletId||!isAddress(b.walletAddress)||/^0x0{40}$/i.test(b.walletAddress)||sameCashAddress(b.walletAddress,EVM_PLATFORM_TREASURY))fail()
  return nativeSwapUnits(b.amount,6)
 }
