@@ -1,3 +1,4 @@
+import {xLayerUsde} from './pocketXLayerPaymentAssets'
 import {POCKET_EARN_DISPLAY_TOKENS} from './pocketEarnDisplayAssets'
 import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem, parseUnits, type Address, type Hex } from 'viem'
 import { xLayer } from 'viem/chains'
@@ -12,6 +13,8 @@ export type StockAsset = { symbol: string; name: string; address: string; icon: 
 export const stockAssets: StockAsset[] = catalogue.assets
 export const stockUsdc: StockAsset = { symbol: 'USDC', name: 'USD Coin', address: '0xB6CEceAB302E2E4948951eE7843FC24E92933061', icon: '' }
 export const stockUsdt: StockAsset = { symbol: 'USDT', name: 'Tether USD (USDT0)', address: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736', icon: '/brand/usdt.svg' }
+export const stockUsde: StockAsset = xLayerUsde
+export const xLayerHoldingAssets: StockAsset[] = [stockUsde, ...stockAssets]
 export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '/brand/okb.png' }
 // OKX's native-token identifier for X Layer market-price requests.
 export const stockGasPriceAddress = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
@@ -41,7 +44,7 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
   if (previous && blockNumber < previous.blockNumber) throw Error('X Layer node is behind the previous balance snapshot.')
   if (previous && blockNumber === previous.blockNumber && previous.complete && previous.usdt != null && previous.earn && !reorganized) return previous
   const full = reorganized || !previous?.complete || Date.now() - previous.fullScanAt >= 300_000 || blockNumber - previous.blockNumber > 2000n
-  let assets = stockAssets
+  let assets = xLayerHoldingAssets
   if (!full && previous) {
     // Re-read transfers across a short overlap to cover ordinary shallow reorganizations.
     const fromBlock = previous.blockNumber > 12n ? previous.blockNumber - 12n : 0n
@@ -56,7 +59,7 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
     }
     // Rebase multipliers can change a held balance without a Transfer event.
     const held=new Set(previous.holdings.map(h=>h.asset.address.toLowerCase()))
-    assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase())||held.has(asset.address.toLowerCase()))
+    assets = xLayerHoldingAssets.filter(asset => asset.address===stockUsde.address||changed.has(asset.address.toLowerCase())||held.has(asset.address.toLowerCase()))
   }
   const balances = assets.length ? await client.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []
   if (balances.some(r => r.status !== 'success')) throw Error('Some stock balances could not be verified.')
@@ -82,7 +85,7 @@ export async function prepareStockTransfer(owner: Address, asset: StockAsset, re
   if (!isAddress(recipientInput, { strict: true }) || /^0x0{40}$/i.test(recipientInput)) throw Error('Enter a valid X Layer recipient address.')
   const recipient = getAddress(recipientInput)
   if (recipient.toLowerCase() === owner.toLowerCase()) throw Error('Choose a recipient other than your own wallet.')
-  if (asset.address !== 'native' && ![stockUsdc, stockUsdt, ...stockAssets].some(a => a.address.toLowerCase() === asset.address.toLowerCase())) throw Error('Unsupported asset contract.')
+  if (asset.address !== 'native' && ![stockUsdc, stockUsdt, ...xLayerHoldingAssets].some(a => a.address.toLowerCase() === asset.address.toLowerCase())) throw Error('Unsupported asset contract.')
   const native = asset.address === 'native'
   const decimals = native ? 18 : await stockClient.readContract({ address: getAddress(asset.address), abi: stockTokenAbi, functionName: 'decimals' })
   const units = stockAmountUnits(amount, decimals)

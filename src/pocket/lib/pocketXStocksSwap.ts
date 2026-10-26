@@ -1,11 +1,11 @@
 import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees'
 import { decodeFunctionData, encodeFunctionData, getAddress, isAddress, type Abi, type Address, type Hex } from 'viem'
 import routerAbi from './pocketOkxRouterAbi.json'
-import { stockAssets, stockGasAsset, stockUsdc, stockUsdt, stockAmountUnits, type StockAsset } from './pocketXStocksWallet'
+import { stockAssets, stockGasAsset, stockUsdc, stockUsdt, stockUsde, stockAmountUnits, type StockAsset } from './pocketXStocksWallet'
 
 // Circle native USDC on X Layer. Bridged versions are deliberately distinct.
 export { stockUsdc }
-export const swapAssets = [stockUsdc, stockUsdt, stockGasAsset, ...stockAssets]
+export const swapAssets = [stockUsdc, stockUsdt, stockUsde, stockGasAsset, ...stockAssets]
 export const OKX_NATIVE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 export const OKX_XLAYER_ROUTER = '0x7c5bee2a8091c3ef39072f64f18fac913060aeaf'
 export const OKX_XLAYER_SPENDER = '0x8b773d83bc66be128c60e07e17c8901f7a64f000'

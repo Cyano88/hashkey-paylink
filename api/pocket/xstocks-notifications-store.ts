@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { createPublicClient, http, parseAbiItem, decodeEventLog, formatUnits, type Address } from 'viem'
 import { xLayer } from 'viem/chains'
 import { mutateDurableJson, readDurableJson, hasRenderDurableStore } from '../render-durable-store.js'
-import { stockAssets, stockUsdc, stockUsdt, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
+import { stockAssets, stockUsdc, stockUsdt,stockUsde, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { formatStockQuantity } from '../../src/pocket/lib/pocketStockDisplay.js'
 import { sendPocketPush, pocketPushConfigured, listPocketPushOwners } from './push-devices.js'
 export type StockNotice = { pushSuppressed?:boolean; tradeChecked?:boolean; trade?:{serviceFeeAmount?:string;feeAmount?:string;action:'buy'|'sell'|'swap';input:{symbol:string;amount:string};output:{symbol:string;amount:string}}; id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
@@ -20,7 +20,7 @@ export const normalizeStockNotices = (s?: StockNoticeStore): StockNoticeStore =>
 export const readStockNotices = async () => normalizeStockNotices(await readDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY))
 export const mutateStockNotices = (fn: (s: StockNoticeStore) => void) => mutateDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY, current => {const s=normalizeStockNotices(current);archiveStockInvestments(s);fn(s);archiveStockInvestments(s);return s})
 export const stockNoticeClient = createPublicClient({chain:xLayer,transport:http(process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',{timeout:10000,retryCount:0})})
-const allowed = new Map([stockUsdc,stockUsdt,...stockAssets].map(a=>[a.address.toLowerCase(),a]))
+const allowed = new Map([stockUsdc,stockUsdt,stockUsde,...stockAssets].map(a=>[a.address.toLowerCase(),a]))
 const decimals = new Map<string,number>([[stockUsdc.address.toLowerCase(),6],[stockUsdt.address.toLowerCase(),6],['native',18]])
 export async function stockNoticeAsset(token: string) {
   const key=token.toLowerCase(), asset=key==='native'?{address:'native',symbol:'OKB'}:allowed.get(key)
