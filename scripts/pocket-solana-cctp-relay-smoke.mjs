@@ -96,6 +96,30 @@ const prepared = await preparePocketSolanaCctpTransaction({
   buildBridge: async () => bridgeInstructions(),
 })
 assert.equal(prepared.lastValidBlockHeight, 123)
+let feeReads = 0
+let blockReads = 0
+const recovered = await preparePocketSolanaCctpTransaction({
+  walletAddress: wallet.publicKey.toBase58(), expected,
+  connection: {
+    ...healthyConnection,
+    getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: ++blockReads + 123 }),
+    getFeeForMessage: async () => ({ value: ++feeReads === 1 ? null : 5_000 }),
+  },
+  buildBridge: async () => bridgeInstructions(),
+})
+assert.equal(feeReads, 2)
+assert.equal(blockReads, 2)
+assert.equal(recovered.lastValidBlockHeight, 125)
+const recoveredTx = Transaction.from(Buffer.from(recovered.transaction, 'base64'))
+recoveredTx.partialSign(wallet)
+assert.ok(recoveredTx.verifySignatures(true), 'refreshed message must retain valid sponsor signatures')
+let unavailableReads = 0
+await assert.rejects(() => preparePocketSolanaCctpTransaction({
+  walletAddress: wallet.publicKey.toBase58(), expected,
+  connection: { ...healthyConnection, getFeeForMessage: async () => { unavailableReads++; return { value: null } } },
+  buildBridge: async () => bridgeInstructions(),
+}), /Unable to estimate the Solana network fee/)
+assert.equal(unavailableReads, 2, 'unavailable RPC must not create an endless loading loop')
 const sponsored = Transaction.from(Buffer.from(prepared.transaction, 'base64'))
 assert.ok(sponsored.feePayer?.equals(relayer.publicKey))
 assert.ok(sponsored.instructions[0].keys[0].pubkey.equals(relayer.publicKey))
@@ -152,7 +176,9 @@ console.log('External Solana bridge destinations rejected without relaying.')
 
 process.env.SOLANA_TREASURY=Keypair.generate().publicKey.toBase58()
 process.env.POCKET_SWAP_QUOTE_SECRET='fixture-only-bridge-signing-key-1234567890'
-const quoted=await preparePocketSolanaCctpTransaction({walletAddress:wallet.publicKey.toBase58(),expected,reimburse:true,connection:{...healthyConnection,getAccountInfo:async()=>({owner:SOLANA_TOKEN_PROGRAM_ID}),getTokenAccountBalance:async()=>({value:{amount:'1000000000'}})},buildBridge:async()=>bridgeInstructions(),readRate:async()=>10000000000n})
+let reimbursementFeeReads=0
+const quoted=await preparePocketSolanaCctpTransaction({walletAddress:wallet.publicKey.toBase58(),expected,reimburse:true,connection:{...healthyConnection,getFeeForMessage:async()=>({value:++reimbursementFeeReads===2?null:5000}),getAccountInfo:async()=>({owner:SOLANA_TOKEN_PROGRAM_ID}),getTokenAccountBalance:async()=>({value:{amount:'1000000000'}})},buildBridge:async()=>bridgeInstructions(),readRate:async()=>10000000000n})
+assert.equal(reimbursementFeeReads,3)
 assert.equal(quoted.networkFeeUnits,'390500','Only 3900000 rent funding plus 5000 network lamports; reserve excluded')
 assert.equal(quoted.providerFeeUnits,'53591')
 const approval={...quoted,...expected,walletAddress:wallet.publicKey.toBase58(),expiresAt:Date.now()+30000}
@@ -171,3 +197,4 @@ const expired=sealSolanaBridgeApproval({...approval,expiresAt:1})
 assert.throws(()=>openSolanaBridgeApproval(expired,{...expected,walletAddress:wallet.publicKey.toBase58()}),/expired/)
 assert.doesNotThrow(()=>openSolanaBridgeApproval(expired,{...expected,walletAddress:wallet.publicKey.toBase58()},true))
 console.log('PASS: exact gas reimbursement, no service fee or reserve markup; signed quote and exact transaction integrity; completed signatures required.')
+

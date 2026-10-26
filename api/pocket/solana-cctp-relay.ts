@@ -375,13 +375,27 @@ export async function preparePocketSolanaCctpTransaction(input: {
     relayer,
     expected: input.expected,
   })
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+  const { blockhash, lastValidBlockHeight: initialLastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+  let lastValidBlockHeight = initialLastValidBlockHeight
   const sponsored = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash }).add(...built.instructions)
-  const fee = await connection.getFeeForMessage(sponsored.compileMessage(), 'confirmed')
-  if (fee.value === null) throw fail(503, 'Solana bridge sponsorship is temporarily unavailable.')
+  const estimateFee = async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const fee = (await connection.getFeeForMessage(sponsored.compileMessage(), 'confirmed')).value
+      if (fee !== null && Number.isSafeInteger(fee) && fee > 0) return fee
+      if (fee !== null || attempt === 1) break
+      // An RPC node can lack the recent blockhash's fee schedule. Refresh once,
+      // before user approval, and keep the transaction's expiry in sync.
+      const fresh = await connection.getLatestBlockhash('confirmed')
+      sponsored.recentBlockhash = fresh.blockhash
+      lastValidBlockHeight = fresh.lastValidBlockHeight
+      sponsored.signatures = []
+    }
+    throw fail(503, 'Unable to estimate the Solana network fee. Please try again.')
+  }
+  const fee = await estimateFee()
   const requiredLamports = CCTP_EVENT_RENT_LAMPORTS
     + built.additionalRentLamports
-    + BigInt(fee.value)
+    + BigInt(fee)
     + RELAYER_OPERATIONAL_BUFFER_LAMPORTS
   await checkSolanaRelayerBalance(connection, relayer.publicKey, requiredLamports)
   sponsored.partialSign(relayer, built.messageSender)
@@ -400,8 +414,7 @@ export async function preparePocketSolanaCctpTransaction(input: {
     if(await readTokenAccountAmount(connection,treasuryAta)===null)throw fail(503,'Solana bridge treasury token account must be provisioned.')
     const sourceAta=await getAssociatedTokenAddress(USDC_MINT,wallet,true)
     sponsored.add(createTransferCheckedInstruction(sourceAta,USDC_MINT,treasuryAta,wallet,1n,6))
-    const quotedFee=(await connection.getFeeForMessage(sponsored.compileMessage(),'confirmed')).value
-    if(!Number.isSafeInteger(quotedFee)||quotedFee===null||quotedFee<=0)throw fail(503,'Solana bridge fee is unavailable.')
+    const quotedFee=await estimateFee()
     const cost=CCTP_EVENT_RENT_LAMPORTS+built.additionalRentLamports+BigInt(quotedFee)
     networkFeeUnits=solanaReimbursementUnits(cost,await (input.readRate??readNativeUsdcRate)('solana'))
     // The operational SOL reserve is never included in customer reimbursement.
