@@ -63,6 +63,7 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: VerificationRecord
   id: string
   ownerId: string
@@ -391,6 +392,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
   return {
     id: project.id,
     businessVerification: publicVerification(project.businessVerification),
+    directoryProfile: project.directoryProfile,
     name: project.name,
     ownerEmail: project.ownerEmail,
     website: project.website,
@@ -607,6 +609,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
+        if (resource === 'businesses') return res.json({ok:true,businesses:Object.values(store?.projects??{}).filter(project=>project.businessVerification?.status==='approved'&&project.operationalStatus!=='suspended'&&project.directoryProfile?.enabled).map(project=>({id:project.id,name:project.name,website:project.website,logo:project.brandImageUrl??'',introduction:project.directoryProfile!.introduction})).sort((a,b)=>a.name.localeCompare(b.name))})
         if (resource === 'activity' || resource === 'payments') {
           const projectId = clean(req.query?.projectId, 80)
           const project = findOwnedProject(store, projectId, identity.userId)
@@ -859,6 +862,18 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       const currentProject = findOwnedProject(currentStore, projectId, identity.userId)
       if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
+
+      if (req.method === 'POST' && action === 'directory-profile') {
+        const enabled=req.body?.enabled
+        const introduction=clean(req.body?.introduction,241)
+        if(typeof enabled!=='boolean'||introduction.length>240||(enabled&&introduction.length<20)) return res.status(400).json({ok:false,error:'Write a public introduction of 20 to 240 characters.'})
+        const store=await dependencies.mutate(STORE_KEY,current=>{
+          const latest=findOwnedProject(current,projectId,identity.userId)
+          if(!latest) throw Object.assign(new Error('Developer project not found.'),{status:404})
+          return {projects:{...(current?.projects??{}),[projectId]:{...latest,directoryProfile:{enabled,introduction},updatedAt:dependencies.now().toISOString()}}}
+        })
+        return res.json({ok:true,project:projectPublic(store.projects[projectId])})
+      }
 
       if (req.method === 'PUT' && action === 'configure') {
         const name = clean(req.body?.name, 100)

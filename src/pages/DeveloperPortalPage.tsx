@@ -1,3 +1,5 @@
+import AccountHome from '../developer/AccountHome'
+import BusinessDirectory, {DirectoryProfile} from '../developer/BusinessDirectory'
 import BusinessVerificationPanel from '../developer/BusinessVerificationPanel'
 import type {BusinessVerification} from '../developer/verificationTypes'
 import AccountMenu from '../developer/AccountMenu'
@@ -13,7 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CliGuide, OverviewPanel, ProductsPanel, portalSections, portalParent, portalSubsections, ComingSoonProducts, type PortalSection } from '../developer/PortalPanels'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, LayoutDashboard, CreditCard, Code2, Settings2, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
+import { BookOpen, Building2, Home, ArrowLeft, LayoutDashboard, CreditCard, Code2, Settings2, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
@@ -22,6 +24,7 @@ type Network = 'base' | 'arbitrum' | 'arc'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
+  directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: BusinessVerification
   xlayerCheckout?: XLayerCheckoutConfig
   id: string
@@ -91,11 +94,13 @@ export default function DeveloperPortalPage() {
   const selectedTab = params.get('section')
   const tab: PortalSection = ['overview','products','activity','setup','verification','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
   const sandbox = params.get('environment') === 'test'
-  const showingApps = params.get('section') === 'apps' || (!params.get('section') && !params.get('project'))
-  function openApps() {
+  const accountView = selectedTab === 'home' || (!selectedTab && !params.get('project')) ? 'home' : selectedTab === 'businesses' ? 'businesses' : selectedTab === 'apps' ? 'apps' : null
+  const showingApps = accountView === 'apps'
+  function openApps() { openAccount('apps') }
+  function openAccount(section:'home'|'apps'|'businesses') {
     if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved app changes?'))) return
     resetProjectDraft(); setCreatingNew(false); setNewKey(null); setNewWebhookSecret(null)
-    setParams(current => { const next = new URLSearchParams(current); next.set('section', 'apps'); next.delete('project'); return next })
+    setParams(current => { const next = new URLSearchParams(current); next.set('section', section); next.delete('project'); return next })
   }
   function hasUnsavedChanges() { return Boolean(verificationDirty || active && ((draft && editableProjectState(draft)!==editableProjectState(active)) || webhookUrl !== active.webhookUrl)) }
   function resetProjectDraft() { setVerificationDirty(false); if (active) { setDraft({...active, recipients:{...active.recipients}, networks:[...active.networks], allowedOrigins:[...active.allowedOrigins]}); setWebhookUrl(active.webhookUrl) } }
@@ -112,12 +117,12 @@ export default function DeveloperPortalPage() {
       resetProjectDraft()
     }
     setCreatingNew(false)
-    setParams(current => { const next = new URLSearchParams(current); next.set('section', value); return next }) }
-  function selectProject(value: string) {
+    setParams(current => { const next = new URLSearchParams(current); next.set('section', value); if(active) next.set('project',active.id); return next }) }
+  function selectProject(value: string, section:PortalSection='overview') {
     if (busy) return
     if (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?')) return
-    setNewKey(null); setNewWebhookSecret(null); setActiveId(value); setCreatingNew(false)
-    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('section', 'overview'); return next })
+    resetProjectDraft(); setNewKey(null); setNewWebhookSecret(null); setActiveId(value); setCreatingNew(false)
+    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('section', section); return next })
   }
   const [creatingNew, setCreatingNew] = useState(false)
   const [newKey, setNewKey] = useState<{ value: string; environment: 'test' | 'live'; projectId: string } | null>(null)
@@ -180,7 +185,7 @@ export default function DeveloperPortalPage() {
       if (window.matchMedia('(max-width: 1023px)').matches) content?.scrollIntoView({block:'start'})
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [tab, showingApps, creatingNew, activeId])
+  }, [tab, accountView, creatingNew, activeId])
   useEffect(() => { setWebhookUrl(active?.webhookUrl ?? '') }, [active?.id, active?.webhookUrl])
   useEffect(() => { const project = params.get('project'); if (project) { setNewKey(null); setNewWebhookSecret(null); setActiveId(project) } }, [params.get('project')])
   useEffect(() => { setVerificationDirty(false); setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId])
@@ -314,28 +319,30 @@ export default function DeveloperPortalPage() {
   const subnav = portalSubsections[parent]
   const sectionIcons = { overview: LayoutDashboard, products: CreditCard, quickstart: Code2, setup: Settings2 }
   return (
-    <main className="portal-console mx-auto min-h-[calc(100dvh-4rem)] max-w-[1440px] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+    <main className="portal-console min-h-[calc(100dvh-4rem)] w-full lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#101114] lg:min-h-[calc(100dvh-4rem)] lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
-        <div className="flex items-center gap-2">
-          <button type="button" disabled={busy} onClick={openApps} aria-current={showingApps&&!creatingNew?'page':undefined} className="flex min-h-11 flex-1 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold"><LayoutDashboard className="h-4 w-4"/>Apps</button>
-          <button type="button" aria-label="New app" title="New app" disabled={busy || sandbox} onClick={startNewProject} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5"><Plus className="h-4 w-4" /></button>
-        </div>
-        {!showingApps && !creatingNew && active && <><p className="mt-5 truncate px-3 text-xs font-medium text-gray-400">{active.name}</p>
+        <nav aria-label="Account navigation" className="account-navigation">
+          <button disabled={busy} onClick={()=>openAccount('home')} aria-current={accountView==='home'&&!creatingNew?'page':undefined}><Home size={17}/>Home</button>
+          <div className="flex items-center"><button disabled={busy} onClick={openApps} aria-current={showingApps&&!creatingNew?'page':undefined} className="flex-1"><LayoutDashboard size={17}/>Apps</button><button aria-label="New app" title="New app" disabled={busy||sandbox} onClick={startNewProject}><Plus size={17}/></button></div>
+          <a href="https://docs.hashpaylink.com" target="_blank" rel="noopener noreferrer"><BookOpen size={17}/>Docs</a>
+          <button disabled={busy} onClick={()=>openAccount('businesses')} aria-current={accountView==='businesses'&&!creatingNew?'page':undefined}><Building2 size={17}/>Verified businesses</button>
+        </nav>
+        {!accountView && !creatingNew && active && <><button onClick={openApps} disabled={busy} className="mt-7 flex items-center gap-2 px-3 text-sm text-gray-500"><ArrowLeft size={16}/>Back to apps</button><p className="mt-5 truncate px-3 text-xs font-medium text-gray-400">{active.name}</p>
         <nav aria-label="Project navigation" className="mt-4 grid grid-cols-4 gap-1 lg:mt-8 lg:grid-cols-1 lg:gap-2">
           {portalSections.map(([value,label]) => { const Icon=sectionIcons[value as keyof typeof sectionIcons]; return <button key={value} type="button" disabled={busy} aria-current={parent===value&&!creatingNew?'page':undefined} onClick={()=>setTab(value)} className={cn('flex min-h-11 items-center justify-center gap-3 rounded-lg px-2 text-xs font-medium transition lg:justify-start lg:px-3 lg:text-sm',parent===value&&!creatingNew?'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}><Icon className="hidden h-4 w-4 lg:block"/>{label}</button>})}
         </nav></>}
       </aside>
       <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
         <div className="mb-6 flex items-center justify-end"><AccountMenu onLogout={logout}/></div>
-        {!showingApps && !creatingNew && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
+        {!accountView && !creatingNew && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
         <section id="developer-content" tabIndex={-1} className="min-w-0 max-w-4xl outline-none">
           {sandbox ? <div><h1 className="text-xl font-semibold">Test payments are unavailable</h1><p className="mt-2 text-sm text-gray-500">This old link cannot create or execute payments.</p><Link className="pocket-cta-primary mt-5" to="?environment=live">Open live configuration</Link></div> : creatingNew
             ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
-            : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : <>
+            : accountView==='home' ? <AccountHome apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
-              {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} />}
+              {active && draft && tab === 'setup' && <><SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/></>}
               {active && tab === 'verification' && <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/> }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
