@@ -1,3 +1,4 @@
+import {requestAmountUnits,type RequestAsset,type RequestNetwork} from '../../src/pocket/lib/pocketRequestAssets.js'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
@@ -13,11 +14,14 @@ export type PocketRequestRoute = {
   updatedAt: number
 }
 export type PocketMoneyRequest = {
+  submittedHash?:string
+  asset?: RequestAsset
+  acceptedAt?: number
   linkCode?: string
   id: string; eventId: string; senderId: string; senderPocketId: string; senderName: string
   senderAddress?: string; recipientId: string; recipientPocketId: string; recipientName?: string
   title: string; amount: string; flexibleAmount: boolean
-  network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' | 'multi'; paymentPath?: string
+  network: RequestNetwork | 'multi'; paymentPath?: string
   route?: PocketRequestRoute
   transactionHash?: string; paidAt?: number; status: PocketRequestStatus; createdAt: number; updatedAt: number
 }
@@ -67,7 +71,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         if(request.senderId===userId)throw Object.assign(Error('You cannot pay your own request.'),{status:409})
         if(request.recipientId===userId&&['accepted','paid'].includes(request.status))return request
         if(request.status!=='pending'||request.recipientId)throw Object.assign(Error(request.status==='paid'?'This request is already paid.':request.status==='cancelled'?'This request was cancelled.':'This request has already been accepted.'),{status:409})
-        const updated:PocketMoneyRequest={...request,recipientId:userId,recipientPocketId:pocketId,recipientName:name,status:'accepted',updatedAt:now()}
+        const updated:PocketMoneyRequest={...request,recipientId:userId,recipientPocketId:pocketId,recipientName:name,status:'accepted',acceptedAt:now(),updatedAt:now()}
         store.requests[request.id]=updated
         return updated
       })
@@ -77,19 +81,19 @@ export function createPocketRequestRepository(options: Options = {}) {
       const eventId = clean(input.eventId, 120)
       if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(eventId)) throw Object.assign(new Error('Request identity is invalid.'), { status: 400 })
       if (input.senderId === input.recipientId) throw Object.assign(new Error('Choose another Pocket user.'), { status: 400 })
-      const amount = clean(input.amount, 30)
-      if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw Object.assign(new Error('Enter a valid USDC amount.'), { status: 400 })
-      const network = input.network === 'solana' || input.network === 'arbitrum' || input.network === 'arc' || input.network === 'ethereum' || input.network === 'polygon' ? input.network : 'base'
+      const amount = clean(input.amount, 80)
+      try { requestAmountUnits(amount,input.network,input.asset||'USDC') } catch(reason) { throw Object.assign(reason as Error,{status:400}) }
+      const network = input.network === 'xlayer' || input.network === 'solana' || input.network === 'arbitrum' || input.network === 'arc' || input.network === 'ethereum' || input.network === 'polygon' ? input.network : 'base'
       const senderAddress = clean(input.senderAddress, 120)
       if (network === 'solana' ? !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(senderAddress) : !/^0x[a-fA-F0-9]{40}$/.test(senderAddress)) {
         throw Object.assign(new Error(`Open your ${network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} Pocket wallet before requesting payment.`), { status: 409 })
       }
       return mutate(store => {
         const existing = Object.values(store.requests).find(item => item.eventId === eventId)
-        if (existing) { if (existing.senderId !== input.senderId) throw Object.assign(new Error('This request already belongs to another user.'), { status: 409 }); return { request: existing, replayed: true } }
+        if (existing) { if((existing.asset||'USDC')!==(input.asset||'USDC')||existing.network!==input.network||existing.amount!==amount)throw Object.assign(Error('This request reference has different payment details.'),{status:409}); if (existing.senderId !== input.senderId) throw Object.assign(new Error('This request already belongs to another user.'), { status: 409 }); return { request: existing, replayed: true } }
         const timestamp = now()
         const id = 'preq_' + eventId
-        const request: PocketMoneyRequest = { ...input, eventId, id, title: clean(input.title, 100) || 'USDC request', amount, flexibleAmount: false, network, senderAddress, paymentPath: `/home/send?request=${encodeURIComponent(id)}`, status: 'pending', createdAt: timestamp, updatedAt: timestamp }
+        const request: PocketMoneyRequest = { ...input, asset:input.asset||'USDC', eventId, id, title: clean(input.title, 100) || 'USDC request', amount, flexibleAmount: false, network, senderAddress, paymentPath: `/home/send?request=${encodeURIComponent(id)}`, status: 'pending', createdAt: timestamp, updatedAt: timestamp }
         store.requests[request.id] = request
         store.notificationReads[input.senderId] = timestamp
         return { request, replayed: false }
@@ -129,7 +133,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         const status = decision === 'accept' ? 'accepted' : 'declined'
         if (request.status === status) return request
         if (request.status !== 'pending') throw Object.assign(new Error('This request already has a response.'), { status: 409 })
-        const updated: PocketMoneyRequest = { ...request, status, updatedAt: now() }
+        const updated: PocketMoneyRequest = { ...request, status, ...(status==='accepted'?{acceptedAt:now()}:{}), updatedAt: now() }
         store.requests[id] = updated
         store.notificationReads[userId] = updated.updatedAt
         return updated
@@ -150,6 +154,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         return updated
       })
     },
+    async recordSubmitted(userId:string,id:string,hash:string){return mutate(store=>{const r=store.requests[id];if(!r||r.recipientId!==userId||r.status!=='accepted')throw Object.assign(Error('This request is not awaiting your payment.'),{status:409});if(!(r.network==='solana'?/^[1-9A-HJ-NP-Za-km-z]{64,120}$/:/^0x[a-fA-F0-9]{64}$/).test(hash))throw Object.assign(Error('Invalid transaction reference.'),{status:400});store.requests[id]={...r,submittedHash:hash};return store.requests[id]})},
     async markPaid(userId: string, id: string, transactionHash: string) {
       return mutate(store => {
         const request = store.requests[clean(id, 160)]
@@ -180,6 +185,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
         if (request.recipientId !== userId) throw Object.assign(new Error('Only the requested Pocket user can route this payment.'), { status: 403 })
         if (request.status !== 'accepted') throw Object.assign(new Error('Accept this request before preparing payment.'), { status: 409 })
+        if((request.asset||'USDC')!=='USDC')throw Object.assign(Error('Pay this request using its selected asset and network.'),{status:400})
         const source = clean(input.source, 20)
         const destination = clean(input.destination, 20)
         const amount = clean(input.amount, 30)

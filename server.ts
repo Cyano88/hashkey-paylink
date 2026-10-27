@@ -1,3 +1,4 @@
+import pocketNativeSolanaSendHandler from './api/pocket/native-solana-send.js'
 import pocketBscInboundBridgeHandler from './api/pocket/bsc-inbound-bridge.js'
 import pocketBscOutboundBridgeHandler from './api/pocket/bsc-outbound-bridge.js'
 import usdAccountHandler, { usdAccountWebhook } from './api/pocket/usd-account.js'
@@ -428,6 +429,7 @@ app.all('/api/pocket/bridge/solana/prepare', relayLimiter, pocketSolanaCctpPrepa
 app.all('/api/pocket/bridge/solana/submit', relayLimiter, pocketSolanaCctpSubmitHandler)
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
+app.all('/api/pocket/native-solana-send', strictLimiter, pocketNativeSolanaSendHandler)
 app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
 app.get('/api/pocket/bsc-account', readLimiter, pocketBscAccountHandler)
 app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)

@@ -1,3 +1,6 @@
+import {REQUEST_ASSETS,requestNetworks,requestAsset,type RequestNetwork,type RequestAsset} from '../../src/pocket/lib/pocketRequestAssets.js'
+import {verifyRequestTransfer} from './request-transfer-proof.js'
+import {readStockNotices} from './xstocks-notifications-store.js'
 import {randomBytes} from 'node:crypto'
 import { isPocketId, normalizePocketId } from '../../src/pocket/lib/pocketId.js'
 import {pocketRequestPaymentPath} from '../../src/pocket/lib/pocketRequestPaymentPath.js'
@@ -11,7 +14,7 @@ import { pocketRequestRepository, type PocketRequestRepository } from './request
 import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
 import { sendPocketPush } from './push-devices.js'
 
-type Dependencies = { verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; findEvm?: typeof findEvmUsdcTransfer; findSolana?: typeof findSolanaUsdcTransfer; solanaConnection?: () => Connection; readBridgeStatus?: typeof readCircleBridgeStatus }
+type Dependencies = { eurcEnabled?:()=>boolean; nativeEnabled?:()=>boolean; solEnabled?:()=>boolean; readEmbeddedWallet?: (owner:string)=>Promise<string|undefined>; verifyAsset?:typeof verifyRequestTransfer; verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; findEvm?: typeof findEvmUsdcTransfer; findSolana?: typeof findSolanaUsdcTransfer; solanaConnection?: () => Connection; readBridgeStatus?: typeof readCircleBridgeStatus }
 const fail = (res: Response, status: number, message: string) => res.status(status).json({ ok: false, error: { message } })
 const maskedEmail = (email: string) => {
   const [local, domain] = email.toLowerCase().split('@')
@@ -19,20 +22,23 @@ const maskedEmail = (email: string) => {
   return `${local.slice(0, 2)}...${local.slice(-2)}@${domain}`
 }
 const profileName = (profile: Awaited<ReturnType<ProfileRepository['getByPocketId']>>) => profile?.nameStatus === 'kyc_verified' && profile.resolvedName ? profile.resolvedName : maskedEmail(profile?.email || '')
-const publicRequest = (item: Awaited<ReturnType<PocketRequestRepository['listFor']>>[number], userId: string) => ({ id: item.id, eventId: item.eventId, direction: item.recipientId === userId ? 'incoming' : 'outgoing', senderPocketId: item.senderPocketId, senderName: item.senderName, recipientPocketId: item.recipientPocketId, recipientName: item.recipientName || (item.linkCode?'Anyone with the link':`Pocket ${item.recipientPocketId}`), ...(item.linkCode&&item.senderId===userId?{linkUrl:'https://pocket.hashpaylink.com/request/'+item.linkCode}:{}), title: item.title, amount: item.amount, flexibleAmount: item.flexibleAmount, network: item.network, paymentPath: pocketRequestPaymentPath(item.id), recipientAddress: item.senderAddress || '', status: item.status, transactionHash: item.transactionHash || '', createdAt: item.createdAt, updatedAt: item.updatedAt })
+const publicRequest = (item: Awaited<ReturnType<PocketRequestRepository['listFor']>>[number], userId: string) => ({ id: item.id, eventId: item.eventId, direction: item.recipientId === userId ? 'incoming' : 'outgoing', senderPocketId: item.senderPocketId, senderName: item.senderName, recipientPocketId: item.recipientPocketId, recipientName: item.recipientName || (item.linkCode?'Anyone with the link':`Pocket ${item.recipientPocketId}`), ...(item.linkCode&&item.senderId===userId?{linkUrl:'https://pocket.hashpaylink.com/request/'+item.linkCode}:{}), asset:item.asset||'USDC', submittedHash:item.submittedHash, title: item.title, amount: item.amount, flexibleAmount: item.flexibleAmount, network: item.network, paymentPath: pocketRequestPaymentPath(item.id), recipientAddress: item.senderAddress || '', status: item.status, transactionHash: item.transactionHash || '', createdAt: item.createdAt, updatedAt: item.updatedAt })
 
 export function createPocketRequestsHandler(deps: Dependencies) {
+  const enabledAsset=(asset:string)=>asset==='EURC'?(deps.eurcEnabled?.()??process.env.POCKET_EURC_REQUESTS_ENABLED==='true'):asset==='SOL'?(deps.solEnabled?.()??process.env.POCKET_NATIVE_SOL_SEND_ENABLED==='true'):['ETH','POL','EURC'].includes(asset)?(deps.nativeEnabled?.()??process.env.POCKET_NATIVE_SEND_ENABLED==='true'):true
+  const readAddress=async(owner:string,network:string)=>network==='xlayer'?await (deps.readEmbeddedWallet|| (async id=>(await readStockNotices()).wallets[id]?.address))(owner):(await deps.readWallet?.(circleLinkKey(owner,network as any)))?.circleWalletAddress
+
   const notifyPaid = (request: Awaited<ReturnType<PocketRequestRepository['getFor']>>) => {
     void Promise.allSettled([
       sendPocketPush(request.senderId, 'request-paid-received:' + request.id, {
         title: 'Request paid',
-        body: `${request.amount} USDC received for ${request.title}.`,
+        body: `${request.amount} ${request.asset||'USDC'} received for ${request.title}.`,
         path: '/activity?receipt='+encodeURIComponent(request.eventId),
         tag: 'pocket-request:' + request.id,
       }),
       sendPocketPush(request.recipientId, 'request-paid-sent:' + request.id, {
         title: 'Request paid',
-        body: `Your ${request.amount} USDC payment for ${request.title} was successful.`,
+        body: `Your ${request.amount} ${request.asset||'USDC'} payment for ${request.title} was successful.`,
         path: '/activity?receipt='+encodeURIComponent(request.eventId),
         tag: 'pocket-request:' + request.id,
       }),
@@ -41,7 +47,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
 
   const reconcileAccepted = async (viewerId: string, id: string) => {
     const request = await deps.repository.getFor(viewerId, id)
-    if (request.status !== 'accepted') return request
+    if (request.status !== 'accepted'||(request.asset||'USDC')!=='USDC'||request.network==='xlayer') return request
     if (!deps.readWallet || !request.senderAddress) return request
     const network = request.network === 'multi' ? 'base' : request.network
     const payerWallet = await deps.readWallet(circleLinkKey(request.recipientId, network))
@@ -73,10 +79,13 @@ export function createPocketRequestsHandler(deps: Dependencies) {
     if (req.method !== 'GET' && req.method !== 'POST') return fail(res, 405, 'Method not allowed.')
     try {
       res.setHeader('Cache-Control','no-store')
+      if(req.method==='GET'&&req.query?.capabilities==='1')return res.json({ok:true,assets:REQUEST_ASSETS.filter(enabledAsset).map(asset=>({asset,networks:requestNetworks(asset)}))})
       if(req.method==='GET'&&req.query?.link){
         const item=await deps.repository.getLink(String(req.query.link))
-        return res.json({ok:true,preview:{senderName:item.senderName.includes('@')?'Pocket '+item.senderPocketId:item.senderName,senderPocketId:item.senderPocketId,title:item.title,amount:item.amount,network:item.network,status:item.status}})
+        return res.json({ok:true,preview:{senderName:item.senderName.includes('@')?'Pocket '+item.senderPocketId:item.senderName,senderPocketId:item.senderPocketId,title:item.title,amount:item.amount,asset:item.asset||'USDC',network:item.network,status:item.status}})
       }
+      const multiAssetClient=req.headers['x-pocket-request-assets']==='1'
+      const needsMulti=(r:{asset?:string;network:string})=>(r.asset||'USDC')!=='USDC'||r.network==='xlayer'
       const identity = await deps.verifyUser(req)
       const sender = await deps.profiles.ensure(identity)
       if (req.method === 'POST' && req.body?.action === 'resolve-request-user') {
@@ -102,6 +111,8 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         return res.json({ ok: true, recipient: { pocketId: recipient.pocketId, name: profileName(recipient), network, address: wallet.circleWalletAddress } })
       }
       if(req.method==='POST'&&req.body?.action==='claim-link'){
+        const preview=await deps.repository.getLink(String(req.body.code||''))
+        if(needsMulti(preview)&&!multiAssetClient)return fail(res,409,'Update Pocket to pay this asset request.')
         const item=await deps.repository.claimLink(identity.userId,String(req.body.code||''),sender.profile.pocketId,profileName(sender.profile))
         return res.json({ok:true,request:publicRequest(item,identity.userId)})
       }
@@ -110,11 +121,14 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         const recipient = viaLink?{privyUserId:'',pocketId:''}:await deps.profiles.getByPocketId(String(req.body?.recipientPocketId ?? ''))
         if (!recipient) return fail(res, 404, 'Pocket user was not found.')
         if (recipient.privyUserId === identity.userId) return fail(res, 400, 'Choose another Pocket user.')
-        const network = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'].includes(req.body?.network) ? req.body.network as 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' : 'base'
-        if (!deps.readWallet) return fail(res, 503, 'Pocket wallet lookup is unavailable.')
-        const wallet = await deps.readWallet(circleLinkKey(identity.userId, network))
-        if (!wallet?.circleWalletAddress) return fail(res, 409, `Open your ${network === 'ethereum' ? 'Ethereum' : network === 'polygon' ? 'Polygon' : network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : network === 'arc' ? 'Arc' : 'Base'} Pocket wallet before requesting payment.`)
-        const saved = await deps.repository.create({ eventId: req.body?.eventId, senderId: identity.userId, senderPocketId: sender.profile.pocketId, senderName: profileName(sender.profile), senderAddress: wallet.circleWalletAddress, recipientId: recipient.privyUserId, recipientPocketId: recipient.pocketId, recipientName: viaLink?'Anyone with the link':profileName(recipient as any), ...(viaLink?{linkCode:randomBytes(24).toString('base64url')}:{}), title: String(req.body?.title ?? '').trim().slice(0, 100) || 'USDC request', amount: String(req.body?.amount ?? '').trim(), flexibleAmount: false, network })
+        const network = String(req.body?.network||'base') as RequestNetwork
+        const asset = String(req.body?.asset||'USDC') as RequestAsset
+        if(needsMulti({asset,network})&&!multiAssetClient)return fail(res,409,'Update Pocket to request this asset.')
+        if(!enabledAsset(asset))return fail(res,409,'Requests for this asset are not available yet.')
+        if(!requestAsset(network,asset))return fail(res,400,'Choose a supported asset and network.')
+        const address=await readAddress(identity.userId,network)
+        if(!address)return fail(res,409,'Open your '+network+' Pocket wallet before requesting payment.')
+        const saved = await deps.repository.create({ eventId: req.body?.eventId, senderId: identity.userId, senderPocketId: sender.profile.pocketId, senderName: profileName(sender.profile), senderAddress: address, asset, recipientId: recipient.privyUserId, recipientPocketId: recipient.pocketId, recipientName: viaLink?'Anyone with the link':profileName(recipient as any), ...(viaLink?{linkCode:randomBytes(24).toString('base64url')}:{}), title: String(req.body?.title ?? '').trim().slice(0, 100) || 'Payment request', amount: String(req.body?.amount ?? '').trim(), flexibleAmount: false, network })
         if (!saved.replayed && !viaLink) void sendPocketPush(recipient.privyUserId, 'request-created:' + saved.request.id, {
           title: 'New payment request',
           body: 'Open Pocket to review it.',
@@ -125,12 +139,13 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       }
       if (req.method === 'POST' && req.body?.action === 'prepare-payment') {
         const request = await deps.repository.getFor(identity.userId, String(req.body.id || ''))
+        if(needsMulti(request)&&!multiAssetClient)return fail(res,409,'Update Pocket to pay this asset request.')
         if (request.recipientId !== identity.userId || request.status !== 'accepted') return fail(res, 409, 'This request is not awaiting your payment.')
         if (request.senderAddress) return res.json({ok:true,request:publicRequest(request,identity.userId)})
         if (!deps.readWallet || request.network === 'multi') return fail(res,409,'This older request needs a new request from the sender.')
-        const wallet = await deps.readWallet(circleLinkKey(request.senderId,request.network))
-        if (!wallet?.circleWalletAddress) return fail(res,409,'The sender needs to open their Pocket wallet on this network before you can pay.')
-        const prepared = await deps.repository.preparePayment(identity.userId,request.id,wallet.circleWalletAddress)
+        const address = await readAddress(request.senderId,request.network)
+        if (!address) return fail(res,409,'The sender needs to open their Pocket wallet on this network before you can pay.')
+        const prepared = await deps.repository.preparePayment(identity.userId,request.id,address)
         return res.json({ok:true,request:publicRequest(prepared,identity.userId)})
       }
       if (req.method === 'POST' && req.body?.action === 'cancel') {
@@ -189,7 +204,13 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         if (request.status !== 'accepted') return fail(res, 409, 'Accept this request before paying.')
         const txHash = String(req.body?.transactionHash ?? '').trim()
         if (!deps.readWallet) return fail(res, 503, 'Pocket wallet lookup is unavailable.')
-        const payerWallet = await deps.readWallet(circleLinkKey(identity.userId, request.network === 'multi' ? 'base' : request.network))
+        const payer=await readAddress(identity.userId,request.network==='multi'?'base':request.network)
+        if(!payer||!request.senderAddress)return fail(res,409,'Pocket wallet details are incomplete for this request.')
+        if((request.asset||'USDC')!=='USDC'||request.network==='xlayer'){
+          await deps.repository.recordSubmitted(identity.userId,request.id,txHash)
+          await (deps.verifyAsset||verifyRequestTransfer)({network:request.network,asset:request.asset,amount:request.amount,payer,recipient:request.senderAddress,txHash,notBefore:request.acceptedAt||request.createdAt})
+        }else{
+        const payerWallet = {circleWalletAddress:payer}
         if (!payerWallet?.circleWalletAddress || !request.senderAddress) return fail(res, 409, 'Pocket wallet details are incomplete for this request.')
         if (request.network === 'solana') {
           if (!/^[1-9A-HJ-NP-Za-km-z]{64,120}$/.test(txHash)) return fail(res, 400, 'A valid Solana transaction is required.')
@@ -210,6 +231,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
             return fail(res, 409, 'The confirmed USDC transfer does not match this request.')
           }
         }
+        }
         const paid = await deps.repository.markPaid(identity.userId, request.id, txHash)
         notifyPaid(paid)
 
@@ -217,7 +239,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       }
       if (req.method === 'POST') return fail(res, 400, 'Choose a valid request action.')
       const requests = await deps.repository.listFor(identity.userId)
-      const notifications = requests.map(item => publicRequest(item, identity.userId))
+      const notifications = requests.filter(r=>multiAssetClient||!needsMulti(r)).map(item => publicRequest(item, identity.userId))
       const lastRead = await deps.repository.lastRead(identity.userId)
       return res.json({ ok: true, unreadCount: notifications.filter(item => item.direction === 'incoming' && ['pending', 'accepted'].includes(item.status) && item.updatedAt > lastRead).length, requests: notifications })
     } catch (reason) {
