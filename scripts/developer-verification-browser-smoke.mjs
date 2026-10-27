@@ -9,6 +9,21 @@ try {
  for(const [label,value] of Object.entries({'Legal company name':'Example Limited','Trading name':'Example','Phone number':'+2348000000000','Website':'https://example.test','Registration number':'RC-TEST-123','Registered business address':'Example Street, Abuja','What does your business do?':'Software subscriptions and checkout services.'}))await page.getByLabel(label,{exact:true}).fill(value)
  const file={name:'example-evidence.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nSynthetic fixture - not a real document')}
  for(const input of await page.locator('input[type=file]').all()) {await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor();await page.getByRole('button',{name:'Continue',exact:true}).waitFor({state:'visible'})}
+ for(const width of [320,390,768,1440]) for(const dark of [false,true]) {
+  await page.setViewportSize({width,height:960})
+  await page.evaluate(dark=>document.documentElement.classList.toggle('dark',dark),dark)
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+  const geometry=await page.evaluate(()=>{const form=document.querySelector('.verification-documents').getBoundingClientRect();return [...document.querySelectorAll('.verification-documents > .verification-document .verification-upload')].map(el=>({width:el.getBoundingClientRect().width,expected:form.width}))})
+  assert.ok(geometry.length>=5)
+  for(const size of geometry)assert.ok(Math.abs(size.width-size.expected)<2,'each company upload spans the form width')
+  assert.equal(await page.getByLabel('Legal company name',{exact:true}).evaluate(el=>getComputedStyle(el).fontSize),'16px')
+  assert.ok((await page.getByLabel('Legal company name',{exact:true}).boundingBox()).height>=50)
+  await page.locator('.verification-section-heading').first().scrollIntoViewIfNeeded()
+  await page.screenshot({path:'output/playwright/verification-layout-'+width+(dark?'-dark':'-light')+'.png'})
+  if(width===1440){await page.locator('.verification-document').first().scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/verification-uploads-'+(dark?'dark':'light')+'.png'})}
+ }
+ await page.setViewportSize({width:390,height:844})
+ await page.evaluate(()=>document.documentElement.classList.remove('dark'))
  await page.getByRole('button',{name:'Save draft',exact:true}).click()
  await page.getByText('Draft saved.',{exact:true}).waitFor()
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
@@ -38,5 +53,5 @@ try {
  await page.waitForFunction(()=>document.querySelectorAll('details').length===2)
  assert.equal(await page.getByText('Pending',{exact:true}).count(),0)
  assert.deepEqual(errors,[])
- console.log('PASS mobile verification wizard, document uploads, draft, submission lock, gated keys and payment statuses/search.')
+ console.log('PASS responsive verification layout (320/390/768/1440 light/dark), full-width uploads, mobile verification wizard, document uploads, draft, submission lock, gated keys and payment statuses/search.')
 } finally {await browser.close()}
