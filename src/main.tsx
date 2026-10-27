@@ -9,6 +9,8 @@ import '@fontsource/plus-jakarta-sans/700.css'
 import '@fontsource/plus-jakarta-sans/800.css'
 
 import './index.css'
+// Console forms must be styled before any lazy surface or shared chunk renders.
+import './developer/developer.css'
 
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
 import DeveloperLoadingSkeleton from './components/DeveloperLoadingSkeleton'
