@@ -1,3 +1,4 @@
+import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {decodeFunctionData,decodeAbiParameters,encodeFunctionData,parseAbi,parseEventLogs,type Hex} from 'viem'
 import {entryPoint07Abi} from 'viem/account-abstraction'
 import {encodeXLayerSponsoredBatch,XLAYER_ENTRY_POINT} from './xlayer-sponsored-cost.js'
@@ -21,7 +22,7 @@ export function sponsoredSwapTradeCall(tx:{hash:string;to:string|null;input:Hex}
   const [raw]=decodeAbiParameters([{type:'tuple[]',components:[{name:'target',type:'address'},{name:'value',type:'uint256'},{name:'callData',type:'bytes'}]}],decoded.args[1])
   if(raw.length!==5||raw.some(c=>c.value!==0n))return
   const calls=raw.map(c=>({to:c.target,data:c.callData,value:'0x0' as const}))
-  if(!same(encodeXLayerSponsoredBatch(calls),op.callData)||![stockUsdc.address,stockUsdt.address].some(t=>same(t,calls[0].to))||![1,3,4].every(i=>same(calls[i].to,calls[0].to))||!same(calls[2].to,OKX_XLAYER_ROUTER))return
+  if(!same(encodeXLayerSponsoredBatch(calls),op.callData)||!Object.values(xLayerFeeAssets).some(t=>same(t.address,calls[0].to))||![1,3,4].every(i=>same(calls[i].to,calls[0].to))||!same(calls[2].to,OKX_XLAYER_ROUTER))return
   const approval=decodeFunctionData({abi:tokenAbi,data:calls[1].data});if(approval.functionName!=='approve'||!same(approval.args[0],OKX_XLAYER_SPENDER)||approval.args[1]<=0n)return
   for(const i of [0,3])if(!same(calls[i].data,encodeFunctionData({abi:tokenAbi,functionName:'approve',args:[OKX_XLAYER_SPENDER,0n]})))return
   const fee=decodeFunctionData({abi:tokenAbi,data:calls[4].data});if(fee.functionName!=='transfer'||!same(fee.args[0],EVM_PLATFORM_TREASURY)||fee.args[1]<=0n)return

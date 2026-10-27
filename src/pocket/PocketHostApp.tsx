@@ -9,6 +9,7 @@ import PocketNativeBridge from './components/PocketNativeBridge'
 
 const PocketGiftSendPage = lazy(() => import('./pages/PocketGiftSendPage'))
 const PocketGiftClaimEntryPage = lazy(() => import('./pages/PocketGiftClaimEntryPage'))
+const PocketRequestLinkPage = lazy(() => import('./pages/PocketRequestLinkPage'))
 const PocketGiftPage = lazy(() => import('./pages/PocketGiftPage'))
 const UnifiedXPayCheckout = lazy(() => import('./pages/PocketUnifiedXPayPage'))
 const XPayCheckout = lazy(() => import('./pages/PocketXPayCheckoutPage'))
@@ -23,6 +24,7 @@ export default function PocketHostApp() {
         <Routes>
           <Route path="gifts/send" element={<Suspense fallback={<PocketGiftRouteLoading kind="send"/>}><PocketGiftSendPage/></Suspense>}/>
           <Route path="gifts/claim" element={<Suspense fallback={<PocketGiftRouteLoading kind="claim"/>}><PocketGiftClaimEntryPage/></Suspense>}/>
+          <Route path="request/:code" element={<Suspense fallback={<PocketGiftRouteLoading kind="preview"/>}><PocketRequestLinkPage/></Suspense>}/>
           <Route path="gift/:giftId" element={<Suspense fallback={<PocketGiftRouteLoading kind="preview"/>}><PocketGiftPage/></Suspense>} />
           {!isPocketNativeRuntime() && <Route path="xpay/checkout/:checkoutId" element={<Suspense fallback={null}><UnifiedXPayCheckout publicCheckout /></Suspense>} />}
           {!isPocketNativeRuntime() && <Route path="xpay/:merchantId" element={<Suspense fallback={null}><XPayCheckout /></Suspense>} />}

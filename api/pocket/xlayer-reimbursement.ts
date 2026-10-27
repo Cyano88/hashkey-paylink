@@ -1,20 +1,21 @@
+import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {createHmac,timingSafeEqual} from 'node:crypto'
 import {encodeFunctionData,getAddress,isAddress,parseAbi,type Hex} from 'viem'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 import {priceXLayerReimbursement} from './xlayer-sponsored-cost.js'
 
 export type XLayerCall={to:Hex;data:Hex;value:'0x0'}
-export type XLayerFeeBinding={ownerId:string;walletId:string;walletAddress:Hex;asset:'USDC'|'USDT';amountUnits:string;intentId:string}
+export type XLayerFeeBinding={ownerId:string;walletId:string;walletAddress:Hex;asset:XLayerFeeAsset;amountUnits:string;intentId:string}
 export type XLayerReimbursementPolicy={marginBps:number;minimumFeeUnits:string}
 export type XLayerFeeQuote=XLayerFeeBinding&{version:2;chainId:196;calls:XLayerCall[];networkFeeUnits:string;totalUnits:string;issuedAt:number;expiresAt:number;estimateId:string;pricing:XLayerReimbursementPolicy}
 // An adapter must quote the entire sponsored operation, including managed-service
 // charges and the reimbursement call. eth_estimateGas alone is not this estimate.
 export type XLayerSponsorshipEstimate={feeUnits:string;expiresAt:number;estimateId:string}
 export type XLayerFeeEstimator=(input:XLayerFeeBinding&{calls:XLayerCall[]})=>Promise<XLayerSponsorshipEstimate>
-const tokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c9e1022225f8e0630b35a9b54be713736'} as const
+const tokens=Object.fromEntries(Object.entries(xLayerFeeAssets).map(([asset,token])=>[asset,token.address])) as Record<XLayerFeeAsset,string>
 const transfer=parseAbi(['function transfer(address,uint256) returns(bool)'])
 const invalid=()=>{throw Error('X Layer fee quote changed or expired. Review the transfer again.')}
-const units=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,19}$/.test(v)&&BigInt(v)<2n**64n
+const units=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,77}$/.test(v)&&BigInt(v)<2n**256n
 function pricedFee(cost:string,policy:XLayerReimbursementPolicy){
  if(!units(cost)||!policy||!(policy.minimumFeeUnits==='0'||units(policy.minimumFeeUnits)))return invalid()
  const fee=priceXLayerReimbursement(BigInt(cost),policy.marginBps,BigInt(policy.minimumFeeUnits)).toString()
@@ -22,18 +23,18 @@ function pricedFee(cost:string,policy:XLayerReimbursementPolicy){
  return fee
 }
 function validateBinding(b:XLayerFeeBinding){
- if(!b.ownerId||!b.walletId||!b.intentId||!isAddress(b.walletAddress)||/^0x0{40}$/i.test(b.walletAddress)||b.walletAddress.toLowerCase()===EVM_PLATFORM_TREASURY.toLowerCase()||!['USDC','USDT'].includes(b.asset)||!units(b.amountUnits))invalid()
+ if(!b.ownerId||!b.walletId||!b.intentId||!isAddress(b.walletAddress)||/^0x0{40}$/i.test(b.walletAddress)||b.walletAddress.toLowerCase()===EVM_PLATFORM_TREASURY.toLowerCase()||!Object.hasOwn(xLayerFeeAssets,b.asset)||!units(b.amountUnits))invalid()
 }
 function validateCalls(calls:XLayerCall[]){
  if(!Array.isArray(calls)||!calls.length||calls.length>12||calls.some(c=>!c||!isAddress(c.to)||/^0x0{40}$/i.test(c.to)||c.value!=='0x0'||!/^0x(?:[0-9a-f]{2})+$/i.test(c.data)))invalid()
 }
-function withReimbursement(calls:XLayerCall[],asset:'USDC'|'USDT',fee:string):XLayerCall[]{
+function withReimbursement(calls:XLayerCall[],asset:XLayerFeeAsset,fee:string):XLayerCall[]{
  return [...calls,{to:getAddress(tokens[asset]),value:'0x0',data:encodeFunctionData({abi:transfer,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,BigInt(fee)]})}]
 }
 /** Only pass calls built and validated by the server's send/bridge adapter. */
 export async function quoteXLayerReimbursement(binding:XLayerFeeBinding,validatedCalls:XLayerCall[],providerExpiresAt:number,estimate:XLayerFeeEstimator,pricing:XLayerReimbursementPolicy,now:()=>number=Date.now,availableUnits?:bigint):Promise<XLayerFeeQuote>{
  validateBinding(binding);validateCalls(validatedCalls)
- const policy=structuredClone(pricing)
+ const policy={...structuredClone(pricing),minimumFeeUnits:(BigInt(pricing.minimumFeeUnits)*xLayerFeeScale(binding.asset)).toString()}
  pricedFee('1',policy)
  const issuedAt=now()
  if(!Number.isSafeInteger(providerExpiresAt)||providerExpiresAt<=issuedAt)invalid()

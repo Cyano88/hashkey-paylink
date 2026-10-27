@@ -1,7 +1,7 @@
 import type { PocketPaymentLiquidityCheckpoint } from '../controllers/usePocketPaymentLiquidityController'
 import { POCKET_API } from '../lib/pocketSchemas'
 
-export type PocketRequestItem = { id: string; eventId: string; direction: 'incoming' | 'outgoing'; senderPocketId: string; senderName: string; recipientPocketId: string; recipientName: string; title: string; amount: string; flexibleAmount: boolean; network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' | 'multi'; paymentPath: string; recipientAddress?: string; status: 'pending' | 'accepted' | 'declined' | 'paid' | 'cancelled'; transactionHash: string; createdAt: number; updatedAt: number }
+export type PocketRequestItem = { linkUrl?:string; id: string; eventId: string; direction: 'incoming' | 'outgoing'; senderPocketId: string; senderName: string; recipientPocketId: string; recipientName: string; title: string; amount: string; flexibleAmount: boolean; network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' | 'multi'; paymentPath: string; recipientAddress?: string; status: 'pending' | 'accepted' | 'declined' | 'paid' | 'cancelled'; transactionHash: string; createdAt: number; updatedAt: number }
 export const POCKET_REQUESTS_UPDATED_EVENT = 'pocket:requests-updated'
 function announcePocketRequestsUpdated() { window.dispatchEvent(new Event(POCKET_REQUESTS_UPDATED_EVENT)) }
 const message = (data: unknown, fallback: string) => {
@@ -83,3 +83,6 @@ export async function resolvePocketRecipient(accessToken: string, pocketId: stri
 export async function cancelPocketRequest(accessToken: string, id: string) { const data = await call(accessToken, { action: "cancel", id }); if (!data.request) throw new Error("Request could not be cancelled."); announcePocketRequestsUpdated(); return data.request }
 
 export async function preparePocketRequestPayment(accessToken:string,id:string){const data=await call(accessToken,{action:'prepare-payment',id});if(!data.request?.recipientAddress)throw Error('The requested wallet is unavailable.');return data.request}
+
+export async function createPocketLinkRequest(input:{accessToken:string;eventId:string;title:string;amount:string;network:Exclude<PocketRequestItem['network'],'multi'>}){const {accessToken,...body}=input;const data=await call(accessToken,{action:'create-link',...body});if(!data.request?.linkUrl||!/^https:\/\/pocket\.hashpaylink\.com\/request\/[A-Za-z0-9_-]{32}$/.test(data.request.linkUrl))throw Error('Request link is unavailable.');announcePocketRequestsUpdated();return data.request}
+export async function claimPocketLinkRequest(accessToken:string,code:string){const data=await call(accessToken,{action:'claim-link',code});if(!data.request)throw Error('Request is unavailable.');announcePocketRequestsUpdated();return data.request}

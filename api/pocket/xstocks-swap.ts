@@ -1,3 +1,4 @@
+import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {quoteStockMaximum} from './xstocks-max.js'
 import {stockClient,stockTokenAbi,stockUsdc,stockUsdt} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {quoteSponsoredSwap} from './xlayer-swap-sponsorship.js'
@@ -29,7 +30,7 @@ export function createStockSwapHandler(overrides: Partial<{identity:typeof verif
       const prepare=async(amount:string)=>{
       const quote = await quoteStockSwap({...input,amount})
       let sponsorship
-      if(reimbursedSwapAsset(quote)){
+      if(reimbursedSwapAsset(quote)&&(['USDC','USDT'].includes(quote.tokenIn.symbol)||req.body.extendedReimbursement==='true')){
         const config=configuredXLayerReimbursement(),embedded=user.linkedAccounts.find(a=>a.type==='wallet'&&a.walletClientType==='privy'&&a.chainType==='ethereum'&&a.address.toLowerCase()===wallet.toLowerCase()) as {id?:string}|undefined
         const allowed=process.env.POCKET_XLAYER_TRANSFER_PUBLIC_ENABLED==='true'||(process.env.POCKET_XLAYER_SPONSORSHIP_WALLETS||'').toLowerCase().split(',').map(s=>s.trim()).includes(wallet.toLowerCase())
         if(!config||!embedded?.id||process.env.POCKET_XLAYER_SPONSORSHIP_ENABLED!=='true'||!allowed)throw Object.assign(Error('Swap fee service is temporarily unavailable.'),{status:503})
@@ -39,12 +40,14 @@ export function createStockSwapHandler(overrides: Partial<{identity:typeof verif
       return {quote,sponsorship}
       }
       let review
-      if(req.body.max==='true'&&(input.tokenIn==='native'||[stockUsdc.address,stockUsdt.address].some(a=>a.toLowerCase()===input.tokenIn.toLowerCase()))){
+      if(req.body.max==='true'&&(input.tokenIn==='native'||Object.values(xLayerFeeAssets).some(a=>a.address===input.tokenIn.toLowerCase()))){
         if(await stockClient.getChainId()!==196)throw Error('X Layer connection unavailable.')
         const native=input.tokenIn==='native'
         const balance=native?await stockClient.getBalance({address:input.owner}):await stockClient.readContract({address:getAddress(input.tokenIn),abi:stockTokenAbi,functionName:'balanceOf',args:[input.owner]})
-        const reserve=native?0n:BigInt(configuredXLayerReimbursement()?.pricing.minimumFeeUnits||'0')
-        review=await quoteStockMaximum(balance,native?18:6,reserve,prepare)
+        const feeAsset=Object.entries(xLayerFeeAssets).find(([,a])=>a.address===input.tokenIn.toLowerCase())?.[0] as XLayerFeeAsset|undefined
+        const decimals=native?18:xLayerFeeAssets[feeAsset!].decimals
+        const reserve=native?0n:BigInt(configuredXLayerReimbursement()?.pricing.minimumFeeUnits||'0')*xLayerFeeScale(feeAsset!)
+        review=await quoteStockMaximum(balance,decimals,reserve,prepare)
       }else review=await prepare(String(req.body.amount||''))
       const {quote,sponsorship}=review
       return res.json({ ok: true, quote, quoteToken: sealStockQuote(quote, identity.userId),...(sponsorship?{sponsorship}:{}) })

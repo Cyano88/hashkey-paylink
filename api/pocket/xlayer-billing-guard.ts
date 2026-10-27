@@ -1,3 +1,4 @@
+import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {bscCollectedCoverage,type BscCollectedCoverage} from './bsc-collected-coverage.js'
 import {createBscRuntime} from './bsc-runtime.js'
 import type {BscOperationStore} from './bsc-operations.js'
@@ -7,11 +8,11 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {readStockMarketPrices} from './xstocks-prices.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
-export type XLayerCoverage={walletId:string;asset:'USDC'|'USDT';feeUnits:string}
+export type XLayerCoverage={walletId:string;asset:XLayerFeeAsset;feeUnits:string}
 type Attempt={wallet:string;at:number;hash?:string;transactionId?:string;coverage?:XLayerCoverage;providerFailure?:{status:number;code?:string}}
 type Halt={haltedAt:number;reason:'billed_cost_exceeds_coverage';billedUsdMicros:string;coverageUsdMicros:string}
 const key='pocket:xlayer-billing-halt:v1'
-const tokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c9e1022225f8e0630b35a9b54be713736'}
+const tokens=Object.fromEntries(Object.entries(xLayerFeeAssets).map(([asset,token])=>[asset,token.address])) as Record<XLayerFeeAsset,string>
 const abi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const unavailable=()=>{throw Error('X Layer sponsorship cost verification is temporarily unavailable.')}
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
@@ -39,7 +40,8 @@ export function createXLayerBillingGuard(d:{
   const walletIds=[...new Set([...recent.map(r=>r.coverage!.walletId),...extra.map(r=>r.walletId)])]
   if(!walletIds.length)return
   if(await d.rpc('eth_chainId',[])!=='0xc4')return unavailable()
-  const prices=await d.prices(Object.values(tokens))
+  if(recent.some(r=>!Object.hasOwn(xLayerFeeAssets,r.coverage!.asset)))return unavailable()
+  const prices=await d.prices([...new Set(recent.map(r=>tokens[r.coverage!.asset]))])
   let failure:unknown
   for(const walletId of walletIds){
    try {
@@ -71,7 +73,7 @@ export function createXLayerBillingGuard(d:{
     // Discount current USD value by 5%; never assume a stablecoin dollar peg.
     const usd8=Math.floor(price.usd*1e8*0.95)
     if(!Number.isSafeInteger(usd8)||usd8<=0)return unavailable()
-    return BigInt(c.feeUnits)*BigInt(usd8)/100000000n
+    return BigInt(c.feeUnits)*BigInt(usd8)/(100000000n*xLayerFeeScale(c.asset))
     }))
     coverage+=collected.reduce((sum,value)=>sum+value,0n)
    }

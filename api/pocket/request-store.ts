@@ -13,6 +13,7 @@ export type PocketRequestRoute = {
   updatedAt: number
 }
 export type PocketMoneyRequest = {
+  linkCode?: string
   id: string; eventId: string; senderId: string; senderPocketId: string; senderName: string
   senderAddress?: string; recipientId: string; recipientPocketId: string; recipientName?: string
   title: string; amount: string; flexibleAmount: boolean
@@ -52,7 +53,27 @@ export function createPocketRequestRepository(options: Options = {}) {
     queue = run.catch(() => undefined); await run; return result as T
   }
   return {
+    async getLink(code: string) {
+      if(!/^[A-Za-z0-9_-]{32}$/.test(code))throw Object.assign(Error('Payment request was not found.'),{status:404})
+      const request=Object.values((await readStore()).requests).find(r=>r.linkCode===code)
+      if(!request)throw Object.assign(Error('Payment request was not found.'),{status:404})
+      return request
+    },
+    async claimLink(userId:string,code:string,pocketId:string,name:string){
+      if(!userId||!/^[A-Za-z0-9_-]{32}$/.test(code))throw Object.assign(Error('Payment request was not found.'),{status:404})
+      return mutate(store=>{
+        const request=Object.values(store.requests).find(r=>r.linkCode===code)
+        if(!request)throw Object.assign(Error('Payment request was not found.'),{status:404})
+        if(request.senderId===userId)throw Object.assign(Error('You cannot pay your own request.'),{status:409})
+        if(request.recipientId===userId&&['accepted','paid'].includes(request.status))return request
+        if(request.status!=='pending'||request.recipientId)throw Object.assign(Error(request.status==='paid'?'This request is already paid.':request.status==='cancelled'?'This request was cancelled.':'This request has already been accepted.'),{status:409})
+        const updated:PocketMoneyRequest={...request,recipientId:userId,recipientPocketId:pocketId,recipientName:name,status:'accepted',updatedAt:now()}
+        store.requests[request.id]=updated
+        return updated
+      })
+    },
     async create(input: Omit<PocketMoneyRequest, 'id' | 'status' | 'createdAt' | 'updatedAt'>) {
+      if(input.linkCode&&(!/^[A-Za-z0-9_-]{32}$/.test(input.linkCode)||input.recipientId))throw Object.assign(Error('Invalid request link.'),{status:400})
       const eventId = clean(input.eventId, 120)
       if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(eventId)) throw Object.assign(new Error('Request identity is invalid.'), { status: 400 })
       if (input.senderId === input.recipientId) throw Object.assign(new Error('Choose another Pocket user.'), { status: 400 })

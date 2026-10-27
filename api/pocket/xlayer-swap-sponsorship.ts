@@ -1,4 +1,5 @@
 import {type Hex} from 'viem'
+import {xLayerFeeAssets} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {stockClient,stockTokenAbi} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {sponsoredSwapCalls,reimbursedSwapAsset} from '../../src/pocket/lib/pocketSponsoredSwap.js'
 import {openStockQuote,type quoteStockSwap} from './xstocks-swap-provider.js'
@@ -8,6 +9,7 @@ import type {StockSwapQuote} from '../../src/pocket/lib/pocketXStocksSwap.js'
 export const swapFeeBinding=(q:StockSwapQuote,ownerId:string,walletId:string)=>({ownerId,walletId,walletAddress:q.owner,asset:reimbursedSwapAsset(q)!,amountUnits:q.amountUnits,intentId:q.id})
 export async function quoteSponsoredSwap(q:StockSwapQuote,ownerId:string,walletId:string,appId:string,estimate:XLayerFeeEstimator,pricing:XLayerReimbursementPolicy){
  const calls=sponsoredSwapCalls(q),binding=swapFeeBinding(q,ownerId,walletId)
+ if(q.decimalsIn!==xLayerFeeAssets[binding.asset].decimals)throw Error('Swap token precision changed.')
  const fee=await quoteXLayerReimbursement(binding,calls,q.expiresAt,estimate,pricing)
  if(await stockClient.getChainId()!==196)throw Error('X Layer connection unavailable.')
  const balance=await stockClient.readContract({address:q.tokenIn.address as Hex,abi:stockTokenAbi,functionName:'balanceOf',args:[q.owner]})

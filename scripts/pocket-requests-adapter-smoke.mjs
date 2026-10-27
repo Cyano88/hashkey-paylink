@@ -12,7 +12,7 @@ const profiles = {
   async ensure(identity) { return { profile: identity.userId === 'sender' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'kyc_verified', email: 'ada@example.com' } : { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' }, unchanged: true } },
   async getByPocketId(id) { return id === '22222222' ? { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' } : id === '11111111' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'kyc_verified', email: 'ada@example.com' } : undefined },
 }
-const response = () => ({ statusCode: 200, body: undefined, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } })
+const response = () => ({ statusCode: 200, body: undefined, headers: {}, setHeader(name,value) { this.headers[name]=value; return this }, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } })
 async function call(handler, method, body = {}) { const res = response(); await handler({ method, body, headers: {} }, res); return res }
 const identity = { current: 'sender' }
 const eventId = 'request_event_0001'

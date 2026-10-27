@@ -1,3 +1,4 @@
+import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {createHash} from 'node:crypto'
 import {encodeFunctionData,parseAbi,toHex,type Hex} from 'viem'
 import {entryPoint07Abi} from 'viem/account-abstraction'
@@ -6,7 +7,7 @@ import type {XLayerFeeEstimator,XLayerReimbursementPolicy} from './xlayer-reimbu
 import {readStockMarketPrices} from './xstocks-prices.js'
 
 const native='0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
-const tokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c9e1022225f8e0630b35a9b54be713736'} as const
+const tokens=Object.fromEntries(Object.entries(xLayerFeeAssets).map(([asset,token])=>[asset,token.address])) as Record<XLayerFeeAsset,string>
 const oracle='0x420000000000000000000000000000000000000F'
 const oracleAbi=parseAbi(['function getL1FeeUpperBound(uint256) view returns(uint256)'])
 type MarketPrice={usd:number;fetchedAt:number}
@@ -61,8 +62,9 @@ export function createXLayerFeeEstimator(d:{rpc:XLayerCostRpc;prices(addresses:s
   // pretending it is Privy's contractual surcharge. The margin and floor then
   // apply to this conservative estimate. Actual billing is monitored separately.
   const fullUsdMicros=ceil(networkUsdMicros*BigInt(10000+policy.providerBps),10000n)+policy.providerFixedUsdMicros+(policy.observedCostUsdMicros??0n)
-  const feeUnits=ceil(fullUsdMicros*100000000n,BigInt(stable8))
-  if(priceXLayerReimbursement(feeUnits,policy.pricing.marginBps,BigInt(policy.pricing.minimumFeeUnits))>policy.maxFeeUnits)unavailable()
+  const scale=xLayerFeeScale(input.asset)
+  const feeUnits=ceil(fullUsdMicros*100000000n*scale,BigInt(stable8))
+  if(priceXLayerReimbursement(feeUnits,policy.pricing.marginBps,BigInt(policy.pricing.minimumFeeUnits)*scale)>policy.maxFeeUnits*scale)unavailable()
   const expiresAt=Math.min(started+30000,okb.fetchedAt+30000,stable.fetchedAt+30000,blockTime+30000)
   if(expiresAt<=now())unavailable()
   const estimateId=createHash('sha256').update(JSON.stringify({input,blockHash:block.hash,gas:String(totalGas),gasPrice:String(price),l1:String(l1),okb8,stable8,providerBps:policy.providerBps,providerFixedUsdMicros:String(policy.providerFixedUsdMicros),observedCostUsdMicros:String(policy.observedCostUsdMicros??''),expiresAt})).digest('hex')

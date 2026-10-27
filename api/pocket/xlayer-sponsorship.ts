@@ -1,4 +1,5 @@
 import {xLayerUsde,xLayerUsdg} from '../../src/pocket/lib/pocketXLayerPaymentAssets.js'
+import {xLayerFeeScale} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {readSponsoredSwapOutcome,type SponsoredSwapEvidence} from './xlayer-swap-settlement.js'
 import {encodeXLayerSponsoredBatch} from './xlayer-sponsored-cost.js'
@@ -269,7 +270,11 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         } else if(req.body?.purpose!=='bridge'&&req.body?.purpose!=='swap')try { await d.minimum(token,units) } catch(error) { throw fail((error as Error).message,422) }
       }
       const fingerprint = createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
-      if(approved&&!reserved&&!isDeepStrictEqual(approved.pricing,d.reimbursement?.pricing))throw fail('Transfer fee policy changed. Review the transfer again.',422)
+      if(approved&&!reserved){
+        const policy=d.reimbursement?.pricing
+        const expectedPolicy=policy?{...policy,minimumFeeUnits:(BigInt(policy.minimumFeeUnits)*xLayerFeeScale(approved.asset)).toString()}:undefined
+        if(!isDeepStrictEqual(approved.pricing,expectedPolicy))throw fail('Transfer fee policy changed. Review the transfer again.',422)
+      }
       if(!reserved)await d.billingGuard(wallet)
       if(!reserved&&Number(canonical.headers['privy-request-expiry'])<=d.now())throw fail('Payment approval expired. Review the transfer again.',422)
       let existing: Record | undefined
