@@ -1,3 +1,4 @@
+import {normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import {manageAppRemoval} from './developer-app-removal.js'
 import {listDeveloperPayments} from './developer-payments.js'
@@ -78,6 +79,8 @@ type DeveloperProject = {
   checkoutMode?: DeveloperCheckoutMode
   capabilities?: DeveloperCapability[]
   productSettingsVersion?: number
+  acceptedAssets?: CheckoutAcceptance
+  checkoutDefaultNetwork?: 'xlayer'
   xlayerCheckout?: XLayerCheckoutConfig
   settlementMode: SettlementMode
   settlementStatus: 'ready' | 'review_required'
@@ -117,6 +120,8 @@ type DeveloperProject = {
 type DeveloperStore = { projects: Record<string, DeveloperProject>; profiles?: Record<string, { name: string; role: string; updatedAt: string }> }
 
 export type DeveloperCheckoutPolicy = {
+  acceptedAssets?: CheckoutAcceptance
+  checkoutDefaultNetwork?: 'xlayer'
   xlayerCheckout?: XLayerCheckoutConfig
   swapPermission?: boolean
   partnerId: string
@@ -407,6 +412,8 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     checkoutMode: projectCheckoutMode(project),
     capabilities: effectiveProductCapabilities(project),
     productSettingsVersion: project.productSettingsVersion,
+    acceptedAssets: project.acceptedAssets,
+    checkoutDefaultNetwork: project.checkoutDefaultNetwork,
     xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
@@ -916,6 +923,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
         const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
         const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
+        let acceptedAssets:CheckoutAcceptance
+        try{acceptedAssets=normalizeCheckoutAcceptance(req.body?.acceptedAssets ?? currentProject.acceptedAssets,networks)}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
+        const checkoutDefaultNetwork = req.body?.checkoutDefaultNetwork === 'xlayer' ? 'xlayer' as const : undefined
+        if(checkoutDefaultNetwork && (!xlayerCheckout || settlementMode !== 'usdc')) return res.status(400).json({ok:false,error:'Enable X Layer acceptance before making it the default.'})
         const recipients = Object.fromEntries(NETWORKS.flatMap(network => {
           const recipient = validRecipient(req.body?.recipients?.[network], network)
           return recipient ? [[network, recipient]] : []
@@ -982,7 +993,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
             ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
-            networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
+            acceptedAssets, checkoutDefaultNetwork, networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
             bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: isLocalSettlement(settlementMode) ? bankVerifiedAt : undefined,
             bankAccountLast4: isLocalSettlement(settlementMode) ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
             bankAccountCipher: isLocalSettlement(settlementMode) ? (bankAccountNumber ? encryptValue(secret, bankAccountNumber) : latest.bankAccountCipher) : '',
@@ -1120,6 +1131,8 @@ function policyForDeveloperProject(
     : paymentOptions[0]?.network ?? 'arc'
   return {
     partnerId: project.id,
+    acceptedAssets: project.acceptedAssets,
+    checkoutDefaultNetwork: project.checkoutDefaultNetwork,
     xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     ownerId: project.ownerId,
     ownerEmail: project.ownerEmail,

@@ -658,3 +658,14 @@ assert.equal(store.checkouts[usdt.body.checkoutId].asset,'USDT')
 store.checkouts[usdt.body.checkoutId].asset='USDC'
 assert.equal((await request(handler,'GET',{query:{id:usdt.body.checkoutId}})).statusCode,409)
 console.log('PASS Solana checkout routing, USDT asset signing and case-sensitive full-length receipts.')
+
+const acceptanceDependencies={...dependencies,policy:()=>({partnerId:'acceptance-test',ownerId:'builder',allowedOrigins:['https://polydesk.trade'],merchantName:'Test',environment:'live',checkoutMode:'human',capabilities:['hosted_checkout'],projectManaged:true,settlementMode:'usdc',defaultNetwork:'base',paymentOptions:[{network:'base',recipient:valid.recipient},{network:'solana',recipient:solPayer}],acceptedAssets:{base:['USDC'],solana:['USDT']}})}
+const acceptanceHandler=createHostedCheckoutsHandler(acceptanceDependencies)
+const acceptanceBody={...valid,network:undefined,recipient:undefined}
+const acceptedUsdt=await request(acceptanceHandler,'POST',{body:{...acceptanceBody,asset:'USDT'},headers:{...headers,'idempotency-key':'accepted-usdt-00001'}})
+assert.equal(acceptedUsdt.statusCode,201,JSON.stringify(acceptedUsdt.body))
+assert.deepEqual(acceptedUsdt.body.availableNetworks,['solana'])
+const acceptedUsdc=await request(acceptanceHandler,'POST',{body:acceptanceBody,headers:{...headers,'idempotency-key':'accepted-usdc-00001'}})
+assert.equal(acceptedUsdc.statusCode,201,JSON.stringify(acceptedUsdc.body))
+assert.deepEqual(acceptedUsdc.body.availableNetworks,['base'])
+console.log('PASS accepted asset policy restricts payment routes and chooses the matching default.')

@@ -1,3 +1,5 @@
+import {CHECKOUT_NETWORK_ORDER} from '../lib/checkoutStablecoins'
+import {acceptedCheckoutAssets,CHECKOUT_ACCEPTANCE,type CheckoutAcceptance} from '../lib/checkoutAcceptance'
 import RemoveAppPanel from '../developer/RemoveAppPanel'
 import AccountHome from '../developer/AccountHome'
 import BusinessDirectory, {DirectoryProfile} from '../developer/BusinessDirectory'
@@ -28,6 +30,8 @@ type Project = {
   removal?: {status:'closed'|'deleted';at:string}
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: BusinessVerification
+  acceptedAssets?: CheckoutAcceptance
+  checkoutDefaultNetwork?: 'xlayer'
   xlayerCheckout?: XLayerCheckoutConfig
   id: string
   name: string
@@ -71,7 +75,7 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
 ]
 
 function editableProjectState(project:Project) {
-  const fields:Array<keyof Project>=['name','website','brandImageUrl','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout']
+  const fields:Array<keyof Project>=['name','website','brandImageUrl','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout']
   return JSON.stringify(fields.map(field=>project[field]))
 }
 
@@ -245,7 +249,7 @@ export default function DeveloperPortalPage() {
         action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
         checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
         xlayerCheckout: draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' ? draft.xlayerCheckout ?? null : null,
-        settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
+        acceptedAssets:draft.acceptedAssets,checkoutDefaultNetwork:draft.checkoutDefaultNetwork,settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
         arcMainnetChainId: draft.networks.includes('arc') ? 5042 : undefined, recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins.length ? draft.allowedOrigins : [draft.website],
         webhookUrl: draft.webhookUrl, bankCode: draft.bankCode, bankName: draft.bankName,
         bankAccountName: draft.bankAccountName, bankAccountNumber: draft.bankAccountNumber ?? '',
@@ -453,7 +457,9 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
         : <div className="mt-2 grid grid-cols-1 gap-2 rounded-2xl bg-gray-100 p-1 sm:grid-cols-3 dark:bg-white/[0.05]">
           {[['usdc', 'Stablecoins'], ['ngn', 'Nigeria bank'], ['ugx', 'Uganda mobile money']] .map(([value, label]) => <button key={value} type="button" onClick={() => {if(value===draft.settlementMode)return;setDraft({ ...draft, settlementMode: value as Project['settlementMode'], bankCode:'',bankName:'',bankAccountName:'',bankAccountNumber:'',bankAccountLast4:'',bankVerifiedAt:undefined, ...(value !== 'usdc' ? { networks: ['base'], defaultNetwork: 'base', recipients: {}, xlayerCheckout:undefined } : {}) })}} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
         </div>}
-      {localSettlement && <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200">Customers pay USDC on Base. {mobileMoney ? 'You receive UGX in your configured MTN or Airtel mobile money account.' : 'You receive NGN in your configured Nigerian bank account.'} Delivery is confirmed before checkout is marked paid.</p>}
+
+
+    {localSettlement && <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200">Customers pay USDC on Base. {mobileMoney ? 'You receive UGX in your configured MTN or Airtel mobile money account.' : 'You receive NGN in your configured Nigerian bank account.'} Delivery is confirmed before checkout is marked paid.</p>}
     </div>
 
     <div className="mt-7">
@@ -469,16 +475,19 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
 
     {draft.capabilities.includes('arc_agreements') && <p className="mt-3 text-sm leading-6 text-gray-500">Arc agreements use USDC on Arc Mainnet.{draft.checkoutMode === 'human' && ' X Layer agreements and Swap use the networks selected in their own sections above.'}</p>}
     <div className="mt-5 space-y-3">
-      {draft.settlementMode === 'usdc' && draft.networks.filter(network => supportedNetworks.includes(network)).map(network => <Field key={network} label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
-        <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder={network === 'solana' ? 'Solana wallet address' : '0x...'} />
-      </Field>)}
-      {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{draft.capabilities.includes('arc_agreements') ? 'The Arc address is the fixed project recipient for Agreements. Paying different workers or sellers requires the backend verified-recipient integration; do not substitute a platform wallet for their payout wallets. This is not an escrow deposit address.' : 'Enter the treasury or Circle wallet address that should receive payments on each enabled network.'}</p>}
+      {draft.settlementMode === 'usdc' && NETWORKS.filter(option=>draft.networks.includes(option.key)&&supportedNetworks.includes(option.key)).map(({key:network}) => <section key={network} className="rounded-2xl border border-gray-200 p-4 dark:border-white/10"><h3 className="mb-3 text-sm font-semibold">{network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)}</h3><p className="mb-2 text-xs text-gray-500">Accepted stablecoins</p>
+        <div className="mb-3 flex flex-wrap gap-2">{CHECKOUT_ACCEPTANCE[network].map(asset=>{const selected=acceptedCheckoutAssets(network,draft.acceptedAssets),checked=selected.includes(asset);return <label key={asset} className="flex min-h-10 items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm dark:border-white/10"><input type="checkbox" aria-label={'Accept '+asset+' on '+network} checked={checked} disabled={checked&&selected.length===1} onChange={()=>setDraft({...draft,acceptedAssets:{...draft.acceptedAssets,[network]:checked?selected.filter(value=>value!==asset):[...selected,asset]}})}/>{asset}</label>})}</div>
+        <Field label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}><input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder={network === 'solana' ? 'Solana wallet address' : '0x...'} />
+      </Field></section>)}
+      {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{draft.capabilities.includes('arc_agreements') ? 'The Arc address is the fixed project recipient for Agreements. Paying different workers or sellers requires the backend verified-recipient integration; do not substitute a platform wallet for their payout wallets. This is not an escrow deposit address.' : 'Choose accepted stablecoins and add your receiving wallet for each network.'}</p>}
     </div>
 
-    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.defaultNetwork} options={draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
+
     </>}
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
-    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout })} />}
+    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout,...(!xlayerCheckout?{checkoutDefaultNetwork:undefined}:{}) })} />}
+
+{routingRequired && draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.checkoutDefaultNetwork === 'xlayer' && draft.xlayerCheckout ? 'xlayer' : draft.defaultNetwork} options={[...draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) })),...(draft.xlayerCheckout?[{value:'xlayer',label:'X Layer'}]:[])].sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.value as typeof CHECKOUT_NETWORK_ORDER[number])-CHECKOUT_NETWORK_ORDER.indexOf(b.value as typeof CHECKOUT_NETWORK_ORDER[number]))} onChange={value => setDraft({ ...draft, checkoutDefaultNetwork:value==='xlayer'?'xlayer':undefined,...(value!=='xlayer'?{defaultNetwork:value as Network}:{}) })} ariaLabel="Default payment network" /></Field>}
 
     {localSettlement && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
       <Field label={mobileMoney ? "Mobile money provider" : "Bank"} className="sm:col-span-2"><PocketSelect value={draft.bankCode} options={institutions.map(bank => ({ value: bank.code, label: bank.name }))} onChange={value => { const bank = institutions.find(item => item.code === value); setDraft({ ...draft, bankCode: value, bankName: bank?.name ?? '', bankAccountNumber: '', bankVerifiedAt: undefined }) }} disabled={institutionsLoading} placeholder={institutionsLoading ? 'Loading...' : mobileMoney ? 'Select provider' : 'Select bank'} ariaLabel={mobileMoney ? 'Uganda mobile money provider' : 'Naira settlement bank'} /></Field>
