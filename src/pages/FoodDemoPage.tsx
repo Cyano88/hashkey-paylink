@@ -14,7 +14,7 @@ export default function FoodDemoPage(){
  useEffect(()=>{if(screen!=='order')try{sessionStorage.setItem('lunchroom.basket',JSON.stringify({cart,screen}))}catch{}},[cart,screen])
  const orderId=new URLSearchParams(location.search).get('order')
  const [acceptedAssets,setAcceptedAssets]=useState<string[]>([])
- const acceptedCopy=acceptedAssets.includes('NVDAx')?'USDC and tokenized stocks accepted.':acceptedAssets.includes('USDC')?'USDC accepted.':''
+ const acceptedCopy=acceptedAssets.includes('USDC')?'USDC accepted.':''
  useEffect(()=>{window.scrollTo(0,0)},[screen])
  async function checkOrder(){if(!orderId)return;setBusy(true);try{const r=await fetch('/api/demo/food/orders?id='+encodeURIComponent(orderId),{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Cannot check this order.');setOrder(d.order);if(d.order?.status==='paid')sessionStorage.removeItem('lunchroom.order');setScreen('order');setError('')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
  useEffect(()=>{let active=true;void fetch('/api/demo/food/orders').then(r=>r.json()).then(d=>{if(active){setLive(d.liveEnabled===true);setAcceptedAssets(d.acceptedAssets||[])}}).catch(()=>{});if(orderId){setScreen('order');void checkOrder()}return()=>{active=false}},[])

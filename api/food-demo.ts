@@ -18,7 +18,7 @@ async function projectChoices():Promise<XPayDestination[]>{
  const choices:XPayDestination[]=[]
  const networks=policy.paymentOptions.map(p=>p.network).filter(n=>['base','arbitrum','arc'].includes(n))
  if(networks.length)choices.push({id:'circle',name:policy.merchantName,kind:'stablecoins',currency:'USD',assets:['USDC'],networks,revision:'1'})
- const assets=[stockUsdc,...stockAssets].filter(a=>['USDC','NVDAx'].includes(a.symbol)&&policy.xlayerCheckout?.assets.includes(a.address.toLowerCase())).map(a=>a.symbol)
+ const assets=[stockUsdc].filter(a=>a.symbol==='USDC'&&policy.xlayerCheckout?.assets.includes(a.address.toLowerCase())).map(a=>a.symbol)
  if(assets.length&&process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_ENABLED==='true'&&(process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_PROJECTS||'').split(',').map(s=>s.trim()).includes(policy.partnerId))choices.push({id:'xlayer',name:policy.merchantName,kind:'xstocks',currency:'USD',assets,networks:['xlayer'],revision:'1'})
  return choices
 }
@@ -52,7 +52,7 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const id=String(req.body?.requestId||'');if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid order reference.')
-  const asset=req.body?.asset;if(asset!=='USDC'&&asset!=='NVDAx')throw Error('Choose USDC or NVDAx.')
+  const asset=req.body?.asset;if(asset!=='USDC')throw Error('Choose USDC. Checkout accepts stablecoins only.')
   const rail=req.body?.rail??'xlayer';if(rail!=='circle'&&rail!=='xlayer')throw Error('Unsupported payment rail.');if(asset==='NVDAx'&&rail!=='xlayer')throw Error('NVIDIA xStock is available on X Layer only.')
   const draft=(await d.read()).drafts?.[id];if(draft&&d.now()-draft.createdAt>25*60_000)return res.status(410).json({ok:false,error:'Order expired. Return to the store.'})
   const selectedNetwork=rail==='circle'?String(req.body?.network||''):''

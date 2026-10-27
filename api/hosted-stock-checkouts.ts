@@ -10,7 +10,7 @@ import { paymentExecutionRepository } from './pocket/payment-execution-intents.j
 import { paymentAssetAmount, paymentToken, type PaymentToken } from './pocket/payment-asset.js'
 import { stockNoticeAsset, stockNoticeClient } from './pocket/xstocks-notifications-store.js'
 import { readStockMarketPrices } from './pocket/xstocks-prices.js'
-import { xlayerCheckoutAssets } from '../src/lib/xlayerCheckoutConfig.js'
+import { isXLayerCheckoutAsset, xlayerCheckoutAssets } from '../src/lib/xlayerCheckoutConfig.js'
 
 const KEY = 'hashpaylink:hosted-stock-checkouts:v1'
 export const isStockCheckoutId = (id: unknown): id is string => typeof id === 'string' && /^chkx_[a-f0-9]{24}$/.test(id)
@@ -57,7 +57,7 @@ export async function readStockCheckout(id: string, allowExpired = false, d: Dep
   return record
 }
 const response = (r: StockCheckout) => ({ ok: true, checkoutId: r.id, checkoutUrl: '/pay/c/' + r.id, paymentUrl: '/xpay/' + r.id,
-  checkout: { id: r.id, title: r.title, merchantName: r.merchantName, amount: r.amount, asset: r.asset, token: r.token, network: 'xlayer', stockCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: r.swapEnabled },
+  checkout: { id: r.id, title: r.title, merchantName: r.merchantName, amount: r.amount, asset: r.asset, token: r.token, network: 'xlayer', stockCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
 })
 
 export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencies> = {}) {
@@ -75,6 +75,7 @@ export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencie
           if (!isProjectPolicy(policy) || policy.environment !== 'live' || policy.partnerId !== r.partnerId) fail('Valid project credentials are required.', 403)
           return res.json({ ...response(r), status: r.payment ? 'paid' : Date.parse(r.expiresAt) <= d.now() ? 'expired' : 'pending', ...(r.payment ? { payment: r.payment } : {}) })
         }
+        if (!r.payment && !isXLayerCheckoutAsset(r.token.address)) fail('This checkout asset is no longer accepted. Ask the business for a stablecoin payment link.', 409)
         if (!r.payment && Date.parse(r.expiresAt) <= d.now()) fail('Checkout expired.', 410)
         return res.json({ ...response(r), ...(r.payment ? { returnUrl: r.returnUrl, payment:r.payment, recipient:r.recipient } : {}) })
       }
@@ -92,13 +93,14 @@ export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencie
       if (typeof req.body?.asset !== 'string' || typeof req.body?.amount !== 'string') fail('Asset and exact token amount must be strings.')
       const assetInput = clean(req.body?.asset, 80)
       const chosen = xlayerCheckoutAssets.find(a => a.address.toLowerCase() === assetInput.toLowerCase() || a.symbol === assetInput)
-      if (!chosen || !p.xlayerCheckout.assets.includes(chosen.address.toLowerCase())) fail('Choose an asset accepted by this project.')
+      if (!chosen) fail('Checkout accepts supported stablecoins only. Choose USDC on X Layer.')
+      if (!p.xlayerCheckout.assets.includes(chosen.address.toLowerCase())) fail('Choose a stablecoin accepted by this project.')
       const amountInput = clean(req.body?.amount, 100), title = clean(req.body?.title, 100) || 'Payment request'
       const returnUrl = clean(req.body?.returnUrl, 300)
       if (returnUrl) { let origin = ''; try { origin = new URL(returnUrl).origin } catch {} if (!p.allowedOrigins.includes(origin)) fail('Return URL is not allowlisted for this project.') }
       const swapEnabled = req.body?.swap === true
       if (req.body?.swap !== undefined && typeof req.body.swap !== 'boolean') fail('Swap must be true or false.')
-      if (swapEnabled && (!p.swapPermission || !p.capabilities.includes('swap_xlayer'))) fail('Swap requires wallet:swap permission and X Layer Swap enabled.', 403)
+      if (swapEnabled) fail('Swap in Pocket before paying. Checkout accepts a supported stablecoin balance.', 400)
       const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 30)
       if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 1440) fail('Expiry must be between 5 and 1440 minutes.')
       const requestHash = createHash('sha256').update(JSON.stringify([amountInput, chosen.address.toLowerCase(), p.xlayerCheckout.recipient, title, returnUrl, swapEnabled, expiresInMinutes])).digest('hex')
@@ -174,6 +176,8 @@ export async function drainStockCheckoutWebhooks(d: Dependencies = defaults) {
 export default createHostedStockCheckoutsHandler()
 
 export async function assertStockCheckoutPayable(r:StockCheckout,swap=false){
+ if(!isXLayerCheckoutAsset(r.token.address))fail('This checkout asset is no longer accepted. Ask the business for a stablecoin payment link.',409)
+ if(swap)fail('Swap in Pocket before paying.',403)
  if(!defaults.enabled(r.partnerId)||r.payment||Date.parse(r.expiresAt)<=Date.now()||!await resolveStockCheckoutProjectEnabled(r.partnerId,r.recipient,r.token.address,swap))fail('This checkout is not accepting new payments.',409)
  if(swap&&!r.swapEnabled)fail('Swap is not enabled for this checkout.',403)
 }

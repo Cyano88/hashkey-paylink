@@ -29,7 +29,7 @@ export default function ApiReference() {
         </SubSection>
         <SubSection title="Hosted flow">
           <CodeBlock lang="text">{`Create checkout → Open hosted URL → Slide to pay → Verify status and receipt`}</CodeBlock>
-          <p>The shared checkout surface is used across Hash PayLink products. USDC projects choose the networks they accept and the payer chooses one at checkout. Bank and mobile-money settlement are fixed-amount and Base-only: the payer sends the exact quoted Base USDC amount, then the configured local payout is processed. These are merchant receiving options, not ways for the payer to pay from a bank or mobile-money balance. X Layer USDC and xStocks settle as digital assets; direct local settlement for these assets is not supported.</p>
+          <p>The shared checkout surface is used across Hash PayLink products. USDC projects choose the networks they accept and the payer chooses one at checkout. Bank and mobile-money settlement are fixed-amount and Base-only: the payer sends the exact quoted Base USDC amount, then the configured local payout is processed. These are merchant receiving options, not ways for the payer to pay from a bank or mobile-money balance. Checkout accepts supported stablecoins only. X Layer USDC settles directly to the configured wallet; its local settlement is not supported.</p>
         </SubSection>
         <SubSection title="POST /api/v2/checkouts">
           <p>Creates an immutable, expiring USDC or paid-service checkout. Private-beta credentials and an idempotency key are required.</p>
@@ -47,18 +47,18 @@ export default function ApiReference() {
   }'`}</CodeBlock>
           <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Human live keys use configured Base, Arbitrum, and explicitly saved Arc mainnet routes. Agent checkout supports Base and Arc only. Test keys cannot authorize mainnet transactions. Recipient overrides are rejected. API keys stay server-side.</p>
         </SubSection>
-        <SubSection title="X Layer assets: separately activated human projects">
-          <p>Configure accepted assets and the X Layer receiving wallet in your human project. This release requires project-specific activation by Hash PayLink. Existing USDC routing remains configured separately; this is not an asset-to-bank settlement service.</p>
+        <SubSection title="X Layer USDC: separately activated human projects">
+          <p>Enable USDC and configure the X Layer receiving wallet in your human project. This release requires project-specific activation by Hash PayLink. Existing USDC routing remains configured separately; this is not an asset-to-bank settlement service.</p>
           <CodeBlock lang="json">{`{
   "rail": "xlayer",
   "kind": "payment",
-  "asset": "NVDAx",
-  "amount": "0.01",
+  "asset": "USDC",
+  "amount": "5",
   "swap": false,
   "returnUrl": "https://your-allowlisted-domain.example/complete"
 }`}</CodeBlock>
           <p>Use the same POST /api/v2/checkouts endpoint, server key and unique Idempotency-Key. The amount is an exact quantity of the accepted token, not a dollar price. The response returns a hosted checkout URL and a checkout identifier. Query that identifier through the same status API; payment.confirmed webhooks include the actual asset, token contract and amount.</p>
-          <p>Setting swap to true requires both the project?s X Layer Swap capability and an API key with wallet:swap permission. The customer separately approves conversion into the accepted asset, then reviews and approves payment. Conversion alone never completes checkout. With swap disabled, the customer pays directly from their accepted balance. This path does not support Polymarket funding, agent checkout, flexible amounts or request-level recipient overrides.</p>
+          <p>Checkout accepts stablecoins only and does not perform swaps. Send swap: false or omit it. Customers holding other assets can swap in Pocket before paying. This path does not support Polymarket funding, agent checkout, flexible amounts or request-level recipient overrides.</p>
           <p>Customers can sign in and approve in the browser using Pocket wallet infrastructure. Installing the app is optional. Success requires verification of the exact merchant transfer.</p>
         </SubSection>
         <SubSection title="Agent wallet path">

@@ -8,7 +8,7 @@ import {isLocalSettlement,developerSettlementCurrency,ugandaMobileMoneyProviders
 import {normalizePayoutAccount} from '../src/pocket/lib/pocketFiatCorridors.js'
 import {requirePocketBasicKyc} from './pocket/kyc-level.js'
 import { authorizeOperations } from './operations-policy.js'
-import { normalizeXLayerCheckoutConfig, type XLayerCheckoutConfig } from '../src/lib/xlayerCheckoutConfig.js'
+import { currentXLayerCheckoutConfig, isXLayerCheckoutAsset, normalizeXLayerCheckoutConfig, type XLayerCheckoutConfig } from '../src/lib/xlayerCheckoutConfig.js'
 import { verifyOperationsSection } from './operations-access.js'
 import { effectiveProductCapabilities, isOpenCheckoutProduct, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
 import { developerEnvironment } from './developer-environment.js'
@@ -405,7 +405,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     checkoutMode: projectCheckoutMode(project),
     capabilities: effectiveProductCapabilities(project),
     productSettingsVersion: project.productSettingsVersion,
-    xlayerCheckout: project.xlayerCheckout,
+    xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' : 'active',
@@ -907,7 +907,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !existingCapabilities.includes(capability))) return res.status(409).json({ ok: false, error: 'This product is not open for new integrations.' })
         const routingRequired = needsSettlementRouting(capabilities)
         let xlayerCheckout: XLayerCheckoutConfig | undefined
-        try { xlayerCheckout = normalizeXLayerCheckoutConfig(req.body?.xlayerCheckout === undefined ? currentProject.xlayerCheckout : req.body.xlayerCheckout) }
+        try { xlayerCheckout = normalizeXLayerCheckoutConfig(req.body?.xlayerCheckout === undefined ? currentXLayerCheckoutConfig(currentProject.xlayerCheckout) : req.body.xlayerCheckout) }
         catch (error) { return res.status(400).json({ ok: false, error: (error as Error).message }) }
         if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
@@ -1118,7 +1118,7 @@ function policyForDeveloperProject(
     : paymentOptions[0]?.network ?? 'arc'
   return {
     partnerId: project.id,
-    xlayerCheckout: project.xlayerCheckout,
+    xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     ownerId: project.ownerId,
     ownerEmail: project.ownerEmail,
     merchantName: project.name,
@@ -1438,6 +1438,7 @@ export async function resolveWalletSwapProjectEnabled(projectId:string,rail:'arc
 }
 
 export async function resolveStockCheckoutProjectEnabled(projectId:string,recipient:string,asset:string,swap=false):Promise<boolean>{
+ if(swap||!isXLayerCheckoutAsset(asset))return false
  const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
  return Boolean(project&&projectCheckoutMode(project)==='human'&&!project.removal&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
   &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'

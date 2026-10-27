@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import {createFoodDemoHandler} from '../api/food-demo.ts'
 let store={orders:{}},enabled=false,calls=[],status='pending',clock=Date.now();const checkoutId='chkx_'+'1'.repeat(24)
-const h=createFoodDemoHandler({ready:()=>enabled,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},now:()=>clock,price:async()=>200,call:async(path,body,key)=>{calls.push({path,body,key});return body?{ok:true,checkoutId,checkoutUrl:'/pay/c/'+checkoutId}:{ok:true,status,checkout:{id:checkoutId,asset:'NVDAx',amount:'0.0225'}}}})
+const h=createFoodDemoHandler({ready:()=>enabled,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},now:()=>clock,price:async()=>200,call:async(path,body,key)=>{calls.push({path,body,key});return body?{ok:true,checkoutId,checkoutUrl:'/pay/c/'+checkoutId}:{ok:true,status,checkout:{id:checkoutId,asset:'USDC',amount:'4.5'}}}})
 async function call(method,body={},query={}){let code=200,data;await h({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return{code,data}}
-const id='a'.repeat(32),body={requestId:id,items:[{id:'jollof',quantity:1}],asset:'NVDAx',amount:'0.00001',recipient:'attacker'}
+const id='a'.repeat(32),body={requestId:id,items:[{id:'jollof',quantity:1}],asset:'USDC',amount:'0.00001',recipient:'attacker'}
 assert.equal((await call('GET')).data.liveEnabled,false);assert.equal((await call('POST',body)).code,503);assert.equal(calls.length,0)
 enabled=true;assert.equal((await call('POST',{...body,items:[{id:'jollof',quantity:-1}]})).code,400)
-assert.equal((await call('POST',body)).code,200);assert.equal(calls[0].body.amount,'0.0225');assert.equal(calls[0].body.recipient,undefined);assert.equal(calls[0].body.swap,false)
+assert.equal((await call('POST',body)).code,200);assert.equal(calls[0].body.amount,'4.5');assert.equal(calls[0].body.recipient,undefined);assert.equal(calls[0].body.swap,false)
 assert.equal((await call('POST',body)).code,200);assert.equal(calls.length,1,'Retry must reuse checkout')
-assert.equal((await call('POST',{...body,asset:'USDC'})).code,409)
+assert.equal((await call('POST',{...body,asset:'NVDAx'})).code,400)
 assert.equal((await call('GET',{}, {id})).data.order.status,'pending')
 assert.equal((await call('GET',{}, {id,paid:'true'})).data.order.status,'pending','Return parameters cannot confirm payment')
 status='paid';assert.equal((await call('GET',{}, {id})).data.order.status,'paid')
@@ -26,7 +26,7 @@ assert.equal((await circleCall('GET',{}, {id:circleBody.requestId})).data.order.
 circleStatus='paid';assert.equal((await circleCall('GET',{}, {id:circleBody.requestId})).data.order.status,'paid')
 assert.equal((await circleCall('POST',{...circleBody,rail:'xlayer'})).code,409)
 assert.equal((await circleCall('POST',{...circleBody,requestId:'d'.repeat(32),asset:'NVDAx'})).code,400)
-console.log('PASS Circle USDC routing, verified receipt, immutable rail and X Layer-only NVDAx.')
+console.log('PASS Circle USDC routing, verified receipt, immutable rail and non-stablecoin rejection.')
 
 let draftStore={orders:{}},allowed=[{id:'circle',name:'Lunchroom',kind:'stablecoins',currency:'USD',assets:['USDC'],networks:['base'],revision:'1'}],sent
 const draftHandler=createFoodDemoHandler({ready:()=>true,choices:async()=>allowed,read:async()=>structuredClone(draftStore),mutate:async fn=>{draftStore=fn(structuredClone(draftStore));return structuredClone(draftStore)},now:Date.now,call:async(path,body)=>{sent=body;return {ok:true,checkoutId:'chk_12345678',checkoutUrl:'/pay/c/chk_12345678?attempt=test_123'}}})

@@ -31,7 +31,7 @@ async function checkoutMerchant(id:string,readOnly=false):Promise<Merchant|undef
  const r=await readStockCheckout(id,readOnly)
  if(!r||(!readOnly&&r.payment))fail('This checkout is unavailable or already paid.',409)
  if(!readOnly)await assertStockCheckoutPayable(r)
- return {id:r.id,owner:r.ownerId,pocketId:'',name:r.merchantName,wallet:r.recipient,tokens:[r.token.address.toLowerCase()],fixedAmount:r.amount,expiresAt:Date.parse(r.expiresAt),swapEnabled:r.swapEnabled,updatedAt:Date.parse(r.createdAt)}
+ return {id:r.id,owner:r.ownerId,pocketId:'',name:r.merchantName,wallet:r.recipient,tokens:[r.token.address.toLowerCase()],fixedAmount:r.amount,expiresAt:Date.parse(r.expiresAt),swapEnabled:false,updatedAt:Date.parse(r.createdAt)}
 }
 async function syncStockPayment(p:Payment){
  if(!isStockCheckoutId(p.merchantId)||p.status!=='paid'||p.checkoutSynced)return p
