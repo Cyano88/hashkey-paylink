@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict'
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
+const browser=await chromium.launch({channel:'chrome',headless:true})
+try {
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[]
+ page.on('pageerror',e=>errors.push(e.message))
+ await page.goto('http://127.0.0.1:4321/admin/workspaces/hashpaystream/projects')
+ await page.getByRole('button',{name:'Open application',exact:true}).click()
+ await page.getByText('Example Limited',{exact:true}).waitFor()
+ const approve=page.getByRole('button',{name:'Approve business',exact:true})
+ assert.equal(await approve.isDisabled(),true)
+ await page.getByLabel('Smile verification reference',{exact:true}).fill('SMILE-EXAMPLE-123')
+ await page.getByRole('checkbox',{name:/I have checked the registration/}).check()
+ assert.equal(await approve.isDisabled(),false)
+ await approve.click()
+ await page.getByText('Verified',{exact:true}).waitFor()
+ await page.getByText('Review history',{exact:true}).click()
+ await page.getByText(/approved.*SMILE-EXAMPLE-123/).waitFor()
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ await page.screenshot({path:'output/playwright/verification-review-mobile.png',fullPage:true})
+ await page.getByLabel('Review notes / feedback',{exact:true}).fill('Please provide a current address document.')
+ await page.getByRole('button',{name:'Request changes',exact:true}).click()
+ await page.getByText('Changes requested',{exact:true}).waitFor()
+ assert.deepEqual(errors,[])
+ console.log('PASS manual review, required Smile evidence, decision history and changes requested on mobile.')
+} finally {await browser.close()}

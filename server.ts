@@ -1,3 +1,4 @@
+import {developerVerificationUploadHandler} from './api/developer-projects.js'
 import pocketNativeSolanaSendHandler from './api/pocket/native-solana-send.js'
 import pocketBscInboundBridgeHandler from './api/pocket/bsc-inbound-bridge.js'
 import pocketBscOutboundBridgeHandler from './api/pocket/bsc-outbound-bridge.js'
@@ -177,6 +178,7 @@ import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import operationsSessionHandler from './api/operations-access.js'
+import operationsTeamHandler from './api/operations-team.js'
 import developerCapabilitiesHandler from './api/developer-capabilities.js'
 import { developerEnvironmentBoundary } from './api/developer-environment.js'
 import arcWalletHandler from './api/arc-wallet.js'
@@ -303,6 +305,7 @@ app.post(
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.
 app.all('/api/pocket/gifts/events', rateLimit({ name: 'gift-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketGiftEventWebhook)
+app.post('/api/developer-verification/documents', rateLimit({name:'business-documents',windowMs:60_000,max:20}), express.raw({type:'application/octet-stream',limit:'5mb'}), developerVerificationUploadHandler)
 app.use(express.json({ limit: '256kb' }))
 
 // A CLI credential must not activate a different API surface, including public
@@ -515,6 +518,7 @@ app.post('/api/hashpaystream/v2/agreements', strictLimiter, hashPayStreamAgreeme
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
+app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
 app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
 app.all('/api/arc-trade-review', strictLimiter, arcTradeReviewHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)

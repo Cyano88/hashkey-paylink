@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict'
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
+const browser=await chromium.launch({channel:'chrome',headless:true})
+try {
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[]
+ page.on('pageerror',e=>errors.push(e.message))
+ await page.goto('http://127.0.0.1:4319/?verification&section=verification')
+ await page.getByRole('heading',{name:'Business verification',exact:true}).waitFor()
+ for(const [label,value] of Object.entries({'Legal company name':'Example Limited','Trading name':'Example','Phone number':'+2348000000000','Website':'https://example.test','Registration number':'RC-TEST-123','Registered business address':'Example Street, Abuja','What does your business do?':'Software subscriptions and checkout services.'}))await page.getByLabel(label,{exact:true}).fill(value)
+ const file={name:'example-evidence.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nSynthetic fixture - not a real document')}
+ for(const input of await page.locator('input[type=file]').all()) {await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor();await page.getByRole('button',{name:'Continue',exact:true}).waitFor({state:'visible'})}
+ await page.getByRole('button',{name:'Save draft',exact:true}).click()
+ await page.getByText('Draft saved.',{exact:true}).waitFor()
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ await page.screenshot({path:'output/playwright/verification-company-mobile.png',fullPage:true})
+ await page.getByRole('button',{name:'Continue',exact:true}).click()
+ for(const [label,value] of Object.entries({'Full name':'Example Owner','Date of birth':'1990-01-01','Ownership (%)':'100','Residential address':'Example Residential Street','ID number':'TEST-ID-123'}))await page.getByLabel(label,{exact:true}).fill(value)
+ await page.getByLabel('Authorized to act for this business',{exact:true}).check()
+ await page.getByLabel('Is this person a politically exposed person or a close associate?',{exact:true}).selectOption('false')
+ await page.getByLabel('Government ID type',{exact:true}).selectOption('Passport')
+ for(const input of await page.locator('input[type=file]').all()){await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor()}
+ await page.getByRole('button',{name:'Continue',exact:true}).click()
+ await page.getByRole('checkbox').check()
+ await page.getByRole('button',{name:'Submit for review',exact:true}).click()
+ await page.getByRole('heading',{name:'We’re reviewing your application',exact:true}).waitFor()
+ assert.equal(await page.locator('input[type=file]').count(),0)
+ await page.getByRole('button',{name:'Developers',exact:true}).click()
+ await page.getByRole('button',{name:'API keys',exact:true}).click()
+ for(const button of await page.getByRole('button',{name:'Create API key',exact:true}).all()) assert.equal(await button.isDisabled(),true)
+ await page.getByRole('button',{name:'Payments',exact:true}).click()
+ await page.getByRole('button',{name:'Activity',exact:true}).click()
+ for(const label of ['Paid','Pending','Expired','Status unavailable'])await page.getByText(label,{exact:true}).waitFor()
+ await page.setViewportSize({width:320,height:844})
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ await page.screenshot({path:'output/playwright/payments-status-mobile.png',fullPage:true})
+ await page.getByLabel('Payment reference',{exact:true}).fill('pmf_example0')
+ await page.getByRole('button',{name:'Search',exact:true}).click()
+ await page.waitForFunction(()=>document.querySelectorAll('details').length===2)
+ assert.equal(await page.getByText('Pending',{exact:true}).count(),0)
+ assert.deepEqual(errors,[])
+ console.log('PASS mobile verification wizard, document uploads, draft, submission lock, gated keys and payment statuses/search.')
+} finally {await browser.close()}

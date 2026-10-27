@@ -4,7 +4,17 @@ export const OPERATIONS_SECTIONS = ['projects', 'agreements', 'trade-disputes', 
 export type OperationsSection = typeof OPERATIONS_SECTIONS[number]
 export type OperationsIdentity = { userId: string; email: string }
 export type OperationsWorkspace = { id: string; name: string; projectIds: string[] }
-type Grant = { email: string; workspaceId: string; sections: OperationsSection[] }
+export const OPERATIONS_ROLES = ['engineering', 'compliance', 'support'] as const
+export type OperationsRole = typeof OPERATIONS_ROLES[number]
+type Grant = { email: string; workspaceId: string; sections?: OperationsSection[]; roles?: OperationsRole[] }
+const roleSections: Record<OperationsRole, OperationsSection[]> = {
+  engineering: ['projects', 'transactions'], compliance: ['projects'], support: ['support', 'transactions'],
+}
+// Request-local policy snapshots are loaded by authenticated server code, never from request input.
+const requestPolicies = new WeakMap<object, NodeJS.ProcessEnv>()
+export function setOperationsRequestPolicy(req: object, env: NodeJS.ProcessEnv) { requestPolicies.set(req, env) }
+export function operationsRequestPolicy(req: object) { return requestPolicies.get(req) ?? process.env }
+function grantSections(grant: Grant) { return grant.roles ? [...new Set(grant.roles.flatMap(role=>roleSections[role]))] : grant.sections ?? [] }
 export type OperationsPolicy = { founders: Set<string>; workspaces: OperationsWorkspace[]; grants: Grant[] }
 const fail = (message: string, status = 403): never => { throw Object.assign(new Error(message), { status }) }
 const email = (value: unknown) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
@@ -34,10 +44,11 @@ export function operationsPolicy(env: NodeJS.ProcessEnv = process.env): Operatio
   for (const g of grants) {
     if (!g || !email(g.email) || typeof g.workspaceId !== 'string'
       || !(g.workspaceId === 'pocket' || ids.has(g.workspaceId) || (projectId(g.workspaceId) && !projects.has(g.workspaceId)))
-      || !Array.isArray(g.sections) || !g.sections.length || g.sections.some(s => !OPERATIONS_SECTIONS.includes(s))) {
+      || (g.roles !== undefined ? (!Array.isArray(g.roles) || !g.roles.length || g.roles.some(r=>!OPERATIONS_ROLES.includes(r)) || g.sections !== undefined)
+        : (!Array.isArray(g.sections) || !g.sections.length || g.sections.some(s => !OPERATIONS_SECTIONS.includes(s))))) {
       fail('Operations grant configuration is invalid.', 503)
     }
-    if (g.sections.some(s => g.workspaceId === 'pocket' ? !['support', 'transactions'].includes(s) : ['support', 'transactions'].includes(s))) {
+    if (!g.roles && g.sections!.some(s => g.workspaceId === 'pocket' ? !['support', 'transactions'].includes(s) : ['support', 'transactions'].includes(s))) {
       fail('Pocket permissions cannot be assigned to external workspaces.', 503)
     }
   }
@@ -60,7 +71,7 @@ export function workspaceSections(identity: OperationsIdentity, workspaceId: str
   const available: OperationsSection[] = workspaceId === 'pocket' ? ['support', 'transactions'] : ['projects', 'agreements', 'trade-disputes']
   if (isOperationsFounder(identity, policy)) return available
   return available.filter(section => policy.grants.some(g => g.email.toLowerCase() === identity.email.toLowerCase()
-    && g.workspaceId === workspaceId && g.sections.includes(section)))
+    && g.workspaceId === workspaceId && grantSections(g).includes(section)))
 }
 
 export function requestedWorkspace(req: Pick<Request, 'query'>) {
@@ -69,10 +80,21 @@ export function requestedWorkspace(req: Pick<Request, 'query'>) {
   return value as string
 }
 
-export function authorizeOperations(identity: OperationsIdentity, req: Pick<Request, 'query'>, section: OperationsSection, recordProjectId?: string, env = process.env) {
+export function authorizeOperations(identity: OperationsIdentity, req: Pick<Request, 'query'> & Partial<Pick<Request,'method'|'body'>>, section: OperationsSection, recordProjectId?: string, env = operationsRequestPolicy(req)) {
   const policy = operationsPolicy(env), workspaceId = requestedWorkspace(req)
   const projectIds = workspaceProjectIds(workspaceId, policy)
   if (!workspaceSections(identity, workspaceId, policy).includes(section)) fail('This account cannot access this workspace section.')
   if (recordProjectId !== undefined && !projectIds.includes(recordProjectId)) fail('Record not found in this workspace.', 404)
+  const action = typeof req.body?.action === 'string' ? req.body.action.toLowerCase() : ''
+  const read = !req.method || req.method === 'GET' || (req.method === 'POST' && ['admin-list','list','read','admin-verification-read','admin-verification-download','staff-list','staff-knowledge-list'].includes(action))
+  if (!read && !isOperationsFounder(identity,policy)) {
+    const grants=policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase() && g.workspaceId===workspaceId)
+    const legacy=grants.some(g=>!g.roles && g.sections?.includes(section))
+    const roles=grants.flatMap(g=>g.roles??[])
+    const allowed=section==='support' ? roles.includes('support') && ['staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
+      : section==='transactions' ? roles.includes('engineering') && action==='reconcile'
+      : section==='projects' ? roles.includes('compliance') && ['admin-activate','admin-suspend','admin-reactivate','admin-verification-review'].includes(action) : false
+    if(!legacy && !allowed) fail('Your role cannot perform this action.')
+  }
   return { workspaceId, projectIds }
 }

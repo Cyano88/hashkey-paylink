@@ -429,6 +429,12 @@ function updateCurrentPaymentAttempt(
   return attempts
 }
 
+export async function readVerifiedCheckoutActivityRecords(ids:string[],projectId:string) {
+  if(!defaults.hasStore()||defaults.signingSecret().length<32)return new Map<string,CheckoutRecord>()
+  const store=await defaults.read(STORE_KEY),secret=defaults.signingSecret()
+  return new Map(ids.flatMap(id=>{const record=store?.checkouts?.[id];return record&&record.partnerId===projectId&&integrityValid(record,secret)?[[id,record] as const]:[]}))
+}
+
 export async function readVerifiedHostedCheckoutRecord(id: string, options: { allowExpiredForReconciliation?: boolean } = {}) {
   const normalizedId = clean(id, 80)
   if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(normalizedId) || !defaults.hasStore()) return null
@@ -1056,7 +1062,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (routingOptions && requestedRecipient && legacyRecipient !== recipient) return res.status(400).json({ ok: false, error: 'recipient must match the default payment option.' })
     if (!flexible && !amount) return res.status(400).json({ ok: false, error: 'Enter a positive USDC amount or set flexible to true.' })
     if (isNairaProject && flexible) return res.status(400).json({ ok: false, error: 'Local settlement currently requires a fixed USDC amount.' })
-    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 1_440) return res.status(400).json({ ok: false, error: 'expiresInMinutes must be a whole number between 5 and 1440.' })
+    const maximumExpiryMinutes = providerRouting?.capability === 'polymarket_funding' ? 2_880 : 1_440
+    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > maximumExpiryMinutes) return res.status(400).json({ ok: false, error: `expiresInMinutes must be a whole number between 5 and ${maximumExpiryMinutes}.` })
     if (returnUrl) {
       const origin = normalizedOrigin(returnUrl)
       if (!origin || !policy.allowedOrigins.includes(origin)) return res.status(400).json({ ok: false, error: 'returnUrl origin is not allowlisted for this partner.' })

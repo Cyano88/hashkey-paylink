@@ -30,13 +30,14 @@ installPocketNativeFetch()
 const surface = resolveAppSurface(window.location.hostname, isPocketNativeRuntime())
 const rootAppModule = surface === 'pocket' ? import('./pocket/PocketHostApp')
   : surface === 'checkout' ? import('./surfaces/CheckoutApp')
+  : surface === 'admin' ? import('./surfaces/AdminApp')
   : surface === 'developer' ? import('./surfaces/DeveloperApp')
   : surface === 'docs' ? import('./surfaces/DocsApp')
   : import('./App')
 const RootApp = lazy(() => rootAppModule)
 
 function AppBootFallback() {
-  if (surface === 'developer') return <DeveloperLoadingSkeleton fullPage />
+  if (surface === 'developer' || surface === 'admin') return <DeveloperLoadingSkeleton fullPage />
   if (isPocketNativeRuntime()) {
     return <main aria-label="Opening Pocket" className="min-h-screen bg-[#F5F5F7]" />
   }
@@ -116,7 +117,7 @@ function AppProviders() {
   // Public documentation has no wallet or authenticated API dependencies.
   if (surface === 'docs') return app
 
-  if (surface === 'developer') return <PrivyProvider appId={PRIVY_APP_ID!} config={privyConfig}>
+  if (surface === 'developer' || surface === 'admin') return <PrivyProvider appId={PRIVY_APP_ID!} config={privyConfig}>
     <PrivyLoginProvider><QueryClientProvider client={queryClient}>{app}</QueryClientProvider></PrivyLoginProvider>
   </PrivyProvider>
 

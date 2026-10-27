@@ -1,5 +1,6 @@
+import OperationsTeamPanel from '../components/OperationsTeamPanel'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useLocation } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, ArrowUpRight, ChevronRight, Layers3, LogOut, Menu, RefreshCw, ShieldCheck, X } from 'lucide-react'
@@ -12,7 +13,7 @@ import { cn } from '../lib/utils'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 
 type Section = 'projects' | 'agreements' | 'trade-disputes' | 'support' | 'transactions'
-type Workspace = { id: string; name: string; projectIds: string[]; sections: Section[]; missingProjectIds: string[];
+type Workspace = { permissions?: {manageProjects:boolean;reconcile:boolean}; roles?: string[]; id: string; name: string; projectIds: string[]; sections: Section[]; missingProjectIds: string[];
   integrations: Array<{ id: string; name: string; capabilities: string[]; status: string }> }
 type Session = { founder: boolean; email: string; workspaces: Workspace[]; arcActivationEnabled: boolean }
 const labels: Record<Section, string> = { projects: 'Integrations', agreements: 'Arc agreements', 'trade-disputes': 'Trade disputes', support: 'Support inbox', transactions: 'Transactions' }
@@ -27,6 +28,7 @@ const card = 'rounded-2xl border border-gray-200 bg-white dark:border-white/10 d
 export default function OperationsWorkspacePage() {
   const { ready, authenticated, user, getAccessToken, logout } = usePrivy()
   const { workspaceId, section } = useParams()
+  const location=useLocation()
   const [state, setState] = useState<{ owner: string; session: Session }>()
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
@@ -46,7 +48,7 @@ export default function OperationsWorkspacePage() {
       try {
         const token = await getAccessToken()
         if (!token) throw Error('Sign in again to open operations.')
-        const response = await fetch('/api/operations-session', { cache: 'no-store', headers: { authorization: 'Bearer ' + token } })
+        const response = await fetch('/api/operations-session', { cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { authorization: 'Bearer ' + token } })
         const data = await response.json()
         if (!response.ok || !data.ok) throw Error(data.error || 'Operations could not be loaded.')
         if (current) setState({ owner: identity, session: data })
@@ -63,6 +65,7 @@ export default function OperationsWorkspacePage() {
     <p role={error ? 'alert' : 'status'} className="mt-4 text-sm text-gray-500">{error || 'Checking your operations access…'}</p>
     {error && <div className="mt-6 flex gap-3"><button className="developer-primary" onClick={() => setReload(v => v + 1)}>Retry</button><button onClick={() => void logout()}>Sign out</button></div>}
   </main>
+  if(location.pathname==='/admin/team')return <main id="developer-content" className="mx-auto max-w-4xl px-5 py-8"><Link to="/admin" className="mb-6 inline-flex min-h-11 items-center text-sm text-gray-500">Back to operations</Link>{session.founder?<OperationsTeamPanel workspaces={session.workspaces}/>:<p role="alert">Only an owner can manage team access.</p>}</main>
   const workspace = session.workspaces.find(w => w.id === workspaceId)
   const authorizedSection = workspace?.sections.includes(section as Section)
   const invalid = Boolean(workspaceId && !workspace) || Boolean(section && !authorizedSection && section !== 'escalations')
@@ -77,13 +80,14 @@ export default function OperationsWorkspacePage() {
     <aside className="relative flex min-h-full flex-col p-5" onClick={e => { if ((e.target as HTMLElement).closest('a')) setMenuOpen(false) }}>
       <button type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-5 w-5" /></button>
       <Link to="/admin" className="flex min-h-11 items-center gap-2 text-sm font-semibold"><Layers3 className="h-4 w-4" />Operations</Link>
-      <p className="mt-1 text-xs text-gray-500">{session.founder ? 'Founder access' : 'Team access'}</p>
+      <p className="mt-1 text-xs text-gray-500">{session.founder ? 'Owner access' : workspace?.roles?.map(role=>({engineering:'Engineering',compliance:'Compliance',support:'Customer support'}[role]??role)).join(' ? ') || 'Team access'}</p>
+      {session.founder && <Link to="/admin/team" className="mt-4 flex min-h-11 items-center text-sm font-medium">Team access</Link>}
       <p className="mt-6 text-xs font-medium text-gray-500">Products</p>
       <nav aria-label="Product workspaces" className="mb-6 mt-3 flex flex-col gap-1">
         {session.workspaces.map(w => <Link key={w.id} to={path(w.id)} aria-current={workspace?.id === w.id ? 'page' : undefined} className={cn('min-h-11 rounded-xl px-3 py-3 text-sm font-medium', workspace?.id === w.id ? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}>{w.name}</Link>)}
       </nav>
       <div className="mt-auto border-t border-gray-200 pt-4 dark:border-white/10">
-        <Link to="/" className="flex min-h-11 items-center justify-between text-xs text-gray-500">Developer portal<ArrowUpRight className="h-3.5 w-3.5" /></Link>
+        <a href="https://developer.hashpaylink.com" className="flex min-h-11 items-center justify-between text-xs text-gray-500">Developer portal<ArrowUpRight className="h-3.5 w-3.5" /></a>
         <button onClick={() => void logout()} className="flex min-h-11 w-full items-center justify-between text-xs text-gray-500">Sign out<LogOut className="h-3.5 w-3.5" /></button>
       </div>
     </aside>
@@ -115,11 +119,11 @@ export default function OperationsWorkspacePage() {
           {workspace.id !== 'pocket' && <section className={cn(card, 'mt-6 p-6')}><h2 className="text-sm font-semibold">Connected integrations</h2><div className="mt-4 divide-y divide-gray-100 dark:divide-white/10">{workspace.integrations.map(p => <div key={p.id} className="flex flex-wrap justify-between gap-3 py-4 text-sm"><div><p>{p.name}</p><p className="mt-1 font-mono text-xs text-gray-400">{p.id}</p></div><span className="text-xs capitalize text-gray-500">{p.status}</span></div>)}</div></section>}
           <p className="mt-6 flex items-center gap-2 text-xs text-gray-500"><ShieldCheck className="h-4 w-4" />Access to operations does not grant escrow signing authority.</p>
         </>}
-        {section === 'projects' && <ProjectOperations workspaceId={workspace.id} />}
+        {section === 'projects' && <ProjectOperations workspaceId={workspace.id} canManage={Boolean(workspace.permissions?.manageProjects)} />}
         {section === 'agreements' && <><ArcAgreementOperationsPanel workspaceId={workspace.id} /><details className={cn(card, 'mt-6 p-5')}><summary className="cursor-pointer text-sm font-semibold">Activation settings <span className="ml-2 font-normal text-gray-500">{session.arcActivationEnabled ? 'Global switch enabled' : 'Global activation paused'}</span></summary><ProjectOperations workspaceId={workspace.id} mode="agreements" arcActivationEnabled={session.arcActivationEnabled} /></details></>}
         {section === 'trade-disputes' && <TradeReviewOperationsPanel workspaceId={workspace.id} />}
         {section === 'support' && <PocketSupportOperationsPanel />}
-        {section === 'transactions' && <PocketTransactionOperationsPanel />}
+        {section === 'transactions' && <PocketTransactionOperationsPanel canReconcile={Boolean(workspace.permissions?.reconcile)} />}
         {section === 'escalations' && <section className={cn(card, 'mt-7 max-w-3xl p-7')}><h2 className="font-semibold">Escalation connection not configured</h2><p className="mt-3 text-sm leading-7 text-gray-500">This product manages its own customer support. Its team will submit payment or escrow cases to Hash PayLink with the relevant evidence. That submission connection has not been built yet.</p><p className="mt-3 text-sm leading-7 text-gray-500">Existing agreement operations and Trade dispute review remain available in their sections. Customer inboxes are not connected here.</p></section>}
       </div>}
     </main>

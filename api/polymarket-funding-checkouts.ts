@@ -105,6 +105,13 @@ function valid(record: FundingRecord, secret: string) {
   return timingSafeEqual(Buffer.from(sign(unsigned(record), secret), 'hex'), Buffer.from(record.integrity, 'hex'))
 }
 
+export async function readVerifiedFundingActivityRecords(ids:string[],projectId:string) {
+ const secret=defaults.signingSecret()
+ if(secret.length<32||!defaults.hasStore())return new Map<string,FundingRecord>()
+ const store=await defaults.read(STORE_KEY)
+ return new Map(ids.flatMap(id=>{const record=store?.records?.[id];return record&&record.partnerId===projectId&&valid(record,secret)?[[id,record] as const]:[]}))
+}
+
 function publicRecord(record: FundingRecord, replayed = false) {
   return {
     ok: true,
@@ -205,6 +212,8 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
       if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const idempotencyKey = clean(req.headers['idempotency-key'], 128)
       if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'A valid Idempotency-Key header is required.' })
+      const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 2_880)
+      if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 2_880) return res.status(400).json({ok:false,error:'expiresInMinutes must be a whole number between 5 and 2880.'})
       const target = clean(req.body?.polymarketWallet, 64)
       const requestedAmount = amount(req.body?.amount)
       const requestedReturnUrl = clean(req.body?.returnUrl, 300)
@@ -233,7 +242,7 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
         kind: 'service', checkoutMode: 'human', title: 'Fund Polymarket account',
         description: `Bridge USDC to ${normalizedTarget.slice(0, 6)}...${normalizedTarget.slice(-4)}.`,
         amount: requestedAmount, memo: 'Polymarket funding', returnUrl,
-        defaultNetwork: networks[0], expiresInMinutes: Number(req.body?.expiresInMinutes ?? 60),
+        defaultNetwork: networks[0], expiresInMinutes,
       }
       try {
         await dependencies.createCheckout(req, recorded as unknown as Response, {

@@ -1,3 +1,8 @@
+import {listDeveloperPayments} from './developer-payments.js'
+import {verificationEmpty,publicVerification,verificationAllowsLive,assertVerificationEditable,normalizeBusinessApplication,validateBusinessSubmission,sealVerification,openVerification,inspectBusinessDocument,storeBusinessDocument,readBusinessDocument,deleteBusinessDocument,type VerificationRecord} from './developer-verification.js'
+import {operationsPolicy,isOperationsFounder,requestedWorkspace} from './operations-policy.js'
+import {loadOperationsTeam} from './operations-team-store.js'
+import {operationsRequestPolicy} from './operations-policy.js'
 import {isLocalSettlement,developerSettlementCurrency,ugandaMobileMoneyProviders,type DeveloperSettlementMode} from '../src/lib/developerSettlement.js'
 import {normalizePayoutAccount} from '../src/pocket/lib/pocketFiatCorridors.js'
 import {requirePocketBasicKyc} from './pocket/kyc-level.js'
@@ -58,6 +63,7 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  businessVerification?: VerificationRecord
   id: string
   ownerId: string
   ownerEmail: string
@@ -104,7 +110,7 @@ type DeveloperProject = {
   updatedAt: string
 }
 
-type DeveloperStore = { projects: Record<string, DeveloperProject> }
+type DeveloperStore = { projects: Record<string, DeveloperProject>; profiles?: Record<string, { name: string; role: string; updatedAt: string }> }
 
 export type DeveloperCheckoutPolicy = {
   xlayerCheckout?: XLayerCheckoutConfig
@@ -137,6 +143,8 @@ type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
   operationsEnv?: () => NodeJS.ProcessEnv
   activity?: typeof listDeveloperActivity
+  requireVerification?: () => boolean
+  documents?: {write:typeof storeBusinessDocument;read:typeof readBusinessDocument;remove:typeof deleteBusinessDocument}
   hasStore: () => boolean
   read: (key: string) => Promise<DeveloperStore | undefined>
   mutate: (key: string, update: (current: DeveloperStore | undefined) => DeveloperStore) => Promise<DeveloperStore>
@@ -180,8 +188,10 @@ async function verifyDeveloper(req: Request): Promise<VerifiedDeveloper> {
     const client = new PrivyClient(appId, secret)
     const claims = await client.verifyAuthToken(token)
     const user = await client.getUserById(claims.userId)
+    if (req.query?.workspace || req.query?.resource === 'admin' || String(req.body?.action??'').startsWith('admin-')) await loadOperationsTeam(req)
     return { userId: claims.userId, email: linkedEmail(user) }
   } catch (cause) {
+    if ((cause as {status?:number}).status===503) throw cause
     throw Object.assign(new Error('Your developer session is invalid or expired.'), { status: 401, cause })
   }
 }
@@ -256,6 +266,7 @@ async function postPublicWebhook(value: string, payload: string, headers: Record
 }
 
 const defaults: Dependencies = {
+  requireVerification: () => true,
   operationsEnv: () => process.env,
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
@@ -379,6 +390,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     : undefined
   return {
     id: project.id,
+    businessVerification: publicVerification(project.businessVerification),
     name: project.name,
     ownerEmail: project.ownerEmail,
     website: project.website,
@@ -483,7 +495,7 @@ function commaSeparatedSet(value: string) {
 }
 
 function requireDeveloperAdmin(identity: VerifiedDeveloper, dependencies: Dependencies, req: Request, section: 'projects' | 'agreements' = 'projects', projectId?: string) {
-  if (dependencies.operationsEnv) return authorizeOperations(identity, req, section, projectId, dependencies.operationsEnv())
+  if (dependencies.operationsEnv) return authorizeOperations(identity, req, section, projectId, dependencies.operationsEnv() === process.env ? operationsRequestPolicy(req) : dependencies.operationsEnv())
   const emails = commaSeparatedSet(dependencies.adminEmails())
   const userIds = commaSeparatedSet(dependencies.adminUserIds())
   if (!emails.size && !userIds.size) throw Object.assign(new Error('Developer operations access is not configured.'), { status: 503 })
@@ -550,7 +562,7 @@ function projectArcPilotReady(project: DeveloperProject) {
   return (projectCheckoutMode(project) === 'human' || projectCheckoutMode(project) === 'agentic')
     && project.settlementMode === 'usdc'
     && project.settlementStatus === 'ready'
-    && project.operationalStatus !== 'suspended'
+    && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)
     && Boolean(project.capabilities?.includes('arc_agreements'))
     && Boolean(project.webhookUrl && project.webhookSecretCipher)
     && Boolean(hasArcRecipient)
@@ -565,7 +577,7 @@ function adminProjectIndex(store: DeveloperStore | undefined) {
     projects: projects.map(project => projectPublic(project, true)),
     summary: {
       total: projects.length,
-      active: projects.filter(project => project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended').length,
+      active: projects.filter(project => project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)).length,
       setupRequired: projects.filter(project => project.settlementStatus !== 'ready').length,
       suspended: projects.filter(project => project.operationalStatus === 'suspended').length,
     },
@@ -583,6 +595,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method === 'GET') {
         const resource = clean(req.query?.resource, 30).toLowerCase()
+        if (resource === 'profile') {
+          const profiles = await dependencies.read('hashpaylink:developer-profiles:v1')
+          return res.json({ok:true,profile:{...profiles?.profiles?.[identity.userId],email:identity.email}})
+        }
         if (resource === 'institutions') {
           if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Local settlement is temporarily unavailable.' })
           const currency = clean(req.query?.currency, 3).toUpperCase() || 'NGN'
@@ -591,10 +607,12 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
-        if (resource === 'activity') {
+        if (resource === 'activity' || resource === 'payments') {
           const projectId = clean(req.query?.projectId, 80)
           const project = findOwnedProject(store, projectId, identity.userId)
           if (!project) return res.status(404).json({ ok: false, error: 'Project not found.' })
+          if(resource==='payments' && req.query?.environment && req.query.environment!=='live')return res.status(400).json({ok:false,error:'Payments are available in the live environment only.'})
+          if(resource==='payments')return res.json({ok:true,...await listDeveloperPayments({projectId:project.id,cursor:req.query?.cursor?String(req.query.cursor):undefined,recordId:req.query?.recordId?String(req.query.recordId):undefined,limit:req.query?.limit?Number(req.query.limit):50})})
           const environment = req.query?.environment
           if (environment !== 'live' && environment !== 'test') return res.status(400).json({ ok: false, error: 'Choose live or test activity.' })
           const activity = await (dependencies.activity ?? listDeveloperActivity)({projectId:project.id,environment,cursor: req.query?.cursor ? String(req.query.cursor) : undefined,recordId:req.query?.recordId ? String(req.query.recordId) : undefined,limit:req.query?.limit ? Number(req.query.limit) : 50})
@@ -610,6 +628,14 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const action = clean(req.body?.action, 40).toLowerCase()
+      if (req.method === 'PUT' && action === 'update-profile') {
+        const name = clean(req.body?.name, 100)
+        const role = clean(req.body?.role, 100)
+        if (name.length < 2) return res.status(400).json({ok:false,error:'Enter your full name.'})
+        const profile = {name,role,updatedAt:dependencies.now().toISOString()}
+        await dependencies.mutate('hashpaylink:developer-profiles:v1', current => ({projects: {}, profiles:{...current?.profiles,[identity.userId]:profile}}))
+        return res.json({ok:true,profile:{...profile,email:identity.email}})
+      }
 
       if (req.method === 'POST' && action === 'admin-list') {
         const section = req.body?.section === 'agreements' ? 'agreements' : 'projects'
@@ -635,6 +661,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const now = dependencies.now().toISOString()
         const project: DeveloperProject = {
+          businessVerification: verificationEmpty(dependencies.requireVerification?.() ?? false),
           id: dependencies.createProjectId(), ownerId: identity.userId, ownerEmail: identity.email,
           name, website, brandImageUrl: '', useCase, checkoutMode, capabilities, productSettingsVersion: 2, settlementMode: 'usdc', settlementStatus: 'review_required',
           networks: developerProductNetworks(checkoutMode, capabilities).slice(0,1), defaultNetwork: developerProductNetworks(checkoutMode, capabilities)[0] ?? 'arc', recipients: {}, refundAddress: '',
@@ -652,6 +679,65 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       const projectId = clean(req.body?.projectId, 80)
       const currentStore = await dependencies.read(STORE_KEY)
+
+      if (req.method === 'POST' && (action.startsWith('verification-') || action.startsWith('admin-verification-'))) {
+        const project=currentStore?.projects?.[projectId]
+        const reviewer=action.startsWith('admin-')
+        if(!project || (!reviewer && project.ownerId!==identity.userId))return res.status(404).json({ok:false,error:'App not found.'})
+        if(reviewer){
+          requireDeveloperAdmin(identity,dependencies,req,'projects',projectId)
+          if(dependencies.operationsEnv){const env=dependencies.operationsEnv()===process.env?operationsRequestPolicy(req):dependencies.operationsEnv();const policy=operationsPolicy(env),workspace=requestedWorkspace(req)
+            if(!isOperationsFounder(identity,policy)&&!policy.grants.some(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspace&&g.roles?.includes('compliance')))return res.status(403).json({ok:false,error:'Only compliance reviewers can access business documents.'})
+          }
+        }
+        const verification=project.businessVerification??verificationEmpty()
+        const now=dependencies.now().toISOString(),actor=identity.userId
+        const docs=dependencies.documents??{write:storeBusinessDocument,read:readBusinessDocument,remove:deleteBusinessDocument}
+        const change=async (update:(value:VerificationRecord)=>VerificationRecord)=>{
+          const result=await dependencies.mutate(STORE_KEY,current=>{const latest=current?.projects?.[projectId];if(!latest||latest.ownerId!==project.ownerId)throw Object.assign(Error('App not found.'),{status:404});return {projects:{...current?.projects,[projectId]:{...latest,businessVerification:update(latest.businessVerification??verificationEmpty()),updatedAt:now}}}})
+          return result.projects[projectId].businessVerification!
+        }
+        if(action.endsWith('-read')){
+          if(reviewer)await change(v=>({...v,history:[...v.history,{action:'application_viewed',actor,at:now,revision:v.revision}]}))
+          return res.json({ok:true,verification:publicVerification(verification),application:verification.cipher?JSON.parse(openVerification(verification.cipher,secret)):null,...(reviewer?{history:verification.history}: {})})
+        }
+        if(action.endsWith('-download')){
+          const document=verification.documents.find(d=>d.id===req.body?.documentId)
+          if(!document)return res.status(404).json({ok:false,error:'Document not found.'})
+          const bytes=await docs.read(projectId,document,secret)
+          await change(v=>({...v,history:[...v.history,{action:'document_downloaded',actor,at:now,revision:v.revision,note:document.id}]}))
+          res.setHeader('Content-Type','application/octet-stream');res.setHeader('Content-Disposition','attachment; filename="'+document.name+'"');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'")
+          return res.send(bytes)
+        }
+        if(action==='verification-upload'){
+          assertVerificationEditable(verification,req.body?.revision)
+          const document=inspectBusinessDocument(req.body?.bytes,req.body?.filename,req.body?.slot,now)
+          if(verification.documents.length>=29&&!verification.documents.some(d=>d.slot===document.slot))return res.status(400).json({ok:false,error:'The document limit has been reached.'})
+          await docs.write(projectId,document,req.body.bytes,secret)
+          let next:VerificationRecord
+          try{next=await change(v=>{assertVerificationEditable(v,req.body.revision);return {...v,status:'draft',revision:v.revision+1,documents:[...v.documents.filter(d=>d.slot!==document.slot),document],history:[...v.history,{action:'document_uploaded',actor,at:now,revision:v.revision+1,note:document.id}]}})}
+          catch(error){await docs.remove(projectId,document.id).catch(()=>{});throw error}
+          const previous=verification.documents.find(d=>d.slot===document.slot)
+          if(previous)await docs.remove(projectId,previous.id).catch(()=>{})
+          return res.json({ok:true,verification:publicVerification(next)})
+        }
+        if(action==='verification-save' || action==='verification-submit'){
+          const application=normalizeBusinessApplication(req.body?.application)
+          const removedDocuments:typeof verification.documents=[]
+          const next=await change(v=>{assertVerificationEditable(v,req.body?.revision);const documents=v.documents.filter(d=>!d.slot.startsWith('owner-')||application.owners.some(o=>d.slot==='owner-id:'+o.id||d.slot==='owner-address:'+o.id));removedDocuments.push(...v.documents.filter(d=>!documents.includes(d)));if(action==='verification-submit')validateBusinessSubmission(application,documents,dependencies.now());return {...v,documents,cipher:sealVerification(JSON.stringify(application),secret),status:action==='verification-submit'?'submitted':'draft',revision:v.revision+1,feedback:action==='verification-submit'?undefined:v.feedback,submittedAt:action==='verification-submit'?now:undefined,history:[...v.history,{action:action==='verification-submit'?'submitted':'draft_saved',actor,at:now,revision:v.revision+1}]}})
+          for(const document of removedDocuments)await docs.remove(projectId,document.id).catch(()=>{})
+          return res.json({ok:true,verification:publicVerification(next)})
+        }
+        if(action==='admin-verification-review'){
+          const decision=req.body?.decision,feedback=clean(req.body?.feedback,2000),smileReference=clean(req.body?.smileReference,200)
+          if(!['approved','changes_requested','rejected'].includes(decision))return res.status(400).json({ok:false,error:'Choose a review decision.'})
+          if(decision==='approved'&&(!smileReference||req.body?.checksComplete!==true))return res.status(400).json({ok:false,error:'Record the Smile check reference and confirm the review checks.'})
+          if(decision!=='approved'&&feedback.length<10)return res.status(400).json({ok:false,error:'Explain what the applicant needs to address.'})
+          const next=await change(v=>{if((v.status!=='submitted'&&!(v.status==='approved'&&decision==='changes_requested'))||v.revision!==req.body?.revision)throw Object.assign(Error('This submission changed. Reload before reviewing.'),{status:409});return {...v,status:decision,required:decision==='changes_requested'?v.required:true,revision:v.revision+1,feedback,reviewedAt:now,history:[...v.history,{action:decision,actor,at:now,revision:v.revision+1,note:feedback,smileReference}]}})
+          return res.json({ok:true,verification:publicVerification(next),history:next.history})
+        }
+        return res.status(400).json({ok:false,error:'Unknown verification action.'})
+      }
 
       if (req.method === 'POST' && ['admin-arc-pilot-approve', 'admin-arc-pilot-disable'].includes(action)) {
         requireDeveloperAdmin(identity, dependencies, req, 'agreements', projectId)
@@ -881,6 +967,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if (req.method === 'POST' && action === 'create-key') {
         const environment = developerEnvironment(req.body?.environment, 'live')
         if (environment === 'test') return res.status(409).json({ ok: false, error: 'Sandbox keys are not enabled until isolated testnet execution is available.' })
+        if (!verificationAllowsLive(currentProject.businessVerification)) return res.status(409).json({ok:false,error:'Business verification must be approved before creating live API keys.'})
         if (currentProject.operationalStatus === 'suspended') {
           return res.status(409).json({ ok: false, error: 'This project is suspended. Contact Hash PayLink operations.' })
         }
@@ -905,6 +992,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
+          if (!verificationAllowsLive(latest.businessVerification) || latest.operationalStatus==='suspended' || latest.settlementStatus!=='ready') throw Object.assign(Error('Live access requires approved business verification and complete setup.'),{status:409})
           if (latest.keys.filter(item => !item.revokedAt && (!item.expiresAt || Date.parse(item.expiresAt) > dependencies.now().getTime())).length >= 10) throw Object.assign(new Error('Revoke an active API key before creating another.'), { status: 409 })
           next = { ...latest, keys: retainDeveloperKeys([...latest.keys, key], dependencies.now().getTime()), updatedAt: dependencies.now().toISOString() }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
@@ -958,7 +1046,7 @@ function policyForDeveloperProject(
   environment: DeveloperEnvironment,
   secret: string,
 ): DeveloperCheckoutPolicy | null {
-  if (secret.length < 32 || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
+  if (secret.length < 32 || !verificationAllowsLive(project.businessVerification) || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
   const allowedNetworks = environment === 'test'
     ? new Set<DeveloperNetwork>()
     : new Set<DeveloperNetwork>(developerProductNetworks(projectCheckoutMode(project), project.capabilities ?? ['hosted_checkout']))
@@ -1311,21 +1399,29 @@ export async function resolveXStocksAgreementProjectEnabled(projectId: string): 
   if (!defaults.hasStore()) return false
   const project = (await defaults.read(STORE_KEY))?.projects[projectId]
   return Boolean(project && projectCheckoutMode(project) === 'human'
-    && project.operationalStatus !== 'suspended' && project.settlementStatus === 'ready'
+    && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification) && project.settlementStatus === 'ready'
     && project.capabilities?.includes('xstocks_agreements'))
 }
 
 export async function resolveWalletSwapProjectEnabled(projectId:string,rail:'arc'|'xlayer'):Promise<boolean>{
   if(!defaults.hasStore())return false
   const project=(await defaults.read(STORE_KEY))?.projects[projectId]
-  return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&project.settlementStatus==='ready'
+  return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
     &&effectiveProductCapabilities(project).includes(rail==='arc'?'swap_arc':'swap_xlayer'))
 }
 
 export async function resolveStockCheckoutProjectEnabled(projectId:string,recipient:string,asset:string,swap=false):Promise<boolean>{
  const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
- return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&project.settlementStatus==='ready'
+ return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
   &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'
   &&project.xlayerCheckout?.recipient.toLowerCase()===recipient.toLowerCase()&&project.xlayerCheckout.assets.includes(asset.toLowerCase())
   &&(!swap||effectiveProductCapabilities(project).includes('swap_xlayer')))
+}
+
+// This route receives a bounded raw file before the general JSON body parser.
+export async function developerVerificationUploadHandler(req:Request,res:Response){
+  if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed.'})
+  const bytes=req.body
+  req.body={action:'verification-upload',projectId:req.query.projectId,revision:Number(req.query.revision),slot:req.query.slot,filename:req.headers['x-file-name'],bytes}
+  return createDeveloperProjectsHandler()(req,res)
 }

@@ -1,3 +1,5 @@
+import {loadOperationsTeam} from './operations-team-store.js'
+import {operationsRequestPolicy} from './operations-policy.js'
 import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
 import { readDurableJson } from './render-durable-store.js'
@@ -13,8 +15,9 @@ export async function verifyOperationsIdentity(req: Request): Promise<Operations
     const client = new PrivyClient(appId, secret), claims = await client.verifyAuthToken(token)
     const user = await client.getUserById(claims.userId)
     const account = user.linkedAccounts.find(a => a.type === 'email')
+    await loadOperationsTeam(req)
     return { userId: claims.userId, email: account?.type === 'email' ? account.address.trim().toLowerCase() : '' }
-  } catch { throw Object.assign(Error('Your operations session is invalid or expired.'), { status: 401 }) }
+  } catch (error) { if ((error as {status?:number}).status===503) throw error; throw Object.assign(Error('Your operations session is invalid or expired.'), { status: 401 }) }
 }
 
 export async function verifyOperationsSection(req: Request, section: OperationsSection) {
@@ -37,7 +40,8 @@ export function operationsSession(identity: OperationsIdentity, projects: Projec
       : section === 'trade-disputes' ? integrations.some(p => p.capabilities.includes('xstocks_agreements')) : true)
     if (!sections.length) return []
     // Missing mappings must be visible to the founder rather than silently reassigned.
-    return [{ ...w, sections, integrations, missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
+    const allowed=(section:OperationsSection,action:string)=>{try{authorizeOperations(identity,{query:{workspace:w.id},method:'POST',body:{action}},section,undefined,env);return true}catch{return false}}
+    return [{ ...w, sections, integrations, permissions:{manageProjects:allowed('projects','admin-activate'),reconcile:allowed('transactions','reconcile')}, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===w.id).flatMap(g=>g.roles??[]))], missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
   })
   if (!workspaces.length) throw Object.assign(Error('This account has no operations access.'), { status: 403 })
   return { ok: true, founder: isOperationsFounder(identity, policy), email: identity.email, workspaces,
@@ -49,12 +53,13 @@ export default async function operationsSessionHandler(req: Request, res: Respon
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
   try {
     const identity = await verifyOperationsIdentity(req)
-    const policy = operationsPolicy()
+    const env = operationsRequestPolicy(req)
+    const policy = operationsPolicy(env)
     if (!isOperationsFounder(identity, policy) && !policy.grants.some(g => g.email.toLowerCase() === identity.email.toLowerCase())) {
       throw Object.assign(Error('This account has no operations access.'), { status: 403 })
     }
     const store = await readDurableJson<{ projects: Record<string, Project> }>((process.env.DEVELOPER_PROJECT_STORE_KEY || 'hashpaylink:developer-projects:v1').trim())
-    return res.json(operationsSession(identity, Object.values(store?.projects || {})))
+    return res.json(operationsSession(identity, Object.values(store?.projects || {}), env))
   } catch (e) {
     const error = e as Error & { status?: number }
     return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Operations could not be loaded.' })

@@ -1,3 +1,4 @@
+import BusinessVerificationReview from '../components/BusinessVerificationReview'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
@@ -90,7 +91,7 @@ function formatDate(value?: string) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-export default function DeveloperOperationsPage({ workspaceId, mode = 'projects', arcActivationEnabled = false }: { workspaceId: string; mode?: 'projects' | 'agreements'; arcActivationEnabled?: boolean }) {
+export default function DeveloperOperationsPage({ workspaceId, mode = 'projects', arcActivationEnabled = false, canManage = false }: { canManage?:boolean; workspaceId: string; mode?: 'projects' | 'agreements'; arcActivationEnabled?: boolean }) {
   const { ready, authenticated, getAccessToken } = usePrivy()
   const [projects, setProjects] = useState<Project[]>([])
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
@@ -284,6 +285,8 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
                 <p className="mt-4 text-sm text-gray-500">{arcActivationEnabled ? 'The global activation switch is on. All project and execution checks still apply.' : 'New Arc activations are paused globally. Approving this project does not override that pause.'}</p>
                 <ArcPilotControl project={active} busy={busy} limits={pilotLimits} setLimits={setPilotLimits} reason={pilotReason} setReason={setPilotReason} onOperate={operateArcPilot} />
               </> : <ProjectOperations
+                  workspaceId={workspaceId}
+                  canManage={canManage}
                   project={active}
                   busy={busy}
                   reason={suspensionReason}
@@ -299,7 +302,9 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
   )
 }
 
-function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
+function ProjectOperations({ project, busy, reason, setReason, onOperate, canManage, workspaceId }: {
+  workspaceId:string
+  canManage:boolean
   project: Project
   busy: boolean
   reason: string
@@ -353,7 +358,8 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
       </div>
     </section>
 
-    <OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} />
+    {canManage && <BusinessVerificationReview projectId={project.id} workspaceId={workspaceId}/>}
+    {canManage && <OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} />}
 
     <section className="mt-4">
       <p className="text-xs font-semibold text-gray-950 dark:text-white">Operations history</p>

@@ -1,20 +1,24 @@
+import type {BusinessVerification} from './verificationTypes'
 import {CHECKOUT_PRODUCTS, productAllowed} from '../lib/developerProducts'
 
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check, ChevronRight, Clock } from 'lucide-react'
 
-export type PortalSection = 'overview' | 'products' | 'activity' | 'setup' | 'keys' | 'webhooks' | 'quickstart'
+export type PortalSection = 'overview' | 'products' | 'activity' | 'setup' | 'keys' | 'webhooks' | 'quickstart' | 'verification'
 export const portalSections: Array<[PortalSection, string]> = [['overview','Overview'],['products','Payments'],['quickstart','Developers'],['setup','Settings']]
 export function portalParent(section: PortalSection): PortalSection {
+  if (section === 'verification') return 'setup'
   if (section === 'activity') return 'products'
   if (section === 'keys' || section === 'webhooks') return 'quickstart'
   return section
 }
 export const portalSubsections: Partial<Record<PortalSection, Array<[PortalSection, string]>>> = {
+  setup: [['setup','App settings'],['verification','Business verification']],
   products: [['products', 'Payment options'], ['activity', 'Activity']],
   quickstart: [['quickstart', 'Get started'], ['keys', 'API keys'], ['webhooks', 'Webhooks']],
 }
 export type ProjectSummary = {
+  businessVerification?: BusinessVerification
   id: string; name: string; checkoutMode: 'human' | 'agentic'; capabilities: string[]; networks: string[];
   settlementStatus: string; operationalStatus?: string; webhookConfigured: boolean;
   keys: Array<{ revokedAt?: string; expiresAt?: string; environment?: string; prefix: string }>;
@@ -25,14 +29,15 @@ export function SectionTitle({title,copy}:{title:string;copy:string}) { return <
 export function OverviewPanel({project,onNavigate}:{project:ProjectSummary;onNavigate:(tab:PortalSection)=>void}) {
   const hasKey=project.keys.some(k=>!k.revokedAt && (!k.expiresAt||Date.parse(k.expiresAt)>Date.now()) && (k.environment==='live'||k.prefix.startsWith('hpl_live_')||k.prefix.startsWith('hpl_app_')))
   const steps: Array<{title:string;copy:string;done:boolean;tab:PortalSection}> = [
-    {title:'Configure your project',copy:'Choose where you receive payments.',done:project.settlementStatus==='ready',tab:'setup'},
+    {title:'Configure your app',copy:'Choose where you receive payments.',done:project.settlementStatus==='ready',tab:'setup'},
+    ...(project.businessVerification ? [{title:'Verify your business',copy:project.businessVerification.status==='submitted'?'Your application is under review.':'Submit your company and owner information.',done:project.businessVerification.status==='approved',tab:'verification' as PortalSection}] : []),
     {title:'Create an API key',copy:'Keep your key on your backend.',done:hasKey,tab:'keys'},
     {title:'Connect a webhook',copy:'Receive signed updates and handle retries.',done:project.webhookConfigured,tab:'webhooks'},
   ]
   const next=steps.find(step=>!step.done)
   const suspended=project.operationalStatus==='suspended'
   return <div>
-    <p className="text-sm text-gray-500">Your project</p>
+    <p className="text-sm text-gray-500">Your app</p>
     <h1 className="mt-2 text-3xl font-semibold tracking-tight">{project.name}</h1>
     <div className="mt-4 inline-flex items-center gap-2 text-sm text-gray-500"><span className={'h-2 w-2 rounded-full '+(suspended?'bg-red-500':next?'bg-amber-400':'bg-emerald-500')}/>{suspended?'Payments paused':next?'Setup in progress':'Setup complete'}</div>
     <section className="mt-10 rounded-2xl border border-gray-200 p-6 dark:border-white/10 sm:p-8">

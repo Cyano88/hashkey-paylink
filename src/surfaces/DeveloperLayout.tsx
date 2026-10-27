@@ -4,7 +4,7 @@ import { useTheme } from '../lib/ThemeContext'
 import '../developer/developer.css'
 
 export default function DeveloperLayout() {
-  const operations = useLocation().pathname.startsWith('/admin')
+  const operations = useLocation().pathname.startsWith('/admin') || window.location.hostname === 'admin.hashpaylink.com'
   const { theme, toggle } = useTheme()
   return <div className="developer-surface min-h-screen bg-[#f5f5f7] font-sans text-gray-950 dark:bg-[#0a0a0a] dark:text-white">
     <a href="#developer-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-white focus:px-4 focus:py-3 focus:text-gray-950">Skip to content</a>
@@ -19,7 +19,8 @@ export default function DeveloperLayout() {
         {operations && <div id="operations-workspace-title" className="min-w-0 truncate border-l border-gray-200 pl-3 text-xs text-gray-500 dark:border-white/10 dark:text-gray-400" />}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {!operations && <a href="mailto:support@hashpaylink.com" className="inline-flex min-h-11 items-center text-sm font-medium text-gray-600 dark:text-gray-300">Need help?</a>}
+          {!operations && <div id="developer-account-menu" />}
+          {!operations && <a href="mailto:support@hashpaylink.com" className="hidden min-h-11 items-center text-sm font-medium text-gray-600 dark:text-gray-300 sm:inline-flex">Need help?</a>}
           <button type="button" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10">{theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</button>
         </div>
       </nav>

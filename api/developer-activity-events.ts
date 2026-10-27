@@ -43,8 +43,8 @@ export function projectActivitySnapshots(source: JournalSource, store: unknown):
     } else if (source === 'agreement_event') {
       add(text(r.event),r.createdAt,{sourceEventId:text(r.id),...fields(r.data??{},['network','chainId','onchainAgreementId','escrow','amountUsdcUnits','releasedAmountUsdcUnits','unreleasedAmountUsdcUnits','nextStep','termsHash','observedBlockNumber']),asset:'USDC',amountUnit:'atomic_6',evidence:'reconciled_chain_snapshot'})
     } else {
-      add('funding.created',r.createdAt,{...fields(r,['checkoutId','amount']),asset:'USDC',evidence:'request_only'})
-      if (r.observation) add(`funding.${text(r.observation.status)}`,r.observation.observedAt,{...fields(r,['checkoutId','amount']),...fields(r.observation,['paymentStatus','bridgeStatus','network','paymentTransaction','bridgeTransaction']),asset:'USDC',evidence:'provider_observation'})
+      add('funding.created',r.createdAt,{...fields(r,['checkoutId','amount','expiresAt']),asset:'USDC',evidence:'request_only'})
+      if (r.observation) add(`funding.${text(r.observation.status)}`,r.observation.observedAt,{...fields(r,['checkoutId','amount','expiresAt']),...fields(r.observation,['paymentStatus','bridgeStatus','network','paymentTransaction','bridgeTransaction']),asset:'USDC',evidence:'provider_observation'})
     }
   }
   return result

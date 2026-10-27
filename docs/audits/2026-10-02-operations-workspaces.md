@@ -97,3 +97,21 @@ Deployed Hash PayLink commit `e785be57e4c60e34524cd8e301597fed44da3b8f` contains
 The public developer-domain capabilities endpoint returned `sandboxPaymentsEnabled=false` and `sandboxKeysEnabled=false`. `GET /api/v2/agreements?environment=test` returned 409 with no live operation started. The local sandbox-boundary regression suite passed. These are verified environment boundaries, not a claim that every mainnet product is enabled: `ARC_AGREEMENTS_ENABLED=false` and the public Arc Agreements capability reports `draft_only`.
 
 Live credentials for the main Hash PayStream integration were previously authenticated or associated with stored scoped-key metadata; Agents and Upfront only had legacy test credentials in the inspected deployment. Their presence must not be used to expand the live workspace. Registry visibility is distinct from executable payment environment: unmapped legacy project entries may remain visible to the founder until retirement is complete, while sandbox payment execution remains disabled.
+
+
+## 2026-10-27: staff roles and admin domain (local, not deployed)
+
+The dedicated `admin.hashpaylink.com` app contains operations routes; legacy developer `/admin` routes remain compatible. Owner access remains separately configured in `OPERATIONS_FOUNDER_EMAILS`. Editable developer profile roles do not grant permissions.
+
+Engineering can read integrations and reconcile Pocket payments. Compliance can activate, suspend and reactivate integrations. Support can read Pocket transaction status and handle cases, but cannot reconcile or approve integrations. Assign roles per workspace. Existing explicit section grants retain their prior permissions until replaced or revoked; new staff roles do not grant legacy signing authority.
+
+Owner-only `/api/operations-team` persists role overrides and access-change history in `hashpaylink:operations-team:v1`. Protected requests reload the policy; revocation also overrides environment grants. In-flight requests are not cancelled. Saving access does not send an invitation email: staff sign in using the assigned email.
+
+Before live rollout:
+
+- Add the custom domain to the host, configure its DNS record and verify TLS.
+- Allow the admin origin in the authentication provider.
+- Configure and verify staff MFA. Current email OTP alone is not claimed as MFA. An access gateway must protect origin APIs as well as the UI, with signed assertions validated by the server.
+- Verify owner access and each staff role using real accounts, including direct API and cross-workspace denials.
+
+Business document submission/review and document-access auditing remain separate unfinished work. This change has not modified DNS, MFA settings, production staff grants or customer records.

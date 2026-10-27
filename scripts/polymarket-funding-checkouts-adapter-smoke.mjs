@@ -48,6 +48,7 @@ const handler = createPolymarketFundingCheckoutsHandler({
     latest: null,
   }),
   createCheckout: async (_req, res, routing) => {
+    assert.equal(_req.body.expiresInMinutes, 2880)
     capturedRouting = routing
     return res.status(201).json({
       ok: true, checkoutId: 'chk_polymarkettest01', paymentAttemptId: 'pat_111111111111111111111111',

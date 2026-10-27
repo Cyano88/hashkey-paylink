@@ -15,6 +15,7 @@ export default function DeveloperApp() {
       <Route index element={<DeveloperPortalPage />} />
       <Route path="cli/authorize" element={<DeveloperCliAccessPage />} />
       <Route path="developers" element={<DeveloperPortalPage />} />
+      <Route path="admin/team" element={<OperationsWorkspacePage />} />
       <Route path="admin" element={<OperationsWorkspacePage />} />
       <Route path="admin/workspaces/:workspaceId" element={<OperationsWorkspacePage />} />
       <Route path="admin/workspaces/:workspaceId/:section" element={<OperationsWorkspacePage />} />

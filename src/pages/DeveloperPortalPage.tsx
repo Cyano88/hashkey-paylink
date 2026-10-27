@@ -1,10 +1,14 @@
+import BusinessVerificationPanel from '../developer/BusinessVerificationPanel'
+import type {BusinessVerification} from '../developer/verificationTypes'
+import AccountMenu from '../developer/AccountMenu'
+import AppsPanel from '../developer/AppsPanel'
 import CreateProjectCard, { type CreateProjectForm } from '../developer/CreateProjectCard'
 import ProductPicker from '../developer/ProductPicker'
 import XLayerCheckoutSettings from '../developer/XLayerCheckoutSettings'
 import type { XLayerCheckoutConfig } from '../lib/xlayerCheckoutConfig'
 import {needsSettlementRouting, type ProductCapability} from '../lib/developerProducts'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../lib/developerNetworkPolicy'
-import PaymentActivityPanel from '../developer/PaymentActivityPanel'
+import PaymentActivityPanel from '../developer/PaymentListPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CliGuide, OverviewPanel, ProductsPanel, portalSections, portalParent, portalSubsections, ComingSoonProducts, type PortalSection } from '../developer/PortalPanels'
@@ -18,6 +22,7 @@ type Network = 'base' | 'arbitrum' | 'arc'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
+  businessVerification?: BusinessVerification
   xlayerCheckout?: XLayerCheckoutConfig
   id: string
   name: string
@@ -58,6 +63,11 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
   { key: 'solana', label: 'Solana', note: 'Soon', disabled: true },
 ]
 
+function editableProjectState(project:Project) {
+  const fields:Array<keyof Project>=['name','website','brandImageUrl','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout']
+  return JSON.stringify(fields.map(field=>project[field]))
+}
+
 function fieldClass() {
   return 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-blue-400/50 dark:focus:bg-white/[0.07]'
 }
@@ -75,13 +85,20 @@ export default function DeveloperPortalPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [verificationDirty,setVerificationDirty]=useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const selectedTab = params.get('section')
-  const tab: PortalSection = ['overview','products','activity','setup','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
+  const tab: PortalSection = ['overview','products','activity','setup','verification','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
   const sandbox = params.get('environment') === 'test'
-  function hasUnsavedChanges() { return Boolean(active && ((draft && JSON.stringify(draft)!==JSON.stringify(active)) || webhookUrl !== active.webhookUrl)) }
-  function resetProjectDraft() { if (active) { setDraft({...active, recipients:{...active.recipients}, networks:[...active.networks], allowedOrigins:[...active.allowedOrigins]}); setWebhookUrl(active.webhookUrl) } }
+  const showingApps = params.get('section') === 'apps' || (!params.get('section') && !params.get('project'))
+  function openApps() {
+    if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved app changes?'))) return
+    resetProjectDraft(); setCreatingNew(false); setNewKey(null); setNewWebhookSecret(null)
+    setParams(current => { const next = new URLSearchParams(current); next.set('section', 'apps'); next.delete('project'); return next })
+  }
+  function hasUnsavedChanges() { return Boolean(verificationDirty || active && ((draft && editableProjectState(draft)!==editableProjectState(active)) || webhookUrl !== active.webhookUrl)) }
+  function resetProjectDraft() { setVerificationDirty(false); if (active) { setDraft({...active, recipients:{...active.recipients}, networks:[...active.networks], allowedOrigins:[...active.allowedOrigins]}); setWebhookUrl(active.webhookUrl) } }
   function startNewProject() {
     if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?'))) return
     resetProjectDraft()
@@ -100,7 +117,7 @@ export default function DeveloperPortalPage() {
     if (busy) return
     if (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?')) return
     setNewKey(null); setNewWebhookSecret(null); setActiveId(value); setCreatingNew(false)
-    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); return next })
+    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('section', 'overview'); return next })
   }
   const [creatingNew, setCreatingNew] = useState(false)
   const [newKey, setNewKey] = useState<{ value: string; environment: 'test' | 'live'; projectId: string } | null>(null)
@@ -163,10 +180,10 @@ export default function DeveloperPortalPage() {
       if (window.matchMedia('(max-width: 1023px)').matches) content?.scrollIntoView({block:'start'})
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [tab, creatingNew, activeId])
+  }, [tab, showingApps, creatingNew, activeId])
   useEffect(() => { setWebhookUrl(active?.webhookUrl ?? '') }, [active?.id, active?.webhookUrl])
   useEffect(() => { const project = params.get('project'); if (project) { setNewKey(null); setNewWebhookSecret(null); setActiveId(project) } }, [params.get('project')])
-  useEffect(() => { setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId])
+  useEffect(() => { setVerificationDirty(false); setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId])
   useEffect(() => {
     if (!authenticated || !draft || draft.settlementMode === 'usdc') { setInstitutions([]); return }
     const currency = draft.settlementMode === 'ugx' ? 'UGX' : 'NGN'
@@ -293,15 +310,6 @@ export default function DeveloperPortalPage() {
 
   if (loadFailed && !projects.length) return <main className="mx-auto max-w-xl px-4 py-16"><h1 className="text-2xl font-semibold">Projects could not be loaded</h1><Message tone="error">{error}</Message><button type="button" disabled={loading} onClick={() => void loadProjects()} className="developer-primary mt-6">Try again</button></main>
 
-  if (!projects.length) {
-    return (
-      <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-2xl px-4 py-12">
-        <PortalTop onLogout={logout} />
-        <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} emptyAccount />
-      </main>
-    )
-  }
-
   const parent = portalParent(tab)
   const subnav = portalSubsections[parent]
   const sectionIcons = { overview: LayoutDashboard, products: CreditCard, quickstart: Code2, setup: Settings2 }
@@ -309,25 +317,26 @@ export default function DeveloperPortalPage() {
     <main className="portal-console mx-auto min-h-[calc(100dvh-4rem)] max-w-[1440px] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#101114] lg:min-h-[calc(100dvh-4rem)] lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1"><PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: project.name }))} onChange={selectProject} disabled={busy} ariaLabel="Developer project" buttonClassName="shadow-none" /></div>
-          <button type="button" aria-label="New project" title="New project" disabled={busy || sandbox} onClick={startNewProject} className="grid h-10 w-8 shrink-0 place-items-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/5"><Plus className="h-4 w-4" /></button>
+          <button type="button" disabled={busy} onClick={openApps} aria-current={showingApps&&!creatingNew?'page':undefined} className="flex min-h-11 flex-1 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold"><LayoutDashboard className="h-4 w-4"/>Apps</button>
+          <button type="button" aria-label="New app" title="New app" disabled={busy || sandbox} onClick={startNewProject} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5"><Plus className="h-4 w-4" /></button>
         </div>
+        {!showingApps && !creatingNew && active && <><p className="mt-5 truncate px-3 text-xs font-medium text-gray-400">{active.name}</p>
         <nav aria-label="Project navigation" className="mt-4 grid grid-cols-4 gap-1 lg:mt-8 lg:grid-cols-1 lg:gap-2">
           {portalSections.map(([value,label]) => { const Icon=sectionIcons[value as keyof typeof sectionIcons]; return <button key={value} type="button" disabled={busy} aria-current={parent===value&&!creatingNew?'page':undefined} onClick={()=>setTab(value)} className={cn('flex min-h-11 items-center justify-center gap-3 rounded-lg px-2 text-xs font-medium transition lg:justify-start lg:px-3 lg:text-sm',parent===value&&!creatingNew?'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}><Icon className="hidden h-4 w-4 lg:block"/>{label}</button>})}
-        </nav>
-        <div className="hidden border-t border-gray-100 pt-5 dark:border-white/10 lg:mt-12 lg:block"><PortalTop onLogout={logout}/></div>
+        </nav></>}
       </aside>
       <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
-        <div className="mb-6 flex items-center justify-between lg:hidden"><span className="text-xs text-gray-400">Hash PayLink Console</span><PortalTop onLogout={logout}/></div>
-        {!creatingNew && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
+        <div className="mb-6 flex items-center justify-end"><AccountMenu onLogout={logout}/></div>
+        {!showingApps && !creatingNew && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
         <section id="developer-content" tabIndex={-1} className="min-w-0 max-w-4xl outline-none">
           {sandbox ? <div><h1 className="text-xl font-semibold">Test payments are unavailable</h1><p className="mt-2 text-sm text-gray-500">This old link cannot create or execute payments.</p><Link className="pocket-cta-primary mt-5" to="?environment=live">Open live configuration</Link></div> : creatingNew
             ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
-            : <>
+            : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
               {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} />}
+              {active && tab === 'verification' && <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/> }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
               {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><details className="mt-8 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Command-line tools</summary><CliGuide projectId={active.id} /></details><details className="mt-6 text-sm text-gray-500"><summary className="cursor-pointer">Coming soon</summary><ComingSoonProducts/></details></>}
@@ -480,17 +489,16 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
       {newKey?.environment === environment && <SecretReveal label="Copy this key now" value={newKey.value} />}
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
         <input className={fieldClass()} value={keyNames[environment]} onChange={event => setKeyNames({ ...keyNames, [environment]: event.target.value })} aria-label={`${title} key name`} placeholder="Key name" />
-        <button type="button" disabled={environment === 'test' || !needsSettlementRouting(project.capabilities) || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create API key</button>
+        <button type="button" disabled={environment === 'test' || (project.businessVerification?.required && project.businessVerification.status !== 'approved') || !needsSettlementRouting(project.capabilities) || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create API key</button>
       </div>
       <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-xs text-gray-400">{key.prefix}••••</p>{key.scopes && <p className="mt-1 text-xs text-gray-500">Scoped backend key · {key.expiresAt && Date.parse(key.expiresAt) <= Date.now() ? 'Expired' : 'Expires ' + new Date(key.expiresAt!).toLocaleDateString()}</p>}</div>{key.revokedAt ? <span className="text-xs font-semibold text-gray-400">Revoked</span> : <button type="button" disabled={busy} onClick={() => onRevoke(key.id)} className="text-xs font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
     </section>
   }
 
-  return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend for this project. Keep their values in your server secret manager." />
+  return <div>{project.businessVerification?.required && project.businessVerification.status!=='approved' && <p className="mb-5 text-sm text-gray-500">Complete business verification in Settings before creating live keys.</p>}<PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend for this project. Keep their values in your server secret manager." />
 
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
-    <p className="mt-4 text-sm leading-6 text-gray-500">Swap requires a separate <code>wallet:swap</code> key. X Layer agreements require <code>xstocks-agreement:read</code> and <code>xstocks-agreement:create</code>. Create these using the owner-approved CLI; general checkout keys do not enable Swap.</p>
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       {project.keys.some(key => key.environment === 'test') && environmentSection('test', 'Existing test keys', `New sandbox keys are disabled until test environments are connected. Existing keys remain separate from live keys. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
       {environmentSection('live', 'Live keys', `Use a secret key to connect your server. Never expose it in your app.`)}
@@ -555,7 +563,6 @@ function ArcPilotStatus({ project }: { project: Project }) {
   return <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Arc Agreements · Private pilot</p><span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{label}</span></div><p className="mt-2 text-sm leading-5 text-blue-800/80 dark:text-blue-100/70">Agreements use Arc only. Mainnet activation remains unavailable until the deployment and operator are reviewed. Project approval alone does not enable funding.</p>{pilot?.status === 'approved' && <p className="mt-3 text-xs leading-5 text-blue-700/70 dark:text-blue-200/60">Up to {pilot.maxAgreementUsdc} USDC per agreement · {pilot.dailyVolumeUsdc} USDC daily · {pilot.maxActiveAgreements} active · {Math.round(pilot.maxDurationSeconds / 3600)}h maximum</p>}</div>
 }
 
-function PortalTop({ onLogout }: { onLogout: () => Promise<void> }) { return <header className="flex items-center justify-end"><button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button></header> }
 function PortalLoading({ delayed = false }: { delayed?: boolean }) {
   return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-xl items-center px-4 py-12">
     <section className="w-full rounded-[1.75rem] border border-gray-200 bg-white p-7 text-center shadow-[0_24px_80px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-[#111216]">
