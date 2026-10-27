@@ -3,13 +3,13 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {parseUnits} from 'viem'
-import {currentXLayerCheckoutConfig,normalizeXLayerCheckoutConfig} from '../src/lib/xlayerCheckoutConfig.ts'
+import {currentXLayerCheckoutConfig,normalizeXLayerCheckoutConfig,xlayerCheckoutAssets} from '../src/lib/xlayerCheckoutConfig.ts'
 import {createHostedStockCheckoutsHandler,readStockCheckout,settleStockCheckout,drainStockCheckoutWebhooks,assertStockCheckoutPayable} from '../api/hosted-stock-checkouts.ts'
 import {createPaymentExecutionRepository} from '../api/pocket/payment-execution-intents.ts'
 import {stockAssets,stockUsdc} from '../src/pocket/lib/pocketXStocksWallet.ts'
 const root=await mkdtemp(join(tmpdir(),'stock-checkout-'))
-try{
- const asset=stockUsdc,recipient='0x'+'2'.repeat(40),payer='0x'+'1'.repeat(40)
+try{for(const asset of xlayerCheckoutAssets){
+ const recipient='0x'+'2'.repeat(40),payer='0x'+'1'.repeat(40)
  let clock=Date.parse('2026-10-06T12:00:00Z'),seq=0,enabled=true,store={checkouts:{},idempotency:{},outbox:{}},notifications=[],failDelivery=true
  let policy={projectManaged:true,partnerId:'dev_stocktest0001',ownerId:'merchant',merchantName:'Fixture merchant',environment:'live',checkoutMode:'human',settlementMode:'usdc',allowedOrigins:['https://merchant.example'],capabilities:['hosted_checkout'],xlayerCheckout:{recipient,assets:[asset.address.toLowerCase()]}}
  assert.deepEqual(currentXLayerCheckoutConfig({recipient,assets:[stockAssets[0].address.toLowerCase(),asset.address.toLowerCase()]}).assets,[asset.address.toLowerCase()])
@@ -17,8 +17,8 @@ try{
  assert.throws(()=>normalizeXLayerCheckoutConfig({recipient,assets:[stockAssets[0].address]}),/stablecoins only/)
  await assert.rejects(assertStockCheckoutPayable({token:{address:stockAssets[0].address}}),/no longer accepted/)
  await assert.rejects(assertStockCheckoutPayable({token:{address:asset.address}},true),/Swap in Pocket/)
- const executions=createPaymentExecutionRepository({storePath:join(root,'executions.json'),durable:false,isRender:false})
- const d={enabled:()=>enabled,secret:()=> 'test-secret-'.repeat(4),hasStore:()=>true,read:async()=>structuredClone(store),mutate:async fn=>{const next=await fn(structuredClone(store));store=next;return structuredClone(store)},policy:async()=>policy,asset:async address=>({chainId:196,address,symbol:asset.symbol,decimals:6}),price:async()=>1,executions,notify:async(...args)=>{notifications.push(args);if(failDelivery)throw Error('offline');return{status:'sent'}},now:()=>clock,id:()=> 'chkx_'+String(++seq).padStart(24,'0')}
+ const executions=createPaymentExecutionRepository({storePath:join(root,asset.symbol+'-executions.json'),durable:false,isRender:false})
+ const d={enabled:()=>enabled,secret:()=> 'test-secret-'.repeat(4),hasStore:()=>true,read:async()=>structuredClone(store),mutate:async fn=>{const next=await fn(structuredClone(store));store=next;return structuredClone(store)},policy:async()=>policy,asset:async address=>({chainId:196,address,symbol:asset.symbol,decimals:asset.decimals}),price:async()=>1,executions,notify:async(...args)=>{notifications.push(args);if(failDelivery)throw Error('offline');return{status:'sent'}},now:()=>clock,id:()=> 'chkx_'+String(++seq).padStart(24,'0')}
  const handler=createHostedStockCheckoutsHandler(d)
  const call=async(method,body={},query={},key='stock-checkout-order-001')=>{let status=200,data;await handler({method,body,query,headers:{'idempotency-key':key}},{setHeader(){},status(n){status=n;return this},json(d){data=d;return this},sendStatus(n){status=n}});return{status,data}}
  const body={rail:'xlayer',asset:asset.symbol,amount:'0.000001',returnUrl:'https://merchant.example/paid'}
@@ -31,7 +31,7 @@ try{
  assert.equal((await call('POST',{...body,kind:'funding'})).status,400)
  assert.equal((await call('POST',{...body,providerFunding:{provider:'polymarket'}})).status,400)
  assert.equal((await call('POST',{...body,asset:'NOT_ALLOWED'})).status,400)
- assert.equal((await call('POST',{...body,amount:'0.0000001'})).status,400)
+ assert.equal((await call('POST',{...body,amount:'0.'+'0'.repeat(asset.decimals)+'1'})).status,400)
  assert.equal((await call('POST',{...body,returnUrl:'https://other.example/paid'})).status,400)
  const made=await call('POST',body);assert.equal(made.status,201,JSON.stringify(made.data));const id=made.data.checkoutId
  assert.equal((await call('POST',body)).data.checkoutId,id)
@@ -40,7 +40,7 @@ try{
  assert.equal(execution.asset,asset.symbol);assert.equal(execution.amount,body.amount);assert.equal(execution.state,'prepared')
  const original=store.checkouts[id].amount;store.checkouts[id].amount='3';assert.equal(await readStockCheckout(id,true,d),null);store.checkouts[id].amount=original
  const owner=policy;policy={...owner,partnerId:'dev_anotherproject'};assert.equal((await call('GET',{}, {id,purpose:'status'})).status,403);policy=owner
- const proof={id,token:asset.address,units:'1',recipient,payer,hash:'0x'+'a'.repeat(64),confirmedAt:new Date(clock+1000).toISOString(),paymentId:'fixture-payment'}
+ const proof={id,token:asset.address,units:String(parseUnits(body.amount,asset.decimals)),recipient,payer,hash:'0x'+'a'.repeat(64),confirmedAt:new Date(clock+1000).toISOString(),paymentId:'fixture-payment'}
  await assert.rejects(settleStockCheckout({...proof,payer:'invalid'},d),/does not match/)
  await assert.rejects(settleStockCheckout({...proof,units:'not-a-number'},d),/does not match/)
  await assert.rejects(settleStockCheckout({...proof,units:'2'},d),/does not match/)
@@ -62,4 +62,4 @@ try{
  clock+=31*60_000;assert.equal((await call('GET',{}, {id:second.data.checkoutId})).status,410)
  assert.equal((await call('GET',{}, {id})).data.checkout.status,'paid','Paid receipts survive checkout expiry')
  console.log('PASS stablecoin Checkout: activation, permissions, accepted asset, exact precision, signed records, replay isolation, ledger identity, expiry and webhook retry.')
-}finally{await rm(root,{recursive:true,force:true})}
+}}finally{await rm(root,{recursive:true,force:true})}

@@ -1,3 +1,4 @@
+import {checkoutStablecoins} from '../../src/lib/checkoutStablecoins.js'
 import {ownsTerminalSetupKey,legacyXPayTerminal,assertUnifiedXPayDestination} from './unified-xpay-store.js'
 import { isStockCheckoutId, readStockCheckout, settleStockCheckout, assertStockCheckoutPayable } from '../hosted-stock-checkouts.js'
 import { exactTokenTransfer } from '../exact-token-transfer.js'
@@ -22,7 +23,7 @@ const normalize=(s?:Store):Store=>({merchants:s?.merchants||{},payments:s?.payme
 const read=async()=>normalize(await readDurableJson<Store>(KEY))
 const mutate=(fn:(s:Store)=>void)=>mutateDurableJson<Store>(KEY,current=>{const s=normalize(current);fn(s);return s})
 const fail=(message:string,status=400)=>{throw Object.assign(Error(message),{status})}
-const supported=new Set([stockUsdc,...stockAssets].map(a=>a.address.toLowerCase()))
+const supported=new Set([...checkoutStablecoins('xlayer'),...stockAssets].map(a=>a.address.toLowerCase()))
 const publicMerchant=({owner,createKey,...m}:Merchant)=>m
 const publicPayment=({owner,merchantOwner,units,authorizedAt,authorizedBlock,scanBlock,blockHash,blockNumber,...p}:Payment)=>p
 const event=parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
@@ -118,14 +119,14 @@ export default async function handler(req:Request,res:Response){
    const payer=String(b.wallet||'');await verifyStockWalletOwner(owner,payer)
    const id=String(b.id||''),token=String(b.token||'').toLowerCase(),usd=String(b.usd||''),key=String(b.key||'')
    if(!/^[a-zA-Z0-9-]{16,80}$/.test(key))fail('Invalid payment reference.')
-   const s=await read(),m=s.merchants[id]||await checkoutMerchant(id);if(!m||m.deletedAt||!m.tokens.includes(token))fail('Choose a stock accepted by this merchant.')
+   const s=await read(),m=s.merchants[id]||await checkoutMerchant(id);if(!m||m.deletedAt||!m.tokens.includes(token))fail('Choose an asset accepted by this merchant.')
    const checkoutId=b.checkoutId?String(b.checkoutId):undefined
    if(!checkoutId&&await legacyXPayTerminal(id,m.createKey))fail('Reopen this QR to use the business terminal.',409)
    if(checkoutId)await assertUnifiedXPayDestination(checkoutId,id,String(m.updatedAt))
    if(m.owner===owner||m.wallet.toLowerCase()===payer.toLowerCase())fail('You cannot pay your own XPay QR.')
    if(!isStockCheckoutId(id))await verifyStockWalletOwner(m.owner,m.wallet)
    const asset=await stockNoticeAsset(token),prices=await readStockMarketPrices([token]),price=prices[token]
-   if(!price||Date.now()-price.fetchedAt>=60000)fail('A fresh stock price is unavailable. Try again.',503)
+   if(!price||Date.now()-price.fetchedAt>=60000)fail('A fresh asset price is unavailable. Try again.',503)
    const units=m.fixedAmount?parseUnits(m.fixedAmount,asset.decimals):xpayUnits(usd,price.usd,asset.decimals),now=Date.now()
    let payment:Payment|undefined
    await mutate(s=>{

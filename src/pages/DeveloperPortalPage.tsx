@@ -21,7 +21,7 @@ import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
 
-type Network = 'base' | 'arbitrum' | 'arc'
+type Network = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
@@ -63,8 +63,10 @@ type Institution = { code: string; name: string; type?: string }
 
 const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; disabled?: boolean }> = [
   { key: 'base', label: 'Base' },
-  { key: 'arbitrum', label: 'Arbitrum' },
   { key: 'arc', label: 'Arc', note: 'Mainnet' },
+  { key: 'arbitrum', label: 'Arbitrum' },
+  { key: 'ethereum', label: 'Ethereum' },
+  { key: 'polygon', label: 'Polygon' },
   { key: 'solana', label: 'Solana', note: 'Soon', disabled: true },
 ]
 

@@ -26,7 +26,7 @@ import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './ren
 import { createPaycrestOfframpOrder, isPaycrestConfigured, listPaycrestInstitutions, resolvePaycrestOfframpAvailability, verifyPaycrestAccount, type PaycrestInstitution } from './paycrest-pos.js'
 
 const STORE_KEY = (process.env.DEVELOPER_PROJECT_STORE_KEY ?? 'hashpaylink:developer-projects:v1').trim()
-const NETWORKS = ['base', 'arbitrum', 'arc'] as const
+const NETWORKS = ['base', 'arc', 'arbitrum', 'ethereum', 'polygon'] as const
 type DeveloperNetwork = typeof NETWORKS[number]
 type SettlementMode = DeveloperSettlementMode
 type DeveloperEnvironment = 'test' | 'live'

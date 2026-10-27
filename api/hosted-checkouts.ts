@@ -12,7 +12,7 @@ import { paymentExecutionRepository, type PaymentExecutionRepository } from './p
 import { ensureHostedCheckoutExecution, expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
 
 const STORE_KEY = (process.env.HOSTED_CHECKOUT_STORE_KEY ?? 'hashpaylink:hosted-checkouts:v2').trim()
-const NETWORKS = new Set(['base', 'arbitrum', 'arc'])
+const NETWORKS = new Set(['base', 'arc', 'arbitrum', 'ethereum', 'polygon'])
 const KINDS = new Set(['usdc_request', 'service'])
 const CHECKOUT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000
 const MAX_CHECKOUT_RECORDS = 20_000
@@ -22,7 +22,7 @@ const WEBHOOK_LEASE_MS = 30_000
 const WEBHOOK_MAX_ATTEMPTS = 12
 const WEBHOOK_RETRY_DELAYS_MS = [10_000, 30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000]
 
-export type HostedCheckoutNetwork = 'base' | 'arbitrum' | 'arc'
+export type HostedCheckoutNetwork = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
 export type HostedCheckoutPaymentOption = { network: HostedCheckoutNetwork; recipient: string }
 export type HostedCheckoutMode = 'human' | 'agentic'
 export type HostedCheckoutAgenticType = 'creator_earnings' | 'agent_treasury'
@@ -813,7 +813,7 @@ function validRecipient(network: string, recipient: string) {
 function validCheckoutRouting(record: Pick<CheckoutRecord, 'network' | 'recipient' | 'paymentOptions'>) {
   if (!validRecipient(record.network, record.recipient)) return false
   if (record.paymentOptions === undefined) return true
-  if (!Array.isArray(record.paymentOptions) || record.paymentOptions.length < 1 || record.paymentOptions.length > 3) return false
+  if (!Array.isArray(record.paymentOptions) || record.paymentOptions.length < 1 || record.paymentOptions.length > NETWORKS.size) return false
   const networks = new Set<string>()
   for (const option of record.paymentOptions) {
     if (!option || !validRecipient(option.network, option.recipient) || networks.has(option.network)) return false
@@ -824,8 +824,8 @@ function validCheckoutRouting(record: Pick<CheckoutRecord, 'network' | 'recipien
 
 function normalizeRequestedPaymentOptions(value: unknown) {
   if (value === undefined) return { options: undefined as HostedCheckoutPaymentOption[] | undefined, error: '' }
-  if (!Array.isArray(value) || value.length < 1 || value.length > 3) {
-    return { options: undefined, error: 'paymentOptions must contain one to three supported networks.' }
+  if (!Array.isArray(value) || value.length < 1 || value.length > NETWORKS.size) {
+    return { options: undefined, error: 'paymentOptions must contain one to five supported networks.' }
   }
   const options: HostedCheckoutPaymentOption[] = []
   const networks = new Set<string>()

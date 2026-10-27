@@ -93,7 +93,7 @@ export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencie
       if (typeof req.body?.asset !== 'string' || typeof req.body?.amount !== 'string') fail('Asset and exact token amount must be strings.')
       const assetInput = clean(req.body?.asset, 80)
       const chosen = xlayerCheckoutAssets.find(a => a.address.toLowerCase() === assetInput.toLowerCase() || a.symbol === assetInput)
-      if (!chosen) fail('Checkout accepts supported stablecoins only. Choose USDC on X Layer.')
+      if (!chosen) fail('Checkout accepts supported stablecoins only. Choose an enabled stablecoin on X Layer.')
       if (!p.xlayerCheckout.assets.includes(chosen.address.toLowerCase())) fail('Choose a stablecoin accepted by this project.')
       const amountInput = clean(req.body?.amount, 100), title = clean(req.body?.title, 100) || 'Payment request'
       const returnUrl = clean(req.body?.returnUrl, 300)

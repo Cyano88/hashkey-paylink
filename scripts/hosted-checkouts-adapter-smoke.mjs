@@ -622,3 +622,20 @@ for (const capabilities of [['arc_agreements'],['xstocks_agreements'],['swap_arc
  assert.equal(denied.statusCode,403);assert.equal(managedCreatedCount,before)
 }
 console.log('Unselected Checkout is denied for Agreement and Swap projects without creating a payment.')
+
+// Additional Circle EVM networks must survive signing, network locking and receipt settlement.
+for (const network of ['ethereum','polygon']) {
+ const header={...headers,'idempotency-key':'expanded-route:'+network}
+ const made=await request(handler,'POST',{headers:header,body:{...valid,network}})
+ assert.equal(made.statusCode,201,JSON.stringify(made.body))
+ const lookup=await request(handler,'GET',{query:{id:made.body.checkoutId}})
+ assert.equal(lookup.body.checkout.network,network)
+ assert.equal(new URL(lookup.body.paymentUrl,'https://test.invalid').searchParams.get('n'),network)
+ const paid=await markHostedCheckoutPaid({id:made.body.checkoutId,network,txHash:'0x'+(network==='ethereum'?'e':'f').repeat(64),payer:'0x2222222222222222222222222222222222222222',amount:'0.024',confirmedAt:new Date(now.getTime()+1000).toISOString()},dependencies)
+ assert.equal(paid.payment.network,network)
+ assert.equal((await executions.findByResource('partner:polydesk',made.body.checkoutId,'hosted_checkout')).state,'completed')
+}
+const five=await request(handler,'POST',{headers:{...headers,'idempotency-key':'expanded-route:five'},body:{...multi,paymentOptions:[...multi.paymentOptions,...['ethereum','polygon'].map(network=>({network,recipient:valid.recipient}))]}})
+assert.equal(five.statusCode,201,JSON.stringify(five.body))
+assert.equal((await request(handler,'GET',{query:{id:five.body.checkoutId}})).body.checkout.availableNetworks.length,5)
+console.log('PASS Ethereum and Polygon USDC: signed links, exact settlement, execution completion and five-network checkout.')

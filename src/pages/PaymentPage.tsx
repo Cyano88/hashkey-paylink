@@ -146,7 +146,7 @@ type BankSendQuote = {
   destination_network?: string
 }
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
-const HOSTED_CHECKOUT_CHAINS: ChainKey[] = ['base', 'arbitrum', 'arc']
+const HOSTED_CHECKOUT_CHAINS: ChainKey[] = ['base', 'arc', 'arbitrum', 'ethereum', 'polygon']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 type SupportedEvmPayChain = Exclude<ChainKey, 'solana'>
@@ -391,12 +391,14 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const hostedEvmRecipients: Partial<Record<Exclude<ChainKey, 'solana'>, string>> = {
     base: (searchParams.get('e_base') ?? '').trim(),
     arbitrum: (searchParams.get('e_arbitrum') ?? '').trim(),
+    ethereum: (searchParams.get('e_ethereum') ?? '').trim(),
+    polygon: (searchParams.get('e_polygon') ?? '').trim(),
     arc: (searchParams.get('e_arc') ?? '').trim(),
   }
   const hasScopedEvmRecipients = Object.values(hostedEvmRecipients).some(Boolean)
   const evmRecipientForChain = (candidate: ChainKey) =>
     candidate === 'solana' ? '' : hasScopedEvmRecipients ? hostedEvmRecipients[candidate] || '' : evmParam
-  const hasEvmRecipient = (['base', 'arbitrum', 'arc'] as const).some(candidate => isAddress(evmRecipientForChain(candidate)))
+  const hasEvmRecipient = (['base', 'arc', 'arbitrum', 'ethereum', 'polygon'] as const).some(candidate => isAddress(evmRecipientForChain(candidate)))
   const amt         = getPaylinkParam(searchParams, 'amt', 'a')
   const memo        = getPaylinkParam(searchParams, 'memo', 'm')
   const legacyChain = searchParams.get('chain')  as ChainKey | null
@@ -696,7 +698,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           setHostedReturnUrl(body.returnUrl || '')
           setHostedIntentStatus('verified')
           const attempt = body.checkout?.paymentAttempt
-          if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc') {
+          if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc' || attempt?.network === 'ethereum' || attempt?.network === 'polygon') {
             setHostedLockedNetwork(attempt.network)
           }
           if (attempt?.receiptId) setPaymentReceiptId(attempt.receiptId)
