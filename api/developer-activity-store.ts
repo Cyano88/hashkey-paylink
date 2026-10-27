@@ -1,3 +1,4 @@
+import {guardNewProjectRecords} from './developer-app-lifecycle.js'
 import type { PoolClient } from 'pg'
 import { mutateDurableJson, queryDurablePostgres, withDurablePostgresTransaction } from './render-durable-store.js'
 import { projectActivityChanges, projectActivityKey, projectActivitySnapshots, type JournalSource, type ProjectActivityEvent } from './developer-activity-events.js'
@@ -39,6 +40,7 @@ export async function appendDeveloperActivity(client: Pick<PoolClient,'query'>, 
 export async function mutateWithDeveloperActivity<T>(source:JournalSource,key:string,update:(current:T|undefined)=>T|Promise<T>):Promise<T> {
   await ensureDeveloperActivitySchema()
   return mutateDurableJson<T>(key,update,async(client,current,next)=>{
+    await guardNewProjectRecords(client,source,current,next)
     await appendDeveloperActivity(client,projectActivityChanges(source,current,next))
   })
 }

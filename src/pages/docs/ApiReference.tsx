@@ -8,6 +8,18 @@ export default function ApiReference() {
         description="Current public API reference for the Render-hosted Hash PayLink platform."
       />
 
+      <Section title="Remove an app">
+        <p>Owners can remove an app in Apps ? Settings. An unused app is deleted from the active list; apps with retained payment or verification records are closed. Closed apps have read-only payment history under Apps ? Show closed apps. Keys are revoked and the public listing is removed.</p>
+        <p>API removal requires a short-lived CLI grant explicitly approved by the owner with <code>project:delete</code>. Ordinary payment keys and scoped backend keys cannot delete apps. Request this permission through the existing CLI authorization flow; it is not included by default.</p>
+        <SubSection title="GET /api/v2/project/removal">
+          <p>Use <code>Authorization: Bearer &lt;owner-approved CLI token&gt;</code>. Returns <code>review.allowed</code>, <code>review.mode</code> (deleted or closed), and a blocking reason when removal cannot proceed.</p>
+        </SubSection>
+        <SubSection title="DELETE /api/v2/project">
+          <CodeBlock lang="json">{`{ "confirmName": "Exact app name" }`}</CodeBlock>
+          <p>The token identifies the app. The server checks ownership, the exact name and current activity again while removing it. Repeated requests return the existing result. Pending payments, refunds, funding, notifications or uncertain historical records return HTTP 409. Legacy products may require a support review. Removal does not cancel or refund transactions, and does not erase retained records.</p>
+        </SubSection>
+      </Section>
+
       <Section title="Hosted Checkout API">
         <p>
           Create a human-checkout or agentic-x402 project in the Privy-authenticated developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.

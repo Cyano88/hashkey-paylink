@@ -1,3 +1,4 @@
+import {manageAppRemoval} from './developer-app-removal.js'
 import {listDeveloperPayments} from './developer-payments.js'
 import {verificationEmpty,publicVerification,verificationAllowsLive,assertVerificationEditable,normalizeBusinessApplication,validateBusinessSubmission,sealVerification,openVerification,inspectBusinessDocument,storeBusinessDocument,readBusinessDocument,deleteBusinessDocument,type VerificationRecord} from './developer-verification.js'
 import {operationsPolicy,isOperationsFounder,requestedWorkspace} from './operations-policy.js'
@@ -63,6 +64,7 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  removal?: {status:'closed'|'deleted';at:string;by:string}
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: VerificationRecord
   id: string
@@ -100,7 +102,7 @@ type DeveloperProject = {
   keys: DeveloperKey[]
   operations?: Array<{
     id: string
-    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled' | 'cli_key_created' | 'cli_key_revoked'
+    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled' | 'cli_key_created' | 'cli_key_revoked' | 'app_closed' | 'app_deleted'
     actor: string
     reason?: string
     details?: Record<string, string | number | boolean>
@@ -142,6 +144,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  removal?: typeof manageAppRemoval
   operationsEnv?: () => NodeJS.ProcessEnv
   activity?: typeof listDeveloperActivity
   requireVerification?: () => boolean
@@ -391,6 +394,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     : undefined
   return {
     id: project.id,
+    removal: project.removal ? {status:project.removal.status,at:project.removal.at}:undefined,
     businessVerification: publicVerification(project.businessVerification),
     directoryProfile: project.directoryProfile,
     name: project.name,
@@ -564,7 +568,7 @@ function projectArcPilotReady(project: DeveloperProject) {
   return (projectCheckoutMode(project) === 'human' || projectCheckoutMode(project) === 'agentic')
     && project.settlementMode === 'usdc'
     && project.settlementStatus === 'ready'
-    && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)
+    && !project.removal && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)
     && Boolean(project.capabilities?.includes('arc_agreements'))
     && Boolean(project.webhookUrl && project.webhookSecretCipher)
     && Boolean(hasArcRecipient)
@@ -579,7 +583,7 @@ function adminProjectIndex(store: DeveloperStore | undefined) {
     projects: projects.map(project => projectPublic(project, true)),
     summary: {
       total: projects.length,
-      active: projects.filter(project => project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)).length,
+      active: projects.filter(project => project.settlementStatus === 'ready' && !project.removal && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)).length,
       setupRequired: projects.filter(project => project.settlementStatus !== 'ready').length,
       suspended: projects.filter(project => project.operationalStatus === 'suspended').length,
     },
@@ -597,6 +601,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method === 'GET') {
         const resource = clean(req.query?.resource, 30).toLowerCase()
+        if (resource === 'removal') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.query?.projectId,80),ownerId:identity.userId}))
         if (resource === 'profile') {
           const profiles = await dependencies.read('hashpaylink:developer-profiles:v1')
           return res.json({ok:true,profile:{...profiles?.profiles?.[identity.userId],email:identity.email}})
@@ -609,7 +614,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
-        if (resource === 'businesses') return res.json({ok:true,businesses:Object.values(store?.projects??{}).filter(project=>project.businessVerification?.status==='approved'&&project.operationalStatus!=='suspended'&&project.directoryProfile?.enabled).map(project=>({id:project.id,name:project.name,website:project.website,logo:project.brandImageUrl??'',introduction:project.directoryProfile!.introduction})).sort((a,b)=>a.name.localeCompare(b.name))})
+        if (resource === 'businesses') return res.json({ok:true,businesses:Object.values(store?.projects??{}).filter(project=>!project.removal&&project.businessVerification?.status==='approved'&&project.operationalStatus!=='suspended'&&project.directoryProfile?.enabled).map(project=>({id:project.id,name:project.name,website:project.website,logo:project.brandImageUrl??'',introduction:project.directoryProfile!.introduction})).sort((a,b)=>a.name.localeCompare(b.name))})
         if (resource === 'activity' || resource === 'payments') {
           const projectId = clean(req.query?.projectId, 80)
           const project = findOwnedProject(store, projectId, identity.userId)
@@ -625,12 +630,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const scope = requireDeveloperAdmin(identity, dependencies, req)
           return res.json(adminProjectIndex(scope ? { projects: Object.fromEntries(Object.entries(store?.projects || {}).filter(([id]) => scope.projectIds.includes(id))) } : store))
         }
-        const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId)
+        const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId && project.removal?.status!=='deleted')
         return res.json({ ok: true, projects: projects.map(project => projectPublic(project)) })
       }
 
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const action = clean(req.body?.action, 40).toLowerCase()
+      if(req.method==='POST'&&action==='remove-app') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.body?.projectId,80),ownerId:identity.userId,confirmName:req.body?.confirmName,remove:true}))
       if (req.method === 'PUT' && action === 'update-profile') {
         const name = clean(req.body?.name, 100)
         const role = clean(req.body?.role, 100)
@@ -682,6 +688,12 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       const projectId = clean(req.body?.projectId, 80)
       const currentStore = await dependencies.read(STORE_KEY)
+
+      if(currentStore?.projects?.[projectId]?.removal && !['verification-read','verification-download','admin-verification-read','admin-verification-download'].includes(action)) {
+        if(action.startsWith('admin-')) requireDeveloperAdmin(identity,dependencies,req)
+        else if(currentStore.projects[projectId].ownerId!==identity.userId)return res.status(404).json({ok:false,error:'App not found.'})
+        return res.status(409).json({ok:false,error:'This app is closed. Its payment records remain available.'})
+      }
 
       if (req.method === 'POST' && (action.startsWith('verification-') || action.startsWith('admin-verification-'))) {
         const project=currentStore?.projects?.[projectId]
@@ -1061,7 +1073,7 @@ function policyForDeveloperProject(
   environment: DeveloperEnvironment,
   secret: string,
 ): DeveloperCheckoutPolicy | null {
-  if (secret.length < 32 || !verificationAllowsLive(project.businessVerification) || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
+  if (project.removal || secret.length < 32 || !verificationAllowsLive(project.businessVerification) || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
   const allowedNetworks = environment === 'test'
     ? new Set<DeveloperNetwork>()
     : new Set<DeveloperNetwork>(developerProductNetworks(projectCheckoutMode(project), project.capabilities ?? ['hosted_checkout']))
@@ -1133,7 +1145,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
     if (!key) continue
     if (key.expiresAt && (!Number.isFinite(Date.parse(key.expiresAt)) || Date.parse(key.expiresAt) <= now)) return null
     if (scope === 'wallet:swap' && !key.scopes?.includes(scope)) return null
-    if (apiKey.startsWith('hpl_app_') && (!scope || scope === 'keys:manage' || !key.scopes?.includes(scope)
+    if (apiKey.startsWith('hpl_app_') && (!scope || scope === 'keys:manage' || scope === 'project:delete' || !key.scopes?.includes(scope)
       || !key.expiresAt || !Number.isFinite(Date.parse(key.expiresAt)) || Date.parse(key.expiresAt) <= now
       || projectCheckoutMode(project) !== 'human')) return null
     const keyEnvironment: DeveloperEnvironment = key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')
@@ -1414,20 +1426,20 @@ export async function resolveXStocksAgreementProjectEnabled(projectId: string): 
   if (!defaults.hasStore()) return false
   const project = (await defaults.read(STORE_KEY))?.projects[projectId]
   return Boolean(project && projectCheckoutMode(project) === 'human'
-    && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification) && project.settlementStatus === 'ready'
+    && !project.removal && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification) && project.settlementStatus === 'ready'
     && project.capabilities?.includes('xstocks_agreements'))
 }
 
 export async function resolveWalletSwapProjectEnabled(projectId:string,rail:'arc'|'xlayer'):Promise<boolean>{
   if(!defaults.hasStore())return false
   const project=(await defaults.read(STORE_KEY))?.projects[projectId]
-  return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
+  return Boolean(project&&projectCheckoutMode(project)==='human'&&!project.removal&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
     &&effectiveProductCapabilities(project).includes(rail==='arc'?'swap_arc':'swap_xlayer'))
 }
 
 export async function resolveStockCheckoutProjectEnabled(projectId:string,recipient:string,asset:string,swap=false):Promise<boolean>{
  const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
- return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
+ return Boolean(project&&projectCheckoutMode(project)==='human'&&!project.removal&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
   &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'
   &&project.xlayerCheckout?.recipient.toLowerCase()===recipient.toLowerCase()&&project.xlayerCheckout.assets.includes(asset.toLowerCase())
   &&(!swap||effectiveProductCapabilities(project).includes('swap_xlayer')))

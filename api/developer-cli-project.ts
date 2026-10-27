@@ -1,3 +1,4 @@
+import developerAppRemovalApiHandler from './developer-app-removal-api.js'
 import type { Request, Response } from 'express'
 import { resolveDeveloperApiKeyPolicy } from './developer-projects.js'
 
@@ -5,8 +6,9 @@ import { resolveDeveloperApiKeyPolicy } from './developer-projects.js'
 export function createDeveloperCliProjectHandler(resolve = resolveDeveloperApiKeyPolicy) {
   return async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store')
+    if(req.method==='DELETE')return developerAppRemovalApiHandler(req,res)
     if (req.method !== 'GET') {
-      res.setHeader('Allow', 'GET')
+      res.setHeader('Allow', 'GET, DELETE')
       return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     }
     try {

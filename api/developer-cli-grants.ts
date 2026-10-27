@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from './render-durable-store.js'
 
 const STORE = 'hashpaylink:cli-grants:v1'
-export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'wallet:swap', 'xstocks-agreement:create', 'keys:manage'] as const
+export const CLI_SCOPES = ['project:read', 'project:delete', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'wallet:swap', 'xstocks-agreement:create', 'keys:manage'] as const
 export type CliScope = typeof CLI_SCOPES[number]
 type Grant = {
   id: string; projectId: string; challenge: string; codeHash: string; scopes: CliScope[];
@@ -41,6 +41,7 @@ function publicGrant(g: Grant, now: number) {
 export function cliRequestScope(req: Partial<Pick<Request, 'method' | 'originalUrl' | 'query' | 'body'>>): CliScope | null {
   let url: URL
   try { url = new URL(req.originalUrl ?? '', 'https://developer.hashpaylink.com') } catch { return null }
+  if(!url.search&&((req.method==='DELETE'&&url.pathname==='/api/v2/project')||(req.method==='GET'&&url.pathname==='/api/v2/project/removal')))return 'project:delete'
   if (req.method === 'GET' && url.pathname === '/api/v2/project' && !url.search) return 'project:read'
   if (req.method === 'POST' && url.pathname === '/api/v2/cli/keys' && !url.search) return 'keys:manage'
   if (req.method === 'POST' && url.pathname === '/api/v2/wallet-connections' && !url.search

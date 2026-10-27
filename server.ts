@@ -1,3 +1,4 @@
+import developerAppRemovalApiHandler from './api/developer-app-removal-api.js'
 import {developerVerificationUploadHandler} from './api/developer-projects.js'
 import pocketNativeSolanaSendHandler from './api/pocket/native-solana-send.js'
 import pocketBscInboundBridgeHandler from './api/pocket/bsc-inbound-bridge.js'
@@ -553,6 +554,7 @@ app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
 app.all('/api/v2/cli/keys', strictLimiter, developerCliKeysHandler)
 app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
+app.get('/api/v2/project/removal', strictLimiter, developerAppRemovalApiHandler)
 app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
 app.all('/api/demo/food/orders', strictLimiter, foodDemoHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)

@@ -5,6 +5,14 @@ let verification={status:'not_started',revision:0,required:true,documents:[]};
 if(new URLSearchParams(location.search).has('verification')) projects[0].businessVerification=verification;
 window.fetch=async(path,options={})=>{
  const url=new URL(String(path),location.origin);
+ const removalMode=new URLSearchParams(location.search).has('closeApp')?'closed':'deleted';
+ if(url.searchParams.get('resource')==='removal')return Response.json({ok:true,review:{allowed:!new URLSearchParams(location.search).has('removeBlocked'),mode:removalMode,blockingReason:'A bank payout or refund is still unresolved.',pending:0,history:removalMode==='closed'?1:0}});
+ if(options.method==='POST'&&JSON.parse(options.body).action==='remove-app'){
+  const body=JSON.parse(options.body);window.__portalWrites.push(body);
+  if(new URLSearchParams(location.search).has('removeFail'))return Response.json({ok:false,error:'A payment started before removal. Please check again.'},{status:409});
+  projects=removalMode==='deleted'?projects.filter(p=>p.id!==body.projectId):projects.map(p=>p.id===body.projectId?{...p,operationalStatus:'suspended',removal:{status:'closed',at:new Date().toISOString()}}:p);
+  return Response.json({ok:true,removed:true,mode:removalMode});
+ }
  if(url.searchParams.get('resource')==='payments'){
   if(new URLSearchParams(location.search).has('activityFail'))return Response.json({ok:false,error:'Synthetic activity unavailable'},{status:503});
   const reference=url.searchParams.get('recordId');

@@ -18,6 +18,7 @@ export const portalSubsections: Partial<Record<PortalSection, Array<[PortalSecti
   quickstart: [['quickstart', 'Get started'], ['keys', 'API keys'], ['webhooks', 'Webhooks']],
 }
 export type ProjectSummary = {
+  removal?:{status:string}
   businessVerification?: BusinessVerification
   id: string; name: string; checkoutMode: 'human' | 'agentic'; capabilities: string[]; networks: string[];
   settlementStatus: string; operationalStatus?: string; webhookConfigured: boolean;

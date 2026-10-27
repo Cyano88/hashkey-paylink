@@ -11,7 +11,7 @@ function hasLiveKey(app:App) {
  return app.keys.some(key=>!key.revokedAt&&(!key.expiresAt||Date.parse(key.expiresAt)>Date.now())&&(key.environment==='live'||key.prefix.startsWith('hpl_live_')||key.prefix.startsWith('hpl_app_')))
 }
 export function accountSetup(apps:App[]) {
- const eligible=apps.filter(app=>app.operationalStatus!=='suspended')
+ const eligible=apps.filter(app=>!app.removal&&app.operationalStatus!=='suspended')
  const pending=eligible.find(app=>app.businessVerification?.status!=='approved')
  const verified=eligible.find(app=>app.businessVerification?.status==='approved')
  const configured=eligible.find(app=>app.settlementStatus==='ready')

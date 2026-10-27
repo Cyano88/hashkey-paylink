@@ -5,6 +5,7 @@ import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 
 type Grant = { id: string; projectId: string; scopes: string[]; state: string; expiresAt?: string; requestExpiresAt: string }
 const labels: Record<string, string> = {
+  'project:delete': 'Permanently delete or close this app, revoke its keys and remove its public listing',
   'project:read': 'Read project configuration',
   'checkout:read': 'Read checkout payment status',
   'checkout:create': 'Create hosted checkouts',

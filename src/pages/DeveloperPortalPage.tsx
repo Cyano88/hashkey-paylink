@@ -1,3 +1,4 @@
+import RemoveAppPanel from '../developer/RemoveAppPanel'
 import AccountHome from '../developer/AccountHome'
 import BusinessDirectory, {DirectoryProfile} from '../developer/BusinessDirectory'
 import BusinessVerificationPanel from '../developer/BusinessVerificationPanel'
@@ -15,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CliGuide, OverviewPanel, ProductsPanel, portalSections, portalParent, portalSubsections, ComingSoonProducts, type PortalSection } from '../developer/PortalPanels'
 import { usePrivy } from '@privy-io/react-auth'
-import { BookOpen, Building2, Home, ArrowLeft, LayoutDashboard, CreditCard, Code2, Settings2, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
+import { BookOpen, Building2, BadgeCheck, Home, ArrowLeft, LayoutDashboard, CreditCard, Code2, Settings2, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
@@ -24,6 +25,7 @@ type Network = 'base' | 'arbitrum' | 'arc'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
+  removal?: {status:'closed'|'deleted';at:string}
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: BusinessVerification
   xlayerCheckout?: XLayerCheckoutConfig
@@ -122,7 +124,13 @@ export default function DeveloperPortalPage() {
     if (busy) return
     if (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?')) return
     resetProjectDraft(); setNewKey(null); setNewWebhookSecret(null); setActiveId(value); setCreatingNew(false)
-    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('section', section); return next })
+    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('section', projects.find(p=>p.id===value)?.removal?'activity':section); return next })
+  }
+  function appRemoved(mode:'closed'|'deleted') {
+    setVerificationDirty(false);setDraft(null);setNewKey(null);setNewWebhookSecret(null);setCreatingNew(false)
+    setProjects(current=>mode==='deleted'?current.filter(p=>p.id!==active?.id):current.map(p=>p.id===active?.id?{...p,removal:{status:'closed',at:new Date().toISOString()},operationalStatus:'suspended'}:p))
+    setParams(current=>{const next=new URLSearchParams(current);next.set('section','apps');next.delete('project');return next})
+    setNotice(mode==='closed'?'App closed. Its payment history is retained.':'App deleted.');void loadProjects()
   }
   const [creatingNew, setCreatingNew] = useState(false)
   const [newKey, setNewKey] = useState<{ value: string; environment: 'test' | 'live'; projectId: string } | null>(null)
@@ -317,7 +325,7 @@ export default function DeveloperPortalPage() {
 
   const parent = portalParent(tab)
   const subnav = portalSubsections[parent]
-  const sectionIcons = { overview: LayoutDashboard, products: CreditCard, quickstart: Code2, setup: Settings2 }
+  const sectionIcons = { activity: CreditCard, overview: LayoutDashboard, products: CreditCard, quickstart: Code2, setup: Settings2 }
   return (
     <main className="portal-console min-h-[calc(100dvh-4rem)] w-full lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#101114] lg:min-h-[calc(100dvh-4rem)] lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
@@ -325,24 +333,24 @@ export default function DeveloperPortalPage() {
           <button disabled={busy} onClick={()=>openAccount('home')} aria-current={accountView==='home'&&!creatingNew?'page':undefined}><Home size={17}/>Home</button>
           <div className="flex items-center"><button disabled={busy} onClick={openApps} aria-current={showingApps&&!creatingNew?'page':undefined} className="flex-1"><LayoutDashboard size={17}/>Apps</button><button aria-label="New app" title="New app" disabled={busy||sandbox} onClick={startNewProject}><Plus size={17}/></button></div>
           <a href="https://docs.hashpaylink.com" target="_blank" rel="noopener noreferrer"><BookOpen size={17}/>Docs</a>
-          <button disabled={busy} onClick={()=>openAccount('businesses')} aria-current={accountView==='businesses'&&!creatingNew?'page':undefined}><Building2 size={17}/>Verified businesses</button>
+          <button disabled={busy} onClick={()=>openAccount('businesses')} aria-current={accountView==='businesses'&&!creatingNew?'page':undefined}><BadgeCheck size={17} className="fill-blue-500 text-white"/>Verified businesses</button>
         </nav>
         {!accountView && !creatingNew && active && <><p className="mt-5 truncate px-3 text-xs font-medium text-gray-400">{active.name}</p>
         <nav aria-label="Project navigation" className="mt-4 grid grid-cols-4 gap-1 lg:mt-8 lg:grid-cols-1 lg:gap-2">
-          {portalSections.map(([value,label]) => { const Icon=sectionIcons[value as keyof typeof sectionIcons]; return <button key={value} type="button" disabled={busy} aria-current={parent===value&&!creatingNew?'page':undefined} onClick={()=>setTab(value)} className={cn('flex min-h-11 items-center justify-center gap-3 rounded-lg px-2 text-xs font-medium transition lg:justify-start lg:px-3 lg:text-sm',parent===value&&!creatingNew?'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}><Icon className="hidden h-4 w-4 lg:block"/>{label}</button>})}
+          {(active.removal?[['activity','Payments']] as Array<[PortalSection,string]>:portalSections).map(([value,label]) => { const Icon=sectionIcons[value as keyof typeof sectionIcons]; return <button key={value} type="button" disabled={busy} aria-current={parent===portalParent(value)&&!creatingNew?'page':undefined} onClick={()=>setTab(value)} className={cn('flex min-h-11 items-center justify-center gap-3 rounded-lg px-2 text-xs font-medium transition lg:justify-start lg:px-3 lg:text-sm',parent===portalParent(value)&&!creatingNew?'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}><Icon className="hidden h-4 w-4 lg:block"/>{label}</button>})}
         </nav></>}
       </aside>
       <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
         <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout}/></div></div>
-        {!accountView && !creatingNew && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
+        {!accountView && !creatingNew && !active?.removal && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
         <section id="developer-content" tabIndex={-1} className={cn("min-w-0 outline-none",accountView==='home'?'max-w-[1120px]':'max-w-4xl')}>
           {sandbox ? <div><h1 className="text-xl font-semibold">Test payments are unavailable</h1><p className="mt-2 text-sm text-gray-500">This old link cannot create or execute payments.</p><Link className="pocket-cta-primary mt-5" to="?environment=live">Open live configuration</Link></div> : creatingNew
             ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
-            : accountView==='home' ? <AccountHome apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : <>
+            : accountView==='home' ? <AccountHome apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : active?.removal ? <><h1 className="text-2xl font-semibold">{active.name}</h1><p className="mb-8 mt-2 text-sm text-gray-500">Closed app. Payment history is retained for your records.</p><PaymentActivityPanel key={active.id} projectId={active.id}/></> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
-              {active && draft && tab === 'setup' && <><SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/></>}
+              {active && draft && tab === 'setup' && <><SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
               {active && tab === 'verification' && <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/> }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
