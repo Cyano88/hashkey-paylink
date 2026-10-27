@@ -40,7 +40,7 @@ export function reviewAppRemoval(project:Row,input:{checkouts:Row[];funding:Row[
  const retained=history>0||executions.length>0||project.businessVerification?.documents?.length>0||['submitted','approved'].includes(project.businessVerification?.status)
  return {allowed:pending===0,mode:retained?'closed':'deleted',blockingReason:reason,pending,history}
 }
-const keys=()=>[(process.env.HOSTED_CHECKOUT_STORE_KEY??'hashpaylink:hosted-checkouts:v2').trim(),(process.env.POLYMARKET_FUNDING_CHECKOUT_STORE_KEY??'hashpaylink:polymarket-funding-checkouts:v1').trim(),'hashpaylink:hosted-stock-checkouts:v1',(process.env.POCKET_PAYMENT_EXECUTION_STORE_KEY??'hashpaylink:pocket-payment-executions').trim()]
+const keys=()=>[(process.env.HOSTED_CHECKOUT_STORE_KEY??'hashpaylink:hosted-checkouts:v2').trim(),(process.env.POLYMARKET_FUNDING_CHECKOUT_STORE_KEY??'hashpaylink:polymarket-funding-checkouts:v1').trim(),'hashpaylink:hosted-stock-checkouts:v1',(process.env.POCKET_PAYMENT_EXECUTION_STORE_KEY??'hashpaylink:pocket-payment-executions').trim(),'hashpaylink:hosted-bsc-checkouts:v1']
 export function createAppRemovalManager(transaction=withDurablePostgresTransaction,ensure=ensureDeveloperActivitySchema){return async(input:{projectId:string;ownerId:string;confirmName?:string;remove?:boolean})=>{
  await ensure()
  return transaction(async client=>{
@@ -51,10 +51,10 @@ export function createAppRemovalManager(transaction=withDurablePostgresTransacti
   if(project.removal)return {ok:true,removed:true,replayed:true,mode:project.removal.status}
   const sourceKeys=keys(),sources=await client.query('select store_key,value from render_durable_kv where store_key=any($1::text[])',[sourceKeys])
   const stores=Object.fromEntries(sources.rows.map(r=>[r.store_key,r.value??{}]))
-  const checkout=stores[sourceKeys[0]]??{},funding=stores[sourceKeys[1]]??{},stock=stores[sourceKeys[2]]??{},execution=stores[sourceKeys[3]]??{}
+  const checkout=stores[sourceKeys[0]]??{},funding=stores[sourceKeys[1]]??{},stock=stores[sourceKeys[2]]??{},execution=stores[sourceKeys[3]]??{},bsc=stores[sourceKeys[4]]??{}
   const events=await client.query('select distinct record_id as "recordId",project_id as "projectId",product from developer_activity_events where project_id=$1',[project.id])
   const legacy=await client.query("select count(*)::int as count from render_durable_kv where (store_key like 'hashpaylink:xstocks-agreement:v1:%' or store_key like 'hashpaylink:arc-hosted-trade:v1:%' or store_key like 'hashpaylink:wallet-swap:v1:%') and (value->>'partnerId'=$1 or value->>'projectId'=$1)",[project.id])
-  const review=reviewAppRemoval(project,{checkouts:[...Object.values(checkout.checkouts??{}),...Object.values(stock.checkouts??{})] as Row[],funding:Object.values(funding.records??{}),executions:Object.values(execution.intents??{}),events:events.rows,legacyRecords:Number(legacy.rows[0]?.count??0),outbox:[...(checkout.outbox??[]),...Object.values(stock.outbox??{})] as Row[]})
+  const review=reviewAppRemoval(project,{checkouts:[...Object.values(checkout.checkouts??{}),...Object.values(stock.checkouts??{}),...Object.values(bsc.checkouts??{})] as Row[],funding:Object.values(funding.records??{}),executions:Object.values(execution.intents??{}),events:events.rows,legacyRecords:Number(legacy.rows[0]?.count??0),outbox:[...(checkout.outbox??[]),...Object.values(stock.outbox??{}),...Object.values(bsc.outbox??{})] as Row[]})
   if(!input.remove)return {ok:true,review}
   if(!review.allowed)fail(review.blockingReason)
   const at=new Date().toISOString()

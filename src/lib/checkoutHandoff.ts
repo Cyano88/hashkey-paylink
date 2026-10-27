@@ -1,5 +1,5 @@
 export function checkoutHandoff(id: string, attempt = '') {
-  if (!/^(chk_[A-Za-z0-9]{8,40}|chkx_[a-f0-9]{24})$/.test(id) || (attempt && !/^[A-Za-z0-9_-]{1,80}$/.test(attempt))) throw Error('Invalid checkout reference.')
+  if (!/^(chk_[A-Za-z0-9]{8,40}|chk[bx]_[a-f0-9]{24})$/.test(id) || (attempt && !/^[A-Za-z0-9_-]{1,80}$/.test(attempt))) throw Error('Invalid checkout reference.')
   const query = new URLSearchParams(attempt ? {attempt} : {})
   const path = '/pay/c/' + id + (query.size ? '?' + query : '')
   const url = 'https://app.hashpaylink.com' + path

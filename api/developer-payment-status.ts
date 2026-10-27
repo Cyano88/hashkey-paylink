@@ -1,8 +1,9 @@
 import type {CheckoutRecord} from './hosted-checkouts.js'
 export type PaymentEvent={event:string;occurredAt:string;details:Record<string,string>}
 export type PaymentGroup={recordId:string;product:'checkout'|'funding';createdAt:string;updatedAt:string;events:PaymentEvent[]}
+export type StatusCheckout=Pick<CheckoutRecord,'amount'|'expiresAt'|'paymentAttempts'|'settlement'|'payout'>&{payment?:{status:string;referenceType?:string;txHash?:string}}
 type Funding={checkoutId:string;amount:string;expiresAt:string;observation?:{status:string;paymentStatus:string;bridgeStatus:string;observedAt:string}}
-export function paymentStatus(group:PaymentGroup,checkout?:CheckoutRecord,funding?:Funding,now=Date.now()){
+export function paymentStatus(group:PaymentGroup,checkout?:StatusCheckout,funding?:Funding,now=Date.now()){
  const events=group.events??[],latest=[...events].reverse(),details=latest.find(e=>e.details.amount)?.details??{}
  const has=(names:string[])=>events.some(e=>names.includes(e.event))
  const expiresAt=checkout?.expiresAt??funding?.expiresAt??latest.find(e=>e.details.expiresAt)?.details.expiresAt

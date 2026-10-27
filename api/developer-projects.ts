@@ -1,3 +1,4 @@
+import {normalizeBscCheckoutConfig,type BscCheckoutConfig} from '../src/lib/bscCheckoutConfig.js'
 import {normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import {manageAppRemoval} from './developer-app-removal.js'
@@ -80,7 +81,8 @@ type DeveloperProject = {
   capabilities?: DeveloperCapability[]
   productSettingsVersion?: number
   acceptedAssets?: CheckoutAcceptance
-  checkoutDefaultNetwork?: 'xlayer'
+  checkoutDefaultNetwork?: 'xlayer' | 'bsc'
+  bscCheckout?: BscCheckoutConfig
   xlayerCheckout?: XLayerCheckoutConfig
   settlementMode: SettlementMode
   settlementStatus: 'ready' | 'review_required'
@@ -121,7 +123,8 @@ type DeveloperStore = { projects: Record<string, DeveloperProject>; profiles?: R
 
 export type DeveloperCheckoutPolicy = {
   acceptedAssets?: CheckoutAcceptance
-  checkoutDefaultNetwork?: 'xlayer'
+  checkoutDefaultNetwork?: 'xlayer' | 'bsc'
+  bscCheckout?: BscCheckoutConfig
   xlayerCheckout?: XLayerCheckoutConfig
   swapPermission?: boolean
   partnerId: string
@@ -414,6 +417,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     productSettingsVersion: project.productSettingsVersion,
     acceptedAssets: project.acceptedAssets,
     checkoutDefaultNetwork: project.checkoutDefaultNetwork,
+    bscCheckout: project.bscCheckout,
     xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
@@ -915,18 +919,22 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const existingCapabilities = effectiveProductCapabilities(currentProject)
         if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !existingCapabilities.includes(capability))) return res.status(409).json({ ok: false, error: 'This product is not open for new integrations.' })
         const routingRequired = needsSettlementRouting(capabilities)
+        let bscCheckout:BscCheckoutConfig|undefined
+        try { bscCheckout=normalizeBscCheckoutConfig(req.body?.bscCheckout===undefined?currentProject.bscCheckout:req.body.bscCheckout) } catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
         let xlayerCheckout: XLayerCheckoutConfig | undefined
         try { xlayerCheckout = normalizeXLayerCheckoutConfig(req.body?.xlayerCheckout === undefined ? currentXLayerCheckoutConfig(currentProject.xlayerCheckout) : req.body.xlayerCheckout) }
         catch (error) { return res.status(400).json({ ok: false, error: (error as Error).message }) }
         if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
+        if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human stablecoin Checkout.'})
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
         const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
         const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
         let acceptedAssets:CheckoutAcceptance
         try{acceptedAssets=normalizeCheckoutAcceptance(req.body?.acceptedAssets ?? currentProject.acceptedAssets,networks)}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
-        const checkoutDefaultNetwork = req.body?.checkoutDefaultNetwork === 'xlayer' ? 'xlayer' as const : undefined
-        if(checkoutDefaultNetwork && (!xlayerCheckout || settlementMode !== 'usdc')) return res.status(400).json({ok:false,error:'Enable X Layer acceptance before making it the default.'})
+        const checkoutDefaultNetwork = req.body?.checkoutDefaultNetwork === 'xlayer' ? 'xlayer' as const : req.body?.checkoutDefaultNetwork==='bsc'?'bsc' as const:undefined
+        if(checkoutDefaultNetwork==='bsc'&&(!bscCheckout||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'Enable BNB Chain acceptance before making it the default.'})
+        if(checkoutDefaultNetwork==='xlayer' && (!xlayerCheckout || settlementMode !== 'usdc')) return res.status(400).json({ok:false,error:'Enable X Layer acceptance before making it the default.'})
         const recipients = Object.fromEntries(NETWORKS.flatMap(network => {
           const recipient = validRecipient(req.body?.recipients?.[network], network)
           return recipient ? [[network, recipient]] : []
@@ -990,7 +998,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
           const next: DeveloperProject = {
-            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout,
+            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             acceptedAssets, checkoutDefaultNetwork, networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
@@ -1133,6 +1141,7 @@ function policyForDeveloperProject(
     partnerId: project.id,
     acceptedAssets: project.acceptedAssets,
     checkoutDefaultNetwork: project.checkoutDefaultNetwork,
+    bscCheckout: project.bscCheckout,
     xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     ownerId: project.ownerId,
     ownerEmail: project.ownerEmail,
@@ -1467,4 +1476,12 @@ export async function developerVerificationUploadHandler(req:Request,res:Respons
   const bytes=req.body
   req.body={action:'verification-upload',projectId:req.query.projectId,revision:Number(req.query.revision),slot:req.query.slot,filename:req.headers['x-file-name'],bytes}
   return createDeveloperProjectsHandler()(req,res)
+}
+
+export async function resolveBscCheckoutProjectEnabled(projectId:string,recipient:string,asset:string):Promise<boolean>{
+ if(!defaults.hasStore())return false
+ const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
+ return Boolean(project&&projectCheckoutMode(project)==='human'&&!project.removal&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
+ &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'
+ &&project.bscCheckout?.recipient.toLowerCase()===recipient.toLowerCase()&&project.bscCheckout.assets.includes(asset.toLowerCase()))
 }

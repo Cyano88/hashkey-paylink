@@ -1,3 +1,5 @@
+import {bscPaymentCoverage} from './bsc-payment-coverage.js'
+import type {BscPaymentOperationStore} from './bsc-payment-operations.js'
 import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {bscCollectedCoverage,type BscCollectedCoverage} from './bsc-collected-coverage.js'
 import {createBscRuntime} from './bsc-runtime.js'
@@ -101,9 +103,10 @@ export async function checkXLayerBillingCoverage(wallet?:string){
   ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED==='true'?{additionalCoverage:async(wallet?:string)=>{
    const store=await readDurableJson<BscOperationStore>('pocket:bsc-operations:v1')
    const ops=Object.values(store?.operations||{})
-   if(!ops.length)return []
-   const runtime=createBscRuntime()
-   return bscCollectedCoverage(ops,{now:Date.now(),rpc:runtime.rpc,prices:runtime.readPrices},wallet)
+   const payments=Object.values((await readDurableJson<BscPaymentOperationStore>('pocket:bsc-payment-operations:v1'))?.operations||{})
+   if(!ops.length&&!payments.length)return []
+   const runtime=createBscRuntime(),context={now:Date.now(),rpc:runtime.rpc,prices:runtime.readPrices}
+   return [...await bscCollectedCoverage(ops,context,wallet),...await bscPaymentCoverage(payments,context,wallet)]
   }}:{}),
   ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED!=='true'&&env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED==='true'?{transactionSpend:async(records:Attempt[])=>{
    const sent=records.filter(r=>r.hash||!(r.providerFailure?.status===400&&r.providerFailure.code==='transaction_broadcast_failure'))

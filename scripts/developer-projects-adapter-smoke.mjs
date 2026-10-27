@@ -429,3 +429,12 @@ assert.equal(xdefault.statusCode,200,JSON.stringify(xdefault.body))
 assert.equal(xdefault.body.project.checkoutDefaultNetwork,'xlayer')
 assert.equal((await request(handler,'PUT',{...activateDraft,xlayerCheckout:null,checkoutDefaultNetwork:'xlayer'})).statusCode,400)
 console.log('PASS per-network asset acceptance, unsupported/empty selections, and X Layer default validation.')
+
+const bscConfig={recipient:linkedWallet,assets:['0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d','0x55d398326f99059ff775485246999027b3197955']}
+const bdefault=await request(handler,'PUT',{...activateDraft,bscCheckout:bscConfig,checkoutDefaultNetwork:'bsc'})
+assert.equal(bdefault.statusCode,200,JSON.stringify(bdefault.body))
+assert.equal(bdefault.body.project.checkoutDefaultNetwork,'bsc')
+assert.deepEqual(bdefault.body.project.bscCheckout.assets,bscConfig.assets)
+assert.equal((await request(handler,'PUT',{...activateDraft,bscCheckout:null,checkoutDefaultNetwork:'bsc'})).statusCode,400)
+assert.equal((await request(handler,'PUT',{...activateDraft,bscCheckout:{...bscConfig,assets:[xlayerConfig.assets[0]]}})).statusCode,400)
+console.log('PASS BNB acceptance and default, disabled default and wrong-network asset rejection.')

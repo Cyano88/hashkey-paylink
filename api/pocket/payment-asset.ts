@@ -3,11 +3,16 @@ import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
 import { getAddress, parseUnits } from 'viem'
 import { stockAssets, stockUsdc } from '../../src/pocket/lib/pocketXStocksWallet.js'
 
-export type PaymentToken = { chainId: 196 | 8453; address: string; symbol: string; decimals: number }
+export type PaymentToken = { chainId: 196 | 8453 | 56; address: string; symbol: string; decimals: number }
 
 /** Token identity is explicit; symbols alone must never select a payment asset. */
 export function paymentToken(value: PaymentToken | undefined, source: string, settlement: string): PaymentToken | undefined {
   if (!value) return undefined
+  if(source==='bsc'&&settlement==='bsc'){
+    const token=checkoutStablecoin('bsc',String(value.address))
+    if(!token||value.chainId!==56||value.decimals!==18||value.symbol!==token.symbol)throw Object.assign(Error('Payment token is invalid for this network.'),{status:400})
+    return {chainId:56,address:getAddress(token.address),symbol:token.symbol,decimals:18}
+  }
   if (source === 'base' && settlement === 'base' && value.chainId === 8453 && value.symbol === 'USDT' && value.decimals === 6 && value.address.toLowerCase() === BASE_STABLECOINS.USDT.address.toLowerCase()) return {chainId:8453,address:getAddress(BASE_STABLECOINS.USDT.address),symbol:'USDT',decimals:6}
   const stablecoin=source==='xlayer'&&settlement==='xlayer'?checkoutStablecoin(source,String(value.address)):undefined
   if(stablecoin){

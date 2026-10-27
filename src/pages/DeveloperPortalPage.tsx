@@ -1,3 +1,6 @@
+import BscCheckoutSettings from '../developer/BscCheckoutSettings'
+import type {BscCheckoutConfig} from '../lib/bscCheckoutConfig'
+import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 import {CHECKOUT_NETWORK_ORDER} from '../lib/checkoutStablecoins'
 import {acceptedCheckoutAssets,CHECKOUT_ACCEPTANCE,type CheckoutAcceptance} from '../lib/checkoutAcceptance'
 import RemoveAppPanel from '../developer/RemoveAppPanel'
@@ -31,7 +34,8 @@ type Project = {
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: BusinessVerification
   acceptedAssets?: CheckoutAcceptance
-  checkoutDefaultNetwork?: 'xlayer'
+  checkoutDefaultNetwork?: 'xlayer'|'bsc'
+  bscCheckout?:BscCheckoutConfig
   xlayerCheckout?: XLayerCheckoutConfig
   id: string
   name: string
@@ -75,7 +79,7 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
 ]
 
 function editableProjectState(project:Project) {
-  const fields:Array<keyof Project>=['name','website','brandImageUrl','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout']
+  const fields:Array<keyof Project>=['name','website','brandImageUrl','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout','bscCheckout']
   return JSON.stringify(fields.map(field=>project[field]))
 }
 
@@ -248,6 +252,7 @@ export default function DeveloperPortalPage() {
       const data = await api('PUT', {
         action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
         checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
+        bscCheckout: draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'?draft.bscCheckout??null:null,
         xlayerCheckout: draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' ? draft.xlayerCheckout ?? null : null,
         acceptedAssets:draft.acceptedAssets,checkoutDefaultNetwork:draft.checkoutDefaultNetwork,settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
         arcMainnetChainId: draft.networks.includes('arc') ? 5042 : undefined, recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins.length ? draft.allowedOrigins : [draft.website],
@@ -455,7 +460,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       {draft.checkoutMode === 'agentic' || !draft.capabilities.includes('hosted_checkout')
         ? <div className="mt-2 rounded-xl bg-gray-100 px-3 py-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.05] dark:text-gray-200">Receive USDC</div>
         : <div className="mt-2 grid grid-cols-1 gap-2 rounded-2xl bg-gray-100 p-1 sm:grid-cols-3 dark:bg-white/[0.05]">
-          {[['usdc', 'Stablecoins'], ['ngn', 'Nigeria bank'], ['ugx', 'Uganda mobile money']] .map(([value, label]) => <button key={value} type="button" onClick={() => {if(value===draft.settlementMode)return;setDraft({ ...draft, settlementMode: value as Project['settlementMode'], bankCode:'',bankName:'',bankAccountName:'',bankAccountNumber:'',bankAccountLast4:'',bankVerifiedAt:undefined, ...(value !== 'usdc' ? { networks: ['base'], defaultNetwork: 'base', recipients: {}, xlayerCheckout:undefined } : {}) })}} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
+          {[['usdc', 'Stablecoins'], ['ngn', 'Nigeria bank'], ['ugx', 'Uganda mobile money']] .map(([value, label]) => <button key={value} type="button" onClick={() => {if(value===draft.settlementMode)return;setDraft({ ...draft, settlementMode: value as Project['settlementMode'], bankCode:'',bankName:'',bankAccountName:'',bankAccountNumber:'',bankAccountLast4:'',bankVerifiedAt:undefined, ...(value !== 'usdc' ? { networks: ['base'], defaultNetwork: 'base', recipients: {}, xlayerCheckout:undefined,bscCheckout:undefined,checkoutDefaultNetwork:undefined } : {}) })}} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
         </div>}
 
 
@@ -485,9 +490,10 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
 
     </>}
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
-    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout,...(!xlayerCheckout?{checkoutDefaultNetwork:undefined}:{}) })} />}
+    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout,...(!xlayerCheckout&&draft.checkoutDefaultNetwork==='xlayer'?{checkoutDefaultNetwork:undefined}:{}) })} />}
 
-{routingRequired && draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.checkoutDefaultNetwork === 'xlayer' && draft.xlayerCheckout ? 'xlayer' : draft.defaultNetwork} options={[...draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) })),...(draft.xlayerCheckout?[{value:'xlayer',label:'X Layer'}]:[])].sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.value as typeof CHECKOUT_NETWORK_ORDER[number])-CHECKOUT_NETWORK_ORDER.indexOf(b.value as typeof CHECKOUT_NETWORK_ORDER[number]))} onChange={value => setDraft({ ...draft, checkoutDefaultNetwork:value==='xlayer'?'xlayer':undefined,...(value!=='xlayer'?{defaultNetwork:value as Network}:{}) })} ariaLabel="Default payment network" /></Field>}
+{draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'&&<BscCheckoutSettings value={draft.bscCheckout} onChange={bscCheckout=>setDraft({...draft,bscCheckout,...(!bscCheckout&&draft.checkoutDefaultNetwork==='bsc'?{checkoutDefaultNetwork:undefined}:{})})}/>}
+{routingRequired && draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.checkoutDefaultNetwork==='bsc'&&draft.bscCheckout?'bsc':draft.checkoutDefaultNetwork === 'xlayer' && draft.xlayerCheckout ? 'xlayer' : draft.defaultNetwork} options={[...draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) })),...(draft.xlayerCheckout?[{value:'xlayer',label:'X Layer'}]:[]),...(draft.bscCheckout?[{value:'bsc',label:'BNB Chain'}]:[])].sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.value as typeof CHECKOUT_NETWORK_ORDER[number])-CHECKOUT_NETWORK_ORDER.indexOf(b.value as typeof CHECKOUT_NETWORK_ORDER[number]))} onChange={value => setDraft({ ...draft, checkoutDefaultNetwork:value==='xlayer'?'xlayer':value==='bsc'?'bsc':undefined,...(!['xlayer','bsc'].includes(value)?{defaultNetwork:value as Network}:{}) })} ariaLabel="Default payment network" /></Field>}
 
     {localSettlement && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
       <Field label={mobileMoney ? "Mobile money provider" : "Bank"} className="sm:col-span-2"><PocketSelect value={draft.bankCode} options={institutions.map(bank => ({ value: bank.code, label: bank.name }))} onChange={value => { const bank = institutions.find(item => item.code === value); setDraft({ ...draft, bankCode: value, bankName: bank?.name ?? '', bankAccountNumber: '', bankVerifiedAt: undefined }) }} disabled={institutionsLoading} placeholder={institutionsLoading ? 'Loading...' : mobileMoney ? 'Select provider' : 'Select bank'} ariaLabel={mobileMoney ? 'Uganda mobile money provider' : 'Naira settlement bank'} /></Field>
@@ -590,13 +596,9 @@ function ArcPilotStatus({ project }: { project: Project }) {
 }
 
 function PortalLoading({ delayed = false }: { delayed?: boolean }) {
-  return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-xl items-center px-4 py-12">
-    <section className="w-full rounded-[1.75rem] border border-gray-200 bg-white p-7 text-center shadow-[0_24px_80px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-[#111216]">
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><Loader2 className="h-5 w-5 animate-spin" /></span>
-      <h1 className="mt-5 text-xl font-semibold tracking-[-0.03em] text-gray-950 dark:text-white">Securing your developer session</h1>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">Checking Privy identity before loading projects, API keys, and payment routing.</p>
-      {delayed && <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left dark:border-amber-400/20 dark:bg-amber-400/10"><p className="text-xs leading-5 text-amber-800 dark:text-amber-200">Identity verification is taking longer than expected. Check your connection, then retry.</p><button type="button" onClick={() => window.location.reload()} className="mt-3 h-9 rounded-full bg-gray-950 px-4 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Retry securely</button></div>}
-    </section>
+  return <main id="developer-content">
+    {delayed && <div role="alert" className="mx-5 mt-5 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300"><span>Taking longer than expected. Check your connection.</span><button type="button" onClick={() => window.location.reload()} className="min-h-11 rounded-full border border-gray-200 px-4 font-medium dark:border-white/10">Try again</button></div>}
+    <DeveloperLoadingSkeleton />
   </main>
 }
 function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) { return <label className={cn('block space-y-1.5', className)}><span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</span>{children}</label> }

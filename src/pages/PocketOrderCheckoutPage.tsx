@@ -14,7 +14,7 @@ export default function PocketOrderCheckoutPage(){
  const [destinations,setDestinations]=useState<XPayDestination[]>([]),[network,setNetwork]=useState('')
  const [busy,setBusy]=useState(false),[error,setError]=useState('')
  function open(url:string){
-  if(!/^\/pay\/c\/(?:chkx_[a-f0-9]{24}|chk_[a-zA-Z0-9]{8,40})(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(url))throw Error('Unable to open payment.')
+  if(!/^\/pay\/c\/(?:chk[bx]_[a-f0-9]{24}|chk_[a-zA-Z0-9]{8,40})(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(url))throw Error('Unable to open payment.')
   navigate(url,{replace:true})
  }
  useEffect(()=>{let active=true;void fetch('/api/demo/food/orders?purpose=selection&id='+encodeURIComponent(orderId),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Unable to load order.');if(active){if(d.checkoutUrl)open(d.checkoutUrl);else {setOrder({...d.order,id:orderId});setDestinations(d.destinations||[]);let saved:{rail?:string;asset?:string;network?:string}|null=null;try{saved=JSON.parse(sessionStorage.getItem('pocket.checkout.choice:'+orderId)||'null')}catch{}const first=d.destinations?.find((option:XPayDestination)=>option.id===saved?.rail)||d.destinations?.[0];if(first){setRail(first.id);setAsset(saved?.asset&&first.assets.includes(saved.asset)?saved.asset:first.assets[0]);setNetwork(saved?.network&&first.networks?.includes(saved.network)?saved.network:first.networks?.[0]||'')}}}}).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[orderId])

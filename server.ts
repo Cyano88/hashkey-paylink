@@ -1,3 +1,5 @@
+import bscPaymentHandler,{reconcileBscPayments} from './api/pocket/bsc-payment-service.js'
+import {drainBscCheckoutWebhooks} from './api/hosted-bsc-checkouts.js'
 import developerAppRemovalApiHandler from './api/developer-app-removal-api.js'
 import {developerVerificationUploadHandler} from './api/developer-projects.js'
 import pocketNativeSolanaSendHandler from './api/pocket/native-solana-send.js'
@@ -436,6 +438,7 @@ app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/native-solana-send', strictLimiter, pocketNativeSolanaSendHandler)
 app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
 app.get('/api/pocket/bsc-account', readLimiter, pocketBscAccountHandler)
+app.post('/api/pocket/bsc-payment', (req,res,next)=>(['balance','pending'].includes(req.body?.action)?readLimiter:exchangeLimiter)(req,res,next), bscPaymentHandler)
 app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)
 app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
 app.all('/api/pocket/cash-conversion', exchangeLimiter, pocketCashConversionHandler)
@@ -662,6 +665,8 @@ app.listen(PORT, () => {
 })
 
 const hostedCheckoutOutboxTimer = setInterval(() => {
+  void drainBscCheckoutWebhooks().catch(()=>console.warn('[bsc-checkout] webhook delivery deferred'))
+  void reconcileBscPayments().catch(()=>console.warn('[bsc-checkout] confirmation deferred'))
   void drainStockCheckoutWebhooks().catch(()=>console.warn('[stock-checkout] webhook delivery deferred'))
   void drainHostedCheckoutWebhookOutbox().catch(error => {
     console.error('[developer-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))

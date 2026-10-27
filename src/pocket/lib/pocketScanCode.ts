@@ -11,9 +11,9 @@ export function parsePocketScanCode(raw: string): PocketScanCode {
   if(unified&&!keys.length)return {kind:'unified-xpay',id:unified[1],url:url.href}
   const xpay = /^\/xpay\/([0-9a-f-]{36}|chkx_[a-f0-9]{24})\/?$/.exec(url.pathname)
   if (xpay && !keys.length) return {kind:'xpay',id:xpay[1],url:url.href}
-  const checkout = /^\/pay\/c\/(chk_[A-Za-z0-9]{8,40}|chkx_[a-f0-9]{24})\/?$/.exec(url.pathname)
+  const checkout = /^\/pay\/c\/(chk_[A-Za-z0-9]{8,40}|chk[bx]_[a-f0-9]{24})\/?$/.exec(url.pathname)
   const hosted = checkout?.[1] || (url.pathname === '/pay' ? url.searchParams.get('checkout') || url.searchParams.get('checkoutId') || '' : '')
-  if (hosted && /^(?:chk_[A-Za-z0-9]{8,40}|chkx_[a-f0-9]{24})$/.test(hosted)) {
+  if (hosted && /^(?:chk_[A-Za-z0-9]{8,40}|chk[bx]_[a-f0-9]{24})$/.test(hosted)) {
     const attempt=url.searchParams.get('attempt')||''
     if (attempt && !/^[A-Za-z0-9_-]{1,80}$/.test(attempt)) throw Error('Invalid checkout attempt.')
     return {kind:'checkout',id:hosted,attempt,url:url.href}

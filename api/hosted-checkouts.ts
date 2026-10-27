@@ -1,3 +1,4 @@
+import hostedBscCheckoutsHandler,{isBscCheckoutId} from './hosted-bsc-checkouts.js'
 import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import hostedStockCheckoutsHandler, { isStockCheckoutId } from './hosted-stock-checkouts.js'
@@ -922,6 +923,7 @@ function hostedCheckoutUiUrl(record: CheckoutRecord) {
 export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
     if (req.body?.rail === 'xlayer' && verifiedProviderRouting.has(req)) return res.status(400).json({ok:false,error:'Account funding does not support X Layer stock checkout.'})
+    if(isBscCheckoutId(req.query?.id)||req.body?.rail==='bsc')return hostedBscCheckoutsHandler(req,res)
     if (isStockCheckoutId(req.query?.id) || req.body?.rail === 'xlayer') return hostedStockCheckoutsHandler(req, res)
     res.setHeader('Cache-Control', 'no-store')
     try {
@@ -1022,6 +1024,11 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       return res.status(403).json({ ok: false, error: 'This API key is not enabled for the requested funding product.' })
     }
 
+    if('projectManaged' in policy && policy.checkoutDefaultNetwork==='bsc' && !providerRouting && req.body?.rail===undefined){
+      const originalBody=req.body
+      req.body={...originalBody,rail:'bsc',asset:originalBody?.asset??policy.bscCheckout?.assets[0]}
+      try{return await hostedBscCheckoutsHandler(req,res)}finally{req.body=originalBody}
+    }
     if('projectManaged' in policy && policy.checkoutDefaultNetwork === 'xlayer' && !providerRouting && req.body?.rail === undefined) {
       const originalBody=req.body
       req.body={...originalBody,rail:'xlayer',asset:originalBody?.asset ?? policy.xlayerCheckout?.assets[0]}
