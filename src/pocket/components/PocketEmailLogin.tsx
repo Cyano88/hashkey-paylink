@@ -18,7 +18,7 @@ function readableEmailAuthError(error: unknown, action: 'send' | 'verify', produ
 }
 
 type PocketEmailLoginProps = {
-  context?: 'pocket' | 'agreement' | 'hashpaystream' | 'hashpaylink' | 'developer'
+  context?: 'pocket' | 'agreement' | 'hashpaystream' | 'hashpaylink' | 'developer' | 'checkout'
   onStepChange?: (step: 'email' | 'code') => void
 }
 
@@ -121,7 +121,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
   }, [busy, step])
 
   if (step === 'code') {
-    const inline = context === 'developer'
+    const inline = context === 'developer' || context === 'checkout'
     const verification = (
     <div data-pocket-auth={context==='pocket'?'true':undefined} data-pocket-auth-surface={context==='pocket'?true:undefined} role={inline ? 'region' : 'dialog'} aria-modal={inline ? undefined : true} aria-label="Verify your email" className={inline ? 'w-full min-w-0 text-gray-950 dark:text-white' : 'fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950'}>
       {!inline && <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 !bg-white !text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">

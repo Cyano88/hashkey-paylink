@@ -1,5 +1,6 @@
 import PocketMerchantPaymentForm from '../pocket/components/PocketMerchantPaymentForm'
 import BrowserPaymentResult from '../components/BrowserPaymentResult'
+import BrowserCheckoutCard from '../components/BrowserCheckoutCard'
 import { checkoutCompletion } from '../lib/checkoutCompletion'
 import PocketBottomSheet from '../pocket/components/PocketBottomSheet'
 import PocketFundingAction from '../pocket/components/PocketFundingAction'
@@ -320,7 +321,7 @@ function emailFromPrivyUser(user: unknown) {
 // ─── Component ───────────────────────────────────────────────────────────────
 const SMART_WALLET_FUNDING_ERROR = 'Add USDC to Smart wallet to continue.'
 const SMART_WALLET_AMOUNT_ERROR = 'Enter an amount to continue.'
-const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled. Try again.'
+const SMART_WALLET_CANCELLED_MESSAGE = 'Payment cancelled.'
 
 function isSmartWalletBalanceError(msg: string | null) {
   if (!msg) return false
@@ -668,7 +669,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     let cancelled = false
     setHostedIntentStatus('checking')
     setHostedIntentError('')
-    void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&purpose=return`, { cache: 'no-store' })
+    void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&purpose=return`, { cache: 'no-store', signal: AbortSignal.timeout(15000) })
       .then(async response => {
         const body = await response.json().catch(() => undefined) as {
           ok?: boolean
@@ -833,7 +834,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const chainId                  = useChainId()
   const { switchChain, switchChainAsync, isPending: isSwitching } = useSwitchChain()
   const { disconnect: disconnectEvm } = useDisconnect()
-  const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
+  const { authenticated: privyAuthenticated, user: privyUser, getAccessToken, logout } = usePrivy()
   const { wallets: privyWallets } = useWallets()
   const privyEmail = emailFromPrivyUser(privyUser).toLowerCase()
   const checkoutWalletController=usePocketWalletController({authenticated:privyAuthenticated,email:privyEmail,getAccessToken})
@@ -980,6 +981,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   })
   const {
     data: circleWalletBalance,
+    isError: circleWalletBalanceReadFailed,
     isFetching: isCircleWalletBalanceFetching,
     refetch: refetchCircleWalletBalance,
   } = useReadContract({
@@ -1076,7 +1078,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && isSupportedEvmPayChain(chain)
   const usePrivyCircleSolanaCheckout = PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay && chain === 'solana'
   const showLegacyCircleEmailPay = !PRIVY_AUTH_ENABLED && showCircleEmailPay
-  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && (!!pocketScan || !hasExternalPrivyEvmWallet)
+  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && (!!pocketScan || isHostedCheckout || !hasExternalPrivyEvmWallet)
   const showPrivyCircleSolanaEmailPay = usePrivyCircleSolanaCheckout && privyAuthenticated
   const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
   const showCircleSolanaEmailBridgePay = (!PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay) || showPrivyCircleSolanaEmailPay
@@ -1289,7 +1291,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const circleSolanaWalletChecking = !!circleSolanaSession && circleRequiredUnits > 0n && circleSolanaBalance === null && !circleSolanaBalanceError
 
   useEffect(() => {
-    if (!privyAuthenticated || !smartCheckoutOwnsWalletCta || chain === 'arc' || circleRequiredUnits <= 0n) {
+    if ((!pocketScan && isHostedCheckout) || !privyAuthenticated || !smartCheckoutOwnsWalletCta || chain === 'arc' || circleRequiredUnits <= 0n) {
       setPocketCheckoutRoute(null)
       setPocketCheckoutWallets({})
       setPocketCheckoutRouting(false)
@@ -2901,6 +2903,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
 
   async function handleCirclePasskeyPay() {
+    const paymentOwner = checkoutIdentityRef.current
     if (pocketScan && (!showCircleEvmEmailPay || !privyAuthenticated)) {
       setCirclePasskeyError('Your Pocket wallet session is unavailable. Return to Pocket and try again.')
       return
@@ -2991,13 +2994,23 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           return
         }
         const paymentUnits = parseUnits(paymentAmount || '0', meta.decimals)
-        const candidate = currentCircleFeeQuote
+        let candidate = currentCircleFeeQuote
         const payoutIntentId = preparedPaycrestOrder?.intent_id || quotedPayoutId
         if (!candidate || candidate.quote.expiresAt <= Date.now() + 15_000 || candidate.quote.walletId !== session.wallet.id || candidate.quote.walletAddress !== session.wallet.address.toLowerCase() || candidate.quote.amountUnits !== paymentUnits.toString() || candidate.quote.recipient !== paymentRecipient.toLowerCase()) {
           const fresh = await readCirclePaymentFeeQuote({ session, recipient: paymentRecipient, amount: paymentAmount, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId })
           setCircleFeeQuote(fresh); setCircleFeeQuoteError(''); resetCircleSmartWalletPending()
           setCirclePasskeyError('Review the fees, then confirm your payment.')
           return
+        }
+        if (!pocketScan && isHostedCheckout) {
+          const fresh = await readCirclePaymentFeeQuote({session,recipient:paymentRecipient,amount:paymentAmount,feeMode:'gross',feeBps:hashPaylinkFeeBps,payoutIntentId})
+          setCircleFeeQuote(fresh)
+          if (fresh.quote.totalUnits !== candidate.quote.totalUnits || fresh.quote.recipientUnits !== candidate.quote.recipientUnits) {
+            resetCircleSmartWalletPending()
+            setCirclePasskeyError('Payment details updated. Review the total and confirm again.')
+            return
+          }
+          candidate = fresh
         }
         const paymentRequiredUnits = BigInt(candidate.quote.totalUnits)
         lastCirclePaymentUnitsRef.current = paymentUnits
@@ -3023,6 +3036,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           throw new Error('Your secure checkout session expired. Sign in again before paying.')
         }
         if(pocketScan||(isHostedCheckout&&privyAuthenticated))await requestPocketPaymentApproval()
+        if (isHostedCheckout && privyAuthenticated && (!paymentOwner || checkoutIdentityRef.current !== paymentOwner)) throw Error('Your account changed. Sign in again before paying.')
         if (pocketScan && preparedPaycrestOrder) assertPocketScanPayoutPayable(preparedPaycrestOrder)
         const txHash = await sendCircleEvmEmailPayment({
           session,
@@ -3388,7 +3402,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketSlowConfirmation=usePocketSlowConfirmation(Boolean(pocketScan&&(isConfirming||txHash||circleEvmAcceptedPending)),String(txHash||eventId||'scan'),60_000,isWalletPending||pocketMovePayBusy)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
-  const pocketMovePayExpected = privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
+  const pocketMovePayExpected = !(!pocketScan && isHostedCheckout) && privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
   const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const browserPaymentFlow = !pocketScan && !isBankSendPayment
@@ -4025,6 +4039,37 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       returnLabel={isPolymarketBridge ? 'Return to '+polymarketReturnLabel : isAgentOrWalletFunding ? 'Return to app' : 'Return to merchant'}
       onCheckStatus={isPolymarketBridge ? () => void refreshPolymarketBridgeStatus() : isHostedCheckout && hostedConfirmationStatus === 'error' ? () => void registerOrdinaryReceipt() : undefined}
     /></>
+  }
+
+  if (browserPaymentFlow && isHostedCheckout && !isPolymarketFunding && !isAgentOrWalletFunding && chain !== 'solana') {
+    if (hostedIntentStatus !== 'verified') return <div className="mx-auto max-w-md py-8">{hostedIntentError ? <p role="alert">{hostedIntentError}</p> : <div aria-label="Verifying checkout" className="h-72 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}</div>
+    const walletReady = circleEvmWalletUnlocked && !!circleSmartAccount && circleEvmEmailSession?.wallet.address.toLowerCase() === circleSmartAccount.toLowerCase() && !paycrestNeedsPreparation
+    const quote = currentCircleFeeQuote?.quote
+    const total = quote ? BigInt(quote.totalUnits) : null
+    const balance = walletReady && typeof circleWalletBalance === 'bigint' ? circleWalletBalance : null
+    const shortfall = total !== null && balance !== null && total > balance ? formatUnits(total-balance,6) : null
+    const prepare = async () => {
+      if (!privyAuthenticated || !privyEmail) throw Error('Sign in to continue.')
+      const owner = checkoutIdentityRef.current
+      setCirclePasskeyError(null)
+      const wallet = await checkoutWalletController.ensureWallet(chain)
+      if (!wallet) throw Error('Could not open your wallet. Please try again.')
+      const session = await checkoutWalletController.getEvmSession(chain, wallet.address)
+      if (!owner || checkoutIdentityRef.current !== owner) throw Error('Your account changed. Please sign in again.')
+      setCircleEvmEmailSession(session); setCircleSmartAccount(session.wallet.address)
+      if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
+      setFeeQuoteRefresh(value=>value+1)
+    }
+    return <BrowserCheckoutCard id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+      nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
+      amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:'USDC',onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
+      amount={isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} USDC`} fiat={isHostedLocalSettlement}
+      authenticated={privyAuthenticated} email={privyEmail} signOut={logout} network={chain} networks={availableChains.map(value=>({value,label:value==='arc'?'Arc':CHAIN_META[value].label}))}
+      onNetwork={value=>{if(availableChains.includes(value as typeof chain))setChain(value as typeof chain)}}
+      walletReady={walletReady} address={walletReady?circleEvmEmailSession!.wallet.address:''} balance={balance===null?null:formatUnits(balance,6)} shortfall={shortfall}
+      total={total===null?null:formatUnits(total,6)} fee={quote?formatUnits(BigInt(quote.totalUnits)-BigInt(quote.recipientUnits),6):null}
+      busy={circlePasskeyPending||circleEvmPaymentProcessing||circleEvmAcceptedPending||privyCircleLinkLoading||paycrestPreparing}
+      blocked={paymentAmountBlocked||(requiresAttendeeName&&!attendeeName.trim())} error={circlePasskeyError||paymentQuoteError||(circleWalletBalanceReadFailed?'Balance unavailable. Select Update balance to try again.':'')} prepare={prepare} refresh={pocketFunding.onReturn} pay={handleCirclePasskeyPay}/>
   }
 
   if (!pocketScan && isConfirmed && !isWalletManagerFunding) {

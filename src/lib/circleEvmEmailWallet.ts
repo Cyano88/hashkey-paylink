@@ -380,7 +380,7 @@ async function circleWalletApi<T>(
         ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}),
       },
       body: JSON.stringify(payload),
-      ...(/^(getTransaction|getChallenge)$/.test(action) ? { signal: AbortSignal.timeout(12_000) } : {}),
+      ...(/^(getTransaction|getChallenge|quoteEvmPayment|quoteEvmSend)$/.test(action) ? { signal: AbortSignal.timeout(12_000) } : {}),
     })
   } catch (err) {
     throw new Error(`Circle email wallet request could not reach Hash PayLink (${label}). ${readableError(err)}`)

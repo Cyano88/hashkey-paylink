@@ -55,7 +55,7 @@ export function createArcTradeSessionPersistence(deps:{
    return resolved
   }
   const name=key(owner),previous=locks.get(name)??Promise.resolve()
-  const pending=previous.catch(()=>undefined).then(()=>typeof navigator!=='undefined'&&navigator.locks?navigator.locks.request(name,operation):operation())
+  const pending=previous.catch(()=>undefined).then(async()=>await (typeof navigator!=='undefined'&&navigator.locks?navigator.locks.request(name,operation):operation()))
   locks.set(name,pending)
   try{return await pending}finally{if(locks.get(name)===pending)locks.delete(name)}
  }
