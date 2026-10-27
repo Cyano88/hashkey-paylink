@@ -21,6 +21,7 @@ try{
  assert.equal(await page.getByRole('navigation',{name:'Project navigation'}).count(),0)
  await page.getByRole('button',{name:/Builder demo/}).click()
  await page.getByRole('button',{name:'Settings',exact:true}).click()
+ assert.equal(await page.getByLabel('Public introduction',{exact:true}).evaluate(el=>getComputedStyle(el).borderRadius),'12px')
  await page.getByLabel('Public introduction',{exact:true}).fill('This is a draft public business introduction.')
  page.once('dialog',d=>d.dismiss());await nav.getByRole('button',{name:'Home',exact:true}).click()
  assert.ok(await page.getByLabel('Public introduction',{exact:true}).isVisible())
