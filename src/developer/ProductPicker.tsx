@@ -1,14 +1,14 @@
 import {Check} from 'lucide-react'
 import {CHECKOUT_PRODUCTS, isOpenCheckoutProduct, type ProductCapability} from '../lib/developerProducts'
 
-export default function ProductPicker({mode,value,onChange,disabled=false}:{disabled?:boolean;mode:'human'|'agentic';value:ProductCapability[];onChange:(value:ProductCapability[])=>void}) {
-  return <div className="mt-6 divide-y divide-gray-100 dark:divide-white/10">
+export default function ProductPicker({mode,value,onChange,disabled=false,compact=false}:{disabled?:boolean;compact?:boolean;mode:'human'|'agentic';value:ProductCapability[];onChange:(value:ProductCapability[])=>void}) {
+  return <div className={compact?'mt-4':'mt-6 divide-y divide-gray-100 dark:divide-white/10'}>
     {CHECKOUT_PRODUCTS.map(group=>{
       const options=group.options.filter(option=>mode === 'human' || value.includes(option.capability))
       if(!options.length)return null
-      return <fieldset key={group.id} className="min-w-0 py-5">
-        <legend className="pt-5 text-base font-semibold">{group.title}</legend>
-        <p className="mb-3 text-sm leading-6 text-gray-500">{group.description}</p>
+      return <fieldset key={group.id} className={compact?'min-w-0':'min-w-0 py-5'}>
+        <legend className={compact?'sr-only':'pt-5 text-base font-semibold'}>{group.title}</legend>
+        {!compact&&<p className="mb-3 text-sm leading-6 text-gray-500">{group.description}</p>}
         <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10">{options.map(option=>{
           const selected=value.includes(option.capability)
           return <button type="button" role="checkbox" aria-checked={selected} disabled={disabled} key={option.capability}
@@ -21,6 +21,6 @@ export default function ProductPicker({mode,value,onChange,disabled=false}:{disa
       </fieldset>
     })}
     {value.some(capability=>!isOpenCheckoutProduct(capability)) && <p className="pt-4 text-xs leading-5 text-gray-500">Existing legacy product settings are preserved.</p>}
-    <p className="pt-4 text-xs leading-5 text-gray-500">Keep at least one payment option selected.</p>
+    {!compact&&<p className="pt-4 text-xs leading-5 text-gray-500">Keep at least one payment option selected.</p>}
   </div>
 }

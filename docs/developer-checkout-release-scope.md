@@ -35,3 +35,21 @@ Verified with the project adapter, product migration, CLI project/key and sandbo
 boundary tests; browser tests for the actual form at 320px and 390px; and a full
 portal fixture for create-to-overview navigation, payload, settings and cancellation.
 No live customer projects or payments were created by these tests.
+
+## Simplified console
+
+The console has four primary sections: Overview, Payments, Developers and
+Settings. Payment activity is under Payments; the guide, keys and webhooks are
+under Developers. Legacy section links still resolve to the correct parent.
+Project identifiers and return origins are under Advanced settings, and CLI and
+Coming soon sections are collapsed under Developers.
+
+Creation asks for a name, then payment flows. Website and business description
+are optional only at creation; the project stays review_required with no payment
+keys. Configuring receiving accounts still requires complete business details,
+allowed return origins and valid receiving addresses. The UI defaults the return
+origin to the supplied website if no explicit origin has been set.
+
+Business details, receiving accounts and branding have separate settings views.
+Polymarket-only projects cannot choose local bank settlement. Unsaved settings
+and webhook edits are preserved when navigation confirmation is dismissed.

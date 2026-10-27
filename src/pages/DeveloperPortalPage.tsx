@@ -7,9 +7,9 @@ import { isAgentCheckoutNetwork, developerProductNetworks } from '../lib/develop
 import PaymentActivityPanel from '../developer/PaymentActivityPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CliGuide, OverviewPanel, ProductsPanel, portalSections, type PortalSection } from '../developer/PortalPanels'
+import { CliGuide, OverviewPanel, ProductsPanel, portalSections, portalParent, portalSubsections, ComingSoonProducts, type PortalSection } from '../developer/PortalPanels'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
+import { ArrowLeft, LayoutDashboard, CreditCard, Code2, Settings2, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
@@ -78,18 +78,27 @@ export default function DeveloperPortalPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const selectedTab = params.get('section')
-  const tab: PortalSection = portalSections.some(([value]) => value === selectedTab) ? selectedTab as PortalSection : 'overview'
+  const tab: PortalSection = ['overview','products','activity','setup','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
   const sandbox = params.get('environment') === 'test'
+  function hasUnsavedChanges() { return Boolean(active && ((draft && JSON.stringify(draft)!==JSON.stringify(active)) || webhookUrl !== active.webhookUrl)) }
+  function resetProjectDraft() { if (active) { setDraft({...active, recipients:{...active.recipients}, networks:[...active.networks], allowedOrigins:[...active.allowedOrigins]}); setWebhookUrl(active.webhookUrl) } }
+  function startNewProject() {
+    if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?'))) return
+    resetProjectDraft()
+    setCreateForm({name:'',website:'',useCase:'',checkoutMode:'human',capabilities:['hosted_checkout']})
+    setCreatingNew(true); setError(''); setNotice('')
+  }
   function setTab(value: PortalSection) {
     if (busy) return
-    if (draft && active && JSON.stringify(draft) !== JSON.stringify(active)) {
+    if (hasUnsavedChanges()) {
       if (!window.confirm('Discard unsaved project changes?')) return
-      setDraft({ ...active, recipients: {...active.recipients}, networks: [...active.networks], allowedOrigins: [...active.allowedOrigins] })
+      resetProjectDraft()
     }
+    setCreatingNew(false)
     setParams(current => { const next = new URLSearchParams(current); next.set('section', value); return next }) }
   function selectProject(value: string) {
     if (busy) return
-    if (draft && active && JSON.stringify(draft) !== JSON.stringify(active) && !window.confirm('Discard unsaved project changes?')) return
+    if (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?')) return
     setNewKey(null); setNewWebhookSecret(null); setActiveId(value); setCreatingNew(false)
     setParams(current => { const next = new URLSearchParams(current); next.set('project', value); return next })
   }
@@ -147,6 +156,14 @@ export default function DeveloperPortalPage() {
   }, [ready, authenticated, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setDraft(active ? { ...active, recipients: { ...active.recipients }, networks: [...active.networks], allowedOrigins: [...active.allowedOrigins] } : null) }, [active?.id, active?.updatedAt])
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const content = document.getElementById('developer-content')
+      content?.focus({preventScroll:true})
+      if (window.matchMedia('(max-width: 1023px)').matches) content?.scrollIntoView({block:'start'})
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [tab, creatingNew, activeId])
   useEffect(() => { setWebhookUrl(active?.webhookUrl ?? '') }, [active?.id, active?.webhookUrl])
   useEffect(() => { const project = params.get('project'); if (project) { setNewKey(null); setNewWebhookSecret(null); setActiveId(project) } }, [params.get('project')])
   useEffect(() => { setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId])
@@ -197,13 +214,15 @@ export default function DeveloperPortalPage() {
         checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
         xlayerCheckout: draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' ? draft.xlayerCheckout ?? null : null,
         settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
-        arcMainnetChainId: draft.networks.includes('arc') ? 5042 : undefined, recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
+        arcMainnetChainId: draft.networks.includes('arc') ? 5042 : undefined, recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins.length ? draft.allowedOrigins : [draft.website],
         webhookUrl: draft.webhookUrl, bankCode: draft.bankCode, bankName: draft.bankName,
         bankAccountName: draft.bankAccountName, bankAccountNumber: draft.bankAccountNumber ?? '',
       })
       if (generation !== loadGeneration.current) return
       if (!data.project) throw new Error('Project update returned no project.')
       setProjects(current => current.map(project => project.id === data.project!.id ? data.project! : project))
+      setDraft({ ...data.project, recipients: {...data.project.recipients}, networks: [...data.project.networks], allowedOrigins: [...data.project.allowedOrigins] })
+      setWebhookUrl(data.project.webhookUrl)
       setNotice(data.project.operationalStatus === 'suspended'
         ? 'Configuration saved. The project remains suspended.'
         : data.project.settlementStatus === 'ready' ? 'Project settings saved.' : 'Configuration saved. Setup is still required.')
@@ -278,32 +297,30 @@ export default function DeveloperPortalPage() {
     return (
       <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-2xl px-4 py-12">
         <PortalTop onLogout={logout} />
-        <Link to="/cli/authorize" className="mt-3 inline-block text-xs text-blue-600">Manage CLI access</Link>
         <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} emptyAccount />
       </main>
     )
   }
 
+  const parent = portalParent(tab)
+  const subnav = portalSubsections[parent]
+  const sectionIcons = { overview: LayoutDashboard, products: CreditCard, quickstart: Code2, setup: Settings2 }
   return (
-    <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
-      <PortalTop onLogout={logout} />
-      <Link to="/cli/authorize" className="mt-3 inline-block text-xs text-blue-600">Manage CLI access</Link>
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">{sandbox ? 'Test payments are unavailable' : 'Developer dashboard'}</p>
-      </div>
-      <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
-        <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
-          <PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: `${project.name} · ${project.checkoutMode === 'agentic' ? 'Legacy agent' : 'Checkout'}` }))} onChange={selectProject} disabled={busy} ariaLabel="Developer project" buttonClassName="shadow-none" />
-          {active && <ProjectIdCard value={active.id} />}
-          <button type="button" disabled={busy || sandbox} onClick={() => { setCreatingNew(true); setError(''); setNotice('') }} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.05]"><Plus className="h-3.5 w-3.5" /> New project</button>
-          <nav aria-label="Project navigation" className="mt-3 grid grid-cols-2 gap-1 lg:grid-cols-1">
-            {portalSections.map(([value, label]) => (
-              <button key={value} type="button" aria-current={tab === value && !creatingNew ? 'page' : undefined} disabled={busy} onClick={() => { setTab(value); setCreatingNew(false) }} className={cn('rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition', tab === value ? 'bg-blue-50 text-blue-700 dark:bg-blue-400/15 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/[0.05]')}>{label}</button>
-            ))}
-          </nav>
-        </aside>
-
-        <section id="developer-content" tabIndex={-1} className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
+    <main className="portal-console mx-auto min-h-[calc(100dvh-4rem)] max-w-[1440px] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <aside className="border-b border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#101114] lg:min-h-[calc(100dvh-4rem)] lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1"><PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: project.name }))} onChange={selectProject} disabled={busy} ariaLabel="Developer project" buttonClassName="shadow-none" /></div>
+          <button type="button" aria-label="New project" title="New project" disabled={busy || sandbox} onClick={startNewProject} className="grid h-10 w-8 shrink-0 place-items-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/10 dark:hover:bg-white/5"><Plus className="h-4 w-4" /></button>
+        </div>
+        <nav aria-label="Project navigation" className="mt-4 grid grid-cols-4 gap-1 lg:mt-8 lg:grid-cols-1 lg:gap-2">
+          {portalSections.map(([value,label]) => { const Icon=sectionIcons[value as keyof typeof sectionIcons]; return <button key={value} type="button" disabled={busy} aria-current={parent===value&&!creatingNew?'page':undefined} onClick={()=>setTab(value)} className={cn('flex min-h-11 items-center justify-center gap-3 rounded-lg px-2 text-xs font-medium transition lg:justify-start lg:px-3 lg:text-sm',parent===value&&!creatingNew?'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}><Icon className="hidden h-4 w-4 lg:block"/>{label}</button>})}
+        </nav>
+        <div className="hidden border-t border-gray-100 pt-5 dark:border-white/10 lg:mt-12 lg:block"><PortalTop onLogout={logout}/></div>
+      </aside>
+      <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
+        <div className="mb-6 flex items-center justify-between lg:hidden"><span className="text-xs text-gray-400">Hash PayLink Console</span><PortalTop onLogout={logout}/></div>
+        {!creatingNew && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
+        <section id="developer-content" tabIndex={-1} className="min-w-0 max-w-4xl outline-none">
           {sandbox ? <div><h1 className="text-xl font-semibold">Test payments are unavailable</h1><p className="mt-2 text-sm text-gray-500">This old link cannot create or execute payments.</p><Link className="pocket-cta-primary mt-5" to="?environment=live">Open live configuration</Link></div> : creatingNew
             ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
             : <>
@@ -313,7 +330,7 @@ export default function DeveloperPortalPage() {
               {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} />}
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
-              {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><CliGuide projectId={active.id} /></>}
+              {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><details className="mt-8 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Command-line tools</summary><CliGuide projectId={active.id} /></details><details className="mt-6 text-sm text-gray-500"><summary className="cursor-pointer">Coming soon</summary><ComingSoonProducts/></details></>}
             </>}
           {!creatingNew && error && <Message tone="error">{error}</Message>}
           {notice && <Message tone="success">{notice}</Message>}
@@ -328,6 +345,18 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
 }
 
 function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, onSave }: { draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
+  const [settingsSection, setSettingsSection] = useState<'general'|'receiving'|'branding'>('general')
+  const [settingsError, setSettingsError] = useState('')
+  function submitSettings() {
+    let message = ''
+    if (draft.name.trim().length < 2) message = 'Enter your project name.'
+    try { if (new URL(draft.website).protocol !== 'https:') throw new Error() } catch { message = 'Enter your website starting with https://.' }
+    if (!message && draft.useCase.trim().length < 20) message = 'Describe your business in at least 20 characters.'
+    setSettingsError(message)
+    if (message) { setSettingsSection('general'); return }
+    if (settingsSection === 'general' && draft.settlementStatus !== 'ready') setSettingsSection('receiving')
+    else onSave()
+  }
   const bankAccountNumber = draft.bankAccountNumber ?? ''
   const localSettlement = draft.settlementMode !== 'usdc'
   const mobileMoney = draft.settlementMode === 'ugx'
@@ -351,18 +380,21 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
   return <fieldset disabled={busy} className="min-w-0">
     {draft.checkoutMode === 'agentic' && draft.networks.some(network => !isAgentCheckoutNetwork(network)) && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Agent checkout now supports Base and Arc only. Remove unsupported routes, then save your settings. <button type="button" className="ml-2 underline" onClick={() => { const networks = draft.networks.filter(isAgentCheckoutNetwork); if (!networks.length) networks.push('base'); setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork as 'base' | 'arc') ? draft.defaultNetwork : networks[0] }) }}>Remove unsupported networks</button></div>}
     {unsupportedNetworks && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Some saved networks do not support the selected products. <button type="button" className="ml-2 underline" onClick={() => updateProducts(draft.capabilities)}>Use supported networks</button></div>}
-    <PanelHeader eyebrow="Project" title="Settings" copy="Configure the products, receiving accounts and return URLs for this project." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Configured' : 'Setup required'} />
+    <PanelHeader eyebrow="Project" title="Settings" copy="Your business details and receiving accounts." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Configured' : 'Setup required'} />
+    <nav aria-label="Settings sections" className="mt-6 flex gap-5 border-b border-gray-200 dark:border-white/10">{(['general','receiving','branding'] as const).map(value=><button key={value} type="button" onClick={()=>setSettingsSection(value)} aria-current={settingsSection===value?'page':undefined} className={cn('min-h-11 border-b-2 text-sm',settingsSection===value?'border-gray-950 font-semibold dark:border-white':'border-transparent text-gray-500')}>{value==='general'?'Business details':value==='receiving'?'Receiving accounts':'Branding'}</button>)}</nav>
+    <div hidden={settingsSection!=='general'}>
     <div className="mt-7 grid gap-4 sm:grid-cols-2">
       <Field label="Project name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
       <Field label="Website"><input className={fieldClass()} value={draft.website} onChange={event => setDraft({ ...draft, website: event.target.value })} /></Field>
     </div>
     <Field label="What customers pay for" className="mt-4"><textarea className={cn(fieldClass(), 'h-24 resize-none py-3')} value={draft.useCase} onChange={event => setDraft({ ...draft, useCase: event.target.value })} /></Field>
-    <div className="mt-6 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
-      <p className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white">{draft.checkoutMode === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{draft.checkoutMode === 'agentic' ? 'Agentic x402 project' : 'Checkout project'}</p>
-      <p className="mt-2 text-sm leading-5 text-gray-500 dark:text-gray-400">API keys belong to this project. Keep secret keys on your server.</p>
-    </div>
     <CapabilityPicker checkoutMode={draft.checkoutMode} value={draft.capabilities} onChange={updateProducts} />
 
+    <details className="mt-6 border-t border-gray-200 pt-4 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Advanced settings</summary>
+      <ProjectIdCard value={draft.id}/>
+      <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? draft.website} onChange={event=>setDraft({...draft,allowedOrigins:[event.target.value]})} placeholder="https://yourapp.com"/></Field>
+    </details></div>
+    <div hidden={settingsSection!=='branding'}>
     <div className="mt-7 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
       <div className="flex items-start gap-3">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10">
@@ -386,9 +418,11 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       <Field label="Brand mark URL" className="mt-3"><input className={fieldClass()} value={draft.brandImageUrl} onChange={event => setDraft({ ...draft, brandImageUrl: event.target.value })} placeholder="https://yourplatform.com/brand/mark.png" /></Field>
     </div>
 
+    </div>
+    <div hidden={settingsSection!=='receiving'}>
     {routingRequired && <><div className="mt-7">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{localSettlement ? 'Checkout settlement' : 'Settlement for checkout and Arc agreements'}</p>
-      {draft.checkoutMode === 'agentic' || agreementOnly
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{localSettlement ? 'Checkout settlement' : 'Receive payments as'}</p>
+      {draft.checkoutMode === 'agentic' || !draft.capabilities.includes('hosted_checkout')
         ? <div className="mt-2 rounded-xl bg-gray-100 px-3 py-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.05] dark:text-gray-200">Receive USDC</div>
         : <div className="mt-2 grid grid-cols-1 gap-2 rounded-2xl bg-gray-100 p-1 sm:grid-cols-3 dark:bg-white/[0.05]">
           {[['usdc', 'Digital assets'], ['ngn', 'Nigeria bank'], ['ugx', 'Uganda mobile money']] .map(([value, label]) => <button key={value} type="button" onClick={() => {if(value===draft.settlementMode)return;setDraft({ ...draft, settlementMode: value as Project['settlementMode'], bankCode:'',bankName:'',bankAccountName:'',bankAccountNumber:'',bankAccountLast4:'',bankVerifiedAt:undefined, ...(value !== 'usdc' ? { networks: ['base'], defaultNetwork: 'base', recipients: {}, xlayerCheckout:undefined } : {}) })}} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
@@ -419,7 +453,6 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     </>}
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
     {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout })} />}
-    <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? ''} onChange={event => setDraft({ ...draft, allowedOrigins: [event.target.value] })} placeholder="https://yourplatform.com" /></Field>
 
     {localSettlement && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
       <Field label={mobileMoney ? "Mobile money provider" : "Bank"} className="sm:col-span-2"><PocketSelect value={draft.bankCode} options={institutions.map(bank => ({ value: bank.code, label: bank.name }))} onChange={value => { const bank = institutions.find(item => item.code === value); setDraft({ ...draft, bankCode: value, bankName: bank?.name ?? '', bankAccountNumber: '', bankVerifiedAt: undefined }) }} disabled={institutionsLoading} placeholder={institutionsLoading ? 'Loading...' : mobileMoney ? 'Select provider' : 'Select bank'} ariaLabel={mobileMoney ? 'Uganda mobile money provider' : 'Naira settlement bank'} /></Field>
@@ -428,7 +461,9 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       <Field label="Base USDC refund address" className="sm:col-span-2"><input className={fieldClass()} value={draft.refundAddress} onChange={event => setDraft({ ...draft, refundAddress: event.target.value })} placeholder="0x..." /></Field>
       {draft.bankVerifiedAt && <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300"><ShieldCheck className="h-4 w-4" /> Payout details checked</p>}
     </div>}
-    <button type="button" disabled={busy} onClick={onSave} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Save changes</button>
+    </div>
+    {settingsError && <p role="alert" className="mt-4 text-sm text-red-600">{settingsError}</p>}
+    <button type="button" disabled={busy} onClick={submitSettings} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {settingsSection==='general'&&draft.settlementStatus!=='ready'?'Continue to receiving accounts':'Save changes'}</button>
   </fieldset>
 }
 
@@ -452,13 +487,13 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
   }
 
   return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend for this project. Keep their values in your server secret manager." />
-    <div className="mt-5 rounded-xl border border-gray-200 px-3 py-3 text-xs font-semibold text-gray-700 dark:border-white/10 dark:text-gray-200">{project.checkoutMode === 'agentic' ? 'Agent project keys' : 'Human project keys'} <span className="ml-1 font-normal text-gray-400">Access follows the enabled products, network rules and key scopes.</span></div>
+
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
     <p className="mt-4 text-sm leading-6 text-gray-500">Swap requires a separate <code>wallet:swap</code> key. X Layer agreements require <code>xstocks-agreement:read</code> and <code>xstocks-agreement:create</code>. Create these using the owner-approved CLI; general checkout keys do not enable Swap.</p>
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       {project.keys.some(key => key.environment === 'test') && environmentSection('test', 'Existing test keys', `New sandbox keys are disabled until test environments are connected. Existing keys remain separate from live keys. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
-      {environmentSection('live', 'Live keys', `General keys use configured settlement routes. Create separate scoped keys through the CLI for wallet operations.`)}
+      {environmentSection('live', 'Live keys', `Use a secret key to connect your server. Never expose it in your app.`)}
     </div>
   </div>
 }
@@ -500,7 +535,7 @@ function QuickstartPanel({ project }: { project: Project }) {
     : `${createCode}\n\n// Send an agent-wallet user to the hosted Circle wallet checkout.\nconst payerUrl = new URL(checkout.checkoutUrl, "https://app.hashpaylink.com").toString();\n\n// Autonomous agents can use the protocol endpoint directly.\n// The first GET returns HTTP 402 + PAYMENT-REQUIRED.\nconst agentPaymentUrl = new URL(\n  checkout.agentPaymentUrl,\n  "https://app.hashpaylink.com"\n).toString();`
   const agreementPayerEmail = paymentPath === 'human' ? '\n    payerEmail: customer.email,' : ''
   const agreementCode = `const agreement = await fetch("https://app.hashpaylink.com/api/v2/agreements", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASHPAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    template: "fixed_unlock",\n    externalId: order.id,\n    resourceId: "content:premium-report",\n    title: "Premium report access",\n    description: "Unlock one premium research report.",\n    amount: "10",${agreementPayerEmail}\n    recipient: process.env.HASH_PAYLINK_ARC_RECIPIENT,\n    durationSeconds: 86400,\n    cancellationWindowSeconds: 900\n  })\n}).then(res => res.json());\n\n${paymentPath === 'human' ? '// Send agreement.payerReviewPath only to the named customer.' : '// Prepare this agreement through the dedicated agent payer route.'}\n// Mainnet activation is not enabled until deployment review is complete.`
-  return <div><PanelHeader eyebrow="Integration" title="Docs & CLI" copy={`This project and its keys are restricted to the ${paymentPath === 'agentic' ? 'agentic' : 'human'} path.`} />
+  return <div><PanelHeader eyebrow="Integration" title="Connect your app" copy="Create a checkout on your server, then send your customer to the payment page." />
     {hasCheckout && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-white/40">Checkout · server only</span><CopyButton value={checkoutCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-sm leading-5 text-white/70">{checkoutCode}</pre></div>}
     {hasAgreements && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-white/40">Arc Agreements · private pilot</span><CopyButton value={agreementCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-sm leading-5 text-white/70">{agreementCode}</pre></div>}
     {hasCheckout && <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10">

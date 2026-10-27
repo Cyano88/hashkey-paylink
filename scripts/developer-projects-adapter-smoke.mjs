@@ -67,7 +67,7 @@ const handler = createDeveloperProjectsHandler({
   portalSecret: () => portalSecret,
   adminEmails: () => 'operations@example.com',
   adminUserIds: () => '',
-  createProjectId: () => projectCount++ === 0 ? 'dev_testproject1234' : 'dev_agentproject1234',
+  createProjectId: () => projectCount++ === 0 ? 'dev_testproject1234' : `dev_agentproject${projectCount}1234`,
   createKeyId: () => `key_test${++keyCount}`,
   createSecret: prefix => `${prefix}_generated-secret-${keyCount}`,
   now: () => new Date('2026-07-19T12:00:00.000Z'),
@@ -391,3 +391,21 @@ for (const capability of ['bridge','swap_base','unknown']) {
  assert.equal((await request(handler,'PUT',{...agreementOnlyConfig,capabilities:[capability]})).statusCode,400)
 }
 console.log('Product setup passed: standalone wallet and xStocks projects; unsupported routes rejected.')
+
+const draftProject = await request(handler, 'POST', { action: 'create', name: 'Name first project', checkoutMode: 'human', capabilities: ['hosted_checkout'] })
+assert.equal(draftProject.statusCode, 201)
+assert.equal(draftProject.body.project.website, '')
+assert.equal(draftProject.body.project.useCase, '')
+assert.deepEqual(draftProject.body.project.allowedOrigins, [])
+assert.equal(draftProject.body.project.settlementStatus, 'review_required')
+const draftKey = await request(handler, 'POST', {action:'create-key',projectId:draftProject.body.project.id,name:'Not ready',environment:'live'})
+assert.equal(draftKey.statusCode, 409, 'A name-only project cannot issue a live payment key')
+console.log('Name-first creation stores an inactive project; live keys stay gated by complete setup.')
+
+const activateDraft = {action:'configure',projectId:draftProject.body.project.id,name:'Name first project',website:'https://example.com',useCase:'Customers pay for subscriptions to our app.',capabilities:['hosted_checkout'],settlementMode:'usdc',networks:['base'],defaultNetwork:'base',recipients:{base:linkedWallet},allowedOrigins:['https://example.com'],webhookUrl:''}
+assert.equal((await request(handler,'PUT',{...activateDraft,useCase:''})).statusCode,400)
+const activatedDraft = await request(handler,'PUT',activateDraft)
+assert.equal(activatedDraft.statusCode,200,JSON.stringify(activatedDraft.body))
+assert.equal(activatedDraft.body.project.settlementStatus,'ready')
+assert.equal((await request(handler,'POST',{action:'create-key',projectId:draftProject.body.project.id,name:'Ready backend',environment:'live'})).statusCode,201)
+console.log('Draft activation requires business details and complete routing before live-key creation.')

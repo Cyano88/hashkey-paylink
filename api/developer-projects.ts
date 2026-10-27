@@ -626,8 +626,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const useCase = clean(req.body?.useCase, 800)
         const checkoutMode = requestedCheckoutMode(req.body?.checkoutMode)
         if (name.length < 2) return res.status(400).json({ ok: false, error: 'Enter your platform name.' })
-        if (!website) return res.status(400).json({ ok: false, error: 'Enter a valid HTTPS website.' })
-        if (useCase.length < 20) return res.status(400).json({ ok: false, error: 'Briefly explain what customers will pay for.' })
+        if (req.body?.website && !website) return res.status(400).json({ ok: false, error: 'Enter a valid HTTPS website.' })
+        if (useCase && useCase.length < 20) return res.status(400).json({ ok: false, error: 'Briefly explain what customers will pay for.' })
         if (!checkoutMode) return res.status(400).json({ ok: false, error: 'Choose a valid checkout mode.' })
         if (checkoutMode !== 'human') return res.status(409).json({ ok: false, error: 'Agent payments are coming soon. Create a checkout project instead.' })
         if (Array.isArray(req.body?.capabilities) && req.body.capabilities.some((value: unknown) => !isOpenCheckoutProduct(clean(value, 40).toLowerCase()))) return res.status(409).json({ ok: false, error: 'Choose Accept payments or Fund Polymarket accounts. Other products are not open for new integrations.' })
@@ -638,7 +638,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           id: dependencies.createProjectId(), ownerId: identity.userId, ownerEmail: identity.email,
           name, website, brandImageUrl: '', useCase, checkoutMode, capabilities, productSettingsVersion: 2, settlementMode: 'usdc', settlementStatus: 'review_required',
           networks: developerProductNetworks(checkoutMode, capabilities).slice(0,1), defaultNetwork: developerProductNetworks(checkoutMode, capabilities)[0] ?? 'arc', recipients: {}, refundAddress: '',
-          allowedOrigins: [new URL(website).origin], webhookUrl: '', webhookSecretCipher: '',
+          allowedOrigins: website ? [new URL(website).origin] : [], webhookUrl: '', webhookSecretCipher: '',
           bankCode: '', bankName: '', bankAccountName: '', bankAccountLast4: '', bankAccountCipher: '', bankVerifiedAt: undefined,
           arcAgreementPilot: {
             status: 'draft_only', maxAgreementUsdc: '1', dailyVolumeUsdc: '1', maxActiveAgreements: 1,

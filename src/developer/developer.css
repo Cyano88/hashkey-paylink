@@ -7,3 +7,13 @@
 .developer-primary:disabled { opacity: .4; }
 .dark .developer-primary { background: white; color: #111827; }
 @media (prefers-reduced-motion: reduce) { .developer-surface *, .developer-surface *::before, .developer-surface *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Console layout: persistent navigation, flat workspace, progressive settings. */
+.developer-surface:has(.portal-console) { background: #fff; }
+.dark .developer-surface:has(.portal-console) { background: #101114; }
+.portal-console .developer-primary { border-radius: 10px; }
+.portal-console [hidden] { display: none !important; }
+.portal-console input, .portal-console textarea { background: transparent; border-radius: 8px; }
+.portal-console summary::marker { color: #9ca3af; }
+
+.portal-console aside header { justify-content: flex-start; }
