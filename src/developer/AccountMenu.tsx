@@ -34,7 +34,7 @@ export default function AccountMenu({onLogout}:{onLogout:()=>Promise<void>}) {
     event.preventDefault()
     if(lock.current||!loaded)return
     lock.current=true;setSaving(true);setError('');setSaved(false)
-    try{setProfile(await request('PUT',{action:'update-profile',name:profile.name,role:profile.role}));setSaved(true)}
+    try{const savedProfile=await request('PUT',{action:'update-profile',name:profile.name,role:profile.role});setProfile(savedProfile);window.dispatchEvent(new CustomEvent('developer-profile-updated',{detail:savedProfile}));setSaved(true)}
     catch(e){setError(e instanceof Error?e.message:'Profile could not be saved.')}
     finally{lock.current=false;setSaving(false)}
   }

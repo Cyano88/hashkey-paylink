@@ -1,18 +1,28 @@
 ﻿import {useEffect,useState} from 'react'
 import {usePrivy} from '@privy-io/react-auth'
-import {ArrowRight,Check,Plus} from 'lucide-react'
+import {ArrowRight,ArrowDownLeft,Check,Plus,ShieldCheck,Code2,Wallet} from 'lucide-react'
 import type {ProjectSummary,PortalSection} from './PortalPanels'
 import {readActivityResponse} from './activityResponse'
 
 type App=ProjectSummary & {name:string}
 type Payment={recordId:string;amount:string;asset:string;status:string;createdAt:string;projectId:string;appName:string}
 const statusLabels:Record<string,string>={paid:'Paid',pending:'Pending',processing:'Processing',expired:'Expired',failed:'Failed',refunded:'Refunded',unknown:'Status unavailable'}
-export function appSetupSteps(app:App){return [
- {title:'Payment setup',done:app.settlementStatus==='ready',section:'setup' as PortalSection},
- ...(app.businessVerification ? [{title:'Business verification',done:app.businessVerification.status==='approved',section:'verification' as PortalSection}] : []),
- {title:'API key',done:app.keys.some(k=>!k.revokedAt&&(!k.expiresAt||Date.parse(k.expiresAt)>Date.now())&&(k.environment==='live'||k.prefix.startsWith('hpl_live_')||k.prefix.startsWith('hpl_app_'))),section:'keys' as PortalSection},
- {title:'Webhook',done:app.webhookConfigured,section:'webhooks' as PortalSection},
-]}
+function hasLiveKey(app:App) {
+ return app.keys.some(key=>!key.revokedAt&&(!key.expiresAt||Date.parse(key.expiresAt)>Date.now())&&(key.environment==='live'||key.prefix.startsWith('hpl_live_')||key.prefix.startsWith('hpl_app_')))
+}
+export function accountSetup(apps:App[]) {
+ const eligible=apps.filter(app=>app.operationalStatus!=='suspended')
+ const pending=eligible.find(app=>app.businessVerification?.status!=='approved')
+ const verified=eligible.find(app=>app.businessVerification?.status==='approved')
+ const configured=eligible.find(app=>app.settlementStatus==='ready')
+ const connected=eligible.find(app=>hasLiveKey(app)&&app.webhookConfigured)
+ return [
+  {title:'Verify your business',copy:'Send your business details for review.',done:Boolean(verified)&&!eligible.some(app=>app.businessVerification?.required&&app.businessVerification.status!=='approved'),app:pending??verified,section:'verification' as PortalSection,icon:ShieldCheck},
+  {title:'Set up payments',copy:'Choose where you receive your money.',done:Boolean(configured),app:configured??eligible[0],section:'setup' as PortalSection,icon:Wallet},
+  {title:'Connect your app',copy:'Add your API key and payment updates.',done:Boolean(connected),app:connected??configured??eligible[0],section:'quickstart' as PortalSection,icon:Code2},
+ ]
+}
+function paymentDate(value:string) {const date=new Date(value);return Number.isNaN(date.getTime())?'Date unavailable':date.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})}
 export default function AccountHome({apps,onOpen,onCreate,onApps}:{apps:App[];onOpen:(id:string,section?:PortalSection)=>void;onCreate:()=>void;onApps:()=>void}){
  const {getAccessToken,user}=usePrivy()
  const [name,setName]=useState(''),[payments,setPayments]=useState<Payment[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[revision,setRevision]=useState(0)
@@ -24,16 +34,20 @@ export default function AccountHome({apps,onOpen,onCreate,onApps}:{apps:App[];on
    await Promise.all([profile,...Array.from({length:Math.min(3,apps.length)},worker)]);if(active){setPayments(collected.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||a.recordId.localeCompare(b.recordId)).slice(0,10));if(failed)setError(failed===apps.length?'Activity is unavailable right now.':'Activity for some apps could not be loaded.')}
   }catch(e){if(active)setError((e as Error).message)}finally{clearTimeout(timer);if(active)setLoading(false)}})();return()=>{active=false;clearTimeout(timer);abort.abort()}
  },[ids,user?.id,revision]) // eslint-disable-line react-hooks/exhaustive-deps
- const next=apps.find(app=>app.operationalStatus!=='suspended'&&appSetupSteps(app).some(s=>!s.done)),steps=next?appSetupSteps(next):[],done=steps.filter(s=>s.done).length
- const needingVerification=apps.filter(app=>app.businessVerification?.required&&app.businessVerification.status!=='approved')
+ const steps=accountSetup(apps),done=steps.filter(step=>step.done).length,remaining=steps.length-done
+ const verificationStep=steps[0],verificationPending=verificationStep.app?.businessVerification?.status==='submitted'
+ function openStep(step:typeof steps[number]) {if(step.app)onOpen(step.app.id,step.section);else onCreate()}
+ useEffect(()=>{const update=(event:Event)=>{const profile=(event as CustomEvent<{name:string}>).detail;if(typeof profile?.name==='string')setName(profile.name.trim().split(/\s+/)[0])};window.addEventListener('developer-profile-updated',update);return()=>window.removeEventListener('developer-profile-updated',update)},[])
  return <div className="account-home">
-  {needingVerification.length>0&&<div className="account-notice"><p>{needingVerification.length===1?'One app needs business verification.':`${needingVerification.length} apps need business verification.`}</p><button onClick={()=>onOpen(needingVerification[0].id,'verification')}>Review verification <ArrowRight size={15}/></button></div>}
-  <header className="account-heading"><div><p>Home</p><h1>{name?'Hello, '+name:'Welcome back'}</h1><p>One view of payments across your apps.</p></div><button className="developer-primary" onClick={onCreate}><Plus size={16}/>Create app</button></header>
-  <dl className="account-metrics">{[['Apps',apps.length],['Payment-ready apps',apps.filter(a=>a.operationalStatus!=='suspended'&&appSetupSteps(a).every(s=>s.done)).length],['Verified apps',apps.filter(a=>a.businessVerification?.status==='approved').length]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-  {!apps.length?<section className="account-setup"><h2>Start with your first app</h2><p>Create an app to configure payments and get your API credentials.</p><button className="developer-primary mt-5" onClick={onCreate}>Create your first app</button></section>:next?<section className="account-setup"><div className="account-setup-heading"><div><h2>Get {next.name} ready</h2><p>{steps.length-done} setup {steps.length-done===1?'step':'steps'} remaining</p></div><span>{Math.round(done/steps.length*100)}%</span></div><progress aria-label={'Setup progress for '+next.name} max={steps.length} value={done}/><div className="account-setup-steps">{steps.map(step=><button key={step.title} onClick={()=>onOpen(next.id,step.section)}><span className={step.done?'is-done':''}>{step.done?<Check size={15}/>:<ArrowRight size={15}/>}</span>{step.title}</button>)}</div></section>:null}
+  {!verificationStep.done&&<div className="account-notice"><ShieldCheck size={17}/><p>{verificationPending?'Your business verification is being reviewed.':'Complete business verification to unlock live payments.'}</p><button onClick={()=>openStep(verificationStep)}>{verificationPending?'View verification':'Start verification'}<ArrowRight size={14}/></button></div>}
+  <header className="account-heading"><div><h1>{name?'Hello, '+name:'Welcome back'}</h1><p>Your payments, connected in one place.</p></div><button className="developer-primary" onClick={onCreate}><Plus size={16}/>Create app</button></header>
+  <section className="account-onboarding" aria-label="Account setup">
+   <div className="account-onboarding-heading"><div><h2>{remaining?'Get ready to accept payments':'You are ready to accept payments'}</h2><p>{remaining?`${remaining} ${remaining===1?'step':'steps'} left to finish setting up your account.`:'Your business, payment destination and integration are set up.'}</p></div><div className="account-progress"><span>{Math.round(done/steps.length*100)}%</span><progress aria-label="Account setup progress" max={steps.length} value={done}/></div></div>
+   <div className="account-checklist">{steps.map(step=>{const Icon=step.icon;return <button key={step.title} onClick={()=>openStep(step)} className={step.done?'is-complete':''}><span className="account-step-icon"><Icon size={21}/></span><div><h3>{step.title}</h3><p>{step.copy}</p></div><span className="account-step-state" aria-label={step.done?'Complete':'Not complete'}>{step.done?<Check size={15}/>:<ArrowRight size={15}/>}</span></button>})}</div>
+  </section>
   <section className="account-recent"><div className="account-section-heading"><h2>Recent payments</h2><button onClick={onApps}>View apps <ArrowRight size={15}/></button></div>
    {error&&<div role="alert" className="mb-4 flex flex-wrap items-center gap-4 text-sm text-red-600"><p>{error}</p><button onClick={()=>setRevision(r=>r+1)} className="underline">Try again</button></div>}
-   {loading?<div aria-label="Loading account activity" className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-20 animate-pulse rounded-xl bg-gray-100 dark:bg-white/5"/>)}</div>:payments.length?<div>{payments.map(p=><button key={p.projectId+':'+p.recordId} className="account-payment" onClick={()=>onOpen(p.projectId,'activity')}><div><strong>{p.appName}</strong><span>{new Date(p.createdAt).toLocaleString()}</span></div><div><strong>{p.amount} {p.asset}</strong><span className={p.status==='paid'?'text-emerald-600':''}>{statusLabels[p.status]??'Status unavailable'}</span></div><ArrowRight size={16}/></button>)}</div>:!error?<p className="account-empty">Your apps' payments will appear here.</p>:null}
+   {loading?<div aria-label="Loading account activity" className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-20 animate-pulse rounded-xl bg-gray-100 dark:bg-white/5"/>)}</div>:payments.length?<div className="account-payment-table"><div className="account-payment-columns" aria-hidden="true"><span>Payment</span><span>App</span><span>Date</span><span>Status</span><span/></div>{payments.map(p=><button key={p.projectId+':'+p.recordId} className="account-payment" onClick={()=>onOpen(p.projectId,'activity')}><div className="account-payment-amount"><span className="account-payment-icon"><ArrowDownLeft size={18}/></span><div><strong>{p.amount} <span>{p.asset}</span></strong><small>{paymentDate(p.createdAt)}</small></div></div><span className="account-payment-app">{p.appName}</span><span className="account-payment-date">{paymentDate(p.createdAt)}</span><span className={'account-payment-status status-'+p.status}>{statusLabels[p.status]??'Status unavailable'}</span><ArrowRight className="account-payment-arrow" size={15}/></button>)}</div>:!error?<div className="account-payment-empty"><ArrowDownLeft size={24}/><h3>No payments yet</h3><p>Payments from all your apps will appear here.</p><button onClick={apps.length?onApps:onCreate}>{apps.length?'Explore your apps':'Create your first app'}<ArrowRight size={15}/></button></div>:null}
   </section>
  </div>
 }
