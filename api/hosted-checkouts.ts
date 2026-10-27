@@ -1,3 +1,4 @@
+import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import hostedStockCheckoutsHandler, { isStockCheckoutId } from './hosted-stock-checkouts.js'
 import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
@@ -12,7 +13,7 @@ import { paymentExecutionRepository, type PaymentExecutionRepository } from './p
 import { ensureHostedCheckoutExecution, expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
 
 const STORE_KEY = (process.env.HOSTED_CHECKOUT_STORE_KEY ?? 'hashpaylink:hosted-checkouts:v2').trim()
-const NETWORKS = new Set(['base', 'arc', 'arbitrum', 'ethereum', 'polygon'])
+const NETWORKS = new Set(['base', 'arc', 'arbitrum', 'solana', 'ethereum', 'polygon'])
 const KINDS = new Set(['usdc_request', 'service'])
 const CHECKOUT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000
 const MAX_CHECKOUT_RECORDS = 20_000
@@ -22,7 +23,7 @@ const WEBHOOK_LEASE_MS = 30_000
 const WEBHOOK_MAX_ATTEMPTS = 12
 const WEBHOOK_RETRY_DELAYS_MS = [10_000, 30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000]
 
-export type HostedCheckoutNetwork = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
+export type HostedCheckoutNetwork = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon' | 'solana'
 export type HostedCheckoutPaymentOption = { network: HostedCheckoutNetwork; recipient: string }
 export type HostedCheckoutMode = 'human' | 'agentic'
 export type HostedCheckoutAgenticType = 'creator_earnings' | 'agent_treasury'
@@ -41,7 +42,7 @@ type VerifiedProviderRouting = {
 const verifiedProviderRouting = new WeakMap<Request, VerifiedProviderRouting>()
 type HostedCheckoutPayment = {
   status: 'processing' | 'paid' | 'failed'
-  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
+  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer' | 'solana_signature'
   txHash: string
   payer: string
   amount: string
@@ -65,7 +66,7 @@ export type HostedCheckoutPaymentAttempt = {
   amount: string
   createdAt: string
   updatedAt: string
-  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
+  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer' | 'solana_signature'
   transaction?: string
   payer?: string
   confirmedAt?: string
@@ -94,6 +95,7 @@ export type CheckoutRecord = {
   description: string
   amount: string
   flexible: boolean
+  asset?: 'USDC' | 'USDT'
   network: HostedCheckoutNetwork
   recipient: string
   paymentOptions?: HostedCheckoutPaymentOption[]
@@ -296,6 +298,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
     record.expiresAt,
     record.requestHash,
   ]
+  if(record.asset !== undefined) fields.push(['asset',record.asset])
   // Keep the legacy single-network signature byte-for-byte stable. New
   // multi-network records append their immutable routing table.
   if (record.paymentOptions !== undefined) {
@@ -337,6 +340,8 @@ function sign(record: Omit<CheckoutRecord, 'integrity'>, secret: string) {
 function integrityValid(record: CheckoutRecord, secret: string) {
   if ((record.network === 'arc' || record.paymentOptions?.some(option => option.network === 'arc')) && record.arcMainnetChainId !== 5042) return false
   if (!validCheckoutRouting(record)) return false
+  if(record.asset !== undefined && !['USDC','USDT'].includes(record.asset)) return false
+  if(record.asset === 'USDT' && (record.network !== 'solana' || record.paymentOptions?.some(option=>option.network!=='solana') || record.settlement || record.providerFunding || record.checkoutMode==='agentic')) return false
   if (!/^[a-f0-9]{64}$/.test(record.integrity)) return false
   const { integrity, ...unsigned } = record
   const expected = sign(unsigned, secret)
@@ -462,11 +467,11 @@ export async function markHostedCheckoutPaid(input: {
   amount: string
   confirmedAt: string
   network?: string
-  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
+  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer' | 'solana_signature'
 }, dependencies: Dependencies = defaults) {
   const id = clean(input.id, 80)
   if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)) throw new Error('Invalid hosted checkout id.')
-  const txHash = clean(input.txHash, 80)
+  const txHash = clean(input.txHash, 88)
   const payer = clean(input.payer, 80)
   const amount = normalizePositiveUsdc(input.amount)
   const confirmedAt = clean(input.confirmedAt, 40)
@@ -475,7 +480,8 @@ export async function markHostedCheckoutPaid(input: {
   const confirmedAtMs = Date.parse(confirmedAt)
   if (referenceType === 'evm_tx_hash' && !/^0x[a-fA-F0-9]{64}$/.test(txHash)) throw new Error('Invalid hosted checkout transaction hash.')
   if (referenceType === 'circle_gateway_transfer' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(txHash)) throw new Error('Invalid Circle Gateway transfer id.')
-  if (!isAddress(payer)) throw new Error('Invalid hosted checkout payer.')
+  if(referenceType === 'solana_signature' && !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(txHash)) throw new Error('Invalid Solana transaction signature.')
+  if (referenceType === 'solana_signature' ? !isValidSolanaAddress(payer) : !isAddress(payer)) throw new Error('Invalid hosted checkout payer.')
   if (!amount) throw new Error('Invalid hosted checkout amount.')
   if (!Number.isFinite(confirmedAtMs)) throw new Error('Invalid hosted checkout confirmation time.')
   const secret = dependencies.signingSecret()
@@ -494,6 +500,7 @@ export async function markHostedCheckoutPaid(input: {
     const paymentOptions = hostedCheckoutPaymentOptions(record)
     const selectedNetwork = requestedNetwork || (paymentOptions.length === 1 ? paymentOptions[0].network : '')
     if (!hostedCheckoutPaymentOption(record, selectedNetwork)) throw new Error('Hosted checkout payment network is invalid.')
+    if((selectedNetwork === 'solana') !== (referenceType === 'solana_signature')) throw new Error('Payment reference does not match the selected network.')
     const currentAttempt = hostedCheckoutPaymentAttempt(record)
     if (hostedCheckoutMode(record) === 'human' && paymentOptions.length > 1 && currentAttempt.network !== selectedNetwork) {
       throw new Error('Hosted checkout payment attempt is not locked to this network.')
@@ -505,10 +512,10 @@ export async function markHostedCheckoutPaid(input: {
     const gatewaySettlementGrace = referenceType === 'circle_gateway_transfer' ? 5 * 60_000 : 0
     if (confirmedAtMs > expiresAtMs + gatewaySettlementGrace) throw new Error('Hosted checkout payment confirmed after expiry.')
     const reusedBy = Object.values(safe.checkouts).find(item =>
-      item.id !== id && item.payment?.txHash.toLowerCase() === txHash.toLowerCase()
+      item.id !== id && item.payment && (item.payment.network === 'solana' ? item.payment.txHash === txHash : item.payment.txHash.toLowerCase() === txHash.toLowerCase())
     )
     if (reusedBy) throw new Error('Transaction is already linked to another hosted checkout.')
-    if (record.payment && record.payment.txHash.toLowerCase() !== txHash.toLowerCase()) {
+    if (record.payment && (selectedNetwork === 'solana' ? record.payment.txHash !== txHash : record.payment.txHash.toLowerCase() !== txHash.toLowerCase())) {
       throw new Error('Hosted checkout is already linked to another payment.')
     }
     if (record.payment?.network && record.payment.network !== selectedNetwork) {
@@ -519,7 +526,7 @@ export async function markHostedCheckoutPaid(input: {
       status: record.settlement && record.payout?.status !== 'validated' && record.payout?.status !== 'settled' ? 'processing' : 'paid',
       referenceType,
       txHash,
-      payer: getAddress(payer),
+      payer: selectedNetwork === 'solana' ? payer : getAddress(payer),
       amount,
       confirmedAt: new Date(confirmedAtMs).toISOString(),
       network: selectedNetwork as HostedCheckoutNetwork,
@@ -547,6 +554,7 @@ export async function markHostedCheckoutPaid(input: {
       status: payment.status,
       network: payment.network ?? record.network,
       amount: payment.amount,
+      asset: record.asset || 'USDC',
       ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
       payer: payment.payer,
       ...(payment.referenceType === 'circle_gateway_transfer'
@@ -569,7 +577,7 @@ export async function attachHostedCheckoutReceipt(input: {
   receiptUrl: string
 }, dependencies: Dependencies = defaults) {
   const id = clean(input.id, 80)
-  const txHash = clean(input.txHash, 80).toLowerCase()
+  const txHash = clean(input.txHash, 88)
   const receiptId = clean(input.receiptId, 180)
   const receiptUrl = clean(input.receiptUrl, 240)
   if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)) throw new Error('Invalid hosted checkout id.')
@@ -579,9 +587,10 @@ export async function attachHostedCheckoutReceipt(input: {
     const safe = current ?? { checkouts: {}, idempotency: {} }
     const record = safe.checkouts[id]
     if (!record || !integrityValid(record, dependencies.signingSecret())) throw new Error('Hosted checkout is invalid.')
-    if (!record.payment || record.payment.txHash.toLowerCase() !== txHash) throw new Error('Hosted checkout payment does not match this receipt.')
+    const sameReference = (value?:string) => record.payment?.network === 'solana' ? value === txHash : value?.toLowerCase() === txHash.toLowerCase()
+    if (!record.payment || !sameReference(record.payment.txHash)) throw new Error('Hosted checkout payment does not match this receipt.')
     const paymentAttempts = updateCurrentPaymentAttempt(record, attempt => {
-      if (attempt.transaction?.toLowerCase() !== txHash) throw new Error('Hosted checkout attempt does not match this receipt.')
+      if (!sameReference(attempt.transaction)) throw new Error('Hosted checkout attempt does not match this receipt.')
       return { ...attempt, receiptId, receiptUrl, updatedAt: dependencies.now().toISOString() }
     })
     result = { ...record, paymentAttempts }
@@ -774,6 +783,7 @@ function checkoutRequestHash(input: {
   description: string
   amount: string
   flexible: boolean
+  asset?: 'USDC' | 'USDT'
   network: string
   recipient: string
   paymentOptions?: HostedCheckoutPaymentOption[]
@@ -802,11 +812,13 @@ function checkoutRequestHash(input: {
   if (input.paymentOptions !== undefined) {
     fields.push(input.paymentOptions.map(option => [option.network, option.recipient]))
   }
+  if(input.asset !== undefined) fields.push(['asset',input.asset])
   if (input.brandImageUrl !== undefined) fields.push(input.brandImageUrl)
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex')
 }
 
 function validRecipient(network: string, recipient: string) {
+  if(network === 'solana') return isValidSolanaAddress(recipient)
   return NETWORKS.has(network) && isAddress(recipient) && recipient.toLowerCase() !== '0x0000000000000000000000000000000000000000'
 }
 
@@ -825,7 +837,7 @@ function validCheckoutRouting(record: Pick<CheckoutRecord, 'network' | 'recipien
 function normalizeRequestedPaymentOptions(value: unknown) {
   if (value === undefined) return { options: undefined as HostedCheckoutPaymentOption[] | undefined, error: '' }
   if (!Array.isArray(value) || value.length < 1 || value.length > NETWORKS.size) {
-    return { options: undefined, error: 'paymentOptions must contain one to five supported networks.' }
+    return { options: undefined, error: 'paymentOptions must contain one to six supported networks.' }
   }
   const options: HostedCheckoutPaymentOption[] = []
   const networks = new Set<string>()
@@ -881,12 +893,13 @@ function checkoutPaymentUrl(record: CheckoutRecord) {
     params.set('pmr', record.providerFunding.requestId)
     params.set('funding', record.merchantName)
   }
+  if(record.asset === 'USDT') params.set('asset','USDT')
   if (record.flexible) params.set('f', '1')
   else params.set('a', record.amount)
   params.set('e', selectedOption?.recipient ?? record.recipient)
   const paymentOptions = hostedCheckoutPaymentOptions(record)
   if (paymentOptions.length > 1) params.set('multi', '1')
-  for (const option of paymentOptions) params.set(`e_${option.network}`, option.recipient)
+  for (const option of paymentOptions) params.set(option.network === 'solana' ? 's' : `e_${option.network}`, option.recipient)
   return `/pay?${params.toString()}`
 }
 
@@ -943,6 +956,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           paymentStatus: record.payment?.status,
           settlementStatus: record.payout?.status,
           network: record.payment?.network ?? hostedCheckoutPaymentAttempt(record).network ?? record.network,
+          asset: record.asset || 'USDC',
           availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           expiresAt: record.expiresAt,
           settlementMode: record.settlement?.mode ?? 'usdc',
@@ -968,7 +982,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           amount: record.amount,
           flexible: record.flexible,
           network: hostedCheckoutPaymentAttempt(record).network ?? record.network,
-            availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
+            asset: record.asset || 'USDC',
+          availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           settlementMode: record.settlement?.mode ?? 'usdc',
           ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
           status: record.payment?.status ?? 'pending',
@@ -1008,8 +1023,9 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
 
     const kind = clean(req.body?.kind, 40)
     // Stock checkout must not silently fall through to the USDC execution path.
-    if (req.body?.asset !== undefined && (typeof req.body.asset !== 'string' || req.body.asset.trim().toUpperCase() !== 'USDC')) {
-      return res.status(400).json({ ok: false, error: 'This checkout route currently accepts USDC only. Stock checkout is not enabled.' })
+    const asset = req.body?.asset === undefined ? 'USDC' : typeof req.body.asset === 'string' ? req.body.asset.trim().toUpperCase() : ''
+    if (!['USDC','USDT'].includes(asset)) {
+      return res.status(400).json({ ok: false, error: 'Choose a supported stablecoin. Stock checkout is not enabled.' })
     }
     const checkoutMode = (clean(req.body?.checkoutMode, 20).toLowerCase() || 'human') as HostedCheckoutMode
     const requestedAgenticType = clean(req.body?.agenticType, 40).toLowerCase()
@@ -1035,11 +1051,12 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       ? { options: policy.paymentOptions, error: '' }
       : normalizeRequestedPaymentOptions(req.body?.paymentOptions)
     if (normalizedOptions.error) return res.status(400).json({ ok: false, error: normalizedOptions.error })
-    const routingOptions = normalizedOptions.options
+    if(asset === 'USDT' && (checkoutMode !== 'human' || isNairaProject || providerRouting)) return res.status(400).json({ok:false,error:'USDT checkout is only available for direct Solana stablecoin payments.'})
+    const routingOptions = asset === 'USDT' ? normalizedOptions.options?.filter(option=>option.network==='solana') : normalizedOptions.options
     if (checkoutMode === 'agentic' && routingOptions && routingOptions.length > 1 && !requestedNetwork) {
       return res.status(400).json({ ok: false, error: 'Agentic checkout must select exactly one payment network.' })
     }
-    const defaultNetwork = (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || providerRouting?.defaultNetwork || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
+    const defaultNetwork = (asset === 'USDT' ? 'solana' : '') || (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || providerRouting?.defaultNetwork || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
     const defaultOption = routingOptions?.find(option => option.network === defaultNetwork)
     const network = routingOptions ? defaultOption?.network ?? '' : defaultNetwork
     const legacyRecipient = isAddress(requestedRecipient) ? getAddress(requestedRecipient) : requestedRecipient
@@ -1056,6 +1073,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (checkoutMode === 'agentic' && (kind !== 'service' || flexible || isNairaProject)) return res.status(400).json({ ok: false, error: 'Agentic checkout requires a fixed USDC service payment.' })
     if (checkoutMode === 'agentic' && routingOptions && !routingOptions.some(option => option.network === network)) return res.status(400).json({ ok: false, error: 'Agentic checkout network is not enabled for this project.' })
     if (merchantName.length < 2) return res.status(400).json({ ok: false, error: 'merchantName is required.' })
+    if(asset === 'USDT' && network !== 'solana') return res.status(400).json({ok:false,error:'Enable a Solana receiving account for USDT checkout.'})
     if (!NETWORKS.has(network)) return res.status(400).json({ ok: false, error: routingOptions ? 'defaultNetwork must match a payment option.' : 'Unsupported network.' })
     if (!validRecipient(network, recipient)) return res.status(400).json({ ok: false, error: 'Invalid recipient for the selected network.' })
     if (checkoutMode === 'human' && routingOptions && requestedNetwork && requestedNetwork !== network) return res.status(400).json({ ok: false, error: 'network must match defaultNetwork when paymentOptions are supplied.' })
@@ -1081,6 +1099,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       title,
       description,
       amount: flexible ? '' : amount,
+      ...(asset === 'USDT' ? {asset: 'USDT' as const} : {}),
       flexible,
       network,
       recipient,
@@ -1152,6 +1171,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         title,
         description,
         amount: flexible ? '' : nairaOrder?.payableUsdc ?? amount,
+        ...(asset === 'USDT' ? {asset: 'USDT' as const} : {}),
         flexible,
         network: routedNetwork as CheckoutRecord['network'],
         ...((routedNetwork === 'arc' || routingOptions?.some(option => option.network === 'arc')) ? { arcMainnetChainId: 5042 as const } : {}),

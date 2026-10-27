@@ -1,3 +1,4 @@
+import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import {manageAppRemoval} from './developer-app-removal.js'
 import {listDeveloperPayments} from './developer-payments.js'
 import {verificationEmpty,publicVerification,verificationAllowsLive,assertVerificationEditable,normalizeBusinessApplication,validateBusinessSubmission,sealVerification,openVerification,inspectBusinessDocument,storeBusinessDocument,readBusinessDocument,deleteBusinessDocument,type VerificationRecord} from './developer-verification.js'
@@ -26,7 +27,7 @@ import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './ren
 import { createPaycrestOfframpOrder, isPaycrestConfigured, listPaycrestInstitutions, resolvePaycrestOfframpAvailability, verifyPaycrestAccount, type PaycrestInstitution } from './paycrest-pos.js'
 
 const STORE_KEY = (process.env.DEVELOPER_PROJECT_STORE_KEY ?? 'hashpaylink:developer-projects:v1').trim()
-const NETWORKS = ['base', 'arc', 'arbitrum', 'ethereum', 'polygon'] as const
+const NETWORKS = ['base', 'arc', 'arbitrum', 'solana', 'ethereum', 'polygon'] as const
 type DeveloperNetwork = typeof NETWORKS[number]
 type SettlementMode = DeveloperSettlementMode
 type DeveloperEnvironment = 'test' | 'live'
@@ -338,8 +339,9 @@ function normalizedWebhookUrl(value: unknown) {
   }
 }
 
-function validRecipient(value: unknown) {
+function validRecipient(value: unknown, network?: string) {
   const address = clean(value, 80)
+  if(network === 'solana') return isValidSolanaAddress(address) ? address : ''
   return isAddress(address) && address.toLowerCase() !== '0x0000000000000000000000000000000000000000' ? getAddress(address) : ''
 }
 
@@ -517,7 +519,7 @@ export async function verifyDeveloperOperationsAdmin(req: Request) {
 function projectRoutingComplete(project: DeveloperProject) {
   if (!project.allowedOrigins.length) return false
   if (project.settlementMode === 'usdc') {
-    return Boolean(project.networks.length) && project.networks.every(network => validRecipient(project.recipients[network]))
+    return Boolean(project.networks.length) && project.networks.every(network => validRecipient(project.recipients[network], network))
   }
   return Boolean(
     validRecipient(project.refundAddress)
@@ -915,7 +917,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
         const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
         const recipients = Object.fromEntries(NETWORKS.flatMap(network => {
-          const recipient = validRecipient(req.body?.recipients?.[network])
+          const recipient = validRecipient(req.body?.recipients?.[network], network)
           return recipient ? [[network, recipient]] : []
         })) as Partial<Record<DeveloperNetwork, string>>
         const allowedOrigins: string[] = Array.isArray(req.body?.allowedOrigins)

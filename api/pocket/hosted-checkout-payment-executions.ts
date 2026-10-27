@@ -16,13 +16,14 @@ function executionKind(record: CheckoutRecord) {
 function paymentMetadata(record: CheckoutRecord) {
   const attempt = record.paymentAttempts?.[record.paymentAttempts.length - 1]
   return {
+    asset: record.asset || 'USDC',
     checkoutKind: record.kind,
     checkoutMode: record.checkoutMode || 'human',
     partnerId: record.partnerId,
     merchantName: record.merchantName,
     title: record.title,
     memo: record.memo,
-    payerWallet: record.payment?.payer.toLowerCase() || '',
+    payerWallet: (record.payment?.network === 'solana' ? record.payment.payer : record.payment?.payer.toLowerCase()) || '',
     provider: record.providerFunding?.provider || '',
     fundingRequestId: record.providerFunding?.requestId || '',
     receiptId: attempt?.receiptId || '',
@@ -33,6 +34,7 @@ function paymentMetadata(record: CheckoutRecord) {
 
 function checkoutMetadata(record: CheckoutRecord) {
   return {
+    asset: record.asset || 'USDC',
     checkoutKind: record.kind,
     checkoutMode: record.checkoutMode || 'human',
     partnerId: record.partnerId,

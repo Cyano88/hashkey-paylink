@@ -488,6 +488,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     if (hostedCheckoutMode(checkout) !== 'human') {
       throw paymentError('This checkout only accepts agentic payment.', 409)
     }
+    assetSymbol = checkout.asset || 'USDC'
     hostedCheckoutIdForReceipt = checkout.id
     brandName = checkout.merchantName
     brandImageUrl = checkout.brandImageUrl || ''
@@ -495,8 +496,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       throw paymentError('Hosted checkout reference does not match.', 400)
     }
     const evmChain = normalizeEvmUsdcChain(chain)
-    const paymentOption = evmChain ? hostedCheckoutPaymentOption(checkout, evmChain) : null
-    if (!evmChain || !paymentOption) throw paymentError('Hosted checkout network is not available.', 409)
+    const paymentOption = hostedCheckoutPaymentOption(checkout, chain)
+    if ((!evmChain && chain !== 'solana') || !paymentOption) throw paymentError('Hosted checkout network is not available.', 409)
     const actualUnits = usdcMicroUnits(amount)
     const requestedUnits = usdcMicroUnits(requestedAmount)
     const signedUnits = checkout.flexible ? null : usdcMicroUnits(checkout.amount)
@@ -508,8 +509,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
     const minimumAmount = checkout.flexible ? amount : checkout.amount
     try {
-      const verifiedTransfer = await verifyEvmUsdcTransfer({
-        chain: evmChain,
+      const verifiedTransfer = chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
+        chain: evmChain!,
         txHash,
         payer,
         recipient: paymentOption.recipient,
@@ -527,7 +528,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         payer,
         amount: verifiedTransfer.amount,
         confirmedAt: verifiedTransfer.confirmedAt,
-        network: evmChain,
+        network: chain,
+        referenceType: chain === 'solana' ? 'solana_signature' : 'evm_tx_hash',
       })
     } catch (error) {
       throw paymentError(error instanceof Error ? error.message : 'Hosted checkout could not be verified on-chain.', 409)

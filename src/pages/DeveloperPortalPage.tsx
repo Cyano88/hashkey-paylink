@@ -21,7 +21,7 @@ import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
 
-type Network = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
+type Network = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon' | 'solana'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
@@ -65,9 +65,9 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
   { key: 'base', label: 'Base' },
   { key: 'arc', label: 'Arc', note: 'Mainnet' },
   { key: 'arbitrum', label: 'Arbitrum' },
+  { key: 'solana', label: 'Solana' },
   { key: 'ethereum', label: 'Ethereum' },
   { key: 'polygon', label: 'Polygon' },
-  { key: 'solana', label: 'Solana', note: 'Soon', disabled: true },
 ]
 
 function editableProjectState(project:Project) {
@@ -459,10 +459,10 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{agreementOnly ? 'Arc agreement settlement' : 'Settlement networks'}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {NETWORKS.filter(network => network.key !== 'solana' && supportedNetworks.includes(network.key)).map(network => {
-          const active = network.key !== 'solana' && draft.networks.includes(network.key)
+        {NETWORKS.filter(network => supportedNetworks.includes(network.key)).map(network => {
+          const active = draft.networks.includes(network.key)
           const disabled = network.disabled || (localSettlement && network.key !== 'base')
-          return <button key={network.key} type="button" disabled={disabled} onClick={() => network.key !== 'solana' && toggleNetwork(network.key)} className={cn('flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition', active ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:bg-blue-400/15 dark:text-blue-200' : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-blue-400/10', disabled && 'cursor-not-allowed opacity-45')}>{network.label}{network.note && <span className="text-xs font-black uppercase opacity-70">{network.note}</span>}</button>
+          return <button key={network.key} type="button" disabled={disabled} onClick={() => toggleNetwork(network.key)} className={cn('flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition', active ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:bg-blue-400/15 dark:text-blue-200' : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-blue-400/10', disabled && 'cursor-not-allowed opacity-45')}>{network.label}{network.note && <span className="text-xs font-black uppercase opacity-70">{network.note}</span>}</button>
         })}
       </div>
     </div>
@@ -470,12 +470,12 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     {draft.capabilities.includes('arc_agreements') && <p className="mt-3 text-sm leading-6 text-gray-500">Arc agreements use USDC on Arc Mainnet.{draft.checkoutMode === 'human' && ' X Layer agreements and Swap use the networks selected in their own sections above.'}</p>}
     <div className="mt-5 space-y-3">
       {draft.settlementMode === 'usdc' && draft.networks.filter(network => supportedNetworks.includes(network)).map(network => <Field key={network} label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
-        <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder="0x..." />
+        <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder={network === 'solana' ? 'Solana wallet address' : '0x...'} />
       </Field>)}
       {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{draft.capabilities.includes('arc_agreements') ? 'The Arc address is the fixed project recipient for Agreements. Paying different workers or sellers requires the backend verified-recipient integration; do not substitute a platform wallet for their payout wallets. This is not an escrow deposit address.' : 'Enter the treasury or Circle wallet address that should receive payments on each enabled network.'}</p>}
     </div>
 
-    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
+    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.defaultNetwork} options={draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
     </>}
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
     {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout })} />}

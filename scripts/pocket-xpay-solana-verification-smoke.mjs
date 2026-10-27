@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {PublicKey} from '@solana/web3.js'
-import {verifyParsedSolanaUsdcTransfer} from '../api/solana-usdc-transfer-verify.ts'
+import {verifySolanaUsdcTransfer,verifyParsedSolanaUsdcTransfer} from '../api/solana-usdc-transfer-verify.ts'
 const key=n=>new PublicKey(new Uint8Array(32).fill(n)),payer=key(1).toBase58(),recipient=key(2).toBase58()
 const mint='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const balance=(accountIndex,owner)=>({accountIndex,owner,mint,uiTokenAmount:{amount:'1000000',decimals:6}})
@@ -15,3 +15,23 @@ const inner=tx();inner.meta.innerInstructions=[{index:0,instructions:inner.trans
 assert.throws(()=>verifyParsedSolanaUsdcTransfer(null,input))
 assert.throws(()=>verifyParsedSolanaUsdcTransfer(tx(),{...input,recipient:payer}))
 console.log('PASS Solana USDC receipt: exact mint, token program, signer, authority, recipient, integer amount, inner transfer and new recipient token account; invalid proof fails closed.')
+
+const exact={...input,exactAmount:true,notBefore:'2026-10-27T00:00:00Z',notAfter:'2026-10-27T01:00:00Z'}
+const timed=tx();timed.blockTime=Date.parse('2026-10-27T00:30:00Z')/1000
+assert.equal(verifyParsedSolanaUsdcTransfer(timed,exact).amount,'1')
+for(const change of [t=>{t.blockTime=null},t=>{t.blockTime-=3600},t=>{t.blockTime+=3600},t=>{t.transaction.message.instructions[0].parsed.info.tokenAmount.amount='1000001'}]){const value=tx();value.blockTime=timed.blockTime;change(value);assert.throws(()=>verifyParsedSolanaUsdcTransfer(value,exact))}
+const {POCKET_USDT_ASSETS}=await import('../src/pocket/lib/pocketUsdtAssets.ts')
+const tether=tx();tether.blockTime=timed.blockTime
+for(const b of [...tether.meta.preTokenBalances,...tether.meta.postTokenBalances])b.mint=POCKET_USDT_ASSETS.solana.address
+tether.transaction.message.instructions[0].parsed.info.mint=POCKET_USDT_ASSETS.solana.address
+assert.equal(verifyParsedSolanaUsdcTransfer(tether,{...exact,asset:'USDT'}).units,1000000n)
+assert.throws(()=>verifyParsedSolanaUsdcTransfer(tether,exact))
+console.log('PASS Solana exact amount, payment window, missing block time, and USDT mint isolation.')
+
+let commitment
+const rpc={getGenesisHash:async()=>'5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',getParsedTransaction:async(signature,options)=>{commitment=options.commitment;return timed}}
+await verifySolanaUsdcTransfer({...exact,txHash:'Ab'.repeat(44),confirmation:'finalized'},rpc)
+assert.equal(commitment,'finalized')
+await assert.rejects(()=>verifySolanaUsdcTransfer({...exact,txHash:'Ab'.repeat(44),confirmation:'finalized'},{...rpc,getGenesisHash:async()=>'devnet'}),/mainnet/)
+await assert.rejects(()=>verifySolanaUsdcTransfer({...exact,txHash:'Ab'.repeat(44),confirmation:'finalized'},{...rpc,getParsedTransaction:async()=>null}))
+console.log('PASS Solana mainnet identity and finalized RPC commitment; unfinalized transaction stays pending.')

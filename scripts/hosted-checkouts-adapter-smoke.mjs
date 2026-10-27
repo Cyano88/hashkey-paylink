@@ -79,7 +79,7 @@ else process.env.HASH_PAYLINK_PARTNER_API_KEY = previousSingleKey
 assert.equal((await request(handler, 'POST', { body: valid, headers: {} })).statusCode, 401)
 const stockRejected = await request(handler, 'POST', { body: { ...valid, asset: 'NVDAx' }, headers })
 assert.equal(stockRejected.statusCode, 400)
-assert.match(stockRejected.body.error, /USDC only/)
+assert.match(stockRejected.body.error, /supported stablecoin/)
 assert.equal(createdCount, 0, 'unsupported stock requests must not create USDC checkouts')
 assert.equal((await request(handler, 'POST', { body: { ...valid, returnUrl: 'https://evil.example' }, headers })).statusCode, 400)
 assert.equal((await request(handler, 'POST', { body: { ...valid, kind: 'pos' }, headers })).statusCode, 400)
@@ -170,7 +170,8 @@ const solanaCreated = await request(handler, 'POST', {
   body: { ...valid, network: 'solana', recipient: '4QW6qgaEvDZMaKJ8s6GDZjy3G7MQXM4mLrWjK1U8ovCE' },
   headers: solanaHeaders,
 })
-assert.equal(solanaCreated.statusCode, 400)
+assert.equal(solanaCreated.statusCode, 201)
+assert.match((await request(handler,'GET',{query:{id:solanaCreated.body.checkoutId}})).body.paymentUrl, /s=4QW6qgaEvDZMaKJ8s6GDZjy3G7MQXM4mLrWjK1U8ovCE/)
 
 const multiHeaders = { ...headers, 'idempotency-key': 'partner:order:multi-network-0001' }
 const multi = {
@@ -639,3 +640,21 @@ const five=await request(handler,'POST',{headers:{...headers,'idempotency-key':'
 assert.equal(five.statusCode,201,JSON.stringify(five.body))
 assert.equal((await request(handler,'GET',{query:{id:five.body.checkoutId}})).body.checkout.availableNetworks.length,5)
 console.log('PASS Ethereum and Polygon USDC: signed links, exact settlement, execution completion and five-network checkout.')
+
+// Solana references retain all 88 characters and their original case.
+const solPayer='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+const solSignature='Ab'.repeat(44)
+const solPaid={id:solanaCreated.body.checkoutId,txHash:solSignature,payer:solPayer,amount:valid.amount,confirmedAt:store.checkouts[solanaCreated.body.checkoutId].createdAt,network:'solana',referenceType:'solana_signature'}
+await assert.rejects(()=>markHostedCheckoutPaid({...solPaid,referenceType:'evm_tx_hash'},dependencies))
+const solResult=await markHostedCheckoutPaid(solPaid,dependencies)
+assert.equal(solResult.payment.txHash,solSignature)
+assert.equal(solResult.payment.payer,solPayer)
+await assert.rejects(()=>attachHostedCheckoutReceipt({id:solPaid.id,txHash:solSignature.toLowerCase(),receiptId:'solana-test',receiptUrl:'/receipt/solana-test'},dependencies))
+await attachHostedCheckoutReceipt({id:solPaid.id,txHash:solSignature,receiptId:'solana-test',receiptUrl:'/receipt/solana-test'},dependencies)
+const usdt=await request(handler,'POST',{headers:{...headers,'idempotency-key':'solana-usdt-00001'},body:{...valid,asset:'USDT',network:'solana',recipient:solPayer}})
+assert.equal(usdt.statusCode,201,JSON.stringify(usdt.body))
+assert.match((await request(handler,'GET',{query:{id:usdt.body.checkoutId}})).body.paymentUrl,/asset=USDT/)
+assert.equal(store.checkouts[usdt.body.checkoutId].asset,'USDT')
+store.checkouts[usdt.body.checkoutId].asset='USDC'
+assert.equal((await request(handler,'GET',{query:{id:usdt.body.checkoutId}})).statusCode,409)
+console.log('PASS Solana checkout routing, USDT asset signing and case-sensitive full-length receipts.')

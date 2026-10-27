@@ -409,3 +409,12 @@ assert.equal(activatedDraft.statusCode,200,JSON.stringify(activatedDraft.body))
 assert.equal(activatedDraft.body.project.settlementStatus,'ready')
 assert.equal((await request(handler,'POST',{action:'create-key',projectId:draftProject.body.project.id,name:'Ready backend',environment:'live'})).statusCode,201)
 console.log('Draft activation requires business details and complete routing before live-key creation.')
+
+const solanaRecipient='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+const solanaDefault=await request(handler,'PUT',{...activateDraft,networks:['base','solana'],defaultNetwork:'solana',recipients:{base:linkedWallet,solana:solanaRecipient}})
+assert.equal(solanaDefault.statusCode,200,JSON.stringify(solanaDefault.body))
+assert.equal(solanaDefault.body.project.defaultNetwork,'solana')
+assert.equal(solanaDefault.body.project.recipients.solana,solanaRecipient)
+assert.equal((await request(handler,'PUT',{...activateDraft,networks:['solana'],defaultNetwork:'solana',recipients:{solana:linkedWallet}})).statusCode,400)
+assert.equal((await request(handler,'PUT',{...activateDraft,defaultNetwork:'solana'})).statusCode,400)
+console.log('PASS Solana default network saves with a valid Solana recipient; stale defaults and EVM recipients rejected.')

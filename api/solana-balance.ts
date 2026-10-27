@@ -1,3 +1,4 @@
+import { POCKET_USDT_ASSETS } from '../src/pocket/lib/pocketUsdtAssets.js'
 /**
  * /api/solana-balance
  *
@@ -20,9 +21,9 @@ import {
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const PUBLIC_SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com'
 
-export async function readSolanaUsdcBalance(accountAddress: string, fetcher: typeof fetch = solanaReadFetch) {
+export async function readSolanaUsdcBalance(accountAddress: string, fetcher: typeof fetch = solanaReadFetch, asset: 'USDC'|'USDT' = 'USDC') {
   const owner = new PublicKey(accountAddress)
-  const ata = await getAssociatedTokenAddress(USDC_MINT, owner, true)
+  const ata = await getAssociatedTokenAddress(asset === 'USDT' ? new PublicKey(POCKET_USDT_ASSETS.solana.address) : USDC_MINT, owner, true)
   const connection = new Connection(PUBLIC_SOLANA_RPC_URL, {
     commitment: 'confirmed', disableRetryOnRateLimit: true, fetch: fetcher,
   })
@@ -40,8 +41,9 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'accountAddress required' })
   }
 
+  if(req.body.asset !== undefined && !['USDC','USDT'].includes(req.body.asset)) return res.status(400).json({ok:false,error:'Unsupported Solana balance asset.'})
   try {
-    const result = await readSolanaUsdcBalance(accountAddress)
+    const result = await readSolanaUsdcBalance(accountAddress, solanaReadFetch, req.body.asset || 'USDC')
     return res.json({ ok: true, balance: result.balance.toString(), ata: result.ata })
   } catch (error) {
     const invalidAddress = (() => {
