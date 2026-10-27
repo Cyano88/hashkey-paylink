@@ -1,10 +1,11 @@
+import CreateProjectCard, { type CreateProjectForm } from '../developer/CreateProjectCard'
 import ProductPicker from '../developer/ProductPicker'
 import XLayerCheckoutSettings from '../developer/XLayerCheckoutSettings'
 import type { XLayerCheckoutConfig } from '../lib/xlayerCheckoutConfig'
 import {needsSettlementRouting, type ProductCapability} from '../lib/developerProducts'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../lib/developerNetworkPolicy'
 import PaymentActivityPanel from '../developer/PaymentActivityPanel'
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CliGuide, OverviewPanel, ProductsPanel, portalSections, type PortalSection } from '../developer/PortalPanels'
 import { usePrivy } from '@privy-io/react-auth'
@@ -16,7 +17,6 @@ import { cn, copyToClipboard } from '../lib/utils'
 type Network = 'base' | 'arbitrum' | 'arc'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
-type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: CheckoutMode | ''; capabilities: Capability[] }
 type Project = {
   xlayerCheckout?: XLayerCheckoutConfig
   id: string
@@ -67,6 +67,7 @@ export default function DeveloperPortalPage() {
   const institutionAccessToken = useRef(getAccessToken)
   institutionAccessToken.current = getAccessToken
   const loadGeneration = useRef(0)
+  const creatingProject = useRef(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [authWaitExpired, setAuthWaitExpired] = useState(false)
   const [params, setParams] = useSearchParams()
@@ -97,7 +98,7 @@ export default function DeveloperPortalPage() {
   const [newWebhookSecret, setNewWebhookSecret] = useState<{ value: string; projectId: string } | null>(null)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [keyNames, setKeyNames] = useState({ test: 'Sandbox backend', live: 'Production backend' })
-  const [createForm, setCreateForm] = useState<CreateProjectForm>({ name: '', website: '', useCase: '', checkoutMode: '', capabilities: ['hosted_checkout'] })
+  const [createForm, setCreateForm] = useState<CreateProjectForm>({ name: '', website: '', useCase: '', checkoutMode: 'human', capabilities: ['hosted_checkout'] })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
   const active = projects.find(project => project.id === activeId) ?? projects[0]
@@ -167,20 +168,22 @@ export default function DeveloperPortalPage() {
   }, [authenticated, draft?.settlementMode, user?.id])
 
   async function createProject() {
+    if (creatingProject.current) return
+    creatingProject.current = true
     const generation = loadGeneration.current
     setBusy(true); setError('')
     try {
-      const data = await api('POST', { action: 'create', ...createForm })
+      const data = await api('POST', { action: 'create', ...createForm, checkoutMode: 'human' })
       if (generation !== loadGeneration.current) return
       if (!data.project) throw new Error('Project creation returned no project.')
       setProjects(current => [...current, data.project!])
       setActiveId(data.project.id)
       setParams(current => { const next = new URLSearchParams(current); next.set('project', data.project!.id); next.set('section','overview'); return next })
       setCreatingNew(false)
-      setCreateForm({ name: '', website: '', useCase: '', checkoutMode: '', capabilities: ['hosted_checkout'] })
+      setCreateForm({ name: '', website: '', useCase: '', checkoutMode: 'human', capabilities: ['hosted_checkout'] })
       setNotice('Project created. Complete your settings to continue.')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Project could not be created.') }
-    finally { setBusy(false) }
+    } catch (reason) { if (generation === loadGeneration.current) setError(reason instanceof Error ? reason.message : 'Project could not be created.') }
+    finally { creatingProject.current = false; setBusy(false) }
   }
 
   async function saveProject(value = draft) {
@@ -286,11 +289,11 @@ export default function DeveloperPortalPage() {
       <PortalTop onLogout={logout} />
       <Link to="/cli/authorize" className="mt-3 inline-block text-xs text-blue-600">Manage CLI access</Link>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">{sandbox ? 'Test payments are unavailable' : 'Live project configuration'}</p>
+        <p className="text-sm text-gray-500">{sandbox ? 'Test payments are unavailable' : 'Developer dashboard'}</p>
       </div>
       <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
         <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
-          <PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: `${project.name} · ${project.checkoutMode === 'agentic' ? 'Agentic' : 'Human'}` }))} onChange={selectProject} disabled={busy} ariaLabel="Developer project" buttonClassName="shadow-none" />
+          <PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: `${project.name} · ${project.checkoutMode === 'agentic' ? 'Legacy agent' : 'Checkout'}` }))} onChange={selectProject} disabled={busy} ariaLabel="Developer project" buttonClassName="shadow-none" />
           {active && <ProjectIdCard value={active.id} />}
           <button type="button" disabled={busy || sandbox} onClick={() => { setCreatingNew(true); setError(''); setNotice('') }} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.05]"><Plus className="h-3.5 w-3.5" /> New project</button>
           <nav aria-label="Project navigation" className="mt-3 grid grid-cols-2 gap-1 lg:grid-cols-1">
@@ -320,59 +323,6 @@ export default function DeveloperPortalPage() {
   )
 }
 
-function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, embedded = false, emptyAccount = false }: {
-  form: CreateProjectForm
-  setForm: Dispatch<SetStateAction<CreateProjectForm>>
-  busy: boolean
-  error: string
-  onCreate: () => Promise<void>
-  onCancel?: () => void
-  embedded?: boolean
-  emptyAccount?: boolean
-}) {
-  const content = <>
-    {onCancel && <button type="button" disabled={busy} onClick={onCancel} className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 transition hover:text-gray-950 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to projects</button>}
-    <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">New project</p>
-    <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Create your project.</h1>
-    <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Choose who will pay, then select the products you need. Human and agent projects use separate keys.</p>
-    {emptyAccount && <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-5 text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">No projects are linked to this sign-in. If you expected an existing project, sign out and use the email that created it.</p>}
-    <CheckoutModePicker value={form.checkoutMode} onChange={checkoutMode => setForm(current => ({
-      ...current,
-      checkoutMode,
-      capabilities: checkoutMode === 'agentic' ? current.capabilities.filter(capability => capability !== 'polymarket_funding') : current.capabilities,
-    }))} />
-    <div className="mt-6 space-y-4">
-      <Field label="Platform name"><input className={fieldClass()} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder={form.checkoutMode === 'agentic' ? 'Your platform agent' : 'Your platform'} /></Field>
-      <Field label="Website"><input className={fieldClass()} value={form.website} onChange={event => setForm(current => ({ ...current, website: event.target.value }))} placeholder="https://yourplatform.com" /></Field>
-      <Field label="What will customers pay for?"><textarea className={cn(fieldClass(), 'h-28 resize-none py-3 leading-5')} value={form.useCase} onChange={event => setForm(current => ({ ...current, useCase: event.target.value }))} placeholder="Describe the product and checkout flow." /></Field>
-      {form.checkoutMode && <CapabilityPicker checkoutMode={form.checkoutMode} value={form.capabilities} onChange={capabilities => setForm(current => ({ ...current, capabilities }))} />}
-    </div>
-    {error && <Message tone="error">{error}</Message>}
-    <div className={cn('mt-6 grid gap-2', onCancel && 'sm:grid-cols-[auto_1fr]')}>
-      {onCancel && <button type="button" disabled={busy} onClick={onCancel} className="h-12 rounded-full border border-gray-200 px-5 text-sm font-semibold text-gray-600 dark:border-white/10 dark:text-gray-300">Cancel</button>}
-      <button type="button" disabled={busy || !form.checkoutMode} onClick={() => void onCreate()} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-40 dark:bg-white dark:text-gray-950">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create project
-      </button>
-    </div>
-  </>
-  return embedded ? <div>{content}</div> : <section className="mt-8 rounded-[1.75rem] border border-gray-200 bg-white p-6 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-8">{content}</section>
-}
-
-function CheckoutModePicker({ value, onChange }: { value: CheckoutMode | ''; onChange: (value: CheckoutMode) => void }) {
-  const options: Array<{ key: CheckoutMode; icon: typeof UserRound; title: string; copy: string }> = [
-    { key: 'human', icon: UserRound, title: 'Human checkout', copy: 'Hosted payer UI and funding flows for people. Supports human checkout products only.' },
-    { key: 'agentic', icon: Bot, title: 'Agentic x402', copy: 'Fixed-price service payments for compatible agent wallets. No human payer fallback.' },
-  ]
-  return <div className="mt-6 grid gap-3 sm:grid-cols-2">{options.map(option => {
-    const active = value === option.key
-    const Icon = option.icon
-    return <button key={option.key} type="button" onClick={() => onChange(option.key)} className={cn('rounded-2xl border p-4 text-left transition', active ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/10 dark:bg-blue-400/10' : 'border-gray-200 hover:border-blue-300 dark:border-white/10')}>
-      <span className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white"><Icon className="h-4 w-4 text-blue-600 dark:text-blue-300" />{option.title}</span>
-      <span className="mt-2 block text-sm leading-5 text-gray-500 dark:text-gray-400">{option.copy}</span>
-    </button>
-  })}</div>
-}
-
 function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: CheckoutMode; value: Capability[]; onChange: (value: Capability[]) => void }) {
   return <ProductPicker mode={checkoutMode} value={value} onChange={onChange}/>
 }
@@ -398,18 +348,18 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     if (!networks.length) return
     setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] })
   }
-  return <div>
+  return <fieldset disabled={busy} className="min-w-0">
     {draft.checkoutMode === 'agentic' && draft.networks.some(network => !isAgentCheckoutNetwork(network)) && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Agent checkout now supports Base and Arc only. Remove unsupported routes, then save your settings. <button type="button" className="ml-2 underline" onClick={() => { const networks = draft.networks.filter(isAgentCheckoutNetwork); if (!networks.length) networks.push('base'); setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork as 'base' | 'arc') ? draft.defaultNetwork : networks[0] }) }}>Remove unsupported networks</button></div>}
     {unsupportedNetworks && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Some saved networks do not support the selected products. <button type="button" className="ml-2 underline" onClick={() => updateProducts(draft.capabilities)}>Use supported networks</button></div>}
     <PanelHeader eyebrow="Project" title="Settings" copy="Configure the products, receiving accounts and return URLs for this project." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Configured' : 'Setup required'} />
     <div className="mt-7 grid gap-4 sm:grid-cols-2">
-      <Field label="Platform name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
+      <Field label="Project name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
       <Field label="Website"><input className={fieldClass()} value={draft.website} onChange={event => setDraft({ ...draft, website: event.target.value })} /></Field>
     </div>
     <Field label="What customers pay for" className="mt-4"><textarea className={cn(fieldClass(), 'h-24 resize-none py-3')} value={draft.useCase} onChange={event => setDraft({ ...draft, useCase: event.target.value })} /></Field>
     <div className="mt-6 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
-      <p className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white">{draft.checkoutMode === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{draft.checkoutMode === 'agentic' ? 'Agentic x402 project' : 'Human checkout project'}</p>
-      <p className="mt-2 text-sm leading-5 text-gray-500 dark:text-gray-400">This payment path is locked to the project and every API key it issues. Create a separate project to use the other path.</p>
+      <p className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white">{draft.checkoutMode === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{draft.checkoutMode === 'agentic' ? 'Agentic x402 project' : 'Checkout project'}</p>
+      <p className="mt-2 text-sm leading-5 text-gray-500 dark:text-gray-400">API keys belong to this project. Keep secret keys on your server.</p>
     </div>
     <CapabilityPicker checkoutMode={draft.checkoutMode} value={draft.capabilities} onChange={updateProducts} />
 
@@ -479,7 +429,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       {draft.bankVerifiedAt && <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300"><ShieldCheck className="h-4 w-4" /> Payout details checked</p>}
     </div>}
     <button type="button" disabled={busy} onClick={onSave} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Save changes</button>
-  </div>
+  </fieldset>
 }
 
 function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onRevoke }: { project: Project; keyNames: Record<'test' | 'live', string>; setKeyNames: (value: Record<'test' | 'live', string>) => void; newKey: { value: string; environment: 'test' | 'live' } | null; busy: boolean; onCreate: (environment: 'test' | 'live') => void; onRevoke: (id: string) => void }) {

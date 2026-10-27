@@ -100,6 +100,20 @@ const immutableMode = await request(handler, 'PUT', {
 })
 assert.equal(immutableMode.statusCode, 409)
 
+// New onboarding is checkout-only; legacy products remain readable/configurable.
+for (const capability of ['arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer']) {
+  const denied = await request(handler, 'POST', { action: 'create', name: 'Deferred product', website: 'https://example.com', checkoutMode: 'human', capabilities: [capability], useCase: 'Customers pay for a service offered through our platform.' })
+  assert.equal(denied.statusCode, 409)
+  const updateDenied = await request(handler, 'PUT', { action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade', useCase: 'Customers pay for a service offered through our platform.', capabilities: ['hosted_checkout', capability] })
+  assert.equal(updateDenied.statusCode, 409)
+}
+for (const capabilities of [null, 'hosted_checkout', {}, []]) {
+  const reply = await request(handler, 'POST', { action: 'create', name: 'Invalid options', website: 'https://example.com', checkoutMode: 'human', capabilities, useCase: 'Customers pay for a service offered through our platform.' })
+  assert.equal(reply.statusCode, 400)
+}
+// Seed a pre-existing Agreement permission to verify backward compatibility below.
+store.projects[created.body.project.id].capabilities.push('arc_agreements')
+
 const invalidBrand = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   brandImageUrl: 'https://tracker.example/polydesk.svg',
@@ -162,13 +176,17 @@ const invalidAgenticProduct = await request(handler, 'POST', {
   checkoutMode: 'agentic', capabilities: ['hosted_checkout', 'polymarket_funding'],
   useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
 })
-assert.equal(invalidAgenticProduct.statusCode, 400)
+assert.equal(invalidAgenticProduct.statusCode, 409)
 const agenticProject = await request(handler, 'POST', {
   action: 'create', name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
-  checkoutMode: 'agentic', capabilities: ['hosted_checkout', 'arc_agreements'],
+  checkoutMode: 'human', capabilities: ['hosted_checkout'],
   useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
 })
 assert.equal(agenticProject.statusCode, 201)
+// Existing agent projects remain supported; new agent project creation is closed.
+store.projects[agenticProject.body.project.id].checkoutMode = 'agentic'
+store.projects[agenticProject.body.project.id].capabilities = ['hosted_checkout', 'arc_agreements']
+agenticProject.body.project.checkoutMode = 'agentic'
 assert.equal(agenticProject.body.project.checkoutMode, 'agentic')
 const agenticNaira = await request(handler, 'PUT', {
   action: 'configure', projectId: agenticProject.body.project.id, checkoutMode: 'agentic',
@@ -362,6 +380,7 @@ console.log('Agreement-only project routing rejects Base/Arbitrum and accepts Ar
 
 // Wallet/stock-only products do not inherit Arc settlement requirements.
 for (const capabilities of [['swap_arc'], ['swap_xlayer'], ['xstocks_agreements'], ['swap_arc','swap_xlayer']]) {
+ store.projects[created.body.project.id].capabilities = [...capabilities]
  const reply=await request(handler,'PUT',{...agreementOnlyConfig,capabilities,networks:[],defaultNetwork:'arc',recipients:{}})
  assert.equal(reply.statusCode,200,JSON.stringify(reply.body))
  assert.deepEqual(reply.body.project.networks,[])

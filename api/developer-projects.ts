@@ -4,7 +4,7 @@ import {requirePocketBasicKyc} from './pocket/kyc-level.js'
 import { authorizeOperations } from './operations-policy.js'
 import { normalizeXLayerCheckoutConfig, type XLayerCheckoutConfig } from '../src/lib/xlayerCheckoutConfig.js'
 import { verifyOperationsSection } from './operations-access.js'
-import { effectiveProductCapabilities, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
+import { effectiveProductCapabilities, isOpenCheckoutProduct, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
 import { developerEnvironment } from './developer-environment.js'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../src/lib/developerNetworkPolicy.js'
 import { listDeveloperActivity } from './developer-activity-store.js'
@@ -462,7 +462,8 @@ function projectCheckoutMode(project: Pick<DeveloperProject, 'checkoutMode'>): D
 }
 
 function requestedCapabilities(value: unknown, checkoutMode: DeveloperCheckoutMode): DeveloperCapability[] {
-  if (!Array.isArray(value)) return ['hosted_checkout']
+  if (value === undefined) return ['hosted_checkout']
+  if (!Array.isArray(value)) throw Object.assign(new Error('Choose at least one payment option.'), { status: 400 })
   const allowed = new Set<DeveloperCapability>(
     checkoutMode === 'agentic'
       ? ['hosted_checkout', 'arc_agreements']
@@ -627,10 +628,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (name.length < 2) return res.status(400).json({ ok: false, error: 'Enter your platform name.' })
         if (!website) return res.status(400).json({ ok: false, error: 'Enter a valid HTTPS website.' })
         if (useCase.length < 20) return res.status(400).json({ ok: false, error: 'Briefly explain what customers will pay for.' })
-        if (!checkoutMode) return res.status(400).json({ ok: false, error: 'Choose human checkout or agentic x402 for this project.' })
-        if (checkoutMode === 'agentic' && Array.isArray(req.body?.capabilities) && req.body.capabilities.some((capability: unknown) => clean(capability, 40).toLowerCase() === 'polymarket_funding')) {
-          return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
-        }
+        if (!checkoutMode) return res.status(400).json({ ok: false, error: 'Choose a valid checkout mode.' })
+        if (checkoutMode !== 'human') return res.status(409).json({ ok: false, error: 'Agent payments are coming soon. Create a checkout project instead.' })
+        if (Array.isArray(req.body?.capabilities) && req.body.capabilities.some((value: unknown) => !isOpenCheckoutProduct(clean(value, 40).toLowerCase()))) return res.status(409).json({ ok: false, error: 'Choose Accept payments or Fund Polymarket accounts. Other products are not open for new integrations.' })
         const capabilities = requestedCapabilities(req.body?.capabilities, checkoutMode)
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const now = dependencies.now().toISOString()
@@ -790,6 +790,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const capabilities: DeveloperCapability[] = req.body?.capabilities === undefined
           ? effectiveProductCapabilities(currentProject)
           : requestedCapabilities(req.body.capabilities, currentCheckoutMode)
+        const existingCapabilities = effectiveProductCapabilities(currentProject)
+        if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !existingCapabilities.includes(capability))) return res.status(409).json({ ok: false, error: 'This product is not open for new integrations.' })
         const routingRequired = needsSettlementRouting(capabilities)
         let xlayerCheckout: XLayerCheckoutConfig | undefined
         try { xlayerCheckout = normalizeXLayerCheckoutConfig(req.body?.xlayerCheckout === undefined ? currentProject.xlayerCheckout : req.body.xlayerCheckout) }
@@ -860,6 +862,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const store = await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
+          if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
           const next: DeveloperProject = {
             ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',

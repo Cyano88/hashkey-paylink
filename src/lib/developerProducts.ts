@@ -33,3 +33,14 @@ export function effectiveProductCapabilities(project: {
   }
   return [...new Set(capabilities)]
 }
+
+// Public onboarding catalog. Legacy capability definitions above remain for existing integrations.
+export const CHECKOUT_PRODUCTS = [{
+  id: 'checkout', title: 'What would you like to do?', description: 'Choose one or both.', options: [
+    { capability: 'hosted_checkout', title: 'Accept payments', detail: 'Let customers pay on a checkout page hosted by Hash PayLink.' },
+    { capability: 'polymarket_funding', title: 'Fund Polymarket accounts', detail: 'Let customers add USDC to their Polymarket account using Base or Arbitrum.' },
+  ],
+}] as const
+export function isOpenCheckoutProduct(capability: string) {
+  return capability === 'hosted_checkout' || capability === 'polymarket_funding'
+}
