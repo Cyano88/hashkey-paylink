@@ -1,3 +1,4 @@
+import {emergencyPermissions} from './operations-policy.js'
 import {loadOperationsTeam} from './operations-team-store.js'
 import {operationsRequestPolicy} from './operations-policy.js'
 import type { Request, Response } from 'express'
@@ -43,7 +44,8 @@ export function operationsSession(identity: OperationsIdentity, projects: Projec
     const allowed=(section:OperationsSection,action:string)=>{try{authorizeOperations(identity,{query:{workspace:w.id},method:'POST',body:{action}},section,undefined,env);return true}catch{return false}}
     return [{ ...w, sections, integrations, permissions:{manageProjects:allowed('projects','admin-activate'),reconcile:allowed('transactions','reconcile')}, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===w.id).flatMap(g=>g.roles??[]))], missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
   })
-  if (!workspaces.length) throw Object.assign(Error('This account has no operations access.'), { status: 403 })
+  const emergency = emergencyPermissions(identity, env)
+  if (!workspaces.length && !emergency.pause && !emergency.resume) throw Object.assign(Error('This account has no operations access.'), { status: 403 })
   return { ok: true, founder: isOperationsFounder(identity, policy), email: identity.email, workspaces,
     arcActivationEnabled: env.ARC_AGREEMENTS_ENABLED === 'true' }
 }
@@ -56,6 +58,8 @@ export default async function operationsSessionHandler(req: Request, res: Respon
     const env = operationsRequestPolicy(req)
     const policy = operationsPolicy(env)
     if (!isOperationsFounder(identity, policy) && !policy.grants.some(g => g.email.toLowerCase() === identity.email.toLowerCase())) {
+      const emergency = emergencyPermissions(identity, env)
+      if (emergency.pause || emergency.resume) return res.json(operationsSession(identity, [], env))
       throw Object.assign(Error('This account has no operations access.'), { status: 403 })
     }
     const store = await readDurableJson<{ projects: Record<string, Project> }>((process.env.DEVELOPER_PROJECT_STORE_KEY || 'hashpaylink:developer-projects:v1').trim())

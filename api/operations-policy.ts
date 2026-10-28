@@ -98,3 +98,9 @@ export function authorizeOperations(identity: OperationsIdentity, req: Pick<Requ
   }
   return { workspaceId, projectIds }
 }
+
+export function emergencyPermissions(identity:OperationsIdentity,env:NodeJS.ProcessEnv){
+ const owner=isOperationsFounder(identity,operationsPolicy(env))
+ const listed=(key:string)=>(env[key]??'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean).includes(identity.email.toLowerCase())
+ return {pause:owner||listed('OPERATIONS_PAUSE_RESPONDER_EMAILS'),resume:owner||listed('OPERATIONS_RESUME_APPROVER_EMAILS')}
+}

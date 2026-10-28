@@ -1,12 +1,8 @@
 import type {Request,Response} from 'express'
 import {verifyOperationsIdentity} from './operations-access.js'
-import {operationsPolicy,operationsRequestPolicy,isOperationsFounder,type OperationsIdentity} from './operations-policy.js'
+import {operationsRequestPolicy,emergencyPermissions} from './operations-policy.js'
 import {readPauseState,savePauseState} from './emergency-pause.js'
-export function emergencyPermissions(identity:OperationsIdentity,env:NodeJS.ProcessEnv){
- const owner=isOperationsFounder(identity,operationsPolicy(env))
- const listed=(key:string)=>(env[key]??'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean).includes(identity.email.toLowerCase())
- return {pause:owner||listed('OPERATIONS_PAUSE_RESPONDER_EMAILS'),resume:owner||listed('OPERATIONS_RESUME_APPROVER_EMAILS')}
-}
+export {emergencyPermissions} from './operations-policy.js'
 export function createEmergencyPauseHandler(d={verify:verifyOperationsIdentity,env:operationsRequestPolicy,read:readPauseState,save:savePauseState}){
  return async(req:Request,res:Response)=>{
   res.setHeader('Cache-Control','no-store')
