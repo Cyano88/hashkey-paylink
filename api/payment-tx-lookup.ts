@@ -1,9 +1,12 @@
+import {POCKET_USDT_ASSETS,supportsPocketUsdt} from '../src/pocket/lib/pocketUsdtAssets.js'
 import type { Request, Response } from 'express'
 import { isAddress, pad, type Address } from 'viem'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
 const TOKENS = {
+  ethereum: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  polygon: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
   base: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   arc: '0x3600000000000000000000000000000000000000',
   arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
@@ -28,7 +31,7 @@ type TransactionReceipt = {
 }
 
 function readChain(value: unknown): ChainKey {
-  return value === 'arc' || value === 'arbitrum' ? value : 'base'
+  return typeof value === 'string' && Object.hasOwn(TOKENS,value) ? value as ChainKey : 'base'
 }
 
 function readPositiveBigInt(value: unknown, fallback: bigint) {
@@ -53,6 +56,8 @@ function readOptionalBlock(value: unknown) {
 }
 
 function rpcFor(chain: ChainKey) {
+  if (chain === 'ethereum') return process.env.PRIVATE_RPC_URL_ETHEREUM || 'https://ethereum-rpc.publicnode.com'
+  if (chain === 'polygon') return process.env.PRIVATE_RPC_URL_POLYGON || 'https://polygon-bor-rpc.publicnode.com'
   if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC_MAINNET
   if (chain === 'arbitrum') return process.env.PRIVATE_RPC_URL_ARB
   return process.env.PRIVATE_RPC_URL
@@ -117,7 +122,11 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>
+  if(body.chain !== undefined && (typeof body.chain !== 'string' || !Object.hasOwn(TOKENS,body.chain))) return res.status(400).json({ok:false,error:'Unsupported payment network.'})
   const chain = readChain(body.chain)
+  const asset = body.asset ?? 'USDC'
+  if(asset !== 'USDC' && asset !== 'USDT' || asset === 'USDT' && !supportsPocketUsdt(chain)) return res.status(400).json({ok:false,error:'Unsupported payment asset on this network.'})
+  const tokenAddress = asset === 'USDT' && supportsPocketUsdt(chain) ? POCKET_USDT_ASSETS[chain].address : TOKENS[chain]
   const payer = typeof body.payer === 'string' ? body.payer.trim() : ''
   const recipient = typeof body.recipient === 'string' ? body.recipient.trim() : ''
   const amountUnits = readPositiveBigInt(body.amountUnits, 0n)
@@ -157,7 +166,7 @@ export default async function handler(req: Request, res: Response) {
     }
     const logs = await getLogsChunked(
       rpcUrl,
-      TOKENS[chain],
+      tokenAddress,
       payer,
       recipient,
       fromBlock,
@@ -165,7 +174,7 @@ export default async function handler(req: Request, res: Response) {
     )
     const match = [...logs].reverse().find(log => {
       const value = log.data ? BigInt(log.data) : 0n
-      return !!log.transactionHash && value >= minUnits
+      return !!log.transactionHash && (strict ? value === amountUnits : value >= minUnits)
     })
 
     if (!match?.transactionHash) {

@@ -66,7 +66,7 @@ export default function HostedCheckoutEntry() {
   if(stock?.checkout)return stock.checkout.status==='paid'
     ? <BrowserPaymentResult fullScreen state="successful" amount={stock.checkout.amount+' '+stock.checkout.asset} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
     : <Suspense fallback={<p role="status">Opening payment...</p>}><StockCheckout merchantOverride={checkoutId}/></Suspense>
-  if (checkout?.checkout && !error) return <div className="py-6"><CheckoutChoice id={checkoutId} attempt={attemptId} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkout.checkout.settlementCurrency ? `${checkout.checkout.settlementCurrency} ${checkout.checkout.settlementAmount}` : `${checkout.checkout.amount} USDC`} onBrowser={()=>navigate(checkout.paymentUrl!,{replace:true})}/></div>
+  if (checkout?.checkout && !error) return <div className="py-6"><CheckoutChoice id={checkoutId} attempt={attemptId} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkout.checkout.settlementCurrency ? `${checkout.checkout.settlementCurrency} ${checkout.checkout.settlementAmount}` : `${checkout.checkout.amount} ${checkout.checkout.asset || 'USDC'}`} onBrowser={()=>navigate(checkout.paymentUrl!,{replace:true})}/></div>
   return (
     <div className="mx-auto w-full max-w-sm">
       <HashPayLinkCheckoutBrand />

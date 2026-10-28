@@ -1,10 +1,11 @@
-import { BASE_STABLECOINS, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
+import { type BaseStablecoin } from '../src/lib/baseStablecoins.js'
+import { POCKET_USDT_ASSETS, supportsPocketUsdt } from '../src/pocket/lib/pocketUsdtAssets.js'
 import { formatUnits, isAddress, pad, parseUnits, type Address } from 'viem'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const ARC_USDC_EMITTER = '0xfffffffffffffffffffffffffffffffffffffffe'
 const usdcEventAddress = (chain: EvmUsdcChain, token: BaseStablecoin = 'USDC') => {
-  if (token === 'USDT') { if (chain !== 'base') throw Error('USDT verification is only enabled on Base.'); return BASE_STABLECOINS.USDT.address }
+  if (token === 'USDT') { if (!supportsPocketUsdt(chain)) throw Error('USDT verification is not supported on this network.'); return POCKET_USDT_ASSETS[chain].address }
   if (token !== 'USDC') throw Error('Unsupported transfer asset.')
   return chain === 'arc' ? ARC_USDC_EMITTER : USDC_TOKENS[chain]
 }

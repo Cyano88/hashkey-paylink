@@ -1,6 +1,6 @@
 // Only executable checkout routes belong here; the broader Pocket catalogue is separate.
 export const CHECKOUT_ACCEPTANCE = {
- base:['USDC'],arc:['USDC'],arbitrum:['USDC'],solana:['USDC','USDT'],ethereum:['USDC'],polygon:['USDC'],
+ base:['USDC','USDT'],arc:['USDC'],arbitrum:['USDC','USDT'],solana:['USDC','USDT'],ethereum:['USDC','USDT'],polygon:['USDC','USDT'],
 } as const
 export type CheckoutAcceptance = Partial<Record<keyof typeof CHECKOUT_ACCEPTANCE,string[]>>
 export function acceptedCheckoutAssets(network:string, configured?:CheckoutAcceptance):readonly string[] {

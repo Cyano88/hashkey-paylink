@@ -511,6 +511,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     try {
       const verifiedTransfer = chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
         chain: evmChain!,
+        token: assetSymbol,
         txHash,
         payer,
         recipient: paymentOption.recipient,

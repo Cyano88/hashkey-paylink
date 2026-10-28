@@ -58,7 +58,7 @@ await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT'}), /tran
 nextReceipt.logs[0].address = '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2'
 assert.equal((await verifyEvmUsdcTransfer({...exactInput, token:'USDT'})).amountUnits, amountUnits.toString())
 await assert.rejects(verifyEvmUsdcTransfer(exactInput), /transfer/i)
-await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT', chain:'arbitrum'}), /Base/i)
+await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT', chain:'arc'}), /not supported/i)
 await assert.rejects(verifyEvmUsdcTransfer({...exactInput, token:'USDT', payer:recipient}), /transfer/i)
 nextReceipt = receipt('0x1')
 assert.equal((await verifyEvmUsdcTransfer(exactInput)).amountUnits, amountUnits.toString())

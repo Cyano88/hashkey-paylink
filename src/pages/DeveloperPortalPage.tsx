@@ -93,6 +93,7 @@ export default function DeveloperPortalPage() {
   institutionAccessToken.current = getAccessToken
   const loadGeneration = useRef(0)
   const creatingProject = useRef(false)
+  const [receivingWallets, setReceivingWallets] = useState<Record<string,string>>({})
   const [projects, setProjects] = useState<Project[]>([])
   const [authWaitExpired, setAuthWaitExpired] = useState(false)
   const [params, setParams] = useSearchParams()
@@ -194,6 +195,18 @@ export default function DeveloperPortalPage() {
     void loadProjects()
     return () => { loadGeneration.current += 1 }
   }, [ready, authenticated, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled=false
+    setReceivingWallets({})
+    if(ready && authenticated) void (async()=>{
+      const token=await getAccessToken(); if(!token)return
+      const response=await fetch('/api/developer-projects?resource=receiving-wallets',{headers:{authorization:`Bearer ${token}`},cache:'no-store'})
+      const data=await response.json()
+      if(!cancelled && response.ok && data.ok)setReceivingWallets(data.wallets ?? {})
+    })().catch(()=>{})
+    return ()=>{cancelled=true}
+  },[ready,authenticated,user?.id])
 
   useEffect(() => { setDraft(active ? { ...active, recipients: { ...active.recipients }, networks: [...active.networks], allowedOrigins: [...active.allowedOrigins] } : null) }, [active?.id, active?.updatedAt])
   useEffect(() => {
@@ -361,7 +374,7 @@ export default function DeveloperPortalPage() {
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
-              {active && draft && tab === 'setup' && <><SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
+              {active && draft && tab === 'setup' && <><SetupPanel receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
               {active && tab === 'verification' && <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/> }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
@@ -379,7 +392,7 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
   return <ProductPicker mode={checkoutMode} value={value} onChange={onChange}/>
 }
 
-function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, onSave }: { draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
+function SetupPanel({ receivingWallets, draft, setDraft, institutions, institutionsLoading, busy, onSave }: { receivingWallets: Record<string,string>; draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
   const [settingsSection, setSettingsSection] = useState<'general'|'receiving'|'branding'>('general')
   const [settingsError, setSettingsError] = useState('')
   function submitSettings() {
@@ -410,7 +423,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     const selected = draft.networks.includes(network)
     const networks = selected ? draft.networks.filter(item => item !== network) : [...draft.networks, network]
     if (!networks.length) return
-    setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] })
+    setDraft({ ...draft, networks, recipients: !selected && !draft.recipients[network]?.trim() && receivingWallets[network] ? {...draft.recipients,[network]:receivingWallets[network]} : draft.recipients, defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] })
   }
   return <fieldset disabled={busy} className="min-w-0">
     {draft.checkoutMode === 'agentic' && draft.networks.some(network => !isAgentCheckoutNetwork(network)) && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Agent checkout now supports Base and Arc only. Remove unsupported routes, then save your settings. <button type="button" className="ml-2 underline" onClick={() => { const networks = draft.networks.filter(isAgentCheckoutNetwork); if (!networks.length) networks.push('base'); setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork as 'base' | 'arc') ? draft.defaultNetwork : networks[0] }) }}>Remove unsupported networks</button></div>}
@@ -483,6 +496,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       {draft.settlementMode === 'usdc' && NETWORKS.filter(option=>draft.networks.includes(option.key)&&supportedNetworks.includes(option.key)).map(({key:network}) => <section key={network} className="rounded-2xl border border-gray-200 p-4 dark:border-white/10"><h3 className="mb-3 text-sm font-semibold">{network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)}</h3><p className="mb-2 text-xs text-gray-500">Accepted stablecoins</p>
         <div className="mb-3 flex flex-wrap gap-2">{CHECKOUT_ACCEPTANCE[network].map(asset=>{const selected=acceptedCheckoutAssets(network,draft.acceptedAssets),checked=selected.includes(asset);return <label key={asset} className="flex min-h-10 items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm dark:border-white/10"><input type="checkbox" aria-label={'Accept '+asset+' on '+network} checked={checked} disabled={checked&&selected.length===1} onChange={()=>setDraft({...draft,acceptedAssets:{...draft.acceptedAssets,[network]:checked?selected.filter(value=>value!==asset):[...selected,asset]}})}/>{asset}</label>})}</div>
         <Field label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}><input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder={network === 'solana' ? 'Solana wallet address' : '0x...'} />
+      {receivingWallets[network] && !draft.recipients[network]?.trim() && <button type="button" className="mt-2 text-xs font-semibold text-blue-600" onClick={()=>setDraft({...draft,recipients:{...draft.recipients,[network]:receivingWallets[network]}})}>Use Pocket wallet</button>}
       </Field></section>)}
       {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{draft.capabilities.includes('arc_agreements') ? 'The Arc address is the fixed project recipient for Agreements. Paying different workers or sellers requires the backend verified-recipient integration; do not substitute a platform wallet for their payout wallets. This is not an escrow deposit address.' : 'Choose accepted stablecoins and add your receiving wallet for each network.'}</p>}
     </div>
@@ -490,9 +504,9 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
 
     </>}
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
-    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout,...(!xlayerCheckout&&draft.checkoutDefaultNetwork==='xlayer'?{checkoutDefaultNetwork:undefined}:{}) })} />}
+    {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' && <XLayerCheckoutSettings defaultRecipient={receivingWallets.xlayer} value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout,...(!xlayerCheckout&&draft.checkoutDefaultNetwork==='xlayer'?{checkoutDefaultNetwork:undefined}:{}) })} />}
 
-{draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'&&<BscCheckoutSettings value={draft.bscCheckout} onChange={bscCheckout=>setDraft({...draft,bscCheckout,...(!bscCheckout&&draft.checkoutDefaultNetwork==='bsc'?{checkoutDefaultNetwork:undefined}:{})})}/>}
+{draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'&&<BscCheckoutSettings defaultRecipient={receivingWallets.bsc} value={draft.bscCheckout} onChange={bscCheckout=>setDraft({...draft,bscCheckout,...(!bscCheckout&&draft.checkoutDefaultNetwork==='bsc'?{checkoutDefaultNetwork:undefined}:{})})}/>}
 {routingRequired && draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.checkoutDefaultNetwork==='bsc'&&draft.bscCheckout?'bsc':draft.checkoutDefaultNetwork === 'xlayer' && draft.xlayerCheckout ? 'xlayer' : draft.defaultNetwork} options={[...draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) })),...(draft.xlayerCheckout?[{value:'xlayer',label:'X Layer'}]:[]),...(draft.bscCheckout?[{value:'bsc',label:'BNB Chain'}]:[])].sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.value as typeof CHECKOUT_NETWORK_ORDER[number])-CHECKOUT_NETWORK_ORDER.indexOf(b.value as typeof CHECKOUT_NETWORK_ORDER[number]))} onChange={value => setDraft({ ...draft, checkoutDefaultNetwork:value==='xlayer'?'xlayer':value==='bsc'?'bsc':undefined,...(!['xlayer','bsc'].includes(value)?{defaultNetwork:value as Network}:{}) })} ariaLabel="Default payment network" /></Field>}
 
     {localSettlement && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">

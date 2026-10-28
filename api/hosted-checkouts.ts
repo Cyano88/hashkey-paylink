@@ -343,7 +343,7 @@ function integrityValid(record: CheckoutRecord, secret: string) {
   if ((record.network === 'arc' || record.paymentOptions?.some(option => option.network === 'arc')) && record.arcMainnetChainId !== 5042) return false
   if (!validCheckoutRouting(record)) return false
   if(record.asset !== undefined && !['USDC','USDT'].includes(record.asset)) return false
-  if(record.asset === 'USDT' && (record.network !== 'solana' || record.paymentOptions?.some(option=>option.network!=='solana') || record.settlement || record.providerFunding || record.checkoutMode==='agentic')) return false
+  if(record.asset === 'USDT' && (!acceptedCheckoutAssets(record.network).includes('USDT') || record.paymentOptions?.some(option=>!acceptedCheckoutAssets(option.network).includes('USDT')) || record.settlement || record.providerFunding || record.checkoutMode==='agentic')) return false
   if (!/^[a-f0-9]{64}$/.test(record.integrity)) return false
   const { integrity, ...unsigned } = record
   const expected = sign(unsigned, secret)
@@ -1064,13 +1064,14 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       ? { options: policy.paymentOptions, error: '' }
       : normalizeRequestedPaymentOptions(req.body?.paymentOptions)
     if (normalizedOptions.error) return res.status(400).json({ ok: false, error: normalizedOptions.error })
-    if(asset === 'USDT' && (checkoutMode !== 'human' || isNairaProject || providerRouting)) return res.status(400).json({ok:false,error:'USDT checkout is only available for direct Solana stablecoin payments.'})
+    if(asset === 'USDT' && (checkoutMode !== 'human' || isNairaProject || providerRouting)) return res.status(400).json({ok:false,error:'USDT is available for human stablecoin checkout. Local settlement and Polymarket funding use USDC.'})
     const routingOptions = normalizedOptions.options?.filter(option=>acceptedCheckoutAssets(option.network,'projectManaged' in policy ? policy.acceptedAssets : undefined).includes(asset))
     if(routingOptions && !routingOptions.length) return res.status(400).json({ok:false,error:'This stablecoin is not accepted on an enabled settlement network.'})
     if (checkoutMode === 'agentic' && routingOptions && routingOptions.length > 1 && !requestedNetwork) {
       return res.status(400).json({ ok: false, error: 'Agentic checkout must select exactly one payment network.' })
     }
-    const defaultNetwork = (asset === 'USDT' ? 'solana' : '') || (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || providerRouting?.defaultNetwork || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
+    if(requestedNetwork && clean(req.body?.defaultNetwork,20) && requestedNetwork !== clean(req.body?.defaultNetwork,20).toLowerCase()) return res.status(400).json({ok:false,error:'network must match defaultNetwork.'})
+    const defaultNetwork = requestedNetwork || clean(req.body?.defaultNetwork, 20).toLowerCase() || providerRouting?.defaultNetwork || ('projectManaged' in policy ? policy.defaultNetwork : '') || routingOptions?.[0]?.network || ''
     const defaultOption = routingOptions?.find(option => option.network === defaultNetwork) ?? ('projectManaged' in policy ? routingOptions?.[0] : undefined)
     const network = routingOptions ? defaultOption?.network ?? '' : defaultNetwork
     const legacyRecipient = isAddress(requestedRecipient) ? getAddress(requestedRecipient) : requestedRecipient
@@ -1087,7 +1088,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (checkoutMode === 'agentic' && (kind !== 'service' || flexible || isNairaProject)) return res.status(400).json({ ok: false, error: 'Agentic checkout requires a fixed USDC service payment.' })
     if (checkoutMode === 'agentic' && routingOptions && !routingOptions.some(option => option.network === network)) return res.status(400).json({ ok: false, error: 'Agentic checkout network is not enabled for this project.' })
     if (merchantName.length < 2) return res.status(400).json({ ok: false, error: 'merchantName is required.' })
-    if(asset === 'USDT' && network !== 'solana') return res.status(400).json({ok:false,error:'Enable a Solana receiving account for USDT checkout.'})
+    if(!acceptedCheckoutAssets(network,'projectManaged' in policy ? policy.acceptedAssets : undefined).includes(asset)) return res.status(400).json({ok:false,error:'This stablecoin is not accepted on the selected network.'})
     if (!NETWORKS.has(network)) return res.status(400).json({ ok: false, error: routingOptions ? 'defaultNetwork must match a payment option.' : 'Unsupported network.' })
     if (!validRecipient(network, recipient)) return res.status(400).json({ ok: false, error: 'Invalid recipient for the selected network.' })
     if (checkoutMode === 'human' && routingOptions && requestedNetwork && requestedNetwork !== network) return res.status(400).json({ ok: false, error: 'network must match defaultNetwork when paymentOptions are supplied.' })

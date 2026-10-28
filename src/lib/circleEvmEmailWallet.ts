@@ -926,16 +926,18 @@ export async function sendCircleEvmEmailPayment(params: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
+  asset?: 'USDC' | 'USDT'
   feeMode?: 'net' | 'gross'
   feeBps?: number
   feeQuoteToken: string
   payoutIntentId?: string
   privyAccessToken?: string
 }) {
+  if (params.asset === 'USDT' && !supportsPocketUsdt(params.session.chain)) throw Error('USDT is not supported on this network.')
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
     amount: params.amount,
-    asset: CHAIN_META[params.session.chain].asset,
+    asset: params.asset ?? 'USDC',
     recipient: params.recipient,
     chainLabel: CHAIN_META[params.session.chain].label,
   })
@@ -948,6 +950,7 @@ export async function sendCircleEvmEmailPayment(params: {
     transaction?: Record<string, unknown>
   }>({
     action: 'executeEvmPayment',
+    asset: params.asset ?? 'USDC',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     walletAddress: params.session.wallet.address,
@@ -960,8 +963,9 @@ export async function sendCircleEvmEmailPayment(params: {
     feeQuoteToken: params.feeQuoteToken,
     payoutIntentId: params.payoutIntentId,
   }, { privyAccessToken: params.privyAccessToken })
+  if ((challenge.approval?.asset ?? 'USDC') !== (params.asset ?? 'USDC')) throw Error('The payment approval asset does not match.')
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
-  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
+  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: params.asset ?? 'USDC', recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,

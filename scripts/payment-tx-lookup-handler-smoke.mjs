@@ -117,3 +117,20 @@ try {
   if (originalRpcUrl === undefined) delete process.env.PRIVATE_RPC_URL
   else process.env.PRIVATE_RPC_URL = originalRpcUrl
 }
+
+process.env.PRIVATE_RPC_URL='https://rpc.example'
+process.env.PRIVATE_RPC_URL_ARB='https://rpc.example'
+for(const chain of ['base','arbitrum','ethereum','polygon']) {
+ const {POCKET_USDT_ASSETS}=await import('../src/pocket/lib/pocketUsdtAssets.ts')
+ globalThis.fetch=async(_url,init)=>{
+  const rpc=JSON.parse(init.body)
+  if(rpc.method==='eth_blockNumber')return rpcResponse('0x6e')
+  if(rpc.method==='eth_getLogs'){assert.equal(rpc.params[0].address,POCKET_USDT_ASSETS[chain].address);return rpcResponse([])}
+  throw Error('Unexpected RPC')
+ }
+ assert.equal((await request({chain,asset:'USDT',payer,recipient,amountUnits:'1000000',strict:true})).body.found,false)
+}
+assert.equal((await request({chain:'arc',asset:'USDT',payer,recipient,amountUnits:'1000000'})).statusCode,400)
+assert.equal((await request({chain:'wrong',asset:'USDC',payer,recipient,amountUnits:'1000000'})).statusCode,400)
+globalThis.fetch=originalFetch
+console.log('PASS recovery lookup selects the exact USDT contract on four EVM networks and rejects unsupported routes.')

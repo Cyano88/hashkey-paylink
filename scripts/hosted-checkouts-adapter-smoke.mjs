@@ -669,3 +669,14 @@ const acceptedUsdc=await request(acceptanceHandler,'POST',{body:acceptanceBody,h
 assert.equal(acceptedUsdc.statusCode,201,JSON.stringify(acceptedUsdc.body))
 assert.deepEqual(acceptedUsdc.body.availableNetworks,['base'])
 console.log('PASS accepted asset policy restricts payment routes and chooses the matching default.')
+
+for(const network of ['base','arbitrum','ethereum','polygon']) {
+ const made=await request(handler,'POST',{headers:{...headers,'idempotency-key':'usdt-'+network+'-checkout-01'},body:{...valid,network,asset:'USDT'}})
+ assert.equal(made.statusCode,201,JSON.stringify(made.body))
+ const lookup=await request(handler,'GET',{query:{id:made.body.checkoutId}})
+ assert.equal(lookup.statusCode,200,JSON.stringify(lookup.body))
+ assert.match(lookup.body.paymentUrl,/asset=USDT/)
+ assert.equal(store.checkouts[made.body.checkoutId].network,network)
+}
+assert.equal((await request(handler,'POST',{headers:{...headers,'idempotency-key':'usdt-arc-rejected-01'},body:{...valid,network:'arc',asset:'USDT'}})).statusCode,400)
+console.log('PASS EVM USDT checkout creation and signed lookup across four networks; Arc USDT rejected.')

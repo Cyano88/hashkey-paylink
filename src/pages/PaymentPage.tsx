@@ -1,3 +1,4 @@
+import {checkoutStablecoin} from '../lib/checkoutStablecoins'
 import PocketMerchantPaymentForm from '../pocket/components/PocketMerchantPaymentForm'
 import BrowserPaymentResult from '../components/BrowserPaymentResult'
 import BrowserCheckoutCard from '../components/BrowserCheckoutCard'
@@ -981,19 +982,21 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     chainId: permitChainId,
     query: { enabled: isSupportedEvmPayChain(chain) && !!address },
   })
+  const checkoutAsset = isHostedCheckout && searchParams.get('asset') === 'USDT' ? 'USDT' : 'USDC'
+  const checkoutTokenAddress = checkoutStablecoin(chain, checkoutAsset)?.address as `0x${string}` | undefined
   const {
     data: circleWalletBalance,
     isError: circleWalletBalanceReadFailed,
     isFetching: isCircleWalletBalanceFetching,
     refetch: refetchCircleWalletBalance,
   } = useReadContract({
-    address: CHAIN_META[chain === 'solana' ? 'base' : chain].tokenAddress,
+    address: checkoutTokenAddress,
     abi: ERC20_BALANCE_OF_ABI,
     functionName: 'balanceOf',
     args: [circleSmartAccount ?? '0x0000000000000000000000000000000000000000'],
     chainId: CHAIN_META[chain === 'solana' ? 'base' : chain].chainId,
     query: {
-      enabled: !!circleSmartAccount && isSupportedEvmPayChain(chain),
+      enabled: !!circleSmartAccount && isSupportedEvmPayChain(chain) && !!checkoutTokenAddress,
       refetchInterval: 30_000,
       refetchIntervalInBackground: false,
       staleTime: 15_000,
@@ -1052,7 +1055,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isEvmChain    = chain !== 'solana'
-  const checkoutAsset = isHostedCheckout && chain === 'solana' && searchParams.get('asset') === 'USDT' ? 'USDT' : 'USDC'
+
   const meta          = checkoutAsset === 'USDT' ? {...CHAIN_META[chain],asset:'USDT'} : CHAIN_META[chain]
   const targetChainId = CHAIN_META[chain === 'solana' ? 'base' : chain].chainId
   const isCorrectNetwork = isEvmChain ? chainId === targetChainId : true
@@ -1154,7 +1157,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const circleQuoteNeeded = Boolean(circleEvmEmailSession && activeRecipient && payableAmt && !isBankSendPayment && (!isNgPosPaycrestOfframp || quotedPayoutId))
   const currentCircleFeeQuote = (() => {
     const q = circleFeeQuote?.quote
-    if (!q || !circleEvmEmailSession || q.chain !== chain || q.walletId !== circleEvmEmailSession.wallet.id || q.recipient !== activeRecipient?.toLowerCase() || q.walletAddress !== circleEvmEmailSession.wallet.address.toLowerCase() || q.mode !== 'gross' || q.feeBps !== hashPaylinkFeeBps) return null
+    if (!q || !circleEvmEmailSession || q.chain !== chain || q.walletId !== circleEvmEmailSession.wallet.id || q.recipient !== activeRecipient?.toLowerCase() || q.walletAddress !== circleEvmEmailSession.wallet.address.toLowerCase() || q.mode !== 'gross' || q.feeBps !== hashPaylinkFeeBps || (q.asset ?? 'USDC') !== checkoutAsset) return null
     try { if (q.amountUnits !== parseUnits(payableAmt || '0', 6).toString()) return null } catch { return null }
     return circleFeeQuote
   })()
@@ -1164,13 +1167,13 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const session = circleEvmEmailSession
     setCircleFeeQuoteLoading(true); setCircleFeeQuoteError(''); setCircleFeeQuote(null)
     const timer = window.setTimeout(() => {
-      void readCirclePaymentFeeQuote({ session, recipient: activeRecipient, amount: payableAmt, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId: quotedPayoutId })
+      void readCirclePaymentFeeQuote({ asset: checkoutAsset, session, recipient: activeRecipient, amount: payableAmt, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId: quotedPayoutId })
         .then(value => { if (!cancelled) setCircleFeeQuote(value) })
         .catch(error => { if (!cancelled) setCircleFeeQuoteError(readableErrorMsg(error, 'Fee quote unavailable. Try again.')) })
         .finally(() => { if (!cancelled) setCircleFeeQuoteLoading(false) })
     }, 350)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [circleQuoteNeeded, circleEvmEmailSession?.userToken, circleEvmEmailSession?.wallet.id, chain, activeRecipient, payableAmt, hashPaylinkFeeBps, quotedPayoutId, feeQuoteRefresh])
+  }, [circleQuoteNeeded, circleEvmEmailSession?.userToken, circleEvmEmailSession?.wallet.id, chain, activeRecipient, payableAmt, hashPaylinkFeeBps, quotedPayoutId, checkoutAsset, feeQuoteRefresh])
 
 
   const solanaQuoteSender = circleSolanaSession?.wallet.address || solanaWalletAddr || ''
@@ -1626,7 +1629,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const client   = EVM_CLIENTS[evmChain]
 
     let unwatchTransfer: (() => void) | undefined
-    const tokenAddress = CHAIN_META[evmChain].tokenAddress
+    const tokenAddress = checkoutTokenAddress!
 
       const isCircleEmailEvmWatch =
         payMode === 'wallet' &&
@@ -1683,6 +1686,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     showCircleEvmEmailPay,
     circleEvmEmailSession?.wallet.address,
     circleEvmEmailMerchantUnits?.toString(),
+    checkoutTokenAddress,
   ])
 
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
@@ -1961,7 +1965,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         } catch { /* receipt may not be indexed yet; fall through to transfer scan */ }
       }
       {
-        const tokenAddress = CHAIN_META[evmChain].tokenAddress
+        const tokenAddress = checkoutTokenAddress!
         const target = evmRecipient
         const expectedUnits = expectedEvmRecipientUnits()
         const scanUnits = receivedAmount != null && receivedAmount > 0n ? receivedAmount : expectedUnits
@@ -2028,6 +2032,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chain,
+          asset: checkoutAsset,
           payer: expectedPayer,
           recipient: evmRecipient,
           amountUnits: amountUnits.toString(),
@@ -3002,13 +3007,13 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         let candidate = currentCircleFeeQuote
         const payoutIntentId = preparedPaycrestOrder?.intent_id || quotedPayoutId
         if (!candidate || candidate.quote.expiresAt <= Date.now() + 15_000 || candidate.quote.walletId !== session.wallet.id || candidate.quote.walletAddress !== session.wallet.address.toLowerCase() || candidate.quote.amountUnits !== paymentUnits.toString() || candidate.quote.recipient !== paymentRecipient.toLowerCase()) {
-          const fresh = await readCirclePaymentFeeQuote({ session, recipient: paymentRecipient, amount: paymentAmount, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId })
+          const fresh = await readCirclePaymentFeeQuote({ asset: checkoutAsset, session, recipient: paymentRecipient, amount: paymentAmount, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId })
           setCircleFeeQuote(fresh); setCircleFeeQuoteError(''); resetCircleSmartWalletPending()
           setCirclePasskeyError('Review the fees, then confirm your payment.')
           return
         }
         if (!pocketScan && isHostedCheckout) {
-          const fresh = await readCirclePaymentFeeQuote({session,recipient:paymentRecipient,amount:paymentAmount,feeMode:'gross',feeBps:hashPaylinkFeeBps,payoutIntentId})
+          const fresh = await readCirclePaymentFeeQuote({asset:checkoutAsset,session,recipient:paymentRecipient,amount:paymentAmount,feeMode:'gross',feeBps:hashPaylinkFeeBps,payoutIntentId})
           setCircleFeeQuote(fresh)
           if (fresh.quote.totalUnits !== candidate.quote.totalUnits || fresh.quote.recipientUnits !== candidate.quote.recipientUnits) {
             resetCircleSmartWalletPending()
@@ -3044,6 +3049,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         if (isHostedCheckout && privyAuthenticated && (!paymentOwner || checkoutIdentityRef.current !== paymentOwner)) throw Error('Your account changed. Sign in again before paying.')
         if (pocketScan && preparedPaycrestOrder) assertPocketScanPayoutPayable(preparedPaycrestOrder)
         const txHash = await sendCircleEvmEmailPayment({
+          asset: checkoutAsset,
           session,
           recipient: paymentRecipient as `0x${string}`,
           amount: paymentAmount,
@@ -3444,7 +3450,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketPosReviewRows: [string, string][] = [
     ['Merchant', hostedMerchantName || memo || 'Merchant'], ['Network', meta.label],
     ...(isNgPosPaycrestOfframp ? [['Merchant receives', (paycrestOrder?.fiat_currency || 'NGN')+' '+(paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt)] as [string,string]] : []),
-    ...(displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits),6)+' USDC'], ['Gas', formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' USDC'], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' USDC']] as [string,string][] : []),
+    ...(displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits),6)+' '+checkoutAsset], ['Gas', formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' '+checkoutAsset], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : []),
   ]
   function resetCheckoutError() {
     setPaymentAttemptStarted(false)

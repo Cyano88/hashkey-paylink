@@ -1,3 +1,4 @@
+import {developerReceivingWallets} from './developer-receiving-wallets.js'
 import {normalizeBscCheckoutConfig,type BscCheckoutConfig} from '../src/lib/bscCheckoutConfig.js'
 import {normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
@@ -153,6 +154,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  receivingWallets?: typeof developerReceivingWallets
   removal?: typeof manageAppRemoval
   operationsEnv?: () => NodeJS.ProcessEnv
   activity?: typeof listDeveloperActivity
@@ -614,6 +616,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method === 'GET') {
         const resource = clean(req.query?.resource, 30).toLowerCase()
+        if (resource === 'receiving-wallets') return res.json({ok:true,wallets:await (dependencies.receivingWallets ?? developerReceivingWallets)(identity.userId)})
         if (resource === 'removal') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.query?.projectId,80),ownerId:identity.userId}))
         if (resource === 'profile') {
           const profiles = await dependencies.read('hashpaylink:developer-profiles:v1')
