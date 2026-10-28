@@ -61,7 +61,7 @@ function PaymentPinSlots({ value, focused, length }: { value: string; focused: b
   </div>
 }
 
-export default function PocketPaymentSecurityGate({ email, getAccessToken, onInitialStateResolved, children }: { email: string; getAccessToken(): Promise<string | null>; onInitialStateResolved?(): void; children: ReactNode }) {
+export default function PocketPaymentSecurityGate({ email, getAccessToken, onInitialStateResolved, loadingFallback, children }: { email: string; getAccessToken(): Promise<string | null>; onInitialStateResolved?(): void; loadingFallback?: ReactNode; children: ReactNode }) {
   const navigate = useNavigate()
   const { logout } = usePocketIdentity()
   const [pinLength, setPinLength] = useState(()=>Number(localStorage.getItem(configuredKey(email)+':length')) === 4 ? 4 : 6)
@@ -219,7 +219,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     finally { setBusy(false) }
   }
 
-  if (state === 'loading') return <PocketSecuritySurface><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></PocketSecuritySurface>
+  if (state === 'loading') return loadingFallback ?? <PocketSecuritySurface><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></PocketSecuritySurface>
   if (state === 'error') return <PocketSecuritySurface>
     <section className='w-full py-3 text-center'>
       <h1 className='text-xl font-black'>Payment security needs attention</h1>
