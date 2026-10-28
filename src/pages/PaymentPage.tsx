@@ -4074,8 +4074,22 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         setFeeQuoteRefresh(value=>value+1)
         return
       }
-      const session = await checkoutWalletController.getEvmSession(chain, wallet.address)
+      const { prepareBrowserWalletSession } = await import('../lib/prepareBrowserWalletSession')
+      const session = await prepareBrowserWalletSession({
+        chain, email:privyEmail, wallet, getAccessToken,
+        active:()=>Boolean(owner && checkoutIdentityRef.current===owner),
+        restore:async()=>{
+          if(privyUser?.id && (chain==='base'||chain==='arbitrum'||chain==='arc') && wallet.walletId && wallet.blockchain && isAddress(wallet.address)){
+            const token=await getAccessToken()
+            if(!token)throw Error('Sign in again to continue.')
+            const saved=await restoreCheckoutCircleSession({userId:privyUser.id,email:privyEmail,walletAppId:PRIVY_APP_ID||''},token,chain,{id:wallet.walletId,address:wallet.address,blockchain:wallet.blockchain},()=>checkoutIdentityRef.current===owner)
+            if(saved)return saved
+          }
+          return checkoutWalletController.getEvmSession(chain,wallet.address)
+        },
+      })
       if (!owner || checkoutIdentityRef.current !== owner) throw Error('Your account changed. Please sign in again.')
+      if(privyUser?.id)saveCheckoutCircleSession({userId:privyUser.id,email:privyEmail,walletAppId:PRIVY_APP_ID||''},session)
       setCircleEvmEmailSession(session); setCircleSmartAccount(session.wallet.address)
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
