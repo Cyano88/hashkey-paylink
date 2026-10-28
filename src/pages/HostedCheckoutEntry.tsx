@@ -2,7 +2,7 @@ import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
+import { CheckoutFooter, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import BrowserPaymentResult from '../components/BrowserPaymentResult'
 import CheckoutChoice from '../components/CheckoutChoice'
 import CheckoutAssetChoice,{type CheckoutSelectionView} from '../components/CheckoutAssetChoice'
@@ -102,7 +102,7 @@ export default function HostedCheckoutEntry() {
           </>
         )}
       </section>
-      <CheckoutTrustLine />
+      <CheckoutFooter />
     </div>
   )
 }

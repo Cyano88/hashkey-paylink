@@ -1,6 +1,6 @@
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft} from './CheckoutExpiry'
 import CheckoutMerchant from './CheckoutMerchant'
-import {HashPayLinkCheckoutBrand} from './CheckoutChrome'
+import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {checkoutMessage} from '../lib/checkoutMessage'
 import {useEffect,useRef,useState} from 'react'
 import {QRCodeSVG} from 'qrcode.react'
@@ -39,5 +39,5 @@ export default function BrowserCheckoutCard(p:Props){
    {p.walletReady&&!busy&&<button onClick={()=>void run(p.refresh)} className="mt-2 min-h-11 w-full text-xs text-gray-500">Update balance</button>}
   </>}
   <a href={handoff.browser.replace('browser=1','choose=1')} className="mt-5 block py-2 text-center text-xs text-gray-500">Other ways to continue</a>
- </section></main>
+ </section><CheckoutFooter/></main>
 }

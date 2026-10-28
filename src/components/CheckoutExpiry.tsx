@@ -1,4 +1,5 @@
 import CheckoutMerchant from './CheckoutMerchant'
+import {CheckoutFooter} from './CheckoutChrome'
 import {useEffect,useState} from 'react'
 
 export function checkoutSecondsLeft(expiresAt:string|undefined,now=Date.now()) {
@@ -28,5 +29,6 @@ export function CheckoutExpired({returnUrl,merchant,brandImageUrl}:{returnUrl?:s
     <h1 className="mt-6 text-xl font-semibold tracking-tight">Checkout expired</h1>
     <p className="mt-3 text-sm text-gray-500">Start a new checkout to continue.</p>
     {safe&&<a href={safe} className="mt-7 flex min-h-12 w-full max-w-xs items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Back to store</a>}
+    <CheckoutFooter/>
   </main>
 }

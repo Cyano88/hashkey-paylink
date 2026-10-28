@@ -3,7 +3,7 @@ import {build} from 'esbuild'
 import {readFileSync,mkdirSync} from 'node:fs'
 import {checkoutTestCss} from './checkout-test-css.mjs'
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
-const source=`import React,{useEffect}from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,Routes,Route,useOutletContext}from'react-router-dom';import Layout from'./src/surfaces/SurfaceLayout';import Merchant from'./src/components/CheckoutMerchant';import{HashPayLinkCheckoutBrand}from'./src/components/CheckoutChrome';function Child(){const c=useOutletContext();useEffect(()=>c.onPayWalletStateChange({connected:true,disconnect:()=>window.disconnects++}),[]);return <><HashPayLinkCheckoutBrand/><Merchant name="Lunchroom" logo={window.logo}/></>}window.disconnects=0;createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[window.testPath]}><Routes><Route element={<Layout/>}><Route path="*" element={<Child/>}/></Route></Routes></MemoryRouter>);`
+const source=`import React,{useEffect}from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,Routes,Route,useOutletContext}from'react-router-dom';import Layout from'./src/surfaces/SurfaceLayout';import Merchant from'./src/components/CheckoutMerchant';import{HashPayLinkCheckoutBrand,CheckoutFooter}from'./src/components/CheckoutChrome';function Child(){const c=useOutletContext();useEffect(()=>c.onPayWalletStateChange({connected:true,disconnect:()=>window.disconnects++}),[]);return <><HashPayLinkCheckoutBrand/><Merchant name="Lunchroom" logo={window.logo}/><CheckoutFooter/></>}window.disconnects=0;createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[window.testPath]}><Routes><Route element={<Layout/>}><Route path="*" element={<Child/>}/></Route></Routes></MemoryRouter>);`
 const bundle=await build({stdin:{contents:source,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',loader:{'.css':'empty'}})
 const css=await checkoutTestCss()
 const browser=await chromium.launch({channel:'chrome',headless:true})
@@ -19,6 +19,18 @@ try{
    await page.getByText('Lunchroom',{exact:true}).waitFor()
    const brand=page.getByLabel('Hash PayLink',{exact:true})
    await brand.waitFor()
+   const footer=page.getByLabel('Checkout information',{exact:true})
+   await footer.waitFor()
+   for(const name of ['Privacy','Terms']){
+    const link=footer.getByRole('link',{name,exact:true})
+    assert.equal(await link.getAttribute('href'),'https://docs.hashpaylink.com/docs/'+name.toLowerCase())
+    assert.equal(await link.getAttribute('target'),'_blank')
+    assert.match(await link.getAttribute('rel'),/noopener/)
+   }
+   await page.context().route('https://docs.hashpaylink.com/**',r=>r.fulfill({contentType:'text/html',body:'Legal document'}))
+   const [legalTab]=await Promise.all([page.waitForEvent('popup'),footer.getByRole('link',{name:'Privacy',exact:true}).click()])
+   assert.equal(page.url(),'https://checkout.test/')
+   await legalTab.close()
    assert.equal(await brand.locator('img').getAttribute('src'),'/hash-logo-transparent.png')
    await page.waitForFunction(()=>[...document.images].every(i=>i.complete&&i.naturalWidth>0))
    assert.equal(await page.getByRole('button',{name:'Disconnect',exact:true}).count(),path.startsWith('/wallet/')?1:0)

@@ -1,4 +1,5 @@
 import {useEffect} from 'react'
+import {CheckoutFooter} from './CheckoutChrome'
 import PocketBottomSheet from '../pocket/components/PocketBottomSheet'
 import PocketTransactionSheet, { type PocketTransactionState } from '../pocket/components/PocketTransactionSheet'
 import type { PaylinkReceipt } from '../lib/paymentReceiptPdf'
@@ -28,6 +29,6 @@ export default function BrowserPaymentResult({ fullScreen = false, state, amount
     {state === 'pending' && onCheckStatus && <button type="button" className="pocket-cta-secondary mt-4 w-full" onClick={onCheckStatus}>Check payment status</button>}
     {state === 'successful' && destination && <><p role="status" className="mt-4 text-center text-xs text-gray-500">Returning to {merchant}…</p><a className="pocket-cta-primary mt-4 w-full" href={destination}>{returnLabel}</a></>}
     {state !== 'successful' && destination && <a className="pocket-cta-secondary mt-4 w-full" href={destination}>{returnLabel}</a>}
-    <p className="mt-5 text-center text-xs text-gray-500">Powered by Hash PayLink</p>
+    <CheckoutFooter/>
   </PocketBottomSheet>
 }
