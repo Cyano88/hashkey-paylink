@@ -37,7 +37,7 @@ try {
   await confirm.focus();await page.keyboard.press('Enter')
   await page.getByRole('heading',{name:'Processing',exact:true}).waitFor()
   assert.equal(await page.evaluate(()=>window.sends),1)
-  assert.equal(await page.getByRole('link',{name:'Return to merchant'}).count(),0)
+  assert.equal(await page.getByRole('link',{name:'Return to merchant'}).getAttribute('href'),'https://merchant.example/receipt')
   await page.keyboard.press('Escape')
   assert.equal(await page.getByRole('dialog',{name:'Payment status'}).count(),1)
   await page.screenshot({path:stem+'-processing.png'})
@@ -49,5 +49,5 @@ try {
   assert.deepEqual(errors,[])
   await page.close()
  }
- console.log('PASS: mobile bottom sheet; desktop centred card; both themes; keyboard review/confirm; close without sending; one submission; pending cannot dismiss or return as paid; status check never resends; no page errors or horizontal overflow.')
+ console.log('PASS: mobile bottom sheet; desktop centred card; both themes; keyboard review/confirm; close without sending; one submission; pending stays open with a manual merchant return; status check never resends; no page errors or horizontal overflow.')
 } finally {await browser.close()}
