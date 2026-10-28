@@ -26,6 +26,16 @@ const defaults={choices:projectChoices,read:async()=>await readDurableJson<Store
  const response=await fetch('https://app.hashpaylink.com/api/v2/checkouts'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-API-Key':process.env.FOOD_DEMO_PROJECT_KEY||'',...(key?{'Idempotency-Key':key}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000),redirect:'error'});
  const data=await response.json().catch(()=>null);if(!response.ok||!data?.ok)throw Error('Payment is unavailable. Your order has not been charged.');return data
 }}
+async function refreshFoodOrder(d:typeof defaults,order:Order){
+ if(order.checkoutId&&!order.paid){const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status');if(status.status==='paid'&&(order.rail==='circle'?status.checkoutId===order.checkoutId&&status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout?.id===order.checkoutId&&status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].network=status.network||'xlayer';return s});order.paid=true;order.network=status.network||'xlayer'}}
+}
+export async function reconcileFoodDemoCheckout(checkoutId:string) {
+ const state=await defaults.read()
+ const order=Object.values(state.orders).find(order=>order.checkoutId===checkoutId)
+ if(!order)throw Error('Order is not available for reconciliation yet.')
+ await refreshFoodOrder(defaults,order)
+ if(!order.paid)throw Error('Payment is not confirmed by the checkout API yet.')
+}
 export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){const d={...defaults,...overrides};return async(req:Request,res:Response)=>{
  res.setHeader('Cache-Control','no-store')
  try{
@@ -47,7 +57,7 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
   if(req.method==='GET'){
    if(!/^[a-f0-9]{32}$/.test(String(req.query.id)))return res.status(404).json({ok:false,error:'Order not found.'})
    const order=(await d.read()).orders[String(req.query.id)];if(!order)return res.status(404).json({ok:false,error:'Order not found.'})
-   if(order.checkoutId&&!order.paid){const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status');if(status.status==='paid'&&(order.rail==='circle'?status.checkoutId===order.checkoutId&&status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout?.id===order.checkoutId&&status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].network=status.network||'xlayer';return s});order.paid=true;order.network=status.network||'xlayer'}}
+   await refreshFoodOrder(d,order)
    return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.payableAmount||order.amount,cents:order.cents,status:order.paid?'paid':'pending'}})
   }
   if(req.method!=='POST')return res.sendStatus(405)

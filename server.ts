@@ -1,3 +1,4 @@
+import foodDemoWebhook from './api/food-demo-webhook.js'
 import bscPaymentHandler,{reconcileBscPayments} from './api/pocket/bsc-payment-service.js'
 import {drainBscCheckoutWebhooks} from './api/hosted-bsc-checkouts.js'
 import developerAppRemovalApiHandler from './api/developer-app-removal-api.js'
@@ -309,6 +310,7 @@ app.post(
 // publish payloads can include sanitized article HTML plus a compressed cover.
 app.all('/api/pocket/gifts/events', rateLimit({ name: 'gift-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketGiftEventWebhook)
 app.post('/api/developer-verification/documents', rateLimit({name:'business-documents',windowMs:60_000,max:20}), express.raw({type:'application/octet-stream',limit:'5mb'}), developerVerificationUploadHandler)
+app.post('/api/demo/food/webhook', rateLimit({name:'food-webhook',windowMs:60_000,max:120}), express.raw({type:'application/json',limit:'64kb'}), foodDemoWebhook)
 app.use(express.json({ limit: '256kb' }))
 
 // A CLI credential must not activate a different API surface, including public
