@@ -1,5 +1,6 @@
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft} from './CheckoutExpiry'
 import CheckoutMerchant from './CheckoutMerchant'
+import {HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {checkoutMessage} from '../lib/checkoutMessage'
 import {useEffect,useRef,useState} from 'react'
 import {QRCodeSVG} from 'qrcode.react'
@@ -21,7 +22,7 @@ export default function BrowserCheckoutCard(p:Props){
  const needsRefresh=p.walletReady&&(p.balance===null||p.total===null)
  const canFund=Boolean(p.shortfall&&p.address)
  if(seconds===0&&!busy)return <CheckoutExpired returnUrl={p.returnUrl} merchant={p.merchant} brandImageUrl={p.brandImageUrl}/>
- return <main className="mx-auto w-full max-w-md py-6 text-gray-950 dark:text-white"><p className="mb-6 text-center text-sm font-semibold">Hash PayLink</p><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114] sm:p-8">
+ return <main className="mx-auto w-full max-w-md py-6 text-gray-950 dark:text-white"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114] sm:p-8">
   <CheckoutMerchant name={p.merchant} logo={p.brandImageUrl}/><h1 className="mt-3 text-center text-3xl font-semibold tracking-tight">{p.amount}</h1>{p.title&&<p className="mt-2 text-center text-sm text-gray-500">{p.title}</p>}
   <CheckoutCountdown seconds={seconds}/>
   {!p.authenticated?<div className="mt-8"><PocketEmailLogin context="checkout"/></div>:<>
