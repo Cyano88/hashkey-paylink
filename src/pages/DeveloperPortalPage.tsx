@@ -98,7 +98,7 @@ export default function DeveloperPortalPage() {
   const [params, setParams] = useSearchParams()
   const [activeId, setActiveId] = useState(params.get('project') ?? '')
   const [loadFailed, setLoadFailed] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [verificationDirty,setVerificationDirty]=useState(false)
   const [error, setError] = useState('')
