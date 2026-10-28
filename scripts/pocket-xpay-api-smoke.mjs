@@ -103,6 +103,8 @@ console.log('PASS direct USDC wallet receipts remain on the Stablecoins rail.');
 fixture.owner='stock-payer';fixture.wallets['stock-payer']='0x'+'4'.repeat(40);
 fixture.stockCheckout={id:'chkx_'+'1'.repeat(24),ownerId:'merchant',merchantName:'Developer merchant',recipient:to,amount:'0.123456789',token:{address:token},createdAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+60000).toISOString(),swapEnabled:false};
 const stockBody={action:'prepare',id:fixture.stockCheckout.id,wallet:fixture.wallets['stock-payer'],token,usd:'9999',key:'fixture-stock-checkout-0001'};
+const hostedPublic=await readPublic(fixture.stockCheckout.id,200);assert.equal(hostedPublic.merchant.fixedAmount,fixture.stockCheckout.amount);assert.equal(hostedPublic.merchant.expiresAt,Date.parse(fixture.stockCheckout.expiresAt));assert.equal(hostedPublic.merchant.wallet,undefined);assert.equal(hostedPublic.merchant.owner,undefined);
+fixture.owner='merchant';const self=(await call({...stockBody,wallet:to},400));assert.match(self.error,/own account/);assert.doesNotMatch(self.error,/XPay|QR/);fixture.owner='stock-payer';
 const stockPayment=(await call(stockBody)).payment;
 assert.equal(stockPayment.amount,'0.123456789','Client USD input cannot change fixed token units');
 assert.ok(stockPayment.expiresAt<=Date.parse(fixture.stockCheckout.expiresAt));

@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs'
 import {checkoutTestCss} from './checkout-test-css.mjs'
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const source=`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter}from'react-router-dom';import Page from'./src/pocket/pages/PocketXPayCheckoutPage';createRoot(document.getElementById('root')).render(<MemoryRouter><Page merchantOverride={'chkx_'+'a'.repeat(24)} returnUrl="https://store.test/order"/></MemoryRouter>);`
-const bundle=await build({stdin:{contents:source,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',loader:{'.css':'empty'},plugins:[{name:'wallet-fixture',setup(b){b.onResolve({filter:/usePocketIdentity$|usePocketStockWallet$|PocketPaymentSecurityGate$|PrivyLoginProvider$|pocketRoutes$|\/PocketXPay$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({loader:'tsx',resolveDir:process.cwd(),contents:a.path.endsWith('usePocketIdentity')?`export default()=>({authenticated:window.auth,ready:true,user:{id:'test'},email:'test@example.com',getAccessToken:async()=>null})`:a.path.endsWith('usePocketStockWallet')?'export default()=>({})':a.path.endsWith('PocketPaymentSecurityGate')?'export default({children})=>children':a.path.endsWith('PrivyLoginProvider')?'export const usePrivyLoginLauncher=()=>({requestLogin:()=>{}})':a.path.endsWith('pocketRoutes')?'export const pocketApiUrl=p=>p':`import{CheckoutExpired}from'./src/components/CheckoutExpiry';export default()=>window.pending?<h1>Payment pending</h1>:<CheckoutExpired merchant="Lunchroom" returnUrl="https://store.test/order"/>`}))}}]})
+const bundle=await build({stdin:{contents:source,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',loader:{'.css':'empty'},plugins:[{name:'wallet-fixture',setup(b){b.onResolve({filter:/PocketEmailLogin$|usePocketIdentity$|usePocketStockWallet$|PocketPaymentSecurityGate$|PrivyLoginProvider$|pocketRoutes$|\/PocketXPay$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({loader:'tsx',resolveDir:process.cwd(),contents:a.path.endsWith('PocketEmailLogin')?'export default()=> <button>Continue with email</button>':a.path.endsWith('usePocketIdentity')?`export default()=>({authenticated:window.auth,ready:true,user:{id:'test'},email:'test@example.com',getAccessToken:async()=>null})`:a.path.endsWith('usePocketStockWallet')?'export default()=>({})':a.path.endsWith('PocketPaymentSecurityGate')?'export default({children})=>children':a.path.endsWith('PrivyLoginProvider')?'export const usePrivyLoginLauncher=()=>({requestLogin:()=>{}})':a.path.endsWith('pocketRoutes')?'export const pocketApiUrl=p=>p':`import{CheckoutExpired}from'./src/components/CheckoutExpiry';export default()=>window.pending?<h1>Payment pending</h1>:<CheckoutExpired merchant="Lunchroom" returnUrl="https://store.test/order"/>`}))}}]})
 const css=await checkoutTestCss(),browser=await chromium.launch({channel:'chrome',headless:true})
 try{for(const width of [320,390,1280])for(const auth of [false,true]){
  const page=await browser.newPage({viewport:{width,height:844}})
@@ -20,6 +20,14 @@ try{for(const width of [320,390,1280])for(const auth of [false,true]){
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
    if(auth)await page.screenshot({path:'output/playwright/xlayer-expiry-'+width+'.png'})
   }
+ }
+ if(!auth){
+  await page.route('https://checkout.test/api/**',r=>r.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,merchant:{name:'Lunchroom',fixedAmount:'1.5',expiresAt:Date.now()+900000}})}))
+  await page.goto('https://checkout.test/');await page.evaluate(()=>{window.auth=false;window.pending=false});await page.addScriptTag({content:bundle.outputFiles[0].text})
+  await page.getByRole('button',{name:'Continue with email',exact:true}).waitFor()
+  assert.equal(await page.getByLabel('Hash PayLink',{exact:true}).count(),1)
+  assert.equal(await page.getByText('Pocket',{exact:true}).count(),0)
+  assert.equal(await page.getByRole('heading',{name:'1.5 USDC',exact:true}).count(),1)
  }
  await page.close()
 }}finally{await browser.close()}

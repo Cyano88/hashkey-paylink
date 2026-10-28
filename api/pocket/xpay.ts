@@ -86,7 +86,7 @@ export default async function handler(req:Request,res:Response){
   if(req.method==='GET'){
    const id=String(req.query?.id||'');if(!/^[0-9a-f-]{36}$/.test(id)&&!isStockCheckoutId(id))fail('Invalid XPay link.',400)
    const merchant=(await read()).merchants[id]||await checkoutMerchant(id,true);if(!merchant||merchant.deletedAt)fail('This XPay link is unavailable.',404)
-   return res.json({ok:true,terminalId:await legacyXPayTerminal(id,merchant.createKey),merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens}})
+   return res.json({ok:true,terminalId:await legacyXPayTerminal(id,merchant.createKey),merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens,...(isStockCheckoutId(id)?{fixedAmount:merchant.fixedAmount,expiresAt:merchant.expiresAt}:{})}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId,b=req.body||{},action=b.action
@@ -123,7 +123,7 @@ export default async function handler(req:Request,res:Response){
    const checkoutId=b.checkoutId?String(b.checkoutId):undefined
    if(!checkoutId&&await legacyXPayTerminal(id,m.createKey))fail('Reopen this QR to use the business terminal.',409)
    if(checkoutId)await assertUnifiedXPayDestination(checkoutId,id,String(m.updatedAt))
-   if(m.owner===owner||m.wallet.toLowerCase()===payer.toLowerCase())fail('You cannot pay your own XPay QR.')
+   if(m.owner===owner||m.wallet.toLowerCase()===payer.toLowerCase())fail(isStockCheckoutId(id)?"You can't pay a checkout belonging to your own account. Change account to continue.":'You cannot pay your own XPay QR.')
    if(!isStockCheckoutId(id))await verifyStockWalletOwner(m.owner,m.wallet)
    const asset=await stockNoticeAsset(token),prices=await readStockMarketPrices([token]),price=prices[token]
    if(!price||Date.now()-price.fetchedAt>=60000)fail('A fresh asset price is unavailable. Try again.',503)

@@ -1,6 +1,9 @@
+import {CheckoutFooter,HashPayLinkCheckoutBrand} from '../../components/CheckoutChrome'
+import BrowserCheckoutCard from '../../components/BrowserCheckoutCard'
+import {formatPocketAssetAmount} from '../lib/pocketAmountDisplay'
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry} from '../../components/CheckoutExpiry'
 import {checkoutStablecoins} from '../../lib/checkoutStablecoins'
-import {formatUnits} from 'viem'
+import {formatUnits,parseUnits} from 'viem'
 import PocketCheckoutSwap from './PocketCheckoutSwap'
 import BrowserPaymentResult from '../../components/BrowserPaymentResult'
 import {pocketApiUrl} from '../lib/pocketRoutes'
@@ -37,7 +40,8 @@ const cta='pocket-cta-primary w-full'
 export function xpayReceipt(p:XPayPayment):PaylinkReceipt{return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:'XPay payment',amount:p.amount,asset:p.symbol,createdAt:p.createdAt,source:'xpay',recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:'Pocket',brandKind:'pocket'}}
 function CheckoutSurface({children}:ComponentProps<typeof PocketBottomSheet>){return <section className="rounded-3xl border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-[#121212]">{children}</section>}
 export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext,merchantOverride,checkoutReturnUrl,checkoutBrandImageUrl}:{checkoutBrandImageUrl?:string;checkoutReturnUrl?:string;merchantOverride?:string;paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
- const {user,getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=merchantOverride||paymentContext?.merchantId||params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
+ const identity=usePocketIdentity(),{user,getAccessToken}=identity,navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=merchantOverride||paymentContext?.merchantId||params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
+ const hosted=checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)
  const scope=(user?.id||'')+':'+(wallet.address||''),storageKey='pocket.xpay.active:'+scope
  const scopeRef=useRef(scope);scopeRef.current=scope
  const [converting,setConverting]=useState(false)
@@ -119,6 +123,8 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
   if(scopeRef.current!==currentScope)return
   const data=await xpayRequest(getAccessToken,{action:'confirm',id:p.id,hash});adopt(data.payment);setUsd('');setReview(null)
  })
+ // Prepare a review after recovery has finished; signing still requires Pay securely.
+ useEffect(()=>{if(hosted&&!loading&&merchant&&wallet.address&&token&&!payment&&!review&&!guard.current)void prepare()},[hosted,loading,merchant?.id,wallet.address,token])
  const Surface=checkout&&!review&&!merchant?.fixedAmount?CheckoutSurface:PocketBottomSheet
  const close=()=>{if(paymentContext){paymentContext.onClose();return}if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{...location.state,xpayOrigin:xpayOrigin(location.state)}})}
  const snapshot=wallet.displaySnapshot||wallet.snapshot
@@ -134,8 +140,31 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  const fundingProps={asset:fundingAsset,network:'xlayer' as const,address:wallet.address,locked:busy||wallet.busy||payment?.status==='submitted'||wallet.uncertain,onReturn:async()=>{await wallet.refresh();setError('');setReview(null);setPayment(null)},onCancel:()=>{setError('');setReview(null);setPayment(null);setUsd('')}}
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(converting&&merchant?.swapEnabled)return <PocketCheckoutSwap checkoutId={merchant.id} asset={token} onClose={()=>{setConverting(false);setReview(null);setPayment(null);setError('');void wallet.refresh().catch(()=>undefined)}}/>
- if(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&payment&&['paid','submitted','failed'].includes(payment.status))return <BrowserPaymentResult fullScreen={checkout} state={payment.status==='paid'?'successful':payment.status==='failed'?'failed':'pending'} amount={formatStockQuantity(payment.amount)+' '+payment.symbol} merchant={payment.merchantName} receipt={xpayReceipt(payment)} returnUrl={verifiedReturn} detail={payment.status==='submitted'?'Your merchant payment is being verified. Do not pay again.':undefined}/>
+ if(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&payment&&['paid','submitted','failed'].includes(payment.status))return <BrowserPaymentResult fullScreen={checkout} state={payment.status==='paid'?'successful':payment.status==='failed'?'failed':'pending'} amount={formatStockQuantity(payment.amount)+' '+payment.symbol} merchant={payment.merchantName} receipt={xpayReceipt(payment)} returnUrl={verifiedReturn||checkoutReturnUrl} detail={payment.status==='submitted'?'Your merchant payment is being verified. Do not pay again.':undefined}/>
  if(checkoutSeconds===0&&!busy&&!wallet.busy)return <CheckoutExpired merchant={merchant?.name} brandImageUrl={checkoutBrandImageUrl} returnUrl={verifiedReturn||checkoutReturnUrl}/>
+ if(hosted&&loading&&!merchant)return <main className="mx-auto w-full max-w-md py-6"><HashPayLinkCheckoutBrand/><div aria-label="Opening checkout" role="status" className="h-96 animate-pulse rounded-3xl bg-gray-100"/><CheckoutFooter/></main>
+ if(hosted){
+  const asset=selected?.symbol||'USDC',decimals=stableTokens.find(t=>t.address.toLowerCase()===token)?.decimals??6,amount=merchant?.fixedAmount||payment?.amount||''
+  const balance=stableTokens.find(t=>t.address.toLowerCase()===token)?.balance??null
+  const feeUnits=review?.reimbursement?BigInt(review.reimbursement.feeUnits):0n
+  const totalUnits=review?review.units+feeUnits:null
+  const amountUnits=amount?parseUnits(amount,decimals):0n
+  const required=totalUnits??amountUnits
+  const balanceUnits=balance===null?null:parseUnits(balance,decimals)
+  const shortfall=balanceUnits!==null&&balanceUnits<required?formatUnits(required-balanceUnits,decimals):null
+  const gasFee=review&&!review.sponsored&&!review.reimbursement?formatUnits(review.fee,18):null
+  const refresh=async()=>{await wallet.refresh();await prepare()}
+  const message=(error||wallet.error||'').replace(/You cannot pay your own XPay QR\./i,"You can't pay a checkout belonging to your own account. Change account to continue.").replace(/Your previous XPay payment needs confirmation\. Open XPay to check it\./i,'An earlier payment is still being confirmed. Wait before paying again.').replace(/Open your Pocket wallet first\./i,'Connect your wallet to continue.').replace(/XPay could not complete\./i,'Payment could not complete. Please try again.')
+  return <BrowserCheckoutCard id={merchantId} attempt={params.get('attempt')||''} merchant={merchant?.name||'Merchant'} title="" brandImageUrl={checkoutBrandImageUrl} returnUrl={checkoutReturnUrl} expiresAt={merchant?.expiresAt?new Date(merchant.expiresAt).toISOString():undefined}
+   amount={amount?formatPocketAssetAmount(amount,asset)+' '+asset:''} asset={asset} fiat={false} authenticated={identity.authenticated} email={identity.email} signOut={identity.logout}
+   network="xlayer" networks={[{value:'xlayer',label:'X Layer'}]} onNetwork={()=>{}} walletReady={!!wallet.address} address={wallet.address||''}
+   balance={balance===null?null:formatPocketAssetAmount(balance,asset)} shortfall={shortfall} needsFunding={!!fundingAsset&&fundingAsset!=='OKB'}
+   fundingHint={!review?'Add '+asset+' on X Layer to cover the payment and network fee. Review the exact total before paying.':undefined}
+   fee={review?gasFee??formatPocketAssetAmount(formatUnits(feeUnits,decimals),asset):null} feeAsset={gasFee?'OKB':asset}
+   total={totalUnits===null?null:formatPocketAssetAmount(formatUnits(totalUnits,decimals),asset)} totalAdditionalFee={gasFee?gasFee+' OKB':undefined}
+   busy={busy||wallet.busy} quoteLoading={loading||busy} blocked={loading||wallet.uncertain||wallet.pending?.status==='pending'||/checkout belonging to your own account/i.test(message)} error={message}
+   prepare={async()=>{await wallet.connect();if(wallet.address)await refresh()}} refresh={refresh} pay={async()=>{if(quoteExpired)await prepare();else await pay()}}/>
+ }
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
   {merchantId&&!paymentContext&&<PocketXPayCheckoutBackdrop/>}
