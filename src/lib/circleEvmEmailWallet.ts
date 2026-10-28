@@ -385,7 +385,7 @@ async function circleWalletApi<T>(
   } catch (err) {
     throw new Error(`Circle email wallet request could not reach Hash PayLink (${label}). ${readableError(err)}`)
   }
-  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number | string; detail?: string }
+  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number | string; detail?: string; feeDetails?: unknown }
   if (!res.ok || data.ok === false) {
     // Preserve explicit rejection; a lost response remains uncertain.
     const submissionRejected = paymentAction && (
@@ -394,7 +394,7 @@ async function circleWalletApi<T>(
     )
     notifyPocketKycRequirement(data)
     throw Object.assign(new Error(data.code === 'INSUFFICIENT_PAYMENT_BALANCE' && data.error ? data.error : `Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`), {
-      status: res.status, code: data.code, submissionRejected,
+      status: res.status, code: data.code, submissionRejected, feeDetails: data.feeDetails,
     })
   }
   return data as T

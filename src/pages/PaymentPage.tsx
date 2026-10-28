@@ -1,3 +1,4 @@
+import { paymentFundingMinimum } from '../lib/paymentFundingMinimum'
 import {checkoutStablecoin} from '../lib/checkoutStablecoins'
 import PocketMerchantPaymentForm from '../pocket/components/PocketMerchantPaymentForm'
 import BrowserPaymentResult from '../components/BrowserPaymentResult'
@@ -878,6 +879,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [circleSmartAccount, setCircleSmartAccount] = useState<`0x${string}` | null>(null)
   const [circleFeeQuote, setCircleFeeQuote] = useState<CirclePaymentFeeQuote | null>(null)
   const [circleFeeQuoteError, setCircleFeeQuoteError] = useState('')
+  const [circleFundingMinimum,setCircleFundingMinimum]=useState<{key:string;units:bigint}|null>(null)
   const [circleFeeQuoteLoading, setCircleFeeQuoteLoading] = useState(false)
   const [feeQuoteRefresh, setFeeQuoteRefresh] = useState(0)
   const [solanaFeeQuote, setSolanaFeeQuote] = useState<CirclePaymentFeeQuote | null>(null)
@@ -1161,6 +1163,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     try { if (q.amountUnits !== parseUnits(payableAmt || '0', 6).toString()) return null } catch { return null }
     return circleFeeQuote
   })()
+  const circleQuoteRequestKey=JSON.stringify([chain,circleEvmEmailSession?.wallet.id,activeRecipient,payableAmt,checkoutAsset,hashPaylinkFeeBps,quotedPayoutId,feeQuoteRefresh])
   useEffect(() => {
     if (!circleQuoteNeeded || !circleEvmEmailSession) { setCircleFeeQuote(null); setCircleFeeQuoteError(''); setCircleFeeQuoteLoading(false); return }
     let cancelled = false
@@ -1169,7 +1172,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const timer = window.setTimeout(() => {
       void readCirclePaymentFeeQuote({ asset: checkoutAsset, session, recipient: activeRecipient, amount: payableAmt, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId: quotedPayoutId })
         .then(value => { if (!cancelled) setCircleFeeQuote(value) })
-        .catch(error => { if (!cancelled) setCircleFeeQuoteError(readableErrorMsg(error, 'Fee quote unavailable. Try again.')) })
+        .catch(error => { if (!cancelled) {const units=paymentFundingMinimum(error);setCircleFundingMinimum(units===null?null:{key:circleQuoteRequestKey,units});setCircleFeeQuoteError(readableErrorMsg(error, 'Fee quote unavailable. Try again.'))} })
         .finally(() => { if (!cancelled) setCircleFeeQuoteLoading(false) })
     }, 350)
     return () => { cancelled = true; window.clearTimeout(timer) }
@@ -1190,7 +1193,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const abort = new AbortController()
     setSolanaFeeQuote(null); setSolanaFeeQuoteLoading(true); setSolanaFeeQuoteError('')
     const timer = window.setTimeout(() => {
-      void fetch('/api/solana-build-tx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: abort.signal,
+      void fetch('/api/solana-build-tx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.any([abort.signal,AbortSignal.timeout(12_000)]),
         body: JSON.stringify({ from: solanaQuoteSender, to: resolvedSolana, amount: effectiveAmt, asset: checkoutAsset, quoteOnly: true }) })
         .then(async response => {
           const data = await readApiJson<CirclePaymentFeeQuote & { ok?: boolean; error?: string }>(response, 'Solana fee quote')
@@ -4059,7 +4062,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const quote = displayedPaymentQuote?.quote
     const total = quote ? BigInt(quote.totalUnits) : null
     const balance = !walletReady ? null : solanaCheckout ? circleSolanaBalance : typeof circleWalletBalance === 'bigint' ? circleWalletBalance : null
-    const shortfall = total !== null && balance !== null && total > balance ? formatUnits(total-balance,6) : null
+    const minimum = !solanaCheckout && circleFundingMinimum?.key===circleQuoteRequestKey ? circleFundingMinimum.units : circleRequiredUnits
+    const required = total ?? minimum
+    const shortfall = balance !== null && required > balance ? formatUnits(((required-balance+9_999n)/10_000n)*10_000n,6) : null
     const prepare = async () => {
       if (!privyAuthenticated || !privyEmail) throw Error('Sign in to continue.')
       const owner = checkoutIdentityRef.current
@@ -4094,7 +4099,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
       amount={isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={isHostedLocalSettlement}
@@ -4103,7 +4108,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       walletReady={walletReady} address={walletReady?(solanaCheckout?circleSolanaSession!.wallet.address:circleEvmEmailSession!.wallet.address):''} balance={balance===null?null:formatUnits(balance,6)} shortfall={shortfall}
       total={total===null?null:formatUnits(total,6)} fee={quote?formatUnits(BigInt(quote.totalUnits)-BigInt(quote.recipientUnits),6):null}
       busy={circleSolanaPending||isSolanaConfirming||circlePasskeyPending||circleEvmPaymentProcessing||circleEvmAcceptedPending||privyCircleLinkLoading||paycrestPreparing}
-      blocked={paymentAmountBlocked||(requiresAttendeeName&&!attendeeName.trim())} error={circleSolanaError||circlePasskeyError||paymentQuoteError||((solanaCheckout?circleSolanaBalanceError:circleWalletBalanceReadFailed)?'Balance unavailable. Select Update balance to try again.':'')} prepare={prepare} refresh={pocketFunding.onReturn} pay={solanaCheckout?handleCircleSolanaEmailPay:handleCirclePasskeyPay}/>
+      blocked={paymentAmountBlocked||(requiresAttendeeName&&!attendeeName.trim())} error={circleSolanaError||circlePasskeyError||(shortfall?'':paymentQuoteError)||((solanaCheckout?circleSolanaBalanceError:circleWalletBalanceReadFailed)?'Balance unavailable. Select Update balance to try again.':'')} prepare={prepare} refresh={pocketFunding.onReturn} pay={solanaCheckout?handleCircleSolanaEmailPay:handleCirclePasskeyPay}/>
   }
 
   if (!pocketScan && isConfirmed && !isWalletManagerFunding) {
