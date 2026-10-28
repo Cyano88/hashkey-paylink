@@ -16,6 +16,9 @@ try {
    await r.fulfill({contentType:'text/html',body:'<meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script>'+bundle.outputFiles[0].text.replaceAll('</script','<\\/script')+'</script>'})
   })
   await page.goto('https://checkout.test/');await page.getByLabel('Payment network').waitFor()
+  assert.equal(await page.getByLabel('Hash PayLink',{exact:true}).count(),1)
+  assert.equal(await page.getByLabel('Hash PayLink',{exact:true}).locator('img').getAttribute('src'),'/hash-logo-transparent.png')
+  assert.equal(await page.getByLabel('Checkout information').locator('strong').innerText(),'Hash PayLink')
   for(const network of CHECKOUT_NETWORK_ORDER){await page.getByLabel('Payment network').selectOption(network);const expected=options.filter(o=>o.network===network).map(o=>o.asset);assert.deepEqual(await page.getByLabel('Payment asset').locator('option').allTextContents(),expected);for(const asset of expected){await page.getByLabel('Payment asset').selectOption(asset);await page.getByRole('heading',{name:'1.5 '+asset,exact:true}).waitFor()}}
   assert.equal(submissions.length,0,'Choosing assets must not create or submit payments')
   await page.getByLabel('Payment network').selectOption('xlayer');await page.getByLabel('Payment asset').selectOption('USDG')

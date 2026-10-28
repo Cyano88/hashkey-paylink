@@ -1,7 +1,7 @@
 import {useState,useRef} from 'react'
 import {useNavigate} from 'react-router-dom'
 import CheckoutMerchant from './CheckoutMerchant'
-import {CheckoutFooter} from './CheckoutChrome'
+import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry} from './CheckoutExpiry'
 const names:Record<string,string>={base:'Base',arc:'Arc',xlayer:'X Layer',arbitrum:'Arbitrum',solana:'Solana',bsc:'BNB Chain',ethereum:'Ethereum',polygon:'Polygon'}
 export type CheckoutSelectionView={defaultNetwork?:string;id:string;amount:string;merchantName:string;brandImageUrl?:string;title?:string;expiresAt:string;options:Array<{network:string;asset:string}>;selected?:{network:string;asset:string}}
@@ -15,7 +15,7 @@ export default function CheckoutAssetChoice({checkout,returnUrl}:{checkout:Check
   if(lock.current||!choice)return;lock.current=true;setBusy(true);setError('')
   try{const r=await fetch('/api/v2/checkouts?id='+encodeURIComponent(checkout.id)+'&action=select-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(choice),signal:AbortSignal.timeout(25000)}),d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Payment could not be prepared.');if(!/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(d.selectedCheckoutUrl))throw Error('Checkout could not be verified.');navigate(d.selectedCheckoutUrl,{replace:true})}catch(e){setError(e instanceof Error&&e.name==='TimeoutError'?'This is taking longer than usual. Continue to check your checkout.':(e as Error).message)}finally{lock.current=false;setBusy(false)}
  }
- return <div className="mx-auto w-full max-w-md"><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114]">
+ return <div className="mx-auto w-full max-w-md py-6"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114]">
   <CheckoutMerchant name={checkout.merchantName} logo={checkout.brandImageUrl}/>
   <h1 className="mt-5 text-center text-3xl font-semibold">{checkout.amount} {choice?.asset}</h1>
   {checkout.title&&<p className="mt-2 text-center text-sm text-gray-500">{checkout.title}</p>}

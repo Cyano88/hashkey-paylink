@@ -1,6 +1,6 @@
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft} from './CheckoutExpiry'
 import CheckoutMerchant from './CheckoutMerchant'
-import {CheckoutFooter} from './CheckoutChrome'
+import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {useState} from 'react'
 import {QRCodeSVG} from 'qrcode.react'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
@@ -10,7 +10,7 @@ export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,
  const seconds=useCheckoutExpiry(expiresAt)
  if(seconds===0)return <CheckoutExpired returnUrl={returnUrl} merchant={merchant} brandImageUrl={brandImageUrl}/>
  const android=/Android/i.test(navigator.userAgent)
- return <div className="mx-auto w-full max-w-md"><section className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-950 dark:border-white/10 dark:bg-[#101114] dark:text-white sm:p-8">
+ return <div className="mx-auto w-full max-w-md"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-950 dark:border-white/10 dark:bg-[#101114] dark:text-white sm:p-8">
   <CheckoutMerchant name={merchant} logo={brandImageUrl}/>
   <h1 className="mt-4 break-words text-center text-3xl font-semibold tracking-tight">{amount || 'Payment request'}</h1>
   {title&&<p className="mt-2 text-center text-sm text-gray-500">{title}</p>}

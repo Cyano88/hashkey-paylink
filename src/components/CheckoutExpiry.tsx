@@ -1,5 +1,5 @@
 import CheckoutMerchant from './CheckoutMerchant'
-import {CheckoutFooter} from './CheckoutChrome'
+import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {useEffect,useState} from 'react'
 
 export function checkoutSecondsLeft(expiresAt:string|undefined,now=Date.now()) {
@@ -25,6 +25,7 @@ export function CheckoutCountdown({seconds}:{seconds:number|null}) {
 export function CheckoutExpired({returnUrl,merchant,brandImageUrl}:{returnUrl?:string;merchant?:string;brandImageUrl?:string}) {
   const safe=returnUrl&&/^https:\/\//i.test(returnUrl)?returnUrl:undefined
   return <main className="mx-auto flex min-h-[calc(100svh-8rem)] w-full max-w-sm flex-col items-center justify-center px-6 py-10 text-center text-gray-950 dark:text-white">
+    <HashPayLinkCheckoutBrand/>
     {(merchant||brandImageUrl)&&<CheckoutMerchant name={merchant||'Merchant'} logo={brandImageUrl}/>}
     <h1 className="mt-6 text-xl font-semibold tracking-tight">Checkout expired</h1>
     <p className="mt-3 text-sm text-gray-500">Start a new checkout to continue.</p>

@@ -2,7 +2,7 @@ import { cn } from '../lib/utils'
 
 export function CheckoutFooter() {
   return <footer aria-label="Checkout information" className="mt-5 flex flex-wrap items-center justify-center gap-x-2 text-center text-xs leading-5 text-gray-500 dark:text-gray-400">
-    <span>Powered by Hash PayLink</span>
+    <span>Powered by <strong className="font-semibold text-gray-950 dark:text-white">Hash PayLink</strong></span>
     <span aria-hidden="true">&middot;</span>
     <a href="https://docs.hashpaylink.com/docs/privacy" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center underline-offset-4 hover:underline focus-visible:underline">Privacy</a>
     <span aria-hidden="true">&middot;</span>

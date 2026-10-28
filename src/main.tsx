@@ -30,6 +30,11 @@ const BRAND_ORIGIN = 'https://hashpaylink.com'
 if (isPocketNativeRuntime()) document.documentElement.dataset.pocketRuntime = 'native'
 installPocketNativeFetch()
 const surface = resolveAppSurface(window.location.hostname, isPocketNativeRuntime())
+// Apply before React mounts so checkout cannot flash the stored or system dark theme.
+if (surface === 'checkout') {
+  document.documentElement.classList.remove('dark')
+  document.documentElement.style.colorScheme = 'only light'
+}
 const rootAppModule = surface === 'pocket' ? import('./pocket/PocketHostApp')
   : surface === 'checkout' ? import('./surfaces/CheckoutApp')
   : surface === 'admin' ? import('./surfaces/AdminApp')
@@ -142,7 +147,7 @@ function AppProviders() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider>
+    <ThemeProvider forcedTheme={surface === 'checkout' ? 'light' : undefined}>
       <AppErrorBoundary>
         <AppProviders />
       </AppErrorBoundary>
