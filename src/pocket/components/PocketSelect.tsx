@@ -88,7 +88,7 @@ export default function PocketSelect({
 
   const stablecoinOptions = options.length > 0 && options.every(option => option.value === 'USDC' || option.value === 'USDT')
   const stablecoinIcon = (symbol: string) => <img src={symbol === 'USDT' ? '/brand/usdt.svg' : '/brand/usdc-circle-logo.png'} alt="" className="h-5 w-5 shrink-0 rounded-full grayscale contrast-200 dark:invert" />
-  const networkOptions = /network/i.test(ariaLabel) && options.length > 0 && options.every(option => ['base','arbitrum','arc','solana','ethereum','polygon','xlayer'].includes(option.value))
+  const networkOptions = /network/i.test(ariaLabel) && options.length > 0 && options.every(option => ['base','arbitrum','arc','solana','ethereum','polygon','xlayer','bsc'].includes(option.value))
   if (networkOptions) return <div className={className}>
     <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={unavailable} onClick={()=>setOpen(true)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#262626]',buttonClassName)}>
       {selected && <PocketNetworkMark network={selected.value}/>}<span className="flex-1 text-left">{selected?.label ?? placeholder}</span><ChevronDown className="h-4 w-4"/>
