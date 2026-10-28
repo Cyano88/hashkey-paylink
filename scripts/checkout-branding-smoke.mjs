@@ -21,6 +21,10 @@ try{
    await brand.waitFor()
    const footer=page.getByLabel('Checkout information',{exact:true})
    await footer.waitFor()
+   const brandLink=footer.getByRole('link',{name:'Hash PayLink',exact:true})
+   assert.equal(await brandLink.getAttribute('href'),'https://x.com/Hash_PayLink')
+   assert.equal(await brandLink.getAttribute('target'),'_blank')
+   assert.match(await brandLink.getAttribute('rel'),/noopener/)
    for(const name of ['Privacy','Terms']){
     const link=footer.getByRole('link',{name,exact:true})
     assert.equal(await link.getAttribute('href'),'https://docs.hashpaylink.com/docs/'+name.toLowerCase())
