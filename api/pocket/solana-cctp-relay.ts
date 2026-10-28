@@ -1,3 +1,4 @@
+import {assertSolanaSponsorshipRunning} from '../emergency-pause.js'
 import {readNativeUsdcRate} from '../payment-network-fees.js'
 import {sealSolanaBridgeApproval,openSolanaBridgeApproval,assertSolanaBridgeMessage} from './solana-bridge-approval.js'
 import type { Request, Response } from 'express'
@@ -400,6 +401,8 @@ export async function preparePocketSolanaCctpTransaction(input: {
     + BigInt(fee)
     + RELAYER_OPERATIONAL_BUFFER_LAMPORTS
   await checkSolanaRelayerBalance(connection, relayer.publicKey, requiredLamports)
+  await assertSolanaSponsorshipRunning()
+
   sponsored.partialSign(relayer, built.messageSender)
   await validateSignedTransaction({
     transaction: sponsored,
@@ -424,6 +427,8 @@ export async function preparePocketSolanaCctpTransaction(input: {
     const balance=await readTokenAccountAmount(connection,sourceAta)
     if(balance===null||balance<parseUsdcAmount(input.expected.amount)+providerFeeUnits+networkFeeUnits)throw fail(400,'Insufficient USDC to cover the bridge and network fee.')
     sponsored.instructions[sponsored.instructions.length-1]=createTransferCheckedInstruction(sourceAta,USDC_MINT,treasuryAta,wallet,networkFeeUnits,6)
+    await assertSolanaSponsorshipRunning()
+
     sponsored.partialSign(relayer,built.messageSender)
   }
   return {

@@ -1,3 +1,4 @@
+import {assertSolanaSponsorshipRunning} from '../emergency-pause.js'
 import {validateBscRelayQuote,bscBridgeTokenAddress,type BscRelayInput} from './bsc-bridge-provider.js'
 import {validateRelayStablecoinQuote} from './xlayer-bridge-provider.js'
 import {Connection,Keypair,PublicKey,Transaction} from '@solana/web3.js'
@@ -35,6 +36,8 @@ export async function prepareSolanaUsdtRelayTransaction(input:{
  if(totalUnits>=(1n<<64n)||balance===null||balance<totalUnits)throw Object.assign(Error('Insufficient '+asset+' to cover this bridge.'),{maximumAmountUnits:String(balance!==null&&balance>networkFeeUnits?balance-networkFeeUnits:0n)})
  await checkSolanaRelayerBalance(connection,relayer.publicKey,BigInt(fee)+100000n)
  tx.instructions[1]=createTransferCheckedInstruction(source,mint,feeAccount,owner,networkFeeUnits,6)
+ await assertSolanaSponsorshipRunning()
+
  tx.partialSign(relayer)
  return {provider:'relay' as const,orderId:q.orderId,requestId:q.requestId,asset,source:q.source,destination:q.destination,walletAddress:input.route.sender,destinationAddress:input.route.recipient,
   amountUnits:q.amountUnits,receiveUnits:q.receiveUnits,minimumUnits:q.minimumUnits,

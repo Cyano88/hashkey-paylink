@@ -1,3 +1,4 @@
+import operationsEmergencyPauseHandler from './api/operations-emergency-pause.js'
 import foodDemoWebhook from './api/food-demo-webhook.js'
 import bscPaymentHandler,{reconcileBscPayments} from './api/pocket/bsc-payment-service.js'
 import {drainBscCheckoutWebhooks} from './api/hosted-bsc-checkouts.js'
@@ -525,6 +526,7 @@ app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
+app.all('/api/operations-emergency-pause', strictLimiter, operationsEmergencyPauseHandler)
 app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
 app.all('/api/arc-trade-review', strictLimiter, arcTradeReviewHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)

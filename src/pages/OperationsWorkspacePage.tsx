@@ -1,3 +1,4 @@
+import EmergencyPausePanel from '../components/EmergencyPausePanel'
 import OperationsTeamPanel from '../components/OperationsTeamPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useLocation } from 'react-router-dom'
@@ -106,6 +107,7 @@ export default function OperationsWorkspacePage() {
         </div>
         <button onClick={() => setReload(v => v + 1)} className="flex min-h-11 items-center gap-2 rounded-full border border-gray-200 px-4 text-xs font-semibold dark:border-white/10"><RefreshCw className="h-3.5 w-3.5" />Refresh access</button>
       </header>
+      {!workspaceId && <EmergencyPausePanel key={identity} />}
       {invalid ? <p role="alert" className="mt-8 text-sm text-gray-500">Choose an available product from the workspace selector.</p> : !workspace ? <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {session.workspaces.map(w => <Link to={path(w.id)} key={w.id} className={cn(card, 'group p-6 transition hover:border-gray-400 dark:hover:border-white/30')}>
           <div className="flex items-center justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 font-semibold dark:bg-white/10">{w.name.slice(0, 1)}</span><ChevronRight className="h-4 w-4 text-gray-400" /></div>

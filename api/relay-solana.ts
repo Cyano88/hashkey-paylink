@@ -1,3 +1,4 @@
+import {assertSolanaSponsorshipRunning} from './emergency-pause.js'
 import {POCKET_USDT_ASSETS} from '../src/pocket/lib/pocketUsdtAssets.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote } from './payment-fee-quotes.js'
@@ -321,6 +322,7 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
     if (treasury) tx.instructions[tx.instructions.length - 1] = createTransferCheckedInstruction(fromATA, mint, treasury.ata, fromPubkey, treasuryRaw, USDC_DECIMALS)
 
     // Relayer partial-signs as fee payer
+    await assertSolanaSponsorshipRunning()
     tx.partialSign(relayer)
 
     const serialised = tx.serialize({ requireAllSignatures: false })
@@ -363,6 +365,8 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
       throw new Error('A relayer transaction with independent customer authorization is required')
     }
 
+    await assertSolanaSponsorshipRunning()
+
     const txHash = await connection.sendRawTransaction(tx.serialize(), {
       skipPreflight: false,
       preflightCommitment: 'confirmed',
@@ -378,7 +382,7 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
     res.json({ ok: true, txHash, status: 'submitted' })
     return
   } catch (err) {
-    res.status(400).json({ ok: false, error: (err as Error).message })
+    res.status((err as Error & {status?:number}).status || 400).json({ ok: false, error: (err as Error).message })
   }
 }
 
@@ -466,8 +470,12 @@ async function historicalSolanaVaultSweep(req: Request, res: Response): Promise<
       vaultKeypair.publicKey,  // authority
     ))
 
+    await assertSolanaSponsorshipRunning()
+
     tx.partialSign(relayer)
     tx.partialSign(vaultKeypair)
+
+    await assertSolanaSponsorshipRunning()
 
     const txHash = await connection.sendRawTransaction(tx.serialize(), {
       skipPreflight:        false,
