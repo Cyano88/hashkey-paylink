@@ -32,7 +32,7 @@ let draftStore={orders:{}},allowed=[{id:'circle',name:'Lunchroom',kind:'stableco
 const draftHandler=createFoodDemoHandler({ready:()=>true,choices:async()=>allowed,read:async()=>structuredClone(draftStore),mutate:async fn=>{draftStore=fn(structuredClone(draftStore));return structuredClone(draftStore)},now:Date.now,call:async(path,body)=>{sent=body;return {ok:true,checkoutId:'chk_12345678',checkoutUrl:'/pay/c/chk_12345678?attempt=test_123'}}})
 async function draftCall(method,body={},query={}){let code=200,data;await draftHandler({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return{code,data}}
 const draftId='e'.repeat(32)
-assert.equal((await draftCall('POST',{action:'prepare',requestId:draftId,items:[{id:'jollof',quantity:1}]})).data.checkoutUrl,'/pay/order/'+draftId)
+draftStore.drafts={[draftId]:{id:draftId,lines:[{id:'jollof',name:'Smoky jollof bowl',quantity:1,cents:450}],cents:450,createdAt:Date.now()}}
 assert.equal(sent,undefined,'Store handoff must not select or create a rail checkout')
 assert.deepEqual((await draftCall('GET',{}, {id:draftId,purpose:'selection'})).data.destinations,allowed)
 assert.equal((await draftCall('POST',{requestId:draftId,asset:'NVDAx',rail:'xlayer'})).code,400,'Reject disabled project assets')
@@ -54,7 +54,7 @@ for(const mode of ['ngn','ugx']){
  const localId=(mode==='ngn'?'f':'1').repeat(32)
  async function request(method,body={},query={}){let code=200,data;await handler({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return {code,data}}
  assert.deepEqual((await request('GET')).data.acceptedAssets,['USDC'])
- await request('POST',{action:'prepare',requestId:localId,items:[{id:'jollof',quantity:1}]})
+ localStore.drafts={[localId]:{id:localId,lines:[{id:'jollof',name:'Smoky jollof bowl',quantity:1,cents:450}],cents:450,createdAt:Date.now()}}
  assert.deepEqual((await request('GET',{}, {id:localId,purpose:'selection'})).data.destinations,[destination])
  const selection={requestId:localId,asset:'USDC',rail:'circle',network:'base'}
  assert.equal((await request('POST',selection)).code,200)

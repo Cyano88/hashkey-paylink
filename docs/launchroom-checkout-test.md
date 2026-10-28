@@ -12,4 +12,4 @@ The receiver accepts raw signed JSON, validates a five-minute delivery timestamp
 
 Start the first payment test with the $1.50 Golden plantain order and Base USDC. The payer must review the full amount and reimbursement before approving. Verify the merchant order, the checkout status, the developer payment record and webhook delivery all agree. Reloading the merchant result must not create another order or payment.
 
-The demo's older selection adapter still limits the routes it offers. It must be updated before using Launchroom to test the full new network/asset matrix. Do not treat this first Base USDC test as proof of all routes.
+New orders use POST /api/v2/checkouts directly with a server-priced USDC order. The API applies the project's saved routing and branding; Launchroom does not send a recipient or choose a provider. The returned hosted checkout offers Pay with Pocket and Pay on web. Old /pay/order links resume that hosted flow. Changing the project's accepted routes changes subsequent checkout options; already-created checkouts retain their signed settings. Do not treat the first Base USDC test as proof of all routes.

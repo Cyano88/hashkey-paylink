@@ -4080,7 +4080,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
       amount={isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={isHostedLocalSettlement}

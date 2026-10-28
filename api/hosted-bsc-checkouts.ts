@@ -16,7 +16,7 @@ const KEY = 'hashpaylink:hosted-bsc-checkouts:v1'
 export const isBscCheckoutId = (id: unknown): id is string => typeof id === 'string' && /^chkb_[a-f0-9]{24}$/.test(id)
 export type BscCheckout = {
   id: string; partnerId: string; ownerId: string; environment: 'live'; network: 'bsc'; checkoutMode: 'human'
-  title: string; merchantName: string; amount: string; asset: string; token: PaymentToken; recipient: string
+  title: string; merchantName: string; brandImageUrl?: string; amount: string; asset: string; token: PaymentToken; recipient: string
   notionalUsd: string; returnUrl: string; swapEnabled: boolean; createdAt: string; expiresAt: string; requestHash: string
   integrity: string
   payment?: { status: 'paid'; txHash: string; payer: string; amount: string; network: 'bsc'; confirmedAt: string; receiptId: string }
@@ -48,7 +48,7 @@ const defaults = {
 }
 type Dependencies = typeof defaults
 function signature(r: Omit<BscCheckout,'integrity'>, secret:string) {
- return createHmac('sha256',secret).update(JSON.stringify([r.id,r.partnerId,r.ownerId,r.environment,r.network,r.checkoutMode,r.title,r.merchantName,r.amount,r.asset,r.token.chainId,r.token.address,r.token.symbol,r.token.decimals,r.recipient,r.notionalUsd,r.returnUrl,r.swapEnabled,r.createdAt,r.expiresAt,r.requestHash])).digest('hex')
+ return createHmac('sha256',secret).update(JSON.stringify([r.id,r.partnerId,r.ownerId,r.environment,r.network,r.checkoutMode,r.title,r.merchantName,r.amount,r.asset,r.token.chainId,r.token.address,r.token.symbol,r.token.decimals,r.recipient,r.notionalUsd,r.returnUrl,r.swapEnabled,r.createdAt,r.expiresAt,r.requestHash,...(r.brandImageUrl!==undefined?[r.brandImageUrl]:[])])).digest('hex')
 }
 function valid(r:BscCheckout,d:Dependencies){const secret=d.secret();return secret.length>=32&&/^[a-f0-9]{64}$/.test(r.integrity)&&timingSafeEqual(Buffer.from(r.integrity),Buffer.from(signature(r,secret)))}
 export async function readBscCheckout(id: string, allowExpired = false, d: Dependencies = defaults) {
@@ -58,7 +58,7 @@ export async function readBscCheckout(id: string, allowExpired = false, d: Depen
   return record
 }
 const response = (r: BscCheckout) => ({ ok: true, checkoutId: r.id, checkoutUrl: '/pay/c/' + r.id, paymentUrl: '/pay/c/' + r.id + '?browser=1',
-  checkout: { id: r.id, title: r.title, merchantName: r.merchantName, amount: r.amount, asset: r.asset, token: r.token, network: 'bsc', bscCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
+  checkout: { id: r.id, title: r.title, merchantName: r.merchantName, brandImageUrl:r.brandImageUrl, amount: r.amount, asset: r.asset, token: r.token, network: 'bsc', bscCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
 })
 
 export function createHostedBscCheckoutsHandler(overrides: Partial<Dependencies> = {}) {
@@ -117,7 +117,7 @@ export function createHostedBscCheckoutsHandler(overrides: Partial<Dependencies>
       if (notionalUnits <= 0n || notionalUnits > 100_000n * 1_000_000n) fail('Checkout value must be between 0.000001 and 100,000 USD.')
       const now = d.now()
       let record: BscCheckout = { id: d.id(), partnerId: p.partnerId, ownerId: p.ownerId!, environment: 'live', network: 'bsc', checkoutMode: 'human', title,
-        merchantName: p.merchantName, amount, token, asset: token.symbol, recipient: p.bscCheckout.recipient, notionalUsd: formatUnits(notionalUnits, 6),
+        merchantName: p.merchantName, ...(p.brandImageUrl?{brandImageUrl:p.brandImageUrl}:{}), amount, token, asset: token.symbol, recipient: p.bscCheckout.recipient, notionalUsd: formatUnits(notionalUnits, 6),
         returnUrl, swapEnabled, createdAt: new Date(Math.floor(now/1000)*1000).toISOString(), expiresAt: new Date(now + expiresInMinutes * 60_000).toISOString(), requestHash, integrity:'' }
       record.integrity=signature(record,d.secret())
       await d.mutate(s => {
