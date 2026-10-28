@@ -165,7 +165,7 @@ console.log('Pocket Solana CCTP relay smoke checks passed.')
 // Both preparation and relay reject an external destination before touching providers.
 for (const createHandler of [createPocketSolanaCctpPrepareHandler, createPocketSolanaCctpSubmitHandler]) {
   let relayed = false
-  const handler = createHandler({verifyUser:async()=>({userId:'fixture-owner'}), readLink:async()=>({chain:'solana',purpose:'payment',circleWalletAddress:wallet.publicKey.toBase58()}), relay:async()=>{relayed=true}})
+  const handler = createHandler({verifyUser:async()=>({userId:'fixture-owner'}), readLink:async()=>({privyUserId:'fixture-owner',circleBlockchain:'SOL',chain:'solana',purpose:'payment',circleWalletAddress:wallet.publicKey.toBase58()}), relay:async()=>{relayed=true}})
   const response = {statusCode:200,status(code){this.statusCode=code;return this},json(body){this.body=body;return this}}
   await handler({method:'POST',body:{...expected,transaction:'fixture',lastValidBlockHeight:123}},response)
   assert.equal(response.statusCode,403, JSON.stringify(response.body))

@@ -13,7 +13,7 @@ for(const secret of ['', 'a'.repeat(42), 'a'.repeat(44), 'A'.repeat(43)])await a
 assert.throws(()=>giftClaimTypedData({...input,recipient:input.escrow}))
 assert.throws(()=>giftClaimTypedData({...input,deadline:1n<<64n}))
 assert.notEqual(giftContractId(input.recipient,input.giftId),giftContractId(input.escrow,input.giftId))
-const {TypedDataEncoder}=await import('../contracts/node_modules/ethers/lib.esm/index.js')
+const {TypedDataEncoder}=await import('ethers')
 assert.equal(hashTypedData(data),TypedDataEncoder.hash(data.domain,data.types,data.message),'Frontend typed data matches contract test signer')
 console.log('PASS gift capability generation, recipient/chain/contract/gift/deadline binding and invalid credential rejection.')
 

@@ -20,6 +20,6 @@ try {
  globalThis.fetch=async url=>{calls.push(url);return Response.json({ok:true,quote:{total:'1.5',destinationAddress:input.destinationAddress,quoteToken:'fixture-quote'}})}
  await assert.rejects(()=>module.exports.bridgeCircleSolanaWallet({...input,quoteToken:undefined,maxTotalUnits:1400000n}),/fees changed/)
  assert.deepEqual(calls,['/quote'],'a higher reimbursement must never reach preparation or signing')
- await assert.rejects(()=>module.exports.bridgeCircleSolanaWallet({...input,quoteToken:undefined}),/new Solana bridge quote/)
+ await assert.rejects(()=>module.exports.bridgeCircleSolanaWallet({...input,quoteToken:undefined}),/Review the updated bridge amount/)
  console.log('Pocket Solana recovery-before-submit, quote forwarding and funding cost ceiling tests passed.')
 } finally {globalThis.fetch=original}

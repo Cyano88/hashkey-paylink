@@ -227,6 +227,21 @@ async function ensureATA(
 
 // ── POST /api/solana-build-tx ─────────────────────────────────────────────────
 export async function buildSolanaTx(req: Request, res: Response): Promise<void> {
+  // HTTP callers cannot opt out of reimbursement. The authenticated Pocket
+  // adapter has a separate in-process entry point; no header/body flag grants it.
+  if (req.body?.mode === 'withdraw') {
+    res.status(403).json({ ok: false, error: 'Use the authenticated Pocket withdrawal flow.' })
+    return
+  }
+  return buildSolanaTransaction(req, res)
+}
+
+/** Internal only: caller must authenticate and resolve the user's linked wallet. */
+export async function buildPocketSolanaWithdrawal(req: Request, res: Response): Promise<void> {
+  return buildSolanaTransaction(req, res)
+}
+
+async function buildSolanaTransaction(req: Request, res: Response): Promise<void> {
   const { from, to, amount, mode, quoteOnly, feeQuoteToken } = req.body as { from?: string; to?: string; amount?: string; mode?: string; quoteOnly?: boolean; feeQuoteToken?: string }
 
   if (!from || !to || !amount) {
@@ -334,7 +349,8 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
     return
   }
 
-  try { loadRelayer() }
+  let relayer: Keypair
+  try { relayer = loadRelayer() }
   catch { res.status(503).json({ ok: false, error: 'Solana relay not configured' }); return }
 
   try {
@@ -342,6 +358,10 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
     const txBytes    = decodeSignedTransaction(txBase64)
     const tx         = Transaction.from(txBytes)
     if (!tx.recentBlockhash) throw new Error('Signed Solana transaction is missing a blockhash')
+    if (!tx.feePayer?.equals(relayer.publicKey) || !tx.verifySignatures(true)
+      || !tx.signatures.some(item => !item.publicKey.equals(relayer.publicKey) && Boolean(item.signature))) {
+      throw new Error('A relayer transaction with independent customer authorization is required')
+    }
 
     const txHash = await connection.sendRawTransaction(tx.serialize(), {
       skipPreflight: false,
@@ -364,6 +384,13 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
 
 // ── GET /api/solana-vault ─────────────────────────────────────────────────────
 export async function getSolanaVaultAddress(req: Request, res: Response): Promise<void> {
+  res.status(410).json({ ok: false, code: 'LEGACY_PAYMENT_RAIL_RETIRED', error: 'This payment method has been retired. Open the current Pocket checkout.' })
+  return
+}
+
+// Unexported historical implementation. No route may invoke this function.
+async function historicalSolanaVaultAddress(req: Request, res: Response): Promise<void> {
+  // Historical implementation retained for incident review, never executed.
   const { linkId, recipient } = req.query as { linkId?: string; recipient?: string }
   if (!linkId || !recipient) { res.status(400).json({ ok: false, error: 'Missing linkId / recipient' }); return }
   try { parseSolanaAddress('Recipient address', recipient) }
@@ -378,6 +405,13 @@ export async function getSolanaVaultAddress(req: Request, res: Response): Promis
 
 // ── POST /api/solana-sweep ────────────────────────────────────────────────────
 export async function sweepSolanaVault(req: Request, res: Response): Promise<void> {
+  res.status(410).json({ ok: false, code: 'LEGACY_PAYMENT_RAIL_RETIRED', error: 'This payment method has been retired. Open the current Pocket checkout.' })
+  return
+}
+
+// Unexported historical implementation. No route may invoke this function.
+async function historicalSolanaVaultSweep(req: Request, res: Response): Promise<void> {
+  // Historical implementation retained for incident review, never executed.
   const { linkId, recipient } = req.body as { linkId?: string; recipient?: string }
   if (!linkId || !recipient) { res.status(400).json({ ok: false, error: 'Missing linkId / recipient' }); return }
 

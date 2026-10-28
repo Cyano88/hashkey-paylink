@@ -1,7 +1,7 @@
 import { forwardPocketRequest } from './forward-request.js'
 import type { Request, Response } from 'express'
 import {
-  buildSolanaTx,
+  buildPocketSolanaWithdrawal,
   relaySolanaTx,
   validatePocketSignedSolanaTransaction,
 } from '../relay-solana.js'
@@ -54,7 +54,7 @@ async function linkedSolanaWallet(dependencies: PocketSolanaTransferDependencies
   const identity = await dependencies.verifyUser(req)
   const link = await dependencies.readLink(circleLinkKey(identity.userId, 'solana', 'payment'))
   if (!link) throw Object.assign(new Error('Link a Circle Solana wallet before withdrawing.'), { status: 404 })
-  if (link.chain !== 'solana' || (link.purpose ?? 'payment') !== 'payment') {
+  if (link.privyUserId !== identity.userId || link.chain !== 'solana' || link.circleBlockchain !== 'SOL' || (link.purpose ?? 'payment') !== 'payment') {
     throw Object.assign(new Error('Stored Circle wallet link did not match the Solana payment wallet.'), { status: 500 })
   }
   return link.circleWalletAddress
@@ -137,7 +137,7 @@ export function createPocketSolanaTransferSubmitHandler(dependencies: PocketSola
 const dependencies: PocketSolanaTransferDependencies = {
   verifyUser: verifiedPrivyUser,
   readLink: readCircleLink,
-  build: buildSolanaTx,
+  build: buildPocketSolanaWithdrawal,
   relay: relaySolanaTx,
   validateSigned: validatePocketSignedSolanaTransaction,
 }

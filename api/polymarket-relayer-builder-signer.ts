@@ -56,12 +56,21 @@ function isDepositWalletSubmitBody(body: string) {
     return isAddress(call.target)
       && typeof call.value === 'string'
       && /^\d+$/.test(call.value)
+      && typeof call.data === 'string'
       && isHex(call.data)
       && call.data.length <= 20_000
   })
 }
 
 export default async function handler(req: Request, res: Response) {
+  // No current Pocket caller uses this anonymous credential-signing proxy.
+  // Portfolio funding uses its authenticated server-side SDK integration.
+  return res.status(410).json({ ok: false, code: 'LEGACY_SIGNER_RETIRED', error: 'Use the authenticated Polymarket funding flow.' })
+}
+
+// Unexported historical implementation. No route may invoke this function.
+async function historicalBuilderSigner(req: Request, res: Response) {
+  // Historical implementation retained for review; never issue public headers.
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }

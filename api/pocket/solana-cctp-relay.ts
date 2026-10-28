@@ -329,6 +329,7 @@ async function validateSignedTransaction(input: {
   requireAllSignatures?: boolean
 }) {
   const { transaction, wallet, relayer, expected } = input
+  if (wallet.equals(relayer)) throw fail(403, 'Relayer cannot authorize a customer bridge.')
   assertKey(transaction.feePayer, relayer, 'transaction fee payer')
   if (transaction.instructions.length < 2 || transaction.instructions.length > 4) {
     throw fail(400, 'Solana CCTP transaction contained an unexpected instruction count.')
@@ -368,6 +369,7 @@ export async function preparePocketSolanaCctpTransaction(input: {
 }) {
   const wallet = new PublicKey(input.walletAddress)
   const relayer = input.relayer ?? loadRelayer()
+  if (wallet.equals(relayer.publicKey)) throw fail(403, 'Relayer cannot authorize a customer bridge.')
   const connection = input.connection ?? new Connection(getRpc(), 'confirmed')
   const built = await (input.buildBridge ?? buildManualBridge)({
     connection,
@@ -469,11 +471,11 @@ async function linkedWallet(dependencies: Dependencies, req: Request, expected: 
   const identity = await dependencies.verifyUser(req)
   const link = await dependencies.readLink(circleLinkKey(identity.userId, 'solana', 'payment'))
   if (!link) throw fail(404, 'Link a Circle Solana wallet before bridging.')
-  if (link.chain !== 'solana' || (link.purpose ?? 'payment') !== 'payment') {
+  if (link.privyUserId !== identity.userId || link.chain !== 'solana' || link.circleBlockchain !== 'SOL' || (link.purpose ?? 'payment') !== 'payment') {
     throw fail(500, 'Stored Circle wallet link did not match the Solana payment wallet.')
   }
   const destination = await dependencies.readLink(circleLinkKey(identity.userId, expected.destination, 'payment'))
-  if (!destination || destination.chain !== expected.destination || (destination.purpose ?? 'payment') !== 'payment' || destination.circleWalletAddress.toLowerCase() !== expected.destinationAddress.toLowerCase()) {
+  if (!destination || destination.privyUserId !== identity.userId || destination.chain !== expected.destination || (destination.purpose ?? 'payment') !== 'payment' || destination.circleWalletAddress.toLowerCase() !== expected.destinationAddress.toLowerCase()) {
     throw fail(403, 'Bridge destination must be your linked Pocket wallet.')
   }
   return link.circleWalletAddress

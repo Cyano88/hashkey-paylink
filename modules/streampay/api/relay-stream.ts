@@ -67,6 +67,12 @@ const is65ByteHex = (v: unknown): v is `0x${string}` =>
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async function handler(req: Request, res: Response) {
+  // Retired product: preserve receipts and identifiers, not anonymous signing.
+  return res.status(410).json({ ok: false, code: 'LEGACY_SIGNER_RETIRED', error: 'This legacy signing service is retired.' })
+}
+
+// Unexported historical implementation. No route may invoke this function.
+async function historicalLegacyRelayer(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
