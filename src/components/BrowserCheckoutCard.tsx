@@ -1,3 +1,4 @@
+import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft} from './CheckoutExpiry'
 import CheckoutMerchant from './CheckoutMerchant'
 import {checkoutMessage} from '../lib/checkoutMessage'
 import {useEffect,useRef,useState} from 'react'
@@ -5,21 +6,24 @@ import {QRCodeSVG} from 'qrcode.react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
 
-type Props={quoteLoading?:boolean;brandImageUrl?:string;fundingHint?:string;asset?:string;signOut?:()=>Promise<void>;nameInput?:{value:string;onChange:(value:string)=>void};amountInput?:{value:string;currency:string;onChange:(value:string)=>void};id:string;attempt:string;merchant:string;title:string;amount:string;fiat:boolean;authenticated:boolean;email:string;network:string;networks:Array<{value:string;label:string}>;onNetwork:(value:string)=>void;walletReady:boolean;address:string;balance:string|null;shortfall:string|null;total:string|null;fee:string|null;busy:boolean;blocked:boolean;error:string;prepare:()=>Promise<void>;refresh:()=>Promise<unknown>;pay:()=>Promise<void>}
+type Props={expiresAt?:string;returnUrl?:string;quoteLoading?:boolean;brandImageUrl?:string;fundingHint?:string;asset?:string;signOut?:()=>Promise<void>;nameInput?:{value:string;onChange:(value:string)=>void};amountInput?:{value:string;currency:string;onChange:(value:string)=>void};id:string;attempt:string;merchant:string;title:string;amount:string;fiat:boolean;authenticated:boolean;email:string;network:string;networks:Array<{value:string;label:string}>;onNetwork:(value:string)=>void;walletReady:boolean;address:string;balance:string|null;shortfall:string|null;total:string|null;fee:string|null;busy:boolean;blocked:boolean;error:string;prepare:()=>Promise<void>;refresh:()=>Promise<unknown>;pay:()=>Promise<void>}
 export default function BrowserCheckoutCard(p:Props){
  const asset=p.asset||'USDC'
+ const seconds=useCheckoutExpiry(p.expiresAt)
  const [funding,setFunding]=useState(false),[localBusy,setLocalBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false)
  const lock=useRef(false),refreshRef=useRef(p.refresh);refreshRef.current=p.refresh
  const handoff=checkoutHandoff(p.id,p.attempt)
- async function run(action:()=>Promise<unknown>){if(lock.current||p.busy)return;lock.current=true;setLocalBusy(true);setError('');try{await action()}catch(e){setError((e as Error).message||'Please try again.')}finally{lock.current=false;setLocalBusy(false)}}
+ async function run(action:()=>Promise<unknown>){if(lock.current||p.busy)return;lock.current=true;setLocalBusy(true);setError('');try{if(checkoutSecondsLeft(p.expiresAt)===0)throw Error('Checkout expired. Return to the store.');await action()}catch(e){setError((e as Error).message||'Please try again.')}finally{lock.current=false;setLocalBusy(false)}}
  useEffect(()=>{setFunding(false);setCopied(false);setError('')},[p.network,p.address,p.email])
- useEffect(()=>{if(!funding)return;let active=true,timer:ReturnType<typeof setTimeout>;const tick=async()=>{if(!active)return;if(document.visibilityState==='visible'&&!lock.current){lock.current=true;try{await refreshRef.current();if(active)setError('')}catch{if(active)setError('Balance could not be refreshed. Try again.')}finally{lock.current=false}}if(active)timer=setTimeout(tick,10000)};timer=setTimeout(tick,5000);return()=>{active=false;clearTimeout(timer)}},[funding])
+ useEffect(()=>{if(!funding||seconds===0)return;let active=true,timer:ReturnType<typeof setTimeout>;const tick=async()=>{if(!active)return;if(document.visibilityState==='visible'&&!lock.current){lock.current=true;try{await refreshRef.current();if(active)setError('')}catch{if(active)setError('Balance could not be refreshed. Try again.')}finally{lock.current=false}}if(active)timer=setTimeout(tick,10000)};timer=setTimeout(tick,5000);return()=>{active=false;clearTimeout(timer)}},[funding,seconds===0])
  const busy=p.busy||localBusy
  const message=busy?'':checkoutMessage(error||p.error)
  const needsRefresh=p.walletReady&&(p.balance===null||p.total===null)
  const canFund=Boolean(p.shortfall&&p.address)
+ if(seconds===0&&!busy)return <CheckoutExpired returnUrl={p.returnUrl}/>
  return <main className="mx-auto w-full max-w-md py-6 text-gray-950 dark:text-white"><p className="mb-6 text-center text-sm font-semibold">Hash PayLink</p><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114] sm:p-8">
   <CheckoutMerchant name={p.merchant} logo={p.brandImageUrl}/><h1 className="mt-3 text-center text-3xl font-semibold tracking-tight">{p.amount}</h1>{p.title&&<p className="mt-2 text-center text-sm text-gray-500">{p.title}</p>}
+  <CheckoutCountdown seconds={seconds}/>
   {!p.authenticated?<div className="mt-8"><PocketEmailLogin context="checkout"/></div>:<>
    <div className="mt-6 flex items-center justify-between gap-3"><p className="min-w-0 break-all text-xs text-gray-500">{p.email}</p>{p.signOut&&<button disabled={busy} onClick={()=>void run(p.signOut!)} className="shrink-0 py-2 text-xs font-medium">Change account</button>}</div>
    {p.amountInput&&<label className="mt-5 block text-sm">Amount ({p.amountInput.currency})<input aria-label="Payment amount" inputMode="decimal" value={p.amountInput.value} disabled={busy} onChange={e=>{if(/^\d*(?:\.\d{0,6})?$/.test(e.target.value))p.amountInput!.onChange(e.target.value)}} className="mt-2 min-h-12 w-full rounded-xl border border-gray-200 bg-transparent px-3 dark:border-white/10"/></label>}

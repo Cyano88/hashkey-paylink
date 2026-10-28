@@ -367,7 +367,7 @@ const managedDependencies = {
 }
 const managedHandler = createHostedCheckoutsHandler(managedDependencies)
 const managedBody = {
-  kind: 'service', title: 'Managed checkout', amount: '1.25', memo: 'Order 42',
+  kind: 'service', title: 'Managed checkout', amount: '1.25', memo: 'Order 42', expiresInMinutes:60,
   returnUrl: 'https://managed.example/complete',
 }
 const managedHeaders = { 'x-api-key': 'hpl_live_managed', 'idempotency-key': 'managed:order:00000001' }
@@ -487,7 +487,7 @@ const nairaDependencies = {
 }
 const nairaHandler = createHostedCheckoutsHandler(nairaDependencies)
 const nairaHeaders = { 'x-api-key': 'hpl_live_naira', 'idempotency-key': 'naira:order:00000001' }
-const nairaBody = { kind: 'service', title: 'Naira service', amount: '1.25', returnUrl: 'https://naira.example/complete' }
+const nairaBody = { expiresInMinutes:60, kind: 'service', title: 'Naira service', amount: '1.25', returnUrl: 'https://naira.example/complete' }
 assert.equal((await request(nairaHandler, 'POST', { body: { ...nairaBody, flexible: true }, headers: { ...nairaHeaders, 'idempotency-key': 'naira:flexible:0000001' } })).statusCode, 400)
 const nairaCreated = await request(nairaHandler, 'POST', { body: nairaBody, headers: nairaHeaders })
 assert.equal(nairaCreated.statusCode, 201)
@@ -680,3 +680,12 @@ for(const network of ['base','arbitrum','ethereum','polygon']) {
 }
 assert.equal((await request(handler,'POST',{headers:{...headers,'idempotency-key':'usdt-arc-rejected-01'},body:{...valid,network:'arc',asset:'USDT'}})).statusCode,400)
 console.log('PASS EVM USDT checkout creation and signed lookup across four networks; Arc USDT rejected.')
+
+const defaultExpiry=await request(handler,'POST',{headers:{...headers,'idempotency-key':'human-default-expiry-001'},body:{...valid,expiresInMinutes:undefined}})
+assert.equal(defaultExpiry.statusCode,201,JSON.stringify(defaultExpiry.body))
+assert.equal(Date.parse(defaultExpiry.body.expiresAt)-now.getTime(),15*60_000)
+now=new Date(now.getTime()+15*60_000)
+const expiredReturn=await request(handler,'GET',{query:{id:defaultExpiry.body.checkoutId,purpose:'return'}})
+assert.equal(expiredReturn.statusCode,410)
+assert.equal(expiredReturn.body.returnUrl,valid.returnUrl)
+console.log('PASS human default 15-minute expiry and verified store return on expiry.')

@@ -969,7 +969,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
       if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) {
         await expireHostedCheckoutExecution(record, dependencies.executions)
-        return res.status(410).json({ ok: false, error: 'Checkout expired.' })
+        return res.status(410).json({ ok: false, error: 'Checkout expired.', ...(req.query?.purpose==='return'&&record.returnUrl?{returnUrl:record.returnUrl}:{}) })
       }
       return res.json({
         ok: true,
@@ -1078,7 +1078,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const recipient = routingOptions ? defaultOption?.recipient ?? '' : legacyRecipient
     const memo = clean(req.body?.memo, 90) || title
     const returnUrl = clean(req.body?.returnUrl, 300)
-    const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 60)
+    const expiresInMinutes = Number(req.body?.expiresInMinutes ?? (checkoutMode==='human'?15:60))
 
     if (!KINDS.has(kind)) return res.status(400).json({ ok: false, error: 'Private beta supports usdc_request and service checkouts.' })
     if (checkoutMode !== 'human' && checkoutMode !== 'agentic') return res.status(400).json({ ok: false, error: 'checkoutMode must be human or agentic.' })

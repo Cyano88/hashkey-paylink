@@ -1,3 +1,4 @@
+import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { paymentFundingMinimum } from '../lib/paymentFundingMinimum'
 import {checkoutStablecoin} from '../lib/checkoutStablecoins'
 import PocketMerchantPaymentForm from '../pocket/components/PocketMerchantPaymentForm'
@@ -585,6 +586,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedConfirmationError, setHostedConfirmationError] = useState('')
   const [hostedPayoutFailed, setHostedPayoutFailed] = useState(false)
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
+  const [hostedExpiresAt,setHostedExpiresAt]=useState<string|undefined>()
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
   const hostedMerchantLogo = getPaylinkParam(initParams, 'merchantLogo', 'merchantLogo').slice(0, 400)
@@ -679,9 +681,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           ok?: boolean
           paymentUrl?: string
           returnUrl?: string
-          checkout?: { checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
+          checkout?: { expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
           error?: string
         } | undefined
+        if(!cancelled&&response.status===410&&body?.returnUrl)setHostedReturnUrl(body.returnUrl)
         if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This hosted checkout could not be verified.')
         }
@@ -698,6 +701,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         }
         if (!cancelled) {
           setHostedReturnUrl(body.returnUrl || '')
+          setHostedExpiresAt(body.checkout?.expiresAt)
           setHostedIntentStatus('verified')
           const attempt = body.checkout?.paymentAttempt
           if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc' || attempt?.network === 'ethereum' || attempt?.network === 'polygon' || attempt?.network === 'solana') {
@@ -4056,6 +4060,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
 
   if (browserPaymentFlow && isHostedCheckout && !isPolymarketFunding && !isAgentOrWalletFunding) {
+    if (hostedIntentStatus==='error'&&/checkout expired/i.test(hostedIntentError))return <CheckoutExpired returnUrl={hostedReturnUrl}/>
     if (hostedIntentStatus !== 'verified') return <div className="mx-auto max-w-md py-8">{hostedIntentError ? <p role="alert">{hostedIntentError}</p> : <div aria-label="Verifying checkout" className="h-72 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}</div>
     const solanaCheckout = chain === 'solana'
     const walletReady = solanaCheckout ? Boolean(circleSolanaSession?.wallet.address) : circleEvmWalletUnlocked && !!circleSmartAccount && circleEvmEmailSession?.wallet.address.toLowerCase() === circleSmartAccount.toLowerCase() && !paycrestNeedsPreparation
@@ -4099,7 +4104,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
       amount={isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={isHostedLocalSettlement}

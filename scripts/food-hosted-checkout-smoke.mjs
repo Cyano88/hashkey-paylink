@@ -11,7 +11,7 @@ for(const rail of ['circle','bsc','xlayer']){
  if(rail==='xlayer')store.drafts={[id]:{id,lines:[{id:'plantain',name:'Golden plantain',quantity:1,cents:150}],cents:150,createdAt:clock}}
  const body={action:'prepare',requestId:id,items:[{id:'plantain',quantity:1}],amount:'0.01',recipient:'attacker',network:'bsc',rail:'xlayer'}
  const result=await request('POST',rail==='xlayer'?{...body,items:undefined}:body);assert.equal(result.code,200,JSON.stringify(result));assert.equal(result.data.checkoutUrl,'/pay/c/'+checkoutId)
- assert.equal(calls[0].body.amount,'1.5');assert.equal(calls[0].body.asset,'USDC');assert.equal(calls[0].body.kind,'service')
+ assert.equal(calls[0].body.expiresInMinutes,15);assert.equal(calls[0].body.amount,'1.5');assert.equal(calls[0].body.asset,'USDC');assert.equal(calls[0].body.kind,'service')
  for(const field of ['rail','network','recipient','paymentOptions','brandImageUrl'])assert.equal(calls[0].body[field],undefined)
  assert.equal((await request('POST',body)).code,200);assert.equal(calls.length,1)
  assert.equal((await request('POST',{action:'prepare',requestId:id})).data.checkoutUrl,result.data.checkoutUrl)

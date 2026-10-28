@@ -77,8 +77,8 @@ export function createHostedBscCheckoutsHandler(overrides: Partial<Dependencies>
           return res.json({ ...response(r), status: r.payment ? 'paid' : Date.parse(r.expiresAt) <= d.now() ? 'expired' : 'pending', ...(r.payment ? { payment: r.payment } : {}) })
         }
         if (!r.payment && !isBscCheckoutAsset(r.token.address)) fail('This checkout asset is no longer accepted. Ask the business for a stablecoin payment link.', 409)
-        if (!r.payment && Date.parse(r.expiresAt) <= d.now()) fail('Checkout expired.', 410)
-        return res.json({ ...response(r), ...(r.payment ? { returnUrl: r.returnUrl, payment:r.payment, recipient:r.recipient } : {}) })
+        if (!r.payment && Date.parse(r.expiresAt) <= d.now()) return res.status(410).json({ok:false,error:'Checkout expired.',...(req.query.purpose==='return'?{returnUrl:r.returnUrl}:{})})
+        return res.json({ ...response(r), ...(req.query.purpose==='return'?{returnUrl:r.returnUrl}:{}), ...(r.payment ? { returnUrl: r.returnUrl, payment:r.payment, recipient:r.recipient } : {}) })
       }
       if (req.method !== 'POST') return res.sendStatus(405)
       const policy = await d.policy(req)
@@ -102,7 +102,7 @@ export function createHostedBscCheckoutsHandler(overrides: Partial<Dependencies>
       const swapEnabled = req.body?.swap === true
       if (req.body?.swap !== undefined && typeof req.body.swap !== 'boolean') fail('Swap must be true or false.')
       if (swapEnabled) fail('Swap in Pocket before paying. Checkout accepts a supported stablecoin balance.', 400)
-      const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 30)
+      const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 15)
       if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 1440) fail('Expiry must be between 5 and 1440 minutes.')
       const requestHash = createHash('sha256').update(JSON.stringify([amountInput, chosen.address.toLowerCase(), p.bscCheckout.recipient, title, returnUrl, swapEnabled, expiresInMinutes])).digest('hex')
       const scopedKey = p.partnerId + ':' + key, before = await d.read(), existing = before.checkouts[before.idempotency[scopedKey]]

@@ -1,3 +1,4 @@
+import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry} from '../../components/CheckoutExpiry'
 import {checkoutStablecoins} from '../../lib/checkoutStablecoins'
 import {formatUnits} from 'viem'
 import PocketCheckoutSwap from './PocketCheckoutSwap'
@@ -35,7 +36,7 @@ const card='rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262
 const cta='pocket-cta-primary w-full'
 export function xpayReceipt(p:XPayPayment):PaylinkReceipt{return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:'XPay payment',amount:p.amount,asset:p.symbol,createdAt:p.createdAt,source:'xpay',recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:'Pocket',brandKind:'pocket'}}
 function CheckoutSurface({children}:ComponentProps<typeof PocketBottomSheet>){return <section className="rounded-3xl border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-[#121212]">{children}</section>}
-export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext,merchantOverride}:{merchantOverride?:string;paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
+export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext,merchantOverride,checkoutReturnUrl}:{checkoutReturnUrl?:string;merchantOverride?:string;paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
  const {user,getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=merchantOverride||paymentContext?.merchantId||params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
  const scope=(user?.id||'')+':'+(wallet.address||''),storageKey='pocket.xpay.active:'+scope
  const scopeRef=useRef(scope);scopeRef.current=scope
@@ -49,6 +50,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  const guard=useRef(false),mounted=useRef(true)
  const [now,setNow]=useState(Date.now)
  useEffect(()=>{setVerifiedReturn('');if(!checkout||payment?.status!=='paid'||!/^chkx_[a-f0-9]{24}$/.test(merchantId))return;let active=true;void fetch(pocketApiUrl('/api/v2/checkouts?id='+merchantId),{cache:'no-store'}).then(r=>r.json()).then(d=>{if(active&&d.ok&&d.checkout?.id===merchantId&&d.checkout.status==='paid'&&typeof d.returnUrl==='string')setVerifiedReturn(d.returnUrl)}).catch(()=>undefined);return()=>{active=false}},[checkout,merchantId,payment?.status,payment?.id])
+ const checkoutSeconds=useCheckoutExpiry(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&merchant?.expiresAt?new Date(merchant.expiresAt).toISOString():undefined)
  const quoteExpired=payment?.status==='ready'&&payment.expiresAt<=now
  useEffect(()=>{if(payment?.status!=='ready')return;setNow(Date.now());const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[payment?.id,payment?.status])
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
@@ -133,11 +135,13 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(converting&&merchant?.swapEnabled)return <PocketCheckoutSwap checkoutId={merchant.id} asset={token} onClose={()=>{setConverting(false);setReview(null);setPayment(null);setError('');void wallet.refresh().catch(()=>undefined)}}/>
  if(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&payment&&['paid','submitted','failed'].includes(payment.status))return <BrowserPaymentResult fullScreen={checkout} state={payment.status==='paid'?'successful':payment.status==='failed'?'failed':'pending'} amount={formatStockQuantity(payment.amount)+' '+payment.symbol} merchant={payment.merchantName} receipt={xpayReceipt(payment)} returnUrl={verifiedReturn} detail={payment.status==='submitted'?'Your merchant payment is being verified. Do not pay again.':undefined}/>
+ if(checkoutSeconds===0&&!busy&&!wallet.busy)return <CheckoutExpired returnUrl={verifiedReturn||checkoutReturnUrl}/>
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
   {merchantId&&!paymentContext&&<PocketXPayCheckoutBackdrop/>}
   {!merchantId&&<PocketXPayLinks key={user?.id||'guest'} onLayoutChange={onLayoutChange} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
   {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface fullScreen={checkout} title={review?"Confirm payment":"Pay "+(merchant?.name||'XPay')} onClose={()=>{if(review&&payment?.status==='ready'){setPayment(null);setReview(null);setError('')}else close()}} showCloseButton dismissible={!busy&&!wallet.busy} dismissOnBackdrop={false}><div className={review?undefined:"min-h-72"}>
+   <CheckoutCountdown seconds={checkoutSeconds}/>
    {!review&&<h2 className="mb-5 text-center text-base font-semibold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
     <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[

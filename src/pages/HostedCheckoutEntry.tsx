@@ -1,3 +1,4 @@
+import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
@@ -12,7 +13,7 @@ type HostedCheckoutLookup = {
   paymentUrl?: string
   error?: string
   returnUrl?:string
-  checkout?:{id:string;bscCheckout?:boolean;stockCheckout?:boolean;status:string;amount:string;asset:string;merchantName:string;brandImageUrl?:string;title?:string;settlementCurrency?:string;settlementAmount?:string;paymentAttempt?:{status?:string}}
+  checkout?:{expiresAt?:string;id:string;bscCheckout?:boolean;stockCheckout?:boolean;status:string;amount:string;asset:string;merchantName:string;brandImageUrl?:string;title?:string;settlementCurrency?:string;settlementAmount?:string;paymentAttempt?:{status?:string}}
 }
 
 export default function HostedCheckoutEntry() {
@@ -20,6 +21,7 @@ export default function HostedCheckoutEntry() {
   const { checkoutId = '' } = useParams()
   const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
   const [error, setError] = useState('')
+  const [expiredReturn,setExpiredReturn]=useState<string|undefined>()
   const [stock, setStock] = useState<HostedCheckoutLookup|null>(null)
   const [checkout, setCheckout] = useState<HostedCheckoutLookup|null>(null)
   const browser = new URLSearchParams(window.location.search).get('browser') === '1'
@@ -29,12 +31,13 @@ export default function HostedCheckoutEntry() {
     const controller = new AbortController()
     let timeout: ReturnType<typeof setTimeout>
     let poll: ReturnType<typeof setTimeout>
-    setError(''); setCheckout(null); setStock(null)
+    setError(''); setExpiredReturn(undefined); setCheckout(null); setStock(null)
     async function openCheckout() {
       timeout = setTimeout(() => controller.abort(), 15000)
       try {
-        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}`, { cache: 'no-store', signal: controller.signal })
+        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}&purpose=return`, { cache: 'no-store', signal: controller.signal })
         const body = await response.json().catch(() => undefined) as HostedCheckoutLookup | undefined
+        if(!cancelled&&response.status===410)setExpiredReturn(body?.returnUrl)
         if(response.ok&&body?.ok&&body.checkout?.bscCheckout&&body.checkout.id===checkoutId&&/^chkb_[a-f0-9]{24}$/.test(checkoutId)){
           if(!cancelled){setCheckout(body);if(!browser&&body.checkout.status!=='paid')poll=setTimeout(()=>void openCheckout(),10000)}
           return
@@ -61,13 +64,14 @@ export default function HostedCheckoutEntry() {
     return () => { cancelled = true; controller.abort(); clearTimeout(timeout); clearTimeout(poll) }
   }, [attemptId, checkoutId, navigate, browser])
 
-  if(checkout?.checkout?.bscCheckout&&!browser&&checkout.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={`${checkout.checkout.amount} ${checkout.checkout.asset}`} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
+  if(error&&/expired/i.test(error))return <CheckoutExpired returnUrl={expiredReturn||checkout?.returnUrl||stock?.returnUrl}/>
+  if(checkout?.checkout?.bscCheckout&&!browser&&checkout.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={`${checkout.checkout.amount} ${checkout.checkout.asset}`} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
   if(checkout?.checkout?.bscCheckout)return <Suspense fallback={<div role="status" aria-label="Opening payment" className="mx-auto h-96 max-w-md animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><BscCheckout checkout={checkout.checkout} returnUrl={checkout.returnUrl}/></Suspense>
-  if(stock?.checkout&&!browser&&stock.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice id={checkoutId} attempt={attemptId} brandImageUrl={stock.checkout.brandImageUrl} merchant={stock.checkout.merchantName} title={stock.checkout.title} amount={stock.checkout.amount+' '+stock.checkout.asset} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
+  if(stock?.checkout&&!browser&&stock.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice expiresAt={stock.checkout.expiresAt} returnUrl={stock.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={stock.checkout.brandImageUrl} merchant={stock.checkout.merchantName} title={stock.checkout.title} amount={stock.checkout.amount+' '+stock.checkout.asset} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
   if(stock?.checkout)return stock.checkout.status==='paid'
     ? <BrowserPaymentResult fullScreen state="successful" amount={stock.checkout.amount+' '+stock.checkout.asset} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
-    : <Suspense fallback={<div role="status" aria-label="Opening checkout" className="mx-auto h-96 max-w-md animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><StockCheckout merchantOverride={checkoutId}/></Suspense>
-  if (checkout?.checkout && !error) return <div className="py-6"><CheckoutChoice id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkout.checkout.settlementCurrency ? `${checkout.checkout.settlementCurrency} ${checkout.checkout.settlementAmount}` : `${checkout.checkout.amount} ${checkout.checkout.asset || 'USDC'}`} onBrowser={()=>navigate(checkout.paymentUrl!,{replace:true})}/></div>
+    : <Suspense fallback={<div role="status" aria-label="Opening checkout" className="mx-auto h-96 max-w-md animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><StockCheckout merchantOverride={checkoutId} returnUrl={stock.returnUrl}/></Suspense>
+  if (checkout?.checkout && (!error||/expired/i.test(error))) return <div className="py-6"><CheckoutChoice expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkout.checkout.settlementCurrency ? `${checkout.checkout.settlementCurrency} ${checkout.checkout.settlementAmount}` : `${checkout.checkout.amount} ${checkout.checkout.asset || 'USDC'}`} onBrowser={()=>navigate(checkout.paymentUrl!,{replace:true})}/></div>
   return (
     <div className="mx-auto w-full max-w-sm">
       <HashPayLinkCheckoutBrand />

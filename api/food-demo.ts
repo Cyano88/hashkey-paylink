@@ -54,7 +54,7 @@ async function prepareHostedOrder(d:typeof defaults,id:string,items:unknown){
   return store
  })
  // The merchant specifies the order, not receiving wallets or provider routes.
- const made=await d.call('',{kind:'service',checkoutMode:'human',asset:'USDC',amount,title:'Lunchroom order '+id.slice(0,6),expiresInMinutes:25,returnUrl:'https://app.hashpaylink.com/launchroom?order='+id},'food-demo:hosted:'+id)
+ const made=await d.call('',{kind:'service',checkoutMode:'human',asset:'USDC',amount,title:'Lunchroom order '+id.slice(0,6),expiresInMinutes:15,returnUrl:'https://app.hashpaylink.com/launchroom?order='+id},'food-demo:hosted:'+id)
  const checkoutId=String(made.checkoutId||''),url=new URL(made.checkoutUrl,'https://app.hashpaylink.com')
  if(!/^(?:chk_[a-zA-Z0-9]{8,40}|chk[bx]_[a-f0-9]{24})$/.test(checkoutId)||url.origin!=='https://app.hashpaylink.com'||url.pathname!=='/pay/c/'+checkoutId||!String(made.checkoutUrl).startsWith('/pay/c/'))throw Error('Invalid checkout response.')
  const rail=checkoutId.startsWith('chkb_')?'bsc':checkoutId.startsWith('chkx_')?'xlayer':'circle'

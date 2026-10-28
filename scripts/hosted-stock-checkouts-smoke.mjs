@@ -34,6 +34,7 @@ try{for(const asset of xlayerCheckoutAssets){
  assert.equal((await call('POST',{...body,amount:'0.'+'0'.repeat(asset.decimals)+'1'})).status,400)
  assert.equal((await call('POST',{...body,returnUrl:'https://other.example/paid'})).status,400)
  const made=await call('POST',body);assert.equal(made.status,201,JSON.stringify(made.data));const id=made.data.checkoutId
+ assert.equal(Date.parse(made.data.checkout.expiresAt)-clock,15*60_000)
  assert.equal(made.data.checkout.brandImageUrl,policy.brandImageUrl)
  if(policy.brandImageUrl){store.checkouts[id].brandImageUrl='https://merchant.example/changed.png';assert.equal(await readStockCheckout(id,false,d),null);store.checkouts[id].brandImageUrl=policy.brandImageUrl}
  assert.equal((await call('POST',body)).data.checkoutId,id)
