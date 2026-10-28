@@ -59,7 +59,7 @@ for(const mode of ['ngn','ugx']){
  const selection={requestId:localId,asset:'USDC',rail:'circle',network:'base'}
  assert.equal((await request('POST',selection)).code,200)
  assert.equal((await request('POST',selection)).code,200);assert.equal(createCount,1)
- assert.equal((await request('GET',{}, {id:localId})).data.order.status,'pending','USDC confirmation alone is not bank delivery')
+ assert.equal((await request('GET',{}, {id:localId})).data.order.status,'processing','USDC confirmation alone is not bank delivery')
  localStatus='paid';reportedMode='usdc';assert.equal((await request('GET',{}, {id:localId})).data.order.status,'pending','Settlement mode must match the created checkout')
  reportedMode=mode;reportedAmount='4.5';assert.equal((await request('GET',{}, {id:localId})).data.order.status,'pending','Payment must match the provider payable amount')
  reportedAmount='4.6';const receipt=(await request('GET',{}, {id:localId})).data.order

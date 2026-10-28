@@ -93,6 +93,7 @@ export default function DeveloperPortalPage() {
   institutionAccessToken.current = getAccessToken
   const loadGeneration = useRef(0)
   const creatingProject = useRef(false)
+  const savingProject = useRef(false)
   const [receivingWallets, setReceivingWallets] = useState<Record<string,string>>({})
   const [projects, setProjects] = useState<Project[]>([])
   const [authWaitExpired, setAuthWaitExpired] = useState(false)
@@ -164,6 +165,7 @@ export default function DeveloperPortalPage() {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
     const response = await fetch('/api/developer-projects', {
+      signal: AbortSignal.timeout(20000),
       method,
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -257,7 +259,8 @@ export default function DeveloperPortalPage() {
   }
 
   async function saveProject(value = draft) {
-    if (!value) return
+    if (!value || savingProject.current) return
+    savingProject.current=true
     const draft = value
     const generation = loadGeneration.current
     setBusy(true); setError(''); setNotice('')
@@ -280,8 +283,8 @@ export default function DeveloperPortalPage() {
       setNotice(data.project.operationalStatus === 'suspended'
         ? 'Configuration saved. The project remains suspended.'
         : data.project.settlementStatus === 'ready' ? 'Project settings saved.' : 'Configuration saved. Setup is still required.')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Configuration could not be saved.') }
-    finally { setBusy(false) }
+    } catch (reason) { if(generation===loadGeneration.current)setError(reason instanceof Error && reason.name==='TimeoutError' ? 'Saving took longer than expected. Reload to check whether your changes were saved.' : reason instanceof Error ? reason.message : 'Configuration could not be saved.') }
+    finally { savingProject.current=false;setBusy(false) }
   }
 
   async function createKey(environment: 'test' | 'live') {
@@ -374,14 +377,14 @@ export default function DeveloperPortalPage() {
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
-              {active && draft && tab === 'setup' && <><SetupPanel receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
+              {active && draft && tab === 'setup' && <><SetupPanel error={error} notice={notice} receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
               {active && tab === 'verification' && <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/> }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
               {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><details className="mt-8 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Command-line tools</summary><CliGuide projectId={active.id} /></details><details className="mt-6 text-sm text-gray-500"><summary className="cursor-pointer">Coming soon</summary><ComingSoonProducts/></details></>}
             </>}
-          {!creatingNew && error && <Message tone="error">{error}</Message>}
-          {notice && <Message tone="success">{notice}</Message>}
+          {!creatingNew && tab !== 'setup' && error && <Message tone="error">{error}</Message>}
+          {tab !== 'setup' && notice && <Message tone="success">{notice}</Message>}
         </section>
       </div>
     </main>
@@ -392,7 +395,7 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
   return <ProductPicker mode={checkoutMode} value={value} onChange={onChange}/>
 }
 
-function SetupPanel({ receivingWallets, draft, setDraft, institutions, institutionsLoading, busy, onSave }: { receivingWallets: Record<string,string>; draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
+function SetupPanel({ receivingWallets, draft, setDraft, institutions, institutionsLoading, busy, onSave, error, notice }: { receivingWallets: Record<string,string>; draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void; error?:string; notice?:string }) {
   const [settingsSection, setSettingsSection] = useState<'general'|'receiving'|'branding'>('general')
   const [settingsError, setSettingsError] = useState('')
   function submitSettings() {
@@ -518,6 +521,8 @@ function SetupPanel({ receivingWallets, draft, setDraft, institutions, instituti
     </div>}
     </div>
     {settingsError && <p role="alert" className="mt-4 text-sm text-red-600">{settingsError}</p>}
+    {error && <Message tone="error">{error}</Message>}
+    {notice && <Message tone="success">{notice}</Message>}
     <button type="button" disabled={busy} onClick={submitSettings} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {settingsSection==='general'&&draft.settlementStatus!=='ready'?'Continue to receiving accounts':'Save changes'}</button>
   </fieldset>
 }
@@ -582,7 +587,7 @@ function QuickstartPanel({ project }: { project: Project }) {
   const hasAgreements = project.capabilities.includes('arc_agreements')
   const hasFunding = project.capabilities.includes('polymarket_funding')
   const fundingCode = `const response = await fetch("https://developer.hashpaylink.com/api/v2/funding/polymarket/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASHPAYLINK_API_KEY,\n    "Content-Type": "application/json",\n    "Idempotency-Key": "funding_order_0001"\n  },\n  body: JSON.stringify({\n    polymarketWallet: customer.polymarketWallet,\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n});\nif (!response.ok) throw new Error("Funding request failed");\nconst funding = await response.json();\n// Read the funding status API; payment confirmation is not bridge completion.`
-  const modeFields = `    checkoutMode: "${paymentPath}",${paymentPath === 'agentic' ? '\n    agenticType: "agent_treasury",\n    network: process.env.HASH_PAYLINK_NETWORK,' : ''}`
+  const modeFields = `    checkoutMode: "${paymentPath}",${paymentPath === 'agentic' ? '\n    agenticType: "agent_treasury",\n    network: process.env.HASH_PAYLINK_NETWORK,' : project.settlementMode === 'usdc' ? '\n    paymentSelection: "stablecoins",' : ''}`
   const createCode = `const checkout = await fetch("https://app.hashpaylink.com/api/v2/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASHPAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    kind: "service",\n${modeFields}\n    title: "Premium plan",\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n}).then(res => res.json());`
   const checkoutCode = paymentPath === 'human'
     ? `${createCode}\n\n// Send a person to Hash PayLink's hosted checkout.\nwindow.location.assign(new URL(checkout.checkoutUrl, "https://app.hashpaylink.com"));`

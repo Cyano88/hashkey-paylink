@@ -609,7 +609,7 @@ assert.equal((await request(handler, 'GET', { query: { id: created.body.checkout
 store.checkouts[created.body.checkoutId].amount = '0.024'
 
 now = new Date('2026-07-19T14:00:00.000Z')
-assert.equal((await request(handler, 'GET', { query: { id: created.body.checkoutId } })).statusCode, 410)
+assert.equal((await request(handler, 'GET', { query: { id: created.body.checkoutId } })).statusCode, 200, 'Paid receipts remain accessible after expiry')
 assert.equal((await request(handler, 'GET', { query: { id: agenticCreated.body.checkoutId } })).statusCode, 410)
 const expiredExecution = await executions.findByResource('partner:polydesk', agenticCreated.body.checkoutId, 'hosted_checkout')
 assert.equal(expiredExecution.state, 'expired')
@@ -689,3 +689,7 @@ const expiredReturn=await request(handler,'GET',{query:{id:defaultExpiry.body.ch
 assert.equal(expiredReturn.statusCode,410)
 assert.equal(expiredReturn.body.returnUrl,valid.returnUrl)
 console.log('PASS human default 15-minute expiry and verified store return on expiry.')
+const completedAfterExpiry=await request(handler,'GET',{query:{id:created.body.checkoutId,purpose:'return'}})
+assert.equal(completedAfterExpiry.statusCode,200)
+assert.equal(completedAfterExpiry.body.checkout.status,'paid')
+console.log('PASS confirmed checkout remains a receipt after its payment deadline.')

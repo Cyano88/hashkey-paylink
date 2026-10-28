@@ -1206,6 +1206,15 @@ export async function resolveDeveloperProjectPolicy(
   return developerGeneralProjectPolicyFromStore(await defaults.read(STORE_KEY), projectId, environment, secret)
 }
 
+// A previously authenticated selection session grants access only to its own order.
+// Recheck project eligibility without keeping the merchant's API key in that session.
+export async function resolveCheckoutSelectionPolicy(projectId:string) {
+  const secret=defaults.portalSecret()
+  if(!defaults.hasStore()||secret.length<32)return null
+  const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
+  return project?policyForDeveloperProject(project,'live',secret):null
+}
+
 // Hosted Trade authenticates developer requests with scoped keys separately.
 // Participant recovery and project eligibility must not require a general key.
 export function arcTradeProjectPolicyFromStore(store:DeveloperStore|undefined,projectId:string,environment:DeveloperEnvironment,secret:string):DeveloperCheckoutPolicy|null {
@@ -1308,6 +1317,10 @@ export async function dispatchDeveloperWebhook(
   }
   const signingSecret = decryptValue(secret, project.webhookSecretCipher)
   const attemptedAt = defaults.now().toISOString()
+  if(typeof data.checkoutId==='string'&&event.startsWith('payment.')) {
+    const checkoutSessionId=await (await import('./checkout-selection.js')).checkoutSelectionForChild(data.checkoutId)
+    if(checkoutSessionId)data={...data,checkoutSessionId}
+  }
   const { eventId, payload, timestamp, signature } = buildDeveloperWebhookRequest(signingSecret, event, data, {
     attemptedAt,
     eventId: delivery?.eventId,

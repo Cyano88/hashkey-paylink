@@ -1,7 +1,8 @@
-import hostedBscCheckoutsHandler,{isBscCheckoutId} from './hosted-bsc-checkouts.js'
+import hostedBscCheckoutsHandler,{isBscCheckoutId,createHostedBscCheckoutsHandler} from './hosted-bsc-checkouts.js'
 import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
-import hostedStockCheckoutsHandler, { isStockCheckoutId } from './hosted-stock-checkouts.js'
+import hostedStockCheckoutsHandler, { isStockCheckoutId,createHostedStockCheckoutsHandler } from './hosted-stock-checkouts.js'
+import {createCheckoutSelectionHandler,isCheckoutSelection} from './checkout-selection.js'
 import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
@@ -135,6 +136,7 @@ export type HostedCheckoutWebhookEvent = {
 type CheckoutStore = { checkouts: Record<string, CheckoutRecord>; idempotency: Record<string, string>; outbox?: HostedCheckoutWebhookEvent[] }
 
 type Dependencies = {
+  expiryLimit?: () => number
   hasStore: () => boolean
   read: (key: string) => Promise<CheckoutStore | undefined>
   mutate: (key: string, update: (current: CheckoutStore | undefined) => CheckoutStore) => Promise<CheckoutStore>
@@ -920,8 +922,35 @@ function hostedCheckoutUiUrl(record: CheckoutRecord) {
     : `/pay/c/${encodeURIComponent(record.id)}?attempt=${encodeURIComponent(hostedCheckoutPaymentAttempt(record).id)}`
 }
 
+async function invokeCheckoutHandler(handler:(req:Request,res:Response)=>unknown,request:unknown):Promise<any> {
+  let code=200,result:any
+  const response={setHeader(){},status(value:number){code=value;return this},json(value:unknown){result=value;return this},sendStatus(value:number){code=value;return this}}
+  await handler(request as Request,response as unknown as Response)
+  if(code>=400||!result?.ok)throw Error(result?.error||'Checkout could not be prepared.')
+  return result
+}
+
 export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
+    if(isCheckoutSelection(req.query?.id)||req.body?.paymentSelection==='stablecoins') {
+      if(verifiedProviderRouting.has(req))return res.status(400).json({ok:false,error:'Account funding uses its fixed USDC checkout.'})
+      try {assertLiveDeveloperRequest(req)}catch(error){return res.status(403).json({ok:false,error:(error as Error).message})}
+      const selection=createCheckoutSelectionHandler(async(policy,record)=>{
+        const choice=record.choice!
+        const selectedPolicy={...policy,merchantName:record.merchantName,brandImageUrl:record.brandImageUrl,checkoutDefaultNetwork:undefined,paymentOptions:policy.paymentOptions.filter(o=>o.network===choice.network),defaultNetwork:choice.network as HostedCheckoutNetwork}
+        const options={policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
+        const handler=choice.network==='bsc'?createHostedBscCheckoutsHandler(options):choice.network==='xlayer'?createHostedStockCheckoutsHandler(options):createHostedCheckoutsHandler({...dependencies,...options})
+        const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}
+        return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id},body,query:{}})
+      })
+      if(req.method==='GET'&&req.query?.purpose==='status') {
+        const result=await invokeCheckoutHandler(selection,req).catch(error=>({ok:false,error:(error as Error).message}))
+        if(!result.ok)return res.status(409).json(result)
+        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),{...req,query:{...req.query,id:result.selectedCheckoutId}}).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:'usdc'})}
+        return res.json({...result,status:result.status||'pending',settlementMode:'usdc'})
+      }
+      return selection(req,res)
+    }
     if (req.body?.rail === 'xlayer' && verifiedProviderRouting.has(req)) return res.status(400).json({ok:false,error:'Account funding does not support X Layer stock checkout.'})
     if(isBscCheckoutId(req.query?.id)||req.body?.rail==='bsc')return hostedBscCheckoutsHandler(req,res)
     if (isStockCheckoutId(req.query?.id) || req.body?.rail === 'xlayer') return hostedStockCheckoutsHandler(req, res)
@@ -967,7 +996,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           ...(record.payment ? { payment: record.payment } : {}),
         })
       }
-      if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) {
+      if (!record.payment && dependencies.now().getTime() >= Date.parse(record.expiresAt)) {
         await expireHostedCheckoutExecution(record, dependencies.executions)
         return res.status(410).json({ ok: false, error: 'Checkout expired.', merchantName:record.merchantName,brandImageUrl:record.brandImageUrl, ...(req.query?.purpose==='return'&&record.returnUrl?{returnUrl:record.returnUrl}:{}) })
       }
@@ -1174,7 +1203,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       if (!createdId) createdId = dependencies.createId()
       const routedNetwork = nairaOrder ? 'base' : network
       const routedRecipient = nairaOrder?.receiveAddress ?? recipient
-      const hostedExpiry = new Date(now.getTime() + expiresInMinutes * 60_000).getTime()
+      const hostedExpiry = Math.min(now.getTime() + expiresInMinutes * 60_000,dependencies.expiryLimit?.()??Infinity)
       const providerExpiry = nairaOrder?.validUntil ? Date.parse(nairaOrder.validUntil) : Number.POSITIVE_INFINITY
       const unsigned: Omit<CheckoutRecord, 'integrity'> = {
         id: createdId,

@@ -7,6 +7,8 @@ import {foodBasket,foodMenu,type FoodAsset} from '../src/lib/foodDemo.js'
 import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from './render-durable-store.js'
 import {readStockMarketPrices} from './pocket/xstocks-prices.js'
 import {stockAssets,stockUsdc} from '../src/pocket/lib/pocketXStocksWallet.js'
+import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
+import {checkoutStablecoins} from '../src/lib/checkoutStablecoins.js'
 const STORE='hashpaylink:food-demo-orders:v1'
 type Order={id:string;fingerprint:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;asset:FoodAsset;hosted?:boolean;rail?:'circle'|'xlayer'|'bsc';network?:string;selectedNetwork?:string;amount:string;payableAmount?:string;settlementMode?:'usdc'|'ngn'|'ugx';createdAt:number;checkoutId?:string;checkoutUrl?:string;paid?:boolean}
 type Draft={id:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;createdAt:number}
@@ -16,22 +18,34 @@ async function projectChoices():Promise<XPayDestination[]>{
  if(!policy||policy.environment!=='live'||policy.checkoutMode!=='human'||!policy.capabilities.includes('hosted_checkout'))throw Error('Checkout is not configured for this store.')
  if(policy.settlementMode==='ngn'||policy.settlementMode==='ugx')return [{id:'circle',name:policy.merchantName,kind:'bank',currency:policy.settlementMode==='ngn'?'NGN':'UGX',assets:['USDC'],networks:['base'],revision:'1'}]
  const choices:XPayDestination[]=[]
- const networks=policy.paymentOptions.map(p=>p.network).filter(n=>['base','arbitrum','arc'].includes(n))
- if(networks.length)choices.push({id:'circle',name:policy.merchantName,kind:'stablecoins',currency:'USD',assets:['USDC'],networks,revision:'1'})
- const assets=[stockUsdc].filter(a=>a.symbol==='USDC'&&policy.xlayerCheckout?.assets.includes(a.address.toLowerCase())).map(a=>a.symbol)
+ const networks=policy.paymentOptions.map(p=>p.network)
+ if(networks.length)choices.push({id:'circle',name:policy.merchantName,kind:'stablecoins',currency:'USD',assets:[...new Set(networks.flatMap(n=>acceptedCheckoutAssets(n,policy.acceptedAssets)))],networks,revision:'1'})
+ const assets=checkoutStablecoins('xlayer').filter(a=>policy.xlayerCheckout?.assets.includes(a.address.toLowerCase())).map(a=>a.symbol)
  if(assets.length&&process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_ENABLED==='true'&&(process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_PROJECTS||'').split(',').map(s=>s.trim()).includes(policy.partnerId))choices.push({id:'xlayer',name:policy.merchantName,kind:'xstocks',currency:'USD',assets,networks:['xlayer'],revision:'1'})
  return choices
 }
-const defaults={choices:projectChoices,read:async()=>await readDurableJson<Store>(STORE)||{orders:{}},mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(STORE,s=>fn(s||{orders:{}})),ready:()=>hasRenderDurableStore()&&process.env.FOOD_DEMO_ENABLED==='true'&&!!process.env.FOOD_DEMO_PROJECT_KEY,now:Date.now,price:async(address:string)=>(await readStockMarketPrices([address.toLowerCase()]))[address.toLowerCase()]?.usd,call:async(path:string,body?:unknown,key?:string)=>{
+const defaults={selectionEnabled:async()=>{const p=await resolveDeveloperApiKeyPolicy({headers:{'x-api-key':process.env.FOOD_DEMO_PROJECT_KEY||''},method:'POST',originalUrl:'/api/v2/checkouts',body:{}});return p?.settlementMode==='usdc'},choices:projectChoices,read:async()=>await readDurableJson<Store>(STORE)||{orders:{}},mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(STORE,s=>fn(s||{orders:{}})),ready:()=>hasRenderDurableStore()&&process.env.FOOD_DEMO_ENABLED==='true'&&!!process.env.FOOD_DEMO_PROJECT_KEY,now:Date.now,price:async(address:string)=>(await readStockMarketPrices([address.toLowerCase()]))[address.toLowerCase()]?.usd,call:async(path:string,body?:unknown,key?:string)=>{
  const response=await fetch('https://app.hashpaylink.com/api/v2/checkouts'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-API-Key':process.env.FOOD_DEMO_PROJECT_KEY||'',...(key?{'Idempotency-Key':key}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000),redirect:'error'});
  const data=await response.json().catch(()=>null);if(!response.ok||!data?.ok)throw Error('Payment is unavailable. Your order has not been charged.');return data
 }}
 async function refreshFoodOrder(d:typeof defaults,order:Order){
- if(order.checkoutId&&!order.paid){const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status');if(status.status==='paid'&&(order.rail==='circle'?status.checkoutId===order.checkoutId&&status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout?.id===order.checkoutId&&status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer');return s});order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')}}
+ if(order.paid)return 'paid'
+ if(!order.checkoutId)return 'pending'
+ const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status')
+ const matches=order.rail==='circle'?status.checkoutId===order.checkoutId:status.checkout?.id===order.checkoutId
+ if(!matches)throw Error('Payment status could not be verified. Please check again.')
+ if(status.status==='paid'&&(!order.checkoutId.startsWith('chks_')||['USDC','USDT','USDe','USDG'].includes(status.asset))&&(order.rail==='circle'?status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){
+  if(order.checkoutId.startsWith('chks_')&&['USDC','USDT','USDe','USDG'].includes(status.asset))order.asset=status.asset
+  order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')
+  await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})
+  return 'paid'
+ }
+ return ['expired','failed','processing'].includes(status.status)?status.status as 'expired'|'failed'|'processing':'pending'
 }
 export async function reconcileFoodDemoCheckout(checkoutId:string) {
  const state=await defaults.read()
- const order=Object.values(state.orders).find(order=>order.checkoutId===checkoutId)
+ const sessionId=await (await import('./checkout-selection.js')).checkoutSelectionForChild(checkoutId)
+ const order=Object.values(state.orders).find(order=>order.checkoutId===checkoutId||sessionId&&order.checkoutId===sessionId)
  if(!order)throw Error('Order is not available for reconciliation yet.')
  await refreshFoodOrder(defaults,order)
  if(!order.paid)throw Error('Payment is not confirmed by the checkout API yet.')
@@ -54,9 +68,9 @@ async function prepareHostedOrder(d:typeof defaults,id:string,items:unknown){
   return store
  })
  // The merchant specifies the order, not receiving wallets or provider routes.
- const made=await d.call('',{kind:'service',checkoutMode:'human',asset:'USDC',amount,title:'Lunchroom order '+id.slice(0,6),expiresInMinutes:15,returnUrl:'https://app.hashpaylink.com/launchroom?order='+id},'food-demo:hosted:'+id)
+ const made=await d.call('',{kind:'service',checkoutMode:'human',...(await d.selectionEnabled()?{paymentSelection:'stablecoins'}:{asset:'USDC'}),amount,title:'Lunchroom order '+id.slice(0,6),expiresInMinutes:15,returnUrl:'https://app.hashpaylink.com/launchroom?order='+id},'food-demo:hosted:'+id)
  const checkoutId=String(made.checkoutId||''),url=new URL(made.checkoutUrl,'https://app.hashpaylink.com')
- if(!/^(?:chk_[a-zA-Z0-9]{8,40}|chk[bx]_[a-f0-9]{24})$/.test(checkoutId)||url.origin!=='https://app.hashpaylink.com'||url.pathname!=='/pay/c/'+checkoutId||!String(made.checkoutUrl).startsWith('/pay/c/'))throw Error('Invalid checkout response.')
+ if(!/^(?:chk_[a-zA-Z0-9]{8,40}|chk[bxs]_[a-f0-9]{24})$/.test(checkoutId)||url.origin!=='https://app.hashpaylink.com'||url.pathname!=='/pay/c/'+checkoutId||!String(made.checkoutUrl).startsWith('/pay/c/'))throw Error('Invalid checkout response.')
  const rail=checkoutId.startsWith('chkb_')?'bsc':checkoutId.startsWith('chkx_')?'xlayer':'circle'
  const settlementMode=made.settlementMode||'usdc',payableAmount=String(made.amount||made.checkout?.amount||amount)
  if(!['usdc','ngn','ugx'].includes(settlementMode)||!/^\d+(\.\d{1,18})?$/.test(payableAmount)||Number(payableAmount)<=0||(made.checkout?.asset&&made.checkout.asset!=='USDC')||(settlementMode==='usdc'&&parseUnits(payableAmount,18)!==parseUnits(amount,18)))throw Error('Checkout amount or asset did not match the order.')
@@ -84,8 +98,8 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
   if(req.method==='GET'){
    if(!/^[a-f0-9]{32}$/.test(String(req.query.id)))return res.status(404).json({ok:false,error:'Order not found.'})
    const order=(await d.read()).orders[String(req.query.id)];if(!order)return res.status(404).json({ok:false,error:'Order not found.'})
-   await refreshFoodOrder(d,order)
-   return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.payableAmount||order.amount,cents:order.cents,status:order.paid?'paid':'pending'}})
+   const status=await refreshFoodOrder(d,order)
+   return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.payableAmount||order.amount,cents:order.cents,status,checkoutUrl:status==='pending'?order.checkoutUrl:undefined}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const id=String(req.body?.requestId||'');if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid order reference.')

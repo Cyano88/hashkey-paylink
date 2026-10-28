@@ -7,7 +7,7 @@ export default function PocketOrderCheckoutPage(){
  useEffect(()=>{const controller=new AbortController();let active=true;const timer=setTimeout(()=>controller.abort(),20000)
   void fetch('/api/demo/food/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'prepare',requestId:orderId}),signal:controller.signal}).then(async response=>{
    const data=await response.json()
-   if(!response.ok||!data.ok||!/^\/pay\/c\/(?:chk_[a-zA-Z0-9]{8,40}|chk[bx]_[a-f0-9]{24})(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(data.checkoutUrl))throw Error(data.error||'Unable to open checkout.')
+   if(!response.ok||!data.ok||!/^\/pay\/c\/(?:chk_[a-zA-Z0-9]{8,40}|chk[bxs]_[a-f0-9]{24})(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(data.checkoutUrl))throw Error(data.error||'Unable to open checkout.')
    if(active)navigate(data.checkoutUrl,{replace:true})
   }).catch(e=>{if(active)setError(controller.signal.aborted?'Checkout took too long. Return to the store and try again.':e.message)}).finally(()=>clearTimeout(timer))
   return()=>{active=false;clearTimeout(timer);controller.abort()}

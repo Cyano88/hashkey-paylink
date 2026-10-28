@@ -28,6 +28,7 @@ function fail(message: string, status = 400): never { throw Object.assign(Error(
 function isProjectPolicy(value:unknown):value is DeveloperCheckoutPolicy {return Boolean(value&&typeof value==='object'&&'projectManaged' in value&&value.projectManaged===true)}
 const clean = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max)
 const defaults = {
+  expiryLimit: () => Number.POSITIVE_INFINITY,
   enabled: (projectId:string) => process.env.HASHPAYLINK_BSC_CHECKOUT_ENABLED === 'true' && (process.env.HASHPAYLINK_BSC_CHECKOUT_PROJECTS||'').split(',').map(s=>s.trim()).includes(projectId),
   secret: () => process.env.HOSTED_CHECKOUT_SIGNING_SECRET || '',
   hasStore: hasRenderDurableStore,
@@ -118,7 +119,7 @@ export function createHostedBscCheckoutsHandler(overrides: Partial<Dependencies>
       const now = d.now()
       let record: BscCheckout = { id: d.id(), partnerId: p.partnerId, ownerId: p.ownerId!, environment: 'live', network: 'bsc', checkoutMode: 'human', title,
         merchantName: p.merchantName, ...(p.brandImageUrl?{brandImageUrl:p.brandImageUrl}:{}), amount, token, asset: token.symbol, recipient: p.bscCheckout.recipient, notionalUsd: formatUnits(notionalUnits, 6),
-        returnUrl, swapEnabled, createdAt: new Date(Math.floor(now/1000)*1000).toISOString(), expiresAt: new Date(now + expiresInMinutes * 60_000).toISOString(), requestHash, integrity:'' }
+        returnUrl, swapEnabled, createdAt: new Date(Math.floor(now/1000)*1000).toISOString(), expiresAt: new Date(Math.min(now + expiresInMinutes * 60_000,d.expiryLimit())).toISOString(), requestHash, integrity:'' }
       record.integrity=signature(record,d.secret())
       await d.mutate(s => {
         const existing = s.checkouts[s.idempotency[scopedKey]]
