@@ -586,6 +586,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedConfirmationError, setHostedConfirmationError] = useState('')
   const [hostedPayoutFailed, setHostedPayoutFailed] = useState(false)
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
+  const [expiredBrand,setExpiredBrand]=useState<{name?:string;logo?:string}>({})
   const [hostedExpiresAt,setHostedExpiresAt]=useState<string|undefined>()
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
@@ -681,10 +682,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           ok?: boolean
           paymentUrl?: string
           returnUrl?: string
+          merchantName?:string
+          brandImageUrl?:string
           checkout?: { expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
           error?: string
         } | undefined
-        if(!cancelled&&response.status===410&&body?.returnUrl)setHostedReturnUrl(body.returnUrl)
+        if(!cancelled&&response.status===410){if(body?.returnUrl)setHostedReturnUrl(body.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
         if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This hosted checkout could not be verified.')
         }
@@ -4060,7 +4063,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
 
   if (browserPaymentFlow && isHostedCheckout && !isPolymarketFunding && !isAgentOrWalletFunding) {
-    if (hostedIntentStatus==='error'&&/checkout expired/i.test(hostedIntentError))return <CheckoutExpired returnUrl={hostedReturnUrl}/>
+    if (hostedIntentStatus==='error'&&/checkout expired/i.test(hostedIntentError))return <CheckoutExpired returnUrl={hostedReturnUrl} merchant={expiredBrand.name||hostedMerchantName} brandImageUrl={expiredBrand.logo||hostedMerchantLogo}/>
     if (hostedIntentStatus !== 'verified') return <div className="mx-auto max-w-md py-8">{hostedIntentError ? <p role="alert">{hostedIntentError}</p> : <div aria-label="Verifying checkout" className="h-72 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}</div>
     const solanaCheckout = chain === 'solana'
     const walletReady = solanaCheckout ? Boolean(circleSolanaSession?.wallet.address) : circleEvmWalletUnlocked && !!circleSmartAccount && circleEvmEmailSession?.wallet.address.toLowerCase() === circleSmartAccount.toLowerCase() && !paycrestNeedsPreparation

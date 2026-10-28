@@ -36,7 +36,7 @@ const card='rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262
 const cta='pocket-cta-primary w-full'
 export function xpayReceipt(p:XPayPayment):PaylinkReceipt{return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:'XPay payment',amount:p.amount,asset:p.symbol,createdAt:p.createdAt,source:'xpay',recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:'Pocket',brandKind:'pocket'}}
 function CheckoutSurface({children}:ComponentProps<typeof PocketBottomSheet>){return <section className="rounded-3xl border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-[#121212]">{children}</section>}
-export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext,merchantOverride,checkoutReturnUrl}:{checkoutReturnUrl?:string;merchantOverride?:string;paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
+export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext,merchantOverride,checkoutReturnUrl,checkoutBrandImageUrl}:{checkoutBrandImageUrl?:string;checkoutReturnUrl?:string;merchantOverride?:string;paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
  const {user,getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=merchantOverride||paymentContext?.merchantId||params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
  const scope=(user?.id||'')+':'+(wallet.address||''),storageKey='pocket.xpay.active:'+scope
  const scopeRef=useRef(scope);scopeRef.current=scope
@@ -135,7 +135,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(converting&&merchant?.swapEnabled)return <PocketCheckoutSwap checkoutId={merchant.id} asset={token} onClose={()=>{setConverting(false);setReview(null);setPayment(null);setError('');void wallet.refresh().catch(()=>undefined)}}/>
  if(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&payment&&['paid','submitted','failed'].includes(payment.status))return <BrowserPaymentResult fullScreen={checkout} state={payment.status==='paid'?'successful':payment.status==='failed'?'failed':'pending'} amount={formatStockQuantity(payment.amount)+' '+payment.symbol} merchant={payment.merchantName} receipt={xpayReceipt(payment)} returnUrl={verifiedReturn} detail={payment.status==='submitted'?'Your merchant payment is being verified. Do not pay again.':undefined}/>
- if(checkoutSeconds===0&&!busy&&!wallet.busy)return <CheckoutExpired returnUrl={verifiedReturn||checkoutReturnUrl}/>
+ if(checkoutSeconds===0&&!busy&&!wallet.busy)return <CheckoutExpired merchant={merchant?.name} brandImageUrl={checkoutBrandImageUrl} returnUrl={verifiedReturn||checkoutReturnUrl}/>
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
   {merchantId&&!paymentContext&&<PocketXPayCheckoutBackdrop/>}

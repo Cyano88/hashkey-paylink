@@ -969,7 +969,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
       if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) {
         await expireHostedCheckoutExecution(record, dependencies.executions)
-        return res.status(410).json({ ok: false, error: 'Checkout expired.', ...(req.query?.purpose==='return'&&record.returnUrl?{returnUrl:record.returnUrl}:{}) })
+        return res.status(410).json({ ok: false, error: 'Checkout expired.', merchantName:record.merchantName,brandImageUrl:record.brandImageUrl, ...(req.query?.purpose==='return'&&record.returnUrl?{returnUrl:record.returnUrl}:{}) })
       }
       return res.json({
         ok: true,

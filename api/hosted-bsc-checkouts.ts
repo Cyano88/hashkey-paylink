@@ -77,7 +77,7 @@ export function createHostedBscCheckoutsHandler(overrides: Partial<Dependencies>
           return res.json({ ...response(r), status: r.payment ? 'paid' : Date.parse(r.expiresAt) <= d.now() ? 'expired' : 'pending', ...(r.payment ? { payment: r.payment } : {}) })
         }
         if (!r.payment && !isBscCheckoutAsset(r.token.address)) fail('This checkout asset is no longer accepted. Ask the business for a stablecoin payment link.', 409)
-        if (!r.payment && Date.parse(r.expiresAt) <= d.now()) return res.status(410).json({ok:false,error:'Checkout expired.',...(req.query.purpose==='return'?{returnUrl:r.returnUrl}:{})})
+        if (!r.payment && Date.parse(r.expiresAt) <= d.now()) return res.status(410).json({ok:false,error:'Checkout expired.',merchantName:r.merchantName,brandImageUrl:r.brandImageUrl,...(req.query.purpose==='return'?{returnUrl:r.returnUrl}:{})})
         return res.json({ ...response(r), ...(req.query.purpose==='return'?{returnUrl:r.returnUrl}:{}), ...(r.payment ? { returnUrl: r.returnUrl, payment:r.payment, recipient:r.recipient } : {}) })
       }
       if (req.method !== 'POST') return res.sendStatus(405)

@@ -7,7 +7,7 @@ export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,
  const [opened,setOpened]=useState(false)
  const handoff=checkoutHandoff(id,attempt)
  const seconds=useCheckoutExpiry(expiresAt)
- if(seconds===0)return <CheckoutExpired returnUrl={returnUrl}/>
+ if(seconds===0)return <CheckoutExpired returnUrl={returnUrl} merchant={merchant} brandImageUrl={brandImageUrl}/>
  const android=/Android/i.test(navigator.userAgent)
  return <section className="mx-auto w-full max-w-md rounded-3xl border border-gray-200 bg-white p-6 text-gray-950 dark:border-white/10 dark:bg-[#101114] dark:text-white sm:p-8">
   <CheckoutMerchant name={merchant} logo={brandImageUrl}/>
