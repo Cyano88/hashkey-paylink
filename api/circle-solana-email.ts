@@ -638,6 +638,18 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ok:true,wallet:source,alignmentRequired:true})
     }
 
+    if (action === 'restoreCheckoutWallet') {
+      res.setHeader('Cache-Control','no-store')
+      const identity=await verifiedPrivyUser(req)
+      const {userToken,chain}=params
+      if(!userToken||userToken.length>8000||!['base','arbitrum','arc','ethereum','polygon'].includes(chain))return res.status(400).json({ok:false,error:'Valid wallet details are required.'})
+      const network=chain as CircleGasStationEvmChain
+      const link=await readCircleLink(circleLinkKey(identity.userId,network,'payment'))
+      const {readCheckoutWalletSession}=await import('./pocket/checkout-wallet-session.js')
+      const wallet=await readCheckoutWalletSession({userId:identity.userId,chain:network,link,readOwnedWallet:async(n,id)=>await readCircleUserWallet(userToken,n,id) as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord|null})
+      return res.json({ok:true,wallet})
+    }
+
     if (action === 'restoreActivatedEvmWallets') {
       res.setHeader('Cache-Control', 'no-store')
       if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to restore your Pocket wallets.' })

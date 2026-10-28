@@ -1,6 +1,6 @@
 import type {CircleEvmEmailSession} from './circleEvmEmailWallet'
 import type {ArcTradeSessionOwner} from './arcTradeSessionPersistence'
-export type CheckoutSessionChain='base'|'arbitrum'|'arc'
+export type CheckoutSessionChain='base'|'arbitrum'|'arc'|'ethereum'|'polygon'
 type Wallet=CircleEvmEmailSession['wallet']
 type StorageLike=Pick<Storage,'getItem'|'setItem'|'removeItem'|'key'|'length'>
 const prefix=(owner:ArcTradeSessionOwner)=>'pocket:checkout-session:v1:'+encodeURIComponent(owner.walletAppId)+':'+encodeURIComponent(owner.userId)+':'
@@ -48,13 +48,11 @@ const sessions=createCheckoutSessionPersistence({
  identity:async chain=>(await import('./circleEvmEmailWallet')).circleEvmEmailSessionIdentity(chain),
  refresh:async s=>(await import('./circleEvmEmailWallet')).refreshCircleEvmEmailSession(s),
  resolve:async(s,token,chain,wallet,active)=>{
-  const {restoreActivatedCircleEvmSession}=await import('./circleEvmEmailWallet')
-  const {secureSessionForNetwork}=await import('../pocket/lib/pocketSecureWalletSession')
-  const restored=await restoreActivatedCircleEvmSession(s,token)
+  const {restoreBrowserCheckoutWallet}=await import('./circleEvmEmailWallet')
+  const restored=await restoreBrowserCheckoutWallet(s,token,chain)
   if(!active())throw Error('Your signed-in account changed.')
-  const matching=secureSessionForNetwork(restored,chain,wallet.address)
-  if(!matching||!matches(matching.wallet,wallet))throw Error('Reconnect the wallet linked to this Pocket account.')
-  return matching
+  if(!matches(restored.wallet,wallet))throw Error('Your wallet could not be verified. Reconnect and try again.')
+  return restored
  }
 })
 export const saveCheckoutCircleSession=sessions.save

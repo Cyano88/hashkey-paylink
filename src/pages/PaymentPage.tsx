@@ -4079,7 +4079,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         chain, email:privyEmail, wallet, getAccessToken,
         active:()=>Boolean(owner && checkoutIdentityRef.current===owner),
         restore:async()=>{
-          if(privyUser?.id && (chain==='base'||chain==='arbitrum'||chain==='arc') && wallet.walletId && wallet.blockchain && isAddress(wallet.address)){
+          if(privyUser?.id && wallet.walletId && wallet.blockchain && isAddress(wallet.address)){
             const token=await getAccessToken()
             if(!token)throw Error('Sign in again to continue.')
             const saved=await restoreCheckoutCircleSession({userId:privyUser.id,email:privyEmail,walletAppId:PRIVY_APP_ID||''},token,chain,{id:wallet.walletId,address:wallet.address,blockchain:wallet.blockchain},()=>checkoutIdentityRef.current===owner)

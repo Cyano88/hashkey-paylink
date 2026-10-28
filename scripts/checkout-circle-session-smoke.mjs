@@ -9,6 +9,7 @@ sessions.save(owner,original);assert.equal(rows.size,1);assert.ok(![...rows.valu
 assert.equal((await sessions.restore(owner,'auth','base',wallet,()=>true)).encryptionKey,'renewed')
 assert.equal((await sessions.restore(owner,'auth','arbitrum',arb,()=>true)).wallet.id,'arb-wallet');assert.equal(rows.size,1,'Networks share the rotated renewal record')
 assert.equal((await sessions.restore(owner,'auth','base',wallet,()=>true)).wallet.id,'base-wallet')
+for(const [network,blockchain] of [['polygon','MATIC'],['ethereum','ETH']]){const expected={...wallet,id:network+'-wallet',blockchain};assert.equal((await sessions.restore(owner,'auth',network,expected,()=>true)).wallet.id,expected.id);assert.equal(rows.size,1)}
 assert.equal(await sessions.restore({...owner,userId:'receiver'},'auth','base',wallet,()=>true),undefined)
 fail='temporary network failure';await assert.rejects(sessions.restore(owner,'auth','base',wallet,()=>true),/temporary/);assert.equal(rows.size,1)
 fail='refresh token expired HTTP 401';assert.equal(await sessions.restore(owner,'auth','base',wallet,()=>true),undefined);assert.equal(rows.size,0)

@@ -1647,6 +1647,11 @@ export async function reviewCircleEvmReplacement(session: CircleEvmEmailSession,
   }, { privyAccessToken })
 }
 
+export async function restoreBrowserCheckoutWallet(session:CircleEvmEmailSession, privyAccessToken:string, chain:CircleEvmEmailSession['chain']):Promise<CircleEvmEmailSession> {
+  const {wallet}=await circleWalletApi<{wallet:CircleEvmWallet}>({action:'restoreCheckoutWallet',userToken:session.userToken,chain},{privyAccessToken})
+  return {...session,chain,wallet,...(chain==='ethereum'||chain==='polygon'?{additionalWallets:{...session.additionalWallets,[chain]:wallet}}:{})}
+}
+
 export async function restoreActivatedCircleEvmSession(session: CircleEvmEmailSession, privyAccessToken: string) {
   const result = await circleWalletApi<{wallets: Record<'base' | 'arbitrum' | 'arc', CircleEvmWallet>}>({ action: 'restoreActivatedEvmWallets', userToken: session.userToken }, { privyAccessToken })
   const { applyActivatedWalletSession } = await import('../pocket/lib/pocketActivatedWalletSession')
