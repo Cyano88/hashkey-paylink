@@ -76,3 +76,10 @@ if (originalApiKey === undefined) delete process.env.PAYCREST_API_KEY
 else process.env.PAYCREST_API_KEY = originalApiKey
 
 console.log('Paycrest provider-boundary smoke tests passed: exact quotes, conservative available amounts, and service failures stay distinct.')
+
+for (const [fiat,rate,minimum] of [['NGN',1374.32,687.16],['UGX',4332.55,2166.28]]) {
+ await assert.rejects(resolvePaycrestOfframpAvailability({amount:'0.1',fiat,quote:async ({amount})=>Number(amount)>=0.5?rate:unavailable(amount)}),e=>e.code==='BANK_AMOUNT_BELOW_MINIMUM'&&e.minimumFiat===minimum&&e.currency===fiat);
+}
+await assert.rejects(resolvePaycrestOfframpAvailability({amount:'0.1',quote:async()=>unavailable('all')}),e=>e.code==='PAYCREST_ROUTE_UNAVAILABLE');
+await assert.rejects(resolvePaycrestOfframpAvailability({amount:'0.1',quote:async({amount})=>amount==='0.1'?unavailable(amount):1000}),e=>e.code==='PAYCREST_ROUTE_UNAVAILABLE','A successful smaller amount means 0.5 cannot be advertised as the minimum');
+console.log('PASS bank NGN/UGX minimum boundaries use live rates, upward fiat rounding, no invented minimum during outage');

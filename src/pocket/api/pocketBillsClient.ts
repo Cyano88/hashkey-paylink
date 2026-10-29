@@ -1,3 +1,4 @@
+import {positiveBillLimit} from '../lib/pocketBillLimits'
 import type {PocketBillCountry} from '../lib/pocketBillCountry'
 import { pocketApiUrl } from '../lib/pocketRoutes'
 import { POCKET_API, createPocketIdempotencyKey } from '../lib/pocketSchemas'
@@ -270,8 +271,8 @@ export async function quotePocketAirtime(input: {
   return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }
 
-export type PocketDataService = { serviceId: string; name: string; imageUrl?:string }
-export type PocketDataVariation = { amountLocal?:string; currency?:'NGN'|'UGX'; minimum?:number; maximum?:number; variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
+export type PocketDataService = { serviceId: string; name: string; imageUrl?:string; minimumAmount?:number|null; maximumAmount?:number|null }
+export type PocketDataVariation = { fixedPrice?:boolean; amountLocal?:string; currency?:'NGN'|'UGX'; minimum?:number; maximum?:number; variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
 export type PocketBillService = PocketDataService
 export type PocketBillVariation = PocketDataVariation
 
@@ -294,12 +295,12 @@ export async function readPocketDataCatalog(input: {
   const data = record(record(body).data)
   const services = Array.isArray(data.services) ? data.services.flatMap(value => {
     const item = record(value)
-    return text(item.serviceId) && text(item.name) ? [{ serviceId: text(item.serviceId), name: text(item.name), ...(text(item.imageUrl)?{imageUrl:text(item.imageUrl)}:{}) }] : []
+    return text(item.serviceId) && text(item.name) ? [{ serviceId: text(item.serviceId), name: text(item.name), minimumAmount: positiveBillLimit(item.minimumAmount), maximumAmount: positiveBillLimit(item.maximumAmount), ...(text(item.imageUrl)?{imageUrl:text(item.imageUrl)}:{}) }] : []
   }) : []
   const variations = Array.isArray(data.variations) ? data.variations.flatMap(value => {
     const item = record(value)
     return text(item.variationCode) && text(item.name) && text(item.amountNgn)
-      ? [{ ...(item.currency==='UGX'?{amountLocal:text(item.amountLocal),currency:'UGX' as const,minimum:Number(item.minimum),maximum:Number(item.maximum)}:{}), variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
+      ? [{ ...(item.currency==='UGX'?{amountLocal:text(item.amountLocal),currency:'UGX' as const,fixedPrice:typeof item.fixedPrice==='boolean'?item.fixedPrice:undefined,minimum:positiveBillLimit(item.minimum)??undefined,maximum:positiveBillLimit(item.maximum)??undefined}:{}), variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
       : []
   }) : []
   if (input.serviceId ? input.category !== 'electricity' && !variations.length : !services.length) {

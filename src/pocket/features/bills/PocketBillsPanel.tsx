@@ -259,8 +259,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                 </label>
               </>
             )}
+            {(view === 'airtime' || view === 'electricity') && bills.amountLimits?.minimumAmount && <p className="text-xs text-gray-500 dark:text-gray-400">Minimum amount: {money(String(bills.amountLimits.minimumAmount),bills.country==='UG'?'UGX':'NGN')}{bills.amountLimits.maximumAmount ? ` ? Maximum: ${money(String(bills.amountLimits.maximumAmount),bills.country==='UG'?'UGX':'NGN')}` : ''}</p>}
             {(view === 'airtime' || view === 'electricity') && <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Suggested amounts">
-              {(view === 'airtime' ? (bills.country==='UG'?[1000,2000,5000,10000,20000,50000]:[100, 200, 500, 1000, 2000, 5000]) : [2000, 3000, 5000, 10000, 20000, 50000]).map(amount => <button key={amount} type="button" disabled={locked} onClick={() => bills.setAmountNgn(String(amount))} className={cn('min-h-10 shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-40', Number(bills.amountNgn) === amount ? 'border-blue-400 bg-blue-50 dark:bg-blue-400/10' : 'border-gray-200 dark:border-[#262626]')}>{money(String(amount),bills.country==='UG'?'UGX':'NGN')}</button>)}
+              {(view === 'airtime' ? (bills.country==='UG'?[1000,2000,5000,10000,20000,50000]:[100, 200, 500, 1000, 2000, 5000]) : [2000, 3000, 5000, 10000, 20000, 50000]).filter(amount => (!bills.amountLimits?.minimumAmount || amount >= bills.amountLimits.minimumAmount) && (!bills.amountLimits?.maximumAmount || amount <= bills.amountLimits.maximumAmount)).map(amount => <button key={amount} type="button" disabled={locked} onClick={() => bills.setAmountNgn(String(amount))} className={cn('min-h-10 shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-40', Number(bills.amountNgn) === amount ? 'border-blue-400 bg-blue-50 dark:bg-blue-400/10' : 'border-gray-200 dark:border-[#262626]')}>{money(String(amount),bills.country==='UG'?'UGX':'NGN')}</button>)}
             </div>}
 
             {isData ? (
@@ -319,7 +320,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]"><span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
-                {Number(bills.verification?.minimumAmount) > 0 && <span className="mt-1.5 block text-[10px] font-semibold text-gray-500 dark:text-gray-400">Minimum amount: {money(String(bills.verification?.minimumAmount))}</span>}
+
               </label>
             )}
 

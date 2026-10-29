@@ -589,13 +589,13 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
       const serviceId = cleanText(req.query?.service_id, 40).toLowerCase()
       const services = await servicesForCategory(dependencies.provider, category, country)
       if (!serviceId) {
-        return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name, ...(service.imageUrl?{imageUrl:service.imageUrl}:{}) })) })
+        return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name, minimumAmount:service.minimumAmount, maximumAmount:service.maximumAmount, ...(service.imageUrl?{imageUrl:service.imageUrl}:{}) })) })
       }
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
       if (country === 'UG') {
         const plans=await dependencies.provider.listUgandaVariations(internationalOperator(serviceId),category==='data'?'4':'1')
-        return respond.success({variations:plans.map(v=>({variationCode:v.variationCode,name:v.name,amountNgn:v.fixedPrice?v.chargedAmount.toFixed(2):'0',amountLocal:v.fixedPrice?v.amount.toFixed(2):'0',currency:'UGX',minimum:v.minimum,maximum:v.maximum,available:true}))})
+        return respond.success({variations:plans.map(v=>({variationCode:v.variationCode,name:v.name,fixedPrice:v.fixedPrice,amountNgn:v.fixedPrice?v.chargedAmount.toFixed(2):'0',amountLocal:v.fixedPrice?v.amount.toFixed(2):'0',currency:'UGX',minimum:v.minimum,maximum:v.maximum,available:true}))})
       }
       if (category === 'airtime') return respond.success({variations:[]})
       if (category === 'electricity') return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations: [] })

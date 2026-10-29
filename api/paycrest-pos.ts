@@ -292,6 +292,21 @@ export async function resolvePaycrestOfframpAvailability(input: {
   }
 
   const minimumUnits = 500_000n
+  if (requestedUnits < minimumUnits) {
+    // Report a current boundary only after both sides are checked on this corridor.
+    // Failure to verify it remains an availability error, never an invented limit.
+    let minimumRate = 0, belowUnavailable = false
+    try {
+      minimumRate = await quoteAmount(unitsToUsdc(minimumUnits))
+      try { await quoteAmount(unitsToUsdc(minimumUnits - 1n)) }
+      catch (reason) { if (!isPaycrestAmountUnavailable(reason)) throw reason; belowUnavailable = true }
+    } catch { /* Provider outage: keep the original availability result. */ }
+    if (minimumRate > 0 && belowUnavailable) {
+      const currency = (input.fiat || 'NGN').toUpperCase()
+      const minimumFiat = Math.ceil((Number(unitsToUsdc(minimumUnits)) * minimumRate - 1e-9) * 100) / 100
+      throw Object.assign(new Error(`Minimum bank transfer is ${currency} ${minimumFiat.toLocaleString('en-NG', {minimumFractionDigits:2,maximumFractionDigits:2})} at the current rate. Fees are additional.`), {status:400,code:'BANK_AMOUNT_BELOW_MINIMUM',minimumFiat,currency})
+    }
+  }
   if (requestedUnits <= minimumUnits) throw new PaycrestRequestError('No provider is available for this payout amount.', 404, 'PAYCREST_ROUTE_UNAVAILABLE')
   let unavailableUnits = requestedUnits
   let availableUnits = 0n

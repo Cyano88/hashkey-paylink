@@ -358,7 +358,7 @@ async function resolveNgnPayoutQuote(amount: number, amountCurrency: 'NGN' | 'UG
     try {
       availability = await resolvePaycrestOfframpAvailability({ amount: requested, network: 'base', token: 'USDC', fiat: fiatCurrency })
     } catch (reason) {
-      if (isPaycrestAmountUnavailable(reason)) throw ngPosRequestError(503, 'Bank payout is temporarily unavailable. Your money has not moved.')
+      if (isPaycrestAmountUnavailable(reason)) throw ngPosRequestError(503, 'Bank payout is unavailable for this amount. Try a different amount. Your money has not moved.')
       throw reason
     }
     if (!availability.exact) {
@@ -1516,7 +1516,7 @@ export default async function handler(req: Request, res: Response) {
   } catch (err) {
     const error = err as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number }
     const providerUnavailable = isPaycrestAmountUnavailable(error)
-    const message = providerUnavailable ? 'Bank payout is temporarily unavailable. Your money has not moved.' : error.message || 'Nigerian POS request failed'
+    const message = providerUnavailable ? 'Bank payout is unavailable for this amount. Try a different amount. Your money has not moved.' : error.message || 'Nigerian POS request failed'
     return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
   }
 }

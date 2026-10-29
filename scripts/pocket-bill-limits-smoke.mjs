@@ -1,0 +1,20 @@
+﻿import assert from 'node:assert/strict';
+import {createPocketBillsCatalogHandler} from '../api/pocket/bills.ts';
+import {readPocketDataCatalog} from '../src/pocket/api/pocketBillsClient.ts';
+import {pocketBillLimits,withinPocketBillLimits,positiveBillLimit} from '../src/pocket/lib/pocketBillLimits.ts';
+const handler=createPocketBillsCatalogHandler({config:{canVend:true,liveCategories:['airtime']},verifyUser:async()=>({userId:'fixture'}),store:{consumeMutationLimit:async()=>{}},requestId:()=> 'fixture',provider:{listAirtimeServices:async()=>[{serviceId:'airtel',name:'Airtel',minimumAmount:50,maximumAmount:50000}],listUgandaOperators:async()=>[{serviceId:'ug-1',name:'UG provider',minimumAmount:null,maximumAmount:null}],listUgandaVariations:async()=>[{variationCode:'1',name:'Flexible amount',fixedPrice:false,minimum:50,maximum:547645}]}});
+async function catalog(query){const res={setHeader(){},status(n){this.statusCode=n;return this},json(body){this.body=body;return this}};await handler({method:'GET',headers:{},query},res);assert.equal(res.body.ok,true);return res.body}
+const ng=await catalog({category:'airtime'});
+const parsed=await readPocketDataCatalog({accessToken:'fixture',category:'airtime',fetcher:async()=>Response.json(ng)});
+assert.deepEqual(pocketBillLimits(parsed.services[0]),{minimumAmount:50,maximumAmount:50000});
+const ug=await catalog({category:'airtime',country:'UG',service_id:'ug-1'});
+const u=await readPocketDataCatalog({accessToken:'fixture',country:'UG',category:'airtime',serviceId:'ug-1',fetcher:async()=>Response.json(ug)});
+assert.equal(u.variations[0].fixedPrice,false);assert.equal(u.variations[0].minimum,50);assert.equal(u.variations[0].maximum,547645);
+const meter=pocketBillLimits({minimumAmount:100,maximumAmount:1000000},{minimumAmount:2000,maximumAmount:5000});
+assert.deepEqual(meter,{minimumAmount:2000,maximumAmount:5000});
+for(const n of [0,1999.99,5000.01,NaN])assert.equal(withinPocketBillLimits(n,meter),false);
+for(const n of [2000,5000])assert.equal(withinPocketBillLimits(n,meter),true);
+for(const n of [null,undefined,'',NaN,Infinity,-1,0])assert.equal(positiveBillLimit(n),null);
+assert.equal(withinPocketBillLimits(10,pocketBillLimits({minimumAmount:20,maximumAmount:5})),false);
+console.log('PASS bill limits survive provider catalog to client; NGN/UGX amounts and meter intersections use inclusive exact boundaries');
+process.exit(0);

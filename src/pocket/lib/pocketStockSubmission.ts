@@ -28,8 +28,20 @@ export function isPrivyAuthorizationLoadError(reason: unknown): boolean {
  }
  return false
 }
+export function isPrivyChunkLoadError(reason: unknown): boolean {
+ let current = reason
+ for (let depth = 0; current && depth < 4; depth++) {
+  const error = current as { message?: string; cause?: unknown }
+  const message = typeof current === 'string' ? current : error.message || ''
+  if (/Loading chunk [\w-]+ failed|ChunkLoadError/i.test(message) && /https:\/\/auth\.privy\.io\/_next\/static\/chunks\/[\w./-]+\.js(?:[?\s)]|$)/.test(message)) return true
+  current = error.cause
+ }
+ return false
+}
 export function stockSubmissionError(reason: unknown): Error & { reconnectWallet?: boolean } {
- if (isPrivyAuthorizationLoadError(reason)) return Object.assign(new Error('Your wallet connection could not load. Reload Pocket to restore it, then try again.'), { reconnectWallet: true })
+ // Presentation is independent of submission certainty: new provider chunk names
+ // must never clear a signing lock or authorize another payment.
+ if (isPrivyChunkLoadError(reason)) return Object.assign(new Error('Your wallet connection could not load. Reload Pocket to restore it. Any pending payment will still be checked.'), reason instanceof Error ? reason : {}, { reconnectWallet: true })
  return reason instanceof Error ? reason : new Error('The transaction could not complete. Check Activity before retrying.')
 }
 export function readStockPending(key: string): StockPending | null {

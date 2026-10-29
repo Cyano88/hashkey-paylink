@@ -262,7 +262,7 @@ assert.deepEqual(dataServices.body.data.services, [
   { serviceId: 'airtel-data', name: 'Airtel Data' },
   { serviceId: 'glo-data', name: 'GLO Data' },
   { serviceId: 'etisalat-data', name: '9mobile Data' },
-])
+].map(service=>({...service,minimumAmount:1,maximumAmount:1000000})))
 const dataPlans = await request(catalogHandler, {}, { method: 'GET', query: { service_id: 'mtn-data' } })
 assert.deepEqual(dataPlans.body.data.variations, [
   { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00', available: true },
@@ -270,11 +270,11 @@ assert.deepEqual(dataPlans.body.data.variations, [
 ])
 
 const tvServices = await request(catalogHandler, {}, { method: 'GET', query: { category: 'tv' } })
-assert.deepEqual(tvServices.body.data.services, [{ serviceId: 'dstv', name: 'DStv' }, { serviceId: 'showmax', name: 'ShowMax' }])
+assert.deepEqual(tvServices.body.data.services, [{ serviceId: 'dstv', name: 'DStv' }, { serviceId: 'showmax', name: 'ShowMax' }].map(service=>({...service,minimumAmount:1,maximumAmount:1000000})))
 const tvPlans = await request(catalogHandler, {}, { method: 'GET', query: { category: 'tv', service_id: 'dstv' } })
 assert.equal(tvPlans.body.data.variations[0].variationCode, 'dstv-yanga')
 const electricityServices = await request(catalogHandler, {}, { method: 'GET', query: { category: 'electricity' } })
-assert.deepEqual(electricityServices.body.data.services, [{ serviceId: 'ikeja-electric', name: 'Ikeja Electric' }])
+assert.deepEqual(electricityServices.body.data.services, [{ serviceId: 'ikeja-electric', name: 'Ikeja Electric',minimumAmount:100,maximumAmount:1000 }])
 const verifiedTv = await request(verifyHandler, { category: 'tv', service_id: 'dstv', billers_code: '1212121212' })
 assert.equal(verifiedTv.body.data.verification.customerName, 'TEST CUSTOMER')
 const showmaxVerify = await request(verifyHandler, { category: 'tv', service_id: 'showmax', billers_code: '08011111111' })
