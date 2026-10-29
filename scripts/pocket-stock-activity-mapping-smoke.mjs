@@ -11,3 +11,12 @@ console.log('PASS: deposit remains incoming, paid request retains classification
 const gift={eventId:'gift',txHash:'deposit-hash',chain:'xlayer',source:'gift',assetSymbol:'NVDAx',amount:'0.01',direction:'in'}
 const giftRows=stockActivityRows(inbox,[],'recipient',[],[gift]);assert.equal(giftRows.filter(r=>r.txHash==='deposit-hash').length,1);assert.equal(giftRows.find(r=>r.txHash==='deposit-hash').source,'gift')
 console.log('PASS stock gift receipt suppresses its underlying token transfer without affecting other activity.')
+const payment={id:'web-receipt',merchantId:'chkx_'+'a'.repeat(24),merchantName:'Lunchroom',status:'paid',hash:'web-hash',payer:'sender',recipient:'recipient',amount:'1.5',symbol:'USDT',createdAt:1,updatedAt:2}
+for(const direction of ['in','out']){
+ const webInbox={notices:[{id:'web-notice',hash:'web-hash',at:2,webPayment:{receiptId:payment.id,merchantId:payment.merchantId,merchantName:payment.merchantName},transfer:{...transfer,amount:'1.5',symbol:'USDT',direction}}],requests:[]}
+ for(const history of [[],[payment]]){
+  const result=stockActivityRows(webInbox,history,direction==='in'?'recipient':'sender')
+  assert.equal(result.length,1);assert.equal(result[0].settlementType,'hosted_checkout');assert.equal(result[0].direction,direction);assert.equal(result[0].receiptId,payment.id);assert.equal(result[0].recipient,'Lunchroom')
+ }
+}
+console.log('PASS web payment actual activity mapping: payer and receiver, notice and payment history, one row with stable receipt reference.')
