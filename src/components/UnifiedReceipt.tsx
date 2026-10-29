@@ -16,7 +16,7 @@ import {
   type PaylinkReceipt,
   type X402ReceiptLike,
 } from '../lib/paymentReceiptPdf'
-import { Check, Clock3, Copy, Eye, Loader2, Share2, Undo2, X } from '../pocket/components/PocketIcons'
+import { ArrowLeft, Check, Clock3, Copy, Eye, Loader2, Share2, Undo2, X } from '../pocket/components/PocketIcons'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 type UnifiedReceiptProps = {
@@ -222,9 +222,9 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
     <div data-pocket-receipt={brand.kind === 'pocket' || undefined} className="fixed inset-x-0 bottom-0 z-[140] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-black dark:text-white" style={{ top: 0, paddingTop: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
       <div className="z-10 shrink-0 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-black">
         <div className="mx-auto grid h-14 max-w-lg grid-cols-[48px_1fr_48px] items-center">
-          <span className="h-10 w-12" />
+          {checkoutReceipt ? <button type="button" onClick={onClose} aria-label="Back" className="inline-flex h-11 w-11 items-center justify-center rounded-full"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : <span className="h-10 w-12" />}
           <h1 className="text-center text-sm font-bold tracking-[-0.02em]">{surface === 'details' ? 'Transaction details' : 'Receipt'}</h1>
-          <button type="button" onClick={onClose} className="inline-flex h-10 items-center justify-end rounded-full text-xs font-bold">Done</button>
+          {checkoutReceipt ? <span className="h-10 w-12" aria-hidden="true" /> : <button type="button" onClick={onClose} className="inline-flex h-10 items-center justify-end rounded-full text-xs font-bold">Done</button>}
         </div>
       </div>
 
