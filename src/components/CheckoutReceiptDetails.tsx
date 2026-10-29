@@ -10,6 +10,7 @@ export default function CheckoutReceiptDetails({receipt,copied,onCopy}:{receipt:
    <p role="status" className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold" style={{color:outcome.color}}>
     {outcome.state==='pending'?<span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent [animation-duration:1.5s] motion-reduce:animate-none"/>:<Icon aria-hidden="true" className="h-4 w-4"/>}{outcome.label}
    </p>
+   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{view.timestamp}</p>
   </section>
   <section className="rounded-3xl bg-white px-5 py-5 dark:bg-[#17181c]">
    <h2 className="text-sm font-semibold">Payment details</h2>
