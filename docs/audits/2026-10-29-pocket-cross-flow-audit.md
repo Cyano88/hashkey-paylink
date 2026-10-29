@@ -208,3 +208,10 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - User clarified the issue is the Pocket push notification, not ledger activity. X Layer settlement used shared XPay code with hardcoded XPay payment sent/received titles even for chkx hosted checkout merchants.
 - Hosted checkout now emits Web payment sent/received; direct XPay payments retain XPay labels. Existing API settlement tests capture and assert both titles. No rebrand or card-payment support added. Already-delivered Android notifications are not changed or re-sent.
 - Current browser showed confirmed Lunchroom order; Pixel was on a music app during screenshot inspection, so no claim of visually verifying the old notification. Notification producer verified directly in code.
+
+## Receipt reference clarified
+- User means the open phone app. Observed OPay Transaction Details screen with separate amount/status summary, transaction-detail card and action card. It is an external reference, not Pocket. User suggested this structure for hosted checkout receipts. No receipt redesign implemented yet.
+- Proposed mapping: Web payment, formatted amount, verified outcome; merchant/date/network/method/fee/reference details; receipt/help actions. Card-specific fields only when a real card payment method exists.
+- Minimal processing ring deployed eb7dd4ccc / dep-dbhi68hsrm7s73ftrlqg live 10:47:18Z and public PocketTransactionSheet-5Ohe2Axd.js verified.
+
+- Push label release cfcede2ba / dep-dbhi8n142hec73chr2ng live 10:53:35Z. API fixtures verify Web payment for hosted checkout and XPay for direct links; no live duplicate push emitted. Receipt endpoint read during deploy received non-JSON service response, so public receipt recovery remains unverified.
