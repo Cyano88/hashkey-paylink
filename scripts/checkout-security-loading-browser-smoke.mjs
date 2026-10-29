@@ -3,13 +3,13 @@ import {build} from 'esbuild'
 import {checkoutTestCss} from './checkout-test-css.mjs'
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const mocks={
- usePocketIdentity:`const token=async()=>null;export default()=>({authenticated:true,ready:true,user:{id:'fixture'},email:'fixture@example.com',getAccessToken:token,logout:async()=>{}})`,
+ usePocketIdentity:`const token=async()=>null;export default()=>({authenticated:true,ready:true,user:{id:'fixture'},email:'fixture@example.com',getAccessToken:token,logout:async()=>{window.logouts++}})`,
  usePocketStockWallet:`export default()=>({})`,
  PrivyLoginProvider:`export const usePrivyLoginLauncher=()=>null`,
  PocketEmailLogin:`export default()=>null`,
  PocketXPay:`export default()=> <h1>Review payment</h1>`,
  pocketRoutes:`export const pocketApiUrl=p=>p,POCKET_BASE_PATH='',POCKET_ROUTES={root:'/'},isPocketNativeRuntime=()=>false`,
- pocketPaymentSecurityClient:`export const readPocketPaymentSecurity=()=>new Promise(resolve=>window.resolveSecurity=resolve);export const verifyPocketPaymentPin=async()=>{window.verifications++;throw Error('Incorrect PIN')};export const updatePocketPaymentSecurity=async()=>{throw Error('Unexpected setup')},beginPocketPaymentPinReset=async()=>{throw Error('Unexpected reset')}`,
+ pocketPaymentSecurityClient:`export const readPocketPaymentSecurity=()=>new Promise(resolve=>window.resolveSecurity=resolve);export const verifyPocketPaymentPin=async()=>{window.verifications++;throw Error('Incorrect PIN')};export const updatePocketPaymentSecurity=async()=>{throw Error('Unexpected setup')},beginPocketPaymentPinReset=async()=>({resetToken:'fixture-reset-token',expiresAt:Date.now()+900000})`,
  pocketPaymentApproval:`export const POCKET_PAYMENT_APPROVAL_EVENT='test:approval',POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT='test:cancelled',setPocketPaymentApproval=()=>{window.authorizations++}`,
  pocketPaymentBiometrics:`export const pocketPaymentBiometricsAvailable=async()=>false,pocketPaymentBiometricsConfigured=()=>false,pocketPaymentBiometricsEnabled=()=>false,disablePocketPaymentBiometrics=async()=>{},enablePocketPaymentBiometrics=async()=>{},readPocketPinWithBiometrics=async()=>null`,
  usePocketSessionSplash:`export const resetPocketSessionSplash=()=>{}`,
@@ -18,14 +18,14 @@ const mocks={
  pocketSecureWalletSession:`export const deletePocketSecureWalletSession=async()=>{}`,
  pocketAccountState:`export const clearPocketAccountOperationState=()=>{}`,
 }
-const contents=`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter}from'react-router-dom';import Page from'./src/pocket/pages/PocketXPayCheckoutPage';import Gate from'./src/pocket/components/PocketPaymentSecurityGate';const token=async()=>null;createRoot(document.getElementById('root')).render(<MemoryRouter>{window.native?<Gate email="fixture@example.com" getAccessToken={token}><h1>Review payment</h1></Gate>:<Page merchantOverride={'chkx_'+'a'.repeat(24)}/>}</MemoryRouter>);`
+const contents=`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,useLocation}from'react-router-dom';import Page from'./src/pocket/pages/PocketXPayCheckoutPage';import Gate from'./src/pocket/components/PocketPaymentSecurityGate';function Route(){window.currentRoute=useLocation().pathname+useLocation().search;return null}const token=async()=>null;createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={['/pay/c/chkx_'+ 'a'.repeat(24)+'?browser=1']}><Route/>{window.native?<Gate email="fixture@example.com" getAccessToken={token}><h1>Review payment</h1></Gate>:<Page merchantOverride={'chkx_'+'a'.repeat(24)}/>}</MemoryRouter>);`
 const bundle=await build({stdin:{contents,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',loader:{'.css':'empty'},plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>{const key=a.path.split('/').at(-1);if(mocks[key])return{path:key,namespace:'fixture'}});b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'tsx',resolveDir:process.cwd()}))}}]})
 const css=await checkoutTestCss(),browser=await chromium.launch({headless:true,channel:'chrome'})
 try{
  for(const native of [false,true])for(const configured of [false,true]){
   const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message))
   await page.route('https://checkout.test/**',r=>r.fulfill({contentType:r.request().url().includes('/api/')?'application/json':'text/html',body:r.request().url().includes('/api/')?JSON.stringify({ok:true,merchant:{name:'Lunchroom',fixedAmount:'1.5',expiresAt:Date.now()+900000}}):'<style>'+css+'</style><div id="root"></div>'}))
-  await page.goto('https://checkout.test/');await page.evaluate(native=>{window.native=native;window.authorizations=0;window.verifications=0;window.flash=false;new MutationObserver(()=>{if(document.body.textContent.includes('Pocket security'))window.flash=true}).observe(document.body,{subtree:true,childList:true})},native)
+  await page.goto('https://checkout.test/');await page.evaluate(native=>{window.native=native;window.authorizations=0;window.verifications=0;window.logouts=0;window.flash=false;new MutationObserver(()=>{if(document.body.textContent.includes('Pocket security'))window.flash=true}).observe(document.body,{subtree:true,childList:true})},native)
   await page.addScriptTag({content:bundle.outputFiles[0].text});await page.waitForFunction(()=>typeof window.resolveSecurity==='function')
   assert.equal(await page.getByRole('heading',{name:'Review payment'}).count(),0,'Security must resolve before exposing payment')
   if(native)await page.getByRole('dialog',{name:'Pocket security',exact:true}).waitFor()
@@ -36,6 +36,10 @@ try{
    await page.getByRole('heading',{name:'Review payment'}).waitFor();if(!native)assert.equal(await page.evaluate(()=>window.flash),false)
    await page.evaluate(()=>{window.dispatchEvent(new CustomEvent('test:approval',{detail:{resolve:()=>{window.authorizations++},reject:()=>{window.cancelled=true}}}))})
    await page.getByRole('dialog',{name:'Enter Pocket PIN'}).waitFor();await page.getByRole('button',{name:'Close',exact:true}).click();assert.equal(await page.evaluate(()=>window.cancelled),true)
+   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('test:approval',{detail:{resolve:()=>{window.authorizations++},reject:()=>{window.cancelled=true}}})))
+   await page.getByRole('button',{name:'Forgot PIN?',exact:true}).click();await page.waitForFunction(()=>window.logouts===1)
+   assert.equal(await page.evaluate(()=>window.currentRoute),native?'/':'/pay/c/chkx_'+'a'.repeat(24)+'?browser=1')
+   assert.equal(await page.evaluate(()=>localStorage.getItem('pocket:payment-pin:reset-after-login:v1')),'fixture-reset-token')
   }
   assert.equal(await page.evaluate(()=>window.authorizations),0);assert.equal(await page.evaluate(()=>window.verifications),0);assert.deepEqual(errors,[]);await page.close()
  }

@@ -1,3 +1,4 @@
+import {saveCheckoutPinReset,clearCheckoutPinReset} from '../lib/pocketCheckoutPinReset'
 import { useNavigate } from 'react-router-dom'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { beginPocketPaymentPinReset } from '../api/pocketPaymentSecurityClient'
@@ -61,7 +62,7 @@ function PaymentPinSlots({ value, focused, length }: { value: string; focused: b
   </div>
 }
 
-export default function PocketPaymentSecurityGate({ email, getAccessToken, onInitialStateResolved, loadingFallback, children }: { email: string; getAccessToken(): Promise<string | null>; onInitialStateResolved?(): void; loadingFallback?: ReactNode; children: ReactNode }) {
+export default function PocketPaymentSecurityGate({ email, getAccessToken, onInitialStateResolved, loadingFallback, resetReturnPath, children }: { email: string; getAccessToken(): Promise<string | null>; onInitialStateResolved?(): void; loadingFallback?: ReactNode; resetReturnPath?: string; children: ReactNode }) {
   const navigate = useNavigate()
   const { logout } = usePocketIdentity()
   const [pinLength, setPinLength] = useState(()=>Number(localStorage.getItem(configuredKey(email)+':length')) === 4 ? 4 : 6)
@@ -153,6 +154,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
       await updatePocketPaymentSecurity(getAccessToken, resetting ? { action: 'reset', pin, resetToken } : { action: 'setup', pin })
       localStorage.setItem(configuredKey(email), 'true')
       localStorage.removeItem(POCKET_PIN_RESET_KEY)
+      clearCheckoutPinReset()
       setPinLength(4); localStorage.setItem(configuredKey(email)+':length','4')
       setSetupPin(pin); setPin(''); setConfirm('')
       setState(biometricsAvailable ? 'offer' : 'ready')
@@ -210,11 +212,12 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     try {
       const reset = await beginPocketPaymentPinReset(getAccessToken)
       localStorage.setItem(POCKET_PIN_RESET_KEY, reset.resetToken)
+      if(resetReturnPath)saveCheckoutPinReset({email,path:resetReturnPath,expiresAt:reset.expiresAt})
       resetPocketSessionSplash()
       await unregisterPocketPushDevice(getAccessToken).catch(()=>false)
       await Promise.all([disablePocketPaymentBiometrics(email), disablePocketQuickApproval(email), deletePocketSecureWalletSession(email)])
       cancelApproval(); clearPocketAccountOperationState()
-      await logout(); navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)
+      await logout(); navigate(resetReturnPath || POCKET_BASE_PATH || POCKET_ROUTES.root)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'PIN reset could not start.') }
     finally { setBusy(false) }
   }

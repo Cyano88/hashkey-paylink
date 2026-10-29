@@ -19,13 +19,15 @@ function readableEmailAuthError(error: unknown, action: 'send' | 'verify', produ
 
 type PocketEmailLoginProps = {
   context?: 'pocket' | 'agreement' | 'hashpaystream' | 'hashpaylink' | 'developer' | 'checkout'
+  resetEmail?: string
   onStepChange?: (step: 'email' | 'code') => void
 }
 
-export default function PocketEmailLogin({ context = 'pocket', onStepChange }: PocketEmailLoginProps) {
+export default function PocketEmailLogin({ context = 'pocket', onStepChange, resetEmail }: PocketEmailLoginProps) {
   const { sendCode, loginWithCode } = useLoginWithEmail()
   const [step, setStep] = useState<'email' | 'code'>('email')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(resetEmail || '')
+  const resetCodeRequested = useRef(false)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [verifying, setVerifying] = useState(false)
@@ -64,7 +66,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
     setResendIn(RESEND_SECONDS)
     setStep('code')
     try {
-      await sendCode({ email: normalizedEmail })
+      await sendCode({ email: normalizedEmail, ...(resetEmail ? {disableSignup:true} : {}) })
     } catch (nextError) {
       setResendIn(0)
       setError(readableEmailAuthError(nextError, 'send', productName))
@@ -72,6 +74,12 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if(!resetEmail || resetCodeRequested.current)return
+    resetCodeRequested.current=true
+    void requestCode()
+  }, [resetEmail])
 
   const verifyCode = async (event?: FormEvent) => {
     event?.preventDefault()
@@ -129,7 +137,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
       </button>}
       <div className={inline ? 'w-full min-w-0' : 'mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4'}>
         <div className="text-center">
-          <h2 className={inline ? 'text-xl font-semibold tracking-tight' : 'text-3xl font-bold leading-tight tracking-normal'}>Check your email</h2>
+          <h2 className={inline ? 'text-xl font-semibold tracking-tight' : 'text-3xl font-bold leading-tight tracking-normal'}>{resetEmail ? 'Verify email to reset your PIN' : 'Check your email'}</h2>
           <p className="mt-3 text-sm font-medium leading-6 text-gray-500">
             Enter the code sent to
             <strong className={inline ? "mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950 dark:text-white" : "mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950"}>{email}</strong>
@@ -170,8 +178,8 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
         </form>
         <div className="mt-5 flex items-center justify-center gap-4 text-xs font-semibold">
           <button type="button" disabled={busy || resendIn > 0} onClick={() => void requestCode()} className="text-blue-600 disabled:text-gray-400">{resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}</button>
-          <span className="h-3 w-px bg-gray-300" aria-hidden="true" />
-          <button type="button" disabled={busy} onClick={returnToEmail} className="text-gray-600">Change email</button>
+          {!resetEmail && <span className="h-3 w-px bg-gray-300" aria-hidden="true" />}
+          {!resetEmail && <button type="button" disabled={busy} onClick={returnToEmail} className="text-gray-600">Change email</button>}
         </div>
         <div className="mt-9 text-center">
           <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500"><LockClosedIcon className="h-4 w-4" />{productName} will never ask you to share this code.</p>
@@ -192,7 +200,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
       <label className="sr-only" htmlFor={emailInputId}>Email address</label>
       <div className="relative">
         <EnvelopeIcon className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="you@example.com" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
+        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} readOnly={Boolean(resetEmail)} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="you@example.com" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
       </div>
       {error && <p role="alert" className="px-3 text-center text-xs font-semibold text-red-600">{error}</p>}
       <button type="submit" disabled={busy || !email.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">

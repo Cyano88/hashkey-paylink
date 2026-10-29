@@ -181,3 +181,8 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - Selected checkout status lost inherited Node IncomingMessage headers via object spread. Preserve headers explicitly when reading the child; regression uses a real IncomingMessage.
 - Lunchroom now reads authoritative status before reusing an order: expired creates a fresh reference; pending/missing retain the reference; paid/processing recover the order; unavailable status blocks new creation. Browser checks passed.
 - Food demo, hosted merchant checkout and checkout selection regression suites passed. No funds moved by the audit. Deployment/live verification pending.
+
+## Checkout PIN reset continuity
+- Verified current browser had been redirected from checkout to pocket.hashpaylink.com after Forgot PIN. Hosted security now returns to the exact checkout path/query after logout; native Pocket default navigation stays unchanged.
+- Reset context is scoped to the current tab, checkout URL and server expiry. Checkout requests a fresh Privy email OTP for the same email with signup disabled; inline six-digit OTP is distinct from the new four-digit payment PIN. Successful PIN reset clears the context. No automatic payment submission.
+- Browser tests passed reset routing, one OTP request under StrictMode, invalid-code retry, unchanged checkout URL and no account-change control. Backend security smoke passed fresh-session and email-verification checks, old-session rejection and reset-token replay rejection. Actual live reset still needs the user to enter OTP/PIN.
