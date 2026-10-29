@@ -8,7 +8,7 @@ import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { type PaylinkReceipt } from '../../lib/paymentReceiptPdf'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketGetApp from './PocketGetApp'
-import { Check, Clock3, X, Undo2 } from './PocketIcons'
+import { Check, X, Undo2 } from './PocketIcons'
 
 export type PocketTransactionState = 'successful' | 'pending' | 'failed' | 'reversed'
 export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, embedded = false, children, detailsRows, statusAction }: {
@@ -33,13 +33,13 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const usdcEquivalent = receipt && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT') && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
     ? `${formatPocketPaymentAmount(Number(receipt.amount))} ${receipt.asset || 'USDC'}` : undefined
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
-  const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
+  const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : Undo2
   if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} extraActions={children} />
   if (viewDetails) return <PocketBottomSheet title={title} onClose={() => setViewDetails(false)} dismissOnBackdrop={false}><h2 className="mb-5 text-base font-bold">{title}</h2><PocketTransactionDetails rows={detailsRows || []} />{detail && <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">{detail}</p>}{children}</PocketBottomSheet>
   const content = <>
     {inline && !embedded && <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{title}</p>}
     <div data-pocket-status-core className="flex h-48 shrink-0 flex-col items-center pt-1 text-center" role="status" aria-live="polite">
-      {state === 'successful' ? <span className="mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}><Icon aria-hidden="true" className="h-9 w-9" /></span>}
+      {state === 'successful' ? <span className="mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${state === 'pending' ? '' : state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}>{state === 'pending' ? <span aria-hidden="true" className="h-9 w-9 rounded-full border-2 border-gray-200 border-t-gray-500 animate-spin [animation-duration:1.5s] motion-reduce:animate-none dark:border-gray-700 dark:border-t-gray-300"/> : <Icon aria-hidden="true" className="h-9 w-9"/>}</span>}
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
       {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
       <div className="mt-1 h-8 w-full shrink-0 overflow-y-auto text-xs leading-4 text-gray-500 dark:text-gray-400">

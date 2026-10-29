@@ -198,3 +198,8 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 
 - Eligibility fix 852cba8e4 / dep-dbhhtsgm7kps73evajp0 live 10:30:36Z. Reloaded the user checkout chkx_43f0d392105b4f769d67f507: server preflight HTTP 200; actual screen now Verify email to reset your PIN with Send a new email code, without PIN fields. No OTP requested by agent. Additional browser case passed expiry between preflight and PIN submission.
 - Deployment invocation with literal HEAD resolved to old server-default revision; canceled dep-dbhhtoe7bikc73emdb90 during build before live. Replacement used the exact tested commit hash. Always pass the resolved commit hash to Render.
+
+## Funded Lunchroom confirmation and processing ring
+- User completed payment for order 1b09d0d4a39040e9936313ca812daf0d. Authenticated selection chks_b11f040698b1404b8ade4132 and child chkx_e9d6d2914cf047d0b6e3c143 both return paid, 1.5 USDT on X Layer. Merchant order independently returns paid.
+- Recorded transaction 0x5063a5b0b73b3bb1248b2769a5c5483b36e863e93986b726b3df438fb6076d70 and receipt e6c65f5d-9e09-400f-b35d-4f6b99f499ef. Receipt retrieval, developer activity record and webhook delivery still need separate verification; do not claim these passed from the merchant confirmation alone.
+- Replaced static processing clock with thin neutral 2px ring, continuous linear 1.5s rotation, no colored background, reduced-motion disables animation. Amount/copy stay static. Existing transaction-sheet browser suite passed including computed animation and reduced-motion checks; screenshot visually inspected.

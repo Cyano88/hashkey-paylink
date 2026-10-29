@@ -1,3 +1,4 @@
+import {checkoutTestCss} from './checkout-test-css.mjs'
 import assert from 'node:assert/strict'
 import { build } from 'esbuild'
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs'
@@ -9,10 +10,16 @@ const bundle=await build({stdin:{contents:entry,loader:'jsx',resolveDir:process.
 const browser=await chromium.launch({headless:true,channel:'chrome'})
 try{
  const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>r.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('https://fixture.invalid');await page.addScriptTag({content:bundle.outputFiles[0].text});
- for(const file of readdirSync('dist/assets').filter(f=>f.endsWith('.css')))await page.addStyleTag({content:readFileSync('dist/assets/'+file,'utf8')});
+ await page.addStyleTag({content:await checkoutTestCss()});
  await page.evaluate(()=>{document.documentElement.style.setProperty('--pocket-safe-top','0px');document.documentElement.style.setProperty('--pocket-safe-bottom','0px')});mkdirSync('output/playwright',{recursive:true});
  for(const [state,label] of [['pending','Processing'],['failed','Failed'],['successful','Successful']]){
   await page.evaluate(s=>window.show(s),state);const sheet=page.getByRole('dialog',{name:label,exact:true});await sheet.waitFor();assert.equal(await sheet.getByRole('button',{name:'Close',exact:true}).count(),0);const header=sheet.locator('[data-pocket-sheet-header]');const pill=await header.locator('[aria-hidden]').boundingBox(),title=await header.locator('p').boundingBox();assert(Math.abs(pill.y+pill.height/2-title.y-title.height/2)<1,'Movement label aligns with the centre handle');
+  if(state==='pending'){
+   const ring=sheet.locator('[data-pocket-status-core] .animate-spin');await ring.waitFor()
+   assert.deepEqual(await ring.evaluate(e=>{const s=getComputedStyle(e);return [s.animationName,s.animationDuration,s.animationTimingFunction,s.borderTopWidth]}),['spin','1.5s','linear','2px'])
+   await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await ring.evaluate(e=>getComputedStyle(e).animationName),'none');await page.emulateMedia({reducedMotion:'no-preference'})
+   await page.screenshot({path:'output/playwright/processing-minimal-ring.png'})
+  }
   await page.mouse.click(5,5);await page.keyboard.press('Escape');await page.evaluate(()=>window.dispatchEvent(new Event('pocket:native-back',{cancelable:true})));assert.equal(await sheet.count(),1);
   await sheet.getByRole('button',{name:'View receipt',exact:true}).click();const preview=page.getByRole('dialog',{name:'Receipt preview'});await preview.waitFor();assert.equal(await preview.evaluate(e=>getComputedStyle(e).top),'0px');await preview.getByText(label,{exact:true}).waitFor();await preview.getByText('NVDAx',{exact:false}).first().waitFor();
   await page.screenshot({path:'output/playwright/receipt-'+state+'.png'});await preview.getByRole('button',{name:'Done',exact:true}).click();await sheet.waitFor();await sheet.getByRole('button',{name:'Done',exact:true}).click();assert.equal(await page.getByRole('dialog').count(),0)
