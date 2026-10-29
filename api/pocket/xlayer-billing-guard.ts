@@ -16,7 +16,7 @@ type Halt={haltedAt:number;reason:'billed_cost_exceeds_coverage';billedUsdMicros
 const key='pocket:xlayer-billing-halt:v1'
 const tokens=Object.fromEntries(Object.entries(xLayerFeeAssets).map(([asset,token])=>[asset,token.address])) as Record<XLayerFeeAsset,string>
 const abi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
-const unavailable=()=>{throw Error('X Layer sponsorship cost verification is temporarily unavailable.')}
+const unavailable=()=>{throw Object.assign(Error('X Layer sponsorship cost verification is temporarily unavailable.'),{status:503})}
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 export function xlayerBilledUsdMicros(b:any){
  if(typeof b?.currency!=='string'||b.currency.toLowerCase()!=='usd'||!['number','string'].includes(typeof b.value)||!/^\d+(?:\.\d+)?$/.test(String(b.value)))return unavailable()
@@ -34,7 +34,7 @@ export function createXLayerBillingGuard(d:{
  prices:typeof readStockMarketPrices;
 }){
  return async(attempts:Attempt[],wallet?:string)=>{
-  if(await d.readHalt())throw Error('X Layer sponsorship is paused for a fee review.')
+  if(await d.readHalt())throw Object.assign(Error('X Layer sponsorship is paused for a fee review.'),{status:503})
   const now=d.now(),recent=attempts.filter(r=>r.coverage&&r.at>=now-28*86400000&&(!wallet||same(r.wallet,wallet)))
   const extra=await d.additionalCoverage?.(wallet)||[]
   if(d.transactionSpend&&extra.length)return unavailable()
@@ -83,7 +83,7 @@ export function createXLayerBillingGuard(d:{
    if(billed<0n)return unavailable()
    if(billed>coverage){
     await d.halt({haltedAt:now,reason:'billed_cost_exceeds_coverage',billedUsdMicros:String(billed),coverageUsdMicros:String(coverage)})
-    throw Error('X Layer sponsorship is paused for a fee review.')
+    throw Object.assign(Error('X Layer sponsorship is paused for a fee review.'),{status:503})
    }
    }catch(error){failure=error}
   }

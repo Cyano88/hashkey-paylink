@@ -1,3 +1,4 @@
+import {readFallbackNetworkPrices} from './payment-network-price-fallback.js'
 import { parseUnits } from 'viem'
 const CACHE_MS = 60_000
 const MAX_PRICE_AGE_MS = 180_000
@@ -17,17 +18,25 @@ export async function readNativeUsdcRate(asset: NativeAsset, fetcher = fetch, no
   if (cache && now() >= cache.at && now() < cache.expiresAt) return cache.ratio
   if (pending) return pending
   const work = (async () => {
-    const response = await fetcher(`https://api.coingecko.com/api/v3/simple/price?ids=${priceId},${stableId}&vs_currencies=usd&include_last_updated_at=true`, { signal: AbortSignal.timeout(5000) })
-    if (!response.ok) throw new Error('Network fee pricing is temporarily unavailable.')
-    const body = await response.json() as Record<string, { usd?: number; last_updated_at?: number }>
-    for (const id of [priceId, stableId]) {
-      const value = body[id]
-      if (!value || !Number.isFinite(value.usd) || value.usd! <= 0 || !Number.isFinite(value.last_updated_at) || now() - value.last_updated_at! * 1000 > MAX_PRICE_AGE_MS || value.last_updated_at! * 1000 > now() + 30_000) throw new Error('Network fee pricing is not fresh. Try again.')
+    let rate: number, oldestPriceAt: number
+    try {
+      const response = await fetcher(`https://api.coingecko.com/api/v3/simple/price?ids=${priceId},${stableId}&vs_currencies=usd&include_last_updated_at=true`, { signal: AbortSignal.timeout(5000) })
+      if (!response.ok) throw new Error('Network fee pricing is temporarily unavailable.')
+      const body = await response.json() as Record<string, { usd?: number; last_updated_at?: number }>
+      for (const id of [priceId, stableId]) {
+        const value = body[id]
+        if (!value || !Number.isFinite(value.usd) || value.usd! <= 0 || !Number.isFinite(value.last_updated_at) || now() - value.last_updated_at! * 1000 > MAX_PRICE_AGE_MS || value.last_updated_at! * 1000 > now() + 30_000) throw new Error('Network fee pricing is not fresh. Try again.')
+      }
+      rate = body[priceId].usd! / body[stableId].usd!
+      oldestPriceAt = Math.min(body[priceId].last_updated_at!, body[stableId].last_updated_at!) * 1000
+    } catch (primaryError) {
+      try {
+        const prices=await readFallbackNetworkPrices(asset,stablecoin,fetcher,now)
+        rate=prices.native/prices.stable;oldestPriceAt=prices.oldestPriceAt
+      } catch { throw primaryError }
     }
-    const rate = body[priceId].usd! / body[stableId].usd!
     if (!Number.isFinite(rate) || rate <= 0 || rate > 10_000_000) throw new Error('Invalid network fee conversion rate.')
     const ratio = BigInt(Math.ceil(rate * 1e8))
-    const oldestPriceAt = Math.min(body[priceId].last_updated_at!, body[stableId].last_updated_at!) * 1000
     caches.set(cacheKey, { at: now(), expiresAt: Math.min(now() + CACHE_MS, oldestPriceAt + MAX_PRICE_AGE_MS), ratio })
     return ratio
   })().finally(() => { requests.delete(cacheKey) })

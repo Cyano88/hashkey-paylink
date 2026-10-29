@@ -133,7 +133,8 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     if(review.reimbursement)validateSponsoredStablecoinQuote(review.reimbursement)
     inFlight.current = true; setBusy(true); setError('')
     try {
-      await requestPocketPaymentApproval()
+      try { await requestPocketPaymentApproval() }
+      catch (reason) { throw Object.assign(reason instanceof Error ? reason : new Error('Payment approval did not complete.'), { pocketApprovalNotSubmitted: true }) }
       const approval = takePocketPaymentApproval()
       if (!approval) throw Error('Payment approval expired. Please try again.')
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')

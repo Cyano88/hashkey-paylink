@@ -1,3 +1,4 @@
+import {isPocketApprovalCancelled} from '../lib/pocketApprovalCancelled'
 import PocketAmountKeypad, {pocketAmountKeyDown} from './PocketAmountKeypad'
 import {formatPocketDisplayAmount} from '../lib/pocketMoney'
 import PocketFundingAction from './PocketFundingAction'
@@ -62,7 +63,11 @@ export default function PocketStockWalletActions({ wallet, view, stablecoinsOnly
     setBusy(true); setError('')
     setResult({amount:review.amount,symbol:review.asset.symbol,recipient:review.recipient,hash:'',at:Date.now(),failed:false}); setResultOpen(false)
     try { const hash = await wallet.send(review, {onSubmitted:hash=>setResult(previous=>previous?{...previous,hash}:previous)}); setResult(previous=>previous?{...previous,hash}:previous); setResultOpen(true) }
-    catch (e) { setResult(previous=>previous?{...previous,attemptId:(e as {attemptId?:string})?.attemptId,failed:!(e as {transactionPending?:boolean})?.transactionPending}:previous); setResultOpen(true); setReconnectWallet(!!(e as {reconnectWallet?:boolean})?.reconnectWallet);setError(e instanceof Error ? e.message : 'Could not send. Check Activity before retrying.') }
+    catch (e) {
+      if ((e as {pocketApprovalNotSubmitted?:boolean})?.pocketApprovalNotSubmitted && isPocketApprovalCancelled(e)) {
+        setResult(null); setResultOpen(false); setError(''); return
+      }
+      setResult(previous=>previous?{...previous,attemptId:(e as {attemptId?:string})?.attemptId,failed:!(e as {transactionPending?:boolean})?.transactionPending}:previous); setResultOpen(true); setReconnectWallet(!!(e as {reconnectWallet?:boolean})?.reconnectWallet);setError(e instanceof Error ? e.message : 'Could not send. Check Activity before retrying.') }
     finally { setBusy(false) }
   }
   if (!wallet.address) return <section className={stablecoinsOnly ? 'min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain' : panel}><h2 className="text-sm font-bold">Your XStocks wallet</h2><p className="my-4 text-xs leading-5 text-gray-400">Open your XStocks wallet to send or receive.</p><button type="button" className={button} disabled={!wallet.ready || wallet.busy} onClick={wallet.connect}>{wallet.busy ? 'Opening...' : 'Open wallet'}</button>{wallet.error && <p role="alert" className="mt-3 text-xs text-red-500">{wallet.error}</p>}</section>

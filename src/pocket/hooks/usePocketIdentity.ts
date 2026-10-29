@@ -1,4 +1,6 @@
 import { usePrivy } from '@privy-io/react-auth'
+import { useCallback } from 'react'
+import { readPocketAccessToken } from '../lib/pocketAccessToken'
 
 export function emailFromPocketPrivyUser(user: unknown) {
   const directEmail = (user as { email?: { address?: unknown } } | undefined)?.email?.address
@@ -16,6 +18,7 @@ export function emailFromPocketPrivyUser(user: unknown) {
 
 export default function usePocketIdentity() {
   const { ready, authenticated, user, logout, getAccessToken } = usePrivy()
+  const readAccessToken = useCallback(() => readPocketAccessToken(getAccessToken), [getAccessToken])
 
   return {
     ready,
@@ -23,6 +26,6 @@ export default function usePocketIdentity() {
     email: emailFromPocketPrivyUser(user),
     user,
     logout,
-    getAccessToken,
+    getAccessToken: readAccessToken,
   }
 }
