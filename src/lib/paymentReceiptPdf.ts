@@ -19,6 +19,7 @@ export type PaylinkReceipt = {
   memo: string
   amount: string
   feeAmount?: string
+  feeAsset?: string
   requestedAmount?: string
   asset: string
   createdAt: number
@@ -272,8 +273,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
-    variant:'general',badge:receipt.brandKind==='pocket'?(receipt.type==='money_in'?'Web payment received':'Web payment sent'):'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
+    variant:'general',badge:'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
+      ...(receipt.brandKind==='pocket'?[{label:'Type',value:'Web payment'},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
       {label:'Payment method',value:'Wallet'},
       {label:'Network',value:network},
@@ -281,6 +283,21 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       {label:'Date',value:fmtTime(receipt.createdAt)},
       ...(receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
+  }
+  if(['wallet-transfer','wallet-deposit','wallet-withdrawal'].includes(receipt.source||'')&&['money_in','money_out'].includes(receipt.type)){
+    const incoming=receipt.type==='money_in'
+    const narration=receipt.narration||receipt.memo||''
+    const normalized=(value:string)=>value.toLowerCase().replace(/\s/g,'')
+    const automatic=new Set(['','Incoming','Outgoing','Transfer','Wallet transfer',receipt.title||'',receipt.asset+' received',receipt.asset+' sent',...([receipt.amount,compactReceiptAmount(receipt.amount,receipt.asset)].flatMap(value=>[value+' '+receipt.asset,value+' '+receipt.asset+' received',value+' '+receipt.asset+' sent',value+' '+receipt.asset+' received on '+network+'.',value+' '+receipt.asset+' sent on '+network+'.']))].map(normalized))
+    return {variant:'general',badge:'Wallet transfer',amount,timestamp:fmtTime(receipt.createdAt),reference,rows:[
+      {label:'Type',value:'Wallet transfer'},
+      {label:'Direction',value:incoming?'Received':'Sent'},
+      {label:'Network',value:network},
+      {label:'From',value:receipt.payer||'-',mono:true},
+      {label:'To',value:receipt.destination&&/^0x|^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(receipt.destination)?receipt.destination:receipt.recipient||'-',mono:true},
+      ...(!automatic.has(normalized(narration))?[{label:'Narration',value:narration}]:[]),
+      ...(receipt.feeAmount?[{label:'Fees',value:compactReceiptAmount(receipt.feeAmount,receipt.feeAsset||receipt.asset)+' '+(receipt.feeAsset||receipt.asset)}]:[]),
+    ]}
   }
   if (receipt.source === 'gift') {
     const incoming = receipt.type === 'money_in'
