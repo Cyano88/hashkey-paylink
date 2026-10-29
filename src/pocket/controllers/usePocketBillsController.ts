@@ -164,10 +164,10 @@ export default function usePocketBillsController({
   }, [category])
 
   useEffect(() => {
-    if (view === 'airtime' && serviceId && !['mtn', 'airtel', 'glo', 'etisalat'].includes(serviceId)) {
+    if (country === 'NG' && view === 'airtime' && serviceId && !['mtn', 'airtel', 'glo', 'etisalat'].includes(serviceId)) {
       setServiceIdState('mtn')
     }
-  }, [serviceId, view])
+  }, [country, serviceId, view])
 
   useEffect(() => {
     let initializedSandbox = false

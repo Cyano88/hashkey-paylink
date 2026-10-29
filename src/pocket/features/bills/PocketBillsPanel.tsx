@@ -169,6 +169,13 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const networks = preview && view === 'data' && catalogNetworks.length === 0
     ? NETWORKS.map(network => ({ ...network, value: `${network.value}-data` }))
     : catalogNetworks
+  const enteredAmount = Number(bills.amountNgn)
+  const amountLimitMessage = (view === 'airtime' || view === 'electricity') && bills.amountNgn?.trim() && Number.isFinite(enteredAmount)
+    ? bills.amountLimits?.minimumAmount && enteredAmount < bills.amountLimits.minimumAmount
+      ? `Minimum amount is ${money(String(bills.amountLimits.minimumAmount),bills.country==='UG'?'UGX':'NGN')}.`
+      : bills.amountLimits?.maximumAmount && enteredAmount > bills.amountLimits.maximumAmount
+        ? `Maximum amount is ${money(String(bills.amountLimits.maximumAmount),bills.country==='UG'?'UGX':'NGN')}.` : ''
+    : ''
   const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
   const isMobileBill = view === 'airtime' || view === 'data'
   const quoteExpired = bills.errorCode === 'BILLS_QUOTE_EXPIRED'
@@ -259,7 +266,6 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                 </label>
               </>
             )}
-            {(view === 'airtime' || view === 'electricity') && bills.amountLimits?.minimumAmount && <p className="text-xs text-gray-500 dark:text-gray-400">Minimum amount: {money(String(bills.amountLimits.minimumAmount),bills.country==='UG'?'UGX':'NGN')}{bills.amountLimits.maximumAmount ? ` ? Maximum: ${money(String(bills.amountLimits.maximumAmount),bills.country==='UG'?'UGX':'NGN')}` : ''}</p>}
             {(view === 'airtime' || view === 'electricity') && <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Suggested amounts">
               {(view === 'airtime' ? (bills.country==='UG'?[1000,2000,5000,10000,20000,50000]:[100, 200, 500, 1000, 2000, 5000]) : [2000, 3000, 5000, 10000, 20000, 50000]).filter(amount => (!bills.amountLimits?.minimumAmount || amount >= bills.amountLimits.minimumAmount) && (!bills.amountLimits?.maximumAmount || amount <= bills.amountLimits.maximumAmount)).map(amount => <button key={amount} type="button" disabled={locked} onClick={() => bills.setAmountNgn(String(amount))} className={cn('min-h-10 shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-40', Number(bills.amountNgn) === amount ? 'border-blue-400 bg-blue-50 dark:bg-blue-400/10' : 'border-gray-200 dark:border-[#262626]')}>{money(String(amount),bills.country==='UG'?'UGX':'NGN')}</button>)}
             </div>}
@@ -326,6 +332,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
 
 
+            {amountLimitMessage && <p role="status" className="text-xs text-red-500 dark:text-red-400">{amountLimitMessage}</p>}
             {bills.country!=='UG' && !isData && Number(bills.amountNgn) > 0 && <PocketFiatUsdcEstimate amount={Number(bills.amountNgn)} asset={bills.asset} />}
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
