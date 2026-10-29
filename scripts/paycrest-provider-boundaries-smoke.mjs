@@ -68,6 +68,9 @@ await assert.rejects(
   verifyPaycrestAccount({ institution: 'OPAY', accountIdentifier: '0123456789' }),
   /currency: Currency is required/,
 )
+globalThis.fetch = async () => Response.json({status:'error',message:'Failed to validate payload',data:{field:'Rate',message:'Rate validation failed: no provider available for USDC to NGN conversion with amount 0.072212 on base'}},{status:400})
+await assert.rejects(verifyPaycrestAccount({institution:'OPAY',accountIdentifier:'0123456789'}), /Rate: Rate validation failed: no provider available/)
+
 globalThis.fetch = originalFetch
 if (originalApiKey === undefined) delete process.env.PAYCREST_API_KEY
 else process.env.PAYCREST_API_KEY = originalApiKey

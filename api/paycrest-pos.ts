@@ -163,7 +163,9 @@ async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T
       ? (body as any).errors
       : Array.isArray((body as any).data)
         ? (body as any).data
-        : []
+        : (body as any).data && typeof (body as any).data === 'object' && typeof (body as any).data.message === 'string'
+          ? [(body as any).data]
+          : []
     const validation = validationRows.length
       ? validationRows.map((item: any) => {
           const field = firstText(item?.field, item?.path)

@@ -23,6 +23,7 @@ const env = {
   VITE_CIRCLE_USER_WALLET_APP_ID: config.circle.userWalletAppId,
   VITE_CIRCLE_EVM_EMAIL_ENABLED: String(config.circle.evmEmailEnabled),
   VITE_POCKET_PUSH_ENABLED: 'true',
+  VITE_XLAYER_TRANSFER_SPONSORSHIP: String(config.xlayer?.transferSponsorshipEnabled === true),
   VITE_POCKET_USDT_PAYOUT: String(config.payouts?.usdtEnabled === true),
   VITE_CHECKPOINT_FACTORY_ADDRESS_MAINNET: config.streampay?.checkpointFactoryAddress || '',
 }
