@@ -67,5 +67,9 @@ try{for(const asset of xlayerCheckoutAssets){
  await assert.rejects(settleStockCheckout({...proof,id:second.data.checkoutId,confirmedAt:new Date(clock+1000).toISOString()},d),/already used/)
  clock+=31*60_000;assert.equal((await call('GET',{}, {id:second.data.checkoutId})).status,410)
  assert.equal((await call('GET',{}, {id})).data.checkout.status,'paid','Paid receipts survive checkout expiry')
+ assert.equal((await readStockCheckoutReceipt(proof.paymentId,d)).txHash,proof.hash,'Receipt recovery survives checkout expiry')
+ const originalName=store.checkouts[id].merchantName;store.checkouts[id].merchantName='Tampered merchant'
+ assert.equal(await readStockCheckoutReceipt(proof.paymentId,d),undefined,'Never recover a receipt from altered checkout terms')
+ store.checkouts[id].merchantName=originalName
  console.log('PASS stablecoin Checkout: activation, permissions, accepted asset, exact precision, signed records, replay isolation, ledger identity, expiry and webhook retry.')
 }}finally{await rm(root,{recursive:true,force:true})}

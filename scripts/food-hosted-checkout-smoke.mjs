@@ -36,4 +36,8 @@ assert.equal(selectionBody.paymentSelection,'stablecoins');assert.equal(selectio
 selectionState='expired';assert.equal((await selectionRequest('GET',{}, {id:orderId})).data.order.status,'expired')
 selectionState='paid';const selectedReceipt=(await selectionRequest('GET',{}, {id:orderId})).data.order
 assert.equal(selectedReceipt.receiptUrl,'/receipt/receipt-fixture-123');assert.equal(selectedReceipt.status,'paid');assert.equal(selectedReceipt.asset,'USDG');assert.equal(selectedReceipt.network,'xlayer')
+ delete selectionStore.orders[orderId].receiptId;selectionState='pending'
+ assert.equal((await selectionRequest('GET',{}, {id:orderId})).data.order.status,'paid','Receipt backfill must not regress an already confirmed order')
+ selectionState='paid'
+ assert.equal((await selectionRequest('GET',{}, {id:orderId})).data.order.receiptUrl,'/receipt/receipt-fixture-123','Older paid orders recover their receipt link')
 console.log('PASS merchant selection session: no fixed asset, truthful expiry and verified selected-asset receipt.')

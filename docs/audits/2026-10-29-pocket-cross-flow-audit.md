@@ -215,3 +215,9 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - Minimal processing ring deployed eb7dd4ccc / dep-dbhi68hsrm7s73ftrlqg live 10:47:18Z and public PocketTransactionSheet-5Ohe2Axd.js verified.
 
 - Push label release cfcede2ba / dep-dbhi8n142hec73chr2ng live 10:53:35Z. API fixtures verify Web payment for hosted checkout and XPay for direct links; no live duplicate push emitted. Receipt endpoint read during deploy received non-JSON service response, so public receipt recovery remains unverified.
+
+## Checkout receipt implementation and recovery
+- Implemented the phone reference as separate payment summary, payment details and actions cards. Web payment, standard 1.50 USDT formatting, verified status, merchant, wallet method, network, date and copyable reference. Share image/PDF and support actions reuse existing receipt infrastructure.
+- Confirmed the paid receipt endpoint previously returned 404. Added recovery from stored settled X Layer checkout records with valid signed checkout terms; no payment resubmission. Fees are omitted when absent from recorded data. Lunchroom recovers old paid order receipt IDs and exposes View receipt; a failed backfill cannot regress confirmed status.
+- Passed browser checks at 320/390/1280 in light/dark, status transitions, reference copying, PDF generation and close; visually inspected 390px screenshot. Passed four stablecoin settlement/recovery fixtures, merchant integration, completion proof, existing receipt policy and capability-security checks. Added expiry/tampering and old-paid-order recovery coverage, passing.
+- Release 0bd59621be006caef9a889ec8bfe46e3b5fb3bb4 deployment dep-dbhinqtg1s2s73a6forg started; live receipt verification pending. Native APK not rebuilt. Developer activity and signed webhook delivery still need independent live verification.
