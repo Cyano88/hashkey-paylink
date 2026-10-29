@@ -1,3 +1,4 @@
+import {formatPocketDisplayAmount,formatPocketPaymentAmount} from '../lib/pocketMoney'
 import {PocketSendBalance,PocketSendAddress,PocketSendAmount} from '../components/PocketSendFormParts'
 import usePocketSendKeypad from '../hooks/usePocketSendKeypad'
 ﻿import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
@@ -99,14 +100,14 @@ function BscSendForm({asset}:{asset:'USDC'|'USDT'}){
  const fee=quote?formatUnits(BigInt(quote.reimbursementUnits),18):null,total=quote?formatUnits(BigInt(quote.amountUnits)+BigInt(quote.reimbursementUnits),18):null
  const insufficient=!!review&&BigInt(review.balanceUnits)<BigInt(review.quote.amountUnits)+BigInt(review.quote.reimbursementUnits)
  const route=(network:string,nextAsset=asset)=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.send+'?'+new URLSearchParams({mode:'address',network,asset:nextAsset}))
- const details=<PocketConfirmationDetails amount={displayAmount+' '+displayAsset} rows={[["Wallet address",<span className="break-all">{quote?.recipient||recipient}</span>],["Network","BNB Chain"],["Fee",fee?fee+' '+displayAsset:busy?<PocketAmountShimmer label="Updating fee"/>:'Unavailable'],["Total",total?total+' '+displayAsset:busy?<PocketAmountShimmer label="Updating total"/>:'Unavailable']]}/>
+ const details=<PocketConfirmationDetails amount={formatPocketPaymentAmount(displayAmount)+' '+displayAsset} rows={[["Wallet address",<span className="break-all">{quote?.recipient||recipient}</span>],["Network","BNB Chain"],["Fee",fee?formatPocketPaymentAmount(fee)+' '+displayAsset:busy?<PocketAmountShimmer label="Updating fee"/>:'Unavailable'],["Total",total?formatPocketPaymentAmount(total)+' '+displayAsset:busy?<PocketAmountShimmer label="Updating total"/>:'Unavailable']]}/>
  return <PocketRouteShell active="home" fixedPage refreshEnabled={false} navigationDisabled={blocked} onSelect={()=>{if(!blocked)navigate(POCKET_BASE_PATH+POCKET_ROUTES.home)}}>
  <PocketFlowHeader centered title="Send" onBack={()=>{if(!blocked)navigate(POCKET_BASE_PATH+POCKET_ROUTES.transfer)}}/>
  <section className="pocket-send-form flex min-h-0 flex-1 flex-col">
  <div className="pocket-form-fields min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
  <PocketSelect ariaLabel="Send asset" buttonClassName={field} value={asset} disabled={blocked} options={['USDC','USDT'].map(value=>({value,label:value}))} onChange={value=>route('bsc',value as 'USDC'|'USDT')}/>
  <div className="space-y-2.5"><p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Network</p><PocketSelect ariaLabel="Send network" buttonClassName={field} value="bsc" disabled={blocked} options={[...networks,...(asset==='USDC'?[['arc','Arc']]:[])].map(([value,label])=>({value,label}))} onChange={network=>route(network)}/></div>
- <PocketSendBalance>{row?.known&&!row.stale?row.quantity+' '+asset:balances.unavailable?'Unavailable':<PocketAmountShimmer label="Updating balance"/>}</PocketSendBalance>
+ <PocketSendBalance>{row?.known&&!row.stale?formatPocketDisplayAmount(row.quantity)+' '+asset:balances.unavailable?'Unavailable':<PocketAmountShimmer label="Updating balance"/>}</PocketSendBalance>
  <PocketSendAddress value={recipient} onChange={setRecipient} disabled={blocked} network="bsc"/>
  <PocketSendAmount value={amount} onChange={setAmount} symbol={asset} decimals={18} disabled={blocked} onActivate={sendKeypad.show}/>
  {!checking&&!enabled&&<p className="text-xs text-gray-500">Transfers on this network are temporarily unavailable.</p>}
