@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck, XCircle } from 'lucide-react'
-import UnifiedReceipt from '../components/UnifiedReceipt'
+import UnifiedReceipt, {FullScreenReceiptSurface} from '../components/UnifiedReceipt'
 import { createX402PaylinkReceipt, type PaylinkReceipt, type X402ReceiptLike } from '../lib/paymentReceiptPdf'
 
 type ReceiptResponse = {
@@ -56,6 +56,8 @@ export default function X402Receipt() {
     if (raw.receiptId && raw.receiptHash && raw.eventId && raw.status) return raw as PaylinkReceipt
     return createX402PaylinkReceipt(raw, activityId)
   }, [activityId, data?.receipt])
+
+  if(!busy&&data?.ok&&receipt&&(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'))return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>navigate(-1)}/>
 
   const circleStatus = String(data?.circle?.transfer?.status ?? data?.circle?.status ?? '')
   if (busy) return <main className="flex min-h-[calc(100vh-120px)] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></main>

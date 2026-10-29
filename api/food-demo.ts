@@ -10,7 +10,7 @@ import {stockAssets,stockUsdc} from '../src/pocket/lib/pocketXStocksWallet.js'
 import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import {checkoutStablecoins} from '../src/lib/checkoutStablecoins.js'
 const STORE='hashpaylink:food-demo-orders:v1'
-type Order={id:string;fingerprint:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;asset:FoodAsset;hosted?:boolean;rail?:'circle'|'xlayer'|'bsc';network?:string;selectedNetwork?:string;amount:string;payableAmount?:string;settlementMode?:'usdc'|'ngn'|'ugx';createdAt:number;checkoutId?:string;checkoutUrl?:string;paid?:boolean}
+type Order={receiptId?:string;id:string;fingerprint:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;asset:FoodAsset;hosted?:boolean;rail?:'circle'|'xlayer'|'bsc';network?:string;selectedNetwork?:string;amount:string;payableAmount?:string;settlementMode?:'usdc'|'ngn'|'ugx';createdAt:number;checkoutId?:string;checkoutUrl?:string;paid?:boolean}
 type Draft={id:string;lines:ReturnType<typeof foodBasket>['lines'];cents:number;createdAt:number}
 type Store={orders:Record<string,Order>;drafts?:Record<string,Draft>}
 async function projectChoices():Promise<XPayDestination[]>{
@@ -29,17 +29,20 @@ const defaults={selectionEnabled:async()=>{const p=await resolveDeveloperApiKeyP
  const data=await response.json().catch(()=>null);if(!response.ok||!data?.ok)throw Error('Payment is unavailable. Your order has not been charged.');return data
 }}
 async function refreshFoodOrder(d:typeof defaults,order:Order){
- if(order.paid)return 'paid'
+ if(order.paid&&order.receiptId)return 'paid'
  if(!order.checkoutId)return 'pending'
- const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status')
+ const status=await d.call('?id='+encodeURIComponent(order.checkoutId)+'&purpose=status').catch(error=>{if(order.paid)return null;throw error})
+ if(!status)return 'paid'
  const matches=order.rail==='circle'?status.checkoutId===order.checkoutId:status.checkout?.id===order.checkoutId
- if(!matches)throw Error('Payment status could not be verified. Please check again.')
+ if(!matches){if(order.paid)return 'paid';throw Error('Payment status could not be verified. Please check again.')}
  if(status.status==='paid'&&(!order.checkoutId.startsWith('chks_')||['USDC','USDT','USDe','USDG'].includes(status.asset))&&(order.rail==='circle'?status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){
   if(order.checkoutId.startsWith('chks_')&&['USDC','USDT','USDe','USDG'].includes(status.asset))order.asset=status.asset
+  if(typeof status.payment?.receiptId==='string'&&/^[a-zA-Z0-9_-]{8,100}$/.test(status.payment.receiptId))order.receiptId=status.payment.receiptId
   order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')
-  await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})
+  await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].receiptId=order.receiptId;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})
   return 'paid'
  }
+ if(order.paid)return 'paid'
  return ['expired','failed','processing'].includes(status.status)?status.status as 'expired'|'failed'|'processing':'pending'
 }
 export async function reconcileFoodDemoCheckout(checkoutId:string) {
@@ -102,7 +105,7 @@ export function createFoodDemoHandler(overrides:Partial<typeof defaults>={}){con
    if(!/^[a-f0-9]{32}$/.test(String(req.query.id)))return res.status(404).json({ok:false,error:'Order not found.'})
    const order=(await d.read()).orders[String(req.query.id)];if(!order)return res.status(404).json({ok:false,error:'Order not found.'})
    const status=await refreshFoodOrder(d,order)
-   return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.payableAmount||order.amount,cents:order.cents,status,checkoutUrl:status==='pending'?order.checkoutUrl:undefined}})
+   return res.json({ok:true,order:{id:order.id,lines:order.lines,asset:order.asset,rail:order.rail||'xlayer',network:order.network,amount:order.payableAmount||order.amount,cents:order.cents,status,...(order.receiptId?{receiptUrl:'/receipt/'+encodeURIComponent(order.receiptId)}:{}),checkoutUrl:status==='pending'?order.checkoutUrl:undefined}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const id=String(req.body?.requestId||'');if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid order reference.')

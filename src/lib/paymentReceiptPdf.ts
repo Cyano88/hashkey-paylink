@@ -271,6 +271,16 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const amount = bankLocalAmount || (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
+  if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
+    variant:'general',badge:'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
+    rows:[
+      {label:'Merchant',value:receipt.recipient||receipt.brandName||'Merchant'},
+      {label:'Payment method',value:'Wallet'},
+      {label:'Network',value:network},
+      {label:'Date',value:fmtTime(receipt.createdAt)},
+      ...(receipt.feeAmount?[{label:'Fee',value:`${compactReceiptAmount(receipt.feeAmount,receipt.asset)} ${receipt.asset}`}]:[]),
+    ],
+  }
   if (receipt.source === 'gift') {
     const incoming = receipt.type === 'money_in'
     const refunded = receipt.status === 'refunded' || receipt.giftState === 'refunded'

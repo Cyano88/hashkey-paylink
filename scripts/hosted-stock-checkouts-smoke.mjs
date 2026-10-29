@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {parseUnits} from 'viem'
 import {currentXLayerCheckoutConfig,normalizeXLayerCheckoutConfig,xlayerCheckoutAssets} from '../src/lib/xlayerCheckoutConfig.ts'
-import {createHostedStockCheckoutsHandler,readStockCheckout,settleStockCheckout,drainStockCheckoutWebhooks,assertStockCheckoutPayable} from '../api/hosted-stock-checkouts.ts'
+import {createHostedStockCheckoutsHandler,readStockCheckoutReceipt,readStockCheckout,settleStockCheckout,drainStockCheckoutWebhooks,assertStockCheckoutPayable} from '../api/hosted-stock-checkouts.ts'
 import {createPaymentExecutionRepository} from '../api/pocket/payment-execution-intents.ts'
 import {stockAssets,stockUsdc} from '../src/pocket/lib/pocketXStocksWallet.ts'
 const root=await mkdtemp(join(tmpdir(),'stock-checkout-'))
@@ -49,7 +49,10 @@ try{for(const asset of xlayerCheckoutAssets){
  await assert.rejects(settleStockCheckout({...proof,units:'2'},d),/does not match/)
  await assert.rejects(settleStockCheckout({...proof,recipient:payer},d),/does not match/)
  await assert.rejects(settleStockCheckout({...proof,confirmedAt:new Date(clock-1000).toISOString()},d),/outside/)
+ assert.equal(await readStockCheckoutReceipt(proof.paymentId,d),undefined)
  assert.equal((await settleStockCheckout(proof,d)).payment.status,'paid')
+ const recoveredReceipt=await readStockCheckoutReceipt(proof.paymentId,d);assert.equal(recoveredReceipt.source,'hosted_checkout');assert.equal(recoveredReceipt.amount,body.amount);assert.equal(recoveredReceipt.txHash,proof.hash);assert.equal(recoveredReceipt.recipient,'Fixture merchant');assert.equal(recoveredReceipt.feeAmount,undefined)
+ assert.equal(await readStockCheckoutReceipt('unknown-receipt',d),undefined)
  assert.equal((await executions.get(execution.ownerId,execution.id)).state,'completed')
  assert.equal((await call('GET',{}, {id})).data.returnUrl,body.returnUrl)
  assert.equal((await call('GET',{}, {id,purpose:'status'})).data.status,'paid')

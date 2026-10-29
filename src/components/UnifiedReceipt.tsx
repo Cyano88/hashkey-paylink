@@ -1,3 +1,4 @@
+import CheckoutReceiptDetails from './CheckoutReceiptDetails'
 import PocketReceiptReport from '../pocket/components/PocketReceiptReport'
 import { shareReceiptFile } from '../lib/shareReceiptFile'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -179,6 +180,7 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
   const [error, setError] = useState('')
   const brand = paymentReceiptBrand(receipt)
   const reference = paymentReceiptView(receipt).reference
+  const checkoutReceipt=receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'
 
   useEffect(() => {
     const previous = document.body.style.overflow
@@ -225,7 +227,19 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
         </div>
       </div>
 
-      {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
+      {checkoutReceipt ? <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-5"><div className="mx-auto w-full max-w-lg">
+        <CheckoutReceiptDetails receipt={receipt} copied={copied} onCopy={()=>void navigator.clipboard.writeText(reference).then(()=>{setCopied(true);window.setTimeout(()=>setCopied(false),1200)}).catch(()=>setError('Could not copy the reference.'))}/>
+        <section className="mt-4 space-y-3 rounded-3xl bg-white p-5 dark:bg-[#17181c]">
+          <h2 className="text-sm font-semibold">More actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" disabled={Boolean(sharing)} onClick={()=>void share('image')} className="min-h-12 rounded-full border border-gray-200 px-3 text-xs font-semibold dark:border-white/15">Share image</button>
+            <button type="button" disabled={Boolean(sharing)} onClick={()=>void share('pdf')} className="min-h-12 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Share PDF</button>
+          </div>
+          <a className="flex min-h-11 items-center justify-between text-sm font-medium" href={'mailto:support@hashpaylink.com?subject='+encodeURIComponent('Payment '+reference)}>Get help<span aria-hidden="true">&rarr;</span></a>
+          {extraActions}{error&&<p role="alert" className="text-xs text-red-500">{error}</p>}
+        </section>
+        <p className="mt-5 text-center text-xs text-gray-400">Payments by Hash PayLink</p>
+      </div></div> : surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
         <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
           <div data-receipt-paper={paymentReceiptBrand(receipt).kind==='pocket'||undefined} style={paymentReceiptBrand(receipt).kind==='pocket'?{WebkitMaskImage:'radial-gradient(circle at 10px 100%, transparent 5.5px, black 6px)',maskImage:'radial-gradient(circle at 10px 100%, transparent 5.5px, black 6px)',WebkitMaskSize:'20px 100%',maskSize:'20px 100%',WebkitMaskRepeat:'repeat-x',maskRepeat:'repeat-x'}:undefined} className={paymentReceiptBrand(receipt).kind==='pocket'?"min-h-0 flex-1 overflow-y-auto rounded-t-[24px] bg-white pb-2 shadow-sm dark:bg-[#111216]":"min-h-0 flex-1 overflow-y-auto rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"}><ReceiptDocument receipt={receipt} /></div>
           {brand.kind==='pocket'&&<PocketReceiptReport key={receipt.eventId+':'+receipt.txHash} receipt={receipt} onClose={onClose}/>}

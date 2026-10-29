@@ -1,3 +1,4 @@
+import type {PaylinkReceipt} from '../src/lib/paymentReceiptPdf.js'
 import type { Request, Response } from 'express'
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { formatUnits, parseUnits, isAddress } from 'viem'
@@ -161,6 +162,15 @@ export async function settleStockCheckout(input: { id: string; token: string; un
     intent = await d.executions.update({ ownerId: intent.ownerId, intentId: intent.id, state, transactionHash: input.hash })
   }
   return record!
+}
+
+/** Recover an existing receipt only from an integrity-checked, settled checkout. */
+export async function readStockCheckoutReceipt(receiptId:string,d:Dependencies=defaults):Promise<PaylinkReceipt|undefined>{
+ if(!/^[a-zA-Z0-9_-]{8,100}$/.test(receiptId)||!d.hasStore())return
+ const record=Object.values((await d.read()).checkouts).find(r=>r.payment?.receiptId===receiptId&&valid(r,d))
+ if(!record?.payment)return
+ const p=record.payment
+ return {type:'money_out',receiptId:p.receiptId,receiptHash:p.txHash,eventId:p.receiptId,txHash:p.txHash,title:'Web payment',status:'confirmed',chain:'xlayer',payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset,createdAt:Date.parse(p.confirmedAt),source:'hosted_checkout',settlementType:'hosted_checkout',merchantId:record.id,recipient:record.merchantName,destination:record.recipient,referenceId:p.receiptId,brandName:'Hash PayLink',brandKind:'hashpaylink'}
 }
 
 export async function drainStockCheckoutWebhooks(d: Dependencies = defaults) {

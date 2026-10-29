@@ -1,3 +1,4 @@
+import {readStockCheckoutReceipt} from './hosted-stock-checkouts.js'
 import type { Request, Response } from 'express'
 import { findRegisteredPaymentReceipt } from './event-registry.js'
 
@@ -35,7 +36,11 @@ export default async function handler(req: Request, res: Response) {
 
   try {
     const receipt = await findRegisteredPaymentReceipt(id)
-    if (!receipt) return res.status(404).json({ ok: false, error: 'Receipt not found.' })
+    if (!receipt) {
+      const checkoutReceipt=await readStockCheckoutReceipt(id)
+      if(checkoutReceipt)return res.json({ok:true,receipt:{...checkoutReceipt,payer:publicReceiptPayer(checkoutReceipt.payer)}})
+      return res.status(404).json({ ok: false, error: 'Receipt not found.' })
+    }
 
     return res.json({
       ok: true,

@@ -29,11 +29,11 @@ console.log('PASS hosted merchant integration: server basket, no route/recipient
 // The demo opts in to the public selection API; it never builds asset routes itself.
 let selectionStore={orders:{}},selectionBody,selectionState='pending'
 const sessionId='chks_'+'c'.repeat(24),orderId='d'.repeat(32)
-const selectionHandler=createFoodDemoHandler({selectionEnabled:async()=>true,ready:()=>true,read:async()=>structuredClone(selectionStore),mutate:async fn=>{selectionStore=fn(structuredClone(selectionStore));return structuredClone(selectionStore)},call:async(path,body)=>{if(body){selectionBody=body;return {ok:true,checkoutId:sessionId,checkoutUrl:'/pay/c/'+sessionId,checkout:{amount:'1.5'}}}return {ok:true,checkoutId:sessionId,status:selectionState,asset:'USDG',network:'xlayer',settlementMode:'usdc',payment:{amount:'1.5'}}}})
+const selectionHandler=createFoodDemoHandler({selectionEnabled:async()=>true,ready:()=>true,read:async()=>structuredClone(selectionStore),mutate:async fn=>{selectionStore=fn(structuredClone(selectionStore));return structuredClone(selectionStore)},call:async(path,body)=>{if(body){selectionBody=body;return {ok:true,checkoutId:sessionId,checkoutUrl:'/pay/c/'+sessionId,checkout:{amount:'1.5'}}}return {ok:true,checkoutId:sessionId,status:selectionState,asset:'USDG',network:'xlayer',settlementMode:'usdc',payment:{amount:'1.5',receiptId:'receipt-fixture-123'}}}})
 async function selectionRequest(method,body={},query={}){let code=200,data;await selectionHandler({method,body,query},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this},sendStatus(n){code=n}});return {code,data}}
 assert.equal((await selectionRequest('POST',{action:'prepare',requestId:orderId,items:[{id:'plantain',quantity:1}]})).code,200)
 assert.equal(selectionBody.paymentSelection,'stablecoins');assert.equal(selectionBody.asset,undefined)
 selectionState='expired';assert.equal((await selectionRequest('GET',{}, {id:orderId})).data.order.status,'expired')
 selectionState='paid';const selectedReceipt=(await selectionRequest('GET',{}, {id:orderId})).data.order
-assert.equal(selectedReceipt.status,'paid');assert.equal(selectedReceipt.asset,'USDG');assert.equal(selectedReceipt.network,'xlayer')
+assert.equal(selectedReceipt.receiptUrl,'/receipt/receipt-fixture-123');assert.equal(selectedReceipt.status,'paid');assert.equal(selectedReceipt.asset,'USDG');assert.equal(selectedReceipt.network,'xlayer')
 console.log('PASS merchant selection session: no fixed asset, truthful expiry and verified selected-asset receipt.')
