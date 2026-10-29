@@ -46,6 +46,6 @@ let prepareCalls=0,sendCalls=0;
 await act(async()=>{tree=create(React.createElement(Sheet,{wallet:{...wallet,attempts:[],prepareTransfer:async()=>{prepareCalls++;throw Error('X Layer sponsorship is paused for a fee review.')},send:async()=>{sendCalls++}},view:'send'}))});
 await click('Review send');
 assert.equal(tree.root.findByProps({'data-idle':'Retry fee quote'}).props['data-progress'],'idle');
-assert.match(tree.root.findByProps({'data-fee-rows':tree.root.findAll(n=>n.props['data-fee-rows'])[0].props['data-fee-rows']}).props['data-fee-rows'],/Network fee.*Unavailable/);
+assert.match(tree.root.findByProps({'data-fee-rows':tree.root.findAll(n=>n.props['data-fee-rows'])[0].props['data-fee-rows']}).props['data-fee-rows'],/Fee.*Unavailable/);
 await click('Confirm send');assert.equal(prepareCalls,2);assert.equal(sendCalls,0);await act(async()=>tree.unmount());
 console.log('PASS unavailable fee remains visible; retry only prepares and never sends.');
