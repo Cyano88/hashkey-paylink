@@ -41,8 +41,8 @@ function BscSendForm({asset}:{asset:'USDC'|'USDT'}){
  },[owner])
  const request=useCallback(async(body:Record<string,unknown>,approval?:string)=>{
   await wallet();const token=await latest.current.identity.getAccessToken();if(!token)throw Error('Sign in to continue.')
-  const response=await fetch(pocketApiUrl('/api/pocket/bsc-send'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',...(approval?{'x-pocket-payment-approval':approval}:{})},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(45000)})
-  const data=await response.json();await wallet()
+  const response=await fetch(pocketApiUrl('/api/pocket/bsc-send'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',...(approval?{'x-pocket-payment-approval':approval}:{})},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(45000)}).catch(()=>{throw Error('Connection interrupted. Try again.')})
+  const data=await response.json().catch(()=>{throw Error('Could not connect. Try again.')});await wallet()
   if(!response.ok||!data.ok)throw Object.assign(Error(data.error||'Could not check this transfer.'),{status:response.status,code:data.code})
   return data
  },[wallet])
