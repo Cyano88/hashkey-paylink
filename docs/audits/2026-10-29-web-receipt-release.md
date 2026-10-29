@@ -20,3 +20,9 @@ Only the checkout receipt presentation was released. Purchaser email and subscri
 Final timestamp deployment `dep-dbhkpru7bikc73essrl0` became live at 2026-10-29T13:46:20Z on exact commit c07759334. Fresh production Chrome checks passed again, including the visible payment timestamp and both real downloads; no page errors. Parent and child status endpoints again returned 200 paid with unchanged payment identifiers.
 
 Repository typecheck errors, dependency advisories, real purchaser inbox delivery, subscription production readiness and paid-order webhook delivery remain separate open work. See the billing verification audit for details.
+
+## Saved merchant logo correction
+
+User identified that the real Lunchroom logo should be present. Verified the existing paid checkout already contains `https://app.hashpaylink.com/brand/lunchroom.png`. Two mapping defects omitted it: the recovered receipt replaced merchant branding with Hash PayLink, and the export branding helper forced an empty image URL. Commit `67fd6baa659565a3e72969ac0d4f5d2c00854eee` preserves the signed checkout's merchant name/logo and renders wide wordmarks without a duplicate header name. Missing/failed logos fall back to merchant text, never fabricated initials.
+
+Four-asset checkout smoke tests now assert branding survives receipt recovery. Browser export tests cover real Lunchroom wordmark, missing and failed logos, amount and reference preservation. All pass. PDF and JPEG fixtures visually inspected. Deployment `dep-dbhl1ton74is73eb1ulg` live at 2026-10-29T14:03:31Z on exact commit 67fd6baa6. Fresh production PDF/JPEG downloads passed; instrumentation confirmed the actual saved Lunchroom logo was drawn in both exports. Production JPEG visually checked with 1.50 USDT, 11:37 GMT+1 and the full existing receipt reference; PDF rendered successfully as one page.
