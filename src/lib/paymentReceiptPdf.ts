@@ -272,13 +272,14 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
-    variant:'general',badge:'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
+    variant:'general',badge:receipt.brandKind==='pocket'?(receipt.type==='money_in'?'Web payment received':'Web payment sent'):'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
-      {label:'Merchant',value:receipt.recipient||receipt.brandName||'Merchant'},
+      {label:'Merchant',value:receipt.recipient||'Merchant'},
       {label:'Payment method',value:'Wallet'},
       {label:'Network',value:network},
+      ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
       {label:'Date',value:fmtTime(receipt.createdAt)},
-      ...(receipt.feeAmount?[{label:'Fee',value:`${compactReceiptAmount(receipt.feeAmount,receipt.asset)} ${receipt.asset}`}]:[]),
+      ...(receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
   }
   if (receipt.source === 'gift') {

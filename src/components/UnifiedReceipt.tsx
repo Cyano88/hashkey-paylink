@@ -1,6 +1,6 @@
 import CheckoutReceiptDetails from './CheckoutReceiptDetails'
 import PocketReceiptReport from '../pocket/components/PocketReceiptReport'
-import { shareReceiptFile } from '../lib/shareReceiptFile'
+import { downloadReceiptFile, shareReceiptFile } from '../lib/shareReceiptFile'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { POCKET_NATIVE_BACK_EVENT } from '../pocket/lib/pocketNativeBack'
@@ -180,7 +180,7 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
   const [error, setError] = useState('')
   const brand = paymentReceiptBrand(receipt)
   const reference = paymentReceiptView(receipt).reference
-  const checkoutReceipt=receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'
+  const checkoutReceipt=brand.kind!=='pocket'&&(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')
 
   useEffect(() => {
     const previous = document.body.style.overflow
@@ -204,10 +204,10 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
       if (kind === 'image') {
         const dataUrl = await createPaymentReceiptImage(receipt)
         const blob = receiptDataUrlBlob(dataUrl)
-        await shareReceiptFile(new File([blob], paymentReceiptImageFileName(receipt), { type: 'image/jpeg' }), `${brand.name} receipt`)
+        await (checkoutReceipt?downloadReceiptFile:shareReceiptFile)(new File([blob], paymentReceiptImageFileName(receipt), { type: 'image/jpeg' }), `${brand.name} receipt`)
       } else {
         const blob = await createPaymentReceiptPdf(receipt)
-        await shareReceiptFile(new File([blob], paymentReceiptFileName(receipt), { type: 'application/pdf' }), `${brand.name} receipt`)
+        await (checkoutReceipt?downloadReceiptFile:shareReceiptFile)(new File([blob], paymentReceiptFileName(receipt), { type: 'application/pdf' }), `${brand.name} receipt`)
       }
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') return
@@ -232,8 +232,8 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
         <section className="mt-4 space-y-3 rounded-3xl bg-white p-5 dark:bg-[#17181c]">
           <h2 className="text-sm font-semibold">More actions</h2>
           <div className="grid grid-cols-2 gap-3">
-            <button type="button" disabled={Boolean(sharing)} onClick={()=>void share('image')} className="min-h-12 rounded-full border border-gray-200 px-3 text-xs font-semibold dark:border-white/15">Share image</button>
-            <button type="button" disabled={Boolean(sharing)} onClick={()=>void share('pdf')} className="min-h-12 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Share PDF</button>
+            <button type="button" disabled={Boolean(sharing)} onClick={()=>void share('image')} className="min-h-12 rounded-full border border-gray-200 px-3 text-xs font-semibold dark:border-white/15">Download image</button>
+            <button type="button" disabled={Boolean(sharing)} onClick={()=>void share('pdf')} className="min-h-12 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Download PDF</button>
           </div>
           <a className="flex min-h-11 items-center justify-between text-sm font-medium" href={'mailto:support@hashpaylink.com?subject='+encodeURIComponent('Payment '+reference)}>Get help<span aria-hidden="true">&rarr;</span></a>
           {extraActions}{error&&<p role="alert" className="text-xs text-red-500">{error}</p>}

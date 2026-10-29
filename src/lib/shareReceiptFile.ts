@@ -24,6 +24,10 @@ export async function shareReceiptFile(file: File, title: string) {
     await navigator.share({ title, files: [file] })
     return
   }
+  downloadReceiptFile(file)
+}
+
+export function downloadReceiptFile(file:File) {
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = url

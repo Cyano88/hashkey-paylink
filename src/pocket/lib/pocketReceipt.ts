@@ -59,6 +59,7 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
 
   if ((source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
+  if (settlement === 'hosted_checkout') return row.direction === 'in' ? 'money_in' : 'money_out'
   if (source === 'xpay') return row.direction === 'in' ? 'money_in' : 'app_purchase'
   if (source === 'esim') return 'app_purchase'
   if (isOutgoingPosPurchase(row)) return 'app_purchase'
@@ -94,6 +95,7 @@ export function pocketBillTitle(category?: string): string {
 }
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
+  if(row.settlementType==='hosted_checkout')return 'Web payment '+(row.direction==='in'?'received':'sent')
   if (normalizedSource(row) === 'esim') return pocketActivityStatus(row) === 'refunded' ? 'eSIM refunded' : 'eSIM purchase'
   if (normalizedSource(row) === 'wallet-bridge') return (row.assetSymbol || 'USDC') + ' bridge'
   if (normalizedSource(row) === 'wallet-swap') return (row.assetSymbol || 'USDC') + ' swap'
@@ -110,6 +112,7 @@ export function pocketMovementTitle(row: PocketActivityRow): string {
 
 // Reuse the existing receipt reference; exports must never mint a new identifier.
 export function pocketActivityReference(row: PocketActivityRow): string {
+  if(row.settlementType==='hosted_checkout'&&row.receiptId)return row.receiptId
   return row.providerReference || row.billReference || row.txHash || row.eventId
 }
 

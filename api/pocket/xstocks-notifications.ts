@@ -1,3 +1,4 @@
+import {enrichWebPaymentNotices} from './web-payment-notices.js'
 import { isPocketId } from '../../src/pocket/lib/pocketId.js'
 import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
@@ -18,7 +19,7 @@ export default async function handler(req:Request,res:Response){
    }
    // Serve saved activity immediately; historical metadata RPCs must not block reads.
    if(req.query?.activity==='1')void hydrateStockActivity(owner).catch(()=>undefined)
-   const s=await readStockNotices(),notices=Object.values(s.notices).filter(n=>n.owner===owner && req.query?.activity==='1').sort((a,b)=>b.at-a.at).slice(0,100)
+   const s=await readStockNotices(),notices=await enrichWebPaymentNotices(Object.values(s.notices).filter(n=>n.owner===owner && req.query?.activity==='1').sort((a,b)=>b.at-a.at).slice(0,100),owner)
    return res.json({ok:true,notices:notices.map(({owner,delivered,...n})=>n),unread:Object.values(s.requests).filter(r=>r.payer===owner&&['pending','accepted'].includes(r.status)&&r.updatedAt>(s.reads[owner]||0)).length,requests:Object.values(s.requests).filter(r=>r.sender===owner||r.payer===owner).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,100).map(r=>publicRequest(r,owner))})
   }
   const action=req.body?.action

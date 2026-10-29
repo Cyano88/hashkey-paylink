@@ -37,6 +37,7 @@ export function pocketActivityAction(row: PocketActivityRow): string {
   if (row.source === 'wallet-withdrawal') return 'Sent'
   if (row.source === 'gift') return pocketActivityStatus(row) === 'refunded' ? 'Gift refunded' : row.direction === 'in' ? 'Gift received' : 'Gift sent'
   if (row.source === 'request' || row.source === 'collection') return 'Request payment'
+  if(row.settlementType==='hosted_checkout')return row.direction==='in'?'Web payment received':'Web payment sent'
   if (['xpay','purchase','app-pay','pos','ngpos'].includes(row.source || '')) return row.direction === 'in' ? 'Payment received' : 'Payment'
   return row.direction === 'in' ? 'Received' : 'Sent'
 }
