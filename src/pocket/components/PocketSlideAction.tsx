@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
 import { cn } from '../../lib/utils'
-import { PocketSkeletonBar } from './PocketContentSkeletons'
+
 import { POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, preparePocketPaymentApproval, requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 import { AlertCircle, ArrowLeftRight, Banknote, Check, CheckCircle2, Loader2, Send, Wallet } from './PocketIcons'
 
@@ -124,7 +124,7 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
           : visualStatus === 'error'
             ? <AlertCircle className="h-4 w-4" />
             : !plain ? <ActionIcon className="h-4 w-4" /> : null)}
-      {loadingContent && visualStatus === 'idle' ? <PocketSkeletonBar className="h-3 w-28" /> : <span>{label}</span>}
+      <span>{label}</span>
     </button>
   )
 }
