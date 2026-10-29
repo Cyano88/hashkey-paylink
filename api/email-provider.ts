@@ -1,6 +1,6 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 
-type SendEmailInput = {
+export type SendEmailInput = {
   to: string
   fromEmail?: string
   fromName?: string
@@ -8,6 +8,9 @@ type SendEmailInput = {
   text: string
   html: string
   context: string
+  replyTo?: string
+  idempotencyKey?: string
+  attachments?: Array<{filename:string;content:string;content_type?:string}>
 }
 
 function formatFrom(email?: string, name?: string) {
@@ -25,6 +28,7 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     headers: {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
+      ...(input.idempotencyKey?{'Idempotency-Key':input.idempotencyKey}:{}),
     },
     body: JSON.stringify({
       from,
@@ -32,10 +36,16 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
       subject: input.subject,
       text: input.text,
       html: input.html,
+      ...(input.replyTo?{reply_to:input.replyTo}:{}),
+      ...(input.attachments?.length?{attachments:input.attachments}:{}),
     }),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     throw new Error(body ? `Resend rejected ${input.context}: ${body.slice(0, 180)}` : `Resend rejected ${input.context} email.`)
   }
+  const result=await response.json() as {id?:string}
+  if(!result.id)throw new Error('Email provider did not return a delivery reference.')
+  return result.id
 }

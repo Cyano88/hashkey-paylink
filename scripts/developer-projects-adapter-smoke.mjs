@@ -438,3 +438,9 @@ assert.deepEqual(bdefault.body.project.bscCheckout.assets,bscConfig.assets)
 assert.equal((await request(handler,'PUT',{...activateDraft,bscCheckout:null,checkoutDefaultNetwork:'bsc'})).statusCode,400)
 assert.equal((await request(handler,'PUT',{...activateDraft,bscCheckout:{...bscConfig,assets:[xlayerConfig.assets[0]]}})).statusCode,400)
 console.log('PASS BNB acceptance and default, disabled default and wrong-network asset rejection.')
+
+const receiptDraft={...activateDraft,xlayerCheckout:xlayerConfig,receiptEmails:{enabled:true,supportEmail:'help@example.test',timeZone:'Africa/Lagos',enabledAt:'2000-01-01'}};
+const receiptSave=await request(handler,'PUT',receiptDraft);assert.equal(receiptSave.statusCode,200,JSON.stringify(receiptSave.body));assert.equal(receiptSave.body.project.receiptEmails.supportEmail,'help@example.test');assert.equal(receiptSave.body.project.receiptEmails.enabledAt,'2026-07-19T12:00:00.000Z');
+assert.equal((await request(handler,'PUT',{...receiptDraft,receiptEmails:{...receiptDraft.receiptEmails,supportEmail:'bad'}})).statusCode,400);
+const receiptOwner=activeIdentity;activeIdentity={userId:'stranger',email:'stranger@example.test'};assert.equal((await request(handler,'PUT',receiptDraft)).statusCode,404);activeIdentity=receiptOwner;
+const disabledReceipts=await request(handler,'PUT',{...receiptDraft,receiptEmails:{...receiptDraft.receiptEmails,enabled:false}});assert.equal(disabledReceipts.body.project.receiptEmails.enabled,false);console.log('PASS project-owned receipt settings round-trip, validation, enable-time integrity and disable.');

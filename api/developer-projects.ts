@@ -1,3 +1,4 @@
+import{normalizeReceiptEmailSettings,defaultReceiptEmailSettings,type ReceiptEmailSettings}from'../src/lib/receiptEmailSettings.js'
 import {developerReceivingWallets} from './developer-receiving-wallets.js'
 import {normalizeBscCheckoutConfig,type BscCheckoutConfig} from '../src/lib/bscCheckoutConfig.js'
 import {normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
@@ -68,6 +69,7 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  receiptEmails?: ReceiptEmailSettings
   removal?: {status:'closed'|'deleted';at:string;by:string}
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: VerificationRecord
@@ -242,7 +244,7 @@ export function pinnedPublicWebhookLookup(address: string, family: number): Look
   }
 }
 
-async function resolvePublicWebhookDestination(value: string) {
+export async function resolvePublicWebhookDestination(value: string) {
   const url = new URL(value)
   if (url.protocol !== 'https:' || url.username || url.password) throw Object.assign(new Error('Webhook URLs must use public HTTPS endpoints.'), { status: 400 })
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
@@ -413,6 +415,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     ownerEmail: project.ownerEmail,
     website: project.website,
     brandImageUrl: project.brandImageUrl ?? '',
+    receiptEmails: project.receiptEmails ?? defaultReceiptEmailSettings,
     useCase: project.useCase,
     checkoutMode: projectCheckoutMode(project),
     capabilities: effectiveProductCapabilities(project),
@@ -930,6 +933,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
         if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human stablecoin Checkout.'})
+        let receiptEmails:ReceiptEmailSettings
+        try{receiptEmails=normalizeReceiptEmailSettings(req.body?.receiptEmails,currentProject.receiptEmails,dependencies.now().toISOString())}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
+        if(receiptEmails.enabled&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||!xlayerCheckout||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'Customer receipt emails require human X Layer stablecoin Checkout.'})
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
         const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
         const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
@@ -1001,7 +1007,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
           const next: DeveloperProject = {
-            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,
+            ...latest, receiptEmails:normalizeReceiptEmailSettings(req.body?.receiptEmails,latest.receiptEmails,dependencies.now().toISOString()), name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             acceptedAssets, checkoutDefaultNetwork, networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,

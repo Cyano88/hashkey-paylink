@@ -1,3 +1,4 @@
+import {reconcileCheckoutReceiptEmails} from './api/checkout-receipt-emails.js'
 import bscSendHandler,{reconcileBscSends} from './api/pocket/bsc-send-service.js'
 import operationsEmergencyPauseHandler from './api/operations-emergency-pause.js'
 import foodDemoWebhook from './api/food-demo-webhook.js'
@@ -671,6 +672,7 @@ app.listen(PORT, () => {
 })
 
 const hostedCheckoutOutboxTimer = setInterval(() => {
+  void reconcileCheckoutReceiptEmails().catch(()=>console.warn('[receipt-email] delivery deferred'))
   void drainBscCheckoutWebhooks().catch(()=>console.warn('[bsc-checkout] webhook delivery deferred'))
   void reconcileBscSends().catch(()=>console.warn('[bsc-send] confirmation deferred'))
   void reconcileBscPayments().catch(()=>console.warn('[bsc-checkout] confirmation deferred'))

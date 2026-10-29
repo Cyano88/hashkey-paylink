@@ -2,9 +2,10 @@
 import fs from 'node:fs'
 fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
+'../developer-receipt-settings.js':`export const readDeveloperReceiptSettings=async()=>globalThis.fixture.emailEnabled?{enabled:true}:undefined`,
 '../hosted-stock-checkouts.js':`export const isStockCheckoutId=id=>typeof id==='string'&&/^chkx_[a-f0-9]{24}$/.test(id);export const readStockCheckout=async id=>globalThis.fixture.stockCheckout?.id===id?globalThis.fixture.stockCheckout:null;export const assertStockCheckoutPayable=async()=>{if(globalThis.fixture.stockDisabled)throw Object.assign(Error('Checkout disabled'),{status:409})};export const settleStockCheckout=async proof=>{globalThis.fixture.stockSettled=proof;globalThis.fixture.stockCheckout.payment={status:'paid',txHash:proof.hash}}`,
 './payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
-'../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
+'../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner,email:globalThis.fixture.email});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
 '../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));globalThis.fixture.saved=state;return structuredClone(state)}`,
 './xstocks-wallet-owner.js':`export const verifyStockWalletOwner=async(owner,wallet)=>{if(globalThis.fixture.wallets[owner]!==wallet)throw Object.assign(Error('Wrong wallet'),{status:403})}`,
 './xstocks-notifications-store.js':`export const stockNoticeClient={getChainId:async()=>196,getLogs:async()=>globalThis.fixture.logs||[],getTransactionReceipt:async({hash})=>{if(!globalThis.fixture.receipts[hash])throw Error('pending');return globalThis.fixture.receipts[hash]},getBlock:async({blockNumber}={})=>({number:blockNumber||globalThis.fixture.head||100n,hash:'block',timestamp:BigInt(Math.floor(Date.now()/1000))})};export const stockNoticeAsset=async(token)=>({address:token,symbol:'NVDAx',decimals:18});export const mutateStockNotices=async fn=>fn({notices:{}});export const putStockNotice=(_s,n)=>{globalThis.fixture.notices??=[];globalThis.fixture.notices.push(n)}`,
@@ -103,11 +104,13 @@ console.log('PASS direct USDC wallet receipts remain on the Stablecoins rail.');
 // A developer checkout reuses this payment engine with immutable token units.
 fixture.owner='stock-payer';fixture.wallets['stock-payer']='0x'+'4'.repeat(40);
 fixture.stockCheckout={id:'chkx_'+'1'.repeat(24),ownerId:'merchant',merchantName:'Developer merchant',recipient:to,amount:'0.123456789',token:{address:token},createdAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+60000).toISOString(),swapEnabled:false};
-const stockBody={action:'prepare',id:fixture.stockCheckout.id,wallet:fixture.wallets['stock-payer'],token,usd:'9999',key:'fixture-stock-checkout-0001'};
+fixture.email='verified@example.test';fixture.emailEnabled=true;
+const stockBody={receiptEmail:'spoofed@example.test',action:'prepare',id:fixture.stockCheckout.id,wallet:fixture.wallets['stock-payer'],token,usd:'9999',key:'fixture-stock-checkout-0001'};
 const hostedPublic=await readPublic(fixture.stockCheckout.id,200);assert.equal(hostedPublic.merchant.fixedAmount,fixture.stockCheckout.amount);assert.equal(hostedPublic.merchant.expiresAt,Date.parse(fixture.stockCheckout.expiresAt));assert.equal(hostedPublic.merchant.wallet,undefined);assert.equal(hostedPublic.merchant.owner,undefined);
 fixture.owner='merchant';const self=(await call({...stockBody,wallet:to},400));assert.match(self.error,/own account/);assert.doesNotMatch(self.error,/XPay|QR/);fixture.owner='stock-payer';
 const stockPayment=(await call(stockBody)).payment;
 assert.equal(stockPayment.amount,'0.123456789','Client USD input cannot change fixed token units');
+assert.equal(stockPayment.receiptEmail,undefined);assert.equal(fixture.saved.payments[stockPayment.id].receiptEmail,'verified@example.test');
 assert.ok(stockPayment.expiresAt<=Date.parse(fixture.stockCheckout.expiresAt));
 assert.equal((await call({...stockBody,usd:'1'})).payment.id,stockPayment.id);
 fixture.owner='other-stock-payer';fixture.wallets['other-stock-payer']='0x'+'5'.repeat(40);

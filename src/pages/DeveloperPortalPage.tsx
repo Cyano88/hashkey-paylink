@@ -1,3 +1,5 @@
+import ReceiptEmailSettings from '../developer/ReceiptEmailSettings'
+import type{ReceiptEmailSettings as ReceiptEmailPreferences}from'../lib/receiptEmailSettings'
 import BscCheckoutSettings from '../developer/BscCheckoutSettings'
 import type {BscCheckoutConfig} from '../lib/bscCheckoutConfig'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
@@ -42,6 +44,7 @@ type Project = {
   ownerEmail: string
   website: string
   brandImageUrl: string
+  receiptEmails?: ReceiptEmailPreferences
   useCase: string
   checkoutMode: CheckoutMode
   capabilities: Capability[]
@@ -79,7 +82,7 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
 ]
 
 function editableProjectState(project:Project) {
-  const fields:Array<keyof Project>=['name','website','brandImageUrl','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout','bscCheckout']
+  const fields:Array<keyof Project>=['name','website','brandImageUrl','receiptEmails','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout','bscCheckout']
   return JSON.stringify(fields.map(field=>project[field]))
 }
 
@@ -266,7 +269,7 @@ export default function DeveloperPortalPage() {
     setBusy(true); setError(''); setNotice('')
     try {
       const data = await api('PUT', {
-        action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
+        action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, receiptEmails:draft.receiptEmails, useCase: draft.useCase,
         checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
         bscCheckout: draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'?draft.bscCheckout??null:null,
         xlayerCheckout: draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && draft.settlementMode === 'usdc' ? draft.xlayerCheckout ?? null : null,
@@ -396,7 +399,7 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
 }
 
 function SetupPanel({ receivingWallets, draft, setDraft, institutions, institutionsLoading, busy, onSave, error, notice }: { receivingWallets: Record<string,string>; draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void; error?:string; notice?:string }) {
-  const [settingsSection, setSettingsSection] = useState<'general'|'receiving'|'branding'>('general')
+  const [settingsSection, setSettingsSection] = useState<'general'|'receiving'|'branding'|'receipts'>('general')
   const [settingsError, setSettingsError] = useState('')
   function submitSettings() {
     let message = ''
@@ -432,7 +435,7 @@ function SetupPanel({ receivingWallets, draft, setDraft, institutions, instituti
     {draft.checkoutMode === 'agentic' && draft.networks.some(network => !isAgentCheckoutNetwork(network)) && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Agent checkout now supports Base and Arc only. Remove unsupported routes, then save your settings. <button type="button" className="ml-2 underline" onClick={() => { const networks = draft.networks.filter(isAgentCheckoutNetwork); if (!networks.length) networks.push('base'); setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork as 'base' | 'arc') ? draft.defaultNetwork : networks[0] }) }}>Remove unsupported networks</button></div>}
     {unsupportedNetworks && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Some saved networks do not support the selected products. <button type="button" className="ml-2 underline" onClick={() => updateProducts(draft.capabilities)}>Use supported networks</button></div>}
     <PanelHeader eyebrow="Project" title="Settings" copy="Your business details and receiving accounts." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Configured' : 'Setup required'} />
-    <nav aria-label="Settings sections" className="mt-6 flex gap-5 border-b border-gray-200 dark:border-white/10">{(['general','receiving','branding'] as const).map(value=><button key={value} type="button" onClick={()=>setSettingsSection(value)} aria-current={settingsSection===value?'page':undefined} className={cn('min-h-11 border-b-2 text-sm',settingsSection===value?'border-gray-950 font-semibold dark:border-white':'border-transparent text-gray-500')}>{value==='general'?'Business details':value==='receiving'?'Receiving accounts':'Branding'}</button>)}</nav>
+    <nav aria-label="Settings sections" className="mt-6 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-gray-200 dark:border-white/10">{(['general','receiving','branding','receipts'] as const).map(value=><button key={value} type="button" onClick={()=>setSettingsSection(value)} aria-current={settingsSection===value?'page':undefined} className={cn('min-h-11 border-b-2 text-sm',settingsSection===value?'border-gray-950 font-semibold dark:border-white':'border-transparent text-gray-500')}>{value==='general'?'Business details':value==='receiving'?'Receiving accounts':value==='branding'?'Branding':'Receipts & support'}</button>)}</nav>
     <div hidden={settingsSection!=='general'}>
     <div className="mt-7 grid gap-4 sm:grid-cols-2">
       <Field label="Project name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
@@ -470,6 +473,7 @@ function SetupPanel({ receivingWallets, draft, setDraft, institutions, instituti
     </div>
 
     </div>
+    <div hidden={settingsSection!=='receipts'}><ReceiptEmailSettings value={draft.receiptEmails} onChange={receiptEmails=>setDraft({...draft,receiptEmails})} eligible={draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'&&Boolean(draft.xlayerCheckout)}/></div>
     <div hidden={settingsSection!=='receiving'}>
     {routingRequired && <><div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{localSettlement ? 'Checkout settlement' : 'Receive payments as'}</p>

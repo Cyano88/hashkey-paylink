@@ -1,4 +1,5 @@
 import {checkoutStablecoins} from '../../src/lib/checkoutStablecoins.js'
+import{readDeveloperReceiptSettings}from'../developer-receipt-settings.js'
 import {ownsTerminalSetupKey,legacyXPayTerminal,assertUnifiedXPayDestination} from './unified-xpay-store.js'
 import { isStockCheckoutId, readStockCheckout, settleStockCheckout, assertStockCheckoutPayable } from '../hosted-stock-checkouts.js'
 import { exactTokenTransfer } from '../exact-token-transfer.js'
@@ -17,7 +18,7 @@ import { readStockMarketPrices } from './xstocks-prices.js'
 import type { XPayMerchant, XPayPayment } from '../../src/pocket/lib/pocketXPay.js'
 const KEY='hashpaylink:pocket-xpay:v1'
 type Merchant=XPayMerchant&{owner:string;createKey?:string}
-type Payment=XPayPayment&{owner:string;merchantOwner:string;units:string;authorizedAt?:number;authorizedBlock?:string;scanBlock?:string;blockNumber?:string;blockHash?:string;confirmedAt?:string;checkoutSynced?:boolean}
+type Payment=XPayPayment&{receiptEmail?:string;owner:string;merchantOwner:string;units:string;authorizedAt?:number;authorizedBlock?:string;scanBlock?:string;blockNumber?:string;blockHash?:string;confirmedAt?:string;checkoutSynced?:boolean}
 type Store={merchants:Record<string,Merchant>;payments:Record<string,Payment>;hashes:Record<string,string>}
 const normalize=(s?:Store):Store=>({merchants:s?.merchants||{},payments:s?.payments||{},hashes:s?.hashes||{}})
 const read=async()=>normalize(await readDurableJson<Store>(KEY))
@@ -25,7 +26,7 @@ const mutate=(fn:(s:Store)=>void)=>mutateDurableJson<Store>(KEY,current=>{const 
 const fail=(message:string,status=400)=>{throw Object.assign(Error(message),{status})}
 const supported=new Set([...checkoutStablecoins('xlayer'),...stockAssets].map(a=>a.address.toLowerCase()))
 const publicMerchant=({owner,createKey,...m}:Merchant)=>m
-const publicPayment=({owner,merchantOwner,units,authorizedAt,authorizedBlock,scanBlock,blockHash,blockNumber,...p}:Payment)=>p
+const publicPayment=({receiptEmail,owner,merchantOwner,units,authorizedAt,authorizedBlock,scanBlock,blockHash,blockNumber,...p}:Payment)=>p
 const event=parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
 async function checkoutMerchant(id:string,readOnly=false):Promise<Merchant|undefined>{
  if(!isStockCheckoutId(id))return undefined
@@ -128,6 +129,7 @@ export default async function handler(req:Request,res:Response){
    const asset=await stockNoticeAsset(token),prices=await readStockMarketPrices([token]),price=prices[token]
    if(!price||Date.now()-price.fetchedAt>=60000)fail('A fresh asset price is unavailable. Try again.',503)
    const units=m.fixedAmount?parseUnits(m.fixedAmount,asset.decimals):xpayUnits(usd,price.usd,asset.decimals),now=Date.now()
+   const receiptEmail=isStockCheckoutId(id)&&identity.email?await readStockCheckout(id,true).then(async checkout=>checkout&&await readDeveloperReceiptSettings(checkout.partnerId)?identity.email:undefined).catch(()=>undefined):undefined
    let payment:Payment|undefined
    await mutate(s=>{
     const prior=Object.values(s.payments).find(p=>p.owner===owner&&p.key===key)
@@ -136,7 +138,7 @@ export default async function handler(req:Request,res:Response){
     if(Object.values(s.payments).filter(p=>p.owner===owner&&p.createdAt>now-86400000).length>=100)fail('Daily payment limit reached.',429)
     const current=s.merchants[id]||(isStockCheckoutId(id)?m:undefined);if(!current||current.deletedAt||current.updatedAt!==m.updatedAt)fail('Merchant settings changed. Review again.',409)
     if(isStockCheckoutId(id)&&Object.values(s.payments).some(p=>p.merchantId===id&&['submitted','paid'].includes(p.status)))fail('This checkout already has a payment in progress.',409)
-    payment={id:randomUUID(),checkoutId,key,owner,merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd:m.fixedAmount?(Number(m.fixedAmount)*price.usd).toFixed(2):usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:Math.min(now+5*60_000,m.expiresAt||Infinity)}
+    payment={id:randomUUID(),checkoutId,key,owner,...(receiptEmail?{receiptEmail}:{}),merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd:m.fixedAmount?(Number(m.fixedAmount)*price.usd).toFixed(2):usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:Math.min(now+5*60_000,m.expiresAt||Infinity)}
     s.payments[payment.id]=payment
    })
    return res.json({ok:true,payment:publicPayment(payment!)})
