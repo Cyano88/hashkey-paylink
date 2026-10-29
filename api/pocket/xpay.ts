@@ -76,7 +76,7 @@ async function observe(p:Payment){
  const paid=await syncStockPayment(result.payments[p.id])
  if(paid.status==='paid'){
   const log=receipt.logs.find(log=>verifyXPayTransfer(paid,{status:'success',logs:[log]},Number(block.timestamp)*1000))
-  if(log?.logIndex!=null)await mutateStockNotices(s=>{for(const owner of [paid.owner,paid.merchantOwner])putStockNotice(s,{id:owner+':transfer:'+paid.hash+':'+log.logIndex+':'+(owner===paid.owner?'out':'in'),owner,title:owner===paid.owner?'XPay payment sent':'XPay payment received',body:paid.amount+' '+paid.symbol,at:paid.updatedAt,hash:paid.hash})})
+  if(log?.logIndex!=null)await mutateStockNotices(s=>{for(const owner of [paid.owner,paid.merchantOwner])putStockNotice(s,{id:owner+':transfer:'+paid.hash+':'+log.logIndex+':'+(owner===paid.owner?'out':'in'),owner,title:(isStockCheckoutId(paid.merchantId)?'Web payment':'XPay payment')+(owner===paid.owner?' sent':' received'),body:paid.amount+' '+paid.symbol,at:paid.updatedAt,hash:paid.hash})})
  }
  return paid
 }

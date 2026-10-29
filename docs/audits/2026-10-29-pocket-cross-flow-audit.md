@@ -203,3 +203,8 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - User completed payment for order 1b09d0d4a39040e9936313ca812daf0d. Authenticated selection chks_b11f040698b1404b8ade4132 and child chkx_e9d6d2914cf047d0b6e3c143 both return paid, 1.5 USDT on X Layer. Merchant order independently returns paid.
 - Recorded transaction 0x5063a5b0b73b3bb1248b2769a5c5483b36e863e93986b726b3df438fb6076d70 and receipt e6c65f5d-9e09-400f-b35d-4f6b99f499ef. Receipt retrieval, developer activity record and webhook delivery still need separate verification; do not claim these passed from the merchant confirmation alone.
 - Replaced static processing clock with thin neutral 2px ring, continuous linear 1.5s rotation, no colored background, reduced-motion disables animation. Amount/copy stay static. Existing transaction-sheet browser suite passed including computed animation and reduced-motion checks; screenshot visually inspected.
+
+## Hosted checkout push label
+- User clarified the issue is the Pocket push notification, not ledger activity. X Layer settlement used shared XPay code with hardcoded XPay payment sent/received titles even for chkx hosted checkout merchants.
+- Hosted checkout now emits Web payment sent/received; direct XPay payments retain XPay labels. Existing API settlement tests capture and assert both titles. No rebrand or card-payment support added. Already-delivered Android notifications are not changed or re-sent.
+- Current browser showed confirmed Lunchroom order; Pixel was on a music app during screenshot inspection, so no claim of visually verifying the old notification. Notification producer verified directly in code.

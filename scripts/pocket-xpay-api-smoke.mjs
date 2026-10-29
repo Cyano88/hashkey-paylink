@@ -7,7 +7,7 @@ const mocks={
 '../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
 '../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));globalThis.fixture.saved=state;return structuredClone(state)}`,
 './xstocks-wallet-owner.js':`export const verifyStockWalletOwner=async(owner,wallet)=>{if(globalThis.fixture.wallets[owner]!==wallet)throw Object.assign(Error('Wrong wallet'),{status:403})}`,
-'./xstocks-notifications-store.js':`export const stockNoticeClient={getChainId:async()=>196,getLogs:async()=>globalThis.fixture.logs||[],getTransactionReceipt:async({hash})=>{if(!globalThis.fixture.receipts[hash])throw Error('pending');return globalThis.fixture.receipts[hash]},getBlock:async({blockNumber}={})=>({number:blockNumber||globalThis.fixture.head||100n,hash:'block',timestamp:BigInt(Math.floor(Date.now()/1000))})};export const stockNoticeAsset=async(token)=>({address:token,symbol:'NVDAx',decimals:18});export const mutateStockNotices=async fn=>fn({notices:{}});export const putStockNotice=()=>{}`,
+'./xstocks-notifications-store.js':`export const stockNoticeClient={getChainId:async()=>196,getLogs:async()=>globalThis.fixture.logs||[],getTransactionReceipt:async({hash})=>{if(!globalThis.fixture.receipts[hash])throw Error('pending');return globalThis.fixture.receipts[hash]},getBlock:async({blockNumber}={})=>({number:blockNumber||globalThis.fixture.head||100n,hash:'block',timestamp:BigInt(Math.floor(Date.now()/1000))})};export const stockNoticeAsset=async(token)=>({address:token,symbol:'NVDAx',decimals:18});export const mutateStockNotices=async fn=>fn({notices:{}});export const putStockNotice=(_s,n)=>{globalThis.fixture.notices??=[];globalThis.fixture.notices.push(n)}`,
 './xstocks-prices.js':`export const readStockMarketPrices=async tokens=>Object.fromEntries(tokens.map(t=>[t,{usd:200,fetchedAt:Date.now()}]))`
 }
 await build({entryPoints:['api/pocket/xpay.ts'],outfile:'.codex-temp/xpay-handler-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
@@ -33,9 +33,10 @@ await call({...body,key:'fixture-unique-key-0002'},409)
 assert.equal((await call({action:'confirm',id:p.id,hash})).payment.status,'submitted')
 fixture.owner='merchant';await call({action:'status',id:p.id},404);fixture.owner='payer'
 const event=parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
-fixture.receipts[hash]={status:'success',blockNumber:110n,blockHash:'block',logs:[{address:token,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from,to}}),data:encodeAbiParameters([{type:'uint256'}],[5000000000000000n])}]}
+fixture.receipts[hash]={status:'success',blockNumber:110n,blockHash:'block',logs:[{logIndex:0,address:token,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from,to}}),data:encodeAbiParameters([{type:'uint256'}],[5000000000000000n])}]}
 fixture.head=120n;assert.equal((await call({action:'status',id:p.id})).payment.status,'paid')
 assert.equal((await call({action:'confirm',id:p.id,hash})).payment.status,'paid')
+assert.deepEqual(fixture.notices.slice(-2).map(n=>n.title),['XPay payment sent','XPay payment received'])
 const second=(await call({...body,key:'fixture-unique-key-0002'})).payment
 await call({action:'authorize',id:second.id});await call({action:'confirm',id:second.id,hash},409)
 fixture.head=140n;const recoveredHash='0x'+'b'.repeat(64);fixture.logs=[{args:{value:5000000000000000n},transactionHash:recoveredHash}];fixture.receipts[recoveredHash]={...fixture.receipts[hash],blockNumber:130n};assert.equal((await call({action:'status',id:second.id})).payment.status,'paid');
@@ -117,8 +118,9 @@ assert.equal((await call({action:'merchant',id:fixture.stockCheckout.id})).payme
 fixture.owner='other-stock-payer';await call({action:'authorize',id:concurrent.id},409);
 assert.equal((await call({action:'merchant',id:fixture.stockCheckout.id})).payments.some(p=>p.id===stockPayment.id),false);
 fixture.owner='stock-payer';const stockHash='0x'+'d'.repeat(64);fixture.head=200n;
-fixture.receipts[stockHash]={status:'success',blockNumber:190n,blockHash:'block',logs:[{address:token,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from:fixture.wallets['stock-payer'],to}}),data:encodeAbiParameters([{type:'uint256'}],[123456789000000000n])}]};
+fixture.receipts[stockHash]={status:'success',blockNumber:190n,blockHash:'block',logs:[{logIndex:0,address:token,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from:fixture.wallets['stock-payer'],to}}),data:encodeAbiParameters([{type:'uint256'}],[123456789000000000n])}]};
 assert.equal((await call({action:'confirm',id:stockPayment.id,hash:stockHash})).payment.status,'paid');
+assert.deepEqual(fixture.notices.slice(-2).map(n=>n.title),['Web payment sent','Web payment received']);
 assert.equal(fixture.stockSettled.id,fixture.stockCheckout.id);assert.equal(fixture.stockSettled.units,'123456789000000000');
 await call({...stockBody,key:'fixture-stock-checkout-0003'},409);
 console.log('PASS shared developer stock engine: fixed units, disabled-project authorization, concurrent payer lock, verified settlement and paid-order replay rejection.');
