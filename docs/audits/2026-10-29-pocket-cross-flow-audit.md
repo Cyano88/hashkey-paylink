@@ -95,3 +95,20 @@ Supersedes earlier provisional failure statuses above:
 - Native transport browser suite passes POST/auth/query preservation, bounded read retry, no execution replay, coalesced reads and abort isolation.
 
 Remaining acceptance gates: recurring Privy session refresh timeout; X Layer billing-halt reconciliation; provider availability for bank amount; BNB Send/Request capability parity; obsolete unified-send fixture; unrelated combined-config StreamGate assertion; real funded end-to-end settlement/recovery/receipt testing. No overall all-clear issued.
+
+## User-reported X Layer fee screen / BNB regression follow-up (06:22 UTC)
+
+- Inspected user's actual 2 USDT X Layer confirmation screen: no fee row and enabled Confirm send despite failed sponsorship quote. Root: absent review removed all fee rows; button actually retried prepare but was misleadingly labelled as confirmation.
+- Corrected both sources to reuse Base PocketAmountShimmer for Fee and Total while preparing, with existing CTA loading shimmer. No visible Calculating or Getting fee text. Failed preparation shows Fee Unavailable and Retry fee quote; successful reimbursement uses actual asset decimals for fee/total. Submission still requires a valid reviewed quote.
+- User explicitly reaffirmed shimmer convention; the earlier calculating-text patch was superseded. Web deployment dep-dbhe968n74is73d5dgfg for 3af1bd9d1 was cancelled. Replacement commit ce5b4931b is deploying under dep-dbheahe1egvs73fbckng.
+- Native production build, Gradle build and install preserving data passed. Pixel PID28089. Pixel/narrow/landscape light-dark actual component tests pass fee+total shimmer presence, no calculating text, explicit quote retry without send, and reset. Release real-component cancellation and quote-error tests pass.
+- Verified BNB Chain is actually present in Pixel Swap and Bridge source selectors; BNB Swap opens, displaying BNB input. Native BNB Bridge capability lookup had a swallowed one-shot failure. Added five-second retry with cleanup and stable access-token dependency, matching existing X Layer recovery. Actual page fixture confirms BNB reappears after transient failure without navigation or any signing/submission.
+- BNB Send remains absent from current native and release send routes. Tracked history and the dedicated BSC release checkout did not recover an earlier BNB Send implementation. Do not claim it was never working; exact prior implementation remains unverified.
+- Found material source divergence: native PocketSwapPage includes BNB panels, web release PocketSwapPage does not. Full native page dependency comparison spans many shared components; did not overwrite them wholesale into release. Native BNB selectors are not missing because of shared PocketSelect: the b514ffbf9 BNB selector correction is already present in native source.
+- Important rollout accountability: prior rebuild enabled configured X Layer stablecoin reimbursement while its persistent billing halt was active, replacing the old direct-OKB send path with a blocked quote. No rollback to silently charging OKB and no bypass of sponsorship pause performed.
+- Isolated read-only re-evaluation of current combined billing could not complete due to BSC RPC connection unavailable. Stored halt unchanged; no funds or fee records modified.
+
+Installed Pixel verification (final shimmer build): feeShimmer=1, totalShimmer=1, calculatingText=0 observed during the actual 2 USDT quote request. No payment approval. First retry coincided with web deployment restart (HTTP502), so its generic connection error is not new evidence of the billing guard's state. Final deployment health and same-screen BNB recovery checked separately below.
+
+Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel same-screen BNB recovery during deployment: before=0 BNB options, after=1, reopenedScreen=false. The corrected retry restored the option in the already-open Bridge source selector. BNB Send and full native/web feature reconciliation remain open; sponsorship pause unchanged.
+
