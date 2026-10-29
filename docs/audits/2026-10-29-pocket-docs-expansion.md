@@ -20,3 +20,4 @@ Expanded Pocket documentation without changing payment or app code. Added Stocks
 ## Still separate
 Native Collections entry-point reconciliation; funded Earn/eSIM/gift tests; bank/AML/provider and daily-limit approval. This documentation release does not establish those outcomes.
 - Production Vite build: exit 0 (existing dependency annotation and bundle-size warnings). Builder integration helper smoke passed; no real APIs called.
+- Deployed commit 32112915c42f4a12b7012156893dd8dfc4422034 via dep-dbhs5tss728c73cpso70; live 2026-10-29T22:10:19.254851Z. Live Playwright passed all 22 pages, three groups, retired redirects, Earn content, Collections page, mobile navigation, no overflow or page errors.
