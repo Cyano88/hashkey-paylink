@@ -50,3 +50,17 @@ Four-asset checkout smoke tests now assert branding survives receipt recovery. B
 - Commit `22c8e59258c746d6764196a058eacfec36f2119e` adds direct PDF downloads. Final table-layout commit `7e31ebe0e3a22dbe9556b8c84833912479d92f96`, deployment `dep-dbhn3dul5iis738l8nf0`, live 2026-10-29T16:25:05Z. Production build passed; health and existing receipt endpoints returned 200 after rollout.
 - Tests passed: email presentation, durable queue/retries, PDF canonical lookup and frozen-attachment reuse, and browser layout at 320/390/1280. Actual paid receipt download through the new email link returned application/pdf with attachment filename; Chrome downloaded it. PDF parsed as one page with the correct 1.50 USDT and full reference. Rendered actual-order email screenshot `output/playwright/live-order-email-layout.png`; downloaded file `output/playwright/live-direct-receipt.pdf`.
 - Already-delivered emails and frozen attachments retain their previous presentation. This release does not resend them or move funds. Product-level itemization and automatic inbox confirmation remain distinct follow-up checks.
+
+## Final funded acceptance: order #498541
+
+The user confirmed immediate automatic email arrival. Pixel Gmail was then inspected directly: the redesigned payment summary, aligned order table, one Download receipt action, merchant support address, muted weighted branding footer and PDF attachment were visible in dark mode. Screenshots: `pixel-redesign-email.png` and `pixel-redesign-order-table.png` under `output/playwright`.
+
+Read-only durable-store verification matched order `4985416349ba4ec08cfb683ea775dff2`, parent `chks_611854dd2e1c4bb99f7ae01f`, child `chkx_a23f82e030034f19b4782870`, and receipt `fb6986a1-b175-476b-b219-1b5b17f4887b`. All agree on 1.50 USDT paid on X Layer, confirmed 2026-10-29T16:50:05Z, transaction `0xfbf0a90e5dd207155dcdc5b959fa953e6f60cabe0932e427e32ec3e02190e604`.
+
+- Webhook `stock-paid:chkx_a23f82e030034f19b4782870`: `payment.confirmed`, HTTP 200, delivered on the first attempt at 16:50:14.570Z. The merchant receiver independently persisted the matching event and payload hash; the checkout outbox is marked delivered. The merchant order is paid and retains the same receipt ID.
+- Automatic receipt email: durable job state sent, one attempt, provider ID `01a18891-be2f-7b1c-9436-f6bc78870d52`. Combined with the user's inbox confirmation and phone inspection, automatic email delivery is verified for this payment.
+- Fresh isolated Chrome: paid order reopened and reloaded; receipt opened from the order, reloaded, then reopened directly in a separate tab. Correct amount, full reference, wallet-payment type and transaction were preserved. Web PDF export and direct PDF response both passed. Back returned to the confirmed order. No page errors or app API mutation requests occurred; mutation requests were blocked by the test harness.
+- Recovered PDF rendered as one page. Screenshot and PDF artifacts: `recovered-latest-receipt.png`, `recovered-latest-receipt.pdf` under `output/playwright`.
+- Existing `food-demo-webhook-smoke.mjs` passed invalid/stale-signature rejection, duplicate idempotency, conflicting-event rejection, pending retry behavior and authoritative-status verification.
+
+This closes the funded Lunchroom X Layer checkout, signed webhook, automatic email, and receipt recovery acceptance checks. It does not certify other payment rails, provider/AML approvals, subscriptions or card payments. No new payment or webhook replay was initiated during this verification.
