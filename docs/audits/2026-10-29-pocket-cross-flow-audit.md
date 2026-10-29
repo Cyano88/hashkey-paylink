@@ -173,3 +173,5 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - Added bounded 5-second tolerance to the future-window check in both web and native source; expiration, fee/total, recipient, signing request binding and server 30-second lifetime remain enforced. No transaction submitted by this audit.
 - USDC/USDT client regression checks pass in both repos, including the exact 116ms mismatch, tolerance boundary, expired quote rejection, post-PIN refresh, increased fee rejection and uncertain-send retention. Native source patch is not installed yet.
 - Authenticated child chkx_02ed254437fa4523bc494f8c remains pending at verification. Selection chks_1add86a339af43cf92b38161 still returns 409; merchant order status/settlement/receipt acceptance remains open separately.
+
+- Deployment c64f04d2f / dep-dbhh0i5g1s2s73a2hu60 live at 09:27:18Z. Public site HTTP 200; served usePocketStockWallet-C0eeX-_0.js verified with 5,000ms future-window tolerance and unchanged strict expiry check. Hosted checkout browser suite passed all four supported X Layer stablecoins. Old checkout expired; fresh funded acceptance still requires user approval.
