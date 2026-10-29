@@ -24,8 +24,14 @@ ${header}<table role="presentation" width="100%" cellspacing="0" cellpadding="0"
 <p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:#667085">Receipt from ${escape(r.merchant)}</p>
 <h1 style="margin:0 0 10px;font-size:32px;line-height:1.2;letter-spacing:-0.5px">${escape(amount)}</h1>
 <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#667085">Paid on ${escape(date)}</p>
-<p style="margin:0 0 14px;font-size:16px;font-weight:700;line-height:1.5">${escape(order||r.description)}</p>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;line-height:1.6"><tr><td style="padding:4px 12px 4px 0;color:#667085">Payment method</td><td align="right" style="padding:4px 0">Wallet payment</td></tr><tr><td style="padding:4px 12px 4px 0;color:#667085">Network</td><td align="right" style="padding:4px 0">${escape(r.network)}</td></tr></table>
+</td></tr></table>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background:#ffffff;border-radius:18px"><tr><td style="padding:24px">
+<p style="margin:0 0 20px;font-size:16px;font-weight:700;line-height:1.5">${escape(order||'Payment details')}</p>
+<table aria-label="Order details" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;line-height:1.6;table-layout:fixed">
+<tbody><tr><td style="padding:0 12px 20px 0;vertical-align:top;overflow-wrap:anywhere">${escape(r.description)}</td><td align="right" style="width:112px;padding:0 0 20px;vertical-align:top;font-weight:600">${escape(amount)}</td></tr>
+<tr><td style="border-top:1px solid #e5e7eb;padding:14px 12px 14px 0">Total</td><td align="right" style="border-top:1px solid #e5e7eb;padding:14px 0;font-weight:600">${escape(amount)}</td></tr>
+<tr><td style="border-top:1px solid #e5e7eb;padding:14px 12px 0 0;font-weight:600">Amount paid</td><td align="right" style="border-top:1px solid #e5e7eb;padding:14px 0 0;font-weight:600">${escape(amount)}</td></tr></tbody></table>
 <div style="border-top:1px solid #e5e7eb;margin-top:20px;padding-top:14px"><p style="margin:0 0 5px;font-size:11px;color:#667085">Receipt reference</p><p style="margin:0;font-family:monospace;font-size:10px;line-height:1.6;word-break:break-all;overflow-wrap:anywhere;color:#667085">${escape(r.id)}</p></div>
 </td></tr><tr><td style="border-top:1px solid #e5e7eb;padding:14px 24px;text-align:center"><a href="${escape(downloadUrl)}" style="display:inline-block;padding:10px 12px;color:#667085;text-decoration:none;font-size:14px;line-height:20px;font-weight:600"><span aria-hidden="true" style="margin-right:8px">&#8595;</span>Download receipt</a></td></tr></table>${supportHtml}<p style="margin:22px 0 0;color:#8a8f98;text-align:center;font-size:13px;line-height:20px">Powered by <strong style="font-weight:700;letter-spacing:-0.2px">Hash PayLink</strong></p></main></body></html>`
  return {subject:`Receipt from ${r.merchant}`,text,html}
