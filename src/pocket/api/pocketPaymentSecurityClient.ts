@@ -22,7 +22,7 @@ async function request(getAccessToken: AccessTokenReader, init?: RequestInit) {
     window.clearTimeout(timeout)
   }
   const data = await response.json().catch(() => ({})) as Record<string, unknown>
-  if (!response.ok || data.ok !== true) throw Object.assign(new Error(String(data.error || 'Payment security did not respond.')), { status: response.status, lockedUntil: Number(data.lockedUntil || 0) })
+  if (!response.ok || data.ok !== true) throw Object.assign(new Error(String(data.error || 'Payment security did not respond.')), { status: response.status, code:data.code, lockedUntil: Number(data.lockedUntil || 0) })
   return data
 }
 
@@ -33,6 +33,11 @@ export async function readPocketPaymentSecurity(getAccessToken: AccessTokenReade
 
 export async function updatePocketPaymentSecurity(getAccessToken: AccessTokenReader, body: Record<string, unknown>) {
   return request(getAccessToken, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function checkPocketPaymentPinReset(getAccessToken:AccessTokenReader,resetToken:string){
+ const data=await updatePocketPaymentSecurity(getAccessToken,{action:'reset-status',resetToken})
+ return {eligible:data.eligible===true,error:String(data.error||'Verify your email again to reset your PIN.')}
 }
 
 export async function beginPocketPaymentPinReset(getAccessToken: AccessTokenReader) {

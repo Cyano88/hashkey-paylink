@@ -1,7 +1,7 @@
 import {saveCheckoutPinReset,clearCheckoutPinReset} from '../lib/pocketCheckoutPinReset'
 import { useNavigate } from 'react-router-dom'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { beginPocketPaymentPinReset } from '../api/pocketPaymentSecurityClient'
+import { beginPocketPaymentPinReset, checkPocketPaymentPinReset } from '../api/pocketPaymentSecurityClient'
 import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
 import { unregisterPocketPushDevice } from '../lib/pocketPushPreference'
 import { disablePocketQuickApproval } from '../lib/pocketQuickApproval'
@@ -66,7 +66,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
   const navigate = useNavigate()
   const { logout } = usePocketIdentity()
   const [pinLength, setPinLength] = useState(()=>Number(localStorage.getItem(configuredKey(email)+':length')) === 4 ? 4 : 6)
-  const [state, setState] = useState<'loading' | 'error' | 'setup' | 'offer' | 'ready'>(() => initialSecurityState(email))
+  const [state, setState] = useState<'loading' | 'error' | 'setup' | 'offer' | 'ready' | 'reset-required'>(() => initialSecurityState(email))
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [resetting, setResetting] = useState(false)
   const [pin, setPin] = useState('')
@@ -85,11 +85,17 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     let active = true
     setState(initialSecurityState(email))
     void Promise.all([readPocketPaymentSecurity(getAccessToken), pocketPaymentBiometricsAvailable()])
-      .then(([security, available]) => {
+      .then(async ([security, available]) => {
         if (!active) return
         setPinLength(security.pinLength)
         localStorage.setItem(configuredKey(email)+':length', String(security.pinLength))
-        const reset = Boolean(pendingResetToken())
+        const resetToken=pendingResetToken()
+        const reset = Boolean(resetToken)
+        if(reset && security.configured){
+          const eligibility=await checkPocketPaymentPinReset(getAccessToken,resetToken)
+          if(!active)return
+          if(!eligibility.eligible){setError(eligibility.error);setState('reset-required');return}
+        }
         if (security.configured) localStorage.setItem(configuredKey(email), 'true')
         else localStorage.removeItem(configuredKey(email))
         setResetting(reset && security.configured)
@@ -158,7 +164,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
       setPinLength(4); localStorage.setItem(configuredKey(email)+':length','4')
       setSetupPin(pin); setPin(''); setConfirm('')
       setState(biometricsAvailable ? 'offer' : 'ready')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not saved.') }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not saved.'); if((reason as {code?:string})?.code==='PIN_RESET_REAUTH_REQUIRED'){setPin('');setConfirm('');setState('reset-required')} }
     finally { setBusy(false) }
   }
 
@@ -222,6 +228,12 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     finally { setBusy(false) }
   }
 
+  if(state==='reset-required')return <PocketSecuritySurface><section className='w-full py-3 text-center'>
+    <h1 className='text-xl font-black'>Verify email to reset your PIN</h1>
+    <p className='mt-2 text-sm leading-6 text-gray-500'>This reset needs fresh email verification. Your PIN has not changed.</p>
+    {error&&<p role='alert' className='mt-3 text-sm text-red-500'>{error}</p>}
+    <button type='button' disabled={busy} onClick={()=>void forgotPin()} className='pocket-cta-primary mt-5 w-full'>{busy?'Preparing reset...':'Send a new email code'}</button>
+  </section></PocketSecuritySurface>
   if (state === 'loading') return loadingFallback ?? <PocketSecuritySurface><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></PocketSecuritySurface>
   if (state === 'error') return <PocketSecuritySurface>
     <section className='w-full py-3 text-center'>

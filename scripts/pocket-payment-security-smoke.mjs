@@ -37,16 +37,24 @@ assert.equal((await call(handler, 'POST', { action: 'verify', pin: '1234' })).st
 assert.equal((await call(handler, 'POST', { action: 'verify', pin: '6543' })).statusCode, 200)
 const resetStarted = await call(handler, 'POST', { action: 'begin-reset' }, { authorization: 'Bearer session-before-reset' })
 assert.equal(resetStarted.statusCode, 200)
+assert.equal((await call(handler,'POST',{action:'reset-status',resetToken:resetStarted.payload.resetToken},{authorization:'Bearer session-before-reset'})).payload.eligible,false)
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '1111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer session-before-reset' })).statusCode, 401)
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '1111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer refreshed-token-same-session' })).statusCode, 401)
 sessionId = 'other-old-session'
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '1111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer other-old-token' })).statusCode, 401)
 now += 2000; sessionId = 'fresh-reauth-session'; emailVerifiedAt = now
+for(let i=0;i<2;i++)assert.equal((await call(handler,'POST',{action:'reset-status',resetToken:resetStarted.payload.resetToken},{authorization:'Bearer session-after-reauth'})).payload.eligible,true,'Preflight does not consume reset')
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '1111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer session-after-reauth' })).statusCode, 200)
 for (const action of ['executeEvmWithdraw','executeEvmPayment','signPayment']) assert.equal(await requiresPocketPaymentApproval('did:privy:pocket-pin-smoke', action, false), true, 'Omitting the client header must not bypass approval')
 for (const action of ['executeEvmBridge','signOwnWalletBridge']) assert.equal(await requiresPocketPaymentApproval('did:privy:pocket-pin-smoke', action, true), false)
 assert.equal(await requiresPocketPaymentApproval('non-pocket-owner', 'executeEvmPayment', false), false)
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '2222', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer another-session' })).statusCode, 401)
+
+assert.equal((await call(handler,'POST',{action:'reset-status',resetToken:resetStarted.payload.resetToken},{authorization:'Bearer session-after-reauth'})).payload.eligible,false,'Used reset cannot reopen form')
+const expiredReset=await call(handler,'POST',{action:'begin-reset'},{authorization:'Bearer before-expired-reset'})
+now+=16*60_000;sessionId='fresh-but-reset-expired';emailVerifiedAt=now
+assert.equal((await call(handler,'POST',{action:'reset-status',resetToken:expiredReset.payload.resetToken},{authorization:'Bearer fresh-after-expiry'})).payload.eligible,false)
+assert.equal((await call(handler,'POST',{action:'reset',resetToken:expiredReset.payload.resetToken,pin:'2222'},{authorization:'Bearer fresh-after-expiry'})).payload.code,'PIN_RESET_REAUTH_REQUIRED')
 
 const circleSource = await readFile(new URL('../api/circle-solana-email.ts', import.meta.url), 'utf8')
 const circleEvmClientSource = await readFile(new URL('../src/lib/circleEvmEmailWallet.ts', import.meta.url), 'utf8')

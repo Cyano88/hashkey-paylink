@@ -190,3 +190,8 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - Release 1cf220373 / dep-dbhh8uo8v5cc738g5jtg live 09:45:53Z. Live parent selection status now HTTP 200 expired, child status HTTP 200 expired, Lunchroom order c780287fc8d04f9e9a56351f62919693 HTTP 200 expired. Previous 409/400 status failure resolved for this order. Served index-Cuy-5icn.js contains inline reset OTP UI.
 - Full typecheck reported unrelated repository errors plus one newly introduced helper assertion; removed that unnecessary Request cast (no runtime change). Focused strict helper typecheck and request regression passed. Full repository typecheck remains failing in existing modules and library targets.
 - Actual email/PIN reset and funded settlement/receipt recovery remain user-driven acceptance checks. No OTP/PIN captured and no payment submitted by the agent.
+
+## PIN reset eligibility correction
+- User reached Reset Pocket PIN after an old pending reset; save returned 401. UI previously trusted presence of local reset token and claimed verified sign-in without server eligibility.
+- Added authenticated read-only reset-status preflight using the exact same identity/session/email/time conditions as atomic reset consumption. Stale/replayed/unverified resets show restart-email action instead of PIN fields. Reset rejection after preflight clears entered PINs and offers fresh verification.
+- Backend smoke passed expired/used token rejection, repeated non-consuming preflight, fresh OTP session acceptance and existing reset security tests. Real gate browser checks passed stale-reset gating and restart on the same checkout. No OTP/PIN read or payment submitted.
