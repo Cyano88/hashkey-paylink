@@ -16,3 +16,12 @@ Existing Terms, Privacy and account deletion text is preserved. New business-rev
 - Browser checks passed at 320/390/1280 in light/dark for the integration guide, all 14 retained pages at mobile/desktop widths, three navigation groups, mobile menu, removed-route redirects and absence of page errors.
 - Desktop/mobile screenshots inspected: output/playwright/docs-reorganized-1280.png and docs-reorganized-390.png.
 - Final build and live deployment evidence follows below after completion.
+
+## Live release evidence
+
+- Production build exit 0; existing bundle-size warnings remain.
+- Source commit: 1b22db6eaf81dc4fba238b9d8333c70b5259d1d4.
+- Deployment dep-dbhrmfc9v7es738v002g live at 2026-10-29T21:37:01.17306Z.
+- Fresh Chrome checks passed all 14 published pages, exact three navigation groups, retired-route redirects and Pocket mobile menu with no page errors or horizontal overflow.
+- Existing user Chrome docs tab 4 was refreshed and its rendered navigation and homepage verified. Its only observed console error was a Chrome-extension unload permissions-policy warning, not a docs-page error.
+- Live screenshots: output/playwright/docs-cleanup-live.png and pocket-docs-live-mobile.png.
