@@ -1,4 +1,4 @@
-import { DocPage, DocHeader, Section, SubSection, CodeBlock, Table, NavFooter } from './components'
+import { DocPage, DocHeader, Section, SubSection, CodeBlock, Table, NavFooter, InfoBox } from './components'
 
 export default function ApiReference() {
   return (
@@ -8,24 +8,14 @@ export default function ApiReference() {
         description="Current public API reference for the Render-hosted Hash PayLink platform."
       />
 
-      <Section title="Remove an app">
-        <p>Owners can remove an app in Apps ? Settings. An unused app is deleted from the active list; apps with retained payment or verification records are closed. Closed apps have read-only payment history under Apps ? Show closed apps. Keys are revoked and the public listing is removed.</p>
-        <p>API removal requires a short-lived CLI grant explicitly approved by the owner with <code>project:delete</code>. Ordinary payment keys and scoped backend keys cannot delete apps. Request this permission through the existing CLI authorization flow; it is not included by default.</p>
-        <SubSection title="GET /api/v2/project/removal">
-          <p>Use <code>Authorization: Bearer &lt;owner-approved CLI token&gt;</code>. Returns <code>review.allowed</code>, <code>review.mode</code> (deleted or closed), and a blocking reason when removal cannot proceed.</p>
-        </SubSection>
-        <SubSection title="DELETE /api/v2/project">
-          <CodeBlock lang="json">{`{ "confirmName": "Exact app name" }`}</CodeBlock>
-          <p>The token identifies the app. The server checks ownership, the exact name and current activity again while removing it. Repeated requests return the existing result. Pending payments, refunds, funding, notifications or uncertain historical records return HTTP 409. Legacy products may require a support review. Removal does not cancel or refund transactions, and does not erase retained records.</p>
-        </SubSection>
-      </Section>
+      <InfoBox>New builder? Start with the <a href="/docs/getting-started" className="underline">complete checkout guide</a>. This reference also contains existing and gated products; an endpoint being documented does not mean a new project can enable it. Local bank/mobile-money onboarding remains pending audit, AML policy, daily-limit decisions and provider approval.</InfoBox>
 
       <Section title="Hosted Checkout API">
         <p>
-          Create a human-checkout or agentic-x402 project in the Privy-authenticated developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
+          New projects use human checkout. Existing approved agentic projects have separate gates. Configure your project in the developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
         </p>
         <SubSection title="Request access">
-          <p>Open the <a href="/developers" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement accepts a valid receiving address for every enabled network. Local settlement accepts Base USDC and pays out NGN to a configured Nigerian bank account or UGX to a configured MTN/Airtel Uganda mobile money account. Configure the country, payout details and a valid Base USDC refund address in the developer dashboard. Uganda requires the same verified Pocket identity used for local payouts.</p>
+          <p>Open the <a href="https://developer.hashpaylink.com" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement accepts a valid receiving address for every enabled network. The existing local-settlement implementation accepts Base USDC and then requests NGN bank payout or UGX mobile-money payout. New-builder onboarding is on hold until the local-flow audit, AML policy, daily limits and provider approvals are finalized. Do not treat these receiving options as customer bank-payment methods.</p>
         </SubSection>
         <SubSection title="Hosted flow">
           <CodeBlock lang="text">{`Create checkout → Open hosted URL → Slide to pay → Verify status and receipt`}</CodeBlock>
@@ -94,13 +84,13 @@ export default function ApiReference() {
   -H "X-API-Key: YOUR_SERVER_KEY"`}</CodeBlock>
         </SubSection>
         <SubSection title="Signed webhooks">
-          <p>Configured projects receive <code>checkout.created</code>, <code>payment.processing</code>, <code>payment.confirmed</code>, and <code>payment.failed</code> events. Verify <code>X-HashPayLink-Signature</code>, formatted as <code>t=UNIX_SECONDS,v1=HMAC</code>. Compute HMAC-SHA256 over <code>timestamp + "." + rawRequestBody</code> with the webhook signing secret. Reject old timestamps and duplicate event ids.</p>
+          <p>Configured projects receive <code>checkout.created</code>, <code>payment.processing</code>, <code>payment.confirmed</code>, and <code>payment.failed</code> events. Verify <code>X-HashPayLink-Signature</code>, formatted as <code>t=UNIX_SECONDS,v1=HMAC</code>. Compute HMAC-SHA256 over <code>timestamp + "." + rawRequestBody</code> with the webhook signing secret. Reject old timestamps and invalid signatures. Persist event IDs: acknowledge an already-handled valid duplicate with HTTP 200 and do not fulfill twice. For selection checkouts, map data.checkoutSessionId back to your saved order, then verify its paid status through the authenticated status API.</p>
         </SubSection>
       </Section>
 
       <Section title="Arc Agreements API · Arc Mainnet private pilot">
         <p>
-          Enable <code>Arc Agreements</code> on a live project to create durable fixed, progressive, or milestone USDC terms on Arc Mainnet. Creation returns a private payer-review path once. Mainnet funding and lifecycle execution remain disabled pending a verified contract release: the project must pass Hash PayLink's pilot authorization, limits, operator, and runtime gates before a payer can activate an escrow.
+          Existing approved pilot projects may use <code>Arc Agreements</code> on a live project to create durable fixed, progressive, or milestone USDC terms on Arc Mainnet. Creation returns a private payer-review path once. Mainnet funding and lifecycle execution remain disabled pending a verified contract release: the project must pass Hash PayLink's pilot authorization, limits, operator, and runtime gates before a payer can activate an escrow.
         </p>
         <SubSection title="POST /api/v2/agreements">
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
@@ -221,6 +211,18 @@ export default function ApiReference() {
             ['/api/arena-room', 'Experimental Arena test-room state; not a public Arc Agreements API'],
           ]}
         />
+      </Section>
+
+      <Section title="Remove an app">
+        <p>Owners can remove an app in Apps ? Settings. An unused app is deleted from the active list; apps with retained payment or verification records are closed. Closed apps have read-only payment history under Apps ? Show closed apps. Keys are revoked and the public listing is removed.</p>
+        <p>API removal requires a short-lived CLI grant explicitly approved by the owner with <code>project:delete</code>. Ordinary payment keys and scoped backend keys cannot delete apps. Request this permission through the existing CLI authorization flow; it is not included by default.</p>
+        <SubSection title="GET /api/v2/project/removal">
+          <p>Use <code>Authorization: Bearer &lt;owner-approved CLI token&gt;</code>. Returns <code>review.allowed</code>, <code>review.mode</code> (deleted or closed), and a blocking reason when removal cannot proceed.</p>
+        </SubSection>
+        <SubSection title="DELETE /api/v2/project">
+          <CodeBlock lang="json">{`{ "confirmName": "Exact app name" }`}</CodeBlock>
+          <p>The token identifies the app. The server checks ownership, the exact name and current activity again while removing it. Repeated requests return the existing result. Pending payments, refunds, funding, notifications or uncertain historical records return HTTP 409. Legacy products may require a support review. Removal does not cancel or refund transactions, and does not erase retained records.</p>
+        </SubSection>
       </Section>
 
       <NavFooter

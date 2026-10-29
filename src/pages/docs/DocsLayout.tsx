@@ -3,7 +3,7 @@ import { Outlet, NavLink, Link } from 'react-router-dom'
 import { Menu, X, ExternalLink, Sun, Moon, ChevronRight } from 'lucide-react'
 import { useTheme } from '../../lib/ThemeContext'
 
-const NAV = [
+const LEGACY_NAV = [
   {
     group: 'Introduction',
     items: [
@@ -64,6 +64,12 @@ const NAV = [
   },
 ]
 
+const NAV: Array<{group:string;items:Array<{label:string;path:string;end?:boolean}>}> = [
+  {group: 'Start here', items: [{label:'Overview',path:'/docs',end:true},{label:'Accept your first payment',path:'/docs/getting-started'},{label:'API reference',path:'/docs/api'},{label:'SDK or direct API?',path:'/docs/sdk'}]},
+  {group:'Existing feature reference',items:LEGACY_NAV.filter(s=>!['Introduction','SDK','Reference'].includes(s.group)).flatMap(s=>s.items)},
+  {group:'Reference and policies',items:LEGACY_NAV.find(s=>s.group==='Reference')!.items.filter(i=>i.path!=='/docs/api')}
+]
+
 export default function DocsLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { theme, toggle } = useTheme()
@@ -76,6 +82,7 @@ export default function DocsLayout() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(o => !o)}
+              aria-label={sidebarOpen?'Close documentation navigation':'Open documentation navigation'}
               className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

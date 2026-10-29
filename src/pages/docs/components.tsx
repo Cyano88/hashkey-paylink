@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import {useState} from 'react'
 
 export function DocPage({ children }: { children: ReactNode }) {
   return <div className="animate-fade-in space-y-10">{children}</div>
@@ -38,17 +39,19 @@ export function SubSection({ title, children }: { title: string; children: React
 
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="px-1.5 py-0.5 rounded text-sm font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+    <code className="break-words [overflow-wrap:anywhere] px-1.5 py-0.5 rounded text-sm font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
       {children}
     </code>
   )
 }
 
 export function CodeBlock({ children, lang = 'bash' }: { children: string; lang?: string }) {
+  const [copyStatus,setCopyStatus]=useState('Copy')
   return (
     <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <span className="text-xs text-gray-400 dark:text-gray-500 font-mono uppercase tracking-wide">{lang}</span>
+        <button type="button" className="min-h-11 shrink-0 px-3 text-xs font-semibold text-gray-700 dark:text-gray-200" aria-label={'Copy '+lang+' example'} onClick={()=>void navigator.clipboard.writeText(children).then(()=>setCopyStatus('Copied')).catch(()=>setCopyStatus('Select code to copy'))}>{copyStatus}</button>
       </div>
       <pre className="p-4 overflow-x-auto bg-gray-950 text-gray-100 text-sm font-mono leading-relaxed whitespace-pre">
         {children}

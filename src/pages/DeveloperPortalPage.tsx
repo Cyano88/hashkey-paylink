@@ -1,3 +1,4 @@
+import BuilderQuickstart from '../developer/BuilderQuickstart'
 import ReceiptEmailSettings from '../developer/ReceiptEmailSettings'
 import type{ReceiptEmailSettings as ReceiptEmailPreferences}from'../lib/receiptEmailSettings'
 import BscCheckoutSettings from '../developer/BscCheckoutSettings'
@@ -586,6 +587,7 @@ function WebhookPanel({ draft, setDraft, newSecret, busy, onSave, onRotate, save
 }
 
 function QuickstartPanel({ project }: { project: Project }) {
+  if(project.checkoutMode==='human' && project.settlementMode==='usdc' && project.capabilities.includes('hosted_checkout'))return <BuilderQuickstart returnOrigin={project.allowedOrigins[0]||project.website||'https://shop.example'} hasFunding={project.capabilities.includes('polymarket_funding')}/>
   const paymentPath = project.checkoutMode
   const hasCheckout = project.capabilities.includes('hosted_checkout')
   const hasAgreements = project.capabilities.includes('arc_agreements')
@@ -599,6 +601,7 @@ function QuickstartPanel({ project }: { project: Project }) {
   const agreementPayerEmail = paymentPath === 'human' ? '\n    payerEmail: customer.email,' : ''
   const agreementCode = `const agreement = await fetch("https://app.hashpaylink.com/api/v2/agreements", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASHPAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    template: "fixed_unlock",\n    externalId: order.id,\n    resourceId: "content:premium-report",\n    title: "Premium report access",\n    description: "Unlock one premium research report.",\n    amount: "10",${agreementPayerEmail}\n    recipient: process.env.HASH_PAYLINK_ARC_RECIPIENT,\n    durationSeconds: 86400,\n    cancellationWindowSeconds: 900\n  })\n}).then(res => res.json());\n\n${paymentPath === 'human' ? '// Send agreement.payerReviewPath only to the named customer.' : '// Prepare this agreement through the dedicated agent payer route.'}\n// Mainnet activation is not enabled until deployment review is complete.`
   return <div><PanelHeader eyebrow="Integration" title="Connect your app" copy="Create a checkout on your server, then send your customer to the payment page." />
+    {project.settlementMode !== 'usdc' && <p className="mt-4 rounded-xl border border-amber-200 p-4 text-sm leading-6">Local bank/mobile-money settlement is an existing integration reference. New-builder onboarding remains pending the flow audit, AML controls, daily-limit decisions and provider approval. This is stablecoin payment followed by local payout, not payment from a customer's bank account.</p>}
     {hasCheckout && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-white/40">Checkout · server only</span><CopyButton value={checkoutCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-sm leading-5 text-white/70">{checkoutCode}</pre></div>}
     {hasAgreements && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-white/40">Arc Agreements · private pilot</span><CopyButton value={agreementCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-sm leading-5 text-white/70">{agreementCode}</pre></div>}
     {hasCheckout && <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
