@@ -1,234 +1,40 @@
-import { DocPage, DocHeader, Section, SubSection, CodeBlock, Table, NavFooter, InfoBox } from './components'
-
-export default function ApiReference() {
-  return (
-    <DocPage>
-      <DocHeader
-        title="API Endpoints"
-        description="Current public API reference for the Render-hosted Hash PayLink platform."
-      />
-
-      <InfoBox>New builder? Start with the <a href="/docs/getting-started" className="underline">complete checkout guide</a>. This reference also contains existing and gated products; an endpoint being documented does not mean a new project can enable it. Local bank/mobile-money onboarding remains pending audit, AML policy, daily-limit decisions and provider approval.</InfoBox>
-
-      <Section title="Hosted Checkout API">
-        <p>
-          New projects use human checkout. Existing approved agentic projects have separate gates. Configure your project in the developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
-        </p>
-        <SubSection title="Request access">
-          <p>Open the <a href="https://developer.hashpaylink.com" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement accepts a valid receiving address for every enabled network. The existing local-settlement implementation accepts Base USDC and then requests NGN bank payout or UGX mobile-money payout. New-builder onboarding is on hold until the local-flow audit, AML policy, daily limits and provider approvals are finalized. Do not treat these receiving options as customer bank-payment methods.</p>
-        </SubSection>
-        <SubSection title="Hosted flow">
-          <CodeBlock lang="text">{`Create checkout → Open hosted URL → Slide to pay → Verify status and receipt`}</CodeBlock>
-          <p>The shared checkout surface is used across Hash PayLink products. USDC projects choose the networks they accept and the payer chooses one at checkout. Bank and mobile-money settlement are fixed-amount and Base-only: the payer sends the exact quoted Base USDC amount, then the configured local payout is processed. These are merchant receiving options, not ways for the payer to pay from a bank or mobile-money balance. Checkout accepts supported stablecoins only. X Layer stablecoins settle directly to the configured wallet; its local settlement is not supported.</p>
-        </SubSection>
-        <SubSection title="POST /api/v2/checkouts">
-          <p>To offer all saved stablecoins and networks, send <code>paymentSelection: "stablecoins"</code> without <code>asset</code>. This returns a <code>chks_</code> selection session. The amount is an exact token quantity, not an FX quote: an amount of 1.5 means 1.5 of the stablecoin the payer reviews and selects. Checkout does not swap assets. One selection binds one underlying payment; refresh and retries resume it. Fixed-asset requests keep their existing behavior. Local settlement and Polymarket funding remain fixed USDC flows.</p>
-          <p>Poll the session ID with authenticated <code>purpose=status</code>. Once selected, its response includes <code>selectedCheckoutId</code>. Signed payment webhooks contain both the underlying <code>checkoutId</code> and <code>checkoutSessionId</code>. Fulfill only after verified paid status, never from a redirect. Checkout shows verified success and returns to the allowlisted merchant URL automatically.</p>
-          <p>Creates an immutable, expiring USDC or paid-service checkout. Private-beta credentials and an idempotency key are required.</p>
-          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/checkouts \\
-  -H "X-API-Key: YOUR_SERVER_KEY" \\
-  -H "Idempotency-Key: order:your-unique-order-id" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "kind": "service",
-    "checkoutMode": "human",
-    "title": "Data request",
-    "amount": "0.024",
-    "memo": "Order 1042",
-    "returnUrl": "https://your-allowlisted-domain.example/complete"
-  }'`}</CodeBlock>
-          <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Human live keys use configured Base, Arbitrum, Solana, Ethereum, Polygon, and explicitly saved Arc mainnet routes. Base, Arbitrum, Solana, Ethereum and Polygon support USDC and USDT; set asset to USDT for a USDT checkout on enabled receiving networks. Arc supports USDC. The accepted stablecoins saved in Settings filter the available routes. A configured BNB Chain default uses its dedicated sponsored USDC/USDT route; an explicit rail of bsc also selects it after project activation. A configured X Layer default uses its dedicated checkout route; an explicit rail of xlayer also selects that route. USDC is the default on other routes. Local-currency settlement continues to use Base USDC. Agent checkout supports Base and Arc only. Test keys cannot authorize mainnet transactions. Recipient overrides are rejected. API keys stay server-side.</p>
-        </SubSection>
-        <SubSection title="BNB Chain stablecoins: separately activated human projects">
-          <p>Choose USDC or USDT and a BNB Chain receiving wallet in Settings. Set rail to bsc, or make BNB Chain your default. Both assets use 18 decimals on this network. Pocket sponsors gas and collects the displayed reimbursement in the payment asset; the business receives the exact checkout amount. Project activation is required. This route does not settle to a bank account.</p>
-        </SubSection>
-        <SubSection title="X Layer stablecoins: separately activated human projects">
-          <p>Choose USDC, USDT, USDe or USDG and configure the X Layer receiving wallet in your human project. This release requires project-specific activation by Hash PayLink. Existing USDC routing remains configured separately; this is not an asset-to-bank settlement service.</p>
-          <CodeBlock lang="json">{`{
-  "rail": "xlayer",
-  "kind": "payment",
-  "asset": "USDC",
-  "amount": "5",
-  "swap": false,
-  "returnUrl": "https://your-allowlisted-domain.example/complete"
-}`}</CodeBlock>
-          <p>Use the same POST /api/v2/checkouts endpoint, server key and unique Idempotency-Key. The amount is an exact quantity of the accepted token, not a dollar price. USDe supports 18 decimal places; USDC, USDT and USDG support 6. The response returns a hosted checkout URL and a checkout identifier. Query that identifier through the same status API; payment.confirmed webhooks include the actual asset, token contract and amount.</p>
-          <p>Checkout accepts stablecoins only and does not perform swaps. Send swap: false or omit it. Customers holding other assets can swap in Pocket before paying. This path does not support Polymarket funding, agent checkout, flexible amounts or request-level recipient overrides.</p>
-          <p>Customers can sign in and approve in the browser using Pocket wallet infrastructure. Installing the app is optional. Success requires verification of the exact merchant transfer.</p>
-        </SubSection>
-        <SubSection title="Agent wallet path">
-          <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Open <code>checkoutUrl</code> for the hosted Circle Agent Wallet payer flow: email identity, wallet restoration or creation, USDC and App Pay balances, Gateway funding, and payment all stay inside checkout. Autonomous agents can instead send a GET request to <code>agentPaymentUrl</code>. Its first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. After Gateway verification and settlement, Hash PayLink returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
-          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/checkouts \
-  -H "X-API-Key: YOUR_SERVER_KEY" \
-  -H "Idempotency-Key: agent:your-unique-request-id" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "kind": "service",
-    "checkoutMode": "agentic",
-    "agenticType": "agent_treasury",
-    "network": "base",
-    "title": "LP Scout",
-    "amount": "0.01",
-    "returnUrl": "https://your-allowlisted-domain.example/complete"
-  }'`}</CodeBlock>
-          <CodeBlock lang="text">{`Create agentic service checkout
-  -> checkoutUrl       (hosted Circle Agent Wallet checkout + durable success UI)
-  -> agentPaymentUrl   (autonomous agent handles x402 challenge)
-  -> paymentAttemptId  (immutable payment session)
-  -> status + signed webhook confirm fulfillment`}</CodeBlock>
-          <p>Agentic payment is available only from an agentic-x402 project and only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> or <code>base</code> with a live key. Arbitrum remains available for human checkout and Polymarket Funding, but cannot start new agent payments. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests, Polymarket funding and local-bank settlement require a separate human-checkout project.</p>
-        </SubSection>
-        <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
-          <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For bank or mobile-money settlement, <code>processing</code> means the USDC deposit is confirmed but local delivery is not final. Settlement reports its currency as NGN or UGX; never infer delivery from the USDC transaction alone. Verify <code>paid</code> from your server before fulfillment.</p>
-          <CodeBlock lang="bash">{`curl "https://app.hashpaylink.com/api/v2/checkouts?purpose=status&id=chk_..." \\
-  -H "X-API-Key: YOUR_SERVER_KEY"`}</CodeBlock>
-        </SubSection>
-        <SubSection title="Signed webhooks">
-          <p>Configured projects receive <code>checkout.created</code>, <code>payment.processing</code>, <code>payment.confirmed</code>, and <code>payment.failed</code> events. Verify <code>X-HashPayLink-Signature</code>, formatted as <code>t=UNIX_SECONDS,v1=HMAC</code>. Compute HMAC-SHA256 over <code>timestamp + "." + rawRequestBody</code> with the webhook signing secret. Reject old timestamps and invalid signatures. Persist event IDs: acknowledge an already-handled valid duplicate with HTTP 200 and do not fulfill twice. For selection checkouts, map data.checkoutSessionId back to your saved order, then verify its paid status through the authenticated status API.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="Arc Agreements API · Arc Mainnet private pilot">
-        <p>
-          Existing approved pilot projects may use <code>Arc Agreements</code> on a live project to create durable fixed, progressive, or milestone USDC terms on Arc Mainnet. Creation returns a private payer-review path once. Mainnet funding and lifecycle execution remain disabled pending a verified contract release: the project must pass Hash PayLink's pilot authorization, limits, operator, and runtime gates before a payer can activate an escrow.
-        </p>
-        <SubSection title="POST /api/v2/agreements">
-          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
-  -H "X-API-Key: YOUR_LIVE_SERVER_KEY" \
-  -H "Idempotency-Key: agreement:your-unique-order-id" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "template": "fixed_unlock",
-    "externalId": "order-1042",
-    "resourceId": "content:premium-report",
-    "title": "Premium report access",
-    "description": "Unlock one premium research report.",
-    "amount": "10",
-    "payerEmail": "customer@example.com",
-    "recipient": "0xARC_RECIPIENT",
-    "durationSeconds": 86400,
-    "cancellationWindowSeconds": 900
-  }'`}</CodeBlock>
-          <p>Human agreements require the customer&apos;s verified email. Only that authenticated email can review, connect an Arc wallet, and fund the private agreement. Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a masked payer email, domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, normalized onchain schedule, one-time <code>payerReviewPath</code>, and <code>activationStatus: "private_pilot"</code>. Creating a draft never proves that funds moved.</p>
-        </SubSection>
-        <SubSection title="GET /api/v2/agreements">
-          <p>Lists the project&apos;s agreements with their authoritative Arc lifecycle, confirmed chain totals, current payer-review request, and unified terminal receipt when confirmation data is complete. Add <code>?id=agr_...</code> to read one agreement, <code>?ids=agr_...,agr_...</code> to read up to 100 known project agreements, or <code>?limit=50</code> to bound the newest-first list. Internal request hashes, evidence hashes, prepared operator calls, and payer-access hashes are never returned.</p>
-        </SubSection>
-        <SubSection title="Rotate an unused payer link">
-          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
-  -H "X-API-Key: YOUR_LIVE_SERVER_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"action":"rotate_payer_link","agreementId":"agr_..."}'`}</CodeBlock>
-          <p>The prior private link is invalidated and a new one is returned. Rotation is rejected as soon as agreement activation has started. Keep this server-side; never place the project API key in browser code.</p>
-        </SubSection>
-        <SubSection title="Request payer review for a release">
-          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
-  -H "X-API-Key: YOUR_LIVE_SERVER_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "request_release",
-    "agreementId": "agr_...",
-    "deliveryNote": "Completed the agreed delivery.",
-    "evidenceReference": "https://yourplatform.com/deliveries/1042"
-  }'`}</CodeBlock>
-          <p>Hash PayLink verifies project ownership, reconciles the confirmed Arc escrow, derives the next release step, and creates a payer-reviewed release request. This does not release USDC by itself. Repeating the request returns the existing pending review instead of creating a second action.</p>
-        </SubSection>
-        <SubSection title="Agreement webhooks">
-          <p>Authorized pilot projects receive <code>agreement.activated</code>, <code>agreement.step_released</code>, <code>agreement.completed</code>, <code>agreement.cancelled</code>, and <code>agreement.refunded</code>. Each signed event is derived from an exactly reconciled snapshot at a confirmed Arc block. Draft creation alone emits no lifecycle event and must never trigger fulfillment.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="Polymarket Funding API">
-        <p>
-          Enable <code>Polymarket funding</code> on a human-checkout USDC project. Your server supplies the customer's Polymarket wallet, amount and eligible project networks. Hash PayLink independently requests and verifies the provider deposit route; integrations cannot supply or override that destination.
-        </p>
-        <SubSection title="POST /api/v2/funding/polymarket/checkouts">
-          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/funding/polymarket/checkouts \
-  -H "X-API-Key: YOUR_SERVER_KEY" \
-  -H "Idempotency-Key: funding:your-unique-request-id" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "polymarketWallet": "0xCUSTOMER_WALLET",
-    "amount": "25",
-    "networks": ["base", "arbitrum"],
-    "returnUrl": "https://your-allowlisted-domain.example/funding/complete"
-  }'`}</CodeBlock>
-          <p>The response includes a hosted <code>checkoutUrl</code>, stable <code>fundingRequestId</code>, and authenticated <code>statusUrl</code>. The payer can select from the requested networks that are also enabled on the developer project. Base and Arbitrum are supported in this provider flow.</p>
-        </SubSection>
-        <SubSection title="GET /api/v2/funding/polymarket/checkouts?id=pmf_...">
-          <p>Poll this endpoint from your server with the same API key. <code>awaiting_payment</code> means no accepted checkout payment, <code>bridging</code> means payment was received but provider delivery is not final, and <code>funded</code> means the provider reports completed delivery. Only <code>funded</code> returns the receipt and allowlisted return URL. Never grant access or credit a customer from the generic <code>payment.confirmed</code> webhook alone for a provider-funded checkout.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="0G verification">
-        <SubSection title="GET /api/agent-verify">
-          <p>Looks up a historical archive event. The legacy verified field does not authenticate the caller or verify source-chain settlement or stored payload integrity. Do not use it alone to authorize access.</p>
-          <CodeBlock lang="bash">{`GET /api/agent-verify?eventId=YOUR_EVENT_ID&payer=Alice`}</CodeBlock>
-        </SubSection>
-        <SubSection title="POST /api/agent-ask">
-          <p>Compatibility endpoint for Pocket Agent Hash only. Experimental assistant modes and paid access return HTTP 410. Historical archive lookup remains available separately.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="Payment and dashboard">
-        <SubSection title="POST /api/event-register">
-          <p>Registers a confirmed payment to a dashboard and can trigger 0G archiving.</p>
-        </SubSection>
-        <SubSection title="GET /api/list-event-payments">
-          <p>Returns registered payments for a multi-payer event dashboard.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="Solana relay">
-        <SubSection title="POST /api/solana-build-tx">
-          <p>Builds a Solana USDC transfer transaction with the Hash PayLink relayer as fee payer.</p>
-        </SubSection>
-        <SubSection title="POST /api/solana-relay">
-          <p>Submits a payer-signed Solana transaction.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="Pocket requests and funding">
-        <Table
-          headers={['Endpoint', 'Purpose']}
-          rows={[
-            ['/api/pocket/paylink-requests', 'Pocket shareable payment requests; /api/telegram-request remains an older-client compatibility alias'],
-            ['/api/polymarket-bridge', 'Polymarket funding bridge proxy with builder attribution'],
-            ['/api/polymarket-portfolio', 'Postgres-backed PolyDesk profile, alert, watchlist, and funding state'],
-            ['/api/worldcup-scores', 'World Cup live score and Polymarket market context'],
-            ['/api/worldcup-news', 'World Cup market news feed'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Legacy compatibility endpoints">
-        <Table
-          headers={['Endpoint', 'Purpose']}
-          rows={[
-            ['/api/privy-circle-link', 'Privy to Circle wallet mapping'],
-            ['/api/stream-create', 'Legacy timed-stream compatibility'],
-            ['/api/stream-status', 'Legacy timed-stream state'],
-            ['/api/arena-room', 'Experimental Arena test-room state; not a public Arc Agreements API'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Remove an app">
-        <p>Owners can remove an app in Apps ? Settings. An unused app is deleted from the active list; apps with retained payment or verification records are closed. Closed apps have read-only payment history under Apps ? Show closed apps. Keys are revoked and the public listing is removed.</p>
-        <p>API removal requires a short-lived CLI grant explicitly approved by the owner with <code>project:delete</code>. Ordinary payment keys and scoped backend keys cannot delete apps. Request this permission through the existing CLI authorization flow; it is not included by default.</p>
-        <SubSection title="GET /api/v2/project/removal">
-          <p>Use <code>Authorization: Bearer &lt;owner-approved CLI token&gt;</code>. Returns <code>review.allowed</code>, <code>review.mode</code> (deleted or closed), and a blocking reason when removal cannot proceed.</p>
-        </SubSection>
-        <SubSection title="DELETE /api/v2/project">
-          <CodeBlock lang="json">{`{ "confirmName": "Exact app name" }`}</CodeBlock>
-          <p>The token identifies the app. The server checks ownership, the exact name and current activity again while removing it. Repeated requests return the existing result. Pending payments, refunds, funding, notifications or uncertain historical records return HTTP 409. Legacy products may require a support review. Removal does not cancel or refund transactions, and does not erase retained records.</p>
-        </SubSection>
-      </Section>
-
-      <NavFooter
-        prev={{ label: 'SDK', path: '/docs/sdk' }}
-        next={{ label: 'Environment', path: '/docs/environment' }}
-      />
-    </DocPage>
-  )
-}
+﻿import {DocPage,DocHeader,Section,CodeBlock,Table,Code,NavFooter} from './components'
+import {Link} from 'react-router-dom'
+export default function ApiReference(){return <DocPage>
+<DocHeader title="Checkout API" description="Create a fixed-amount checkout, read its payment status, and match the result to your order."/>
+<Section title="Authentication"><p>Call <Code>https://app.hashpaylink.com</Code> from your server. Send your live project key in <Code>X-API-Key</Code>. Configure accepted assets, receiving wallets and HTTPS return origins in the developer dashboard. The <Link to="/docs/getting-started" className="underline">integration guide</Link> includes the complete order and webhook flow.</p></Section>
+<Section title="Create a checkout" id="create"><CodeBlock lang="text">{'POST /api/v2/checkouts'}</CodeBlock>
+<Table headers={['Field','Value and meaning']} rows={[
+['kind','service'],['checkoutMode','human'],['paymentSelection','stablecoins — offers your saved, enabled token/network choices'],['title','Order description; up to 100 characters'],['amount','Positive decimal string, up to 6 decimal places; exact selected-token quantity, not an FX conversion'],['returnUrl','HTTPS URL whose origin is saved on your project'],['expiresInMinutes','Whole number from 5 to 1440; defaults to 15']
+]}/>
+<p>Send <Code>Idempotency-Key</Code>: 16–128 letters, digits, colons, underscores or hyphens. Keep the same key and request body when retrying one order attempt. A changed request using the same key is rejected. The selection request does not accept an asset, network or recipient override; those come from the saved project settings.</p>
+<CodeBlock lang="javascript">{`const response = await fetch('https://app.hashpaylink.com/api/v2/checkouts', {
+  method: 'POST',
+  headers: {
+    'X-API-Key': process.env.HASHPAYLINK_API_KEY,
+    'Idempotency-Key': order.attemptKey,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    kind: 'service', checkoutMode: 'human', paymentSelection: 'stablecoins',
+    title: order.description, amount: order.amount,
+    returnUrl: order.returnUrl, expiresInMinutes: 15
+  })
+});
+const checkout = await response.json();
+if (!response.ok || checkout.ok === false) throw new Error(checkout.error || 'Checkout failed');
+const checkoutUrl = new URL(checkout.checkoutUrl, 'https://app.hashpaylink.com').toString();
+// Save checkout.checkoutId and checkoutUrl on the order before returning the URL.`}</CodeBlock>
+<p>Calculate the amount from your own catalog and authenticate the customer before this call. A successful response contains <Code>checkoutId</Code> starting with <Code>chks_</Code>, a <Code>checkoutUrl</Code> and the checkout details. Save the parent ID; the payer's later route selection is represented by a separate child checkout.</p>
+</Section>
+<Section title="Read payment status" id="status"><CodeBlock lang="bash">{`curl "https://app.hashpaylink.com/api/v2/checkouts?purpose=status&id=YOUR_SAVED_CHECKOUT_ID" \\
+  -H "X-API-Key: $HASHPAYLINK_API_KEY"`}</CodeBlock>
+<p>Use the same project's server key and the saved parent ID. Once a route is selected, <Code>selectedCheckoutId</Code> identifies its child. Require <Code>status: paid</Code> and match the ID, amount, asset and network to the saved order before delivery.</p>
+<Table headers={['Status','Action']} rows={[
+['pending','Keep the order awaiting payment.'],['processing','Payment is being checked. Do not request another payment.'],['paid','Save the verified payment and queue delivery once.'],['expired / failed','Recheck authoritative status before offering a new attempt.'],['Request error or unknown','Retry the status check with backoff; do not infer paid or failed.']
+]}/><p>A return URL or a screenshot is not payment proof. Read status on the return page through your backend and from a scheduled recovery job for unfinished orders.</p></Section>
+<Section title="Payment notifications" id="webhooks"><p>Save your HTTPS webhook endpoint in Developers → Webhooks. Verify <Code>X-HashPayLink-Signature</Code> using the separate signing secret. The header is <Code>t=UNIX_SECONDS,v1=HMAC</Code>; sign the timestamp, a period, and the original request bytes with HMAC-SHA256. Reject signatures more than five minutes old or in the future.</p><p>For <Code>payment.confirmed</Code>, map <Code>data.checkoutSessionId</Code> to your saved parent ID and verify paid status through the API. <Code>data.checkoutId</Code> identifies the selected child. Persist event IDs and acknowledge matching duplicates with HTTP 200 without delivering twice. Store confirmation and the delivery job atomically before acknowledging.</p><Link to="/docs/getting-started#webhooks" className="underline">Copy the signature verifier and webhook handler</Link></Section>
+<Section title="Receipts"><p>When status supplies <Code>payment.receiptId</Code>, the web receipt is <Code>https://app.hashpaylink.com/receipt/RECEIPT_ID</Code>. Eligible X Layer checkout receipts also support <Code>/api/receipt?id=RECEIPT_ID&amp;format=pdf</Code>. Treat receipt links as shareable customer information.</p><p>Automatic receipt emails require an eligible X Layer payment, a verified payer email and the project's customer receipt setting enabled before payment. The merchant handles delivery, refunds, order support and tax invoices.</p></Section>
+<Section title="Errors and retries"><p>Read both the HTTP status and JSON error message. Validation and idempotency conflicts in selection checkout can return 409. Authentication, ownership or activation failures require checking your project configuration. On timeout, preserve the original attempt key and check status before retrying. On 429, honor Retry-After when present and use backoff.</p><Link className="underline" to="/docs/getting-started#errors">Troubleshoot checkout and webhook errors</Link></Section>
+<NavFooter prev={{label:'Accept your first payment',path:'/docs/getting-started'}} next={{label:'Polymarket funding',path:'/docs/funding'}}/>
+</DocPage>}

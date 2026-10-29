@@ -12,9 +12,7 @@ export default function BuilderGettingStarted(){const{hash}=useLocation();useEff
   <Table headers={['What you want to build','Current path']} rows={[
    ['One-time purchases','Start here. Configure a human project with Accept payments. Business review and route activation apply.'],
    ['Fund a Polymarket account','Separate product and endpoint. Eligible accounts and enabled Base/Arbitrum routes only. Payment received is not proof that account funding finished.'],
-   ['Recurring subscriptions or card checkout','Not enabled by this guide. Do not promise automatic renewals, saved-card charges or subscription invoices.'],
    ['Local bank / mobile-money settlement','New-builder onboarding is pending audit, AML controls, daily-limit decisions and provider approval. See the boundary below.'],
-   ['Agent payments, Agreements or Hash PayStream','Not selectable for new projects in this checkout release. Existing integrations have separate documentation and approval gates.'],
   ]}/>
   <p>Business review considers what you sell, your operating location and the payment provider’s requirements. Activities prohibited by the <Link to="/docs/terms" className="underline">Terms</Link> are not supported. Ask <a href="mailto:support@hashpaylink.com" className="underline">support@hashpaylink.com</a> about eligibility before promising a regulated or unusual use case to customers.</p>
  </Section>
@@ -37,7 +35,7 @@ export default function BuilderGettingStarted(){const{hash}=useLocation();useEff
    <li>Save your logo under <strong>Branding</strong>. Under <strong>Receipts &amp; support</strong>, set your support inbox and timezone, then enable customer receipts if eligible.</li>
    <li>Under <strong>Developers → API keys</strong>, create a live project key. Put it in your server’s secret manager as <Code>HASHPAYLINK_API_KEY</Code>. Never put it in frontend environment variables, browser code, a mobile bundle or Git.</li>
   </ol>
-  <InfoBox>Saved settings are not the same as live approval. X Layer and BNB Chain require project-specific activation. The checkout only offers routes both configured and enabled for your project. The funded reference flow verified for this release is Lunchroom’s X Layer USDT checkout.</InfoBox>
+  <InfoBox>Saved settings are not the same as live approval. X Layer and BNB Chain require project-specific activation. The checkout only offers routes both configured and enabled for your project.</InfoBox>
  </Section>
  <Section title="2. Save an order, then create its checkout" id="create">
   <p>Your backend is your server. It must load the product and calculate the price itself. Do not accept a price or receiving wallet supplied by the customer’s browser.</p>
@@ -56,7 +54,7 @@ export default function BuilderGettingStarted(){const{hash}=useLocation();useEff
     "expiresInMinutes": 15
   }'`}</CodeBlock>
   <p>Run this on your server or terminal with your real saved order and approved HTTPS return URL. The key must be 16–128 letters, digits, colons, underscores or hyphens. Expiry defaults to 15 minutes; the API accepts 5–1440 minutes.</p>
-  <p><Code>paymentSelection: "stablecoins"</Code> lets the customer select from your saved routes. The amount is an exact token quantity: <Code>1.50</Code> means 1.50 of the selected stablecoin, not an FX conversion or a swap. Leave <Code>asset</Code> out of this request. Use a fixed-asset route from the API reference if your product requires one specific token.</p>
+  <p><Code>paymentSelection: "stablecoins"</Code> lets the customer select from your saved routes. The amount is an exact token quantity: <Code>1.50</Code> means 1.50 of the selected stablecoin, not an FX conversion or a swap. Leave <Code>asset</Code> out of this request. Your saved accepted assets control which tokens checkout offers.</p>
   <CodeBlock lang="json">{`{
   "ok": true,
   "checkoutId": "chks_...",

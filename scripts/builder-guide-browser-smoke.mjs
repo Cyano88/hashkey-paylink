@@ -20,8 +20,17 @@ try{const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.p
   if(width===390&&!dark)await page.screenshot({path:'output/playwright/builder-guide-mobile.png'})
   await page.goto(base+'/console');await page.getByRole('heading',{name:'Connect your app'}).waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Console overflow');assert.equal(await page.getByRole('heading',{name:'1. Server only'}).count(),1);assert.equal(await page.getByRole('heading',{name:'2. Browser only'}).count(),1)
  }
- await page.goto(base+'/docs');await page.getByRole('link',{name:'Accept your first payment'}).last().click();await page.getByRole('heading',{name:'Accept your first payment'}).waitFor()
- await page.goto(base+'/docs/sdk');await page.getByRole('heading',{name:'SDK or direct API?',exact:true}).waitFor();assert(!await page.getByText('npm install @hashpaylink/sdk',{exact:true}).count())
- await page.goto(base+'/docs/api');assert((await page.locator('main').innerText()).includes('Local bank/mobile-money onboarding remains pending'))
- assert.deepEqual(errors,[]);console.log('PASS actual docs and console guide at 320/390/1280, light/dark, expandable real sample, separated browser/server code, navigation, bank boundary and no page errors.')
+ await page.goto(base+'/docs');await page.getByRole('link',{name:'Integrate hosted checkout'}).click();await page.getByRole('heading',{name:'Accept your first payment'}).waitFor()
+ const routes=['/docs','/docs/getting-started','/docs/api','/docs/funding','/docs/pocket','/docs/pocket/pay','/docs/pocket/transfers','/docs/pocket/exchange','/docs/environment','/docs/security','/docs/compliance','/docs/terms','/docs/privacy','/docs/account-deletion'];
+ for(const width of [390,1280]){
+  await page.setViewportSize({width,height:900});
+  for(const path of routes){await page.goto(base+path);await page.locator('main h1').waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),path+' overflows');assert.equal(await page.locator('aside nav > div').count(),3);}
+  await page.goto(base+'/docs');await page.screenshot({path:'output/playwright/docs-reorganized-'+width+'.png',fullPage:true});
+ }
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Open documentation navigation'}).click();await page.getByRole('link',{name:'Pay a business',exact:true}).click();await page.getByRole('heading',{name:'Pay a business',exact:true}).waitFor();
+ for(const old of ['/docs/0g-storage','/docs/0g-storage/agent-verify','/docs/access-mode/api','/docs/chains/arc','/docs/multi-payer','/docs/payment-links','/docs/streampay']){await page.goto(base+old);await page.waitForURL(base+'/docs');await page.getByRole('heading',{name:'Build your business on Hash PayLink'}).waitFor();}
+ await page.goto(base+'/docs/sdk');await page.getByRole('heading',{name:'Accept your first payment',exact:true}).waitFor();
+ await page.goto(base+'/docs/api');assert(!/Arc Agreements|0G verification|Legacy compatibility|Solana relay|Agent wallet path/.test(await page.locator('main').innerText()));
+ await page.goto(base+'/docs/compliance');assert((await page.locator('main').innerText()).includes('New-builder onboarding remains on hold'));
+ assert.deepEqual(errors,[]);console.log('PASS actual docs and console guide at 320/390/1280, light/dark, expandable real sample, separated browser/server code, three navigation groups, all 14 pages, removed-route redirects, mobile menu, bank boundary and no page errors.')
 }finally{await browser.close();await new Promise(r=>server.close(r))}

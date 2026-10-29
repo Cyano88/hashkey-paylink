@@ -1,65 +1,10 @@
-import { DocPage, DocHeader, Section, SubSection, InfoBox, Code, NavFooter } from './components'
-
-export default function SecurityDocs() {
-  return (
-    <DocPage>
-      <DocHeader
-        title="Security"
-        description="Hash PayLink is non-custodial, server-secret isolated, and built around hosted checkout plus verifiable receipts."
-      />
-
-      <Section title="Non-custodial payments">
-        <p>Hash PayLink does not ask users for seed phrases or private keys. Payment flows either transfer directly through wallet-confirmed actions or route through transparent vault/escrow logic for supported flows.</p>
-        <InfoBox type="tip">Only trust links on hashpaylink.com. Hash PayLink will never ask for a private key, seed phrase, or wallet password.</InfoBox>
-      </Section>
-
-      <Section title="Hosted execution">
-        <p>Developers and merchants can use Hash PayLink URLs or SDK helpers without embedding wallet-provider code into their own apps. Wallet/session execution stays inside the hosted checkout surface.</p>
-      </Section>
-
-      <Section title="Private key isolation">
-        <p>Relayer, Circle, 0G, Sportmonks, Resend, and admin credentials are server-side environment variables on Render. They are not exposed through browser code or committed files.</p>
-        <ul className="list-none space-y-1 mt-2 font-mono text-xs text-gray-600 dark:text-gray-400">
-          <li>- <Code>RELAYER_PRIVATE_KEY</Code> - Base and fallback EVM relayer</li>
-          <li>- <Code>RELAYER_PRIVATE_KEY_ARC_MAINNET</Code> - Arc relayer</li>
-          <li>- <Code>RELAYER_PRIVATE_KEY_ARB</Code> - Arbitrum relayer</li>
-          <li>- <Code>RELAYER_PRIVATE_KEY_SOLANA</Code> - Solana relayer</li>
-          <li>- <Code>ARENA_RELAYER_PRIVATE_KEY</Code> - legacy Arena test actions only</li>
-          <li>- <Code>OG_STORAGE_KEY</Code> - 0G proof archiving</li>
-        </ul>
-      </Section>
-
-      <Section title="Current contracts">
-        <p>Contract and payment logic are auditable in the public repository. Current product-facing contract areas include:</p>
-        <ul className="list-none space-y-1 mt-2">
-          <li>- <Code>PayLinkFactoryV2.sol</Code> - CREATE2 vault factory</li>
-          <li>- <Code>PayLinkArchive.sol</Code> - 0G payment proof registry</li>
-          <li>- <Code>ArcAgreementEscrow.sol</Code> and <Code>ArcAgreementFactory.sol</Code> - fixed, progressive, and milestone Arc agreements</li>
-        </ul>
-        <InfoBox type="warning"><Code>StreamVault</Code> and <Code>ArenaRoomEscrow</Code> contracts are retained compatibility or experimental assets. They are not approved public-fund paths.</InfoBox>
-      </Section>
-
-      <Section title="0G proof layer">
-        <p>Eligible payment and receipt records can be archived to 0G Storage so downstream agents and dashboards can verify payment state without trusting a private database.</p>
-      </Section>
-
-      <Section title="Operational controls">
-        <SubSection title="Postgres durability">
-          <p>Receipts, agreement projections, agent/helper state, POS profiles, PolyDesk, and Privy/Circle mappings use Render Postgres instead of ephemeral local files.</p>
-        </SubSection>
-        <SubSection title="Email alerts">
-          <p>Portfolio and report emails use Resend. Delivery secrets remain server-side.</p>
-        </SubSection>
-      </Section>
-
-      <Section title="Phishing warning">
-        <p>Hash PayLink will never DM first to request funds or keys. Suspicious messages should be reported to <a href="mailto:support@hashpaylink.com" className="text-blue-600 dark:text-blue-400 hover:underline">support@hashpaylink.com</a>.</p>
-      </Section>
-
-      <NavFooter
-        prev={{ label: 'SDK', path: '/docs/sdk' }}
-        next={{ label: 'Wallet Setup', path: '/docs/wallets' }}
-      />
-    </DocPage>
-  )
-}
+﻿import {Link} from 'react-router-dom'
+import {DocPage,DocHeader,Section,NavFooter} from './components'
+export default function SecurityDocs(){return <DocPage>
+<DocHeader title="Payment security" description="Protect account access, review every approval, and verify payments before delivering an order."/>
+<Section title="For Pocket customers"><p>Keep control of your email and device. Never share a PIN, one-time sign-in code, seed phrase or private key with a merchant or support. Approve payments only inside the genuine Pocket or Hash PayLink checkout experience.</p><p>Check the recipient or business name, asset, network, amount, fee and total before approving. If a transaction is processing, check Activity or the existing order before trying again.</p></Section>
+<Section title="For developers"><p>Keep API keys and webhook signing secrets on your server. Authenticate your customers, check order ownership and calculate prices from your catalog. Do not accept browser-supplied prices or receiving-wallet overrides.</p><p>Verify webhook signatures against the original request bytes, reject stale signatures and deduplicate event IDs. Check authenticated payment status and match it to the saved order before delivery. A redirect, screenshot or browser message is not proof of payment.</p><p>Persist confirmation and a delivery job in one database transaction, then fulfill using an order-based deduplication key. Recover unfinished orders through status checks so a missed notification does not lose an order.</p></Section>
+<Section title="Receipts and customer data"><p>Receipt links are shareable. Show them only to the appropriate customer and avoid logging secrets or unnecessary personal data. A payment receipt does not replace your tax invoice or refund process.</p></Section>
+<Section title="Report a problem"><p>Contact <a className="underline" href="mailto:support@hashpaylink.com">support@hashpaylink.com</a> with your project, order or payment reference and a description of the problem. Do not include credentials, a PIN or a sign-in code.</p><p>Read the <Link className="underline" to="/docs/privacy">privacy policy</Link> for data handling and retention. Business verification and product availability are described under <Link className="underline" to="/docs/compliance">business review and limits</Link>.</p></Section>
+<NavFooter prev={{label:'Keys and environments',path:'/docs/environment'}} next={{label:'Business review and limits',path:'/docs/compliance'}}/>
+</DocPage>}

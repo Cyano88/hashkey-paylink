@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import {useState} from 'react'
 
 export function DocPage({ children }: { children: ReactNode }) {
-  return <div className="animate-fade-in space-y-10">{children}</div>
+  return <div className="space-y-10">{children}</div>
 }
 
 export function DocHeader({ title, description, badge }: { title: string; description: string; badge?: string }) {
@@ -93,7 +93,7 @@ export function Table({ headers, rows }: { headers: string[]; rows: string[][] }
           {rows.map((row, i) => (
             <tr key={i} className="bg-white dark:bg-gray-900/40">
               {row.map((cell, j) => (
-                <td key={j} className="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono text-xs align-top">
+                <td key={j} className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm align-top">
                   {cell}
                 </td>
               ))}

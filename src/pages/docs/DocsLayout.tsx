@@ -1,78 +1,19 @@
-import { useState } from 'react'
-import { Outlet, NavLink, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
 import { Menu, X, ExternalLink, Sun, Moon, ChevronRight } from 'lucide-react'
 import { useTheme } from '../../lib/ThemeContext'
 
-const LEGACY_NAV = [
-  {
-    group: 'Introduction',
-    items: [
-      { label: 'Overview',         path: '/docs',                end: true },
-      { label: 'Getting Started',  path: '/docs/getting-started' },
-    ],
-  },
-  {
-    group: 'Hash PayLink',
-    items: [
-      { label: 'Payment Links',       path: '/docs/payment-links' },
-      { label: 'Multi-Payer Collection', path: '/docs/multi-payer' },
-      { label: 'Flexible Amount',     path: '/docs/flexible-amount' },
-      { label: 'QR Codes',            path: '/docs/qr-codes' },
-      { label: 'FX Display',          path: '/docs/fx-display' },
-    ],
-  },
-  {
-    group: 'Supported Chains',
-    items: [
-      { label: 'Base',          path: '/docs/chains/base' },
-      { label: 'Arbitrum',      path: '/docs/chains/arbitrum' },
-      { label: 'Arc Mainnet',   path: '/docs/chains/arc' },
-      { label: 'Solana',        path: '/docs/chains/solana' },
-    ],
-  },
-  {
-    group: '0G Storage',
-    items: [
-      { label: 'How It Works',      path: '/docs/0g-storage' },
-      { label: 'Agent Verification', path: '/docs/0g-storage/agent-verify' },
-    ],
-  },
-  {
-    group: 'Access Mode',
-    items: [
-      { label: 'Overview',         path: '/docs/access-mode' },
-      { label: 'API Integration',  path: '/docs/access-mode/api' },
-    ],
-  },
-  {
-    group: 'SDK',
-    items: [
-      { label: '@hashpaylink/sdk', path: '/docs/sdk' },
-      { label: 'URL Parameters',   path: '/docs/sdk/url-params' },
-    ],
-  },
-  {
-    group: 'Reference',
-    items: [
-      { label: 'API Endpoints',          path: '/docs/api' },
-      { label: 'Environment Variables',  path: '/docs/environment' },
-      { label: 'Security',               path: '/docs/security' },
-      { label: 'Wallet Setup',           path: '/docs/wallets' },
-      { label: 'Terms',                  path: '/docs/terms' },
-      { label: 'Privacy',                path: '/docs/privacy' },
-    ],
-  },
-]
-
-const NAV: Array<{group:string;items:Array<{label:string;path:string;end?:boolean}>}> = [
-  {group: 'Start here', items: [{label:'Overview',path:'/docs',end:true},{label:'Accept your first payment',path:'/docs/getting-started'},{label:'API reference',path:'/docs/api'},{label:'SDK or direct API?',path:'/docs/sdk'}]},
-  {group:'Existing feature reference',items:LEGACY_NAV.filter(s=>!['Introduction','SDK','Reference'].includes(s.group)).flatMap(s=>s.items)},
-  {group:'Reference and policies',items:LEGACY_NAV.find(s=>s.group==='Reference')!.items.filter(i=>i.path!=='/docs/api')}
-]
+export const DOCS_NAV = [
+ {group:'Developer API',items:[{label:'Build with Hash PayLink',path:'/docs',end:true},{label:'Accept your first payment',path:'/docs/getting-started'},{label:'Checkout API',path:'/docs/api'},{label:'Polymarket funding',path:'/docs/funding'}]},
+ {group:'Pocket by Hash PayLink',items:[{label:'Your wallet and payments',path:'/docs/pocket',end:true},{label:'Pay a business',path:'/docs/pocket/pay'},{label:'Send, receive and request',path:'/docs/pocket/transfers'},{label:'Swap and bridge',path:'/docs/pocket/exchange'}]},
+ {group:'Reference, policies & compliance',items:[{label:'Keys and environments',path:'/docs/environment'},{label:'Payment security',path:'/docs/security'},{label:'Business review and limits',path:'/docs/compliance'},{label:'Terms and conditions',path:'/docs/terms'},{label:'Privacy policy',path:'/docs/privacy'},{label:'Delete your Pocket account',path:'/docs/account-deletion'}]}
+];
 
 export default function DocsLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { theme, toggle } = useTheme()
+  const { pathname, hash } = useLocation()
+  useEffect(() => { if (!hash) window.scrollTo(0, 0) }, [pathname, hash])
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 font-inter">
@@ -107,7 +48,7 @@ export default function DocsLayout() {
               className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Developer portal
+              Developer dashboard
             </a>
           </div>
         </div>
@@ -127,7 +68,7 @@ export default function DocsLayout() {
           `}
         >
           <nav className="py-6 px-3 space-y-5">
-            {NAV.map((section) => (
+            {DOCS_NAV.map((section) => (
               <div key={section.group}>
                 <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
                   {section.group}
@@ -140,7 +81,7 @@ export default function DocsLayout() {
                         end={'end' in item ? item.end : false}
                         onClick={() => setSidebarOpen(false)}
                         className={({ isActive }) =>
-                          `flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                          `flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
                             isActive
                               ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-medium'
                               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900'
