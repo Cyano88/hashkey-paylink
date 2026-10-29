@@ -159,7 +159,7 @@ console.log('PASS: XStocks incoming assets, XPay direction, request submission a
 for (const [chain,label] of [['base','Base'],['ethereum','Ethereum'],['polygon','Polygon'],['xlayer','X Layer']]) {
  const view=paymentReceiptView(pocketActivityReceipt({...incoming,chain,assetSymbol:'NVDAx'}))
  assert.equal(view.rows.find(r=>r.label==='Network').value,label)
- assert.equal(view.rows.find(r=>r.label==='Type').value,'Wallet transfer')
+ assert.equal(view.rows.find(r=>r.label==='Type').value,'Wallet payment')
  assert.equal(view.rows.find(r=>r.label==='Direction').value,'Received')
 }
 console.log('PASS: Base, Ethereum, Polygon and X Layer receipts preserve network and movement type')

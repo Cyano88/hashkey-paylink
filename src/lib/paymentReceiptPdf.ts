@@ -275,9 +275,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
     variant:'general',badge:'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
-      ...(receipt.brandKind==='pocket'?[{label:'Type',value:'Web payment'},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
+      ...(receipt.brandKind==='pocket'?[{label:'Type',value:'Wallet payment'},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
-      {label:'Payment method',value:'Wallet'},
+      ...(receipt.brandKind!=='pocket'?[{label:'Payment method',value:'Wallet'}]:[]),
       {label:'Network',value:network},
       ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
       {label:'Date',value:fmtTime(receipt.createdAt)},
@@ -289,8 +289,8 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     const narration=receipt.narration||receipt.memo||''
     const normalized=(value:string)=>value.toLowerCase().replace(/\s/g,'')
     const automatic=new Set(['','Incoming','Outgoing','Transfer','Wallet transfer',receipt.title||'',receipt.asset+' received',receipt.asset+' sent',...([receipt.amount,compactReceiptAmount(receipt.amount,receipt.asset)].flatMap(value=>[value+' '+receipt.asset,value+' '+receipt.asset+' received',value+' '+receipt.asset+' sent',value+' '+receipt.asset+' received on '+network+'.',value+' '+receipt.asset+' sent on '+network+'.']))].map(normalized))
-    return {variant:'general',badge:'Wallet transfer',amount,timestamp:fmtTime(receipt.createdAt),reference,rows:[
-      {label:'Type',value:'Wallet transfer'},
+    return {variant:'general',badge:incoming?'Incoming':'Outgoing',amount,timestamp:fmtTime(receipt.createdAt),reference,rows:[
+      {label:'Type',value:'Wallet payment'},
       {label:'Direction',value:incoming?'Received':'Sent'},
       {label:'Network',value:network},
       {label:'From',value:receipt.payer||'-',mono:true},

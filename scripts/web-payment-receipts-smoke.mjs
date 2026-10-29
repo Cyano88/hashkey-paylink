@@ -19,7 +19,7 @@ console.log('PASS web payment receipts: both directions, exact payment binding, 
 for(const direction of ['in','out']){
  const receipt={type:direction==='in'?'money_in':'money_out',source:'wallet-transfer',title:direction==='in'?'Incoming':'Outgoing',asset:'USDT',amount:'1.5',chain:'xlayer',payer:p.payer,recipient:p.recipient,destination:'USDT',referenceId:'transfer',createdAt:Date.now(),feeAmount:'0.01',feeAsset:'USDT'}
  for(const memo of ['1.5 USDT','1.5 USDT sent on X Layer.','USDT received']){
-  const view=paymentReceiptView({...receipt,memo});assert.equal(view.badge,'Wallet transfer');assert.equal(view.rows.find(r=>r.label==='Direction').value,direction==='in'?'Received':'Sent');assert(!view.rows.some(r=>['Destination','Amount & narration','Narration'].includes(r.label)));assert.equal(view.rows.find(r=>r.label==='To').value,p.recipient)
+  const view=paymentReceiptView({...receipt,memo});assert.equal(view.badge,direction==='in'?'Incoming':'Outgoing');assert.equal(view.rows.find(r=>r.label==='Type').value,'Wallet payment');assert.equal(view.rows.find(r=>r.label==='Direction').value,direction==='in'?'Received':'Sent');assert(!view.rows.some(r=>['Destination','Amount & narration','Narration'].includes(r.label)));assert.equal(view.rows.find(r=>r.label==='To').value,p.recipient)
  }
  assert.equal(paymentReceiptView({...receipt,memo:'Dinner contribution'}).rows.find(r=>r.label==='Narration').value,'Dinner contribution')
 }
