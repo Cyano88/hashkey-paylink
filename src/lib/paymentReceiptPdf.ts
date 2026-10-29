@@ -204,6 +204,9 @@ export function paymentReceiptBrand(receipt?: PaylinkReceipt): PaymentReceiptBra
   if (receipt?.brandKind === 'pocket' || receipt?.brandName === 'Pocket') {
     return { kind: 'pocket', name: 'Pocket', imageUrl: '' }
   }
+  if (receipt?.source === 'hosted_checkout' || receipt?.settlementType === 'hosted_checkout') {
+    return { kind: 'partner', name: receipt.recipient || 'Merchant', imageUrl: '' }
+  }
   if (receipt?.brandName) {
     return { kind: 'partner', name: receipt.brandName, imageUrl: receipt.brandImageUrl || '' }
   }
@@ -218,6 +221,7 @@ function fmtTime(value?: number) {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   })
 }
 
@@ -277,10 +281,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     rows:[
       ...(receipt.brandKind==='pocket'?[{label:'Type',value:'Wallet payment'},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
-      ...(receipt.brandKind!=='pocket'?[{label:'Payment method',value:'Wallet'}]:[]),
+      ...(receipt.brandKind!=='pocket'?[{label:'Type',value:'Wallet payment'}]:[]),
       {label:'Network',value:network},
       ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
-      {label:'Date',value:fmtTime(receipt.createdAt)},
       ...(receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
   }
@@ -460,7 +463,7 @@ function drawReceiptCanvas(
     drawContainedImage(ctx, logo, 52, 48, 38, 38)
   } else if (brand.kind === 'pocket') {
     drawPocketMark(ctx, 52, 48, 38)
-  } else {
+  } else if (brand.kind !== 'partner') {
     roundRect(ctx, 52, 48, 38, 38, 12, '#111827')
     ctx.fillStyle = '#ffffff'
     ctx.font = `700 11px ${sans}`
@@ -469,7 +472,8 @@ function drawReceiptCanvas(
 
   ctx.fillStyle = '#111827'
   ctx.font = `700 17px ${sans}`
-  ctx.fillText(clipCanvasText(ctx, brand.name, 320), 104, 72)
+  const brandX = brand.kind === 'partner' && !logo ? 52 : 104
+  ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)
@@ -530,7 +534,9 @@ function drawReceiptCanvas(
   ctx.fillText('REFERENCE ID', 52, y + 36)
   ctx.fillStyle = '#374151'
   ctx.font = '600 11px "Courier New", monospace'
-  drawRightText(ctx, shortPdfValue(view.reference), 560, y + 36, 326)
+  // A downloaded receipt must preserve its usable reference, not an ellipsis.
+  const referenceLines = view.reference.match(/.{1,48}/g) || ['-']
+  referenceLines.forEach((line, index) => drawRightText(ctx, line, 560, y + 36 + index * 15, 326))
 
   ctx.setLineDash([])
   ctx.fillStyle = '#9ca3af'

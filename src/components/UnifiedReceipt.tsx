@@ -74,6 +74,7 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
   if (brand.imageUrl && !failed) {
     return <img src={brand.imageUrl} alt="" onError={() => setFailed(true)} className={`object-contain ${className}`} />
   }
+  if (brand.kind === 'partner') return null
   return (
     <span className={`flex items-center justify-center rounded-xl bg-gray-950 text-[10px] font-bold text-white dark:bg-white dark:text-gray-950 ${className}`}>
       {brand.name.slice(0, 2).toUpperCase()}
