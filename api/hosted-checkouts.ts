@@ -1,3 +1,4 @@
+import {checkoutChildStatusRequest} from './checkout-child-request.js'
 import hostedBscCheckoutsHandler,{isBscCheckoutId,createHostedBscCheckoutsHandler} from './hosted-bsc-checkouts.js'
 import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
@@ -946,7 +947,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       if(req.method==='GET'&&req.query?.purpose==='status') {
         const result=await invokeCheckoutHandler(selection,req).catch(error=>({ok:false,error:(error as Error).message}))
         if(!result.ok)return res.status(409).json(result)
-        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),{...req,query:{...req.query,id:result.selectedCheckoutId}}).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:'usdc'})}
+        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId)).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:'usdc'})}
         return res.json({...result,status:result.status||'pending',settlementMode:'usdc'})
       }
       return selection(req,res)

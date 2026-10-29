@@ -13,6 +13,8 @@ for(const rail of ['circle','bsc','xlayer']){
  const result=await request('POST',rail==='xlayer'?{...body,items:undefined}:body);assert.equal(result.code,200,JSON.stringify(result));assert.equal(result.data.checkoutUrl,'/pay/c/'+checkoutId)
  assert.equal(calls[0].body.expiresInMinutes,15);assert.equal(calls[0].body.amount,'1.5');assert.equal(calls[0].body.asset,'USDC');assert.equal(calls[0].body.kind,'service')
  for(const field of ['rail','network','recipient','paymentOptions','brandImageUrl'])assert.equal(calls[0].body[field],undefined)
+ // JSONB storage may reorder object keys while preserving the basket.
+ store.orders[id].lines=store.orders[id].lines.map(({id,name,quantity,cents})=>({cents,quantity,name,id}))
  assert.equal((await request('POST',body)).code,200);assert.equal(calls.length,1)
  assert.equal((await request('POST',{action:'prepare',requestId:id})).data.checkoutUrl,result.data.checkoutUrl)
  assert.equal((await request('POST',{...body,items:[{id:'wrap',quantity:1}]})).code,400)

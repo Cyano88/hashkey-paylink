@@ -175,3 +175,9 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 - Authenticated child chkx_02ed254437fa4523bc494f8c remains pending at verification. Selection chks_1add86a339af43cf92b38161 still returns 409; merchant order status/settlement/receipt acceptance remains open separately.
 
 - Deployment c64f04d2f / dep-dbhh0i5g1s2s73a2hu60 live at 09:27:18Z. Public site HTTP 200; served usePocketStockWallet-C0eeX-_0.js verified with 5,000ms future-window tolerance and unchanged strict expiry check. Hosted checkout browser suite passed all four supported X Layer stablecoins. Old checkout expired; fresh funded acceptance still requires user approval.
+
+## Lunchroom retry recovery
+- Observed live POST prepare HTTP 400 Order reference conflict reusing c780287fc8d04f9e9a56351f62919693. JSONB key reorder reproduced the failure; compare basket fields instead of serialized property order. Changed baskets still reject.
+- Selected checkout status lost inherited Node IncomingMessage headers via object spread. Preserve headers explicitly when reading the child; regression uses a real IncomingMessage.
+- Lunchroom now reads authoritative status before reusing an order: expired creates a fresh reference; pending/missing retain the reference; paid/processing recover the order; unavailable status blocks new creation. Browser checks passed.
+- Food demo, hosted merchant checkout and checkout selection regression suites passed. No funds moved by the audit. Deployment/live verification pending.

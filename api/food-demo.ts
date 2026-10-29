@@ -50,11 +50,14 @@ export async function reconcileFoodDemoCheckout(checkoutId:string) {
  await refreshFoodOrder(defaults,order)
  if(!order.paid)throw Error('Payment is not confirmed by the checkout API yet.')
 }
+function sameOrderLines(a:Order['lines'],b:Order['lines']) {
+ return a.length===b.length && a.every((line,i)=>line.id===b[i].id&&line.name===b[i].name&&line.quantity===b[i].quantity&&line.cents===b[i].cents)
+}
 async function prepareHostedOrder(d:typeof defaults,id:string,items:unknown){
  if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid order reference.')
  const state=await d.read(),existing=state.orders[id],draft=state.drafts?.[id]
  const basket=foodBasket(items ?? (existing?.lines || draft?.lines)?.map(line=>({id:line.id,quantity:line.quantity})))
- if(existing && JSON.stringify(existing.lines)!==JSON.stringify(basket.lines))throw Error('Order reference conflict.')
+ if(existing && !sameOrderLines(existing.lines,basket.lines))throw Error('Order reference conflict.')
  if(existing?.checkoutUrl)return {ok:true,checkoutUrl:existing.checkoutUrl,orderId:id}
  if(existing&&!existing.hosted)throw Error('Start a new order to use secure checkout.')
  const createdAt=existing?.createdAt ?? draft?.createdAt ?? d.now()
@@ -63,7 +66,7 @@ async function prepareHostedOrder(d:typeof defaults,id:string,items:unknown){
  const order:Order={id,hosted:true,fingerprint:createHash('sha256').update(JSON.stringify(basket.lines)).digest('hex'),...basket,asset:'USDC',amount,createdAt}
  await d.mutate(store=>{
   const current=store.orders[id]
-  if(current && (JSON.stringify(current.lines)!==JSON.stringify(basket.lines)||!current.hosted))throw Error('Order reference conflict.')
+  if(current && (!sameOrderLines(current.lines,basket.lines)||!current.hosted))throw Error('Order reference conflict.')
   if(!current){if(Object.keys(store.orders).length>=1000)throw Error('Orders are currently unavailable.');store.orders[id]=order}
   return store
  })

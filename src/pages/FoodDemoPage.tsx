@@ -21,7 +21,16 @@ export default function FoodDemoPage(){
  async function checkOrder(){if(!orderId)return;setBusy(true);try{const r=await fetch('/api/demo/food/orders?id='+encodeURIComponent(orderId),{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Cannot check this order.');setOrder(d.order);if(['paid','expired'].includes(d.order?.status))sessionStorage.removeItem('lunchroom.order');setScreen('order');setError('')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
  useEffect(()=>{let active=true;void fetch('/api/demo/food/orders').then(r=>r.json()).then(d=>{if(active){setLive(d.liveEnabled===true);setAcceptedAssets(d.acceptedAssets||[])}}).catch(()=>{});if(orderId){setScreen('order');void checkOrder()}return()=>{active=false}},[])
  async function pay(){setBusy(true);setError('');try{const items=lines.map(m=>({id:m.id,quantity:m.quantity})),fingerprint=JSON.stringify(items);let saved;try{saved=JSON.parse(sessionStorage.getItem('lunchroom.order')||'null')}catch{}
- const requestId=saved?.fingerprint===fingerprint&&Date.now()-saved.createdAt<25*60_000?saved.requestId:crypto.randomUUID().replace(/-/g,'');sessionStorage.setItem('lunchroom.order',JSON.stringify({fingerprint,requestId,createdAt:saved?.requestId===requestId?saved.createdAt:Date.now()}));const r=await fetch('/api/demo/food/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'prepare',items,requestId})}),d=await r.json();if(!r.ok||!d.ok||!/^\/pay\/c\/(?:chk_[a-zA-Z0-9]{8,40}|chk[bxs]_[a-f0-9]{24})(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(d.checkoutUrl))throw Error(d.error||'Unable to open payment.');navigate(d.checkoutUrl)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ let requestId=saved?.fingerprint===fingerprint?saved.requestId:crypto.randomUUID().replace(/-/g,'');
+ if(saved?.requestId===requestId){
+  const statusResponse=await fetch('/api/demo/food/orders?id='+encodeURIComponent(requestId),{cache:'no-store'}),statusData=await statusResponse.json();
+  if(statusResponse.status!==404){
+   if(!statusResponse.ok||!statusData.ok||statusData.order?.id!==requestId)throw Error(statusData.error||'Cannot check your previous order. Try again.');
+   if(statusData.order.status==='expired')requestId=crypto.randomUUID().replace(/-/g,'');
+   else if(['paid','processing','failed'].includes(statusData.order.status)){setOrder(statusData.order);setScreen('order');navigate('/launchroom?order='+requestId);return}
+  }
+ }
+ sessionStorage.setItem('lunchroom.order',JSON.stringify({fingerprint,requestId,createdAt:saved?.requestId===requestId?saved.createdAt:Date.now()}));const r=await fetch('/api/demo/food/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'prepare',items,requestId})}),d=await r.json();if(!r.ok||!d.ok||!/^\/pay\/c\/(?:chk_[a-zA-Z0-9]{8,40}|chk[bxs]_[a-f0-9]{24})(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(d.checkoutUrl))throw Error(d.error||'Unable to open payment.');navigate(d.checkoutUrl)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
  return <main className="food-demo"><div className="food-demo-inner">
  <header className="food-header"><a href="/launchroom" className="food-logo"><span aria-hidden="true">&#10035;</span> lunchroom<span className="food-dot">.</span></a></header>
  {screen==='menu'?<><section className="food-hero"><h1>Menu</h1><p>Select items for your order.</p></section>
