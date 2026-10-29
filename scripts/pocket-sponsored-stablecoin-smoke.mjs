@@ -18,6 +18,12 @@ for(const [asset,token] of [['USDC','0xb6ceceab302e2e4948951ee7843fc24e92933061'
  const q=await quoteSponsoredStablecoin(owner,{asset,recipient,amountUnits:'1000000'},deps)
  await assert.rejects(()=>quoteSponsoredStablecoin(owner,{asset,recipient,amountUnits:'1000000'},{...deps,fetcher:async()=>{throw Error('timeout')}}),SponsoredTransferNotSubmitted)
  assert.equal(q.feeUnits,'125');assert.equal(sends,0)
+ // Live checkout arrived with 30,116ms remaining because the server clock was ahead.
+ validateSponsoredStablecoinQuote(q,q.expiresAt-30116)
+ validateSponsoredStablecoinQuote(q,q.expiresAt-35000)
+ assert.throws(()=>validateSponsoredStablecoinQuote(q,q.expiresAt-35001),SponsoredTransferNotSubmitted)
+ assert.throws(()=>validateSponsoredStablecoinQuote(q,q.expiresAt),SponsoredTransferNotSubmitted)
+ assert.equal(sends,0)
  const realNow=Date.now
  try{
   Date.now=()=>realNow()+60000 // User spends a minute approving the PIN.

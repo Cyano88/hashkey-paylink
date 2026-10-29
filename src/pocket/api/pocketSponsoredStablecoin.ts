@@ -10,9 +10,12 @@ const tokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c
 const abi=parseAbi(['function transfer(address,uint256) returns(bool)'])
 const units=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,19}$/.test(v)&&BigInt(v)<2n**64n
 const canonical=(value:any):string=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v)
+// Allow bounded server/browser clock skew on the future-window check only.
+// Expired quotes remain invalid; the server enforces the signed 30-second lifetime.
+const QUOTE_CLOCK_SKEW_MS = 5_000
 export function validateSponsoredStablecoinQuote(q:SponsoredStablecoinQuote,now=Date.now()){
  const fail=()=>{throw new SponsoredTransferNotSubmitted('Transfer quote changed or expired. Review the transfer again.')}
- if(!q||!isAddress(q.owner)||!q.intent||!isAddress(q.intent.recipient)||q.intent.recipient.toLowerCase()===q.owner.toLowerCase()||!tokens[q.intent.asset]||!units(q.intent.amountUnits)||!units(q.feeUnits)||!units(q.totalUnits)||BigInt(q.totalUnits)!==BigInt(q.intent.amountUnits)+BigInt(q.feeUnits)||!Number.isSafeInteger(q.expiresAt)||q.expiresAt<=now||q.expiresAt>now+30000||typeof q.quoteToken!=='string'||!q.quoteToken||q.quoteToken.length>60000||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q.attemptId))return fail()
+ if(!q||!isAddress(q.owner)||!q.intent||!isAddress(q.intent.recipient)||q.intent.recipient.toLowerCase()===q.owner.toLowerCase()||!tokens[q.intent.asset]||!units(q.intent.amountUnits)||!units(q.feeUnits)||!units(q.totalUnits)||BigInt(q.totalUnits)!==BigInt(q.intent.amountUnits)+BigInt(q.feeUnits)||!Number.isSafeInteger(q.expiresAt)||q.expiresAt<=now||q.expiresAt>now+30000+QUOTE_CLOCK_SKEW_MS||typeof q.quoteToken!=='string'||!q.quoteToken||q.quoteToken.length>60000||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q.attemptId))return fail()
  const walletId=q.request?.url?.match(/^https:\/\/api\.privy\.io\/v1\/wallets\/([a-zA-Z0-9]{10,64})\/rpc$/)?.[1]
  const appId=q.request?.headers?.['privy-app-id']
  if(!walletId||typeof appId!=='string'||!appId)return fail()

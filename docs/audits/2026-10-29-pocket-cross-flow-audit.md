@@ -166,3 +166,10 @@ Final: ce5b4931b deployment confirmed live; public-config HTTP200. Actual Pixel 
 
 
 - Funded acceptance preparation09:02UTC: actual Pixel XLayer Send shows2.37USDT available. Prepared original user recipient0xE292801Ff95620ae2749B8C71A9EABB51E77e851 with2.00USDT; current displayed fee0.01USDT,total2.01USDT. Confirm send and PIN were NOT pressed. Explicit approval requested for this real transfer; do not treat quote preparation or elapsed time as approval. Revalidate quote/fee before any approved execution. No real funded acceptance result yet.
+
+
+## Checkout quote clock mismatch - 2026-10-29
+- Live Lunchroom USDT quote was rejected before submission: expiry 09:17:46.768Z, browser response end 09:17:16.652Z, leaving 30,116ms against an exact 30,000ms client ceiling. The captured quote validates inside its window; replaying validation at receipt reproduced the error.
+- Added bounded 5-second tolerance to the future-window check in both web and native source; expiration, fee/total, recipient, signing request binding and server 30-second lifetime remain enforced. No transaction submitted by this audit.
+- USDC/USDT client regression checks pass in both repos, including the exact 116ms mismatch, tolerance boundary, expired quote rejection, post-PIN refresh, increased fee rejection and uncertain-send retention. Native source patch is not installed yet.
+- Authenticated child chkx_02ed254437fa4523bc494f8c remains pending at verification. Selection chks_1add86a339af43cf92b38161 still returns 409; merchant order status/settlement/receipt acceptance remains open separately.
