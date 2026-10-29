@@ -8,8 +8,8 @@ const mocks={PocketAssetFiatValue:`export default()=>null`,usePocketStockQuotes:
  'react-router-dom':`export const useSearchParams=()=>[new URLSearchParams('amount=1&recipient=0x2222222222222222222222222222222222222222')]`,
  PocketFundingAction:`export default ({children})=>children`,pocketFundingShortfall:`export const fundingShortfall=()=>null,amountExceedsBalance=()=>false`,
  PocketTransactionSheet:`export default props=> <div data-state={props.state} data-receipt={props.receipt?.txHash||''}/>`,
- PocketBottomSheet:`export default ({children})=>children`,PocketSlideAction:`export default ({onConfirm,status})=><button data-progress={status} onClick={onConfirm}>Confirm send</button>`,
- PocketArcTokenPicker:`export default props=><div data-picker={props.tokens.map(t=>t.symbol).join(',')}/>`,PocketConfirmationDetails:`export default ()=>null`,PocketIcons:`export const Copy=()=>null`,
+ PocketBottomSheet:`export default ({children})=>children`,PocketSlideAction:`export default ({onConfirm,status,labels})=><button data-idle={labels.idle} data-progress={status} onClick={onConfirm}>Confirm send</button>`,
+ PocketArcTokenPicker:`export default props=><div data-picker={props.tokens.map(t=>t.symbol).join(',')}/>`,PocketConfirmationDetails:`export default props=><div data-fee-rows={JSON.stringify(props.rows.map(r=>[r[0],typeof r[1]==="string"?r[1]:null]))}/>`,PocketIcons:`export const Copy=()=>null`,
  usePocketIdentity:`export default ()=>({getAccessToken:async()=>null})`,stockNotificationsRequest:`export const stockNotificationsRequest=async()=>({})`,
  pocketReceipt:`export const pocketActivityReceipt=row=>row`,pocketStockPickerTokens:`export const stockPickerTokens=()=>[{address:'0x1111111111111111111111111111111111111111',balance:'2',symbol:'USDC',decimals:6},{address:'native',symbol:'OKB',balance:'1',decimals:18},{address:'0x4444444444444444444444444444444444444444',symbol:'ZEROx',balance:'0',decimals:18},{address:'0x5555555555555555555555555555555555555555',symbol:'HELDx',balance:'0.01',decimals:18}]`,
  pocketStockDisplay:`export const formatStockQuantity=x=>x`,
@@ -42,4 +42,10 @@ for (const scenario of ['cancelled-before-submit','cancelled-unknown','cancelled
  await act(async()=>tree.unmount());
 }
 console.log('PASS cancellation: proven pre-submit returns to review; unknown and submitted remain pending.');
-
+let prepareCalls=0,sendCalls=0;
+await act(async()=>{tree=create(React.createElement(Sheet,{wallet:{...wallet,attempts:[],prepareTransfer:async()=>{prepareCalls++;throw Error('X Layer sponsorship is paused for a fee review.')},send:async()=>{sendCalls++}},view:'send'}))});
+await click('Review send');
+assert.equal(tree.root.findByProps({'data-idle':'Retry fee quote'}).props['data-progress'],'idle');
+assert.match(tree.root.findByProps({'data-fee-rows':tree.root.findAll(n=>n.props['data-fee-rows'])[0].props['data-fee-rows']}).props['data-fee-rows'],/Network fee.*Unavailable/);
+await click('Confirm send');assert.equal(prepareCalls,2);assert.equal(sendCalls,0);await act(async()=>tree.unmount());
+console.log('PASS unavailable fee remains visible; retry only prepares and never sends.');
