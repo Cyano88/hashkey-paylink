@@ -1,3 +1,5 @@
+import {bscSendCoverage} from './bsc-send-coverage.js'
+import type {BscSendOperationStore} from './bsc-send-operations.js'
 import {bscPaymentCoverage} from './bsc-payment-coverage.js'
 import type {BscPaymentOperationStore} from './bsc-payment-operations.js'
 import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
@@ -68,7 +70,7 @@ export function createXLayerBillingGuard(d:{
     if(receipt.status==='0x0')return 0n
     if(receipt.status!=='0x1')return unavailable()
     const c=r.coverage!,token=tokens[c.asset],price=prices[token]
-    if(!price||!Number.isFinite(price.usd)||price.usd<=0||price.fetchedAt+30000<=now||price.fetchedAt>now+5000)return unavailable()
+    const priceNow=d.now();if(!price||!Number.isFinite(price.usd)||price.usd<=0||!Number.isSafeInteger(price.fetchedAt)||price.fetchedAt+30000<=priceNow||price.fetchedAt>priceNow+5000)return unavailable()
     const topics=encodeEventTopics({abi,eventName:'Transfer',args:{from:r.wallet as `0x${string}`,to:EVM_PLATFORM_TREASURY}})
     const paid=receipt.logs.filter((log:any)=>same(log.address,token)&&log.topics?.length===3&&topics.every((t,i)=>typeof t==='string'&&same(log.topics[i],t))&&/^0x[0-9a-f]{64}$/i.test(log.data))
     if(paid.length!==1||BigInt(paid[0].data)!==BigInt(c.feeUnits))return 0n
@@ -104,9 +106,10 @@ export async function checkXLayerBillingCoverage(wallet?:string){
    const store=await readDurableJson<BscOperationStore>('pocket:bsc-operations:v1')
    const ops=Object.values(store?.operations||{})
    const payments=Object.values((await readDurableJson<BscPaymentOperationStore>('pocket:bsc-payment-operations:v1'))?.operations||{})
-   if(!ops.length&&!payments.length)return []
+   const sends=Object.values((await readDurableJson<BscSendOperationStore>('pocket:bsc-send-operations:v1'))?.operations||{})
+   if(!ops.length&&!payments.length&&!sends.length)return []
    const runtime=createBscRuntime(),context={now:Date.now(),rpc:runtime.rpc,prices:runtime.readPrices}
-   return [...await bscCollectedCoverage(ops,context,wallet),...await bscPaymentCoverage(payments,context,wallet)]
+   return [...await bscCollectedCoverage(ops,context,wallet),...await bscPaymentCoverage(payments,context,wallet),...await bscSendCoverage(sends,context,wallet)]
   }}:{}),
   ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED!=='true'&&env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED==='true'?{transactionSpend:async(records:Attempt[])=>{
    const sent=records.filter(r=>r.hash||!(r.providerFailure?.status===400&&r.providerFailure.code==='transaction_broadcast_failure'))

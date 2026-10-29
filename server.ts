@@ -1,3 +1,4 @@
+import bscSendHandler,{reconcileBscSends} from './api/pocket/bsc-send-service.js'
 import operationsEmergencyPauseHandler from './api/operations-emergency-pause.js'
 import foodDemoWebhook from './api/food-demo-webhook.js'
 import bscPaymentHandler,{reconcileBscPayments} from './api/pocket/bsc-payment-service.js'
@@ -441,6 +442,7 @@ app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/native-solana-send', strictLimiter, pocketNativeSolanaSendHandler)
 app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
 app.get('/api/pocket/bsc-account', readLimiter, pocketBscAccountHandler)
+app.post('/api/pocket/bsc-send', (req,res,next)=>(['capabilities','pending','status'].includes(req.body?.action)?readLimiter:exchangeLimiter)(req,res,next), bscSendHandler)
 app.post('/api/pocket/bsc-payment', (req,res,next)=>(['balance','pending'].includes(req.body?.action)?readLimiter:exchangeLimiter)(req,res,next), bscPaymentHandler)
 app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)
 app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
@@ -670,6 +672,7 @@ app.listen(PORT, () => {
 
 const hostedCheckoutOutboxTimer = setInterval(() => {
   void drainBscCheckoutWebhooks().catch(()=>console.warn('[bsc-checkout] webhook delivery deferred'))
+  void reconcileBscSends().catch(()=>console.warn('[bsc-send] confirmation deferred'))
   void reconcileBscPayments().catch(()=>console.warn('[bsc-checkout] confirmation deferred'))
   void drainStockCheckoutWebhooks().catch(()=>console.warn('[stock-checkout] webhook delivery deferred'))
   void drainHostedCheckoutWebhookOutbox().catch(error => {

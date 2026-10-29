@@ -163,7 +163,7 @@ export async function recordCirclePocketAction(input: {
     }
     // Bridge recovery can retry after a worker has already finalized the action.
     // Keep terminal state and the event timestamp stable for ledger deduplication.
-    if (['wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge','wallet.native-send','wallet.native-swap','wallet.bsc-swap','wallet.cash-conversion'].includes(input.action) && existing) {
+    if (['wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge','wallet.native-send','wallet.native-swap','wallet.bsc-swap','wallet.bsc-send','wallet.cash-conversion'].includes(input.action) && existing) {
       for (const key of ['quoteToken', 'source', 'destination', 'amount']) {
         if (existing.metadata?.[key] !== input.metadata?.[key]) throw new Error('Bridge details do not match the saved transfer.')
       }
@@ -173,8 +173,8 @@ export async function recordCirclePocketAction(input: {
       if (['cancelled','not_submitted'].includes(input.status) && (existing.metadata?.txHash || existing.metadata?.signedTransaction)) return existing
       if (['cancelled','not_submitted'].includes(existing.status) && ['started','submitted'].includes(input.status)
         && (!input.metadata?.txHash || input.metadata?.submissionClaim === 'true')) return existing
-      if(['wallet.native-send','wallet.native-swap','wallet.bsc-swap','wallet.cash-conversion'].includes(input.action)){
-        for(const key of ['network','walletAddress','recipient','assetSymbol','toAsset','challengeId','txHash','signedTransaction']){
+      if(['wallet.native-send','wallet.native-swap','wallet.bsc-swap','wallet.bsc-send','wallet.cash-conversion'].includes(input.action)){
+        for(const key of ['network','walletAddress','recipient','recipientAddress','assetSymbol','toAsset','challengeId','txHash','signedTransaction']){
           if(existing.metadata?.[key] && input.metadata?.[key] !== undefined && existing.metadata[key] !== input.metadata[key])throw new Error('Native transfer evidence cannot change.')
         }
       }

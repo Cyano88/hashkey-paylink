@@ -12,8 +12,8 @@ const attempt={wallet,at:now-60000,hash,coverage:{walletId:'wallet1',asset:'USDC
 const topics=encodeEventTopics({abi:parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)']),eventName:'Transfer',args:{from:wallet,to:EVM_PLATFORM_TREASURY}})
 function fixture(transactionSpend,additionalCoverage){
  let halted
- const s={billed:285n,usd:1,chain:'0xc4',missing:false,reorg:false,priceAge:0,status:'0x1',logs:[{address:token,topics,data:toHex(10000n,{size:32})}],reads:0}
- const guard=createXLayerBillingGuard({transactionSpend,additionalCoverage,now:()=>now,readHalt:async()=>halted,halt:async value=>{halted||=value},prices:async()=>({[token]:{usd:s.usd,fetchedAt:now-s.priceAge}}),spend:async(id,start,end)=>{assert.equal(id,'wallet1');assert.equal(start,attempt.at-1000);assert.equal(end,now);s.reads++;return s.billed},rpc:async(method)=>{if(method==='eth_chainId')return s.chain;if(method==='eth_getTransactionReceipt')return s.missing?null:{transactionHash:hash,blockHash,blockNumber:'0x1',status:s.status,logs:s.logs};if(method==='eth_getBlockByNumber')return {hash:s.reorg?'0x'+'c'.repeat(64):blockHash};throw Error('Unexpected RPC')}})
+ const s={billed:285n,usd:1,chain:'0xc4',missing:false,reorg:false,priceAge:0,status:'0x1',logs:[{address:token,topics,data:toHex(10000n,{size:32})}],reads:0,clock:now}
+ const guard=createXLayerBillingGuard({transactionSpend,additionalCoverage,now:()=>s.clock,readHalt:async()=>halted,halt:async value=>{halted||=value},prices:async()=>({[token]:{usd:s.usd,fetchedAt:s.clock-s.priceAge}}),spend:async(id,start,end)=>{assert.equal(id,'wallet1');assert.equal(start,attempt.at-1000);assert.equal(end,now);s.reads++;return s.billed},rpc:async(method)=>{if(method==='eth_chainId')return s.chain;if(method==='eth_getTransactionReceipt')return s.missing?null:{transactionHash:hash,blockHash,blockNumber:'0x1',status:s.status,logs:s.logs};if(method==='eth_getBlockByNumber')return {hash:s.reorg?'0x'+'c'.repeat(64):blockHash};throw Error('Unexpected RPC')}})
  return {s,guard,get halted(){return halted}}
 }
 let f=fixture();await f.guard([attempt]);assert.equal(f.halted,undefined)
@@ -36,3 +36,9 @@ f=fixture(undefined,async()=>[{walletId:'wallet1',at:attempt.at,hash:'0x'+'e'.re
 f.s.billed=19501n;await assert.rejects(()=>f.guard([attempt]),/paused/);assert.equal(f.halted.coverageUsdMicros,'19500')
 f=fixture(undefined,async()=>{throw Error('Unproven BSC fee')});await assert.rejects(()=>f.guard([attempt]),/Unproven/);assert.equal(f.halted,undefined)
 console.log('PASS combined-chain coverage: wallet invoice includes only independently proven BSC plus X Layer fees; no gas subtraction or historical ID guess')
+
+// Additional-chain verification can take longer than the allowed future skew.
+f=fixture(undefined,async()=>{f.s.clock+=6000;return []});await f.guard([attempt]);assert.equal(f.halted,undefined);
+f=fixture();f.s.priceAge=-5001;await assert.rejects(()=>f.guard([attempt]),/unavailable/);
+f=fixture();f.s.priceAge=30000;await assert.rejects(()=>f.guard([attempt]),/unavailable/);
+console.log('PASS delayed combined-chain verification accepts newly fetched prices and still rejects stale or future prices');
