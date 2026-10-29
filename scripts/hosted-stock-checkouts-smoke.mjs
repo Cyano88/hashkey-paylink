@@ -51,7 +51,7 @@ try{for(const asset of xlayerCheckoutAssets){
  await assert.rejects(settleStockCheckout({...proof,confirmedAt:new Date(clock-1000).toISOString()},d),/outside/)
  assert.equal(await readStockCheckoutReceipt(proof.paymentId,d),undefined)
  assert.equal((await settleStockCheckout(proof,d)).payment.status,'paid')
- const recoveredReceipt=await readStockCheckoutReceipt(proof.paymentId,d);assert.equal(recoveredReceipt.source,'hosted_checkout');assert.equal(recoveredReceipt.amount,body.amount);assert.equal(recoveredReceipt.txHash,proof.hash);assert.equal(recoveredReceipt.recipient,'Fixture merchant');assert.equal(recoveredReceipt.feeAmount,undefined)
+ const recoveredReceipt=await readStockCheckoutReceipt(proof.paymentId,d);assert.equal(recoveredReceipt.source,'hosted_checkout');assert.equal(recoveredReceipt.amount,body.amount);assert.equal(recoveredReceipt.txHash,proof.hash);assert.equal(recoveredReceipt.recipient,'Fixture merchant');assert.equal(recoveredReceipt.feeAmount,undefined);assert.equal(recoveredReceipt.brandImageUrl,policy.brandImageUrl);assert.equal(recoveredReceipt.brandName,policy.merchantName)
  assert.equal(await readStockCheckoutReceipt('unknown-receipt',d),undefined)
  assert.equal((await executions.get(execution.ownerId,execution.id)).state,'completed')
  assert.equal((await call('GET',{}, {id})).data.returnUrl,body.returnUrl)

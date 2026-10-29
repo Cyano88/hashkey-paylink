@@ -170,7 +170,7 @@ export async function readStockCheckoutReceipt(receiptId:string,d:Dependencies=d
  const record=Object.values((await d.read()).checkouts).find(r=>r.payment?.receiptId===receiptId&&valid(r,d))
  if(!record?.payment)return
  const p=record.payment
- return {type:'money_out',receiptId:p.receiptId,receiptHash:p.txHash,eventId:p.receiptId,txHash:p.txHash,title:'Web payment',status:'confirmed',chain:'xlayer',payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset,createdAt:Date.parse(p.confirmedAt),source:'hosted_checkout',settlementType:'hosted_checkout',merchantId:record.id,recipient:record.merchantName,destination:record.recipient,referenceId:p.receiptId,brandName:'Hash PayLink',brandKind:'hashpaylink'}
+ return {type:'money_out',receiptId:p.receiptId,receiptHash:p.txHash,eventId:p.receiptId,txHash:p.txHash,title:'Web payment',status:'confirmed',chain:'xlayer',payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset,createdAt:Date.parse(p.confirmedAt),source:'hosted_checkout',settlementType:'hosted_checkout',merchantId:record.id,recipient:record.merchantName,destination:record.recipient,referenceId:p.receiptId,brandName:record.merchantName,brandImageUrl:record.brandImageUrl,brandKind:'partner'}
 }
 
 export async function drainStockCheckoutWebhooks(d: Dependencies = defaults) {

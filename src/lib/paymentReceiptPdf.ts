@@ -205,7 +205,7 @@ export function paymentReceiptBrand(receipt?: PaylinkReceipt): PaymentReceiptBra
     return { kind: 'pocket', name: 'Pocket', imageUrl: '' }
   }
   if (receipt?.source === 'hosted_checkout' || receipt?.settlementType === 'hosted_checkout') {
-    return { kind: 'partner', name: receipt.recipient || 'Merchant', imageUrl: '' }
+    return { kind: 'partner', name: receipt.recipient || 'Merchant', imageUrl: receipt.brandImageUrl || '' }
   }
   if (receipt?.brandName) {
     return { kind: 'partner', name: receipt.brandName, imageUrl: receipt.brandImageUrl || '' }
@@ -459,7 +459,10 @@ function drawReceiptCanvas(
   }
 
 
-  if (logo) {
+  const wordmark = brand.kind === 'partner' && logo && logo.naturalWidth / logo.naturalHeight > 1.6
+  if (wordmark) {
+    drawContainedImage(ctx, logo, 52, 46, 180, 44)
+  } else if (logo) {
     drawContainedImage(ctx, logo, 52, 48, 38, 38)
   } else if (brand.kind === 'pocket') {
     drawPocketMark(ctx, 52, 48, 38)
@@ -473,7 +476,7 @@ function drawReceiptCanvas(
   ctx.fillStyle = '#111827'
   ctx.font = `700 17px ${sans}`
   const brandX = brand.kind === 'partner' && !logo ? 52 : 104
-  ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
+  if (!wordmark) ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)
