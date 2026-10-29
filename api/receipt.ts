@@ -1,4 +1,5 @@
 import {readStockCheckoutReceipt} from './hosted-stock-checkouts.js'
+import {downloadCheckoutReceiptPdf} from './checkout-receipt-pdf.js'
 import type { Request, Response } from 'express'
 import { findRegisteredPaymentReceipt } from './event-registry.js'
 
@@ -35,6 +36,15 @@ export default async function handler(req: Request, res: Response) {
   if (!id) return res.status(400).json({ ok: false, error: 'Missing receipt id.' })
 
   try {
+    if(req.query.format==='pdf'){
+      const pdf=await downloadCheckoutReceiptPdf(id)
+      if(!pdf)return res.status(404).json({ok:false,error:'Receipt not found.'})
+      res.setHeader('Content-Type','application/pdf')
+      res.setHeader('Content-Disposition',`attachment; filename="Receipt-${id}.pdf"`)
+      res.setHeader('Cache-Control','private, no-store')
+      res.setHeader('X-Content-Type-Options','nosniff')
+      return res.send(pdf)
+    }
     const receipt = await findRegisteredPaymentReceipt(id)
     if (!receipt) {
       const checkoutReceipt=await readStockCheckoutReceipt(id)
