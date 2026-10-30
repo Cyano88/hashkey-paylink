@@ -18,3 +18,10 @@ Initial test harness failures were filesystem restrictions and missing mock expo
 
 ## Pending
 Deploy, refresh the actual Pixel review, confirm returned fee and total. User retains PIN approval. Funded delivery and receipt/relaunch acceptance remain open until observed.
+
+## Live verification
+- Render dep-dbi3cfu1egvs73epq6t0 live at 2026-10-30T06:22:29Z, source e4070e312d66d7c8bd677b0e0c8fe7b30f4a220b; server build passed.
+- First quote retry reused the previously rejected provider reference and returned Reference already exists. Verified the old order had amountPaid 0. Reset the unchanged 1000 NGN draft via its preset to clear the local operation key; no approval or funding occurred.
+- Actual Pixel fresh review succeeded. Provider order 21b6fc35-41ae-464b-8fdf-cd69bf6c05a7 at 06:24 UTC: amount 0.732311 USDC, senderFeePercent 0.25, rounded senderFee 0.0018, transactionFee 0.02, amountToTransfer 0.754111, amountPaid 0, initiated. Pixel review shows 1000 NGN to receive, cash balance, and total 0.75 USD using the existing fiat formatter.
+- Left Pixel at Confirm payment. Payment approval, fiat delivery, funded settlement and receipt recovery are not verified by this quote check.
+- Follow-up: preparation failures that occur after provider creation can leave an unpersisted remote order and expose a raw duplicate-reference error on retry. Do not auto-create replacement funded attempts; reconcile remote state before any retry recovery change.
