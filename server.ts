@@ -513,6 +513,7 @@ app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler
 app.post('/api/zeroscout/polymarket-brief', strictLimiter, zeroScoutPolymarketBriefHandler)
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
 app.get('/api/receipt',                readLimiter, receiptHandler)
+app.post('/api/receipt', strictLimiter, receiptHandler)
 app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
 app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)

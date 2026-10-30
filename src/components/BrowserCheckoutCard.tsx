@@ -1,3 +1,5 @@
+import {usePrivy} from '@privy-io/react-auth'
+import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
 import {pocketFundingCode} from '../pocket/lib/pocketFundingCode'
 import {readCheckoutPinReset} from '../pocket/lib/pocketCheckoutPinReset'
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft} from './CheckoutExpiry'
@@ -11,6 +13,7 @@ import {checkoutHandoff} from '../lib/checkoutHandoff'
 
 type Props={feeAsset?:string;totalAdditionalFee?:string;needsFunding?:boolean;expiresAt?:string;returnUrl?:string;quoteLoading?:boolean;brandImageUrl?:string;fundingHint?:string;asset?:string;signOut?:()=>Promise<void>;nameInput?:{value:string;onChange:(value:string)=>void};amountInput?:{value:string;currency:string;onChange:(value:string)=>void};id:string;attempt:string;merchant:string;title:string;amount:string;fiat:boolean;authenticated:boolean;email:string;network:string;networks:Array<{value:string;label:string}>;onNetwork:(value:string)=>void;walletReady:boolean;address:string;balance:string|null;shortfall:string|null;total:string|null;fee:string|null;busy:boolean;blocked:boolean;error:string;prepare:()=>Promise<void>;refresh:()=>Promise<unknown>;pay:()=>Promise<void>}
 export default function BrowserCheckoutCard(p:Props){
+ const {getAccessToken}=usePrivy()
  const asset=p.asset||'USDC'
  const reset=readCheckoutPinReset(window.location.pathname+window.location.search)
  const seconds=useCheckoutExpiry(p.expiresAt)
@@ -39,7 +42,7 @@ export default function BrowserCheckoutCard(p:Props){
    {p.walletReady&&p.total!==null&&p.fee!==null&&<dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-gray-500">Fees</dt><dd>{p.fee+' '+(p.feeAsset||asset)}</dd></div><div className="flex justify-between font-semibold"><dt>You pay</dt><dd>{p.total+' '+asset+(p.totalAdditionalFee?' + '+p.totalAdditionalFee:'')}</dd></div></dl>}
    {p.walletReady&&p.quoteLoading&&!canFund&&!message&&p.total===null&&<div aria-label="Checking fees" className="mt-5 space-y-3"><div className="h-4 animate-pulse rounded bg-gray-100 dark:bg-white/10"/><div className="h-4 animate-pulse rounded bg-gray-100 dark:bg-white/10"/></div>}
    {message?<p role="alert" className="mt-5 text-center text-sm leading-5 text-gray-500">{message}</p>:!p.walletReady&&<p className="mt-5 text-center text-sm leading-5 text-gray-500">Confirm your email to access your balance securely.</p>}
-   <button disabled={busy||p.blocked||(!funding&&!canFund&&Boolean(p.quoteLoading))} onClick={()=>void run(async()=>{if(!p.walletReady){await p.prepare();return}if(funding){setFunding(false);return}if(canFund){setFunding(true);return}if(needsRefresh){await p.refresh();return}await p.pay()})} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950">{busy?'Please wait…':!p.walletReady?'Continue':funding?'Return to payment':canFund?'Add funds':needsRefresh?'Continue':'Pay securely'}</button>
+   <button disabled={busy||p.blocked||(!funding&&!canFund&&Boolean(p.quoteLoading))} onClick={()=>void run(async()=>{if(!p.walletReady){await p.prepare();return}if(funding){setFunding(false);return}if(canFund){setFunding(true);return}if(needsRefresh){await p.refresh();return}await prepareCheckoutReceiptContact({checkoutId:p.id,network:p.network,payer:p.address,getAccessToken});await p.pay()})} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950">{busy?'Please wait…':!p.walletReady?'Continue':funding?'Return to payment':canFund?'Add funds':needsRefresh?'Continue':'Pay securely'}</button>
    {p.walletReady&&!busy&&<button onClick={()=>void run(p.refresh)} className="mt-2 min-h-11 w-full text-xs text-gray-500">Update balance</button>}
   </>}
   <a href={handoff.browser.replace('browser=1','choose=1')} className="mt-5 block py-2 text-center text-xs text-gray-500">Other ways to continue</a>

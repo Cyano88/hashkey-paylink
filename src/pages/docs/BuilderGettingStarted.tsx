@@ -147,8 +147,8 @@ for (const order of await orders.listDuePaymentChecks({limit: 100})) {
  </Section>
  <Section title="6. Receipts, emails and customer support" id="receipts">
   <p>Hash PayLink creates the payment receipt. Your business delivers the purchase. Enable customer receipts under <strong>Settings → Receipts &amp; support</strong>; set a monitored support email and timezone.</p>
-  <p>Automatic email coverage in this release is confirmed X Layer wallet checkout with a verified purchaser email. It includes the merchant name/logo, PDF attachment and a direct PDF download link. Enabling it does not email old payments. Other routes and customers without a verified email are not automatically emailed by this feature.</p>
-  <p>Store <Code>payment.receiptId</Code> when the status response supplies it. The web receipt is <Code>https://app.hashpaylink.com/receipt/RECEIPT_ID</Code>. For hosted X Layer receipts, the direct PDF is <Code>/api/receipt?id=RECEIPT_ID&amp;format=pdf</Code> on app.hashpaylink.com. Receipt URLs are shareable; send them only to the appropriate customer.</p>
+  <p>Automatic emails cover supported human Checkout networks when the purchaser signs in with a verified email before paying. Bank or mobile-money settlement must also be confirmed before the receipt is sent. It includes the merchant name/logo, PDF attachment and a direct PDF download link. Enabling it does not email old payments. Customers without a verified email are not automatically emailed.</p>
+  <p>Store <Code>payment.receiptId</Code> when the status response supplies it. The web receipt is <Code>https://app.hashpaylink.com/receipt/RECEIPT_ID</Code>. For hosted Checkout receipts, the direct PDF is <Code>/api/receipt?id=RECEIPT_ID&amp;format=pdf</Code> on app.hashpaylink.com. Receipt URLs are shareable; send them only to the appropriate customer.</p>
   <p>A payment receipt is not a subscription invoice or a tax invoice. You handle tax documentation, refund requests, cancellations and order support. Contact Hash PayLink support for payment investigation; include your order ID, checkout ID and receipt ID, never a secret key or PIN.</p>
  </Section>
  <Section title="Server helpers you can copy" id="sample">
@@ -177,7 +177,7 @@ for (const order of await orders.listDuePaymentChecks({limit: 100})) {
    ['429','Slow down. Honor Retry-After if provided and retry with backoff. Never change the attempt key just to bypass a limit.'],
    ['5xx / timeout','Treat the outcome as unknown. Retry safely with the original key or read the existing checkout status.'],
    ['Webhook failed','Public HTTPS endpoint, correct signing secret, raw-body parser order, clock accuracy and Recent deliveries.'],
-   ['Receipt email missing','X Layer eligibility, verified payer email, project receipt setting enabled before the payment, and support configuration. Contact support with the receipt ID.'],
+   ['Receipt email missing','Human Checkout eligibility, verified payer email, project receipt setting enabled before the payment, and support configuration. Contact support with the receipt ID.'],
   ]}/>
  </Section>
  <Section title="Local bank pay and limits: not open for new onboarding yet" id="local-bank">

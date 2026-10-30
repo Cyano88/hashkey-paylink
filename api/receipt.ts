@@ -1,3 +1,5 @@
+import receiptContactHandler from './checkout-receipt-contact.js'
+import {readCheckoutReceipt} from './checkout-receipts.js'
 import {readStockCheckoutReceipt} from './hosted-stock-checkouts.js'
 import {downloadCheckoutReceiptPdf} from './checkout-receipt-pdf.js'
 import type { Request, Response } from 'express'
@@ -30,6 +32,7 @@ export function publicReceiptPayer(value?: string) {
 }
 
 export default async function handler(req: Request, res: Response) {
+  if (req.method === 'POST') return receiptContactHandler(req,res)
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
   const id = String(req.query.id ?? req.query.receiptId ?? '').trim()
@@ -45,8 +48,10 @@ export default async function handler(req: Request, res: Response) {
       res.setHeader('X-Content-Type-Options','nosniff')
       return res.send(pdf)
     }
+    const canonical=await readCheckoutReceipt(id)
+    if(canonical)return res.json({ok:true,receipt:{...canonical,payer:publicReceiptPayer(canonical.payer)}})
     const receipt = await findRegisteredPaymentReceipt(id)
-    if (!receipt) {
+    if (!receipt || receipt.source==='hosted-checkout') {
       const checkoutReceipt=await readStockCheckoutReceipt(id)
       if(checkoutReceipt)return res.json({ok:true,receipt:{...checkoutReceipt,payer:publicReceiptPayer(checkoutReceipt.payer)}})
       return res.status(404).json({ ok: false, error: 'Receipt not found.' })

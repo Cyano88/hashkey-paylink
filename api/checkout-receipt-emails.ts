@@ -1,3 +1,5 @@
+import {readReceiptContacts} from './checkout-receipt-contact.js'
+import {readReceiptCheckout,checkoutReceipt,checkoutBillingReceipt} from './checkout-receipts.js'
 import{readDeveloperReceiptSettings}from'./developer-receipt-settings.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from './render-durable-store.js'
@@ -46,8 +48,23 @@ export async function reconcileCheckoutReceiptEmails(){
   if(!settings||p.createdAt<Date.parse(settings.enabledAt!))continue
   const r=await readStockCheckoutReceipt(p.id)
   if(!r||r.payer.toLowerCase()!==p.payer.toLowerCase())continue
-  await queueCheckoutReceiptEmail(p.receiptEmail!,{id:r.receiptId,projectId:checkout.partnerId,merchant:r.recipient||'Merchant',merchantLogoUrl:r.brandImageUrl,supportEmail:settings.supportEmail,timeZone:settings.timeZone,description:r.memo,amount:r.amount,asset:r.asset,network:'X Layer',paidAt:new Date(r.createdAt).toISOString(),paymentMethod:'wallet',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(r.receiptId)});prepared++
+  await queueCheckoutReceiptEmail(p.receiptEmail!,{id:r.receiptId,projectId:checkout.partnerId,merchant:r.recipient||'Merchant',merchantLogoUrl:r.brandImageUrl,supportEmail:settings.supportEmail,timeZone:settings.timeZone,description:r.memo,amount:r.amount,asset:r.asset,network:r.chain==='xlayer'?'X Layer':r.chain,paidAt:new Date(r.createdAt).toISOString(),paymentMethod:'wallet',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(r.receiptId)});prepared++
   }catch{console.warn('[receipt-email] receipt preparation deferred')}
  }
+ await reconcileReceiptContacts()
  await drainCheckoutReceiptEmails()
+}
+
+const contactDefaults={contacts:readReceiptContacts,checkout:readReceiptCheckout,settings:readDeveloperReceiptSettings,queue:queueCheckoutReceiptEmail}
+export async function reconcileReceiptContacts(d=contactDefaults){
+ for(const contact of Object.values(await d.contacts())){
+  try{
+   const record=await d.checkout(contact.checkoutId)
+   if(!record||record.partnerId!==contact.projectId)continue
+   const receipt=checkoutReceipt(record),settings=await d.settings(record.partnerId)
+   if(!receipt||receipt.status!=='confirmed'||!settings||contact.createdAt<Date.parse(settings.enabledAt!)||Date.parse(record.createdAt)<Date.parse(settings.enabledAt!))continue
+   if(receipt.chain!==contact.network||(receipt.chain==='solana'?receipt.payer!==contact.payer:receipt.payer.toLowerCase()!==contact.payer.toLowerCase()))continue
+   await d.queue(contact.email,checkoutBillingReceipt(receipt,record.partnerId,settings))
+  }catch{console.warn('[receipt-email] checkout receipt preparation deferred')}
+ }
 }

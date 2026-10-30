@@ -1,3 +1,4 @@
+import useCheckoutReceipt from '../lib/useCheckoutReceipt'
 import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {pocketApiUrl} from '../pocket/lib/pocketRoutes'
 import {useCallback,useEffect,useRef,useState} from 'react'
@@ -17,7 +18,8 @@ export type BscCheckoutView={expiresAt?:string;id:string;amount:string;asset:str
 type Operation={operationId:string;checkoutId:string;state:string;hash?:string;quote:BscPaymentQuote}
 export default function BscCheckoutPage({checkout,returnUrl,securityManaged=false}:{checkout:BscCheckoutView;returnUrl?:string;securityManaged?:boolean}){
  const identity=usePocketIdentity()
- if(checkout.status==='paid')return <BrowserPaymentResult fullScreen state="successful" amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} merchant={checkout.merchantName} returnUrl={returnUrl} detail="Payment received."/>
+ const receipt=useCheckoutReceipt(checkout.id,checkout.status==='paid')
+ if(checkout.status==='paid')return <BrowserPaymentResult receipt={receipt} fullScreen state="successful" amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} merchant={checkout.merchantName} returnUrl={returnUrl} detail="Payment received."/>
  const content=<Payment key={identity.user?.id||'guest'} checkout={checkout} returnUrl={returnUrl}/>
  return identity.authenticated&&!securityManaged?<PocketPaymentSecurityGate email={identity.email} getAccessToken={identity.getAccessToken}>{content}</PocketPaymentSecurityGate>:content
 }
@@ -25,6 +27,7 @@ function Payment({checkout,returnUrl}:{checkout:BscCheckoutView;returnUrl?:strin
  const identity=usePocketIdentity(),wallet=usePocketEmbeddedWallet(),{generateAuthorizationSignature}=useAuthorizationSignature()
  const [fundingBuffer,setFundingBuffer]=useState('0')
  const [quote,setQuote]=useState<BscPaymentQuote|null>(null),[quoteToken,setQuoteToken]=useState(''),[balance,setBalance]=useState<string|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[op,setOp]=useState<Operation|null>(null),[loaded,setLoaded]=useState(false)
+ const receipt=useCheckoutReceipt(checkout.id,op?.state==='completed')
  const alive=useRef(true),lock=useRef(false),current=useRef<Operation|null>(null)
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
  const [verifiedReturn,setVerifiedReturn]=useState(returnUrl)
@@ -95,7 +98,7 @@ function Payment({checkout,returnUrl}:{checkout:BscCheckoutView;returnUrl?:strin
   }finally{lock.current=false;setBusy(false)}
  }
  if(!identity.ready)return <DeveloperLoadingSkeleton/>
- if(op&&['submitting','pending','completed'].includes(op.state))return <BrowserPaymentResult state={op.state==='completed'?'successful':'pending'} amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} merchant={checkout.merchantName} returnUrl={verifiedReturn} detail={op.state==='completed'?'Payment received.':'Your payment is being confirmed.'}/>
+ if(op&&['submitting','pending','completed'].includes(op.state))return <BrowserPaymentResult receipt={receipt} state={op.state==='completed'?'successful':'pending'} amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} merchant={checkout.merchantName} returnUrl={verifiedReturn} detail={op.state==='completed'?'Payment received.':'Your payment is being confirmed.'}/>
  const total=quote?BigInt(quote.amountUnits)+BigInt(quote.reimbursementUnits):null
  const required=total??(parseUnits(checkout.amount,18)+BigInt(fundingBuffer))
  const shortfall=balance!==null&&BigInt(balance)<required?formatUnits(required-BigInt(balance),18):null

@@ -37,7 +37,8 @@ async function refreshFoodOrder(d:typeof defaults,order:Order){
  if(!matches){if(order.paid)return 'paid';throw Error('Payment status could not be verified. Please check again.')}
  if(status.status==='paid'&&(!order.checkoutId.startsWith('chks_')||['USDC','USDT','USDe','USDG'].includes(status.asset))&&(order.rail==='circle'?status.settlementMode===(order.settlementMode||'usdc')&&status.payment?.amount===(order.payableAmount||order.amount):status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){
   if(order.checkoutId.startsWith('chks_')&&['USDC','USDT','USDe','USDG'].includes(status.asset))order.asset=status.asset
-  if(typeof status.payment?.receiptId==='string'&&/^[a-zA-Z0-9_-]{8,100}$/.test(status.payment.receiptId))order.receiptId=status.payment.receiptId
+  if(typeof status.payment?.receiptId==='string'&&/^[a-zA-Z0-9_.-]{8,1024}$/.test(status.payment.receiptId))order.receiptId=status.payment.receiptId
+  else if(/^chk_[a-zA-Z0-9]{8,40}$/.test(order.checkoutId))order.receiptId=order.checkoutId
   order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')
   await d.mutate(s=>{s.orders[order.id].paid=true;s.orders[order.id].receiptId=order.receiptId;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})
   return 'paid'

@@ -58,6 +58,10 @@ export async function readBscCheckout(id: string, allowExpired = false, d: Depen
   if (!record || !valid(record,d) || (!allowExpired && !record.payment && Date.parse(record.expiresAt) <= d.now())) return null
   return record
 }
+export async function readBscCheckoutByReceipt(id:string,d:Dependencies=defaults){
+ if(!/^[a-zA-Z0-9_-]{8,100}$/.test(id)||!d.hasStore())return undefined
+ return Object.values((await d.read()).checkouts).find(r=>r.payment?.receiptId===id&&valid(r,d))
+}
 const response = (r: BscCheckout) => ({ ok: true, checkoutId: r.id, checkoutUrl: '/pay/c/' + r.id, paymentUrl: '/pay/c/' + r.id + '?browser=1',
   checkout: { id: r.id, title: r.title, merchantName: r.merchantName, brandImageUrl:r.brandImageUrl, amount: r.amount, asset: r.asset, token: r.token, network: 'bsc', bscCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
 })

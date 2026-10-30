@@ -4,7 +4,7 @@ import {downloadCheckoutReceiptPdf} from '../api/checkout-receipt-pdf.ts'
 import {receiptEmail,receiptPdfUrl} from '../api/billing-document.ts'
 const id='fixture-receipt-123',pdf=Buffer.from('%PDF-1.4 frozen document'),key=createHash('sha256').update(id).digest('hex')
 let renderCount=0,stored=true
-const d={readReceipt:async value=>value===id?{receiptId:id,status:'confirmed',merchantId:'checkout',recipient:'Lunchroom',memo:'Lunchroom order 123',amount:'1.50',asset:'USDT',createdAt:Date.parse('2026-10-29T10:37:00Z')}:undefined,readFiles:async()=>stored?{jobs:{[key]:{input:{attachments:[{content_type:'application/pdf',content:pdf.toString('base64')}]}}}}:undefined,readCheckout:async()=>({partnerId:'project'}),readSettings:async()=>({timeZone:'Africa/Lagos'}),render:async receipt=>{renderCount++;assert.equal(receipt.timeZone,'Africa/Lagos');assert.equal(receipt.amount,'1.50');return pdf}}
+const d={readReceipt:async value=>value===id?{receiptId:id,chain:'xlayer',status:'confirmed',merchantId:'checkout',recipient:'Lunchroom',memo:'Lunchroom order 123',amount:'1.50',asset:'USDT',createdAt:Date.parse('2026-10-29T10:37:00Z')}:undefined,readFiles:async()=>stored?{jobs:{[key]:{input:{attachments:[{content_type:'application/pdf',content:pdf.toString('base64')}]}}}}:undefined,readCheckout:async()=>({partnerId:'project'}),readSettings:async()=>({timeZone:'Africa/Lagos'}),render:async receipt=>{renderCount++;assert.equal(receipt.timeZone,'Africa/Lagos');assert.equal(receipt.amount,'1.50');return pdf}}
 assert.deepEqual(await downloadCheckoutReceiptPdf(id,d),pdf);assert.equal(renderCount,0)
 assert.equal(await downloadCheckoutReceiptPdf('missing-receipt',d),undefined)
 assert.equal(await downloadCheckoutReceiptPdf('../bad\r\nfilename',d),undefined)
@@ -15,4 +15,3 @@ assert(!/View receipt|Download invoice|>Back</.test(email.html));assert(email.te
 assert(email.html.indexOf('Download receipt')<email.html.indexOf('Questions about your purchase?'))
 assert(email.html.includes('Powered by <span'));assert(!email.html.includes('background:#111827'))
 console.log('PASS direct PDF: frozen attachment reuse, canonical receipt requirement, safe filename, legacy generation, one download CTA, support placement and weighted footer.')
-

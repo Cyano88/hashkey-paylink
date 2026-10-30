@@ -1002,7 +1002,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human stablecoin Checkout.'})
         let receiptEmails:ReceiptEmailSettings
         try{receiptEmails=normalizeReceiptEmailSettings(req.body?.receiptEmails,currentProject.receiptEmails,dependencies.now().toISOString())}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
-        if(receiptEmails.enabled&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||!xlayerCheckout||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'Customer receipt emails require human X Layer stablecoin Checkout.'})
+        if(receiptEmails.enabled&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')))return res.status(400).json({ok:false,error:'Customer receipt emails require human Checkout.'})
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
         const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
         const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork

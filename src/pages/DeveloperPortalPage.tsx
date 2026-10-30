@@ -543,7 +543,7 @@ function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, set
     </div>
 
     </div>
-    <div hidden={settingsSection!=='receipts'}><ReceiptEmailSettings value={draft.receiptEmails} onChange={receiptEmails=>setDraft({...draft,receiptEmails})} eligible={draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&draft.settlementMode==='usdc'&&Boolean(draft.xlayerCheckout)}/></div>
+    <div hidden={settingsSection!=='receipts'}><ReceiptEmailSettings value={draft.receiptEmails} onChange={receiptEmails=>setDraft({...draft,receiptEmails})} eligible={draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')}/></div>
     <div hidden={settingsSection!=='receiving'}>
     {settingsSection==='receiving' && draft.settlementMode==='usdc' && <EnablePocketWallets wallets={receivingWallets} onReady={onWalletsReady} onBusy={onWalletBusy}/>}
     {routingRequired && <><div className="mt-7">

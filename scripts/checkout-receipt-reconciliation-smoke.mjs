@@ -3,6 +3,8 @@ import {build} from 'esbuild'
 import {mkdirSync} from 'node:fs'
 mkdirSync('.codex-temp',{recursive:true})
 const mocks={
+ './checkout-receipt-contact.js':`export const readReceiptContacts=async()=>({})`,
+ './checkout-receipts.js':`export const readReceiptCheckout=async()=>null;export const checkoutReceipt=()=>undefined;export const checkoutBillingReceipt=()=>undefined`,
  './render-durable-store.js':`export const hasRenderDurableStore=()=>true;export const readDurableJson=async k=>structuredClone(k.includes('pocket-xpay')?globalThis.fixture.payments:globalThis.fixture.outbox);export const mutateDurableJson=async(k,fn)=>{globalThis.fixture.outbox=fn(structuredClone(globalThis.fixture.outbox));return structuredClone(globalThis.fixture.outbox)}`,
  './developer-receipt-settings.js':`export const readDeveloperReceiptSettings=async id=>id==='enabled'?{enabled:true,supportEmail:'help@example.test',timeZone:'Africa/Lagos',enabledAt:'2026-10-29T10:00:00Z'}:undefined`,
  './hosted-stock-checkouts.js':`export const readStockCheckout=async id=>({partnerId:id.endsWith('2')?'disabled':'enabled'});export const readStockCheckoutReceipt=async id=>{if(id==='bad')throw Error('Unavailable receipt');return {receiptId:id,payer:id==='wrong-owner'?'other':'payer',recipient:'Lunchroom',memo:'Lunchroom order fixture',amount:'1.50',asset:'USDT',createdAt:Date.parse('2026-10-29T11:00:00Z')}}`,

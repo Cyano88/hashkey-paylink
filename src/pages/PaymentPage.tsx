@@ -1,3 +1,5 @@
+import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
+import useCheckoutReceipt from '../lib/useCheckoutReceipt'
 import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { paymentFundingMinimum } from '../lib/paymentFundingMinimum'
 import {checkoutStablecoin} from '../lib/checkoutStablecoins'
@@ -583,6 +585,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedIntentStatus, setHostedIntentStatus] = useState<'idle' | 'checking' | 'verified' | 'error'>(() => isHostedCheckout ? 'checking' : 'idle')
   const [hostedIntentError, setHostedIntentError] = useState('')
   const [hostedConfirmationStatus, setHostedConfirmationStatus] = useState<'idle' | 'checking' | 'processing' | 'verified' | 'error'>('idle')
+  const canonicalCheckoutReceipt=useCheckoutReceipt(hostedCheckoutId,hostedConfirmationStatus==='verified')
   const [hostedConfirmationError, setHostedConfirmationError] = useState('')
   const [hostedPayoutFailed, setHostedPayoutFailed] = useState(false)
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
@@ -2460,6 +2463,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         return
       }
 
+      if(pocketScan&&isHostedCheckout&&privyAuthenticated)await prepareCheckoutReceiptContact({checkoutId:hostedCheckoutId,network:'solana',payer:session.wallet.address,getAccessToken})
       const feeQuoteToken = approvedSolanaQuoteToken()
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
@@ -3046,6 +3050,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           return
         }
 
+        if(pocketScan&&isHostedCheckout&&privyAuthenticated)await prepareCheckoutReceiptContact({checkoutId:hostedCheckoutId,network:chain,payer:session.wallet.address,getAccessToken})
         setCircleEvmPaymentProcessing(true)
         setCircleEvmAcceptedPending(false)
         await beginPaymentVerificationWindow()
@@ -4051,7 +4056,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   if (browserPaymentFlow && (isConfirmed || Boolean(txHash) || circleEvmAcceptedPending)) {
     const failed = isEvmReverted || isBasePaymasterFailed || hostedPayoutFailed
     const state = checkoutCompletion({transferConfirmed:isConfirmed,checkoutVerified:!isHostedCheckout||hostedConfirmationStatus==='verified',payoutSettled:!isNgPosPaycrestOfframp||(isHostedLocalSettlement?hostedConfirmationStatus==='verified':paycrestOrder?.status==='settled'),fundingComplete:!isPolymarketBridge||polymarketBridgeComplete,reverted:failed})
-    const receipt = paymentReceipt ? { ...paymentReceipt, status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
+    const confirmedReceipt=canonicalCheckoutReceipt||paymentReceipt
+    const receipt = confirmedReceipt ? { ...confirmedReceipt, status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
     return <><HashPayLinkCheckoutBrand/><BrowserPaymentResult fullScreen={fullScreenHumanCheckout}
       state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={String(payableAmt)+' '+meta.asset} receipt={receipt}
       statusLabel={state==='successful' && (isPolymarketFunding||isAgentOrWalletFunding) ? 'Funded' : undefined}

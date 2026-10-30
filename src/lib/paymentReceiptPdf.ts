@@ -1,3 +1,4 @@
+import {pocketApiUrl} from '../pocket/lib/pocketRoutes'
 import {pocketPaymentMethodPaths} from '../pocket/lib/pocketPaymentMethodPaths'
 import {webPaymentMethodLabel} from '../pocket/lib/pocketWebPaymentMethod'
 import { pocketFundingRoute, type PocketPaymentFunding } from '../pocket/lib/pocketPaymentFunding'
@@ -286,6 +287,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       {label:'Merchant',value:receipt.recipient||'Merchant'},
       ...(receipt.brandKind!=='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)}]:[]),
       {label:'Network',value:network},
+      ...(receipt.amountNgn&&receipt.fiatCurrency?[{label:'Merchant settlement',value:compactReceiptAmount(receipt.amountNgn)+' '+receipt.fiatCurrency}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
       ...(receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
@@ -421,6 +423,11 @@ export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
 }
 
 export async function createPaymentReceiptPdf(receipt: PaylinkReceipt) {
+  if(receipt.brandKind!=='pocket' && (receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')){
+    const response=await fetch(pocketApiUrl('/api/receipt?id='+encodeURIComponent(receipt.receiptId)+'&format=pdf'),{cache:'no-store',signal:AbortSignal.timeout(30000)})
+    if(!response.ok)throw Error('The confirmed receipt could not be downloaded. Try again.')
+    return response.blob()
+  }
   const width = 612
   const height = 792
   const jpeg = await createPaymentReceiptImage(receipt)
