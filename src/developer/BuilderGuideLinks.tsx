@@ -1,7 +1,7 @@
 export default function BuilderGuideLinks(){return <section className="mt-6 space-y-4 rounded-2xl border border-gray-200 p-5 dark:border-white/10" aria-label="Integration checklist">
  <h2 className="text-base font-semibold">Your integration, in order</h2>
  <ol className="list-decimal space-y-3 pl-5 text-sm leading-6 text-gray-600 dark:text-gray-400">
- <li>Save your receiving wallets, accepted assets and website in Settings. Complete business review and any route activation.</li>
+ <li>Save your receiving wallets, accepted assets and website in Settings, then complete any required route activation. Wallet checkout is available before verification; local fiat requires personal KYC or business KYB.</li>
  <li>Create an API key under Developers → API keys. Keep it on your server.</li>
  <li>Create one checkout for a saved order. Save its ID, then send the customer to its checkout URL.</li>
  <li>Verify signed webhooks and check payment status from your server. Deliver the order once after it is paid.</li>

@@ -24,3 +24,7 @@ User-selected new email and user-completed OTP are required for genuine first-si
 - Scope: developer/operations layout only. Other custom email surfaces have not been declared audited or fixed by this change.
 
 Terms gate source a02ac0203453b64f6560dd8d683c7dafdfa0f98c deployed live via dep-dbicr0rbc2fs73ao8eu0 at 2026-10-30T17:07:48Z. Production build passed; full typecheck is unchanged at 43 existing errors. Reloading the existing unaccepted session still triggers the SDK startup logout as expected; a fresh sign-in code was requested for the user to reach the new explicit acceptance screen. Post-acceptance refresh remains pending user action.
+
+## Post-acceptance live verification
+
+The user completed acceptance. Live refresh retained the authenticated dashboard and the paid sandbox fixture. Production entry worked; a temporary personal draft app (dev_8db6ddcd7ec94daf82, Onboarding test - no payments) was created. API key creation was visibly disabled while settlement setup was incomplete. Personal verification showed personal KYC rather than business KYB. No wallet, live key, real payment or KYC submission was created. The temporary draft was deleted through the reviewed in-app removal flow. Two stale guide sentences requiring universal business review were corrected to reflect wallet checkout availability and personal KYC/business KYB for local fiat. Live business profile setup awaits the user-selected business name.
