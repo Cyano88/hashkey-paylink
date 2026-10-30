@@ -11,3 +11,11 @@ Passed: current V3 KYC handler tests (Nigeria, Uganda, provider entitlement, sig
 Test maintenance: Pocket browser expectations were stale versus existing Done CTA and current support guidance; scoped its mock to KYC so unrelated FX requests are not mistaken for KYC retries. The older legacy pocket-kyc-smoke suite could not bundle due to stale durable-store mocks; this is not claimed as a pass. Current V3 handler suite is the active-path coverage. Full typecheck and final deploy evidence to follow.
 
 No real identity details submitted, provider verdict fabricated, consent accepted, live wallet created, payment made or limit raised. User's historical failed attempt has no country/error details yet, so its exact cause is not established. Browser fixtures do not prove camera capture or an actual provider enrollment. Native APK has not been rebuilt in this change; served identity-frame fixes apply when it loads the updated frame.
+
+## Release evidence
+
+Source 322a2878b3915999a3230c6f11f481325b62c202 deployed via dep-dbidtqmtlv9c73csvkvg, live 2026-10-30T18:21:34Z. Render production build succeeded. Full typecheck remained 43 existing diagnostics with no new normalized diagnostics versus developer-terms baseline.
+
+Live Playwright: authenticated personal profile loaded the embedded panel and /api/pocket/kyc returned HTTP 200. Nigeria Basic and disabled Advanced, Uganda National ID fields, and unchecked consent/disabled submission were verified. Returned country preference to Nigeria. Both live identity-frame variants returned HTTP 200, explicit developer frame-ancestor permission, camera=(self), and Pocket/developer submission-error origin entries. No provider session/camera/enrollment was started. Temporary personal app dev_36491be0c8e24e89a3 was deleted after the check.
+
+Unrelated billing additions in server.ts remain uncommitted and were excluded using a scoped index patch. No dist files included.
