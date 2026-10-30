@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
-import { Menu, X, ExternalLink, Sun, Moon, ChevronRight } from 'lucide-react'
+import { Menu, X, ExternalLink, Sun, Moon } from 'lucide-react'
 import { useTheme } from '../../lib/ThemeContext'
+import { HashPayLinkCheckoutBrand } from '../../components/CheckoutChrome'
 
 export const DOCS_NAV = [
  {group:'Developer API',items:[{label:'Build with Hash PayLink',path:'/docs',end:true},{label:'Accept your first payment',path:'/docs/getting-started'},{label:'Checkout API',path:'/docs/api'},{label:'Polymarket funding',path:'/docs/funding'}]},
@@ -18,30 +19,29 @@ export default function DocsLayout() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 font-inter">
       {/* Top bar */}
-      <header className="sticky top-0 z-50 h-14 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur-sm">
-        <div className="flex items-center justify-between h-full px-4 max-w-screen-xl mx-auto">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-50 h-16 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur-sm">
+        <div className="flex items-center justify-between h-full px-3 sm:px-6 max-w-screen-xl mx-auto">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             <button
               onClick={() => setSidebarOpen(o => !o)}
               aria-label={sidebarOpen?'Close documentation navigation':'Open documentation navigation'}
-              className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="lg:hidden flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <Link to="/" className="flex items-center gap-1.5 group">
-              <span className="font-bold text-gray-900 dark:text-white tracking-tight">Hash PayLink</span>
-              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
-              <span className="text-gray-500 dark:text-gray-400 text-sm font-medium">Docs</span>
+            <Link to="/docs" aria-label="Hash PayLink documentation home" className="flex min-h-11 shrink-0 items-center">
+              <HashPayLinkCheckoutBrand className="mb-0 sm:mb-0" />
             </Link>
+            <span className="hidden sm:inline-flex border-l border-gray-200 pl-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">Docs</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={toggle}
-              className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Toggle dark mode"
             >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
             <a
               href="https://developer.hashpaylink.com"
@@ -58,7 +58,7 @@ export default function DocsLayout() {
         {/* Sidebar */}
         <aside
           className={`
-            fixed lg:sticky top-14 z-40 h-[calc(100vh-3.5rem)]
+            fixed lg:sticky top-16 z-40 h-[calc(100vh-4rem)]
             w-72 shrink-0 overflow-y-auto
             border-r border-gray-200 dark:border-gray-800
             bg-white dark:bg-gray-950
@@ -83,7 +83,7 @@ export default function DocsLayout() {
                         className={({ isActive }) =>
                           `flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
                             isActive
-                              ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-medium'
+                              ? 'bg-gray-100 dark:bg-gray-900 text-gray-950 dark:text-white font-medium'
                               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900'
                           }`
                         }
