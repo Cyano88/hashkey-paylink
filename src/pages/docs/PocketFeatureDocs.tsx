@@ -48,15 +48,7 @@ export function PocketCollect(){return <DocPage>
 <Section title="Pay through a link or QR code"><p>Open the link or use Pocket's scanner. Check the recipient, available payment choices, amount, network and fees before approving. Never assume that scanning a code authorizes or completes a payment.</p></Section>
 <Section title="Manage terminals"><p>Use the terminal management view available from your receiving flow to copy links, display or download QR codes, and view recorded payments. Check individual receipt references when reconciling totals. Removing a terminal does not reverse completed payments.</p></Section>
 <Section title="Confirm incoming payments"><p>Use the checkout's payment history or Activity to verify each payment. A shared link, QR scan or payer's screenshot is not confirmation. If your business needs automatic order delivery, use the <Link className={link} to="/docs/getting-started">developer checkout integration</Link> and server-side verification.</p></Section>
-<NavFooter prev={{label:'Gifts',path:'/docs/pocket/gifts'}} next={{label:'Collections',path:'/docs/pocket/collections'}}/>
-</DocPage>}
-export function PocketCollections(){return <DocPage>
-<DocHeader badge="Pocket by Hash PayLink" title="Collections" description="Keep a shared collection and its contributors together in Pocket."/>
-<Section title="Collections and requests"><p>A collection groups contributions under one named link. A payment request asks someone to pay you; XPay manages your receiving checkouts and terminals. These have separate histories and should not be treated as the same feature.</p></Section>
-<Section title="Find an existing collection"><p>Use the Collections view in Activity where available. Open a collection to review its recorded payments, copy its link or download its QR code. Confirm each contribution from its recorded status and receipt, rather than from a shared screenshot.</p></Section>
-<Section title="App availability"><p>The collection management view is available in the Pocket web interface. Access to creating a collection differs between app versions. If your Request screen only offers Pocket ID and Link, those options create requests; they are not a replacement for Collections.</p><p>Existing collection records remain separate from XPay. Contact support if you cannot find an existing collection, and include its name or reference.</p></Section>
-<Section title="Manage a collection"><p>Check the collection name, amount and receiving details before sharing an existing link. Closing a collection stops new payments; it does not reverse earlier payments or erase their records.</p></Section>
-<NavFooter prev={{label:'XPay and terminals',path:'/docs/pocket/collect'}} next={{label:'Activity, account and support',path:'/docs/pocket/account'}}/>
+<NavFooter prev={{label:'Gifts',path:'/docs/pocket/gifts'}} next={{label:'Activity, account and support',path:'/docs/pocket/account'}}/>
 </DocPage>}
 export function PocketAccount(){return <DocPage>
 <DocHeader badge="Pocket by Hash PayLink" title="Activity, account and support" description="Find receipts, manage your Pocket profile and resolve payment issues."/>
@@ -66,5 +58,5 @@ export function PocketAccount(){return <DocPage>
 <Section title="Contact support"><p>Open Profile → Support to describe the issue and follow its case history. Include the relevant payment or order reference and what happened. Support conversations and automated assistance do not approve transactions for you.</p><p>You can also email <a className={link} href="mailto:support@hashpaylink.com">support@hashpaylink.com</a>. For a failed provider delivery, keep the bill, bank or eSIM order reference available.</p></Section>
 <Section title="Cards and availability"><p>The Cards screen is currently a Coming soon preview. It does not issue a usable card or enable card purchases. Other features can be temporarily unavailable or restricted by account, network, country or provider; use the current status shown inside each flow.</p></Section>
 <Section title="Delete your account"><p>Review the <Link className={link} to="/docs/account-deletion">account deletion instructions</Link> before deleting. Deletion does not reverse blockchain transactions or remove records that must be retained.</p></Section>
-<NavFooter prev={{label:'Collections',path:'/docs/pocket/collections'}} next={{label:'Keys and environments',path:'/docs/environment'}}/>
+<NavFooter prev={{label:'XPay and terminals',path:'/docs/pocket/collect'}} next={{label:'Keys and environments',path:'/docs/environment'}}/>
 </DocPage>}

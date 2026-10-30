@@ -24,7 +24,7 @@ try{const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.p
   await page.goto(base+'/console');await page.getByRole('heading',{name:'Connect your app'}).waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Console overflow');assert.equal(await page.getByRole('heading',{name:'1. Server only'}).count(),1);assert.equal(await page.getByRole('heading',{name:'2. Browser only'}).count(),1)
  }
  await page.goto(base+'/docs');await page.getByRole('link',{name:'Integrate hosted checkout'}).click();await page.getByRole('heading',{name:'Accept your first payment'}).waitFor()
- const routes=['/docs','/docs/getting-started','/docs/api','/docs/funding','/docs/pocket','/docs/pocket/pay','/docs/pocket/transfers','/docs/pocket/exchange','/docs/pocket/stocks','/docs/pocket/earn','/docs/pocket/esim','/docs/pocket/local-payments','/docs/pocket/gifts','/docs/pocket/collect','/docs/pocket/collections','/docs/pocket/account','/docs/environment','/docs/security','/docs/compliance','/docs/terms','/docs/privacy','/docs/account-deletion'];
+ const routes=['/docs','/docs/getting-started','/docs/api','/docs/funding','/docs/pocket','/docs/pocket/pay','/docs/pocket/transfers','/docs/pocket/exchange','/docs/pocket/stocks','/docs/pocket/earn','/docs/pocket/esim','/docs/pocket/local-payments','/docs/pocket/gifts','/docs/pocket/collect','/docs/pocket/account','/docs/environment','/docs/security','/docs/compliance','/docs/terms','/docs/privacy','/docs/account-deletion'];
  for(const width of [390,1280]){
   await page.setViewportSize({width,height:900});
   for(const path of routes){await page.goto(base+path);await page.locator('main h1').waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),path+' overflows');assert.equal(await page.locator('aside nav > div').count(),3);}
@@ -40,5 +40,6 @@ try{const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.p
  await page.goto(base+'/docs/pocket/earn');assert((await page.locator('main').innerText()).includes('Services → Earn'));
  await page.goto(base+'/docs/pocket/esim');assert((await page.locator('main').innerText()).includes('My eSIMs'));
  await page.goto(base+'/docs/pocket/account');assert((await page.locator('main').innerText()).includes('Coming soon preview'));
- assert.deepEqual(errors,[]);console.log('PASS actual docs and console guide at 320/390/1280, light/dark, expandable real sample, separated browser/server code, three navigation groups, all 22 pages, removed-route redirects, mobile menu, bank boundary and no page errors.')
+ await page.goto(base+'/docs/pocket/collections');await page.waitForURL(base+'/docs/pocket/transfers');assert.equal(await page.getByRole('link',{name:'Collections',exact:true}).count(),0);
+ assert.deepEqual(errors,[]);console.log('PASS actual docs and console guide at 320/390/1280, light/dark, expandable real sample, separated browser/server code, three navigation groups, all 21 pages, removed-route redirects, mobile menu, bank boundary and no page errors.')
 }finally{await browser.close();await new Promise(r=>server.close(r))}

@@ -5,7 +5,7 @@ import GettingStarted from '../pages/docs/GettingStarted'
 import ApiReference from '../pages/docs/ApiReference'
 import FundingDocs from '../pages/docs/FundingDocs'
 import {PocketOverview,PocketPay,PocketTransfers,PocketExchange} from '../pages/docs/PocketDocs'
-import {PocketStocks,PocketEarn,PocketEsim,PocketLocalPayments,PocketGifts,PocketCollect,PocketCollections,PocketAccount} from '../pages/docs/PocketFeatureDocs'
+import {PocketStocks,PocketEarn,PocketEsim,PocketLocalPayments,PocketGifts,PocketCollect,PocketAccount} from '../pages/docs/PocketFeatureDocs'
 import SecurityDocs from '../pages/docs/SecurityDocs'
 import EnvironmentDocs from '../pages/docs/EnvironmentDocs'
 import ComplianceDocs from '../pages/docs/ComplianceDocs'
@@ -29,7 +29,7 @@ export default function DocsApp(){return <BrowserRouter><Routes>
   <Route path="pocket/local-payments" element={<PocketLocalPayments/>}/>
   <Route path="pocket/gifts" element={<PocketGifts/>}/>
   <Route path="pocket/collect" element={<PocketCollect/>}/>
-  <Route path="pocket/collections" element={<PocketCollections/>}/>
+  <Route path="pocket/collections" element={<Navigate to="/docs/pocket/transfers" replace/>}/>
   <Route path="pocket/account" element={<PocketAccount/>}/>
   <Route path="environment" element={<EnvironmentDocs/>}/>
   <Route path="security" element={<SecurityDocs/>}/>

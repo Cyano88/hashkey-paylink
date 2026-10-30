@@ -13,7 +13,6 @@ export function PocketOverview(){return <DocPage>
  ['Bills and bank transfers','local-payments','Airtime, data, TV, electricity and available local payouts.'],
  ['Gifts','gifts','Fund, share, claim and track asset gifts.'],
  ['XPay and terminals','collect','Receiving options, payment links, QR codes and terminals.'],
- ['Collections','collections','Shared collections and contribution history.'],
  ['Activity, account and support','account','Receipts, verification, limits, notifications, security and help.']
 ].map(([title,path,description])=><Link key={path} to={'/docs/pocket/'+path} className="block py-4"><span className="font-semibold text-gray-900 dark:text-white">{title} →</span><span className="mt-1 block text-sm">{description}</span></Link>)}</div></Section>
 <Section title="Start with your account"><p>Open Pocket and sign in with your email. Follow the wallet setup and payment-security prompts for the area you use. Stablecoins and Stocks can have different wallets and supported routes; check the selected account, asset and network before adding funds.</p><p>Use the balance visibility control when you want to hide amounts on screen. Display currency changes the estimate you see, not the assets you hold.</p></Section>
