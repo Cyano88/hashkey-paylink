@@ -16,7 +16,7 @@ import PocketBottomSheet from '../components/PocketBottomSheet'
 import PocketTransactionSheet from '../components/PocketTransactionSheet'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { PocketSkeletonBar } from '../components/PocketContentSkeletons'
 import { Check } from '../components/PocketIcons'
 import {formatPocketPaymentAmount} from '../lib/pocketMoney'
@@ -43,6 +43,10 @@ const networkLabel = (network: SendNetwork) => network === 'arc' ? 'Arc' : netwo
 function navPath(tab: PocketNavTab) { if (tab === 'profile') return POCKET_ROUTES.profile; if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'overview' }); if (tab === 'activity') return POCKET_ROUTES.activity; return POCKET_ROUTES.home }
 
 export default function PocketSendPage() {
+ const location=useLocation()
+ return <PocketSendRoute key={location.key}/>
+}
+function PocketSendRoute() {
   const [params] = useSearchParams()
   if(params.get('network')==='bsc'&&params.get('mode')==='address'&&!params.get('request'))return <PocketBscSendPage/>
   return params.get('network') === 'xlayer' && params.get('mode') === 'address' && !params.get('request') ? <PocketXLayerStablecoinSend/> : <PocketCircleSendPage/>

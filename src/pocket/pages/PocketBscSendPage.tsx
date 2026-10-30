@@ -28,11 +28,12 @@ export default function PocketBscSendPage(){
 }
 function BscSendForm({asset}:{asset:'USDC'|'USDT'}){
  const identity=usePocketIdentity(),balances=usePocketBscBalances(),{wallets}=useWallets(),{generateAuthorizationSignature}=useAuthorizationSignature(),navigate=useNavigate()
+ const [params]=useSearchParams()
  const sendKeypad=usePocketSendKeypad()
  const owner=identity.user?.id||'',storageKey='pocket:bsc-send:'+owner
  const latest=useRef({identity,wallets,generateAuthorizationSignature});latest.current={identity,wallets,generateAuthorizationSignature}
  const mounted=useRef(true),lock=useRef(false)
- const [recipient,setRecipient]=useState(''),[amount,setAmount]=useState(''),[busy,setBusy]=useState(false),[approvalBusy,setApprovalBusy]=useState(false),[checking,setChecking]=useState(true),[enabled,setEnabled]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[reviewOpen,setReviewOpen]=useState(false),[review,setReview]=useState<BscSendReview|null>(null),[pending,setPending]=useState<BscSendResult|null>(null),[result,setResult]=useState<BscSendResult|null>(null)
+ const [recipient,setRecipient]=useState(params.get('recipient')||''),[amount,setAmount]=useState(''),[busy,setBusy]=useState(false),[approvalBusy,setApprovalBusy]=useState(false),[checking,setChecking]=useState(true),[enabled,setEnabled]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[reviewOpen,setReviewOpen]=useState(false),[review,setReview]=useState<BscSendReview|null>(null),[pending,setPending]=useState<BscSendResult|null>(null),[result,setResult]=useState<BscSendResult|null>(null)
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
  const wallet=useCallback(async()=>{
   const current=latest.current,matching=current.wallets.filter(w=>w.walletClientType==='privy')

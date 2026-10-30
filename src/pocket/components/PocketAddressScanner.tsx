@@ -2,13 +2,14 @@ import {useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {ArrowLeftIcon,ArrowPathIcon,BoltIcon,BoltSlashIcon} from '@heroicons/react/24/outline'
 import {POCKET_NATIVE_BACK_EVENT} from '../lib/pocketNativeBack'
+import {parsePocketFundingCode} from '../lib/pocketFundingCode'
 import {pocketWalletAddressCode} from '../lib/pocketWalletAddressCode'
 
-export default function PocketAddressScanner({network,onAddress,onClose}:{network:string;onAddress(address:string):void;onClose():void}){
+export default function PocketAddressScanner({network,onAddress,onFunding,onClose}:{network:string;onAddress(address:string):void;onFunding?(path:string):void;onClose():void}){
  const [facing,setFacing]=useState<'environment'|'user'>('environment'),[attempt,setAttempt]=useState(0)
  const [error,setError]=useState(''),[ready,setReady]=useState(false),[torch,setTorch]=useState(false),[hasTorch,setHasTorch]=useState(false)
  const video=useRef<HTMLVideoElement>(null),stream=useRef<MediaStream|null>(null),back=useRef<HTMLButtonElement>(null)
- const callbacks=useRef({onAddress,onClose});callbacks.current={onAddress,onClose}
+ const callbacks=useRef({onAddress,onFunding,onClose});callbacks.current={onAddress,onFunding,onClose}
  useEffect(()=>{
   const previous=document.activeElement as HTMLElement|null,overflow=document.body.style.overflow
   document.body.style.overflow='hidden';back.current?.focus()
@@ -39,7 +40,7 @@ export default function PocketAddressScanner({network,onAddress,onClose}:{networ
      if(element.readyState>=2&&element.videoWidth){
       const scale=Math.min(1,720/element.videoWidth);canvas.width=Math.round(element.videoWidth*scale);canvas.height=Math.round(element.videoHeight*scale);context.drawImage(element,0,0,canvas.width,canvas.height)
       const pixels=context.getImageData(0,0,canvas.width,canvas.height),code=decode(pixels.data,pixels.width,pixels.height,{inversionAttempts:'attemptBoth'})
-      if(code){try{const address=pocketWalletAddressCode(code.data,network);disposed=true;stop();callbacks.current.onAddress(address);return}catch(reason){setError(reason instanceof Error?reason.message:'Use a valid wallet address.')}}
+      if(code){try{const funding=parsePocketFundingCode(code.data);if(funding){if(!callbacks.current.onFunding)throw Error('Open this funding QR with Pocket�s main scanner.');disposed=true;stop();callbacks.current.onFunding(funding.path);return}const address=pocketWalletAddressCode(code.data,network);disposed=true;stop();callbacks.current.onAddress(address);return}catch(reason){setError(reason instanceof Error?reason.message:'Use a valid wallet address.')}}
      }
      timer=window.setTimeout(tick,200)
      }catch{stop();setReady(false);setError('Camera interrupted. Open it again, or paste the address.')}

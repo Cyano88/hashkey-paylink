@@ -1,7 +1,9 @@
-export type PocketScanCode = {kind:'unified-xpay';id:string;url:string} | { kind: 'xpay'; id: string; url: string } | { kind: 'pos'; id: string; url: string } | { kind: 'checkout'; id: string; attempt: string; url: string }
+import {parsePocketFundingCode,type PocketFundingCode} from './pocketFundingCode'
+export type PocketScanCode = ({kind:'funding'} & PocketFundingCode) | {kind:'unified-xpay';id:string;url:string} | { kind: 'xpay'; id: string; url: string } | { kind: 'pos'; id: string; url: string } | { kind: 'checkout'; id: string; attempt: string; url: string }
 const hosts = new Set(['app.hashpaylink.com', 'hashpaylink.com', 'pocket.hashpaylink.com'])
 export function parsePocketScanCode(raw: string): PocketScanCode {
   if (typeof raw !== 'string' || raw.length > 4096) throw Error('This QR is not a supported Hash PayLink checkout.')
+  const funding=parsePocketFundingCode(raw);if(funding)return {kind:'funding',...funding}
   let url: URL
   try { url = new URL(raw.trim()) } catch { throw Error('Scan a Hash PayLink merchant or checkout QR.') }
   if (url.protocol !== 'https:' || !hosts.has(url.hostname) || url.username || url.password || url.port || url.hash) throw Error('This QR is not a supported Hash PayLink checkout.')
@@ -23,5 +25,5 @@ export function parsePocketScanCode(raw: string): PocketScanCode {
   return {kind:'pos',id,url:url.href}
 }
 export function pocketScanDestination(raw: string) {
-  try { const code=parsePocketScanCode(raw);return code.kind==='unified-xpay' ? '/xpay/checkout/'+code.id : code.kind==='xpay' ? '/xstocks/xpay?merchant='+encodeURIComponent(code.id) : '/home/scan?code='+encodeURIComponent(code.url) } catch { return '' }
+  try { const code=parsePocketScanCode(raw);return code.kind==='funding'?code.path:code.kind==='unified-xpay' ? '/xpay/checkout/'+code.id : code.kind==='xpay' ? '/xstocks/xpay?merchant='+encodeURIComponent(code.id) : '/home/scan?code='+encodeURIComponent(code.url) } catch { return '' }
 }
