@@ -1,3 +1,4 @@
+import {PocketPaymentMethodIcon} from '../pocket/components/PocketWebPaymentIdentity'
 import CheckoutReceiptDetails from './CheckoutReceiptDetails'
 import PocketReceiptReport from '../pocket/components/PocketReceiptReport'
 import { downloadReceiptFile, shareReceiptFile } from '../lib/shareReceiptFile'
@@ -102,7 +103,7 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
           <BrandMark receipt={receipt} className="h-9 w-9 shrink-0" />
           <span className="truncate text-sm font-bold tracking-[-0.02em]">{brand.name}</span>
         </span>
-        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:bg-white/10 dark:text-gray-300">{view.badge}</span>
+        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:bg-white/10 dark:text-gray-300">{(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')&&<PocketPaymentMethodIcon method={receipt.paymentMethod} className="mr-1 inline-block h-4 w-4"/>}{view.badge}</span>
       </header>
 
       <section className="mt-5">

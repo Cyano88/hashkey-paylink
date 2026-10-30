@@ -1,7 +1,7 @@
 import {checkoutStablecoins} from '../../src/lib/checkoutStablecoins.js'
 import{readDeveloperReceiptSettings}from'../developer-receipt-settings.js'
 import {ownsTerminalSetupKey,legacyXPayTerminal,assertUnifiedXPayDestination} from './unified-xpay-store.js'
-import { isStockCheckoutId, readStockCheckout, settleStockCheckout, assertStockCheckoutPayable } from '../hosted-stock-checkouts.js'
+import { isStockCheckoutId, readStockCheckoutBranding, readStockCheckout, settleStockCheckout, assertStockCheckoutPayable } from '../hosted-stock-checkouts.js'
 import { exactTokenTransfer } from '../exact-token-transfer.js'
 import type {XPayHistoryEntry} from '../../src/pocket/lib/pocketUnifiedXPay.js'
 ﻿import type { Request, Response } from 'express'
@@ -114,7 +114,10 @@ export default async function handler(req:Request,res:Response){
   if(action==='merchant'||action==='mine'){
    const s=await read(),merchant=action==='mine'?Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt):s.merchants[String(b.id||'')]||await checkoutMerchant(String(b.id||''),true)
    if((!merchant||merchant.deletedAt)&&action!=='mine')fail('This XPay merchant is unavailable.',404)
-   return res.json({ok:true,terminalId:action==='merchant'&&merchant?await legacyXPayTerminal(merchant.id,merchant.createKey):undefined,merchant:merchant?publicMerchant(merchant):null,merchants:action==='mine'?Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(publicMerchant):undefined,payments:action==='mine'?Object.values(s.payments).filter(p=>p.owner===owner||p.merchantOwner===owner).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):merchant&&isStockCheckoutId(merchant.id)?Object.values(s.payments).filter(p=>p.owner===owner&&p.merchantId===merchant.id).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):undefined})
+   const visiblePayments=action==='mine'?Object.values(s.payments).filter(p=>p.owner===owner||p.merchantOwner===owner):merchant&&isStockCheckoutId(merchant.id)?Object.values(s.payments).filter(p=>p.owner===owner&&p.merchantId===merchant.id):undefined
+   const history=visiblePayments?.sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment)
+   const brands=await readStockCheckoutBranding((history||[]).map(p=>p.merchantId))
+   return res.json({ok:true,terminalId:action==='merchant'&&merchant?await legacyXPayTerminal(merchant.id,merchant.createKey):undefined,merchant:merchant?publicMerchant(merchant):null,merchants:action==='mine'?Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(publicMerchant):undefined,payments:history?.map(p=>({...p,...brands[p.merchantId]}))})
   }
   if(action==='prepare'){
    const payer=String(b.wallet||'');await verifyStockWalletOwner(owner,payer)

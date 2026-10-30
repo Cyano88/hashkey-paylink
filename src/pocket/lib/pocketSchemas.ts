@@ -189,6 +189,9 @@ export type PocketActivityRow = {
   ts: number
   statusUpdatedAt?: number
   source?: string
+  merchantName?: string
+  merchantImageUrl?: string
+  paymentMethod?: 'wallet' | 'card' | 'bank_transfer'
   merchantId?: string
   contextLabel?: string
   settlementType?: string
@@ -624,6 +627,9 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && value.ts >= 0
     && (value.statusUpdatedAt === undefined || typeof value.statusUpdatedAt === 'number' && Number.isFinite(value.statusUpdatedAt) && value.statusUpdatedAt >= 0)
     && isOptionalBoundedString(value.source, 80)
+    && isOptionalBoundedString(value.merchantName, 320)
+    && isOptionalBoundedString(value.merchantImageUrl, 2048)
+    && (value.paymentMethod === undefined || ['wallet','card','bank_transfer'].includes(String(value.paymentMethod)))
     && isOptionalBoundedString(value.merchantId, 256)
     && isOptionalBoundedString(value.contextLabel, 500)
     && isOptionalBoundedString(value.settlementType, 80)

@@ -1,6 +1,6 @@
 import { GiftIcon } from '@heroicons/react/24/outline'
 import { createElement } from 'react'
-import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, QrCode, RequestMoney, CreditCard, Phone, Wifi, Tv, Lightbulb } from './PocketIcons'
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, QrCode, RequestMoney, Wallet, CreditCard, Phone, Wifi, Tv, Lightbulb } from './PocketIcons'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isOutgoingPosPurchase, isIncomingPosPayment } from '../lib/pocketPurchaseKind'
 import { pocketActivityStatus } from '../lib/pocketReceipt'
@@ -20,6 +20,7 @@ function UsdtActivityLogo({ className }: { className?: string }) {
 }
 
 export function pocketActivityIcon(row: PocketActivityRow) {
+  if(row.source==='hosted_checkout'||row.settlementType==='hosted_checkout')return row.paymentMethod==='card'?CreditCard:row.paymentMethod==='bank_transfer'?Landmark:Wallet
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
   if (source === 'gift') return GiftIcon
   if (source === 'esim') return Wifi

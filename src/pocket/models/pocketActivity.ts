@@ -2,6 +2,9 @@ import type { PocketPaymentFunding } from '../lib/pocketPaymentFunding'
 import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
 
 export type PocketActivityRow = {
+  merchantName?: string
+  merchantImageUrl?: string
+  paymentMethod?: 'wallet' | 'card' | 'bank_transfer'
   cashFunding?: boolean
   cashReceivedAmount?: string
   giftState?: 'funded' | 'claimed' | 'refunded'

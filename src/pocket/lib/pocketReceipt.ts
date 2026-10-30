@@ -152,6 +152,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     createdAt: row.ts,
     source,
     merchantId: row.merchantId,
+    paymentMethod: row.paymentMethod,
     settlementType: kind === 'bill_purchase' ? `bill_payment:${category}` : row.settlementType,
     variant: kind === 'bill_purchase' ? 'bills' : 'general',
     providerName: kind === 'bill_purchase' ? row.billProvider || row.memo : undefined,

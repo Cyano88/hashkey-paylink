@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {parseUnits} from 'viem'
 import {currentXLayerCheckoutConfig,normalizeXLayerCheckoutConfig,xlayerCheckoutAssets} from '../src/lib/xlayerCheckoutConfig.ts'
-import {createHostedStockCheckoutsHandler,readStockCheckoutReceipt,readStockCheckout,settleStockCheckout,drainStockCheckoutWebhooks,assertStockCheckoutPayable} from '../api/hosted-stock-checkouts.ts'
+import {createHostedStockCheckoutsHandler,readStockCheckoutBranding,readStockCheckoutReceipt,readStockCheckout,settleStockCheckout,drainStockCheckoutWebhooks,assertStockCheckoutPayable} from '../api/hosted-stock-checkouts.ts'
 import {createPaymentExecutionRepository} from '../api/pocket/payment-execution-intents.ts'
 import {stockAssets,stockUsdc} from '../src/pocket/lib/pocketXStocksWallet.ts'
 const root=await mkdtemp(join(tmpdir(),'stock-checkout-'))
@@ -36,6 +36,9 @@ try{for(const asset of xlayerCheckoutAssets){
  const made=await call('POST',body);assert.equal(made.status,201,JSON.stringify(made.data));const id=made.data.checkoutId
  assert.equal(Date.parse(made.data.checkout.expiresAt)-clock,15*60_000)
  assert.equal(made.data.checkout.brandImageUrl,policy.brandImageUrl)
+ assert.deepEqual(await readStockCheckoutBranding([id,id,'unknown'],d),{[id]:{merchantName:policy.merchantName,merchantImageUrl:policy.brandImageUrl}})
+ const brandOriginal=store.checkouts[id].merchantName;store.checkouts[id].merchantName='Tampered';assert.deepEqual(await readStockCheckoutBranding([id],d),{});store.checkouts[id].merchantName=brandOriginal
+
  if(policy.brandImageUrl){store.checkouts[id].brandImageUrl='https://merchant.example/changed.png';assert.equal(await readStockCheckout(id,false,d),null);store.checkouts[id].brandImageUrl=policy.brandImageUrl}
  assert.equal((await call('POST',body)).data.checkoutId,id)
  assert.equal((await call('POST',{...body,amount:'1'})).status,409)

@@ -1,8 +1,11 @@
+import {pocketPaymentMethodPaths} from '../pocket/lib/pocketPaymentMethodPaths'
+import {webPaymentMethodLabel} from '../pocket/lib/pocketWebPaymentMethod'
 import { pocketFundingRoute, type PocketPaymentFunding } from '../pocket/lib/pocketPaymentFunding'
 import { CHAIN_META, type ChainKey } from './chains'
 import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
+  paymentMethod?: 'wallet' | 'card' | 'bank_transfer'
   giftState?: 'funded' | 'claimed' | 'refunded'
   giftRecipient?: string
   paymentFunding?: PocketPaymentFunding[]
@@ -279,9 +282,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
     variant:'general',badge:'Web payment',amount:`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`,timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
-      ...(receipt.brandKind==='pocket'?[{label:'Type',value:'Wallet payment'},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
+      ...(receipt.brandKind==='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
-      ...(receipt.brandKind!=='pocket'?[{label:'Type',value:'Wallet payment'}]:[]),
+      ...(receipt.brandKind!=='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)}]:[]),
       {label:'Network',value:network},
       ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
       ...(receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
@@ -478,6 +481,7 @@ function drawReceiptCanvas(
   ctx.font = `700 17px ${sans}`
   const brandX = brand.kind === 'partner' && !logo ? 52 : 104
   if (!wordmark) ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
+  if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'){ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;ctx.stroke(new Path2D(pocketPaymentMethodPaths[receipt.paymentMethod||'wallet']));ctx.restore()}
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)

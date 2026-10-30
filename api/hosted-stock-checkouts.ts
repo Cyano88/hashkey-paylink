@@ -58,6 +58,15 @@ export async function readStockCheckout(id: string, allowExpired = false, d: Dep
   if (!record || !valid(record,d) || (!allowExpired && !record.payment && Date.parse(record.expiresAt) <= d.now())) return null
   return record
 }
+// Read the signed checkout snapshot, including expired paid checkouts, for history branding.
+export async function readStockCheckoutBranding(ids:string[],d:Dependencies=defaults){
+ const brands:Record<string,{merchantName:string;merchantImageUrl?:string}>={}
+ const wanted=[...new Set(ids.filter(isStockCheckoutId))]
+ if(!wanted.length||!d.hasStore())return brands
+ const store=await d.read()
+ for(const id of wanted){const r=store.checkouts[id];if(r&&valid(r,d))brands[id]={merchantName:r.merchantName,merchantImageUrl:r.brandImageUrl}}
+ return brands
+}
 const response = (r: StockCheckout) => ({ ok: true, checkoutId: r.id, checkoutUrl: '/pay/c/' + r.id, paymentUrl: '/xpay/' + r.id,
   checkout: { id: r.id, title: r.title, merchantName: r.merchantName, brandImageUrl:r.brandImageUrl, amount: r.amount, asset: r.asset, token: r.token, network: 'xlayer', stockCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
 })
