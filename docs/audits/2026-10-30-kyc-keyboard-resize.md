@@ -17,3 +17,9 @@
 
 ## Limit
 The double-resize defect is confirmed. Its causal connection to every reported intermittent keyboard dismissal is not yet proven. Do not describe a provider/identity verification submission as tested or approved.
+
+## Installed build
+- Native Vite build completed; Capacitor sync succeeded; Gradle assembleDebug BUILD SUCCESSFUL.
+- APK SHA256: 91DDA5F0207B1FC6E32EF2BA7DE1EEFFDC61BAC6701561C5F9B38969D0F9FE19.
+- adb install -r succeeded; package update time 2026-10-30 20:36:51; relaunched WebView PID 28700.
+- Reopened Identity verification / Advanced. Provider resumed to its consent screen; no consent was granted by the assistant. Post-install real form typing therefore remains for the user to retry.
