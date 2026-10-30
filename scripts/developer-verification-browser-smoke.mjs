@@ -8,13 +8,13 @@ try {
  await page.getByRole('heading',{name:'Business verification',exact:true}).waitFor()
  for(const [label,value] of Object.entries({'Legal company name':'Example Limited','Trading name':'Example','Phone number':'+2348000000000','Website':'https://example.test','Registration number':'RC-TEST-123','Registered business address':'Example Street, Abuja','What does your business do?':'Software subscriptions and checkout services.'}))await page.getByLabel(label,{exact:true}).fill(value)
  const file={name:'example-evidence.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7\nSynthetic fixture - not a real document')}
- for(const input of await page.locator('input[type=file]').all()) {await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor();await page.getByRole('button',{name:'Continue',exact:true}).waitFor({state:'visible'})}
+ for(const input of await page.locator('.verification-documents > .verification-document input[type=file]').all()) {await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor();await page.getByRole('button',{name:'Continue',exact:true}).waitFor({state:'visible'})}
  for(const width of [320,390,768,1440]) for(const dark of [false,true]) {
   await page.setViewportSize({width,height:960})
   await page.evaluate(dark=>document.documentElement.classList.toggle('dark',dark),dark)
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   const geometry=await page.evaluate(()=>{const form=document.querySelector('.verification-documents').getBoundingClientRect();return [...document.querySelectorAll('.verification-documents > .verification-document .verification-upload')].map(el=>({width:el.getBoundingClientRect().width,expected:form.width}))})
-  assert.ok(geometry.length>=5)
+  assert.equal(geometry.length,3)
   for(const size of geometry)assert.ok(Math.abs(size.width-size.expected)<2,'each company upload spans the form width')
   assert.equal(await page.getByLabel('Legal company name',{exact:true}).evaluate(el=>getComputedStyle(el).fontSize),'16px')
   assert.ok((await page.getByLabel('Legal company name',{exact:true}).boundingBox()).height>=50)
@@ -22,6 +22,9 @@ try {
   await page.screenshot({path:'output/playwright/verification-layout-'+width+(dark?'-dark':'-light')+'.png'})
   if(width===1440){await page.locator('.verification-document').first().scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/verification-uploads-'+(dark?'dark':'light')+'.png'})}
  }
+ await page.locator('.verification-extras summary').click()
+ for(const name of ['AML policy','KYC policy']){const card=page.locator('.verification-document').filter({has:page.getByRole('heading',{name,exact:true})});assert.match(await card.innerText(),/Optional/)}
+ await page.locator('.verification-extras summary').click()
  await page.setViewportSize({width:390,height:844})
  await page.evaluate(()=>document.documentElement.classList.remove('dark'))
  await page.getByRole('button',{name:'Save draft',exact:true}).click()
@@ -36,7 +39,7 @@ try {
  await page.screenshot({path:'output/playwright/verification-director-mobile.png',fullPage:true})
  await page.getByLabel('Is this person a politically exposed person or a close associate?',{exact:true}).selectOption('false')
  await page.getByLabel('Government ID type',{exact:true}).selectOption('Passport')
- for(const input of await page.locator('input[type=file]').all()){await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor()}
+ for(const input of await page.locator('input[type=file]').all()){ await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor()}
  await page.getByRole('button',{name:'Continue',exact:true}).click()
  await page.getByRole('checkbox').check()
  await page.getByRole('button',{name:'Submit for review',exact:true}).click()

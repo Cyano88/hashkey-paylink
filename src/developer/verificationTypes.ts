@@ -7,3 +7,7 @@ export const businessDocumentSlots=[['incorporation','Certificate of incorporati
 export const verificationLabels:Record<VerificationStatus,string>={not_started:'Not started',draft:'Draft',submitted:'Under review',changes_requested:'Changes requested',approved:'Verified',rejected:'Not approved'}
 export function emptyBusinessApplication():BusinessApplication{return {companyName:'',tradingName:'',phone:'',website:'',address:'',registrationNumber:'',country:'NG',description:'',owners:[emptyBusinessOwner()],attested:false}}
 export function emptyBusinessOwner():BusinessOwner{return {id:crypto.randomUUID(),fullName:'',birthDate:'',address:'',ownership:'',pep:null,idType:'',idNumber:'',issuingCountry:'NG',bvn:'',nin:'',controlPerson:false,director:false}}
+
+// Default merchant evidence; review may request additional policy documents.
+export const requiredCompanyDocumentSlots=['incorporation','articles','business-address'] as const
+export function isRequiredBusinessDocument(slot:string){return (requiredCompanyDocumentSlots as readonly string[]).includes(slot)||slot.startsWith('owner-id:')||slot.startsWith('owner-address:')}

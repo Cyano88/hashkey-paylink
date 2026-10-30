@@ -24,7 +24,9 @@ assert.equal(JSON.parse(openVerification(store.projects[projectId].businessVerif
 assert.equal((await call('verification-submit',{application,revision:1})).statusCode,400)
 assert.equal((await call('verification-save',{application,revision:0})).statusCode,409)
 let revision=1
-for(const slot of ['incorporation','articles','business-address','aml','kyc','owner-id:'+ownerId,'owner-address:'+ownerId]){const result=await call('verification-upload',{revision,slot,filename:'evidence.pdf',bytes:Buffer.from('%PDF-1.7\nsynthetic test')});assert.equal(result.statusCode,200,result.body?.error);revision=result.body.verification.revision}
+for(const slot of ['incorporation','articles','business-address','owner-id:'+ownerId,'owner-address:'+ownerId]){const result=await call('verification-upload',{revision,slot,filename:'evidence.pdf',bytes:Buffer.from('%PDF-1.7\nsynthetic test')});assert.equal(result.statusCode,200,result.body?.error);revision=result.body.verification.revision}
+for(const slot of ['incorporation','articles','business-address','owner-id:'+ownerId,'owner-address:'+ownerId])assert.throws(()=>validateBusinessSubmission(application,store.projects[projectId].businessVerification.documents.filter(d=>d.slot!==slot)),{status:400})
+assert.ok(!store.projects[projectId].businessVerification.documents.some(d=>['aml','kyc'].includes(d.slot)))
 assert.equal((await call('verification-submit',{application,revision})).statusCode,200);revision++
 assert.equal((await call('verification-save',{application,revision})).statusCode,409)
 const documentId=store.projects[projectId].businessVerification.documents[0].id

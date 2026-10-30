@@ -1,3 +1,4 @@
+import {requiredCompanyDocumentSlots} from '../src/developer/verificationTypes.js'
 import {createCipheriv,createDecipheriv,createHash,randomBytes,randomUUID} from 'node:crypto'
 import {readDurableJson,writeDurableJson,queryDurablePostgres} from './render-durable-store.js'
 import type {BusinessApplication,BusinessVerification,VerificationDocument} from '../src/developer/verificationTypes.js'
@@ -32,7 +33,7 @@ export function validateBusinessSubmission(a:BusinessApplication,documents:Verif
   if((o.bvn&&!/^\d{11}$/.test(o.bvn))||(o.nin&&!/^\d{11}$/.test(o.nin)))fail('BVN and NIN must contain 11 digits when provided.')
  }
  if(ownership>100.001)fail('Total ownership cannot exceed 100%.')
- for(const slot of ['incorporation','articles','business-address','aml','kyc',...a.owners.flatMap(o=>['owner-id:'+o.id,'owner-address:'+o.id])])if(!documents.some(d=>d.slot===slot))fail('Upload all required company and owner documents.')
+ for(const slot of [...requiredCompanyDocumentSlots,...a.owners.flatMap(o=>['owner-id:'+o.id,'owner-address:'+o.id])])if(!documents.some(d=>d.slot===slot))fail('Upload all required company and owner documents.')
  if(!a.attested)fail('Confirm that the information is accurate and you are authorized to submit it.')
 }
 const documentKey=(projectId:string,id:string)=>'hashpaylink:business-document:'+projectId+':'+id
