@@ -64,7 +64,7 @@ export async function readStockCheckoutBranding(ids:string[],d:Dependencies=defa
  const wanted=[...new Set(ids.filter(isStockCheckoutId))]
  if(!wanted.length||!d.hasStore())return brands
  const store=await d.read()
- for(const id of wanted){const r=store.checkouts[id];if(r&&valid(r,d))brands[id]={merchantName:r.merchantName,merchantImageUrl:r.brandImageUrl}}
+ for(const id of wanted){const r=store.checkouts[id];if(r&&valid(r,d))brands[id]={merchantName:r.merchantName,merchantImageUrl:r.brandImageUrl?.startsWith('/')&&!r.brandImageUrl.startsWith('//')?new URL(r.brandImageUrl,'https://app.hashpaylink.com').href:r.brandImageUrl}}
  return brands
 }
 const response = (r: StockCheckout) => ({ ok: true, checkoutId: r.id, checkoutUrl: '/pay/c/' + r.id, paymentUrl: '/xpay/' + r.id,
