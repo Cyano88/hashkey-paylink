@@ -25,3 +25,9 @@ The mapper is an internal tested building block, not a public endpoint or an ope
 - All identity data used by tests is synthetic. No real Paycrest order, KYC transmission or money movement.
 
 Source schema checked: https://docs.paycrest.io/implementation-guides/sender-api-integration#on-ramp-customer-kyc
+
+## Release verification
+
+Source 05c263680421648fabb9c38af45d8397a98af75e is live (Render dep-dbi9103bc2fs73aei89g, 2026-10-30T12:47:17Z). Post-deploy health returned HTTP 200 and database true. Existing operational health remains false with the unchanged 37 stale unresolved records (12 bank payouts, 24 hosted checkouts, 1 POS). This change does not classify or clear that backlog.
+
+Inspected output/playwright/verification-director-mobile.png: director and authorized-representative controls are separate and readable. Visual verification used synthetic browser data; no production business application was edited or submitted. The mapper remains internal and unconnected to provider order creation.
