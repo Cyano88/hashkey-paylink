@@ -21,12 +21,12 @@ globalThis.fetch=async(url,init)=>{
 try{
  const {createPaycrestOfframpOrder}=await import('../.codex-temp/paycrest-fee-payer-fixture.mjs')
  const input={merchantId:'fixture',amountNgn:'1000',estimatedAmountUsdc:'0.732075',bankCode:'FIXTURE',accountNumber:'0000000001',accountName:'FIXTURE',refundAddress:'0x'+'1'.repeat(40),payerName:'FIXTURE'}
- for(const [intentId,source,fiatCurrency,unifiedXPay] of [['ng','bank-withdraw','NGN',false],['ug','bank-withdraw','UGX',false],['xpay','ngpos','NGN',true]]){
+ for(const [intentId,source,fiatCurrency,unifiedXPay] of [['ng','bank-withdraw','NGN',false],['ug','bank-withdraw','UGX',false],['xpay','ngpos','NGN',true],['hosted-ng','hosted-checkout','NGN',false],['hosted-ug','hosted-checkout','UGX',false]]){
   const order=await createPaycrestOfframpOrder({...input,intentId,source,fiatCurrency,unifiedXPay})
   assert.equal(payload.transactionFeePayer,'customer');assert.equal(payload.senderFeePercent,'0.25');assert.equal(payload.destination.currency,fiatCurrency)
   assert.equal(order.amount_usdc,'0.753875','Exact funded amount includes full platform fee and provider transaction cost')
  }
  forceNetFee=true
- await assert.rejects(createPaycrestOfframpOrder({...input,intentId:'bad',source:'bank-withdraw'}),/bank fee could not be verified/)
- console.log('PASS actual NG/UG bank and XPay requests pin customer fee payer, preserve full 0.25%, bind total, and reject net-fee responses; no real orders created.')
+ for(const source of ['bank-withdraw','hosted-checkout'])await assert.rejects(createPaycrestOfframpOrder({...input,intentId:'bad-'+source,source}),/bank fee could not be verified/)
+ console.log('PASS actual NG/UG bank, hosted local settlement and XPay requests pin customer fee payer, preserve full 0.25%, bind total, and reject net-fee responses; no real orders created.')
 }finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.PAYCREST_API_KEY;else process.env.PAYCREST_API_KEY=oldKey;delete globalThis.__feePayerStore}

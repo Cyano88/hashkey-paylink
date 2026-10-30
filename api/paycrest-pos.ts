@@ -410,8 +410,8 @@ export async function createPaycrestOfframpOrder(input: {
     },
     reference,
   }
-  // Pocket payouts use the same explicit treasury fee as XPay, never the provider account default.
-  const pocketSenderFee = input.unifiedXPay || input.source === 'bank-withdraw'
+  // Current Pocket, XPay and hosted local payouts share the approved explicit fee policy.
+  const pocketSenderFee = input.unifiedXPay || input.source === 'bank-withdraw' || input.source === 'hosted-checkout'
   if (pocketSenderFee) Object.assign(payload, xpaySenderFee())
   else if (senderFeePercent) payload.senderFeePercent = senderFeePercent
 
