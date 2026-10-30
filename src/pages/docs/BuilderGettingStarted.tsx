@@ -126,7 +126,7 @@ app.use(express.json());`}</CodeBlock>
   ]}/>
   <p>The return URL is navigation, not payment proof. When the customer returns or refreshes, your page should ask your backend for the saved order status. Your backend can recheck the API using the same order-confirmation function used by your webhook. A scheduled job should also check unfinished orders in case a webhook or browser return was missed.</p>
   <p>Your return page and a scheduled worker should call the same recovery helper. It reads authenticated payment status before storing confirmation; it does not create another checkout or charge.</p>
-  <CodeBlock lang="javascript � server recovery">{`import {recoverOrderPayment} from './hashpaylink.mjs';
+  <CodeBlock lang="javascript - server recovery">{`import {recoverOrderPayment} from './hashpaylink.mjs';
 
 // In your order-status endpoint: first authenticate the customer and verify ownership.
 const payment = await recoverOrderPayment(order, process.env.HASHPAYLINK_API_KEY, orders);
