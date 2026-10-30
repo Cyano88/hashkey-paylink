@@ -1,3 +1,4 @@
+import {validBuilderProfileId} from '../src/lib/builderProfiles.js'
 import type {Request,Response} from 'express'
 import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto'
 import {readDurableJson,mutateDurableJson} from './render-durable-store.js'
@@ -7,6 +8,7 @@ type Key = {id:string;prefix:string;digest:string;createdAt:string;revokedAt?:st
 type Store = {keys:Key[];payments:SandboxPayment[];requests:Record<string,{digest:string;id:string}>}
 type Dependencies = {
   verify:(req:Request)=>Promise<{userId:string}>;
+  resolveProfile?:(ownerId:string,profileId:string)=>Promise<string>;
   read:(key:string)=>Promise<Store|undefined>;
   mutate:(key:string,update:(current:Store|undefined)=>Store)=>Promise<Store>;
   now:()=>Date;
@@ -29,9 +31,18 @@ export function createDeveloperSandboxHandler(verify:Dependencies['verify'],over
    const credential=String(req.headers['x-api-key']??bearer)
    if(/^hpl_(live|app|cli)_/.test(credential))fail('Production credentials cannot access the sandbox.',403)
    const testKey=credential.startsWith('hpl_test_')
+   if(testKey&&req.query?.profileId!==undefined)fail('A sandbox key is already bound to its profile. Omit profileId.',400)
    let owner:string
    if(testKey){const match=/^hpl_test_([a-f0-9]{64})_([a-f0-9]{64})$/.exec(credential);if(!match)fail('Invalid sandbox key.',401);owner=match![1]}
-   else owner=hash((await deps.verify(req)).userId)
+   else {
+    const identity=await deps.verify(req),profileId=req.query?.profileId??'personal'
+    if(!validBuilderProfileId(profileId))fail('Choose a valid profile.')
+    if(profileId!=='personal'){
+     if(!deps.resolveProfile)fail('Business sandbox is unavailable.',503)
+     await deps.resolveProfile!(identity.userId,profileId as string)
+    }
+    owner=hash(identity.userId+(profileId==='personal'?'':'\0profile:'+profileId))
+   }
    const storeKey='hashpaylink:developer-sandbox:v1:'+owner
    const authorize=(store:Store)=>{if(testKey&&!store.keys.some(key=>!key.revokedAt&&same(key.digest,hash(credential))))fail('Invalid or revoked sandbox key.',401)}
    const current=await deps.read(storeKey)??empty();authorize(current)

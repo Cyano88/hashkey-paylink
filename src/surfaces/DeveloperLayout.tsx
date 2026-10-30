@@ -14,13 +14,13 @@ export default function DeveloperLayout() {
         {operations && <div id="operations-navigation-trigger" className="shrink-0" />}
         <Link to="/" aria-label="Hash PayLink developer home" className="flex min-h-11 shrink-0 items-center gap-2.5">
           <img src="/hash-logo-transparent.png" alt="" className="h-7 w-7 object-contain dark:invert" />
-          <span className="text-sm font-semibold tracking-normal sm:text-base">Hash PayLink</span>
+          <span className="hidden text-sm font-semibold tracking-normal sm:inline sm:text-base">Hash PayLink</span>
         </Link>
         {operations && <div id="operations-workspace-title" className="min-w-0 truncate border-l border-gray-200 pl-3 text-xs text-gray-500 dark:border-white/10 dark:text-gray-400" />}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {!operations && <div id="developer-account-menu" />}
-          {!operations && <a href="mailto:support@hashpaylink.com" className="hidden min-h-11 items-center text-sm font-medium text-gray-600 dark:text-gray-300 sm:inline-flex">Need help?</a>}
+          {!operations && <a href="mailto:support@hashpaylink.com" className="hidden min-h-11 items-center text-sm font-medium text-gray-600 dark:text-gray-300 lg:inline-flex">Need help?</a>}
           <button type="button" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10">{theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</button>
         </div>
       </nav>

@@ -1,3 +1,4 @@
+import {builderProfilesForProjects,projectBuilderProfileId,validBuilderProfileId,type BuilderProfile} from '../src/lib/builderProfiles.js'
 import {productionCapabilities, productionVerificationAllows, type DeveloperAccountType} from '../src/lib/developerAccess.js'
 import {createDeveloperSandboxHandler} from './developer-sandbox.js'
 import{normalizeReceiptEmailSettings,defaultReceiptEmailSettings,type ReceiptEmailSettings}from'../src/lib/receiptEmailSettings.js'
@@ -71,6 +72,7 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  builderProfileId?: string
   accountType?: DeveloperAccountType
   personalKycVerified?: boolean
   receiptEmails?: ReceiptEmailSettings
@@ -126,7 +128,7 @@ type DeveloperProject = {
   updatedAt: string
 }
 
-type DeveloperStore = { projects: Record<string, DeveloperProject>; profiles?: Record<string, { name: string; role: string; updatedAt: string }> }
+type DeveloperStore = { businessProfiles?: Record<string, BuilderProfile & {ownerId:string}>; projects: Record<string, DeveloperProject>; profiles?: Record<string, { name: string; role: string; updatedAt: string }> }
 
 export type DeveloperCheckoutPolicy = {
   accountType?: DeveloperAccountType
@@ -413,6 +415,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     : undefined
   return {
     id: project.id,
+    builderProfileId: projectBuilderProfileId(project),
     accountType: project.accountType ?? 'business',
     productionAccess: productionVerificationAllows(project),
     enabledCapabilities: productionCapabilities(project),
@@ -618,7 +621,17 @@ function adminProjectIndex(store: DeveloperStore | undefined) {
 }
 
 export function createDeveloperProjectsHandler(dependencies: Dependencies = defaults) {
-  const sandboxHandler = createDeveloperSandboxHandler(dependencies.verify)
+  async function profilesForOwner(ownerId:string) {
+    const [projects,profiles]=await Promise.all([dependencies.read(STORE_KEY),dependencies.read('hashpaylink:developer-business-profiles:v1')])
+    return builderProfilesForProjects(Object.values(projects?.projects??{}).filter(p=>p.ownerId===ownerId),Object.values(profiles?.businessProfiles??{}).filter(p=>p.ownerId===ownerId).map(({ownerId,...profile})=>profile))
+  }
+  async function ownedProfile(ownerId:string,id:unknown) {
+    if(!validBuilderProfileId(id))throw Object.assign(Error('Choose a valid profile.'),{status:400})
+    const profile=(await profilesForOwner(ownerId)).find(p=>p.id===id)
+    if(!profile)throw Object.assign(Error('Profile not found for this account.'),{status:404})
+    return profile
+  }
+  const sandboxHandler = createDeveloperSandboxHandler(dependencies.verify,{resolveProfile:async(owner,id)=>{await ownedProfile(owner,id);return id}})
   return async function developerProjectsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     try {
@@ -660,13 +673,26 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const scope = requireDeveloperAdmin(identity, dependencies, req)
           return res.json(adminProjectIndex(scope ? { projects: Object.fromEntries(Object.entries(store?.projects || {}).filter(([id]) => scope.projectIds.includes(id))) } : store))
         }
-        const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId && project.removal?.status!=='deleted')
-        return res.json({ ok: true, projects: projects.map(project => projectPublic(project)) })
+        const profiles=await profilesForOwner(identity.userId)
+        const selected=req.query?.profileId
+        if(selected!==undefined){if(!validBuilderProfileId(selected)||!profiles.some(p=>p.id===selected))return res.status(404).json({ok:false,error:'Profile not found for this account.'})}
+        const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId && project.removal?.status!=='deleted' && (selected===undefined||projectBuilderProfileId(project)===selected))
+        return res.json({ ok: true, projects: projects.map(project => projectPublic(project)),builderProfiles:profiles })
       }
 
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const action = clean(req.body?.action, 40).toLowerCase()
       if(req.method==='POST'&&action==='remove-app') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.body?.projectId,80),ownerId:identity.userId,confirmName:req.body?.confirmName,remove:true}))
+      if(req.method==='POST'&&action==='create-builder-profile') {
+        const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
+        if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
+        const profile:BuilderProfile={id:'business_'+randomUUID().replace(/-/g,''),name,type:'business',createdAt:dependencies.now().toISOString()}
+        await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>{
+          if(Object.values(current?.businessProfiles??{}).filter(p=>p.ownerId===identity.userId).length>=20)throw Object.assign(Error('Contact support before adding more business profiles.'),{status:409})
+          return {projects:{},businessProfiles:{...current?.businessProfiles,[profile.id]:{...profile,ownerId:identity.userId}}}
+        })
+        return res.status(201).json({ok:true,builderProfile:profile})
+      }
       if (req.method === 'PUT' && action === 'update-profile') {
         const name = clean(req.body?.name, 100)
         const role = clean(req.body?.role, 100)
@@ -699,9 +725,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (Array.isArray(req.body?.capabilities) && req.body.capabilities.some((value: unknown) => !isOpenCheckoutProduct(clean(value, 40).toLowerCase()))) return res.status(409).json({ ok: false, error: 'Choose Accept payments or Fund Polymarket accounts. Other products are not open for new integrations.' })
         const capabilities = requestedCapabilities(req.body?.capabilities, checkoutMode)
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
+        const selectedProfile=req.body?.builderProfileId===undefined?undefined:await ownedProfile(identity.userId,req.body.builderProfileId)
+        if(selectedProfile&&req.body?.accountType!==undefined&&req.body.accountType!==selectedProfile.type)return res.status(400).json({ok:false,error:'The app type must match its selected profile.'})
+        if(selectedProfile?.type==='business')await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>({projects:{},businessProfiles:{...current?.businessProfiles,[selectedProfile.id]:{...selectedProfile,ownerId:identity.userId}}}))
         const now = dependencies.now().toISOString()
         const project: DeveloperProject = {
-          accountType: req.body?.accountType ?? 'business',
+          builderProfileId: selectedProfile?.id,
+          accountType: selectedProfile?.type ?? req.body?.accountType ?? 'business',
           businessVerification: verificationEmpty(dependencies.requireVerification?.() ?? false),
           id: dependencies.createProjectId(), ownerId: identity.userId, ownerEmail: identity.email,
           name, website, brandImageUrl: '', useCase, checkoutMode, capabilities, productSettingsVersion: 2, settlementMode: 'usdc', settlementStatus: 'review_required',
@@ -905,6 +935,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       }
 
       const currentProject = findOwnedProject(currentStore, projectId, identity.userId)
+      if(currentProject && req.body?.builderProfileId!==undefined && req.body.builderProfileId!==projectBuilderProfileId(currentProject))return res.status(409).json({ok:false,error:'This app belongs to a different profile. Reload it in its original profile.'})
       if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
 
       if (req.method === 'POST' && action === 'directory-profile') {

@@ -8,7 +8,7 @@ try{
  const page=await browser.newPage({viewport:{width:1440,height:960}}),errors=[]
  page.on('pageerror',e=>errors.push(e.message))
  await page.addInitScript(()=>{const native=window.fetch.bind(window);let value=native;Object.defineProperty(window,'fetch',{get:()=>value,set:next=>{value=(input,options)=>String(input).includes('resource=sandbox')?native(input,options):next(input,options)}})})
- await page.route('**/api/developer-projects?resource=sandbox',async route=>{
+ await page.route('**/api/developer-projects?resource=sandbox*',async route=>{
   const request=route.request();const response={statusCode:200,status(n){this.statusCode=n;return this},json(body){this.body=body;return this}}
   await handler({method:request.method(),body:request.postDataJSON(),headers:request.headers(),query:{resource:'sandbox'}},response)
   await route.fulfill({status:response.statusCode,contentType:'application/json',body:JSON.stringify(response.body)})

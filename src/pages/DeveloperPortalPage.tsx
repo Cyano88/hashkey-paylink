@@ -1,3 +1,5 @@
+import ProfileSwitcher from '../developer/ProfileSwitcher'
+import {PERSONAL_PROFILE,builderProfilesForProjects,projectBuilderProfileId,type BuilderProfile} from '../lib/builderProfiles'
 import SandboxPanel from '../developer/SandboxPanel'
 import {productionVerificationAllows} from '../lib/developerAccess'
 import BuilderQuickstart from '../developer/BuilderQuickstart'
@@ -35,6 +37,7 @@ type Network = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon' | 'solana'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
+  builderProfileId?: string
   accountType?: 'individual'|'business'
   personalKycVerified?: boolean
   productionAccess?: boolean
@@ -104,7 +107,8 @@ export default function DeveloperPortalPage() {
   const creatingProject = useRef(false)
   const savingProject = useRef(false)
   const [receivingWallets, setReceivingWallets] = useState<Record<string,string>>({})
-  const [projects, setProjects] = useState<Project[]>([])
+  const [allProjects, setProjects] = useState<Project[]>([])
+  const [builderProfiles,setBuilderProfiles]=useState<BuilderProfile[]>([PERSONAL_PROFILE])
   const [authWaitExpired, setAuthWaitExpired] = useState(false)
   const [params, setParams] = useSearchParams()
   const [activeId, setActiveId] = useState(params.get('project') ?? '')
@@ -117,10 +121,35 @@ export default function DeveloperPortalPage() {
   const selectedTab = params.get('section')
   const tab: PortalSection = ['overview','products','activity','setup','verification','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
   const sandbox = params.get('environment') === 'test' || (!params.has('environment') && !params.has('project') && !params.has('section'))
+  const linkedProfileProject=allProjects.find(p=>p.id===params.get('project'))
+  const activeProfileId=linkedProfileProject?projectBuilderProfileId(linkedProfileProject):params.get('profile')??(selectedTab&&!sandbox&&allProjects[0]?projectBuilderProfileId(allProjects[0]):'personal')
+  const activeProfile=builderProfiles.find(p=>p.id===activeProfileId)??PERSONAL_PROFILE
+  const projects=allProjects.filter(p=>projectBuilderProfileId(p)===activeProfile.id)
+  function applyProfileChoice(id:string) {
+    setVerificationDirty(false);setDraft(null);setWebhookUrl('');setNewKey(null);setNewWebhookSecret(null);setCreatingNew(false);setActiveId('');setError('');setNotice('')
+    setParams({profile:id,environment:sandbox?'test':'live',section:'home'})
+  }
+  function selectProfile(id:string) {
+    if(busy||!builderProfiles.some(p=>p.id===id))return false
+    if(id===activeProfile.id)return true
+    if(hasUnsavedChanges()&&!window.confirm('Discard unsaved app changes before switching profiles?'))return false
+    applyProfileChoice(id);return true
+  }
+  async function createBusinessProfile(name:string) {
+    if(busy)return
+    if(hasUnsavedChanges()&&!window.confirm('Discard unsaved app changes before creating a business profile?'))throw Error('Your current app changes have been kept.')
+    const generation=loadGeneration.current
+    setBusy(true)
+    try{const data=await api('POST',{action:'create-builder-profile',name});if(generation!==loadGeneration.current)return
+      if(!data.builderProfile)throw Error('Business profile could not be loaded.')
+      loadGeneration.current+=1;setLoading(false)
+      setBuilderProfiles(current=>[...current,data.builderProfile!]);applyProfileChoice(data.builderProfile.id)
+    }finally{setBusy(false)}
+  }
   function switchEnvironment(production:boolean) {
     if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved app changes?'))) return
     resetProjectDraft();setCreatingNew(false);setNewKey(null);setNewWebhookSecret(null);setError('');setNotice('')
-    setParams({environment:production?'live':'test',section:'home'})
+    setParams({environment:production?'live':'test',section:'home',profile:activeProfile.id})
   }
   const accountView = selectedTab === 'home' || (!selectedTab && !params.get('project')) ? 'home' : selectedTab === 'businesses' ? 'businesses' : selectedTab === 'apps' ? 'apps' : null
   const showingApps = accountView === 'apps'
@@ -128,14 +157,14 @@ export default function DeveloperPortalPage() {
   function openAccount(section:'home'|'apps'|'businesses') {
     if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved app changes?'))) return
     resetProjectDraft(); setCreatingNew(false); setNewKey(null); setNewWebhookSecret(null)
-    setParams(current => { const next = new URLSearchParams(current); next.set('section', section); next.delete('project'); return next })
+    setParams(current => { const next = new URLSearchParams(current); next.set('section', section); next.set('profile',activeProfile.id); next.delete('project'); return next })
   }
-  function hasUnsavedChanges() { return Boolean(verificationDirty || active && ((draft && editableProjectState(draft)!==editableProjectState(active)) || webhookUrl !== active.webhookUrl)) }
+  function hasUnsavedChanges() { return Boolean((creatingNew && createForm.name.trim()) || verificationDirty || active && ((draft && editableProjectState(draft)!==editableProjectState(active)) || webhookUrl !== (active.webhookUrl ?? ''))) }
   function resetProjectDraft() { setVerificationDirty(false); if (active) { setDraft({...active, recipients:{...active.recipients}, networks:[...active.networks], allowedOrigins:[...active.allowedOrigins]}); setWebhookUrl(active.webhookUrl) } }
   function startNewProject() {
     if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?'))) return
     resetProjectDraft()
-    setCreateForm({name:'',website:'',useCase:'',checkoutMode:'human',accountType:'individual',capabilities:['hosted_checkout']})
+    setCreateForm({name:'',website:'',useCase:'',checkoutMode:'human',accountType:activeProfile.type,capabilities:['hosted_checkout']})
     setCreatingNew(true); setError(''); setNotice('')
   }
   function setTab(value: PortalSection) {
@@ -150,12 +179,12 @@ export default function DeveloperPortalPage() {
     if (busy) return
     if (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?')) return
     resetProjectDraft(); setNewKey(null); setNewWebhookSecret(null); setActiveId(value); setCreatingNew(false)
-    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('section', projects.find(p=>p.id===value)?.removal?'activity':section); return next })
+    setParams(current => { const next = new URLSearchParams(current); next.set('project', value); next.set('profile',activeProfile.id); next.set('section', projects.find(p=>p.id===value)?.removal?'activity':section); return next })
   }
   function appRemoved(mode:'closed'|'deleted') {
     setVerificationDirty(false);setDraft(null);setNewKey(null);setNewWebhookSecret(null);setCreatingNew(false)
     setProjects(current=>mode==='deleted'?current.filter(p=>p.id!==active?.id):current.map(p=>p.id===active?.id?{...p,removal:{status:'closed',at:new Date().toISOString()},operationalStatus:'suspended'}:p))
-    setParams(current=>{const next=new URLSearchParams(current);next.set('section','apps');next.delete('project');return next})
+    setParams(current=>{const next=new URLSearchParams(current);next.set('section','apps');next.set('profile',activeProfile.id);next.delete('project');return next})
     setNotice(mode==='closed'?'App closed. Its payment history is retained.':'App deleted.');void loadProjects()
   }
   const [creatingNew, setCreatingNew] = useState(false)
@@ -184,7 +213,7 @@ export default function DeveloperPortalPage() {
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
-    const data = await response.json().catch(() => undefined) as { ok?: boolean; projects?: Project[]; project?: Project; apiKey?: string; webhookSecret?: string; error?: string } | undefined
+    const data = await response.json().catch(() => undefined) as { ok?: boolean; projects?: Project[]; project?: Project; apiKey?: string; webhookSecret?: string; builderProfiles?:BuilderProfile[];builderProfile?:BuilderProfile;error?: string } | undefined
     if (!response.ok || !data?.ok) throw new Error(data?.error || 'Developer dashboard request failed.')
     return data
   }
@@ -197,6 +226,7 @@ export default function DeveloperPortalPage() {
       if (generation !== loadGeneration.current) return
       const next = data.projects ?? []
       setProjects(next)
+      setBuilderProfiles(data.builderProfiles??builderProfilesForProjects(next))
       setActiveId(current => current && next.some(project => project.id === current) ? current : next[0]?.id ?? '')
     } catch (reason) {
       if (generation !== loadGeneration.current) return
@@ -207,7 +237,7 @@ export default function DeveloperPortalPage() {
   }
 
   useEffect(() => {
-    if (!ready || !authenticated) { setProjects([]); setDraft(null); setNewKey(null); setNewWebhookSecret(null); return }
+    if (!ready || !authenticated) { setBuilderProfiles([PERSONAL_PROFILE]);setProjects([]); setDraft(null); setNewKey(null); setNewWebhookSecret(null); return }
     void loadProjects()
     return () => { loadGeneration.current += 1 }
   }, [ready, authenticated, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -235,7 +265,8 @@ export default function DeveloperPortalPage() {
   }, [tab, accountView, creatingNew, activeId])
   useEffect(() => { setWebhookUrl(active?.webhookUrl ?? '') }, [active?.id, active?.webhookUrl])
   useEffect(() => { const project = params.get('project'); if (project) { setNewKey(null); setNewWebhookSecret(null); setActiveId(project) } }, [params.get('project')])
-  useEffect(() => { setVerificationDirty(false); setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId])
+  useEffect(() => { setVerificationDirty(false); setNewKey(null); setNewWebhookSecret(null); setError(''); setNotice('') }, [activeId, activeProfile.id])
+  useEffect(() => { setCreatingNew(false) }, [activeProfile.id])
   useEffect(() => {
     if (!authenticated || !draft || draft.settlementMode === 'usdc') { setInstitutions([]); return }
     const currency = draft.settlementMode === 'ugx' ? 'UGX' : 'NGN'
@@ -259,7 +290,7 @@ export default function DeveloperPortalPage() {
     const generation = loadGeneration.current
     setBusy(true); setError('')
     try {
-      const data = await api('POST', { action: 'create', ...createForm, checkoutMode: 'human' })
+      const data = await api('POST', { action: 'create', ...createForm, checkoutMode: 'human', accountType:activeProfile.type, builderProfileId:activeProfile.id })
       if (generation !== loadGeneration.current) return
       if (!data.project) throw new Error('Project creation returned no project.')
       setProjects(current => [...current, data.project!])
@@ -390,12 +421,13 @@ export default function DeveloperPortalPage() {
         </div>
       </aside>
       <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
-        <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout}/></div></div>
+        <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout} profileSwitcher={<ProfileSwitcher profiles={builderProfiles} active={activeProfile} disabled={busy} onSelect={selectProfile} onCreate={createBusinessProfile}/>}/></div></div>
         {!sandbox && !accountView && !creatingNew && !active?.removal && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
+        <p className="mb-4 flex items-center gap-2 text-xs font-medium text-gray-500">{activeProfile.type==='business'?<Building2 size={14}/>:<UserRound size={14}/>}<span>{activeProfile.type==='business'?activeProfile.name+' \u00b7 Business':'Personal profile'}</span></p>
         <section id="developer-content" tabIndex={-1} className={cn("min-w-0 outline-none",accountView==='home'?'max-w-[1120px]':'max-w-4xl')}>
-          {sandbox ? <SandboxPanel key={user?.id}/> : creatingNew
-            ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
-            : accountView==='home' ? <AccountHome apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : active?.removal ? <><h1 className="text-2xl font-semibold">{active.name}</h1><p className="mb-8 mt-2 text-sm text-gray-500">Closed app. Payment history is retained for your records.</p><PaymentActivityPanel key={active.id} projectId={active.id}/></> : <>
+          {sandbox ? <SandboxPanel key={(user?.id??'')+':'+activeProfile.id} profileId={activeProfile.id}/> : creatingNew
+            ? <CreateProjectCard profileName={activeProfile.name} form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
+            : accountView==='home' ? <AccountHome key={activeProfile.id} apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : active?.removal ? <><h1 className="text-2xl font-semibold">{active.name}</h1><p className="mb-8 mt-2 text-sm text-gray-500">Closed app. Payment history is retained for your records.</p><PaymentActivityPanel key={active.id} projectId={active.id}/></> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
