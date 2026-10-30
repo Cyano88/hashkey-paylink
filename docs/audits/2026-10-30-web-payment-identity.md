@@ -20,3 +20,15 @@ Verification:
 Final source revision: 7f3330c9ab2bde54b14a0e42a64d69a441906e85. Render deploy dep-dbi4lkss728c73cb62kg (status to be appended).
 
 Deployment completion: Render deploy dep-dbi4lkss728c73cb62kg is live at 7f3330c9ab2bde54b14a0e42a64d69a441906e85 (2026-10-30 07:53:22 UTC). Public receipt lookup for both observed Lunchroom payments returns the saved https://app.hashpaylink.com/brand/lunchroom.png image URL. A direct Pixel receipt URL attempt timed out at Connecting securely; subsequent phone API probe timed out on LTE. Workstation public API returned 502 during rollout, then 200 after rollout. Phone connection verification remains pending; do not claim live logo rendering or a fresh OS push tap passed. The installed Activity layout and method icons were visually verified before the connection stall.
+
+## Connected Pixel follow-up
+
+- Found a second, native-only cause of the initial fallback: Capacitor intercepts app.hashpaylink.com as bundled assets. On the actual Pixel the app-host logo failed, while the Pocket-host image loaded at 513 x 162.
+- Added a native presentation resolver for first-party hosted merchant images. External merchant HTTPS URLs and web rendering remain unchanged. No merchant artwork was replaced or recoloured.
+- Added builder guidance in Branding and Getting started: recommend square 512 x 512 PNG/WebP with padding; JPG remains accepted; public HTTPS on the project website origin; initials fallback on failed images.
+- Routing and fallback browser regressions pass in both worktrees. Web/native production builds, Capacitor sync and Gradle assembleDebug pass.
+- Installed APK preserving app data: SHA256 20485417726a811bf10c219ef69a1806771b9eb92fd1f2e53038428764ba4b87.
+- Real Pixel CDP verification: Lunchroom image naturalWidth=513, naturalHeight=162, source https://pocket.hashpaylink.com/brand/lunchroom.png. Activity tap and direct saved-receipt URL both open fb6986a1-b175-476b-b219-1b5b17f4887b. Visually verified 1.50 USDT, Received, Wallet payment, Lunchroom, X Layer, matching reference, Pocket branding and wallet icon beside Web payment.
+- ADB screenshots in native output/playwright/lunchroom-logo-fixed.png and lunchroom-receipt-fixed.png. CDP screenshot capture timed out; ADB capture succeeded. No fresh OS push delivery/tap tested and no new payment made.
+- Source 64b30d493cfa9ef995c536fc6a0401750a7e9035; Render deploy dep-dbi5b5ss728c73ccv950 pending completion.
+`nDeployment completed: dep-dbi5b5ss728c73ccv950 live at 64b30d493cfa9ef995c536fc6a0401750a7e9035 on 2026-10-30 08:36:17 UTC. Pixel logo and saved-receipt checks above supersede earlier connection-pending notes. Fresh OS push tap remains untested.
