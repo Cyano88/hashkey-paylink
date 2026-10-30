@@ -31,6 +31,9 @@ try {
  await page.getByRole('button',{name:'Continue',exact:true}).click()
  for(const [label,value] of Object.entries({'Full name':'Example Owner','Date of birth':'1990-01-01','Ownership (%)':'100','Residential address':'Example Residential Street','ID number':'TEST-ID-123'}))await page.getByLabel(label,{exact:true}).fill(value)
  await page.getByLabel('Authorized to act for this business',{exact:true}).check()
+ await page.getByLabel('Director of this business',{exact:true}).check()
+ assert.equal(await page.getByLabel('Director of this business',{exact:true}).isChecked(),true)
+ await page.screenshot({path:'output/playwright/verification-director-mobile.png',fullPage:true})
  await page.getByLabel('Is this person a politically exposed person or a close associate?',{exact:true}).selectOption('false')
  await page.getByLabel('Government ID type',{exact:true}).selectOption('Passport')
  for(const input of await page.locator('input[type=file]').all()){await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor()}

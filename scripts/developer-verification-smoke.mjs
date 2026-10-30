@@ -14,9 +14,10 @@ assert.equal((await call('create',{name:'Builder app',checkoutMode:'human',capab
 assert.equal(store.projects[projectId].businessVerification.required,true)
 const project=store.projects[projectId];Object.assign(project,{settlementStatus:'ready',website:'https://example.test',useCase:'Example payment product',allowedOrigins:['https://example.test'],networks:['base'],defaultNetwork:'base',recipients:{base:'0x1111111111111111111111111111111111111111'}})
 assert.equal((await call('create-key',{environment:'live'})).statusCode,409)
-const application={companyName:'Example Ltd',tradingName:'Example',phone:'+2348000000000',website:'https://example.test',address:'Example street, Abuja',registrationNumber:'RC123456',country:'NG',description:'Software payment service',attested:true,owners:[{id:ownerId,fullName:'Example Owner',birthDate:'1990-01-01',address:'Example residential address',ownership:'100',pep:false,idType:'Passport',idNumber:'TEST-ID-123',issuingCountry:'NG',bvn:'',nin:'',controlPerson:true}]}
+const application={companyName:'Example Ltd',tradingName:'Example',phone:'+2348000000000',website:'https://example.test',address:'Example street, Abuja',registrationNumber:'RC123456',country:'NG',description:'Software payment service',attested:true,owners:[{id:ownerId,fullName:'Example Owner',birthDate:'1990-01-01',address:'Example residential address',ownership:'100',pep:false,idType:'Passport',idNumber:'TEST-ID-123',issuingCountry:'NG',bvn:'',nin:'',controlPerson:true,director:true}]}
 let saved=await call('verification-save',{application,revision:0});assert.equal(saved.statusCode,200)
 assert.equal(JSON.stringify(store).includes('TEST-ID-123'),false)
+assert.equal(JSON.parse(openVerification(store.projects[projectId].businessVerification.cipher,secret)).owners[0].director,true)
 assert.equal((await call('verification-submit',{application,revision:1})).statusCode,400)
 assert.equal((await call('verification-save',{application,revision:0})).statusCode,409)
 let revision=1

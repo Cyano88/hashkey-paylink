@@ -16,7 +16,7 @@ export function normalizeBusinessApplication(value:unknown):BusinessApplication{
  const text=(v:unknown,max=300)=>{if(typeof v!=='string'||v.length>max)fail('A field is invalid or too long.');return (v as string).trim()}
  const ids=new Set<string>()
  return {companyName:text(a.companyName),tradingName:text(a.tradingName),phone:text(a.phone,40),website:text(a.website,500),address:text(a.address,1500),registrationNumber:text(a.registrationNumber,100),country:text(a.country,2).toUpperCase(),description:text(a.description,2000),attested:a.attested===true,
- owners:a.owners.map(o=>{if(!o||!/^[a-zA-Z0-9-]{8,64}$/.test(o.id)||ids.has(o.id))fail('Owner reference is invalid.');ids.add(o.id);return {id:o.id,fullName:text(o.fullName),birthDate:text(o.birthDate,10),address:text(o.address,1500),ownership:text(o.ownership,6),pep:o.pep===true?true:o.pep===false?false:null,idType:text(o.idType,60),idNumber:text(o.idNumber,100),issuingCountry:text(o.issuingCountry,2).toUpperCase(),bvn:text(o.bvn,11),nin:text(o.nin,11),controlPerson:o.controlPerson===true}})}
+ owners:a.owners.map(o=>{if(!o||!/^[a-zA-Z0-9-]{8,64}$/.test(o.id)||ids.has(o.id))fail('Owner reference is invalid.');ids.add(o.id);return {id:o.id,fullName:text(o.fullName),birthDate:text(o.birthDate,10),address:text(o.address,1500),ownership:text(o.ownership,6),pep:o.pep===true?true:o.pep===false?false:null,idType:text(o.idType,60),idNumber:text(o.idNumber,100),issuingCountry:text(o.issuingCountry,2).toUpperCase(),bvn:text(o.bvn,11),nin:text(o.nin,11),controlPerson:o.controlPerson===true,director:o.director===true}})}
 }
 export function validateBusinessSubmission(a:BusinessApplication,documents:VerificationDocument[],now=new Date()){
  for(const [field,label] of [['companyName','company name'],['tradingName','trading name'],['phone','phone number'],['address','registered address'],['registrationNumber','registration number'],['description','business description']] as const)if(a[field].length<2)fail('Enter your '+label+'.')
@@ -27,7 +27,7 @@ export function validateBusinessSubmission(a:BusinessApplication,documents:Verif
  for(const o of a.owners){if(!o.fullName||!o.address||!o.idType||!o.idNumber||!/^[A-Z]{2}$/.test(o.issuingCountry)||o.pep===null)fail('Complete identity and PEP details for each owner.')
   const birth=new Date(o.birthDate+'T00:00:00Z'),adult=new Date(now);adult.setUTCFullYear(adult.getUTCFullYear()-18)
   if(!/^\d{4}-\d{2}-\d{2}$/.test(o.birthDate)||!Number.isFinite(birth.getTime())||birth.toISOString().slice(0,10)!==o.birthDate||birth>adult||birth.getUTCFullYear()<1900)fail('Enter a valid date of birth. Representatives must be at least 18.')
-  if(!/^\d+(\.\d{1,2})?$/.test(o.ownership)||Number(o.ownership)>100||(!o.controlPerson&&Number(o.ownership)===0))fail('Enter a valid ownership percentage.')
+  if(!/^\d+(\.\d{1,2})?$/.test(o.ownership)||Number(o.ownership)>100||(!o.controlPerson&&!o.director&&Number(o.ownership)===0))fail('Enter a valid ownership percentage.')
   ownership+=Number(o.ownership)
   if((o.bvn&&!/^\d{11}$/.test(o.bvn))||(o.nin&&!/^\d{11}$/.test(o.nin)))fail('BVN and NIN must contain 11 digits when provided.')
  }

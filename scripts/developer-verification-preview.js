@@ -7,7 +7,7 @@ window.fetch=async(path,options={})=>{
  const url=new URL(String(path),location.origin);
  const removalMode=new URLSearchParams(location.search).has('closeApp')?'closed':'deleted';
  if(url.searchParams.get('resource')==='removal')return Response.json({ok:true,review:{allowed:!new URLSearchParams(location.search).has('removeBlocked'),mode:removalMode,blockingReason:'A bank payout or refund is still unresolved.',pending:0,history:removalMode==='closed'?1:0}});
- if(options.method==='POST'&&JSON.parse(options.body).action==='remove-app'){
+ if(options.method==='POST'&&typeof options.body==='string'&&JSON.parse(options.body).action==='remove-app'){
   const body=JSON.parse(options.body);window.__portalWrites.push(body);
   if(new URLSearchParams(location.search).has('removeFail'))return Response.json({ok:false,error:'A payment started before removal. Please check again.'},{status:409});
   projects=removalMode==='deleted'?projects.filter(p=>p.id!==body.projectId):projects.map(p=>p.id===body.projectId?{...p,operationalStatus:'suspended',removal:{status:'closed',at:new Date().toISOString()}}:p);
