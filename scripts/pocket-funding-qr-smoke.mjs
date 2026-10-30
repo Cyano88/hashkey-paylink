@@ -12,3 +12,6 @@ for(const invalid of [raw+'&asset=USDC',raw+'&amount=2',raw.replace('xlayer','un
 assert.equal(parsePocketFundingCode(evm),null);assert.equal(parsePocketFundingCode(raw.replace('pocket.hashpaylink.com','evil.example')),null)
 assert.equal(parsePocketScanCode('https://app.hashpaylink.com/pay/c/chkx_48e1aebe24fb43d28de481b2?browser=1').kind,'checkout')
 console.log('PASS funding QR address/network/asset roundtrip, all checkout stablecoin routes, malformed/conflicting rejection and checkout separation.')
+
+for(const asset of ['USDe','USDG']){assert.equal(parsePocketFundingCode(pocketFundingCode(evm,'xlayer',asset)).asset,asset);assert.throws(()=>pocketFundingCode(evm,'base',asset))}
+console.log('PASS X Layer USDe/USDG funding support and wrong-network rejection.');

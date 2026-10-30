@@ -57,7 +57,7 @@ function PocketXLayerStablecoinSend() {
   const [params] = useSearchParams()
   return <PocketRouteShell active="home" fixedPage refreshEnabled={false} onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
     <PocketFlowHeader centered title="Send" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.transfer)}/>
-    <PocketSelect ariaLabel="Send network" value="xlayer" options={['base','arbitrum','solana','ethereum','polygon',...(params.get('asset')==='USDT'?[]:['arc']),'xlayer','bsc'].map(value=>({value,label:value==='bsc'?'BNB Chain':value==='xlayer'?'X Layer':networkLabel(value as SendNetwork)}))} onChange={network=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.send+'?'+new URLSearchParams({mode:'address',network,asset:params.get('asset')==='USDT'?'USDT':'USDC'}))}/>
+    <PocketSelect ariaLabel="Send network" value="xlayer" options={(['USDe','USDG'].includes(params.get('asset')||'')?['xlayer']:['base','arbitrum','solana','ethereum','polygon',...(params.get('asset')==='USDT'?[]:['arc']),'xlayer','bsc']).map(value=>({value,label:value==='bsc'?'BNB Chain':value==='xlayer'?'X Layer':networkLabel(value as SendNetwork)}))} onChange={network=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.send+'?'+new URLSearchParams({mode:'address',network,asset:params.get('asset')==='USDT'?'USDT':'USDC'}))}/>
     <PocketStockWalletActions wallet={wallet} view="send" stablecoinsOnly/>
   </PocketRouteShell>
 }

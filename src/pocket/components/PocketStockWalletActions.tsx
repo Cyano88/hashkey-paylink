@@ -18,7 +18,7 @@ import PocketArcTokenPicker from './PocketArcTokenPicker'
 import { stockPickerTokens } from '../lib/pocketStockPickerTokens'
 import { formatStockQuantity } from '../lib/pocketStockDisplay'
 import { Copy } from './PocketIcons'
-import { stockAssets, stockGasAsset, stockUsdc, stockUsdt, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
+import { stockAssets, stockGasAsset, stockUsdc, stockUsdt, stockUsde, stockUsdg, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
 import { stockTransferGasLabel, xLayerTransferSponsorshipEnabled } from '../lib/pocketXLayerSponsorship'
 import type usePocketStockWallet from '../hooks/usePocketStockWallet'
 import {matchStockSendResult} from '../lib/pocketStockSendResult'
@@ -33,7 +33,7 @@ export default function PocketStockWalletActions({ wallet, view, stablecoinsOnly
   const { getAccessToken } = usePocketIdentity()
   const [requestId, setRequestId] = useState(() => crypto.randomUUID())
   const [requestSent, setRequestSent] = useState(false)
-  const [symbol, setSymbol] = useState(() => [stockUsdc, ...(view==='send'?[stockUsdt]:[]), stockGasAsset, ...stockAssets].filter(a=>!stablecoinsOnly || ['USDC','USDT'].includes(a.symbol)).some(a => a.symbol === params.get('asset')) ? params.get('asset')! : 'USDC')
+  const [symbol, setSymbol] = useState(() => [stockUsdc, ...(view==='send'?[stockUsdt,stockUsde,stockUsdg]:[]), stockGasAsset, ...stockAssets].filter(a=>!stablecoinsOnly || ['USDC','USDT','USDe','USDG'].includes(a.symbol)).some(a => a.symbol === params.get('asset')) ? params.get('asset')! : 'USDC')
   const [recipient, setRecipient] = useState(params.get('recipient') || '')
   const [amount, setAmount] = useState(params.get('amount') || '')
   const [result, setResult] = useState<{amount:string;symbol:string;recipient:string;hash:string;attemptId?:string;at:number;failed:boolean}|null>(null)
@@ -45,9 +45,9 @@ export default function PocketStockWalletActions({ wallet, view, stablecoinsOnly
   const [error, setError] = useState('')
   const [reconnectWallet, setReconnectWallet] = useState(false)
   const [copied, setCopied] = useState(false)
-  const asset = symbol === 'OKB' ? stockGasAsset : [stockUsdc, stockUsdt, ...stockAssets].find(a => a.symbol === symbol)!
+  const asset = symbol === 'OKB' ? stockGasAsset : [stockUsdc, stockUsdt, stockUsde, stockUsdg, ...stockAssets].find(a => a.symbol === symbol)!
   useEffect(() => { reviewGeneration.current++;setReview(null); setReviewOpen(false); setError('') }, [symbol, recipient, amount, wallet.address, view])
-  const tokens = stockPickerTokens(wallet.displaySnapshot || wallet.snapshot,{includeUsdt:view==='send'}).filter(token => !stablecoinsOnly || ['USDC','USDT'].includes(token.symbol))
+  const tokens = stockPickerTokens(wallet.displaySnapshot || wallet.snapshot,{includeUsdt:view==='send',includeUsde:view==='send',includeUsdg:view==='send'}).filter(token => !stablecoinsOnly || ['USDC','USDT','USDe','USDG'].includes(token.symbol))
   const assetPicker = <PocketArcTokenPicker label="Asset to send" value={asset.address} excluded="" tokens={tokens} disabled={busy || wallet.busy} networkLabel="X Layer" clean initialLimit={100} balancesLoading={!wallet.displaySnapshot && !wallet.snapshot && !wallet.error} onChange={t => {setSymbol(t.symbol);setRequestSent(false)}} discover={async () => {throw Error('This contract is not in the supported XStocks list.')}} />
   const fundingAsset = fundingShortfall(error||wallet.actionError,asset.symbol) || (amountExceedsBalance(amount,tokens.find(t=>t.address===asset.address)?.balance,!wallet.balanceStale&&!wallet.balanceError) ? asset.symbol : null)
   const fundingProps={asset:fundingAsset,network:'xlayer' as const,address:wallet.address,locked:busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending',onReturn:async()=>{await wallet.refresh();setError('');setReview(null);setReviewOpen(false)},onCancel:()=>{setAmount('');setRecipient('');setReview(null);setReviewOpen(false);setError('')}}

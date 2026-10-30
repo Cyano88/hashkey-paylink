@@ -125,6 +125,23 @@ app.use(express.json());`}</CodeBlock>
    ['Request error / unknown','Show a recoverable status. Retry the status check with backoff; do not mark paid or create a replacement charge from uncertainty.'],
   ]}/>
   <p>The return URL is navigation, not payment proof. When the customer returns or refreshes, your page should ask your backend for the saved order status. Your backend can recheck the API using the same order-confirmation function used by your webhook. A scheduled job should also check unfinished orders in case a webhook or browser return was missed.</p>
+  <p>Your return page and a scheduled worker should call the same recovery helper. It reads authenticated payment status before storing confirmation; it does not create another checkout or charge.</p>
+  <CodeBlock lang="javascript � server recovery">{`import {recoverOrderPayment} from './hashpaylink.mjs';
+
+// In your order-status endpoint: first authenticate the customer and verify ownership.
+const payment = await recoverOrderPayment(order, process.env.HASHPAYLINK_API_KEY, orders);
+// Return your saved order's public status to that customer.
+
+// In a scheduled worker: list orders whose payment check is due, with a bounded batch.
+for (const order of await orders.listDuePaymentChecks({limit: 100})) {
+  try {
+    await recoverOrderPayment(order, process.env.HASHPAYLINK_API_KEY, orders);
+  } catch (error) {
+    // Save the error and next retry time with backoff. Do not mark paid or failed.
+    await orders.deferPaymentCheck(order.id, error.message);
+  }
+}`}</CodeBlock>
+  <p>The helper uses a stable <Code>status:CHECKOUT_ID</Code> recovery record. Your database must still allow only one delivery per order, even when a webhook and recovery run together. Do not stop recovery merely because the browser timer expired: check authoritative status first. Keep payment confirmation separate from whether your delivery worker finished. Once your database has confirmed an order as paid, a later timeout or pending response must not downgrade it.</p>
   <p>Use a durable delivery queue: mark the order paid and enqueue its delivery in one database transaction, then let a worker fulfill it with an order-based deduplication key. This avoids losing an order if your process stops between payment and delivery.</p>
  </Section>
  <Section title="6. Receipts, emails and customer support" id="receipts">
@@ -136,12 +153,13 @@ app.use(express.json());`}</CodeBlock>
  <Section title="Server helpers you can copy" id="sample">
   <p>The following Node.js module implements checkout creation, signature verification and authoritative status matching. It uses built-in fetch and crypto. Save it as <Code>hashpaylink.mjs</Code> on your server and import the functions used above.</p>
   <details className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><summary className="cursor-pointer font-semibold">Show complete server helper module</summary><div className="mt-4"><CodeBlock lang="javascript">{serverHelpers}</CodeBlock></div></details>
-  <p>Your order record must provide <Code>id</Code>, <Code>attemptKey</Code>, <Code>description</Code>, <Code>amount</Code>, <Code>returnUrl</Code>, <Code>acceptedAssets</Code>, <Code>acceptedNetworks</Code>, and the saved <Code>checkoutId</Code>. Keep those values stable for one attempt.</p>
+  <p>Your order record must provide <Code>id</Code>, <Code>attemptKey</Code>, <Code>description</Code>, <Code>amount</Code>, <Code>returnUrl</Code>, <Code>acceptedAssets</Code>, <Code>acceptedNetworks</Code>, and the saved <Code>checkoutId</Code>. Keep those values stable for one attempt. The accepted assets and networks must cover the project routes offered for that order; these arrays validate the result, they do not restrict checkout choices. Selection checkout uses your saved project settings.</p>
   <Table headers={['Your database operation','Required behavior']} rows={[
    ['Load an owned order','Check the signed-in customer owns it; calculate the amount from your catalog.'],
    ['Save checkout result','Persist checkoutId and absolute checkoutUrl before replying to the browser. Retry creation with the SAME attemptKey if the response is lost.'],
    ['findByCheckoutId(id)','Look up the order using its unique saved checkout/session ID.'],
    ['confirmAndQueueDeliveryOnce(orderId, eventId, payment, event)','Atomic transaction: deduplicate the event, verify stored order, mark paid, save proof/receipt ID and enqueue one delivery. Repeating it is safe.'],
+   ['listDuePaymentChecks / deferPaymentCheck','List a bounded batch of unfinished payments and persist retry times with backoff. A temporary API error must not create a new attempt.'],
    ['Fulfillment worker','Deliver the product/service once, retry failed delivery, and record completion separately from payment.'],
   ]}/>
  </Section>

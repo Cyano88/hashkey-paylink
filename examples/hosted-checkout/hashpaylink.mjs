@@ -4,8 +4,10 @@ const origin='https://app.hashpaylink.com'
 
 async function api(path,apiKey,options={},fetcher=fetch){
  const response=await fetcher(origin+path,{...options,headers:{'X-API-Key':apiKey,'Content-Type':'application/json',...options.headers},signal:AbortSignal.timeout(15000)})
- const data=await response.json()
- if(!response.ok||data.ok===false)throw Object.assign(Error(data.error||'Hash PayLink request failed'),{status:response.status})
+ let data
+ try { data=await response.json() } catch { throw Object.assign(Error('Hash PayLink returned an unreadable response; keep the same payment attempt and retry safely'),{status:response.status}) }
+ if(!data||typeof data!=='object'||Array.isArray(data))throw Object.assign(Error('Invalid Hash PayLink response'),{status:response.status})
+ if(!response.ok||data.ok!==true)throw Object.assign(Error(data.error||'Hash PayLink request failed'),{status:response.status})
  return data
 }
 
@@ -13,7 +15,7 @@ export async function createCheckout(order,apiKey,fetcher=fetch){
  // These values come from YOUR saved order, never prices supplied by the browser.
  const data=await api('/api/v2/checkouts',apiKey,{method:'POST',headers:{'Idempotency-Key':order.attemptKey},body:JSON.stringify({kind:'service',checkoutMode:'human',paymentSelection:'stablecoins',title:order.description,amount:order.amount,returnUrl:order.returnUrl,expiresInMinutes:15})},fetcher)
  const url=new URL(data.checkoutUrl,origin)
- if(url.origin!==origin||!/^\/pay\/c\/chks_[a-f0-9]{24}$/.test(url.pathname)||data.checkoutId!==url.pathname.split('/').pop())throw Error('Unexpected checkout response')
+ if(url.origin!==origin||url.username||url.password||url.search||url.hash||!/^\/pay\/c\/chks_[a-f0-9]{24}$/.test(url.pathname)||data.checkoutId!==url.pathname.split('/').pop())throw Error('Unexpected checkout response')
  return {checkoutId:data.checkoutId,checkoutUrl:url.toString()}
 }
 
@@ -38,5 +40,17 @@ export async function readOrderPayment(order,apiKey,fetcher=fetch){
  const network=status.network||status.payment?.network||status.checkout?.network
  const amount=status.payment?.amount??status.checkout?.amount??status.amount
  if(units(amount)!==units(order.amount)||!order.acceptedAssets.includes(asset)||!order.acceptedNetworks.includes(network))throw Error('Payment does not match the order')
- return {paid:true,status:'paid',asset,network,amount,receiptId:status.payment?.receiptId||null,transactionHash:status.payment?.txHash||null}
+ return {paid:true,status:'paid',checkoutId:order.checkoutId,selectedCheckoutId:status.selectedCheckoutId||null,asset,network,amount,receiptId:status.payment?.receiptId||null,transactionHash:status.payment?.txHash||null}
+}
+
+// Use on an authenticated order return and from your scheduled recovery worker.
+// The adapter must deduplicate fulfillment by ORDER ID across webhook and recovery.
+export async function recoverOrderPayment(order,apiKey,orders,fetcher=fetch){
+ const payment=await readOrderPayment(order,apiKey,fetcher)
+ if(!payment.paid)return payment
+ const id='status:'+order.checkoutId
+ // Stable local recovery evidence, not a webhook or an invented provider event.
+ const evidence={id,event:'payment.status_verified',data:{checkoutId:order.checkoutId}}
+ await orders.confirmAndQueueDeliveryOnce(order.id,id,payment,evidence)
+ return payment
 }
