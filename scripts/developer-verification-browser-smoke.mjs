@@ -44,7 +44,7 @@ try {
  assert.equal(await page.locator('input[type=file]').count(),0)
  await page.getByRole('button',{name:'Developers',exact:true}).click()
  await page.getByRole('button',{name:'API keys',exact:true}).click()
- for(const button of await page.getByRole('button',{name:'Create API key',exact:true}).all()) assert.equal(await button.isDisabled(),true)
+ for(const button of await page.getByRole('button',{name:'Create API key',exact:true}).all()) assert.equal(await button.isDisabled(),false)
  await page.getByRole('button',{name:'Payments',exact:true}).click()
  await page.getByRole('button',{name:'Activity',exact:true}).click()
  for(const label of ['Paid','Pending','Expired','Status unavailable'])await page.getByText(label,{exact:true}).waitFor()

@@ -13,12 +13,13 @@ export function portalParent(section: PortalSection): PortalSection {
   return section
 }
 export const portalSubsections: Partial<Record<PortalSection, Array<[PortalSection, string]>>> = {
-  setup: [['setup','App settings'],['verification','Business verification']],
+  setup: [['setup','App settings'],['verification','Verification']],
   products: [['products', 'Payment options'], ['activity', 'Activity']],
   quickstart: [['quickstart', 'Get started'], ['keys', 'API keys'], ['webhooks', 'Webhooks']],
 }
 export type ProjectSummary = {
   removal?:{status:string}
+  accountType?: 'individual'|'business'; settlementMode?: string; personalKycVerified?: boolean; productionAccess?: boolean; enabledCapabilities?: string[];
   businessVerification?: BusinessVerification
   id: string; name: string; checkoutMode: 'human' | 'agentic'; capabilities: string[]; networks: string[];
   settlementStatus: string; operationalStatus?: string; webhookConfigured: boolean;
@@ -31,7 +32,7 @@ export function OverviewPanel({project,onNavigate}:{project:ProjectSummary;onNav
   const hasKey=project.keys.some(k=>!k.revokedAt && (!k.expiresAt||Date.parse(k.expiresAt)>Date.now()) && (k.environment==='live'||k.prefix.startsWith('hpl_live_')||k.prefix.startsWith('hpl_app_')))
   const steps: Array<{title:string;copy:string;done:boolean;tab:PortalSection}> = [
     {title:'Configure your app',copy:'Choose where you receive payments.',done:project.settlementStatus==='ready',tab:'setup'},
-    ...(project.businessVerification ? [{title:'Verify your business',copy:project.businessVerification.status==='submitted'?'Your application is under review.':'Submit your company and owner information.',done:project.businessVerification.status==='approved',tab:'verification' as PortalSection}] : []),
+    ...(project.businessVerification && project.productionAccess === false ? [{title:project.accountType === 'individual' ? 'Verify your identity' : 'Verify your business',copy:project.businessVerification.status==='submitted'?'Your application is under review.':'Submit your company and owner information.',done:project.businessVerification.status==='approved',tab:'verification' as PortalSection}] : []),
     {title:'Create an API key',copy:'Keep your key on your backend.',done:hasKey,tab:'keys'},
     {title:'Connect a webhook',copy:'Receive signed updates and handle retries.',done:project.webhookConfigured,tab:'webhooks'},
   ]
@@ -56,7 +57,7 @@ export function ProductsPanel({project,onConfigure}:{project:ProjectSummary;onCo
       const options=group.options.filter(option=>productAllowed(project.checkoutMode,option.capability))
       if(!options.length)return null
       return <section key={group.id} className="py-5"><h2 className="text-base font-semibold">Payment options</h2>
-        {options.map(option=><div key={option.capability} className="mt-4 flex items-start justify-between gap-4"><div><h3 className="text-sm font-semibold">{option.title}</h3><p className={muted}>{option.detail}</p></div><span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-white/5">{!project.capabilities.includes(option.capability)?'Not selected':project.operationalStatus==='suspended'?'Suspended':project.settlementStatus==='ready'?'Configured':'Setup required'}</span></div>)}
+        {options.map(option=><div key={option.capability} className="mt-4 flex items-start justify-between gap-4"><div><h3 className="text-sm font-semibold">{option.title}</h3><p className={muted}>{option.detail}</p></div><span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-white/5">{!project.capabilities.includes(option.capability)?'Not selected':project.operationalStatus==='suspended'?'Suspended':project.enabledCapabilities&&!project.enabledCapabilities.includes(option.capability)?'Verification required':project.settlementStatus==='ready'?'Configured':'Setup required'}</span></div>)}
       </section>
     })}</div><p className={'mt-4 '+muted}>Payment processing is available after setup and any required approval.</p><button type="button" onClick={onConfigure} className="developer-primary mt-6">Configure payments</button></div>
 }

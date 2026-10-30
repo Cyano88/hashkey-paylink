@@ -12,12 +12,12 @@ function hasLiveKey(app:App) {
 }
 export function accountSetup(apps:App[]) {
  const eligible=apps.filter(app=>!app.removal&&app.operationalStatus!=='suspended')
- const pending=eligible.find(app=>app.businessVerification?.status!=='approved')
- const verified=eligible.find(app=>app.businessVerification?.status==='approved')
+ const pending=eligible.find(app=>app.productionAccess===false)
+ const verified=eligible.find(app=>app.productionAccess!==false)
  const configured=eligible.find(app=>app.settlementStatus==='ready')
  const connected=eligible.find(app=>hasLiveKey(app)&&app.webhookConfigured)
  return [
-  {title:'Verify your business',copy:'Send your business details for review.',done:Boolean(verified)&&!eligible.some(app=>app.businessVerification?.required&&app.businessVerification.status!=='approved'),app:pending??verified,section:'verification' as PortalSection,icon:ShieldCheck},
+  {title:'Check payment access',copy:'Wallet checkout is available before verification. Local fiat requires KYC or KYB.',done:Boolean(verified)&&!pending,app:pending??verified,section:'verification' as PortalSection,icon:ShieldCheck},
   {title:'Set up payments',copy:'Choose where you receive your money.',done:Boolean(configured),app:configured??eligible[0],section:'setup' as PortalSection,icon:Wallet},
   {title:'Connect your app',copy:'Add your API key and payment updates.',done:Boolean(connected),app:connected??configured??eligible[0],section:'quickstart' as PortalSection,icon:Code2},
  ]
@@ -39,7 +39,7 @@ export default function AccountHome({apps,onOpen,onCreate,onApps}:{apps:App[];on
  function openStep(step:typeof steps[number]) {if(step.app)onOpen(step.app.id,step.section);else onCreate()}
  useEffect(()=>{const update=(event:Event)=>{const profile=(event as CustomEvent<{name:string}>).detail;if(typeof profile?.name==='string')setName(profile.name.trim().split(/\s+/)[0])};window.addEventListener('developer-profile-updated',update);return()=>window.removeEventListener('developer-profile-updated',update)},[])
  return <div className="account-home">
-  {!verificationStep.done&&<div className="account-notice"><ShieldCheck size={17}/><p>{verificationPending?'Your business verification is being reviewed.':'Complete business verification to unlock live payments.'}</p><button onClick={()=>openStep(verificationStep)}>{verificationPending?'View verification':'Start verification'}<ArrowRight size={14}/></button></div>}
+  {!!verificationStep.app&&!verificationStep.done&&<div className="account-notice"><ShieldCheck size={17}/><p>{verificationPending?'Your business verification is being reviewed.':'Complete the verification required for your selected payment options.'}</p><button onClick={()=>openStep(verificationStep)}>{verificationPending?'View verification':'Start verification'}<ArrowRight size={14}/></button></div>}
   <header className="account-heading"><div><h1>{name?'Hello, '+name:'Welcome back'}</h1><p>Your payments, connected in one place.</p></div><button className="developer-primary" onClick={onCreate}><Plus size={16}/>Create app</button></header>
   <section className="account-onboarding" aria-label="Account setup">
    <div className="account-onboarding-heading"><div><h2>{remaining?'Get ready to accept payments':'You are ready to accept payments'}</h2><p>{remaining?`${remaining} ${remaining===1?'step':'steps'} left to finish setting up your account.`:'Your business, payment destination and integration are set up.'}</p></div><div className="account-progress"><span>{Math.round(done/steps.length*100)}%</span><progress aria-label="Account setup progress" max={steps.length} value={done}/></div></div>

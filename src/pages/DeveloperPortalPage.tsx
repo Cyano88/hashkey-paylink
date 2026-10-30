@@ -1,3 +1,5 @@
+import SandboxPanel from '../developer/SandboxPanel'
+import {productionVerificationAllows} from '../lib/developerAccess'
 import BuilderQuickstart from '../developer/BuilderQuickstart'
 import ReceiptEmailSettings from '../developer/ReceiptEmailSettings'
 import type{ReceiptEmailSettings as ReceiptEmailPreferences}from'../lib/receiptEmailSettings'
@@ -33,6 +35,9 @@ type Network = 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon' | 'solana'
 type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
+  accountType?: 'individual'|'business'
+  personalKycVerified?: boolean
+  productionAccess?: boolean
   removal?: {status:'closed'|'deleted';at:string}
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: BusinessVerification
@@ -111,7 +116,12 @@ export default function DeveloperPortalPage() {
   const [notice, setNotice] = useState('')
   const selectedTab = params.get('section')
   const tab: PortalSection = ['overview','products','activity','setup','verification','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
-  const sandbox = params.get('environment') === 'test'
+  const sandbox = params.get('environment') === 'test' || (!params.has('environment') && !params.has('project') && !params.has('section'))
+  function switchEnvironment(production:boolean) {
+    if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved app changes?'))) return
+    resetProjectDraft();setCreatingNew(false);setNewKey(null);setNewWebhookSecret(null);setError('');setNotice('')
+    setParams({environment:production?'live':'test',section:'home'})
+  }
   const accountView = selectedTab === 'home' || (!selectedTab && !params.get('project')) ? 'home' : selectedTab === 'businesses' ? 'businesses' : selectedTab === 'apps' ? 'apps' : null
   const showingApps = accountView === 'apps'
   function openApps() { openAccount('apps') }
@@ -125,7 +135,7 @@ export default function DeveloperPortalPage() {
   function startNewProject() {
     if (busy || (hasUnsavedChanges() && !window.confirm('Discard unsaved project changes?'))) return
     resetProjectDraft()
-    setCreateForm({name:'',website:'',useCase:'',checkoutMode:'human',capabilities:['hosted_checkout']})
+    setCreateForm({name:'',website:'',useCase:'',checkoutMode:'human',accountType:'individual',capabilities:['hosted_checkout']})
     setCreatingNew(true); setError(''); setNotice('')
   }
   function setTab(value: PortalSection) {
@@ -153,7 +163,7 @@ export default function DeveloperPortalPage() {
   const [newWebhookSecret, setNewWebhookSecret] = useState<{ value: string; projectId: string } | null>(null)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [keyNames, setKeyNames] = useState({ test: 'Sandbox backend', live: 'Production backend' })
-  const [createForm, setCreateForm] = useState<CreateProjectForm>({ name: '', website: '', useCase: '', checkoutMode: 'human', capabilities: ['hosted_checkout'] })
+  const [createForm, setCreateForm] = useState<CreateProjectForm>({ name: '', website: '', useCase: '', checkoutMode: 'human', accountType: 'individual', capabilities: ['hosted_checkout'] })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
   const active = projects.find(project => project.id === activeId) ?? projects[0]
@@ -256,7 +266,7 @@ export default function DeveloperPortalPage() {
       setActiveId(data.project.id)
       setParams(current => { const next = new URLSearchParams(current); next.set('project', data.project!.id); next.set('section','overview'); return next })
       setCreatingNew(false)
-      setCreateForm({ name: '', website: '', useCase: '', checkoutMode: 'human', capabilities: ['hosted_checkout'] })
+      setCreateForm({ name: '', website: '', useCase: '', checkoutMode: 'human', accountType: 'individual', capabilities: ['hosted_checkout'] })
       setNotice('Project created. Complete your settings to continue.')
     } catch (reason) { if (generation === loadGeneration.current) setError(reason instanceof Error ? reason.message : 'Project could not be created.') }
     finally { creatingProject.current = false; setBusy(false) }
@@ -359,7 +369,9 @@ export default function DeveloperPortalPage() {
   const sectionIcons = { activity: CreditCard, overview: LayoutDashboard, products: CreditCard, quickstart: Code2, setup: Settings2 }
   return (
     <main className="portal-console min-h-[calc(100dvh-4rem)] w-full lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-      <aside className="border-b border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#101114] lg:min-h-[calc(100dvh-4rem)] lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
+      <aside className="flex flex-col border-b border-gray-200 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#101114] lg:sticky lg:top-0 lg:h-[calc(100dvh-4rem)] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
+        {sandbox && <nav aria-label="Sandbox navigation" className="account-navigation"><a href="#developer-content" aria-current="page"><Home size={17}/>Sandbox</a><a href="https://docs.hashpaylink.com/docs/getting-started" target="_blank" rel="noopener noreferrer"><BookOpen size={17}/>Docs</a></nav>}
+        {!sandbox && <>
         <nav aria-label="Account navigation" className="account-navigation">
           <button disabled={busy} onClick={()=>openAccount('home')} aria-current={accountView==='home'&&!creatingNew?'page':undefined}><Home size={17}/>Home</button>
           <div className="flex items-center"><button disabled={busy} onClick={openApps} aria-current={showingApps&&!creatingNew?'page':undefined} className="flex-1"><LayoutDashboard size={17}/>Apps</button><button aria-label="New app" title="New app" disabled={busy||sandbox} onClick={startNewProject}><Plus size={17}/></button></div>
@@ -370,19 +382,25 @@ export default function DeveloperPortalPage() {
         <nav aria-label="Project navigation" className="mt-4 grid grid-cols-4 gap-1 lg:mt-8 lg:grid-cols-1 lg:gap-2">
           {(active.removal?[['activity','Payments']] as Array<[PortalSection,string]>:portalSections).map(([value,label]) => { const Icon=sectionIcons[value as keyof typeof sectionIcons]; return <button key={value} type="button" disabled={busy} aria-current={parent===portalParent(value)&&!creatingNew?'page':undefined} onClick={()=>setTab(value)} className={cn('flex min-h-11 items-center justify-center gap-3 rounded-lg px-2 text-xs font-medium transition lg:justify-start lg:px-3 lg:text-sm',parent===portalParent(value)&&!creatingNew?'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}><Icon className="hidden h-4 w-4 lg:block"/>{label}</button>})}
         </nav></>}
+        </>}
+        <div className="mt-6 border-t border-gray-200 pt-4 dark:border-white/10 lg:mt-auto lg:pt-5">
+          <button type="button" role="switch" aria-label="Production" aria-checked={!sandbox} disabled={busy} onClick={()=>switchEnvironment(sandbox)} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-sm font-medium">
+            <span>Production</span><span aria-hidden="true" className={cn('flex h-6 w-10 items-center rounded-full p-1 transition',sandbox?'bg-gray-300 dark:bg-gray-700':'bg-blue-600')}><span className={cn('h-4 w-4 rounded-full bg-white shadow-sm transition-transform',!sandbox&&'translate-x-4')}/></span>
+          </button><p className="mt-1 px-3 text-xs text-gray-500">{sandbox?'Sandbox · No real money':'Production · Real payments'}</p>
+        </div>
       </aside>
       <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
         <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout}/></div></div>
-        {!accountView && !creatingNew && !active?.removal && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
+        {!sandbox && !accountView && !creatingNew && !active?.removal && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
         <section id="developer-content" tabIndex={-1} className={cn("min-w-0 outline-none",accountView==='home'?'max-w-[1120px]':'max-w-4xl')}>
-          {sandbox ? <div><h1 className="text-xl font-semibold">Test payments are unavailable</h1><p className="mt-2 text-sm text-gray-500">This old link cannot create or execute payments.</p><Link className="pocket-cta-primary mt-5" to="?environment=live">Open live configuration</Link></div> : creatingNew
+          {sandbox ? <SandboxPanel key={user?.id}/> : creatingNew
             ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
             : accountView==='home' ? <AccountHome apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : active?.removal ? <><h1 className="text-2xl font-semibold">{active.name}</h1><p className="mb-8 mt-2 text-sm text-gray-500">Closed app. Payment history is retained for your records.</p><PaymentActivityPanel key={active.id} projectId={active.id}/></> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
               {active && draft && tab === 'setup' && <><SetupPanel error={error} notice={notice} receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
-              {active && tab === 'verification' && <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/> }
+              {active && tab === 'verification' && (active.accountType === 'individual' ? <div><h1 className="text-2xl font-semibold">Personal verification</h1><p className="mt-3 text-sm leading-6 text-gray-500">Wallet checkout does not require business KYB. To receive local fiat, complete personal KYC with the same account in Pocket, then save your local settlement settings here. Your verified identity is checked again before a fiat payment is created.</p><a href="https://pocket.hashpaylink.com" className="developer-primary mt-5">Open Pocket verification</a></div> : <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/>) }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
               {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><details className="mt-8 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Command-line tools</summary><CliGuide projectId={active.id} /></details><details className="mt-6 text-sm text-gray-500"><summary className="cursor-pointer">Coming soon</summary><ComingSoonProducts/></details></>}
@@ -545,18 +563,18 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
       {newKey?.environment === environment && <SecretReveal label="Copy this key now" value={newKey.value} />}
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
         <input className={fieldClass()} value={keyNames[environment]} onChange={event => setKeyNames({ ...keyNames, [environment]: event.target.value })} aria-label={`${title} key name`} placeholder="Key name" />
-        <button type="button" disabled={environment === 'test' || (project.businessVerification?.required && project.businessVerification.status !== 'approved') || !needsSettlementRouting(project.capabilities) || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create API key</button>
+        <button type="button" disabled={environment === 'test' || !productionVerificationAllows(project) || !needsSettlementRouting(project.capabilities) || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create API key</button>
       </div>
       <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-xs text-gray-400">{key.prefix}••••</p>{key.scopes && <p className="mt-1 text-xs text-gray-500">Scoped backend key · {key.expiresAt && Date.parse(key.expiresAt) <= Date.now() ? 'Expired' : 'Expires ' + new Date(key.expiresAt!).toLocaleDateString()}</p>}</div>{key.revokedAt ? <span className="text-xs font-semibold text-gray-400">Revoked</span> : <button type="button" disabled={busy} onClick={() => onRevoke(key.id)} className="text-xs font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
     </section>
   }
 
-  return <div>{project.businessVerification?.required && project.businessVerification.status!=='approved' && <p className="mb-5 text-sm text-gray-500">Complete business verification in Settings before creating live keys.</p>}<PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend for this project. Keep their values in your server secret manager." />
+  return <div>{!productionVerificationAllows(project) && <p className="mb-5 text-sm text-gray-500">Complete the verification required for this payment option in Settings.</p>}<PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend for this project. Keep their values in your server secret manager." />
 
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
-      {project.keys.some(key => key.environment === 'test') && environmentSection('test', 'Existing test keys', `New sandbox keys are disabled until test environments are connected. Existing keys remain separate from live keys. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
+      {project.keys.some(key => key.environment === 'test') && environmentSection('test', 'Existing test keys', `These legacy test keys cannot execute payments. Create simulation keys in Sandbox. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
       {environmentSection('live', 'Live keys', `Use a secret key to connect your server. Never expose it in your app.`)}
     </div>
   </div>

@@ -17,5 +17,5 @@ export const DEVELOPER_PRODUCTS = [
   { id: 'polymarket_funding', name: 'Polymarket Funding', live: { networks: ['base', 'arbitrum'], status: 'project_configuration' }, sandbox: { networks: [], status: 'not_supported', reason: 'Live bridge movement only. No test funding or simulated completion.' } },
 ] as const
 export function developerCapabilities() {
-  return { version: DEVELOPER_CAPABILITIES_VERSION, sandboxPaymentsEnabled: false, sandboxKeysEnabled: false, testNetworks: TEST_NETWORKS, products: DEVELOPER_PRODUCTS }
+  return { version: DEVELOPER_CAPABILITIES_VERSION, sandboxPaymentsEnabled: false, sandboxKeysEnabled: true, sandboxSimulation: {enabled:true, endpoint:'/api/developer-projects?resource=sandbox', products:['hosted_checkout'], funded:false, webhookDelivery:false, signedWebhookFixtures:true}, testNetworks: TEST_NETWORKS, products: DEVELOPER_PRODUCTS }
 }

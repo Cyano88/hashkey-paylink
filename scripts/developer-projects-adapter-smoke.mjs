@@ -297,6 +297,7 @@ assert.equal('updatedBy' in ownerPilot, false)
 assert.equal('disabledBy' in ownerPilot, false)
 assert.equal('reason' in ownerPilot, false)
 
+store.projects[created.body.project.id].businessVerification.status = 'approved'
 const naira = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Settle customer payments into a verified Nigerian business bank account.', settlementMode: 'ngn',

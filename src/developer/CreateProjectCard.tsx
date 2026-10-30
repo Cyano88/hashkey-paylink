@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, Loader2, Plus } from 'lucide-react'
 import ProductPicker from './ProductPicker'
 import { isOpenCheckoutProduct, type ProductCapability } from '../lib/developerProducts'
 
-export type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: 'human'; capabilities: ProductCapability[] }
+export type CreateProjectForm = { accountType?: 'individual'|'business'; name: string; website: string; useCase: string; checkoutMode: 'human'; capabilities: ProductCapability[] }
 const inputClass = 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/5 dark:text-white'
 
 export default function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, embedded = false, emptyAccount = false }: {
@@ -38,6 +38,7 @@ export default function CreateProjectCard({ form, setForm, busy, error, onCreate
     {emptyAccount && <p className="mt-3 text-sm leading-6 text-gray-500">No projects are linked to this sign-in. If you expected an existing project, use the email that created it.</p>}
     <fieldset disabled={locked} className="mt-6 min-w-0 space-y-4" onChange={() => setValidation('')}>
       {step === 1 && <label className="block space-y-1.5"><span className="text-sm font-semibold">App name</span><input className={inputClass} value={form.name} maxLength={100} autoComplete="organization" onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder="Your app"/></label>}
+      {step === 1 && <label className="block text-sm font-semibold">Account type<select className={inputClass+' mt-2'} value={form.accountType ?? 'individual'} onChange={e=>setForm(current=>({...current,accountType:e.target.value as 'individual'|'business'}))}><option value="individual">Individual</option><option value="business">Registered business</option></select><span className="mt-2 block text-xs font-normal leading-5 text-gray-500">For local fiat, individuals complete personal KYC; registered businesses complete KYB. This choice is saved with your app.</span></label>}
       {step === 2 && <ProductPicker compact mode="human" value={form.capabilities} disabled={locked} onChange={capabilities => { setValidation(''); setForm(current => ({ ...current, capabilities })) }}/>}
     </fieldset>
     {(validation || error) && <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">{validation || error}</p>}

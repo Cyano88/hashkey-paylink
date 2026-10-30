@@ -1,3 +1,5 @@
+import {productionCapabilities, productionVerificationAllows, type DeveloperAccountType} from '../src/lib/developerAccess.js'
+import {createDeveloperSandboxHandler} from './developer-sandbox.js'
 import{normalizeReceiptEmailSettings,defaultReceiptEmailSettings,type ReceiptEmailSettings}from'../src/lib/receiptEmailSettings.js'
 import {developerReceivingWallets} from './developer-receiving-wallets.js'
 import {normalizeBscCheckoutConfig,type BscCheckoutConfig} from '../src/lib/bscCheckoutConfig.js'
@@ -69,6 +71,8 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  accountType?: DeveloperAccountType
+  personalKycVerified?: boolean
   receiptEmails?: ReceiptEmailSettings
   removal?: {status:'closed'|'deleted';at:string;by:string}
   directoryProfile?: {enabled:boolean; introduction:string}
@@ -125,6 +129,7 @@ type DeveloperProject = {
 type DeveloperStore = { projects: Record<string, DeveloperProject>; profiles?: Record<string, { name: string; role: string; updatedAt: string }> }
 
 export type DeveloperCheckoutPolicy = {
+  accountType?: DeveloperAccountType
   acceptedAssets?: CheckoutAcceptance
   checkoutDefaultNetwork?: 'xlayer' | 'bsc'
   bscCheckout?: BscCheckoutConfig
@@ -408,6 +413,10 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     : undefined
   return {
     id: project.id,
+    accountType: project.accountType ?? 'business',
+    productionAccess: productionVerificationAllows(project),
+    enabledCapabilities: productionCapabilities(project),
+    personalKycVerified: project.personalKycVerified === true,
     removal: project.removal ? {status:project.removal.status,at:project.removal.at}:undefined,
     businessVerification: publicVerification(project.businessVerification),
     directoryProfile: project.directoryProfile,
@@ -601,7 +610,7 @@ function adminProjectIndex(store: DeveloperStore | undefined) {
     projects: projects.map(project => projectPublic(project, true)),
     summary: {
       total: projects.length,
-      active: projects.filter(project => project.settlementStatus === 'ready' && !project.removal && project.operationalStatus !== 'suspended' && verificationAllowsLive(project.businessVerification)).length,
+      active: projects.filter(project => project.settlementStatus === 'ready' && !project.removal && project.operationalStatus !== 'suspended' && productionVerificationAllows(project)).length,
       setupRequired: projects.filter(project => project.settlementStatus !== 'ready').length,
       suspended: projects.filter(project => project.operationalStatus === 'suspended').length,
     },
@@ -609,12 +618,14 @@ function adminProjectIndex(store: DeveloperStore | undefined) {
 }
 
 export function createDeveloperProjectsHandler(dependencies: Dependencies = defaults) {
+  const sandboxHandler = createDeveloperSandboxHandler(dependencies.verify)
   return async function developerProjectsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     try {
       if (!dependencies.hasStore()) return res.status(503).json({ ok: false, error: 'Developer projects are temporarily unavailable.' })
       const secret = dependencies.portalSecret()
       if (secret.length < 32) return res.status(503).json({ ok: false, error: 'Developer project security is not configured.' })
+      if (req.query?.resource === 'sandbox') return sandboxHandler(req,res)
       const identity = await dependencies.verify(req)
 
       if (req.method === 'GET') {
@@ -675,6 +686,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       }
 
       if (req.method === 'POST' && action === 'create') {
+        if (req.body?.accountType !== undefined && !['individual','business'].includes(req.body.accountType)) return res.status(400).json({ok:false,error:'Choose Individual or Business.'})
         const name = clean(req.body?.name, 100)
         const website = normalizedHttpsUrl(req.body?.website, false)
         const useCase = clean(req.body?.useCase, 800)
@@ -689,6 +701,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const now = dependencies.now().toISOString()
         const project: DeveloperProject = {
+          accountType: req.body?.accountType ?? 'business',
           businessVerification: verificationEmpty(dependencies.requireVerification?.() ?? false),
           id: dependencies.createProjectId(), ownerId: identity.userId, ownerEmail: identity.email,
           name, website, brandImageUrl: '', useCase, checkoutMode, capabilities, productSettingsVersion: 2, settlementMode: 'usdc', settlementStatus: 'review_required',
@@ -984,6 +997,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         let verifiedBankName = bankAccountNumber ? bankAccountName : currentProject.bankAccountName
         let bankVerifiedAt = currentProject.bankVerifiedAt
         if (isLocalSettlement(settlementMode)) {
+          if (currentProject.accountType === 'individual') await (dependencies.requireLocalPayoutEligibility ?? requirePocketBasicKyc)(identity.userId)
+          else if (currentProject.businessVerification?.status !== 'approved') return res.status(403).json({ok:false,error:'Complete business verification before enabling local fiat settlement.'})
           if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Local settlement is temporarily unavailable.' })
           const bankChanged = bankCode !== currentProject.bankCode || bankName !== currentProject.bankName || settlementMode !== currentProject.settlementMode
           if (settlementMode === 'ugx') {
@@ -1006,8 +1021,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
+          if (isLocalSettlement(settlementMode) && latest.accountType !== 'individual' && latest.businessVerification?.status !== 'approved') throw Object.assign(Error('Business verification must be approved for local fiat.'),{status:403})
           const next: DeveloperProject = {
             ...latest, receiptEmails:normalizeReceiptEmailSettings(req.body?.receiptEmails,latest.receiptEmails,dependencies.now().toISOString()), name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,
+            personalKycVerified: isLocalSettlement(settlementMode) && latest.accountType === 'individual' ? true : latest.personalKycVerified,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             acceptedAssets, checkoutDefaultNetwork, networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
@@ -1023,8 +1040,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method === 'POST' && action === 'create-key') {
         const environment = developerEnvironment(req.body?.environment, 'live')
-        if (environment === 'test') return res.status(409).json({ ok: false, error: 'Sandbox keys are not enabled until isolated testnet execution is available.' })
-        if (!verificationAllowsLive(currentProject.businessVerification)) return res.status(409).json({ok:false,error:'Business verification must be approved before creating live API keys.'})
+        if (environment === 'test') return res.status(409).json({ ok: false, error: 'Create simulation keys from Sandbox in the dashboard. Production projects do not issue test keys.' })
+        if (!productionVerificationAllows(currentProject)) return res.status(409).json({ok:false,error:'Complete the verification required for this payment option before creating production keys.'})
+        if (isLocalSettlement(currentProject.settlementMode) && currentProject.accountType === 'individual') await (dependencies.requireLocalPayoutEligibility ?? requirePocketBasicKyc)(identity.userId)
         if (currentProject.operationalStatus === 'suspended') {
           return res.status(409).json({ ok: false, error: 'This project is suspended. Contact Hash PayLink operations.' })
         }
@@ -1049,7 +1067,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
-          if (!verificationAllowsLive(latest.businessVerification) || latest.operationalStatus==='suspended' || latest.settlementStatus!=='ready') throw Object.assign(Error('Live access requires approved business verification and complete setup.'),{status:409})
+          if (!productionVerificationAllows(latest) || latest.operationalStatus==='suspended' || latest.settlementStatus!=='ready') throw Object.assign(Error('Production access requires complete setup and any verification required for this payment option.'),{status:409})
           if (latest.keys.filter(item => !item.revokedAt && (!item.expiresAt || Date.parse(item.expiresAt) > dependencies.now().getTime())).length >= 10) throw Object.assign(new Error('Revoke an active API key before creating another.'), { status: 409 })
           next = { ...latest, keys: retainDeveloperKeys([...latest.keys, key], dependencies.now().getTime()), updatedAt: dependencies.now().toISOString() }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
@@ -1103,7 +1121,7 @@ function policyForDeveloperProject(
   environment: DeveloperEnvironment,
   secret: string,
 ): DeveloperCheckoutPolicy | null {
-  if (project.removal || secret.length < 32 || !verificationAllowsLive(project.businessVerification) || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
+  if (project.removal || secret.length < 32 || !productionVerificationAllows(project) || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
   const allowedNetworks = environment === 'test'
     ? new Set<DeveloperNetwork>()
     : new Set<DeveloperNetwork>(developerProductNetworks(projectCheckoutMode(project), project.capabilities ?? ['hosted_checkout']))
@@ -1120,6 +1138,7 @@ function policyForDeveloperProject(
     if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
     return {
       partnerId: project.id,
+      accountType: project.accountType ?? 'business',
       ownerId: project.ownerId,
       ownerEmail: project.ownerEmail,
       merchantName: project.name,
@@ -1130,7 +1149,7 @@ function policyForDeveloperProject(
       settlementMode: project.settlementMode,
       environment,
       checkoutMode: projectCheckoutMode(project),
-      capabilities: effectiveProductCapabilities(project),
+      capabilities: productionCapabilities(project),
       nairaSettlement: {
         bankCode: project.bankCode,
         bankName: project.bankName,
@@ -1162,7 +1181,7 @@ function policyForDeveloperProject(
     settlementMode: 'usdc',
     environment,
     checkoutMode: projectCheckoutMode(project),
-    capabilities: effectiveProductCapabilities(project),
+    capabilities: productionCapabilities(project),
     webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
     arcAgreementPilot: project.arcAgreementPilot,
     projectManaged: true,
@@ -1259,6 +1278,11 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
   const settlement = policy.nairaSettlement
   const amount = Number(requestedUsdc)
   if (!isLocalSettlement(policy.settlementMode) || !settlement) throw new Error('Local settlement is not configured for this project.')
+  // Recheck personal KYC immediately before a provider operation, not just at setup.
+  if (policy.accountType === 'individual') {
+    if (!policy.ownerId) throw Object.assign(Error('Verified account owner is required.'),{status:403})
+    await requirePocketBasicKyc(policy.ownerId)
+  }
   if (!Number.isFinite(amount) || amount <= 0) throw Object.assign(new Error('Enter a positive USDC checkout amount.'), { status: 400 })
   const currency = developerSettlementCurrency(policy.settlementMode)
   const availability = await dependencies.availability({ amount: requestedUsdc, network: 'base', token: 'USDC', fiat: currency })
