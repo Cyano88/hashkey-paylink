@@ -48,3 +48,9 @@ This is backend state handling, not a claim that every retained legacy UI is rea
 Verified separately in developer-verification.ts and verificationTypes.ts: the encrypted business application already collects companyName, registrationNumber, country and owners' fullName, birthDate, idType/idNumber/issuingCountry, BVN/NIN and controlPerson. The personal Pocket missing-data finding must not be applied to this business application.
 
 The remaining business mapper boundary is authenticated business payer ownership, approved immutable review revision, verified director role (owner/controlPerson alone does not prove directorship), provider enum mapping, consented provider disclosure and refund-account binding. No arbitrary owner is silently mapped as a director. No builder fee-setting work was included in this change.
+
+## Deployment tracking
+
+Main backend state-handling commit fb468de58e10db5ee1ccdce3444412a9678806f2 went live at 2026-10-30T11:49:09Z (dep-dbi85su7bikc73adqtv0). Follow-up 6d8235d14621370d90b3e34f0830063ccd71f271 adds tested recovery from a prior local expiry when a delayed provider hold arrives. That follow-up deployment dep-dbi87hv23o6c73esikeg is pending final confirmation. Tests passed without sending real KYC, creating orders or moving funds.
+
+Final source 6d8235d14621370d90b3e34f0830063ccd71f271 is live at 2026-10-30T11:54:26Z (dep-dbi87hv23o6c73esikeg). Post-deploy health returned HTTP 200 and database true. Existing operations health remains false with the same 37 stale unresolved records (12 bank payouts, 24 hosted checkouts, 1 POS); this work does not clear or classify that backlog. No real hold/refund acceptance or new onramp activation is claimed.
