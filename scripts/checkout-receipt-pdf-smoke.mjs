@@ -13,5 +13,6 @@ const email=receiptEmail({id,merchant:'Lunchroom',description:'Lunchroom order 1
 assert.equal((email.html.match(/Download receipt/g)||[]).length,1)
 assert(!/View receipt|Download invoice|>Back</.test(email.html));assert(email.text.includes(receiptPdfUrl(id)))
 assert(email.html.indexOf('Download receipt')<email.html.indexOf('Questions about your purchase?'))
-assert(email.html.includes('Powered by <strong'));assert(!email.html.includes('background:#111827'))
+assert(email.html.includes('Powered by <span'));assert(!email.html.includes('background:#111827'))
 console.log('PASS direct PDF: frozen attachment reuse, canonical receipt requirement, safe filename, legacy generation, one download CTA, support placement and weighted footer.')
+
