@@ -10,10 +10,16 @@ Playwright reloaded the existing merchant return page for order e30d65516361471a
 
 Handler/helper suites passed: food-hosted-checkout, food-demo-webhook, builder-integration and builder-webhook-contract. Coverage includes exact amount/asset matching, server basket, stable retry keys, parent-child mapping, webhook signatures/staleness, duplicate handling, failed-delivery retry and missed-webhook recovery. No real APIs in these fixtures.
 
-## Open exception
+## Historical retired-stock exception
 
 The project response contains failed delivery stock-paid:chkx_985703bd2a19430896ddc48e. An older loaded dashboard displayed HTTP 503; after refresh the recorded attempt is HTTP 502 at 2026-10-30T17:36:21.573Z. Authenticated checkout status confirms a separate 0.00005 NVDAx payment is paid, receipt 803dd338-7db5-402b-8a68-63141a091ac8, transaction 0xd8139c35999ff05fe25a70ee277e708f212564d1f413fa3431a8cb93597fbbfa. No successful delivery or corresponding merchant order has been verified for this event. Do not mark it delivered, replay it blindly, clear its record, or ask the payer to pay again. Next investigation must establish the order mapping and retry state. It is not evidence of failure of the separately verified USDT checkout.
 
 ## Limits
 
 No new payment, receipt email, key rotation, verification approval or webhook replay was performed. The older dashboard tab retained pre-release copy until refreshed; current source already contains the corrected KYC/KYB wording. Observed repeated unload-policy errors came from the Chrome automation extension; Privy connector warnings remain separate. No claim of a completely error-free system, local-fiat launch approval, or all-provider readiness.
+
+## Scope correction
+
+Stock payments are retired. The NVDAx record above is historical reconciliation only, not a supported payment flow or a blocker for stablecoin onboarding acceptance. Do not restore stock checkout, replay its webhook as a current integration test, or request a replacement stock payment. Existing paid records and receipts remain historical evidence.
+
+Rechecked source: new stock assets are rejected by hosted checkout creation; retired unpaid links are blocked from payment; current project config filters stock tokens out; selection lists only supported stablecoins. The hosted-checkout regression passed all four X Layer stablecoins and rejection of stock symbols/addresses and native assets. Pocket stock holdings/transfers are separate and were not changed.
