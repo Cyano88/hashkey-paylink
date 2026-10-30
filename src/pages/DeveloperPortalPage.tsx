@@ -387,8 +387,8 @@ export default function DeveloperPortalPage() {
           </div>
           <div className="flex flex-col justify-center p-7 sm:p-10 lg:p-12">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><KeyRound className="h-5 w-5" /></span>
-            <h2 className="mt-5 text-2xl font-semibold leading-[1.3] tracking-normal text-gray-950 dark:text-white">Build with Hash PayLink</h2>
-            <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Sign in to configure your products, connect your backend and track project events.</p>
+            <h2 className="mt-5 text-2xl font-semibold leading-[1.3] tracking-normal text-gray-950 dark:text-white">{params.get('continueOnPhone')==='1'?'Continue verification':'Build with Hash PayLink'}</h2>
+            <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{params.get('continueOnPhone')==='1'?'Sign in with the same account you used on your computer to continue your identity check.':'Sign in to configure your products, connect your backend and track project events.'}</p>
             <div className="mt-7"><PocketEmailLogin context="developer" /></div>
             <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-gray-400"><Lock className="h-3 w-3" /> Keep API keys on your backend.</p>
           </div>

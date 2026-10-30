@@ -1,3 +1,4 @@
+import VerificationPhoneHandoff from '../../developer/VerificationPhoneHandoff'
 import {readPocketCountry,savePocketCountry} from '../lib/pocketCountryPreference'
 import PocketSelect from './PocketSelect'
 import usePocketLimitDisplay from '../hooks/usePocketLimitDisplay'
@@ -22,11 +23,12 @@ function loadSmile() {
 }
 
 export default function PocketKycPanel({ getAccessToken, email = '', surface = 'pocket', initialLevel }: { email?:string; surface?:'pocket'|'developer'; initialLevel?:'basic'|'advanced'; getAccessToken: () => Promise<string | null> }) {
-  const [country,setCountry]=useState<'NG'|'UG'>(()=>readPocketCountry(email))
+  const [country,setCountry]=useState<'NG'|'UG'>(()=>surface==='developer' && ['NG','UG'].includes(new URLSearchParams(window.location.search).get('verificationCountry')||'') ? new URLSearchParams(window.location.search).get('verificationCountry') as 'NG'|'UG' : readPocketCountry(email))
   const [ugandaIdentity,setUgandaIdentity]=useState({fullName:'',idNumber:'',cardNumber:'',dob:''})
   const identityRef=useRef(ugandaIdentity);identityRef.current=ugandaIdentity
   const countryRef=useRef(country);countryRef.current=country
   const limitDisplay = usePocketLimitDisplay(country==='UG'?'UGX':undefined)
+  const [phoneOpen, setPhoneOpen] = useState(false)
   const [providerVisible, setProviderVisible] = useState(false)
   usePocketLightSurface(providerVisible)
   const [state, setState] = useState<KycState | null>(null)
@@ -83,13 +85,13 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   useEffect(() => protectSmileViewport(setProviderVisible), [])
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
-    if (error && !autoRetry || ((!state || !['pending', 'review'].includes(state.status)) && !error)) return
+    if (error && !autoRetry || ((!state || !['pending', 'review'].includes(state.status)) && !error && !phoneOpen)) return
     const onVisible = () => { if (!document.hidden) void refresh() }
     window.addEventListener('focus', onVisible)
     document.addEventListener('visibilitychange', onVisible)
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, state?.status === 'review' ? 60000 : 15000)
     return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
-  }, [state?.status, error, autoRetry, refresh])
+  }, [state?.status, error, autoRetry, refresh, phoneOpen])
   const changeMethod = async () => {
     if (busy || opening.current || !state?.canChangeMethod) return
     opening.current=true; requestGeneration.current++; setBusy(true); setError('')
@@ -141,6 +143,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   useEffect(() => { setConsent(false) }, [needsAdditional,selectedLevel])
   useEffect(() => { if(state&&!basicPassed)setSelectedLevel('basic');else if(basicPassed&&initialLevel==='advanced')setSelectedLevel('advanced') }, [Boolean(state),basicPassed,initialLevel])
   const complete = state?.workflow ? state.workflow.complete : state?.status === 'passed'
+  useEffect(() => { if (complete) setPhoneOpen(false) }, [complete])
   const failed = state?.status === 'failed'
   const guidance = state ? kycGuidance(state) : null
   const passed = state?.status === 'passed'
@@ -172,7 +175,8 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
           <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{option.description}</span></span>
         </label>)}
       </fieldset>}
-      {retryable && <>
+      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff level={selectedLevel} country={country} open={phoneOpen} onOpenChange={setPhoneOpen} />}
+      {retryable && !phoneOpen && <>
         {country==='UG' && <div className="space-y-4">
           <p className="text-xs text-gray-500">Checks your National ID details. No selfie is required.</p>
           {([{key:'fullName',label:'Full name for payment records',type:'text',max:160},{key:'idNumber',label:'National ID number',type:'text',max:14},{key:'cardNumber',label:'Card number',type:'text',max:40},{key:'dob',label:'Date of birth',type:'date',max:10}] as const).map(field=><label key={field.key} className="block text-sm">{field.label}<input type={field.type} maxLength={field.max} autoComplete="off" disabled={busy} value={ugandaIdentity[field.key]} onChange={e=>setUgandaIdentity(value=>({...value,[field.key]:e.target.value}))} className="mt-2 block w-full rounded-xl border border-gray-200 bg-transparent px-4 py-3 dark:border-white/15" /></label>)}
