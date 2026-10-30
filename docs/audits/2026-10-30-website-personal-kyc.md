@@ -1,0 +1,13 @@
+# Website personal KYC and Pocket audit
+
+Personal profiles now embed the existing Pocket KYC panel under Settings / Verification. The API, authenticated owner, provider checks and durable identity records are shared. Nigeria requires Basic before Advanced; Uganda retains its current National ID flow. No new countries, provider approvals or higher limits enabled. Business KYB is separate.
+
+Concrete findings: the identity frame CSP omitted developer.hashpaylink.com, preventing website embedding. Both frame documents' submission-error listeners also omitted pocket.hashpaylink.com; added Pocket and developer origins explicitly. Retained origin/source validation, camera isolation and provider-result authority. Panel start is synchronously guarded against duplicate activation and stale status responses cannot overwrite a newer start.
+
+Receiving wallets remain owner-bound and network-specific. Personal settings offer available Pocket wallets as draft defaults without saving them automatically or replacing existing addresses. Business accounts require an explicit Use my Pocket wallet for this business selection. X Layer/BNB use the verified embedded EOA; Circle addresses are never copied between chains. Unavailable wallets stay empty.
+
+Passed: current V3 KYC handler tests (Nigeria, Uganda, provider entitlement, signatures/proof, matching, missing-callback recovery, timeouts, duplicate prevention and sandbox isolation), identity/guidance tests, Pocket browser tests (consent, submission versus approval, failure/support, safe-area, rate-limit cooldown and permanent errors), frame message isolation, website personal KYC/browser wallet choice, receiving wallet ownership and production eligibility. Fresh onboarding passed using the tsx loader.
+
+Test maintenance: Pocket browser expectations were stale versus existing Done CTA and current support guidance; scoped its mock to KYC so unrelated FX requests are not mistaken for KYC retries. The older legacy pocket-kyc-smoke suite could not bundle due to stale durable-store mocks; this is not claimed as a pass. Current V3 handler suite is the active-path coverage. Full typecheck and final deploy evidence to follow.
+
+No real identity details submitted, provider verdict fabricated, consent accepted, live wallet created, payment made or limit raised. User's historical failed attempt has no country/error details yet, so its exact cause is not established. Browser fixtures do not prove camera capture or an actual provider enrollment. Native APK has not been rebuilt in this change; served identity-frame fixes apply when it loads the updated frame.

@@ -21,7 +21,7 @@ function loadSmile() {
   return Promise.resolve()
 }
 
-export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:string; getAccessToken: () => Promise<string | null> }) {
+export default function PocketKycPanel({ getAccessToken, email = '', surface = 'pocket', initialLevel }: { email?:string; surface?:'pocket'|'developer'; initialLevel?:'basic'|'advanced'; getAccessToken: () => Promise<string | null> }) {
   const [country,setCountry]=useState<'NG'|'UG'>(()=>readPocketCountry(email))
   const [ugandaIdentity,setUgandaIdentity]=useState({fullName:'',idNumber:'',cardNumber:'',dob:''})
   const identityRef=useRef(ugandaIdentity);identityRef.current=ugandaIdentity
@@ -33,12 +33,16 @@ export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:
   const [submittedSheet, setSubmittedSheet] = useState(false)
   const [busy, setBusy] = useState(false)
   const [additionalMethod, setAdditionalMethod] = useState<'nin' | 'government_id'>('nin')
-  const [selectedLevel,setSelectedLevel]=useState<'basic'|'advanced'>(()=>new URLSearchParams(window.location.search).get('level')==='advanced'?'advanced':'basic')
+  const [selectedLevel,setSelectedLevel]=useState<'basic'|'advanced'>(()=>initialLevel==='advanced'||new URLSearchParams(window.location.search).get('level')==='advanced'?'advanced':'basic')
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
   const [autoRetry, setAutoRetry] = useState(true)
   const mounted = useRef(true)
   const inFlight = useRef(false)
+  const opening = useRef(false)
+  const requestGeneration = useRef(0)
+  const supportHref = surface==='developer'?'mailto:support@hashpaylink.com':POCKET_BASE_PATH + POCKET_ROUTES.assistant
+  const actionClass = surface==='developer'?'developer-primary':'pocket-cta-primary'
   const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
   const retryNotBefore = useRef(0)
   const [retryAt, setRetryAt] = useState(0)
@@ -64,10 +68,11 @@ export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:
     return data as Session
   }, [])
   const refresh = useCallback(async () => {
-    if (inFlight.current || Date.now() < retryNotBefore.current) return
+    if (opening.current || inFlight.current || Date.now() < retryNotBefore.current) return
     inFlight.current = true
-    try { const next = await api('status'); if (mounted.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError(''); setAutoRetry(true) } }
-    catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not load.'); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
+    const generation = requestGeneration.current
+    try { const next = await api('status'); if (mounted.current && generation===requestGeneration.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError(''); setAutoRetry(true) } }
+    catch (reason) { if (mounted.current && generation===requestGeneration.current) { setError(reason instanceof Error ? reason.message : 'Verification could not load.'); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
     finally { inFlight.current = false }
   }, [api])
   useEffect(() => {
@@ -86,8 +91,8 @@ export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:
     return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
   }, [state?.status, error, autoRetry, refresh])
   const start = async () => {
-    if (!consent || busy || Date.now() < retryNotBefore.current) return
-    setBusy(true); setError(''); setAutoRetry(true)
+    if (!consent || opening.current || busy || Date.now() < retryNotBefore.current) return
+    opening.current=true; requestGeneration.current++; setBusy(true); setError(''); setAutoRetry(true)
     try {
       await loadSmile()
       if (!mounted.current) return
@@ -121,20 +126,20 @@ export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:
           setError(failure?.errorCode === 'CONSENT_DENIED' ? 'Verification was cancelled.' : 'Verification could not open. Please try again.')
         },
       })
-    } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false); if(country==='UG')void refresh() } }
+    } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false); if(country==='UG')void refresh() } } finally { opening.current=false }
   }
   useEffect(()=>{if(state?.jobId && (state.verification?.country==='NG'||state.verification?.country==='UG')){setCountry(state.verification.country);savePocketCountry(email,state.verification.country)}},[state?.jobId,state?.verification?.country,email])
   const basicPassed=Boolean(state?.workflow?.basicPassed ?? state?.workflow?.bvnPassed)
   const needsAdditional = Boolean(state?.workflow?.needsAdditional) && selectedLevel==='advanced'
   useEffect(() => { setConsent(false) }, [needsAdditional,selectedLevel])
-  useEffect(() => { if(state&&!basicPassed)setSelectedLevel('basic') }, [Boolean(state),basicPassed])
+  useEffect(() => { if(state&&!basicPassed)setSelectedLevel('basic');else if(basicPassed&&initialLevel==='advanced')setSelectedLevel('advanced') }, [Boolean(state),basicPassed,initialLevel])
   const complete = state?.workflow ? state.workflow.complete : state?.status === 'passed'
   const failed = state?.status === 'failed'
   const guidance = state ? kycGuidance(state) : null
   const passed = state?.status === 'passed'
   const dailyAllowance=country==='UG'?(state?.advancedDailyLimitNgn||50_000):50_000
   const resultTitle = basicPassed && passed && state?.environment==='production' && !state?.workflow?.complete ? country==='UG'?'Verification complete':'Basic verification complete' : guidance?.title ? guidance.title : passed ? state.verified ? 'Verification complete' : 'Sandbox test completed' : 'Verification submitted'
-  const resultText = basicPassed && passed && state?.environment==='production' && !complete ? <>Your daily allowance is {limitDisplay.usdc(dailyAllowance)}. {country==='NG'?'Advanced verification is optional.':''}</> : guidance?.message ? guidance.message : passed ? state.verified ? 'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
+  const resultText = basicPassed && passed && state?.environment==='production' && !complete ? <>Your daily allowance is {limitDisplay.usdc(dailyAllowance)}. {country==='NG'?surface==='developer'?'You can continue with Advanced verification below.':'Advanced verification is optional.':''}</> : guidance?.message ? guidance.message : passed ? state.verified ? surface==='developer'?'Your identity check passed. You can continue setting up your payments.':'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
   const retryable = !complete && guidance?.action !== 'support' && (selectedLevel==='advanced' ? basicPassed && (needsAdditional || state?.canResume === true || state?.status==='failed') : !basicPassed && (state?.canCorrectNames === true || state?.status === 'not_started' || state?.status === 'failed' || state?.canResume === true))
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
@@ -144,14 +149,14 @@ export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:
       <div aria-label="Verification levels" className="space-y-3">
         <button type="button" onClick={()=>setSelectedLevel('basic')} className={`w-full rounded-2xl border p-4 text-left ${selectedLevel==='basic'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>{country==='UG'?'Identity verification':'Basic'}</span>{basicPassed&&<Check aria-label="Basic complete" className="h-4 w-4 text-green-600"/>}</span>
-          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{country==='UG'?'National ID details':'BVN + selfie'} · {limitDisplay.usdc(dailyAllowance)} daily{limitDisplay.secondary(dailyAllowance) && <small className="mt-1 block">{limitDisplay.secondary(dailyAllowance)}</small>}</span>
+          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{country==='UG'?'National ID details':'BVN + selfie'}{surface==='pocket'&&<> · {limitDisplay.usdc(dailyAllowance)} daily{limitDisplay.secondary(dailyAllowance) && <small className="mt-1 block">{limitDisplay.secondary(dailyAllowance)}</small>}</>}</span>
         </button>
         {country==='NG' && <button type="button" disabled={!basicPassed} onClick={()=>setSelectedLevel('advanced')} className={`w-full rounded-2xl border p-4 text-left disabled:opacity-50 ${selectedLevel==='advanced'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>Advanced</span>{complete&&<Check aria-label="Advanced complete" className="h-4 w-4 text-green-600"/>}</span>
-          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':state.advancedDailyLimitNgn?<>NIN or government ID · {limitDisplay.usdc(state.advancedDailyLimitNgn)} daily</>:'NIN or government ID · Higher limits pending activation'}</span>
+          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':surface==='developer'?'NIN or government ID + selfie':state.advancedDailyLimitNgn?<>NIN or government ID · {limitDisplay.usdc(state.advancedDailyLimitNgn)} daily</>:'NIN or government ID · Higher limits pending activation'}</span>
         </button>}
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">Bank transfers and XPay bank payouts share this allowance. Bills are excluded.</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{surface==='developer'?'Available payment routes and limits are checked separately for your account.':'Bank transfers and XPay bank payouts share this allowance. Bills are excluded.'}</p>
       {guidance?<div role="status" className="space-y-1"><p className="text-sm font-medium">{guidance.title}</p><p className="text-sm leading-6 text-gray-500 dark:text-gray-400">{guidance.message}</p></div>:passed?<p role="status" className="text-sm text-green-700 dark:text-green-400">{state.environment==='sandbox'?'Sandbox test completed':country==='UG'?'Verification complete':complete?'Advanced verification complete':'Basic verification complete'}</p>:null}
       {needsAdditional && <fieldset disabled={busy} className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Choose how to verify</legend>
@@ -167,17 +172,17 @@ export default function PocketKycPanel({ getAccessToken, email = '' }: { email?:
         </div>}
         {country==='NG' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Enter your first, middle and last names as shown on your ID.</p>}
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />{country==='UG'?'I agree to share my National ID details with Smile ID for verification.':'I agree to share my identity details and selfie with Smile ID for verification.'}</label>
-        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="pocket-cta-primary w-full px-4 py-3.5">{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : country==='UG'?'Verify identity':'Verify Basic'}</button>
+        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className={`${actionClass} w-full px-4 py-3.5`}>{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : country==='UG'?'Verify identity':'Verify Basic'}</button>
       </>}
-      {(guidance?.action === 'support') && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
+      {(guidance?.action === 'support') && <a href={supportHref} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}
     {submittedSheet && <PocketBottomSheet title={resultTitle} dismissOnBackdrop={false} onClose={() => setSubmittedSheet(false)}>
       <div className="pb-2 pt-3 text-center">
         {passed ? <Check aria-hidden="true" className="mx-auto h-14 w-14 text-green-600" /> : failed || state?.status === 'review' ? <Info aria-hidden="true" className="mx-auto h-14 w-14 text-red-500" /> : <Clock3 aria-hidden="true" className="mx-auto h-14 w-14 text-gray-500 dark:text-gray-400" />}
         <h2 className="mt-6 text-2xl font-semibold">{resultTitle}</h2>
         <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{resultText}</p>
-        {guidance?.action === 'support' && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="mt-5 block text-sm font-semibold">Contact support</a>}
-        <button type="button" onClick={() => setSubmittedSheet(false)} className="pocket-cta-primary mt-7 w-full px-4 py-3.5">Done</button>
+        {guidance?.action === 'support' && <a href={supportHref} className="mt-5 block text-sm font-semibold">Contact support</a>}
+        <button type="button" onClick={() => setSubmittedSheet(false)} className={`${actionClass} mt-7 w-full px-4 py-3.5`}>Done</button>
       </div>
     </PocketBottomSheet>}
     {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400"><p>{error}</p>{autoRetry && !retryAt && <button type="button" onClick={() => void refresh()} className="mt-3 block min-h-10 font-semibold underline">Try again</button>}</div>}

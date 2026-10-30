@@ -273,7 +273,7 @@ app.get('/pocket/identity-frame', (req, res) => {
   res.setHeader('Cache-Control', 'no-store')
   if (process.env.POCKET_KYC_ENROLLMENT_PAUSED === 'true') {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com http://localhost:5173; base-uri 'none'; form-action 'none'")
+    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com https://developer.hashpaylink.com http://localhost:5173; base-uri 'none'; form-action 'none'")
     return res.sendFile(join(__dirname, 'vendor', 'smile-id', 'coming-soon.html'))
   }
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
@@ -286,7 +286,7 @@ app.get('/pocket/identity-frame', (req, res) => {
     "connect-src https: wss: data:",
     "worker-src blob: https://cdn.smileidentity.com https://cdn.usesmileid.com",
     "media-src blob:",
-    "frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com http://localhost:5173",
+    "frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com https://developer.hashpaylink.com http://localhost:5173",
     "base-uri 'none'",
     "form-action 'none'",
     "sandbox allow-scripts allow-same-origin allow-forms allow-popups",

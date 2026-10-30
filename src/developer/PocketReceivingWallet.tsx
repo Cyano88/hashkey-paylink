@@ -1,0 +1,5 @@
+export default function PocketReceivingWallet({network,address,selected,business=false,onSelect}:{network:string;address?:string;selected?:string;business?:boolean;onSelect:()=>void}){
+ if(!address)return <p className="mt-2 text-xs leading-5 text-gray-500">No Pocket wallet is available for this network. Enter a receiving address you control.</p>
+ const matches=network==='solana'?selected===address:selected?.toLowerCase()===address.toLowerCase()
+ return <div className="mt-3 space-y-2 text-xs leading-5 text-gray-500"><p>{matches?'Receive in Pocket. Payments go to your Pocket wallet on this network.':business?'Use your Pocket wallet for this business only if it is the intended receiving account.':'Your Pocket wallet is available on this network.'} You can use another receiving address.</p>{!matches&&<><p className="break-all font-mono">{address}</p><button type="button" className="min-h-11 font-semibold text-blue-600" onClick={onSelect}>{business?'Use my Pocket wallet for this business':'Use Pocket wallet'}</button></>}</div>
+}

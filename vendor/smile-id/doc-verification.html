@@ -559,7 +559,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
   };
   customElements.whenDefined('selfie-capture-wrapper').then(()=>inspect(document.querySelector('main')));
   addEventListener('message',event=>{
-    if(event.source!==window.parent||!['https://app.hashpaylink.com','http://localhost:5173'].includes(event.origin)||event.data?.source!=='Pocket::SubmissionError')return;
+    if(event.source!==window.parent||!['https://app.hashpaylink.com','https://pocket.hashpaylink.com','https://developer.hashpaylink.com','http://localhost:5173'].includes(event.origin)||event.data?.source!=='Pocket::SubmissionError')return;
     const screen=document.getElementById('upload-failure-screen');if(!screen)return;
     const {status,retryable,message}=event.data;
     const title=screen.querySelector('h1');if(title)title.textContent='Verification not submitted';
