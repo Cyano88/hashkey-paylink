@@ -28,3 +28,9 @@
 - Source commit `16a9c7828f7b7703e78a1ab64441df7fcce576de`; Render deployment `dep-dbibj861egvs73e5a73g` live at 2026-10-30T15:43:00Z.
 - Authenticated Playwright check confirmed Business/Personal controls immediately before the account avatar (8px gap), correct pressed state, existing business context selection, and an empty separate business sandbox.
 - Personal retained the prior paid simulated checkout `test_chk_02e75ca287364bfd94d027090b8ea4fd`; switching back restored it. No real business profile or payment was created during live verification.
+
+## Correction: app names are not business identities
+
+The initial release incorrectly used legacy app names as business profile names. Legacy contexts now display Business profile not set; the app name appears only as an explicitly labelled app in the selector. The owner can select Set business name to confirm the business owning the existing apps. This stores an explicit profile name without changing app IDs, settings, credentials or verification. Adding another app to an unnamed legacy context requires completing this setup first. Existing explicitly created profiles keep their chosen names.
+
+Verification: profile handler tests cover unset names, owner isolation, validation, setup and unchanged app records; Playwright covers blank name entry, saving an explicit business name and preserving the app name, alongside existing responsive/profile tests. Project adapter suite and production build passed.

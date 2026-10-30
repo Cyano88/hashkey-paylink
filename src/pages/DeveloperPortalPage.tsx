@@ -135,15 +135,15 @@ export default function DeveloperPortalPage() {
     if(hasUnsavedChanges()&&!window.confirm('Discard unsaved app changes before switching profiles?'))return false
     applyProfileChoice(id);return true
   }
-  async function createBusinessProfile(name:string) {
+  async function createBusinessProfile(name:string,profileId?:string) {
     if(busy)return
     if(hasUnsavedChanges()&&!window.confirm('Discard unsaved app changes before creating a business profile?'))throw Error('Your current app changes have been kept.')
     const generation=loadGeneration.current
     setBusy(true)
-    try{const data=await api('POST',{action:'create-builder-profile',name});if(generation!==loadGeneration.current)return
+    try{const data=await api('POST',{action:profileId?'setup-builder-profile':'create-builder-profile',name,profileId});if(generation!==loadGeneration.current)return
       if(!data.builderProfile)throw Error('Business profile could not be loaded.')
       loadGeneration.current+=1;setLoading(false)
-      setBuilderProfiles(current=>[...current,data.builderProfile!]);applyProfileChoice(data.builderProfile.id)
+      setBuilderProfiles(current=>[...current.filter(p=>p.id!==data.builderProfile!.id),data.builderProfile!]);applyProfileChoice(data.builderProfile.id)
     }finally{setBusy(false)}
   }
   function switchEnvironment(production:boolean) {

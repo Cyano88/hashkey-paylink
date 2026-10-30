@@ -683,6 +683,15 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const action = clean(req.body?.action, 40).toLowerCase()
       if(req.method==='POST'&&action==='remove-app') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.body?.projectId,80),ownerId:identity.userId,confirmName:req.body?.confirmName,remove:true}))
+      if(req.method==='POST'&&action==='setup-builder-profile') {
+        const existing=await ownedProfile(identity.userId,req.body?.profileId)
+        if(existing.type!=='business'||!existing.needsSetup)return res.status(409).json({ok:false,error:'This profile does not need setup.'})
+        const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
+        if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
+        const profile:BuilderProfile={id:existing.id,name,type:'business',createdAt:dependencies.now().toISOString()}
+        await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>({projects:{},businessProfiles:{...current?.businessProfiles,[profile.id]:{...profile,ownerId:identity.userId}}}))
+        return res.json({ok:true,builderProfile:profile})
+      }
       if(req.method==='POST'&&action==='create-builder-profile') {
         const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
         if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
@@ -726,6 +735,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const capabilities = requestedCapabilities(req.body?.capabilities, checkoutMode)
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const selectedProfile=req.body?.builderProfileId===undefined?undefined:await ownedProfile(identity.userId,req.body.builderProfileId)
+        if(selectedProfile?.needsSetup)return res.status(409).json({ok:false,error:'Set your business profile name before adding another app.'})
         if(selectedProfile&&req.body?.accountType!==undefined&&req.body.accountType!==selectedProfile.type)return res.status(400).json({ok:false,error:'The app type must match its selected profile.'})
         if(selectedProfile?.type==='business')await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>({projects:{},businessProfiles:{...current?.businessProfiles,[selectedProfile.id]:{...selectedProfile,ownerId:identity.userId}}}))
         const now = dependencies.now().toISOString()

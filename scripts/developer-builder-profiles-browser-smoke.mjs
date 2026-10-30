@@ -8,6 +8,7 @@ const handler=createDeveloperProjectsHandler({hasStore:()=>true,portalSecret:()=
 const recorder=()=>({statusCode:200,setHeader(){},status(n){this.statusCode=n;return this},json(b){this.body=b;return this}})
 async function api(body){const r=recorder();await handler({method:body?'POST':'GET',headers:{},query:{},body},r);assert.ok(r.statusCode<300,r.body?.error);return r.body}
 await api({action:'create',name:'Personal app',checkoutMode:'human',accountType:'individual',builderProfileId:'personal'})
+const legacy=(await api({action:'create',name:'Legacy app name',checkoutMode:'human',accountType:'business'})).project
 const business=(await api({action:'create-builder-profile',name:'Business One'})).builderProfile
 await api({action:'create',name:'Business app',checkoutMode:'human',accountType:'business',builderProfileId:business.id})
 const sandbox=createDeveloperSandboxHandler(verify,{read:async k=>sandboxStores.get(k),mutate:async(k,fn)=>{const v=fn(sandboxStores.get(k));sandboxStores.set(k,v);return v},resolveProfile:async(_owner,id)=>{if(!(await api()).builderProfiles.some(p=>p.id===id))throw Object.assign(Error('Unknown profile'),{status:404});return id}})
@@ -73,6 +74,17 @@ try{
  await page.getByRole('button',{name:'Back to apps',exact:true}).click()
  await page.getByText('Business second app',{exact:true}).waitFor()
  assert.equal(await page.getByText('Personal app',{exact:true}).count(),0)
+ await page.goto('http://127.0.0.1:4319/?section=overview&project='+legacy.id)
+ await page.getByRole('button',{name:'Business profile',exact:true}).click()
+ await page.getByRole('button',{name:'Set business name',exact:true}).click()
+ await page.getByRole('heading',{name:'Set business name',exact:true}).waitFor()
+ assert.equal(await page.getByLabel('Business profile name',{exact:true}).inputValue(),'')
+ await page.getByLabel('Business profile name',{exact:true}).fill('Actual Business Name')
+ await page.getByRole('button',{name:'Save business name',exact:true}).click()
+ await page.getByRole('dialog').waitFor({state:'detached'})
+ await page.getByText('Actual Business Name \u00b7 Business',{exact:true}).waitFor()
+ assert.equal((await api()).builderProfiles.find(p=>p.id===legacy.builderProfileId).name,'Actual Business Name')
+ assert.equal((await api()).projects.find(p=>p.id===legacy.id).name,'Legacy app name')
  assert.deepEqual(errors,[])
  console.log('Profile browser: top-right icon toggle, business creation/selection, app type inheritance, personal/business isolation, separate sandbox, cleared secrets, 320/390/640/768/1440 light/dark passed.')
 }finally{await browser.close()}

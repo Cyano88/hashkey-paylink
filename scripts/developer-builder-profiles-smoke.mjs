@@ -28,10 +28,20 @@ assert.equal((await call(undefined,{profileId:business.id})).statusCode,404)
 assert.equal((await app('Foreign profile',{builderProfileId:business.id})).statusCode,404)
 assert.deepEqual((await call()).body.builderProfiles.map(p=>p.id),['personal'])
 owner='owner-a'
+response=await call();const unset=response.body.builderProfiles.find(p=>p.id===legacy.builderProfileId)
+assert.equal(unset.name,'Business profile not set');assert.equal(unset.needsSetup,true);assert.equal(unset.legacyAppName,'Existing company')
+assert.equal((await app('Blocked until named',{builderProfileId:legacy.builderProfileId})).statusCode,409)
+owner='owner-b';assert.equal((await call({action:'setup-builder-profile',profileId:legacy.builderProfileId,name:'Stolen'})).statusCode,404);owner='owner-a'
+assert.equal((await call({action:'setup-builder-profile',profileId:legacy.builderProfileId,name:'x'})).statusCode,400)
+const before=structuredClone(stores.get('hashpaylink:developer-projects:v1'))
+response=await call({action:'setup-builder-profile',profileId:legacy.builderProfileId,name:'Actual Company'})
+assert.equal(response.statusCode,200);assert.equal(response.body.builderProfile.name,'Actual Company');assert.equal(response.body.builderProfile.needsSetup,undefined)
+assert.deepEqual(stores.get('hashpaylink:developer-projects:v1'),before)
+assert.equal((await call({action:'setup-builder-profile',profileId:legacy.builderProfileId,name:'Again'})).statusCode,409)
 const sibling=(await app('Second app',{accountType:'business',builderProfileId:legacy.builderProfileId})).body.project
 assert.equal(sibling.builderProfileId,legacy.builderProfileId)
 const projectStore=stores.get('hashpaylink:developer-projects:v1');delete projectStore.projects[legacy.id]
-response=await call();assert.ok(response.body.builderProfiles.some(p=>p.id===legacy.builderProfileId&&p.name==='Existing company'))
+response=await call();assert.ok(response.body.builderProfiles.some(p=>p.id===legacy.builderProfileId&&p.name==='Actual Company'))
 const isolated=new Map()
 const sandbox=createDeveloperSandboxHandler(deps.verify,{read:async k=>structuredClone(isolated.get(k)),mutate:async(k,fn)=>{const next=fn(structuredClone(isolated.get(k)));isolated.set(k,next);return next},resolveProfile:async(actor,id)=>{const profiles=builderProfilesForProjects(Object.values(projectStore.projects).filter(p=>p.ownerId===actor),Object.values(stores.get('hashpaylink:developer-business-profiles:v1').businessProfiles).filter(p=>p.ownerId===actor));if(!profiles.some(p=>p.id===id))throw Object.assign(Error('Profile not found'),{status:404});return id}})
 async function simulation(body,profileId='personal',headers={}){const r=recorder();await sandbox({method:body?'POST':'GET',body,headers,query:profileId===undefined?{}:{profileId}},r);return r}
