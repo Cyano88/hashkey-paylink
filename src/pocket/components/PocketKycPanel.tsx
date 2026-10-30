@@ -34,7 +34,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   const [state, setState] = useState<KycState | null>(null)
   const [submittedSheet, setSubmittedSheet] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [additionalMethod, setAdditionalMethod] = useState<'nin' | 'government_id'>('nin')
+  const [additionalMethod, setAdditionalMethod] = useState<'nin' | 'government_id'>(()=>surface==='developer' && new URLSearchParams(window.location.search).get('verificationMethod')==='government_id'?'government_id':'nin')
   const [selectedLevel,setSelectedLevel]=useState<'basic'|'advanced'>(()=>initialLevel==='advanced'||new URLSearchParams(window.location.search).get('level')==='advanced'?'advanced':'basic')
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
@@ -175,7 +175,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
           <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{option.description}</span></span>
         </label>)}
       </fieldset>}
-      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff level={selectedLevel} country={country} open={phoneOpen} onOpenChange={setPhoneOpen} />}
+      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff level={selectedLevel} country={country} method={additionalMethod} open={phoneOpen} onOpenChange={setPhoneOpen} />}
       {retryable && !phoneOpen && <>
         {country==='UG' && <div className="space-y-4">
           <p className="text-xs text-gray-500">Checks your National ID details. No selfie is required.</p>
@@ -185,7 +185,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />{country==='UG'?'I agree to share my National ID details with Smile ID for verification.':'I agree to share my identity details and selfie with Smile ID for verification.'}</label>
         <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className={`${actionClass} w-full px-4 py-3.5`}>{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : country==='UG'?'Verify identity':'Verify Basic'}</button>
       </>}
-      {selectedLevel==='advanced' && state.canChangeMethod && !providerVisible && <button type="button" disabled={busy || retryAt > 0} onClick={()=>void changeMethod()} className="block w-full py-3 text-center text-sm font-semibold disabled:opacity-50">Change verification method</button>}
+      {selectedLevel==='advanced' && state.canChangeMethod && !providerVisible && !phoneOpen && <button type="button" disabled={busy || retryAt > 0} onClick={()=>void changeMethod()} className="block w-full py-3 text-center text-sm font-semibold disabled:opacity-50">Change verification method</button>}
       {(guidance?.action === 'support') && <a href={supportHref} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}
     {submittedSheet && <PocketBottomSheet title={resultTitle} dismissOnBackdrop={false} onClose={() => setSubmittedSheet(false)}>

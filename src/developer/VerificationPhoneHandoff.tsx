@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 
-export function verificationPhoneUrl(location: string, level: 'basic' | 'advanced', country: 'NG' | 'UG') {
+export function verificationPhoneUrl(location: string, level: 'basic' | 'advanced', country: 'NG' | 'UG', method: 'nin' | 'government_id' = 'nin') {
   const current = new URL(location)
   const link = new URL(current.pathname, current.origin)
   for (const key of ['project', 'profile']) {
@@ -12,15 +12,16 @@ export function verificationPhoneUrl(location: string, level: 'basic' | 'advance
   link.searchParams.set('section', 'verification')
   link.searchParams.set('level', level)
   link.searchParams.set('verificationCountry', country)
+  if (country === 'NG' && level === 'advanced') link.searchParams.set('verificationMethod', method)
   link.searchParams.set('continueOnPhone', '1')
   return link.toString()
 }
 
-export default function VerificationPhoneHandoff({ level, country, open, onOpenChange }: {
-  level: 'basic' | 'advanced'; country: 'NG' | 'UG'; open: boolean; onOpenChange: (open: boolean) => void
+export default function VerificationPhoneHandoff({ level, country, method, open, onOpenChange }: {
+  level: 'basic' | 'advanced'; country: 'NG' | 'UG'; method: 'nin' | 'government_id'; open: boolean; onOpenChange: (open: boolean) => void
 }) {
   const [copyStatus, setCopyStatus] = useState('')
-  const link = verificationPhoneUrl(window.location.href, level, country)
+  const link = verificationPhoneUrl(window.location.href, level, country, method)
   return <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
     <button type="button" aria-expanded={open} onClick={() => { onOpenChange(!open); setCopyStatus('') }} className="min-h-11 text-sm font-semibold">{open ? 'Close phone option' : 'Continue on phone'}</button>
     {open && <div className="space-y-4 pt-2">

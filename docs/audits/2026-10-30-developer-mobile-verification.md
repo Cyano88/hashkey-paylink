@@ -19,3 +19,17 @@ Release evidence:
 - Full typecheck: same 43 baseline errors; normalized comparison found no new errors.
 - Commit 26db20a969424f69ac9449b78b661888733a9ae3 deployed as dep-dbifv9qjnfac738q6v5g; confirmed live at 2026-10-30T20:41:42.444819Z.
 - Fresh-browser live Playwright check confirmed Continue verification, same-account instruction, email input and sign-in gate with query retained. No OTP requested. A transient 502 during startup cleared once live.
+
+## Follow-up handoff audit
+
+Confirmed gaps fixed:
+- Missing/inaccessible project IDs previously fell back to another owned app. Phone continuation now requires the exact accessible, active personal app; closed/business/missing targets show a clear account/link error with Change account and Back to dashboard. Failed loading is distinguished from invalid access.
+- Project data from an earlier signed-in owner is gated until the current owner's projects load. The shared personal KYC component remounts on account change.
+- Selected NIN versus government ID now survives the link. Only allowlisted method values are used; existing pending sessions remain backend-authoritative.
+- Desktop Change verification method is hidden while phone handoff is open.
+
+New full-portal browser audit (scripts/developer-phone-handoff-audit.mjs) verifies wrong/removed/business targets with no KYC requests; delayed account switch without stale KYC; project-load recovery; preserved method; fresh consent; server-confirmed desktop completion; actual QR decoding; clipboard rejection; Basic/UG routing; expired authentication; submitted-state no-repeat controls. All APIs are fixtures. The preview now explicitly disables out-of-scope wallet setup and exposes synthetic account changes.
+
+The backend remains owner-bound and atomically guards duplicate starts; the existing resume path retains its 20-second opening cooldown. This handoff is authenticated continuation, not transfer of an active camera session or a single-device capture lock. Close desktop capture before continuing on a phone.
+
+Remaining live evidence: an unverified account must scan, sign in, allow its camera and complete capture. iOS Safari capture has not been exercised in this audit. No real identity data or OTP was submitted by the assistant.

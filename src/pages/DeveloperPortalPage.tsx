@@ -118,6 +118,7 @@ export default function DeveloperPortalPage() {
   const [activeId, setActiveId] = useState(params.get('project') ?? '')
   const [loadFailed, setLoadFailed] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [projectsOwner, setProjectsOwner] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   const [verificationDirty,setVerificationDirty]=useState(false)
   const [error, setError] = useState('')
@@ -232,6 +233,7 @@ export default function DeveloperPortalPage() {
       if (generation !== loadGeneration.current) return
       const next = data.projects ?? []
       setProjects(next)
+      setProjectsOwner(user?.id)
       setBuilderProfiles(data.builderProfiles??builderProfilesForProjects(next))
       setActiveId(current => current && next.some(project => project.id === current) ? current : next[0]?.id ?? '')
     } catch (reason) {
@@ -399,7 +401,15 @@ export default function DeveloperPortalPage() {
 
   if (loading && !projects.length) return <PortalLoading />
 
-  if (loadFailed && !projects.length) return <main className="mx-auto max-w-xl px-4 py-16"><h1 className="text-2xl font-semibold">Projects could not be loaded</h1><Message tone="error">{error}</Message><button type="button" disabled={loading} onClick={() => void loadProjects()} className="developer-primary mt-6">Try again</button></main>
+  if (loadFailed && !projects.length && params.get('continueOnPhone') !== '1') return <main className="mx-auto max-w-xl px-4 py-16"><h1 className="text-2xl font-semibold">Projects could not be loaded</h1><Message tone="error">{error}</Message><button type="button" disabled={loading} onClick={() => void loadProjects()} className="developer-primary mt-6">Try again</button></main>
+
+  // A phone continuation must never fall back to another app or previous account's data.
+  if (params.get('continueOnPhone') === '1' && tab === 'verification') {
+    if (loadFailed) return <main className="mx-auto max-w-xl px-4 py-16"><h1 className="text-2xl font-semibold">Verification could not load</h1><p className="mt-3 text-sm text-gray-500">We could not check this link. Please try again.</p><button type="button" onClick={()=>void loadProjects()} className="developer-primary mt-6">Try again</button></main>
+    if (loading || projectsOwner !== user?.id) return <PortalLoading />
+    const requested = allProjects.find(project => project.id === params.get('project'))
+    if (!requested || requested.removal || requested.accountType !== 'individual') return <main className="mx-auto max-w-xl px-4 py-16"><h1 className="text-2xl font-semibold">Check your account or verification link</h1><p className="mt-3 text-sm leading-6 text-gray-500">Use the same account as on your computer. If you are already using it, open Personal verification there and create a new phone link.</p><button type="button" onClick={()=>void logout()} className="developer-primary mt-6">Change account</button><Link to="/" className="mt-4 block text-sm font-semibold">Back to dashboard</Link></main>
+  }
 
   const parent = portalParent(tab)
   const subnav = portalSubsections[parent]
