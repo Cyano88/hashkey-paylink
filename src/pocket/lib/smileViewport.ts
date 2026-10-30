@@ -1,8 +1,11 @@
+import { Capacitor } from '@capacitor/core'
+
 const FRAME_ID = 'smile-identity-hosted-web-integration'
 
 // The hosted document is cross-origin. Give it a usable viewport instead of
 // scaling its text or attempting to change its internal camera layout.
 export function protectSmileViewport(onPresence?: (visible: boolean) => void) {
+  const nativeAndroid = Capacitor.getPlatform() === 'android'
   const style = document.createElement('style')
   style.textContent = `#${FRAME_ID} {
     top: calc(var(--smile-viewport-top, 0px) + var(--pocket-safe-top, env(safe-area-inset-top, 0px))) !important;
@@ -14,8 +17,14 @@ export function protectSmileViewport(onPresence?: (visible: boolean) => void) {
   }
   body:has(#${FRAME_ID})::before { background: #fff !important; }`
   const update = () => {
-    document.documentElement.style.setProperty('--smile-viewport-top', `${window.visualViewport?.offsetTop || 0}px`)
-    document.documentElement.style.setProperty('--smile-viewport-height', `${window.visualViewport?.height || window.innerHeight}px`)
+    // Android already resizes the WebView for the IME. During that transition
+    // visualViewport can subtract the keyboard a second time (Pixel: 618 ->
+    // 284px), collapsing the focused provider form before the next frame.
+    // Browser/iOS visual viewport handling still needs its own offset/height.
+    const top = nativeAndroid ? 0 : window.visualViewport?.offsetTop || 0
+    const height = nativeAndroid ? window.innerHeight : window.visualViewport?.height || window.innerHeight
+    document.documentElement.style.setProperty('--smile-viewport-top', `${top}px`)
+    document.documentElement.style.setProperty('--smile-viewport-height', `${height}px`)
   }
   let visible = false
   const syncPresence = () => {
