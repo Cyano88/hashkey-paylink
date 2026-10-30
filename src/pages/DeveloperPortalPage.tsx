@@ -467,7 +467,7 @@ function SetupPanel({ receivingWallets, draft, setDraft, institutions, instituti
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-gray-900 dark:text-white">Checkout brand mark</p>
-          <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">A square PNG, WebP, or JPG shown beside your platform name on checkout and receipts. Host it on the same origin as your website.</p>
+          <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">Use a square 512 × 512 PNG or WebP with space around your logo. JPG is also accepted. It appears on checkout, receipts and Pocket activity, including at small sizes. Use a public HTTPS URL on the same origin as your website. If the image cannot load, Pocket shows your business’s first letter.</p>
         </div>
       </div>
       <Field label="Brand mark URL" className="mt-3"><input className={fieldClass()} value={draft.brandImageUrl} onChange={event => setDraft({ ...draft, brandImageUrl: event.target.value })} placeholder="https://yourplatform.com/brand/mark.png" /></Field>

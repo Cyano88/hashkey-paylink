@@ -1,6 +1,7 @@
 import {useState} from 'react'
 import {Wallet,CreditCard,Landmark,Link2} from './PocketIcons'
 import {webPaymentMethodLabel,type WebPaymentMethod} from '../lib/pocketWebPaymentMethod'
+import {pocketMerchantImageUrl} from '../lib/pocketMerchantImage'
 export function PocketPaymentMethodIcon({method,className='h-4 w-4'}:{method?:WebPaymentMethod;className?:string}){
  const Icon=method==='card'?CreditCard:method==='bank_transfer'?Landmark:Wallet
  return <Icon className={className} aria-label={webPaymentMethodLabel(method)}/>
@@ -8,7 +9,7 @@ export function PocketPaymentMethodIcon({method,className='h-4 w-4'}:{method?:We
 export function PocketWebPaymentIdentity({name,imageUrl}:{name?:string;imageUrl?:string}){
  const [failed,setFailed]=useState<string|null>(null)
  const initial=Array.from((name||'').trim())[0]?.toLocaleUpperCase()
- const safeUrl=imageUrl && (imageUrl.startsWith('https://')||(imageUrl.startsWith('/')&&!imageUrl.startsWith('//'))) ? imageUrl : undefined
+ const safeUrl=pocketMerchantImageUrl(imageUrl)
  return safeUrl&&failed!==safeUrl?<img src={safeUrl} alt={name||'Merchant'} referrerPolicy="no-referrer" onError={()=>setFailed(safeUrl)} className="h-full w-full object-contain"/>:initial?<span aria-label={name} className="text-base font-semibold">{initial}</span>:<Link2 aria-label="Web payment" className="h-5 w-5"/>
 }
 export function PocketWebPaymentLabel({method}:{method?:WebPaymentMethod}){
