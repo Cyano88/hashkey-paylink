@@ -50,6 +50,12 @@ export function pocketActivitySignedAmount(row: PocketActivityRow): string {
   return (incoming ? '+' : '\u2212') + amount
 }
 
+/** Only confirmed credits receive success colour; refunds and internal moves stay neutral. */
+export function pocketActivityIsCompletedIncoming(row: PocketActivityRow): boolean {
+  return row.direction === 'in' && !['wallet-bridge','wallet-swap'].includes(row.source || '') &&
+    ['completed','confirmed','delivered','paid','settled','successful','validated'].includes(pocketActivityStatus(row))
+}
+
 export function pocketActivityVisibleStatus(row: PocketActivityRow): string {
   const status = pocketActivityStatus(row)
   if (status === 'awaiting_approval') return 'Approval required'

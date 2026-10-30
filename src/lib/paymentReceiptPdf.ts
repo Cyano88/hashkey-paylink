@@ -481,7 +481,7 @@ function drawReceiptCanvas(
   ctx.font = `700 17px ${sans}`
   const brandX = brand.kind === 'partner' && !logo ? 52 : 104
   if (!wordmark) ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
-  if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'){ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;ctx.stroke(new Path2D(pocketPaymentMethodPaths[receipt.paymentMethod||'wallet']));ctx.restore()}
+  if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'){ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;if(!receipt.paymentMethod||receipt.paymentMethod==='wallet'){ctx.fillStyle=ctx.strokeStyle;ctx.fill(new Path2D(pocketPaymentMethodPaths.wallet))}else{ctx.stroke(new Path2D(pocketPaymentMethodPaths[receipt.paymentMethod]))};ctx.restore()}
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)
