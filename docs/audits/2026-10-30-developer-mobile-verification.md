@@ -33,3 +33,9 @@ New full-portal browser audit (scripts/developer-phone-handoff-audit.mjs) verifi
 The backend remains owner-bound and atomically guards duplicate starts; the existing resume path retains its 20-second opening cooldown. This handoff is authenticated continuation, not transfer of an active camera session or a single-device capture lock. Close desktop capture before continuing on a phone.
 
 Remaining live evidence: an unverified account must scan, sign in, allow its camera and complete capture. iOS Safari capture has not been exercised in this audit. No real identity data or OTP was submitted by the assistant.
+
+Audit release evidence:
+- Production build passed in 1m 51s; full typecheck retains exactly the same 43 baseline errors, with no new normalized diagnostics.
+- Personal verification browser smoke, full portal phone audit, and shared Pocket KYC browser regressions pass.
+- Fix commit 6043b1671ce2744a8bbe70084b0c0f419da1fc69 deployed as dep-dbig8s8473hc73dpieog, confirmed live 2026-10-30T21:01:48.60973Z.
+- Signed-in live Chrome invalid-project handoff correctly displayed Check your account or verification link with Change account and Back to dashboard. No identity submission or sign-out was performed. Temporary audit tab closed; original developer tab restored. Browser-extension unload warnings and the existing Privy Solana configuration warning remain unrelated observations.
