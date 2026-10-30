@@ -57,3 +57,19 @@ assert.equal((await simulation(undefined,'personal',{'x-api-key':testKey})).stat
 owner='owner-b';assert.equal((await simulation(undefined,business.id)).statusCode,404)
 assert.equal(isolated.size,2)
 console.log('Builder profiles: legacy preservation, personal/business app isolation, immutable type and context, foreign owner rejection, independent sandbox data and key binding passed.')
+
+// Removed app tombstones must not create business selector entries.
+const deleted=(await app('Deleted app')).body.project
+const deletedStore=stores.get('hashpaylink:developer-projects:v1')
+deletedStore.projects[deleted.id].removal={status:'deleted'}
+response=await call()
+assert.ok(!response.body.projects.some(p=>p.id===deleted.id))
+assert.ok(!response.body.builderProfiles.some(p=>p.id===deleted.builderProfileId))
+assert.equal((await call(undefined,{profileId:deleted.builderProfileId})).statusCode,404)
+const persistedAuto={id:deleted.builderProfileId,name:'Deleted app',type:'business'}
+assert.deepEqual(builderProfilesForProjects([deletedStore.projects[deleted.id]],[persistedAuto]).map(p=>p.id),['personal'])
+const explicit={...persistedAuto,name:'Explicit company',createdAt:new Date().toISOString()}
+assert.ok(builderProfilesForProjects([deletedStore.projects[deleted.id]],[explicit]).some(p=>p.name==='Explicit company'))
+const closed={...deletedStore.projects[deleted.id],removal:{status:'closed'}}
+assert.ok(builderProfilesForProjects([closed]).some(p=>p.id===deleted.builderProfileId),'closed app history remains accessible')
+console.log('Deleted app and inferred profile exclusion passed; explicit businesses and closed history preserved.')

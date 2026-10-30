@@ -42,3 +42,9 @@ Correction release `5790236ab237444a1207d54bd795d9b60a301763`, deployment `dep-d
 Replaced portal navigation window.confirm prompts with a styled accessible dialog offering Keep editing and Discard changes. Escape keeps edits; cancellation retains the current profile and editor. Dirty checks apply only to the active editor, and profile setup restores saved app fields instead of clearing the webhook draft. This fixes the false discard warning after naming an existing business.
 
 Playwright passed native-confirm rejection, no prompt after business setup with an existing webhook, retained edits on Keep editing/Escape, explicit discard on profile/environment changes, and unchanged saved webhook data. Existing profile/isolation/responsive cases passed.
+
+## Deleted app selector correction
+
+Deleted app tombstones were excluded from the app list but still produced inferred business profiles. The shared profile resolver now excludes deleted apps and discards unnamed stored legacy contexts without a surviving app. Explicitly named business profiles remain independent of their app count; closed app history remains accessible. Handler tests verify deletion exclusion, rejection of the deleted inferred profile ID, stale stored legacy cleanup, and preserved explicit businesses/closed records. Playwright confirms deleted apps do not reappear in the selector.
+
+The in-app discard release `b8f0b434e2b934a1265d1baf8ebfa3ed42816bd1` is live via `dep-dbic6imtlv9c739f1b20`; build passed and typecheck has the same 43 pre-existing diagnostics.

@@ -8,6 +8,8 @@ const handler=createDeveloperProjectsHandler({hasStore:()=>true,portalSecret:()=
 const recorder=()=>({statusCode:200,setHeader(){},status(n){this.statusCode=n;return this},json(b){this.body=b;return this}})
 async function api(body){const r=recorder();await handler({method:body?'POST':'GET',headers:{},query:{},body},r);assert.ok(r.statusCode<300,r.body?.error);return r.body}
 await api({action:'create',name:'Personal app',checkoutMode:'human',accountType:'individual',builderProfileId:'personal'})
+const removed=(await api({action:'create',name:'Deleted legacy app',checkoutMode:'human',accountType:'business'})).project
+stores.get('hashpaylink:developer-projects:v1').projects[removed.id].removal={status:'deleted'}
 const legacy=(await api({action:'create',name:'Legacy app name',checkoutMode:'human',accountType:'business'})).project
 const business=(await api({action:'create-builder-profile',name:'Business One'})).builderProfile
 await api({action:'create',name:'Business app',checkoutMode:'human',accountType:'business',builderProfileId:business.id})
@@ -34,7 +36,7 @@ try{
  await company.click();await page.getByRole('button',{name:'Create test payment',exact:true}).waitFor()
  await page.waitForURL('**profile=business_**')
  assert.equal(await page.getByRole('heading',{name:'Personal sandbox payment',exact:true}).count(),0)
- await company.click();await page.getByRole('button',{name:'Add business profile',exact:true}).click()
+ await company.click();assert.equal(await page.getByRole('button',{name:/Deleted legacy app/}).count(),0);await page.getByRole('button',{name:'Add business profile',exact:true}).click()
  await page.getByLabel('Business profile name',{exact:true}).fill('Business Two')
  await page.getByRole('button',{name:'Create business profile',exact:true}).click()
  await page.getByRole('dialog').waitFor({state:'detached'})
