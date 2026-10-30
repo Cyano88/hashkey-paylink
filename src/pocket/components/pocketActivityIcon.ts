@@ -20,7 +20,6 @@ function UsdtActivityLogo({ className }: { className?: string }) {
 }
 
 export function pocketActivityIcon(row: PocketActivityRow) {
-  if(row.source==='hosted_checkout'||row.settlementType==='hosted_checkout')return CreditCard
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
   if (source === 'gift') return GiftIcon
   if (source === 'esim') return Wifi
