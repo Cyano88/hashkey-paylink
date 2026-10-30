@@ -116,7 +116,7 @@ export async function deliverStockNotices(overrides:Partial<{configured:typeof p
    if(disposition==='suppress'){await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].pushSuppressed=true});continue}
    if(disposition==='defer'||Date.now()-n.at<30_000)continue
   }
-  const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:(n.earn||n.trade||stockAssets.some(a=>a.address.toLowerCase()===n.transfer?.token.toLowerCase()))&&n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
+  const delivered=await d.send(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:n.hash?'/activity?receipt='+encodeURIComponent(n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
 }
 
 const activityAttempts=new Map<string,number>()

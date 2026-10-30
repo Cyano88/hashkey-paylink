@@ -76,7 +76,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
     catch(reason){if(!(reason instanceof Error&&reason.name==='AbortError'))setExportError('Your statement could not be saved. Please try again.')}
     finally{setExporting(false)}
   }
-  const selectedRow=currentPocketActivityRow(selected || (receiptReference ? rows.find(row=>[row.eventId,row.providerReference,row.bankOrderId,row.txHash].includes(receiptReference)) || null : null), rows)
+  const selectedRow=currentPocketActivityRow(selected || (receiptReference ? rows.find(row=>[row.eventId,row.receiptId,row.providerReference,row.bankOrderId,row.txHash].includes(receiptReference)) || null : null), rows)
   if(!authenticated)return <>{renderHeader?.(null)}<p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Sign in to view your transactions.</p></>
   const actions=<div className="flex items-center">
     <button type="button" aria-label="Filter transactions" aria-expanded={filterOpen} onClick={openFilters} className="relative flex h-11 w-11 items-center justify-center rounded-full"><Filter className="h-5 w-5"/>{activeFilters&&<span aria-label="Filters active" className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500"/>}</button>

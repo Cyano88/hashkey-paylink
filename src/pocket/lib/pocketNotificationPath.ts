@@ -4,6 +4,6 @@ export function pocketNotificationPath(value:unknown):string|null {
  try{const url=new URL(value,'https://pocket.invalid');if(url.origin!=='https://pocket.invalid'||!allowed.has(url.pathname))return null
  if(url.pathname==='/assistant'){const caseId=url.searchParams.get('case');return caseId&&/^pcs_[a-f0-9]{16}$/.test(caseId)?'/assistant?case='+encodeURIComponent(caseId):null}
  if(url.pathname==='/activity/collections')return url.searchParams.get('kind')==='requests'?'/activity/collections?kind=requests':null
- const receipt=url.searchParams.get('receipt');return url.pathname+(receipt&&receipt.length<=600?'?receipt='+encodeURIComponent(receipt):'')
+ const receipt=url.searchParams.get('receipt');return (url.pathname==='/xstocks/activity'&&receipt&&/^0x[a-f0-9]{64}$/i.test(receipt)?'/activity':url.pathname)+(receipt&&receipt.length<=600?'?receipt='+encodeURIComponent(receipt):'')
  }catch{return null}
 }
