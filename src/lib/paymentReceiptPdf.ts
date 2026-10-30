@@ -277,7 +277,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
-    variant:'general',badge:'Web payment',amount,timestamp:fmtTime(receipt.createdAt),reference,
+    variant:'general',badge:'Web payment',amount:`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`,timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
       ...(receipt.brandKind==='pocket'?[{label:'Type',value:'Wallet payment'},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
@@ -367,10 +367,11 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     }
   }
   const settlement = String(receipt.settlementType || '').toLowerCase()
-  const isBank = receipt.source === 'bank-receive' || receipt.source === 'bank-send' || settlement === 'instant_fiat' || settlement === 'paycrest_onramp'
+  const isBank = receipt.source === 'bank-withdraw' || receipt.source === 'bank-receive' || receipt.source === 'bank-send' || settlement === 'instant_fiat' || settlement === 'paycrest_onramp'
   const recipient = receipt.recipient || receipt.merchantId || receipt.eventId || '-'
   const destination = receipt.destination || (isBank ? `Bank settlement · ${network}` : `${network} · ${receipt.asset}`)
-  const narration = receipt.narration || receipt.memo || receipt.title || '-'
+  const narration = (receipt.narration || receipt.memo || '').trim()
+  const automaticBankNarration = isBank && ['', '-', 'bank transfer', 'mobile money transfer', 'direct bank payout', 'bank cashout', 'xpay payment', (receipt.title || '').toLowerCase()].includes(narration.toLowerCase())
   return {
     variant,
     badge: receipt.title || (isBank ? 'Bank transfer' : 'Transfer'),
@@ -383,7 +384,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       { label: 'From', value: receipt.payer || '-', mono: true },
       { label: 'To', value: recipient, mono: /^0x/.test(recipient) },
       { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
-      { label: 'Amount & narration', value: `${amount} · ${narration}` },
+      ...(!automaticBankNarration && narration ? [{ label: 'Narration', value: narration }] : []),
       ...(localAmount ? [{ label: bankPayout ? 'Paid with' : pocketUsdc ? 'Local amount' : `Total ${receipt.asset}`, value: bankPayout || !pocketUsdc ? `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` : localAmount }] : []),
       ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount, receipt.asset)} ${receipt.asset || 'USDC'}` }] : []),
       ...(receipt.source === 'bank-withdraw' && receipt.bankSettlementStatus ? [{label:'Bank delivery',value:['settled','completed','successful'].includes(receipt.bankSettlementStatus) ? 'Delivered' : ['refunded','reversed'].includes(receipt.bankSettlementStatus) ? 'Refunded' : ['refunding','reversing'].includes(receipt.bankSettlementStatus) ? 'Refund pending' : ['failed','expired','cancelled','canceled'].includes(receipt.bankSettlementStatus) ? 'Not completed' : 'Processing'}] : []),
