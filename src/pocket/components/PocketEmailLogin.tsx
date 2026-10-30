@@ -32,6 +32,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
   const [busy, setBusy] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const submittedCode = useRef('')
+  const authRequest = useRef(false)
   const [error, setError] = useState('')
   const [resendIn, setResendIn] = useState(0)
   const [codeFocused, setCodeFocused] = useState(false)
@@ -57,8 +58,10 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
 
   const requestCode = async (event?: FormEvent) => {
     event?.preventDefault()
+    if (authRequest.current) return
     const normalizedEmail = email.trim().toLowerCase()
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) return setError('Enter a valid email address.')
+    authRequest.current = true
     setBusy(true)
     setError('')
     setEmail(normalizedEmail)
@@ -71,6 +74,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
       setResendIn(0)
       setError(readableEmailAuthError(nextError, 'send', productName))
     } finally {
+      authRequest.current = false
       setBusy(false)
     }
   }
@@ -83,11 +87,12 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
 
   const verifyCode = async (event?: FormEvent) => {
     event?.preventDefault()
-    if (busy) return
+    if (busy || authRequest.current) return
     if (code.length !== CODE_LENGTH) {
       setError('Enter the six-digit code sent to your email.')
       return codeInputRef.current?.focus()
     }
+    authRequest.current = true
     setBusy(true)
     setError('')
     setVerifying(true)
@@ -98,6 +103,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
       setCode('')
       window.requestAnimationFrame(() => codeInputRef.current?.focus())
     } finally {
+      authRequest.current = false
       setVerifying(false)
       setBusy(false)
     }
@@ -204,7 +210,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
       </div>
       {error && <p role="alert" className="px-3 text-center text-xs font-semibold text-red-600">{error}</p>}
       <button type="submit" disabled={busy || !email.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">
-        <span>{busy ? 'Sending code' : 'Continue with email'}</span>
+        <span>{busy ? 'Sending code' : context === 'pocket' ? 'Continue' : 'Continue with email'}</span>
         <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">{busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" /> : <ArrowRightIcon className="h-4 w-4" />}</span>
       </button>
     </form>

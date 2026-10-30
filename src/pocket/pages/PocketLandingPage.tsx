@@ -101,10 +101,10 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
             <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
               <PocketAuthBrand markRef={heroLogoRef} />
               <h1 className="mx-auto mt-9 max-w-sm text-[26px] font-bold leading-[1.25] tracking-normal sm:text-4xl">
-                Your money and stocks,<br />in one Pocket.
+                Your stablecoins<br />can do more.
               </h1>
               <p className="mx-auto mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500">
-                Send, receive and pay with USDC or supported tokenized stocks. Buy, sell and swap stocks.
+                Send money, pay bills, invest and earn with Pocket.
               </p>
             </div>
           </section>
@@ -172,7 +172,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
                   transform: `translate3d(-50%,-50%,0) scale(${splashLogoVisible ? 1 : 0.92})`,
                 }}
           >
-            <CPurseIcon size={228} title="" className="h-full w-full" />
+            <img src="/pocket-wordmark.svg" alt="" className="h-full w-full object-contain" />
           </div>
         </>
       )}
