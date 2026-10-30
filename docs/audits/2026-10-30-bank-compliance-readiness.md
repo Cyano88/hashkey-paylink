@@ -66,3 +66,25 @@ No new public bank onboarding documentation was published. No source or configur
 ## Hosted fee correction
 
 Implemented after the audit snapshot: hosted-checkout offramps now use the same explicit 0.25%, platform treasury and transactionFeePayer=customer payload as current Pocket/XPay, including returned-fee validation. This corrects finding 2 without enabling a route or raising a limit. Actual order-construction fixtures cover NGN and UGX hosted requests and reject a provider response that nets the platform fee away. Tests create no real orders. Deployment evidence follows.
+
+## Provider responsibility and recovery evidence
+
+Paycrest's current compliance documentation states that integrating senders retain responsibility for user KYC/KYB and sanctions screening, and that sender KYB applies before going live for both on/offramp services. This is provider documentation, not a legal opinion or confirmation of our account approval: https://docs.paycrest.io/concepts/compliance-security
+
+Recovery API review: the documented v2 sender list supports page/pageSize, status and direction; it returns reference in each order but does not document a direct reference lookup filter. Get-by-ID is documented. A production recovery change must use verified exact-reference matching and bind full order details, rather than inventing an undocumented reference endpoint. Bounded list exhaustion or unavailable lookup must remain uncertain; it must not authorize a fresh payment. Sources: https://docs.paycrest.io/api-reference/sender/list-payment-orders-v2 and https://docs.paycrest.io/api-reference/sender/get-payment-order-by-id-v2
+
+Hosted-checkouts-adapter-smoke, pocket-bank-withdraw-adapter-smoke, and paycrest-usdt-smoke also passed after the fee correction. Existing tests distinguish confirmed token funding from provider-delivered fiat.
+
+## Earlier funded payout reconciled
+
+Read-only exact-ID lookup at 2026-10-30T11:31:02Z confirmed the prior NGN payout 21b6fc35-41ae-464b-8fdf-cd69bf6c05a7 is now provider status settled. amountPaid 0.754111 USDC; principal 0.732311; senderFee 0.0018 (0.25%); transactionFee 0.02; amountReturned 0. This closes the prior provider-settlement evidence gap for this specific payment. It does not prove the separate receipt reopen/relaunch UI test or a live refund.
+
+Provider also returned percentSettled 0 and no paymentReference. Recorded without inventing receipt data or overriding the authoritative status. Current provider docs say paymentReference can be null for provider-dependent coverage. Initial lookup returned 504; a later sandbox read failed EACCES; approved read-only retry succeeded. No new order or payment was submitted.
+
+## Deployment and operational health
+
+- Fee correction source 6504d618a0a8869516e1cdb776d542d303c602d2 deployed live as dep-dbi7tonb9u1s73dc82v0 at 2026-10-30T11:32:10Z; provider build completed.
+- Post-deploy /api/health returned HTTP 200 and database true, but pocket.healthy false: 37 stale unresolved execution records (12 bank_payout, 24 hosted_checkout, 1 pos_settlement). HTTP liveness is NOT a clean operational-health result.
+- readPocketReconciliationBacklog classifies stale unresolved execution records by updatedAt, not verified financial loss or unpaid recipients. Do not mark these failed or clear them just to silence health.
+- Existing read-checkout-backlog.mjs uses BEGIN READ ONLY and outputs grouped counts only. Both sandbox and approved external attempt failed ENOTFOUND for the service database host; no records changed. Detailed operations-side reconciliation remains open. No production reconciliation mutation or notification dispatch was triggered.
+- No broad AML/launch clearance is claimed. The scope completed here is verification, one fee-policy correction, previous-order settlement confirmation and a written remaining-work record.
