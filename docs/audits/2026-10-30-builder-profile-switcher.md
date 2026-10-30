@@ -22,3 +22,9 @@
 - Existing developer project adapter, sandbox simulation, production KYC/KYB gates, verification/reviewer, live sandbox boundary, sandbox browser and business-verification browser suites passed.
 - Production build passed (exit 0). Full repository typecheck: 43 existing diagnostics, identical to the previous release baseline; no new diagnostics.
 - No live funds, provider submissions, real identity documents or customer notifications used for these checks.
+
+## Live release verification
+
+- Source commit `16a9c7828f7b7703e78a1ab64441df7fcce576de`; Render deployment `dep-dbibj861egvs73e5a73g` live at 2026-10-30T15:43:00Z.
+- Authenticated Playwright check confirmed Business/Personal controls immediately before the account avatar (8px gap), correct pressed state, existing business context selection, and an empty separate business sandbox.
+- Personal retained the prior paid simulated checkout `test_chk_02e75ca287364bfd94d027090b8ea4fd`; switching back restored it. No real business profile or payment was created during live verification.
