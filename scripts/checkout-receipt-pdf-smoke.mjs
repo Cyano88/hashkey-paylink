@@ -12,6 +12,6 @@ stored=false;assert.deepEqual(await downloadCheckoutReceiptPdf(id,d),pdf);assert
 const email=receiptEmail({id,merchant:'Lunchroom',description:'Lunchroom order 123',amount:'1.5',asset:'USDT',network:'X Layer',paidAt:'2026-10-29T10:37:00Z',paymentMethod:'wallet',receiptUrl:'https://app.hashpaylink.com/receipt/'+id,supportEmail:'support@example.test'})
 assert.equal((email.html.match(/Download receipt/g)||[]).length,1)
 assert(!/View receipt|Download invoice|>Back</.test(email.html));assert(email.text.includes(receiptPdfUrl(id)))
-assert(email.html.indexOf('Download receipt')<email.html.indexOf('Questions?'))
+assert(email.html.indexOf('Download receipt')<email.html.indexOf('Questions about your purchase?'))
 assert(email.html.includes('Powered by <strong'));assert(!email.html.includes('background:#111827'))
 console.log('PASS direct PDF: frozen attachment reuse, canonical receipt requirement, safe filename, legacy generation, one download CTA, support placement and weighted footer.')
