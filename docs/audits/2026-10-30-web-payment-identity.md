@@ -32,3 +32,15 @@ Deployment completion: Render deploy dep-dbi4lkss728c73cb62kg is live at 7f3330c
 - ADB screenshots in native output/playwright/lunchroom-logo-fixed.png and lunchroom-receipt-fixed.png. CDP screenshot capture timed out; ADB capture succeeded. No fresh OS push delivery/tap tested and no new payment made.
 - Source 64b30d493cfa9ef995c536fc6a0401750a7e9035; Render deploy dep-dbi5b5ss728c73ccv950 pending completion.
 `nDeployment completed: dep-dbi5b5ss728c73ccv950 live at 64b30d493cfa9ef995c536fc6a0401750a7e9035 on 2026-10-30 08:36:17 UTC. Pixel logo and saved-receipt checks above supersede earlier connection-pending notes. Fresh OS push tap remains untested.
+
+## Incoming amount colour and merchant canvas
+
+- Completed incoming Activity amounts use emerald-700 in light mode and emerald-400 in dark mode. Outgoing, pending, failed, reversed/refunded, missing-status and wallet bridge/swap rows remain neutral. Existing signs/direction labels stay intact.
+- Loaded merchant images sit inside padded white circular canvases; failed images retain the original initial/link fallback styling. Original merchant artwork is unchanged.
+- Wallet payment uses the Heroicons 24 solid WalletIcon; image/PDF export fills the same official path. Card and bank remain their existing outline icons.
+- Both worktrees pass expanded Activity status/direction and merchant fallback browser checks, plus method label/export checks. Production CSS fixture verified light/dark amount colours and white image canvas inside the actual Pocket colour scope.
+- Native and web builds passed; Android Capacitor sync/Gradle assembly passed. Installed APK SHA256 c1c3472f96ce48ca48b8edcfe75643e014d5ce45cdd5d0902359a7bc578f3cb3.
+- Real Pixel dark-mode check: Lunchroom image loaded (513px), canvas rgb(255,255,255), padding 4px, +1.50 USDT rgb(52,211,153), wallet SVG fill=currentColor. Visually verified output/playwright/avatar-green-dark.png in native workspace. Existing outgoing and bridge values neutral.
+- Device light-mode navigation paused because user opened screenshot annotation; did not interrupt it. Light mode verified in browser, not claimed as device-tested. Previous real saved-receipt opening checks remain recorded above; updated exports passed browser tests. No new payment or notification sent.
+- Source 54772aa366de13995fc3cf9a313c26dc50a473d6. Render dep-dbi5i3nlk1mc73fbfqeg rolling out.
+Deployment complete: dep-dbi5i3nlk1mc73fbfqeg live at 54772aa366de13995fc3cf9a313c26dc50a473d6, 2026-10-30 08:50:11 UTC.
