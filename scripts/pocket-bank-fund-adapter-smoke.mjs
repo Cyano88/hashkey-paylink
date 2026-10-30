@@ -77,3 +77,19 @@ const missingWallet = await request(noWallet, {
 assert.equal(missingWallet.statusCode, 400)
 
 console.log('Circle Pocket bank-fund adapter smoke tests passed.')
+const heldHandler=createPocketBankFundHandler({
+ verifyUser:async()=>({userId:'privy-user-1'}),getOrder:async()=>order,
+ listHistory:async()=>({bankSendLinks:[{link_id:order.merchant_id}]}),
+ refreshOrder:async()=>({...order,status:'pending',status_detail:'under_review'}),
+})
+const heldResult=await request(heldHandler,{action:'status',intent_id:order.intent_id})
+assert.equal(heldResult.body.data.state,'processing');assert.equal(heldResult.body.data.validUntil,'')
+assert.equal(heldResult.body.data.statusDetail,'under_review');assert.match(heldResult.body.data.message,/Do not pay again/)
+const refundHandler=createPocketBankFundHandler({
+ verifyUser:async()=>({userId:'privy-user-1'}),getOrder:async()=>order,
+ listHistory:async()=>({bankSendLinks:[{link_id:order.merchant_id}]}),
+ refreshOrder:async()=>({...order,status:'refunded',refund_reason:'payer_mismatch'}),
+})
+const refundResult=await request(refundHandler,{action:'status',intent_id:order.intent_id})
+assert.equal(refundResult.body.data.state,'refunded');assert.equal(refundResult.body.data.refundReason,'payer_mismatch')
+console.log('PASS held funding has no expiry, says not to pay again, and refunded funding retains provider reason.')

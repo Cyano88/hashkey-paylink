@@ -1,5 +1,6 @@
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
+import { paycrestComplianceFields } from './paycrest-compliance-state.js'
 import { updatePaycrestOrderStore } from './paycrest-order-state.js'
 import type { Request, Response } from 'express'
 import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
@@ -32,6 +33,8 @@ export type PaycrestOrderRecord = {
   source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'bank-send' | 'hosted-checkout'
   tx_hash?: string
   status: string
+  status_detail?: 'under_review'
+  refund_reason?: 'payer_mismatch' | 'payer_unverified'
   valid_until?: string
   bank_name?: string
   bank_last4?: string
@@ -640,6 +643,7 @@ export async function refreshPaycrestOrderStatus(id: string) {
   )
   const updated = {
     ...record,
+    ...paycrestComplianceFields(data),
     status,
     tx_hash: txHash,
     provider_amount_paid: firstText(data?.amountPaid, data?.amount_paid, record.provider_amount_paid),
@@ -689,6 +693,7 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
 
   const updated = {
     ...record,
+    ...paycrestComplianceFields(data, payload.event),
     status: firstText(data.status, record.status),
     tx_hash: firstText(
       data.txHash,

@@ -7,11 +7,18 @@ export function mergePaycrestOrder(current: PaycrestOrderRecord | undefined, inc
  const stale=Date.parse(incoming.updated_at)<Date.parse(current.updated_at)
  const regresses=(progress[old]!==undefined && progress[next]!==undefined && progress[next]<progress[old]) || (['failed','expired','cancelled','canceled'].includes(old) && (progress[next]??99)<1)
  const terminalRegression=(old==='settled' && !['settled','refunding','refunded'].includes(next)) || (old==='refunded' && next!=='refunded')
- const preserve=stale||regresses||terminalRegression
+ const held=current.source==='bank-send'&&current.status_detail==='under_review'&&!['settled','refunded'].includes(old)
+ const holdRegression=held&&['expired','cancelled','canceled','failed','initiated','created'].includes(next)
+ const preserve=stale||regresses||terminalRegression||holdRegression
  const merged=preserve?{...incoming,...current}:{...current,...incoming}
  for(const key of ['tx_hash','payer_email','payer_wallet','provider_amount_paid','provider_amount_returned','provider_percent_settled'] as const){
   if(!merged[key])merged[key]=current[key]||incoming[key]
  }
+ if(merged.source==='bank-send'){
+  if(['settled','refunded'].includes(merged.status.toLowerCase()))merged.status_detail=undefined
+  else if(held)merged.status_detail='under_review'
+ }
+ if(!merged.refund_reason)merged.refund_reason=current.refund_reason||incoming.refund_reason
  return merged
 }
 export function updatePaycrestOrderStore(current: {orders: Record<string,PaycrestOrderRecord>} | undefined, incoming: PaycrestOrderRecord, allowReplacement = false){

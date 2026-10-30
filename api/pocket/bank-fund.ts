@@ -41,6 +41,9 @@ function publicOrder(order: any) {
     intentId: text(order?.intent_id),
     orderId: text(order?.paycrest_order_id),
     status: text(order?.status),
+    statusDetail: order?.status_detail === 'under_review' ? 'under_review' : undefined,
+    refundReason: order?.refund_reason,
+    ...(order?.status_detail === 'under_review' ? {message:'Your bank payment is under review. Do not pay again.'} : {}),
     state: stateFor(order?.status),
     amountNgn: text(order?.provider_amount_to_transfer || order?.amount_ngn),
     amountUsdc: text(order?.amount_usdc),
@@ -49,7 +52,7 @@ function publicOrder(order: any) {
     institution: text(order?.provider_institution),
     accountNumber: text(order?.provider_account_identifier),
     accountName: text(order?.provider_account_name),
-    validUntil: text(order?.valid_until),
+    validUntil: order?.status_detail === 'under_review' ? '' : text(order?.valid_until),
     txHash: text(order?.tx_hash),
   }
 }
