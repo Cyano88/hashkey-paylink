@@ -32,3 +32,12 @@
 - Final production build: exit 0.
 - Full TypeScript check: exit 1 with 43 diagnostics, exactly matching the previous `billing-typecheck.log`; no added diagnostics and none in the changed files. This is an existing repository check failure, not a clean full typecheck.
 - Production project adapter, verification state/reviewer checks, production KYC/KYB access tests, simulation isolation tests, live-route boundary tests and both Playwright suites passed.
+
+## Release and live verification
+
+- Source commit `ae4910ec97995615ab6adbaeeb1858e6c83c3e61`; Render deployment `dep-dbia8amtlv9c739a0oa0` live at 2026-10-30 14:11:28 UTC.
+- Public capabilities HTTP 200 advertises isolated simulation, sandbox keys and signed fixtures, with funded execution and outbound webhook delivery explicitly false.
+- Authenticated deployed dashboard: created `test_chk_02e75ca287364bfd94d027090b8ea4fd`, labelled `Sandbox release check - no funds`, 1.50 simulated USDT on X Layer. Simulated paid, reloaded the page, and observed the same ID and paid state from durable storage. No real funds or receipt notifications.
+- Environment switch handler verified on deployed page and returned to sandbox with the paid fixture intact. The connected Chrome automation had pointer stability/key-dispatch issues; DOM button activation verified the handler. Local Playwright pointer tests passed. Extension unload-policy errors and existing Privy configuration warnings were observed separately from application results.
+- Live health HTTP 200: database true; pocket healthy false; unresolved/stale 37 (24 hosted checkout, 12 bank payout, 1 POS settlement), unchanged from the preceding bank-compliance audit. This release is not an all-system health claim.
+- The earlier unverified sandbox-persistence item above is now resolved. A new production merchant onboarding and real funded settlement remain untested in this release.
