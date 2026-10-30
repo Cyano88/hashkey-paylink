@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { POCKET_NATIVE_BACK_EVENT } from '../pocket/lib/pocketNativeBack'
 
 // Resize the provider viewport, never scroll/reparent the whole iframe. Circle
@@ -21,7 +22,9 @@ export function installCircleApprovalSurface(onCancel: () => void, _label = 'Clo
       frameWindow = current.contentWindow
       frameObserver.observe(frame, { attributes: true, attributeFilter: ['style', 'width', 'height'] })
     }
-    const viewport = window.visualViewport
+    // Android already resizes the WebView for the keyboard. Its visual viewport
+    // can transiently subtract the IME again, collapsing OTP/approval content.
+    const viewport = Capacitor.getPlatform() === 'android' ? null : window.visualViewport
     const height = viewport?.height ?? window.innerHeight
     const width = viewport?.width ?? window.innerWidth
     const sheets = document.querySelectorAll<HTMLElement>('[data-pocket-sheet]')

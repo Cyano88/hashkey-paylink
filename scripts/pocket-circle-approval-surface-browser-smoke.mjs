@@ -33,6 +33,10 @@ try {
   await page.waitForFunction(()=>window.outcome!==null);assert.equal(await page.locator('#sdkIframe').count(),0)
   assert.match(await page.evaluate(()=>window.outcome),action==='success'?/^success$/:/Approval closed/)
  }
+ await page.evaluate(()=>{window.androidBridge={};Object.defineProperty(window,'innerHeight',{configurable:true,value:618});Object.defineProperty(window,'visualViewport',{configurable:true,value:Object.assign(new EventTarget(),{height:284,width:390,offsetTop:0,offsetLeft:0})});window.start()})
+ await page.frameLocator('#sdkIframe').getByRole('button',{name:'Confirm',exact:true}).waitFor()
+ const nativeBounds=await page.locator('#sdkIframe').boundingBox();assert.equal(nativeBounds.height,464,'Android must not subtract the keyboard twice');assert.equal(nativeBounds.y+nativeBounds.height,618)
+ await page.keyboard.press('Escape');await page.waitForFunction(()=>window.outcome!==null)
  console.log('PASS: compact viewport preserved across SDK updates; internal body scroll leaves Confirm anchored at two viewport sizes; Circle close, back, Escape and late-callback safety. Mock payments only.')
 } finally {await browser.close()}
 
