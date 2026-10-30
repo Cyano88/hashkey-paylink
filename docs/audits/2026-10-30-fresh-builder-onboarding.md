@@ -34,3 +34,13 @@ The user completed acceptance. Live refresh retained the authenticated dashboard
 User authorized any test business name. Created Onboarding Test Business (business_4111f4bb5de94bc69459cc86ae7d7770). Its sandbox started empty; simulated paid test_chk_86d640ab52274a50898a0558caa72d56 (1.50 USDC, Base) remained separate from Personal and survived reload. Created temporary business app dev_dc730632831a408496; verification showed Business verification / Not started, and key creation was disabled for incomplete settlement setup. Removed the unused draft through its normal removal review. Kept the named business profile and sandbox fixture for continued testing. No live keys, receiving wallets, real transfers or identity documents were submitted. Multiple post-acceptance reloads retained login.
 
 Remaining policy mismatch: both the KYB UI and api/developer-verification.ts submission validator require aml and kyc documents for every business. Review those universal document requirements against the intended ordinary-merchant model (Pocket handles payer verification) and provider/manual review requirements before changing them. No policy requirement was removed during this test.
+
+## Reviewer handoff and resubmission follow-up
+
+The universal policy-document mismatch above is resolved by source de0fb9603 and the separate merchant-kyb-document-requirements audit.
+
+Extended the real handler fixture to cover feedback visible to the applicant, feedback retained while saving a draft, additional policy upload, resubmission, and reviewer reapproval. Existing keys and new key creation stay blocked while changes are requested or the application is resubmitted. Reapproval requires the reviewer checks and reference. Approved KYB still cannot bypass incomplete settlement setup. All checks passed with synthetic identities/documents and no live approval.
+
+The manual-review mobile Playwright suite passed reference/check gating, approval history and requesting changes. Updated the operations preview's stale Privy mock for the existing explicit terms gate; the fixture models an already-consented user and does not accept real terms. Receiving-wallet ownership/network isolation and production personal-KYC/business-KYB eligibility suites also passed.
+
+This follow-up changes test coverage only. No production deployment, customer message, verification submission, live key or payment was performed. Next acceptance milestone is the selected merchant's configured receiving accounts, production key/webhook integration and funded order-to-fulfillment verification; account-specific settings and actual funds must be verified in that merchant context. Provider approval, local-fiat policy/limits and live refund evidence remain separate outstanding work.

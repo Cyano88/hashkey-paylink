@@ -47,6 +47,26 @@ assert.ok(developerPolicyFromStore(store,key.body.apiKey,secret))
 identity={userId:'admin',email:'admin@example.test'}
 assert.equal((await call('admin-verification-review',{revision,decision:'changes_requested',feedback:'Please provide updated address evidence.'})).statusCode,200)
 assert.equal(developerPolicyFromStore(store,key.body.apiKey,secret),null)
+revision++
+identity={userId:'builder',email:'builder@example.test'}
+const reopened=await call('verification-read');assert.equal(reopened.statusCode,200)
+assert.equal(reopened.body.verification.feedback,'Please provide updated address evidence.')
+assert.equal((await call('verification-save',{application,revision})).statusCode,200);revision++
+assert.equal(store.projects[projectId].businessVerification.feedback,'Please provide updated address evidence.')
+assert.equal(developerPolicyFromStore(store,key.body.apiKey,secret),null,'saving changes must not restore payment access')
+const extra=await call('verification-upload',{revision,slot:'aml',filename:'requested-policy.pdf',bytes:Buffer.from('%PDF-1.7\nsynthetic additional evidence')})
+assert.equal(extra.statusCode,200);revision++
+assert.equal((await call('verification-submit',{application,revision})).statusCode,200);revision++
+assert.equal(developerPolicyFromStore(store,key.body.apiKey,secret),null,'resubmission must not restore payment access')
+assert.equal((await call('create-key',{environment:'live'})).statusCode,409)
+identity={userId:'admin',email:'admin@example.test'}
+assert.equal((await call('admin-verification-review',{revision,decision:'approved',checksComplete:false,smileReference:'SMARTCHECK-SECOND'})).statusCode,400)
+assert.equal((await call('admin-verification-review',{revision,decision:'approved',checksComplete:true,smileReference:'SMARTCHECK-SECOND'})).statusCode,200);revision++
+assert.ok(developerPolicyFromStore(store,key.body.apiKey,secret),'reviewer reapproval restores eligible access')
+store.projects[projectId].settlementStatus='review_required'
+identity={userId:'builder',email:'builder@example.test'}
+assert.equal((await call('create-key',{environment:'live'})).statusCode,409,'KYB approval alone cannot replace settlement setup')
+
 assert.ok(store.projects[projectId].businessVerification.history.some(h=>h.action==='document_downloaded'))
 assert.throws(()=>inspectBusinessDocument(Buffer.from('<svg/>'),'file.png','aml',new Date().toISOString()),{status:400})
 assert.throws(()=>inspectBusinessDocument(Buffer.alloc(5*1024*1024+1),'file.pdf','aml',new Date().toISOString()),{status:400})

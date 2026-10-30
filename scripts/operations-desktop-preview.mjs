@@ -26,7 +26,7 @@ createRoot(document.getElementById('root')).render(<ThemeProvider><App/></ThemeP
 await build({ stdin: { contents: entry, resolveDir: root, loader: 'tsx' }, outfile: resolve(out, 'app.js'), bundle: true, format: 'esm', platform: 'browser', jsx: 'automatic', loader: { '.woff': 'file', '.woff2': 'file' },
   define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env': '{}' }, plugins: [{ name: 'fixture-identity', setup(b) {
     b.onResolve({ filter: /^@privy-io\/react-auth$/ }, () => ({ path: 'privy', namespace: 'fixture' }))
-    b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: `export const useCreateWallet=()=>({createWallet:async()=>{throw Error('No wallet calls in preview')}});export const usePrivy=()=>({ready:true,authenticated:true,user:{id:'preview-user'},getAccessToken:async()=>'synthetic-token',logout:async()=>{}});export const useWallets=()=>({wallets:[]});`, loader: 'js' }))
+    b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: `export const useAcceptTerms=()=>({acceptTerms:async()=>{throw Error('Terms acceptance is not part of this fixture')}});export const useCreateWallet=()=>({createWallet:async()=>{throw Error('No wallet calls in preview')}});export const usePrivy=()=>({ready:true,authenticated:true,user:{id:'preview-user',hasAcceptedTerms:true},getAccessToken:async()=>'synthetic-token',logout:async()=>{}});export const useWallets=()=>({wallets:[]});`, loader: 'js' }))
     b.onLoad({ filter: /PocketEmailLogin\.tsx$/ }, () => ({ contents: 'export default function Login(){return null}', loader: 'tsx' }))
     b.onLoad({ filter: /PrivyWalletConnectButton\.tsx$/ }, () => ({ contents: 'export function PrivyWalletConnectButton(){return null}', loader: 'tsx' }))
   } }] })
