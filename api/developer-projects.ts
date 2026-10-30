@@ -682,6 +682,19 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const action = clean(req.body?.action, 40).toLowerCase()
+      if (req.method === 'POST' && action === 'verify-bank-account') {
+        const project = findOwnedProject(await dependencies.read(STORE_KEY), clean(req.body?.projectId, 80), identity.userId)
+        if (!project || project.removal) return res.status(404).json({ok:false,error:'Project not found.'})
+        const bankCode = clean(req.body?.bankCode, 80)
+        const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber : ''
+        if (!bankCode || !/^\d{10}$/.test(accountNumber)) return res.status(400).json({ok:false,error:'Choose a bank and enter a 10-digit account number.'})
+        if (!dependencies.paycrestReady()) return res.status(503).json({ok:false,error:'Bank verification is temporarily unavailable.'})
+        const banks = await dependencies.listBanks('NGN')
+        if (ugandaMobileMoneyProviders.includes(bankCode as typeof ugandaMobileMoneyProviders[number]) || !banks.some(bank => bank.code === bankCode)) return res.status(400).json({ok:false,error:'Choose a supported Nigerian bank.'})
+        const accountName = clean(await dependencies.verifyBank({institution:bankCode,accountIdentifier:accountNumber,currency:'NGN'}),120)
+        if (!accountName || accountName.toLowerCase() === 'ok') return res.status(503).json({ok:false,error:'The bank did not return an account name. Try again.'})
+        return res.json({ok:true,accountName})
+      }
       if(req.method==='POST'&&action==='remove-app') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.body?.projectId,80),ownerId:identity.userId,confirmName:req.body?.confirmName,remove:true}))
       if(req.method==='POST'&&action==='setup-builder-profile') {
         const existing=await ownedProfile(identity.userId,req.body?.profileId)
@@ -1050,6 +1063,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           if (!bankAccountNumber && bankChanged) return res.status(400).json({ ok: false, error: 'Re-enter the account number after changing the bank.' })
           if (bankAccountNumber) {
             verifiedBankName = clean(await dependencies.verifyBank({ institution: bankCode, accountIdentifier: bankAccountNumber, currency }), 120)
+            if (settlementMode === 'ngn' && (!verifiedBankName || verifiedBankName.toLowerCase() === 'ok')) return res.status(503).json({ok:false,error:'The bank did not return an account name. Try again before saving.'})
             if (settlementMode === 'ugx' && !verifiedBankName) return res.status(503).json({ok:false,error:'The provider could not verify this mobile money account. Try again later.'})
             if (!verifiedBankName || verifiedBankName.toLowerCase() === 'ok') verifiedBankName = bankAccountName
             if (!verifiedBankName) return res.status(400).json({ ok: false, error: 'Paycrest verified the account but did not return its name. Enter the account name and save again.' })
