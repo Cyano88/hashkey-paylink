@@ -97,20 +97,17 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
             </div>
           </section>
         ) : (
-          <section className="flex flex-col items-center py-4 text-center sm:py-6">
+          <section className="flex flex-col items-center py-2 text-center sm:py-3">
             <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
               <PocketAuthBrand markRef={heroLogoRef} />
-              <h1 className="mx-auto mt-9 max-w-sm text-[26px] font-bold leading-[1.25] tracking-normal sm:text-4xl">
+              <h1 className="mx-auto mt-6 max-w-sm text-[26px] font-bold leading-[1.25] tracking-normal sm:text-4xl">
                 Your stablecoins<br />can do more.
               </h1>
-              <p className="mx-auto mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500">
-                Send money, pay bills, invest and earn with Pocket.
-              </p>
             </div>
           </section>
         )}
 
-        {!checkingProfile && !profileLoadFailed && <section className={`mt-8 space-y-2.5 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '180ms' : '0ms' }}>
+        {!checkingProfile && !profileLoadFailed && <section className={`mt-5 space-y-2.5 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '180ms' : '0ms' }}>
           {authenticated ? (
             <div className="flex min-h-14 items-center justify-center gap-2.5 text-sm font-semibold text-gray-500" aria-live="polite">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-950" aria-hidden="true" />
