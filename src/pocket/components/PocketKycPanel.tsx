@@ -156,7 +156,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
           <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':surface==='developer'?'NIN or government ID + selfie':state.advancedDailyLimitNgn?<>NIN or government ID · {limitDisplay.usdc(state.advancedDailyLimitNgn)} daily</>:'NIN or government ID · Higher limits pending activation'}</span>
         </button>}
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">{surface==='developer'?'Available payment routes and limits are checked separately for your account.':'Bank transfers and XPay bank payouts share this allowance. Bills are excluded.'}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{surface==='developer'?'Available payment routes and limits are checked separately for your account.':'Verify once for bank transfers, XPay and the developer portal.'}</p>
       {guidance?<div role="status" className="space-y-1"><p className="text-sm font-medium">{guidance.title}</p><p className="text-sm leading-6 text-gray-500 dark:text-gray-400">{guidance.message}</p></div>:passed?<p role="status" className="text-sm text-green-700 dark:text-green-400">{state.environment==='sandbox'?'Sandbox test completed':country==='UG'?'Verification complete':complete?'Advanced verification complete':'Basic verification complete'}</p>:null}
       {needsAdditional && <fieldset disabled={busy} className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Choose how to verify</legend>
