@@ -13,3 +13,9 @@ Validation:
 - Shared KYC browser regression and KYC V3 API regression pass, including owner isolation, signed/provider-confirmed results, method switching, duplicate prevention and Uganda validation.
 - QR screenshot inspected at output/playwright/developer-verification-phone.png.
 - Live cross-device OTP and capture are not yet exercised for this new handoff. Existing Advanced completion is user-reported evidence from before the handoff change.
+
+Release evidence:
+- Production build succeeded in 1m 41s.
+- Full typecheck: same 43 baseline errors; normalized comparison found no new errors.
+- Commit 26db20a969424f69ac9449b78b661888733a9ae3 deployed as dep-dbifv9qjnfac738q6v5g; confirmed live at 2026-10-30T20:41:42.444819Z.
+- Fresh-browser live Playwright check confirmed Continue verification, same-account instruction, email input and sign-in gate with query retained. No OTP requested. A transient 502 during startup cleared once live.
