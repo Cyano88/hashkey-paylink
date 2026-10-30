@@ -15,6 +15,7 @@ export function kycGuidance(state: State) {
     return { title: 'Verification needs attention', message, action: 'support' as const }
   }
   if (state.status === 'failed') {
+    if (state.failureReason === 'session_cancelled') return { title: 'Choose how to verify', message: 'Choose NIN or a government ID to continue.', action: 'retry' as const }
     if (state.failureReason === 'session_failed') return { title: 'Verification did not start', message: 'The verification session could not start. Please try again.', action: 'retry' as const }
     if (state.failureReason === 'provider_error') return { title: 'Verification unavailable', message: 'The verification service could not complete this check. Please try again later.', action: 'retry' as const }
     if (state.failureReason === 'face_mismatch') return { title: 'Selfie did not match', message: 'Your selfie could not be matched to your ID photo. Contact support before submitting again.', action: 'support' as const }

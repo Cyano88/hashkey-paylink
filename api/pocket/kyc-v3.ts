@@ -7,7 +7,7 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {smileConfig,type SmileConfig,type SmileEnvironment} from './smile-provider.js'
 import {smileV3Token,smileV3Status,smileV3Replay,assertSmileV3Policy,smileIdentityMatchKey,validV3Signature,v3Failure as fail} from './smile-v3.js'
 type Method='bvn'|'nin'|'government_id'|'national_id'
-type Job={declaredName?:string;userId?:string;resultCode?:string;country?:'NG'|'UG';supersededBy?:string;replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;firstName?:string;lastName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
+type Job={cancelledAt?:number;declaredName?:string;userId?:string;resultCode?:string;country?:'NG'|'UG';supersededBy?:string;replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;firstName?:string;lastName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
 type Store={jobs:Job[]}
 const key=(owner:string,environment:SmileEnvironment)=>'hashpaylink:pocket-kyc:v3:'+environment+':'+createHash('sha256').update(owner).digest('hex')
 const indexKey=(id:string)=>'hashpaylink:pocket-kyc-job:v3:'+id
@@ -23,8 +23,9 @@ const isBasic=(j:Job)=>j.country==='UG'?['government_id','national_id'].includes
 const bvn=(jobs:Job[])=>jobs.find(j=>isBasic(j)&&j.status==='passed'&&j.identityMatch)
 const complete=(jobs:Job[])=>jobs.find(j=>j.country!=='UG'&&j.method!=='bvn'&&j.status==='passed'&&j.identityMatch&&jobs.some(b=>b.id===j.bvnJobId&&b.method==='bvn'&&b.status==='passed'&&b.identityMatch===j.identityMatch))
 const correctable=(j?:Job)=>j?.method==='bvn'&&j.status==='review'&&j.failureReason==='submitted_name_mismatch'&&!j.supersededBy
-const resumable=(j?:Job)=>!!j&&j.method!=='national_id'&&!j.providerJobId&&!j.uploadReportedAt&&['pending','review'].includes(j.status)
-function publicFlow(jobs:Job[],environment:SmileEnvironment){const j=jobs.at(-1),first=bvn(jobs),done=complete(jobs);return{environment,apiVersion:3,paymentLevel:environment==='production'?(kycLevelFromJobs(jobs).paymentLevel||'none'):'none',basicDailyLimitNgn:BASIC_DAILY_NGN,advancedDailyLimitNgn:advancedDailyNgn(),level:environment==='production'?(done?'advanced':first?'basic':'none'):'none',status:j?.status||'not_started',jobId:j?.id||null,verification:jobPolicy(j),verified:environment==='production'&&!!done,canResume:resumable(j),canCorrectNames:correctable(j),uploadReported:!!j?.uploadReportedAt,failureReason:j?.failureReason||null,workflow:{basicPassed:!!first,bvnPassed:!!first&&first.method==='bvn',complete:!!done,needsAdditional:first?.country!=='UG'&&!!first&&!done&&(!j||j.method==='bvn'||j.status==='failed'),methods:first?.country==='UG'?[]:['nin','government_id']}}}
+const resumable=(j?:Job)=>!!j&&!j.cancelledAt&&j.method!=='national_id'&&!j.providerJobId&&!j.uploadReportedAt&&['pending','review'].includes(j.status)
+const changeable=(j?:Job)=>!!j&&resumable(j)&&j.status==='pending'&&(j.country||'NG')==='NG'&&['nin','government_id'].includes(j.method)&&!j.submissionHint
+function publicFlow(jobs:Job[],environment:SmileEnvironment){const j=jobs.at(-1),first=bvn(jobs),done=complete(jobs);return{environment,apiVersion:3,paymentLevel:environment==='production'?(kycLevelFromJobs(jobs).paymentLevel||'none'):'none',basicDailyLimitNgn:BASIC_DAILY_NGN,advancedDailyLimitNgn:advancedDailyNgn(),level:environment==='production'?(done?'advanced':first?'basic':'none'):'none',status:j?.status||'not_started',jobId:j?.id||null,verification:jobPolicy(j),verified:environment==='production'&&!!done,canResume:resumable(j),canChangeMethod:changeable(j),canCorrectNames:correctable(j),uploadReported:!!j?.uploadReportedAt,failureReason:j?.failureReason||null,workflow:{basicPassed:!!first,bvnPassed:!!first&&first.method==='bvn',complete:!!done,needsAdditional:first?.country!=='UG'&&!!first&&!done&&(!j||j.method==='bvn'||j.status==='failed'),methods:first?.country==='UG'?[]:['nin','government_id']}}}
 export async function requireV3ProductionKyc(owner:string){const r=await readDurableJson<Store>(key(owner,'production'));const j=complete(r?.jobs||[]);if(!j?.legalName)throw fail('Complete identity verification before setting up your POS.',403);return j.legalName}
 function evidence(config:SmileConfig,fields:Record<string,unknown>){
  const legalName=String(fields.full_name||[fields.first_name,fields.other_names,fields.last_name].filter(x=>typeof x==='string').join(' ')).replace(/\s+/g,' ').trim().slice(0,160)
@@ -69,21 +70,25 @@ export default async function pocketKycV3(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed.'})
  try{
   const identity=await verifiedPrivyUser(req),config=smileConfig(),action=req.body?.action,k=key(identity.userId,config.environment)
-  if(!['status','eligibility','start','resume','uploaded','correct_names'].includes(action))throw fail('Invalid verification action.',400)
+  if(!['status','eligibility','start','resume','uploaded','correct_names','change_method'].includes(action))throw fail('Invalid verification action.',400)
   let record=await readDurableJson<Store>(k),latest=record?.jobs.at(-1)
   if(action==='status'||action==='eligibility'){if(latest)await refresh(config,identity.userId,latest);record=await readDurableJson<Store>(k);return res.json({ok:true,...publicFlow(record?.jobs||[],config.environment)})}
+  if(action==='change_method'){
+   record=await mutateDurableJson<Store>(k,r=>{const j=r?.jobs.at(-1);if(!j||j.id!==req.body.jobId||!changeable(j)||!bvn(r!.jobs))throw fail('This verification cannot change methods after submission. Check its progress.',409);j.cancelledAt=Date.now();j.status='failed';j.failureReason='session_cancelled';return r!})
+   return res.json({ok:true,...publicFlow(record.jobs,config.environment)})
+  }
   if(action==='uploaded'){
-   if(!latest||req.body.jobId!==latest.id)throw fail('Verification reference did not match.',409)
+   if(!latest||latest.cancelledAt||req.body.jobId!==latest.id)throw fail('Verification reference did not match.',409)
    const hint=req.body.submission
    if(hint!==undefined&&(!hint||typeof hint.jobId!=='string'||!/^job_[0-9a-hjkmnp-tv-z]{26}$/.test(hint.jobId)||typeof hint.userId!=='string'||!hint.userId||hint.userId.length>160))throw fail('Invalid submission reference.',400)
-   record=await mutateDurableJson<Store>(k,r=>{const j=r?.jobs.find(x=>x.id===latest!.id);if(j&&!['passed','failed'].includes(j.status)){j.uploadReportedAt||=Date.now();if(hint){if(j.submissionHint&&(j.submissionHint.jobId!==hint.jobId||j.submissionHint.userId!==hint.userId))throw fail('Submission reference changed.',409);j.submissionHint={jobId:hint.jobId,userId:hint.userId}}}return r||{jobs:[]}})
+   record=await mutateDurableJson<Store>(k,r=>{const j=r?.jobs.find(x=>x.id===latest!.id);if(j?.cancelledAt)throw fail('This verification session was closed.',409);if(j&&!['passed','failed'].includes(j.status)){j.uploadReportedAt||=Date.now();if(hint){if(j.submissionHint&&(j.submissionHint.jobId!==hint.jobId||j.submissionHint.userId!==hint.userId))throw fail('Submission reference changed.',409);j.submissionHint={jobId:hint.jobId,userId:hint.userId}}}return r||{jobs:[]}})
    return res.json({ok:true,...publicFlow(record.jobs,config.environment)})
   }
   if(req.body.consent!==true)throw fail('Please consent to identity verification first.',400)
   const country=req.body.country ?? latest?.country ?? 'NG'
   if(!['NG','UG'].includes(country))throw fail('Identity verification is not available for this country yet.',409)
   if(latest && (latest.country||'NG')!==country && (latest.status!=='failed'||latest.uploadReportedAt))throw fail('Finish your existing verification before changing country.',409)
-  if(action==='start'&&latest?.status==='failed'&&!['session_failed','provider_error'].includes(latest.failureReason||''))throw fail('Contact support to review your verification before trying again.',409)
+  if(action==='start'&&latest?.status==='failed'&&!['session_failed','provider_error','session_cancelled'].includes(latest.failureReason||''))throw fail('Contact support to review your verification before trying again.',409)
   if(action==='correct_names'&&(!correctable(latest)||req.body.jobId!==latest?.id))throw fail('This verification is not eligible for name correction.',409)
   const method=action==='correct_names'?'bvn':action==='resume'?latest?.method:req.body.method||(country==='UG'?'national_id':'bvn')
   if(!['bvn','nin','government_id','national_id'].includes(method))throw fail('Choose a supported verification method.',400)
@@ -131,12 +136,13 @@ export async function pocketKycV3Callback(req:Request,res:Response){
   const index=await readDurableJson<{owner:string;environment:SmileEnvironment}>(indexKey(reference));if(!index||index.environment!==config.environment)return reject(404,'session_index')
   const k=key(index.owner,index.environment),record=await readDurableJson<Store>(k),selected=record?.jobs.find(j=>j.id===reference)
   if(!selected||selected.method==='national_id'||!timingSafeEqual(Buffer.from(proof,'hex'),Buffer.from(selected.callbackProof,'hex')))return reject(401,'session_proof')
+  if(selected.cancelledAt)return reject(409,'session_cancelled')
   if(body.partner_params?.internal_reference!==reference||body.product!==jobPolicy(selected).apiProduct||selected.providerJobId&&selected.providerJobId!==providerJobId||selected.providerUserId&&selected.providerUserId!==providerUserId)return reject(409,'correlation')
   // Header HMAC authenticates timestamp, not JSON. A per-session callback proof and
   // credentialed status lookup bind the payload to the token and actual provider job.
   // Persist only authenticated correlation before a transient provider lookup can fail.
   // This enables bounded status/replay recovery; it does not approve the identity.
-  await mutateDurableJson<Store>(k,current=>{const j=current?.jobs.find(x=>x.id===reference);if(!j)throw fail('Unknown verification.',404);if(j.providerJobId&&j.providerJobId!==providerJobId||j.providerUserId&&j.providerUserId!==providerUserId)throw fail('Verification reference changed.',409);j.providerJobId=providerJobId;j.providerUserId=providerUserId;return current!})
+  await mutateDurableJson<Store>(k,current=>{const j=current?.jobs.find(x=>x.id===reference);if(!j)throw fail('Unknown verification.',404);if(j.cancelledAt)throw fail('This verification session was closed.',409);if(j.providerJobId&&j.providerJobId!==providerJobId||j.providerUserId&&j.providerUserId!==providerUserId)throw fail('Verification reference changed.',409);j.providerJobId=providerJobId;j.providerUserId=providerUserId;return current!})
   const authoritative=await smileV3Status(config,providerJobId)
   if(authoritative.job_id!==providerJobId||authoritative.user_id!==providerUserId||authoritative.status!==body.status)return reject(409,'provider_status')
   if(!['clear','block','attention','error'].includes(body.status))return reject(409,'terminal_status')

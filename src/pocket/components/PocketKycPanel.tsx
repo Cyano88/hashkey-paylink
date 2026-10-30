@@ -12,7 +12,7 @@ import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRout
 
 type VerificationMethod = 'bvn' | 'nin' | 'government_id' | 'national_id'
 type VerificationPolicy = { method?: VerificationMethod; product?: string; country: string; countryName: string; provider: string; idSelection: Record<string, string[]>; consentRequired: Record<string, string[]>; previewBVNMFA: boolean }
-type KycState = {paymentLevel?:'none'|'basic'|'advanced';level?:'none'|'basic'|'advanced';basicDailyLimitNgn?:number;advancedDailyLimitNgn?:number|null; workflow?: { basicPassed?:boolean; bvnPassed: boolean; complete: boolean; needsAdditional: boolean; methods: string[] }; environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; canCorrectNames?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
+type KycState = {paymentLevel?:'none'|'basic'|'advanced';level?:'none'|'basic'|'advanced';basicDailyLimitNgn?:number;advancedDailyLimitNgn?:number|null; workflow?: { basicPassed?:boolean; bvnPassed: boolean; complete: boolean; needsAdditional: boolean; methods: string[] }; environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; canChangeMethod?: boolean; canCorrectNames?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string; partnerParams?: Record<string,string> }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
 const TEMPORARY_ERROR = 'Verification is temporarily unavailable. We will retry automatically.'
@@ -46,11 +46,11 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
   const retryNotBefore = useRef(0)
   const [retryAt, setRetryAt] = useState(0)
-  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded' | 'correct_names', jobId?: string, method?: VerificationMethod, submission?: {jobId:string;userId:string}) => {
+  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded' | 'correct_names' | 'change_method', jobId?: string, method?: VerificationMethod, submission?: {jobId:string;userId:string}) => {
     if (Date.now() < retryNotBefore.current) throw Object.assign(new Error('Verification is busy. Please wait a moment.'), {retryable:true})
     const token = await tokenReader.current()
     if (!token) throw Object.assign(new Error('Sign in again to continue.'), {retryable:false})
-    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(action==='start'?{country:countryRef.current,...countryRef.current==='UG'?{identity:identityRef.current}:{}}:{}), ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(submission ? {submission} : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
+    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(action==='start'?{country:countryRef.current,...countryRef.current==='UG'?{identity:identityRef.current}:{}}:{}), ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(submission ? {submission} : {}), ...(['start','resume','correct_names'].includes(action) ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
     if (response.status === 429) {
       const header = response.headers.get('Retry-After')
       const seconds = header ? Number(header) : NaN
@@ -71,7 +71,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
     if (opening.current || inFlight.current || Date.now() < retryNotBefore.current) return
     inFlight.current = true
     const generation = requestGeneration.current
-    try { const next = await api('status'); if (mounted.current && generation===requestGeneration.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError(''); setAutoRetry(true) } }
+    try { const next = await api('status'); if (mounted.current && generation===requestGeneration.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, canChangeMethod: false, uploadReported: true } : next); setError(''); setAutoRetry(true) } }
     catch (reason) { if (mounted.current && generation===requestGeneration.current) { setError(reason instanceof Error ? reason.message : 'Verification could not load.'); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
     finally { inFlight.current = false }
   }, [api])
@@ -90,6 +90,13 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, state?.status === 'review' ? 60000 : 15000)
     return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
   }, [state?.status, error, autoRetry, refresh])
+  const changeMethod = async () => {
+    if (busy || opening.current || !state?.canChangeMethod) return
+    opening.current=true; requestGeneration.current++; setBusy(true); setError('')
+    try { const next=await api('change_method',state.jobId); if(mounted.current){setState(next);setAdditionalMethod('nin');setConsent(false);setSelectedLevel('advanced')} }
+    catch(reason){if(mounted.current)setError(reason instanceof Error?reason.message:'Could not change verification method.')}
+    finally{opening.current=false;if(mounted.current)setBusy(false)}
+  }
   const start = async () => {
     if (!consent || opening.current || busy || Date.now() < retryNotBefore.current) return
     opening.current=true; requestGeneration.current++; setBusy(true); setError(''); setAutoRetry(true)
@@ -113,7 +120,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
           if (!mounted.current) return
           setBusy(false)
           setSubmittedSheet(true)
-          setState(current => current && { ...current, canResume: false, uploadReported: true })
+          setState(current => current && { ...current, canResume: false, canChangeMethod: false, uploadReported: true })
           // An upload notification is only a processing hint, never identity approval.
           void api('uploaded', session.jobId, undefined, submission).then(next => { if (mounted.current) { setState(next); void refresh() } }).catch(() => {
             if (mounted.current) setError('Your upload finished. We will keep checking for your result.')
@@ -174,6 +181,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />{country==='UG'?'I agree to share my National ID details with Smile ID for verification.':'I agree to share my identity details and selfie with Smile ID for verification.'}</label>
         <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className={`${actionClass} w-full px-4 py-3.5`}>{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : country==='UG'?'Verify identity':'Verify Basic'}</button>
       </>}
+      {selectedLevel==='advanced' && state.canChangeMethod && !providerVisible && <button type="button" disabled={busy || retryAt > 0} onClick={()=>void changeMethod()} className="block w-full py-3 text-center text-sm font-semibold disabled:opacity-50">Change verification method</button>}
       {(guidance?.action === 'support') && <a href={supportHref} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}
     {submittedSheet && <PocketBottomSheet title={resultTitle} dismissOnBackdrop={false} onClose={() => setSubmittedSheet(false)}>
