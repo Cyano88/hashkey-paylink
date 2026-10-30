@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 await build({entryPoints:['api/pocket/xpay-fee.ts'],outfile:'.codex-temp/xpay-fee-test.mjs',bundle:true,format:'esm',platform:'node',packages:'external'})
 const {xpaySenderFee,assertXPaySenderFee}=await import('../.codex-temp/xpay-fee-test.mjs')
 assert.equal(xpaySenderFee().senderFeePercent,'0.25')
+assert.equal(xpaySenderFee().transactionFeePayer,'customer')
 assert.match(xpaySenderFee().senderFeeAddress,/^0x[0-9a-fA-F]{40}$/)
 const valid={amount:'1',senderFee:'0.0025',senderFeePercent:'0.25'}
 assert.doesNotThrow(()=>assertXPaySenderFee(valid))

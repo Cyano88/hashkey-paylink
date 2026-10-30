@@ -1,7 +1,9 @@
 import {parseUnits} from 'viem'
 import {EVM_PLATFORM_TREASURY, PLATFORM_FEE_BPS} from '../../src/lib/platformFees.js'
 /** Shared explicit platform fee for Pocket bank payouts and XPay. */
-export function xpaySenderFee(){return {senderFeePercent:String(PLATFORM_FEE_BPS/100),senderFeeAddress:EVM_PLATFORM_TREASURY}}
+// The customer pays the network cost on top of our full platform fee.
+// Pin this per order; Paycrest's profile default deducts costs from our fee.
+export function xpaySenderFee(){return {senderFeePercent:String(PLATFORM_FEE_BPS/100),senderFeeAddress:EVM_PLATFORM_TREASURY,transactionFeePayer:'customer' as const}}
 export function assertXPaySenderFee(data:unknown){
  const d=data as Record<string,unknown>|undefined
  const fail=()=>{throw Object.assign(new Error('The bank fee could not be verified. Please try again.'),{status:503})}

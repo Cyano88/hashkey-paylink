@@ -11,6 +11,7 @@ await assert.rejects(quotePaycrestBaseUsdt({amount:'10',fiat:'NGN'},{...dependen
 assert.equal(calls,1)
 const input={amountFiat:'10000',fiat:'NGN',refundAddress:'0x'+'1'.repeat(40),reference:'payout-fixture',institution:'OPAY',accountIdentifier:'0123456789',accountName:'TEST CUSTOMER'}
 const order=buildPaycrestBaseUsdtOrder(input)
+assert.equal(order.transactionFeePayer,'customer')
 assert.equal(order.source.currency,'USDT');assert.equal(order.source.network,'base');assert.equal(order.amountIn,'fiat');assert.equal(order.senderFeePercent,'0.25')
 assert.equal(buildPaycrestBaseUsdtOrder({...input,fiat:'UGX'}).destination.currency,'UGX')
 for(const patch of [{fiat:'USD'},{amountFiat:'1.001'},{refundAddress:'0x'+'0'.repeat(40)},{reference:'../bad'},{accountName:''}])assert.throws(()=>buildPaycrestBaseUsdtOrder({...input,...patch}))
