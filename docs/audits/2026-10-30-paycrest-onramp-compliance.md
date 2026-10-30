@@ -42,3 +42,9 @@ This is backend state handling, not a claim that every retained legacy UI is rea
 - User-forwarded Paycrest operations email dated October 14, 2026; requirement evidence, not account approval evidence.
 - https://docs.paycrest.io/implementation-guides/sender-api-integration#on-ramp-customer-kyc
 - https://docs.paycrest.io/concepts/transaction-lifecycle#compliance-holds
+
+## Business KYB data follow-up
+
+Verified separately in developer-verification.ts and verificationTypes.ts: the encrypted business application already collects companyName, registrationNumber, country and owners' fullName, birthDate, idType/idNumber/issuingCountry, BVN/NIN and controlPerson. The personal Pocket missing-data finding must not be applied to this business application.
+
+The remaining business mapper boundary is authenticated business payer ownership, approved immutable review revision, verified director role (owner/controlPerson alone does not prove directorship), provider enum mapping, consented provider disclosure and refund-account binding. No arbitrary owner is silently mapped as a director. No builder fee-setting work was included in this change.

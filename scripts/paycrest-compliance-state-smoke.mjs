@@ -5,6 +5,7 @@ import {writeFile,mkdir} from 'node:fs/promises'
 import {mergePaycrestOrder} from '../api/paycrest-order-state.ts'
 const base={intent_id:'fixture',paycrest_order_id:'provider-fixture',merchant_id:'merchant',source:'bank-send',status:'pending',amount_usdc:'1',updated_at:'2026-10-30T10:00:00Z'}
 const held={...base,status_detail:'under_review'}
+assert.equal(mergePaycrestOrder({...base,status:'expired'},{...held,updated_at:'2026-10-30T11:00:00Z'}).status,'pending','A newly received provider hold repairs an earlier local expiry')
 for(const status of ['expired','cancelled','failed','initiated'])assert.equal(mergePaycrestOrder(held,{...base,status,updated_at:'2026-10-30T11:00:00Z'}).status,'pending')
 assert.equal(mergePaycrestOrder(held,{...base,status_detail:undefined}).status_detail,'under_review')
 for(const status of ['settled','refunded'])assert.equal(mergePaycrestOrder(held,{...base,status,updated_at:'2026-10-30T11:00:00Z'}).status_detail,undefined)

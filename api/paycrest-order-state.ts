@@ -9,7 +9,8 @@ export function mergePaycrestOrder(current: PaycrestOrderRecord | undefined, inc
  const terminalRegression=(old==='settled' && !['settled','refunding','refunded'].includes(next)) || (old==='refunded' && next!=='refunded')
  const held=current.source==='bank-send'&&current.status_detail==='under_review'&&!['settled','refunded'].includes(old)
  const holdRegression=held&&['expired','cancelled','canceled','failed','initiated','created'].includes(next)
- const preserve=stale||regresses||terminalRegression||holdRegression
+ const lateHold=current.source==='bank-send'&&incoming.status_detail==='under_review'&&next==='pending'&&['expired','cancelled','canceled','failed'].includes(old)
+ const preserve=stale||(regresses&&!lateHold)||terminalRegression||holdRegression
  const merged=preserve?{...incoming,...current}:{...current,...incoming}
  for(const key of ['tx_hash','payer_email','payer_wallet','provider_amount_paid','provider_amount_returned','provider_percent_settled'] as const){
   if(!merged[key])merged[key]=current[key]||incoming[key]
