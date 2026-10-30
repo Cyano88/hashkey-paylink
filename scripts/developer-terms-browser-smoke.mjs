@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict'
+const {chromium}=await import('file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
+const browser=await chromium.launch({channel:'chrome',headless:true})
+try{
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[]
+ page.on('pageerror',e=>errors.push(e.message))
+ await page.goto('http://127.0.0.1:4319/?terms=1&termsFail=1&environment=live&section=home')
+ await page.getByRole('heading',{name:'Before you continue',exact:true}).waitFor()
+ assert.equal(await page.getByRole('button',{name:'Your profile',exact:true}).count(),0)
+ assert.equal(await page.getByRole('button',{name:'Agree and continue',exact:true}).isDisabled(),true)
+ assert.equal(await page.evaluate(()=>window.__termsCalls||0),0)
+ assert.equal(await page.getByRole('link',{name:'Terms of service',exact:true}).getAttribute('href'),'https://docs.hashpaylink.com/docs/terms')
+ assert.equal(await page.getByRole('link',{name:'Privacy policy',exact:true}).getAttribute('href'),'https://docs.hashpaylink.com/docs/privacy')
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ await page.screenshot({path:'output/playwright/developer-terms-mobile.png'})
+ await page.getByRole('checkbox').check()
+ await page.getByRole('button',{name:'Agree and continue',exact:true}).click()
+ await page.getByRole('alert').waitFor()
+ assert.equal(await page.getByRole('heading',{name:'Before you continue',exact:true}).count(),1)
+ assert.equal(await page.evaluate(()=>window.__termsCalls),1)
+ await page.getByRole('button',{name:'Agree and continue',exact:true}).click()
+ await page.getByRole('button',{name:'Your profile',exact:true}).waitFor()
+ assert.equal(await page.evaluate(()=>window.__termsCalls),2)
+ await page.reload();await page.getByRole('button',{name:'Your profile',exact:true}).waitFor()
+ assert.equal(await page.getByRole('heading',{name:'Before you continue',exact:true}).count(),0)
+ assert.deepEqual(errors,[])
+ console.log('Developer terms: explicit unchecked consent, no automatic acceptance, gated dashboard, error/retry, accepted-user refresh and mobile layout passed. SDK identity is simulated here.')
+}finally{await browser.close()}

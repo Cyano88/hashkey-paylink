@@ -1,3 +1,4 @@
+import DeveloperTermsGate from '../developer/DeveloperTermsGate'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../lib/ThemeContext'
@@ -25,6 +26,6 @@ export default function DeveloperLayout() {
         </div>
       </nav>
     </header>
-    <Outlet />
+    <DeveloperTermsGate><Outlet /></DeveloperTermsGate>
   </div>
 }
