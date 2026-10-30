@@ -36,3 +36,9 @@ The initial release incorrectly used legacy app names as business profile names.
 Verification: profile handler tests cover unset names, owner isolation, validation, setup and unchanged app records; Playwright covers blank name entry, saving an explicit business name and preserving the app name, alongside existing responsive/profile tests. Project adapter suite and production build passed.
 
 Correction release `5790236ab237444a1207d54bd795d9b60a301763`, deployment `dep-dbibt6k9v7es73c8bvv0`, live 2026-10-30T16:04:20Z. Authenticated live Playwright confirmed Business profile not set replaces the inferred Hash PayStream business label and Set business name opens an empty field. Closed without submitting a business identity. Full typecheck remains 43 identical pre-existing diagnostics, no additions.
+
+## In-app unsaved edit confirmation
+
+Replaced portal navigation window.confirm prompts with a styled accessible dialog offering Keep editing and Discard changes. Escape keeps edits; cancellation retains the current profile and editor. Dirty checks apply only to the active editor, and profile setup restores saved app fields instead of clearing the webhook draft. This fixes the false discard warning after naming an existing business.
+
+Playwright passed native-confirm rejection, no prompt after business setup with an existing webhook, retained edits on Keep editing/Escape, explicit discard on profile/environment changes, and unchanged saved webhook data. Existing profile/isolation/responsive cases passed.

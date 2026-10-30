@@ -1,7 +1,7 @@
 ﻿import {useEffect,useRef,useState} from 'react'
 import {Building2,UserRound,Plus,X,Check,ChevronDown} from 'lucide-react'
 import type {BuilderProfile} from '../lib/builderProfiles'
-export default function ProfileSwitcher({profiles,active,disabled,onSelect,onCreate}:{profiles:BuilderProfile[];active:BuilderProfile;disabled:boolean;onSelect:(id:string)=>boolean;onCreate:(name:string,profileId?:string)=>Promise<void>}){
+export default function ProfileSwitcher({profiles,active,disabled,onSelect,onCreate}:{profiles:BuilderProfile[];active:BuilderProfile;disabled:boolean;onSelect:(id:string)=>Promise<boolean>;onCreate:(name:string,profileId?:string)=>Promise<void>}){
  const [menu,setMenu]=useState(false),[creating,setCreating]=useState(false),[name,setName]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('')
  const [setupId,setSetupId]=useState<string|undefined>()
  const root=useRef<HTMLDivElement>(null),dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),lastBusiness=useRef('')
@@ -22,7 +22,7 @@ export default function ProfileSwitcher({profiles,active,disabled,onSelect,onCre
   </div>
   {menu&&<div aria-label="Business profiles" className="absolute right-0 top-full z-40 mt-2 max-h-80 w-64 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-white/10 dark:bg-[#17181b]">
    <p className="px-3 py-2 text-xs font-medium text-gray-500">Business profiles</p>
-   {businesses.map(p=><button type="button" key={p.id} disabled={disabled} onClick={()=>{if(onSelect(p.id))setMenu(false)}} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm hover:bg-gray-100 dark:hover:bg-white/5"><Building2 className="h-4 w-4 shrink-0"/><span className="min-w-0 flex-1 truncate">{p.name}{p.needsSetup&&p.legacyAppName&&<span className="block text-xs text-gray-500">App: {p.legacyAppName}</span>}</span>{p.id===active.id&&<Check className="h-4 w-4 shrink-0"/>}</button>)}
+   {businesses.map(p=><button type="button" key={p.id} disabled={disabled} onClick={async()=>{if(await onSelect(p.id))setMenu(false)}} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm hover:bg-gray-100 dark:hover:bg-white/5"><Building2 className="h-4 w-4 shrink-0"/><span className="min-w-0 flex-1 truncate">{p.name}{p.needsSetup&&p.legacyAppName&&<span className="block text-xs text-gray-500">App: {p.legacyAppName}</span>}</span>{p.id===active.id&&<Check className="h-4 w-4 shrink-0"/>}</button>)}
    {active.needsSetup&&<button type="button" disabled={disabled} onClick={()=>{setSetupId(active.id);setName('');setError('');setMenu(false);setCreating(true)}} className="flex min-h-11 w-full items-center px-3 text-sm font-medium">Set business name</button>}
    <button type="button" disabled={disabled} onClick={add} className="mt-1 flex min-h-11 w-full items-center gap-2 border-t border-gray-200 px-3 text-sm dark:border-white/10"><Plus className="h-4 w-4"/>Add business profile</button>
   </div>}
