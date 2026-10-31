@@ -28,7 +28,7 @@ export async function verifyOperationsSection(req: Request, section: OperationsS
   return identity
 }
 
-type Project = { id: string; name: string; capabilities?: string[]; operationalStatus?: string; environment?: string; accountType?: string; removal?: {status:string}; businessVerification?: {status:string} }
+type Project = { personalKycVerified?:boolean; profileCountry?:string; id: string; name: string; capabilities?: string[]; operationalStatus?: string; environment?: string; accountType?: string; removal?: {status:string}; businessVerification?: {status:string} }
 export function operationsSession(identity: OperationsIdentity, projects: Project[], env = process.env) {
   const policy = operationsPolicy(env)
   const removed=new Set(projects.filter(p=>p.removal).map(p=>p.id))
@@ -38,7 +38,7 @@ export function operationsSession(identity: OperationsIdentity, projects: Projec
     ...projects.filter(p => !assigned.has(p.id)).map(p => ({ id: p.id, name: productDisplayName(p.id,p.name), projectIds: [p.id] }))]
   const workspaces = definitions.flatMap(w => {
     const integrations = projects.filter(p => w.projectIds.includes(p.id)).map(p => ({ id: p.id, name: productDisplayName(p.id,p.name),
-      environment:p.environment||'live',accountType:p.accountType||'business',verificationStatus:p.businessVerification?.status||'not_started',capabilities: p.capabilities || [], status: p.operationalStatus || 'active' }))
+      profileCountry:p.profileCountry,environment:p.environment||'live',accountType:p.accountType||'business',verificationStatus:p.accountType==='individual'?(p.personalKycVerified?'approved':'not_recorded'):p.businessVerification?.status||'not_started',capabilities: p.capabilities || [], status: p.operationalStatus || 'active' }))
     const sections = workspaceSections(identity, w.id, policy).filter(section => section === 'agreements'
       ? false
       : section === 'trade-disputes' ? integrations.some(p => p.capabilities.includes('xstocks_agreements')) : true)

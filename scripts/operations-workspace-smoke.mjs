@@ -24,7 +24,9 @@ assert.throws(() => operationsPolicy({ DEVELOPER_ADMIN_EMAILS: founder.email }),
 assert.throws(() => operationsPolicy({ ...env, OPERATIONS_WORKSPACES_JSON: JSON.stringify([{ id: 'one', name: 'One', projectIds: [a] }, { id: 'two', name: 'Two', projectIds: [a] }]) }), { status: 503 })
 assert.throws(() => operationsPolicy({ ...env, OPERATIONS_GRANTS_JSON: '[{"email":"x@example.test","workspaceId":"stream","sections":["support"]}]' }), { status: 503 })
 const projects = [{ id: a, name: 'Human', capabilities: ['arc_agreements', 'xstocks_agreements'] }, { id: b, name: 'Agent', capabilities: ['arc_agreements'] }, { id: c, name: 'Human', capabilities: ['hosted_checkout'] }]
+projects[0].profileCountry='NG'
 const session = operationsSession(staff, projects, env)
+assert.equal(session.workspaces[0].integrations.find(p=>p.id===a).profileCountry,'NG')
 assert.equal(session.workspaces.length, 1)
 assert.deepEqual(session.workspaces[0].sections, ['trade-disputes'])
 assert.equal(session.arcActivationEnabled, false)

@@ -74,6 +74,7 @@ export default function DeveloperSupportWidget(){
  const {ready,authenticated,user}=usePrivy(),location=useLocation(),[open,setOpen]=useState(false),[opened,setOpened]=useState(false),panel=useRef<HTMLDivElement>(null),launcher=useRef<HTMLButtonElement>(null)
  useEffect(()=>{const restored=readSelection('developer-support:'+user?.id+':open')==='true';setOpen(restored);setOpened(restored)},[user?.id])
  useEffect(()=>{if(new URLSearchParams(location.search).get('support')==='open'){setOpened(true);setOpen(true)}},[location.search])
+ useEffect(()=>{const show=()=>{saveSelection('developer-support:'+user?.id+':open','true');setOpened(true);setOpen(true)};window.addEventListener('developer-support-open',show);return()=>window.removeEventListener('developer-support-open',show)},[user?.id])
  useEffect(()=>{if(open)panel.current?.focus()},[open])
  if(!ready||!authenticated)return null
  function close(){saveSelection('developer-support:'+user?.id+':open','false');setOpen(false);launcher.current?.focus()}

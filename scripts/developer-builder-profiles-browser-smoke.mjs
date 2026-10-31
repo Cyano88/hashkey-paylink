@@ -7,11 +7,12 @@ const verify=async()=>({userId:'profile-browser-owner',email:'fixture@example.te
 const handler=createDeveloperProjectsHandler({hasStore:()=>true,portalSecret:()=> 'builder-browser-profile-secret-at-least-32-characters',read:async k=>stores.get(k),mutate:async(k,fn)=>{const v=fn(stores.get(k));stores.set(k,v);return v},verify,requireVerification:()=>true,now:()=>new Date(),createProjectId:()=>`dev_profilebrowser${++sequence}`,createKeyId:()=>`key_${++sequence}`,createSecret:p=>p+'_'+sequence,receivingWallets:async()=>({}),validateWebhook:async()=>{},adminEmails:()=>'',adminUserIds:()=>''})
 const recorder=()=>({statusCode:200,setHeader(){},status(n){this.statusCode=n;return this},json(b){this.body=b;return this}})
 async function api(body){const r=recorder();await handler({method:body?'POST':'GET',headers:{},query:{},body},r);assert.ok(r.statusCode<300,r.body?.error);return r.body}
+await api({action:'set-builder-country',profileId:'personal',country:'NG'})
 await api({action:'create',name:'Personal app',checkoutMode:'human',accountType:'individual',builderProfileId:'personal'})
 const removed=(await api({action:'create',name:'Deleted legacy app',checkoutMode:'human',accountType:'business'})).project
 stores.get('hashpaylink:developer-projects:v1').projects[removed.id].removal={status:'deleted'}
 const legacy=(await api({action:'create',name:'Legacy app name',checkoutMode:'human',accountType:'business'})).project
-const business=(await api({action:'create-builder-profile',name:'Business One'})).builderProfile
+const business=(await api({action:'create-builder-profile',name:'Business One',country:'NG'})).builderProfile
 await api({action:'create',name:'Business app',checkoutMode:'human',accountType:'business',builderProfileId:business.id})
 stores.get('hashpaylink:developer-projects:v1').projects[legacy.id].webhookUrl='https://example.test/webhook'
 const sandbox=createDeveloperSandboxHandler(verify,{read:async k=>sandboxStores.get(k),mutate:async(k,fn)=>{const v=fn(sandboxStores.get(k));sandboxStores.set(k,v);return v},resolveProfile:async(_owner,id)=>{if(!(await api()).builderProfiles.some(p=>p.id===id))throw Object.assign(Error('Unknown profile'),{status:404});return id}})
@@ -38,12 +39,13 @@ try{
  assert.equal(await page.getByRole('heading',{name:'Personal sandbox payment',exact:true}).count(),0)
  await company.click();assert.equal(await page.getByRole('button',{name:/Deleted legacy app/}).count(),0);await page.getByRole('button',{name:'Add business profile',exact:true}).click()
  await page.getByLabel('Business profile name',{exact:true}).fill('Business Two')
+ await page.getByRole('dialog').getByLabel('Country of registration',{exact:true}).selectOption('US')
  await page.getByRole('button',{name:'Create business profile',exact:true}).click()
  await page.getByRole('dialog').waitFor({state:'detached'})
  await personal.click();await page.getByRole('heading',{name:'Personal sandbox payment',exact:true}).waitFor()
  await company.click();await page.getByRole('button',{name:'Create test payment',exact:true}).waitFor()
  assert.equal(await page.getByRole('heading',{name:'Personal sandbox payment',exact:true}).count(),0)
- await company.click();await page.getByRole('button',{name:'Business One',exact:true}).click()
+ await company.click();await page.getByRole('button',{name:'Business One',country:'NG',exact:true}).click()
  await production.click();await page.getByRole('navigation',{name:'Account navigation'}).waitFor()
  await page.getByRole('button',{name:'Apps',exact:true}).click()
  await page.getByText('Business app',{exact:true}).waitFor()
@@ -83,6 +85,7 @@ try{
  await page.getByRole('heading',{name:'Set business name',exact:true}).waitFor()
  assert.equal(await page.getByLabel('Business profile name',{exact:true}).inputValue(),'')
  await page.getByLabel('Business profile name',{exact:true}).fill('Actual Business Name')
+ await page.getByRole('dialog').getByLabel('Country of registration',{exact:true}).selectOption('UG')
  await page.getByRole('button',{name:'Save business name',exact:true}).click()
  await page.getByRole('dialog').waitFor({state:'detached'})
  await page.getByText('Actual Business Name \u00b7 Business',{exact:true}).waitFor()

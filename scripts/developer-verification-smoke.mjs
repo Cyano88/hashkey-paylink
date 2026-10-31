@@ -2,11 +2,12 @@ import assert from 'node:assert/strict'
 import {createDeveloperProjectsHandler,developerPolicyFromStore} from '../api/developer-projects.ts'
 import {sealVerification,openVerification,inspectBusinessDocument,validateBusinessSubmission} from '../api/developer-verification.ts'
 const secret='test-business-verification-secret-more-than-32-characters'
+let countryProfiles
 let identity={userId:'builder',email:'builder@example.test'},store,sequence=0
 const projectId='dev_business12345678',ownerId='owner-12345678'
 const env={OPERATIONS_FOUNDER_EMAILS:'admin@example.test',OPERATIONS_GRANTS_JSON:JSON.stringify([{email:'engineer@example.test',workspaceId:projectId,roles:['engineering']}])}
 const documents=new Map()
-const handler=createDeveloperProjectsHandler({hasStore:()=>true,read:async()=>store,mutate:async(_key,update)=>{store=update(store);return store},verify:async()=>identity,
+const handler=createDeveloperProjectsHandler({hasStore:()=>true,read:async key=>key==='hashpaylink:developer-business-profiles:v1'?countryProfiles:store,mutate:async(key,update)=>{if(key==='hashpaylink:developer-business-profiles:v1'){countryProfiles=update(countryProfiles);return countryProfiles}store=update(store);return store},verify:async()=>identity,
  requireVerification:()=>true,operationsEnv:()=>env,portalSecret:()=>secret,now:()=>new Date('2026-10-27T12:00:00Z'),createProjectId:()=>projectId,createKeyId:()=>`key_${++sequence}`,createSecret:()=>`hpl_live_test_${sequence}`,
  validateWebhook:async()=>{},documents:{write:async(_p,d,bytes)=>documents.set(d.id,sealVerification(bytes.toString('base64'),secret)),read:async(_p,d)=>Buffer.from(openVerification(documents.get(d.id),secret),'base64'),remove:async(_p,id)=>{documents.delete(id)}}})
 async function call(action,extra={},method='POST'){const res={statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v},status(code){this.statusCode=code;return this},json(body){this.body=body;return this},send(body){this.body=body;return this}};await handler({method,query:{workspace:projectId},headers:{},body:{action,projectId,...extra}},res);return res}
@@ -17,7 +18,9 @@ assert.equal((await call('create-key',{environment:'live'})).statusCode,201)
 store.projects[projectId].capabilities=['polymarket_funding']
 assert.equal((await call('create-key',{environment:'live'})).statusCode,409)
 store.projects[projectId].capabilities=['hosted_checkout']
+assert.equal((await call('set-builder-country',{profileId:'business_'+projectId,country:'NG'})).statusCode,200)
 const application={companyName:'Example Ltd',tradingName:'Example',phone:'+2348000000000',website:'https://example.test',address:'Example street, Abuja',registrationNumber:'RC123456',country:'NG',description:'Software payment service',attested:true,owners:[{id:ownerId,fullName:'Example Owner',birthDate:'1990-01-01',address:'Example residential address',ownership:'100',pep:false,idType:'Passport',idNumber:'TEST-ID-123',issuingCountry:'NG',bvn:'',nin:'',controlPerson:true,director:true}]}
+assert.equal((await call('verification-save',{application:{...application,country:'US'},revision:project.businessVerification.revision})).statusCode,409)
 let saved=await call('verification-save',{application,revision:0});assert.equal(saved.statusCode,200)
 assert.equal(JSON.stringify(store).includes('TEST-ID-123'),false)
 assert.equal(JSON.parse(openVerification(store.projects[projectId].businessVerification.cipher,secret)).owners[0].director,true)

@@ -9,11 +9,14 @@ const recorder=()=>({statusCode:200,setHeader(){},status(n){this.statusCode=n;re
 async function call(body,query={}){const r=recorder();await handler({method:body?'POST':'GET',body,query,headers:{}},r);return r}
 let response=await call();assert.deepEqual(response.body.builderProfiles,[{id:'personal',name:'Personal',type:'individual'}])
 const app=(name,extra={})=>call({action:'create',name,checkoutMode:'human',capabilities:['hosted_checkout'],...extra})
+assert.equal((await app('Country required',{accountType:'individual',builderProfileId:'personal'})).statusCode,409)
+assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'KE'})).statusCode,400)
+assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'NG'})).statusCode,200)
 const personal=(await app('Personal app',{accountType:'individual',builderProfileId:'personal'})).body.project
 assert.equal(personal.builderProfileId,'personal')
 const legacy=(await app('Existing company')).body.project
 assert.equal(legacy.builderProfileId,'business_'+legacy.id)
-const business=(await call({action:'create-builder-profile',name:'Example Limited'})).body.builderProfile
+const business=(await call({action:'create-builder-profile',name:'Example Limited',country:'NG'})).body.builderProfile
 assert.equal(business.type,'business')
 const businessApp=(await app('Business app',{accountType:'business',builderProfileId:business.id})).body.project
 assert.equal(businessApp.builderProfileId,business.id)
@@ -38,6 +41,7 @@ response=await call({action:'setup-builder-profile',profileId:legacy.builderProf
 assert.equal(response.statusCode,200);assert.equal(response.body.builderProfile.name,'Actual Company');assert.equal(response.body.builderProfile.needsSetup,undefined)
 assert.deepEqual(stores.get('hashpaylink:developer-projects:v1'),before)
 assert.equal((await call({action:'setup-builder-profile',profileId:legacy.builderProfileId,name:'Again'})).statusCode,409)
+assert.equal((await call({action:'set-builder-country',profileId:legacy.builderProfileId,country:'UG'})).statusCode,200)
 const sibling=(await app('Second app',{accountType:'business',builderProfileId:legacy.builderProfileId})).body.project
 assert.equal(sibling.builderProfileId,legacy.builderProfileId)
 const projectStore=stores.get('hashpaylink:developer-projects:v1');delete projectStore.projects[legacy.id]
@@ -73,3 +77,18 @@ assert.ok(builderProfilesForProjects([deletedStore.projects[deleted.id]],[explic
 const closed={...deletedStore.projects[deleted.id],removal:{status:'closed'}}
 assert.ok(builderProfilesForProjects([closed]).some(p=>p.id===deleted.builderProfileId),'closed app history remains accessible')
 console.log('Deleted app and inferred profile exclusion passed; explicit businesses and closed history preserved.')
+
+owner='owner-a'
+const secondBusiness=(await call({action:'create-builder-profile',name:'US Company',country:'US'})).body.builderProfile
+assert.equal(secondBusiness.country,'US')
+assert.equal((await call()).body.builderProfiles.find(p=>p.id===business.id).country,'NG')
+assert.equal((await call({action:'set-builder-country',profileId:business.id,country:'US'})).statusCode,409)
+assert.equal((await call()).body.projects.find(p=>p.id===personal.id).profileCountry,'NG')
+owner='owner-b'
+assert.equal((await call({action:'set-builder-country',profileId:business.id,country:'NG'})).statusCode,404)
+assert.equal((await call()).body.builderProfiles.find(p=>p.id==='personal').country,undefined)
+assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'UG'})).statusCode,200)
+owner='owner-a'
+assert.equal((await call()).body.builderProfiles.find(p=>p.id==='personal').country,'NG')
+assert.equal((await call()).body.projects.find(p=>p.id===personal.id).businessVerification.status,'not_started')
+console.log('Country: profile-bound persistence, separate-country businesses, owner isolation, no approval side effects and Kenya unavailable passed.')

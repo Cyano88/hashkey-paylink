@@ -1,3 +1,4 @@
+import BuilderCountryPanel from '../developer/BuilderCountryPanel'
 import BankAccountName from '../developer/BankAccountName'
 import EnablePocketWallets from '../developer/EnablePocketWallets'
 import PersonalVerificationPanel from '../developer/PersonalVerificationPanel'
@@ -43,6 +44,7 @@ type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type Project = {
   builderProfileId?: string
+  profileCountry?:string
   accountType?: 'individual'|'business'
   personalKycVerified?: boolean
   productionAccess?: boolean
@@ -143,15 +145,25 @@ export default function DeveloperPortalPage() {
     if(hasUnsavedChanges()&&!await confirmDiscard())return false
     applyProfileChoice(id);return true
   }
-  async function createBusinessProfile(name:string,profileId?:string) {
+  async function createBusinessProfile(name:string,profileId?:string,country?:string) {
     if(busy)return
     if(hasUnsavedChanges()&&!await confirmDiscard())throw Error('Your current app changes have been kept.')
     const generation=loadGeneration.current
     setBusy(true)
-    try{const data=await api('POST',{action:profileId?'setup-builder-profile':'create-builder-profile',name,profileId});if(generation!==loadGeneration.current)return
+    try{const data=await api('POST',{action:profileId?'setup-builder-profile':'create-builder-profile',name,profileId,country});if(generation!==loadGeneration.current)return
       if(!data.builderProfile)throw Error('Business profile could not be loaded.')
       loadGeneration.current+=1;setLoading(false)
       setBuilderProfiles(current=>[...current.filter(p=>p.id!==data.builderProfile!.id),data.builderProfile!]);applyProfileChoice(data.builderProfile.id)
+    }finally{setBusy(false)}
+  }
+  async function saveProfileCountry(country:string){
+    if(busy)return
+    const generation=loadGeneration.current
+    setBusy(true)
+    try{const data=await api('POST',{action:'set-builder-country',profileId:activeProfile.id,country});if(generation!==loadGeneration.current)return
+      if(!data.builderProfile)throw Error('Country could not be saved.')
+      setBuilderProfiles(current=>current.map(profile=>profile.id===data.builderProfile!.id?data.builderProfile!:profile))
+      setProjects(current=>current.map(project=>projectBuilderProfileId(project)===activeProfile.id?{...project,profileCountry:country}:project))
     }finally{setBusy(false)}
   }
   async function switchEnvironment(production:boolean) {
@@ -441,15 +453,16 @@ export default function DeveloperPortalPage() {
         <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout} profileSwitcher={<ProfileSwitcher profiles={builderProfiles} active={activeProfile} disabled={busy} onSelect={selectProfile} onCreate={createBusinessProfile}/>}/></div></div>
         {!sandbox && !accountView && !creatingNew && !active?.removal && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
         <p className="mb-4 flex items-center gap-2 text-xs font-medium text-gray-500">{activeProfile.type==='business'?<Building2 size={14}/>:<UserRound size={14}/>}<span>{activeProfile.type==='business'?activeProfile.name+' \u00b7 Business':'Personal profile'}</span></p>
+        <BuilderCountryPanel key={activeProfile.id} profile={activeProfile} busy={busy} onSave={saveProfileCountry}/>
         <section id="developer-content" tabIndex={-1} className={cn("min-w-0 outline-none",accountView==='home'?'max-w-[1120px]':'max-w-4xl')}>
           {sandbox ? <SandboxPanel key={(user?.id??'')+':'+activeProfile.id} profileId={activeProfile.id}/> : creatingNew
-            ? <CreateProjectCard profileName={activeProfile.name} form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={async () => {if(!hasUnsavedChanges() || await confirmDiscard())setCreatingNew(false)}} embedded />
+            ? !activeProfile.country ? <p className="text-sm text-gray-500">Choose your profile country above to continue creating your app.</p> : <CreateProjectCard profileName={activeProfile.name} form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={async () => {if(!hasUnsavedChanges() || await confirmDiscard())setCreatingNew(false)}} embedded />
             : accountView==='home' ? <AccountHome key={activeProfile.id} apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : active?.removal ? <><h1 className="text-2xl font-semibold">{active.name}</h1><p className="mb-8 mt-2 text-sm text-gray-500">Closed app. Payment history is retained for your records.</p><PaymentActivityPanel key={active.id} projectId={active.id}/></> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <ProductsPanel project={active} onConfigure={() => setTab('setup')} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
               {active && draft && tab === 'setup' && <><SetupPanel onWalletsReady={setReceivingWallets} onWalletBusy={setBusy} error={error} notice={notice} receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
-              {active && tab === 'verification' && (active.accountType === 'individual' ? <PersonalVerificationPanel /> : <BusinessVerificationPanel key={active.id} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/>) }
+              {active && tab === 'verification' && (!activeProfile.country ? <p className="text-sm text-gray-500">Choose your profile country above to continue verification.</p> : active.accountType === 'individual' ? <PersonalVerificationPanel /> : <BusinessVerificationPanel key={active.id} profileCountry={activeProfile.country} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/>) }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
               {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
               {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><details className="mt-8 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Command-line tools</summary><CliGuide projectId={active.id} /></details><details className="mt-6 text-sm text-gray-500"><summary className="cursor-pointer">Coming soon</summary><ComingSoonProducts/></details></>}
@@ -561,7 +574,7 @@ function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, set
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{agreementOnly ? 'Arc agreement settlement' : 'Settlement networks'}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {NETWORKS.filter(network => supportedNetworks.includes(network.key)).map(network => {
+        {NETWORKS.filter(network => supportedNetworks.includes(network.key)&&(!localSettlement||network.key==='base')).map(network => {
           const active = draft.networks.includes(network.key)
           const disabled = network.disabled || (localSettlement && network.key !== 'base')
           return <button key={network.key} type="button" disabled={disabled} onClick={() => toggleNetwork(network.key)} className={cn('flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition', active ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:bg-blue-400/15 dark:text-blue-200' : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-blue-400/10', disabled && 'cursor-not-allowed opacity-45')}>{network.label}{network.note && <span className="text-xs font-black uppercase opacity-70">{network.note}</span>}</button>

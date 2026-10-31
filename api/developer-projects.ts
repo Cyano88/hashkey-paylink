@@ -1,3 +1,4 @@
+import {validBuilderCountry} from '../src/lib/builderCountries.js'
 import {productDisplayName} from '../src/lib/retiredProductPresentation.js'
 import {builderProfilesForProjects,projectBuilderProfileId,validBuilderProfileId,type BuilderProfile} from '../src/lib/builderProfiles.js'
 import {productionCapabilities, productionVerificationAllows, type DeveloperAccountType} from '../src/lib/developerAccess.js'
@@ -73,6 +74,7 @@ type DeveloperKey = {
 }
 
 type DeveloperProject = {
+  profileCountry?: string
   builderProfileId?: string
   accountType?: DeveloperAccountType
   personalKycVerified?: boolean
@@ -416,6 +418,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     : undefined
   return {
     id: project.id,
+    profileCountry: project.profileCountry,
     builderProfileId: projectBuilderProfileId(project),
     accountType: project.accountType ?? 'business',
     productionAccess: productionVerificationAllows(project),
@@ -698,19 +701,52 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         return res.json({ok:true,accountName})
       }
       if(req.method==='POST'&&action==='remove-app') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.body?.projectId,80),ownerId:identity.userId,confirmName:req.body?.confirmName,remove:true}))
+      if(req.method==='POST'&&action==='set-builder-country') {
+        const profile=await ownedProfile(identity.userId,req.body?.profileId)
+        const country=req.body?.country
+        if(!validBuilderCountry(country))return res.status(400).json({ok:false,error:'Choose Nigeria, Uganda or United States. Kenya is coming soon.'})
+        if(profile.country&&profile.country!==country)return res.status(409).json({ok:false,error:'Contact support to change this profile country. Use a separate profile for a different legal business.'})
+        const projects=await dependencies.read(STORE_KEY)
+        for(const project of Object.values(projects?.projects??{}).filter(p=>p.ownerId===identity.userId&&projectBuilderProfileId(p)===profile.id&&!p.removal)){
+          const record=project.businessVerification
+          if(profile.type==='business'&&record?.cipher&&['submitted','approved'].includes(record.status)){
+            const application=JSON.parse(openVerification(record.cipher,secret))
+            if(application.country&&application.country!==country)return res.status(409).json({ok:false,error:'Choose the country on your submitted business verification. Contact support if it needs correction.'})
+          }
+        }
+        const next={...profile,country}
+        const key=profile.id==='personal'?'personal:'+identity.userId:profile.id
+        await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>{
+          const existing=current?.businessProfiles?.[key]
+          if(existing?.country&&existing.country!==country)throw Object.assign(Error('Profile country changed. Reload before continuing.'),{status:409})
+          return {projects:{},businessProfiles:{...current?.businessProfiles,[key]:{...next,ownerId:identity.userId}}}
+        })
+        await dependencies.mutate(STORE_KEY,current=>({projects:Object.fromEntries(Object.entries(current?.projects??{}).map(([id,p])=>[id,p.ownerId===identity.userId&&projectBuilderProfileId(p)===profile.id?{...p,profileCountry:country}:p]))}))
+        return res.json({ok:true,builderProfile:next})
+      }
       if(req.method==='POST'&&action==='setup-builder-profile') {
         const existing=await ownedProfile(identity.userId,req.body?.profileId)
         if(existing.type!=='business'||!existing.needsSetup)return res.status(409).json({ok:false,error:'This profile does not need setup.'})
         const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
         if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
-        const profile:BuilderProfile={id:existing.id,name,type:'business',createdAt:dependencies.now().toISOString()}
-        await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>({projects:{},businessProfiles:{...current?.businessProfiles,[profile.id]:{...profile,ownerId:identity.userId}}}))
+        if(req.body?.country!==undefined&&!validBuilderCountry(req.body.country))return res.status(400).json({ok:false,error:'Choose a supported country.'})
+        if(existing.country&&req.body?.country&&existing.country!==req.body.country)return res.status(409).json({ok:false,error:'Contact support to change this profile country.'})
+        const submitted=Object.values((await dependencies.read(STORE_KEY))?.projects??{}).filter(p=>p.ownerId===identity.userId&&projectBuilderProfileId(p)===existing.id&&!p.removal)
+        for(const project of submitted){const record=project.businessVerification;if(req.body?.country&&record?.cipher&&['submitted','approved'].includes(record.status)&&JSON.parse(openVerification(record.cipher,secret)).country!==req.body.country)return res.status(409).json({ok:false,error:'Use the registration country on your submitted business verification.'})}
+        const profile:BuilderProfile={id:existing.id,name,type:'business',country:existing.country||req.body?.country,createdAt:dependencies.now().toISOString()}
+        await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>{
+          const latest=current?.businessProfiles?.[profile.id]
+          if(latest?.country&&profile.country&&latest.country!==profile.country)throw Object.assign(Error('Profile country changed. Reload before continuing.'),{status:409})
+          return {projects:{},businessProfiles:{...current?.businessProfiles,[profile.id]:{...profile,country:latest?.country||profile.country,ownerId:identity.userId}}}
+        })
+        if(profile.country)await dependencies.mutate(STORE_KEY,current=>({projects:Object.fromEntries(Object.entries(current?.projects??{}).map(([id,p])=>[id,p.ownerId===identity.userId&&projectBuilderProfileId(p)===profile.id?{...p,profileCountry:profile.country}:p]))}))
         return res.json({ok:true,builderProfile:profile})
       }
       if(req.method==='POST'&&action==='create-builder-profile') {
         const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
         if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
-        const profile:BuilderProfile={id:'business_'+randomUUID().replace(/-/g,''),name,type:'business',createdAt:dependencies.now().toISOString()}
+        if(req.body?.country!==undefined&&!validBuilderCountry(req.body.country))return res.status(400).json({ok:false,error:'Choose a supported country.'})
+        const profile:BuilderProfile={id:'business_'+randomUUID().replace(/-/g,''),name,type:'business',country:req.body?.country,createdAt:dependencies.now().toISOString()}
         await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>{
           if(Object.values(current?.businessProfiles??{}).filter(p=>p.ownerId===identity.userId).length>=20)throw Object.assign(Error('Contact support before adding more business profiles.'),{status:409})
           return {projects:{},businessProfiles:{...current?.businessProfiles,[profile.id]:{...profile,ownerId:identity.userId}}}
@@ -750,11 +786,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const capabilities = requestedCapabilities(req.body?.capabilities, checkoutMode)
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const selectedProfile=req.body?.builderProfileId===undefined?undefined:await ownedProfile(identity.userId,req.body.builderProfileId)
+        if(selectedProfile&&!selectedProfile.country)return res.status(409).json({ok:false,error:'Set your profile country before creating an app.'})
         if(selectedProfile?.needsSetup)return res.status(409).json({ok:false,error:'Set your business profile name before adding another app.'})
         if(selectedProfile&&req.body?.accountType!==undefined&&req.body.accountType!==selectedProfile.type)return res.status(400).json({ok:false,error:'The app type must match its selected profile.'})
         if(selectedProfile?.type==='business')await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>({projects:{},businessProfiles:{...current?.businessProfiles,[selectedProfile.id]:{...selectedProfile,ownerId:identity.userId}}}))
         const now = dependencies.now().toISOString()
         const project: DeveloperProject = {
+          profileCountry:selectedProfile?.country,
           builderProfileId: selectedProfile?.id,
           accountType: selectedProfile?.type ?? req.body?.accountType ?? 'business',
           businessVerification: verificationEmpty(dependencies.requireVerification?.() ?? false),
@@ -825,6 +863,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         }
         if(action==='verification-save' || action==='verification-submit'){
           const application=normalizeBusinessApplication(req.body?.application)
+          const profile=await ownedProfile(identity.userId,projectBuilderProfileId(project))
+          if(profile.country&&application.country!==profile.country)return res.status(409).json({ok:false,error:'Business verification must use the registration country set on this profile.'})
           const removedDocuments:typeof verification.documents=[]
           const next=await change(v=>{assertVerificationEditable(v,req.body?.revision);const documents=v.documents.filter(d=>!d.slot.startsWith('owner-')||application.owners.some(o=>d.slot==='owner-id:'+o.id||d.slot==='owner-address:'+o.id));removedDocuments.push(...v.documents.filter(d=>!documents.includes(d)));if(action==='verification-submit')validateBusinessSubmission(application,documents,dependencies.now());return {...v,documents,cipher:sealVerification(JSON.stringify(application),secret),status:action==='verification-submit'?'submitted':'draft',revision:v.revision+1,feedback:action==='verification-submit'?undefined:v.feedback,submittedAt:action==='verification-submit'?now:undefined,history:[...v.history,{action:action==='verification-submit'?'submitted':'draft_saved',actor,at:now,revision:v.revision+1}]}})
           for(const document of removedDocuments)await docs.remove(projectId,document.id).catch(()=>{})
