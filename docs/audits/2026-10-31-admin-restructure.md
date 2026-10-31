@@ -26,3 +26,8 @@ Tests exercise cross-workspace isolation, checkout ownership, stale updates, saf
 Unrelated billing changes in server.ts and untracked project-billing files are excluded. Generated dist files are excluded.
 
 TypeScript verification: 43 existing baseline errors, zero new diagnostics. Production build and targeted fixture/browser checks passed. Pocket review completion clears stale resolution timers and returns the case to Support rather than immediately auto-closing it.
+
+## Live verification
+
+Commit 7360b66ff3148aa0fc4604629a1c69da2acfdacd went live on Render deployment dep-dbimsjs9v7es73827af0 at 2026-10-31 04:33:12 UTC. Playwright checked the existing authenticated Chrome admin tab: Owner beside a single Sign out button, sidebar navigation, existing Pocket inbox and case escalation section, Lunchroom Business support empty queue and new-case fields, all six assignable staff roles for a business workspace, owner-only audit index rendering 31 stored events, and Lunchroom verification entry point. The tab was returned to Overview. Existing unsaved developer settings and the business application tab were preserved. No live case, escalation, grant, approval, payment or message was submitted. Full escalation mutations were tested with synthetic fixtures. Screenshot: output/playwright/admin-live-overview.png. Existing browser extension unload-policy errors and Privy connector warning remain; no new admin request failure was observed during these checks.
+
