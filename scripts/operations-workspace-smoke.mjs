@@ -30,7 +30,7 @@ assert.deepEqual(session.workspaces[0].sections, ['agreements', 'trade-disputes'
 assert.equal(session.arcActivationEnabled, false)
 assert.equal(operationsSession(founder, projects, env).workspaces.length, 3)
 assert.throws(() => operationsSession({ ...staff, email: 'outsider@example.test' }, projects, env), { status: 403 })
-assert.deepEqual(operationsSession(founder, projects, env).workspaces.find(w => w.id === c).sections, ['projects'])
+assert.deepEqual(operationsSession(founder, projects, env).workspaces.find(w => w.id === c).sections, ['projects','cases','products'])
 
 const response = () => ({ statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } })
 let chainReads = 0, approvals = 0, bindings = 0

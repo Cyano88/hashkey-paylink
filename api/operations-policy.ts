@@ -1,14 +1,15 @@
 import type { Request } from 'express'
 
-export const OPERATIONS_SECTIONS = ['projects', 'agreements', 'trade-disputes', 'transactions', 'support'] as const
+export const OPERATIONS_SECTIONS = ['projects', 'agreements', 'trade-disputes', 'transactions', 'support', 'cases', 'products'] as const
 export type OperationsSection = typeof OPERATIONS_SECTIONS[number]
 export type OperationsIdentity = { userId: string; email: string }
 export type OperationsWorkspace = { id: string; name: string; projectIds: string[] }
-export const OPERATIONS_ROLES = ['engineering', 'compliance', 'support'] as const
+export const OPERATIONS_ROLES = ['administrator', 'engineering', 'compliance', 'legal', 'support', 'product'] as const
 export type OperationsRole = typeof OPERATIONS_ROLES[number]
 type Grant = { email: string; workspaceId: string; sections?: OperationsSection[]; roles?: OperationsRole[] }
 const roleSections: Record<OperationsRole, OperationsSection[]> = {
-  engineering: ['projects', 'transactions'], compliance: ['projects'], support: ['support', 'transactions'],
+  administrator: ['projects','support','cases','transactions','products'],
+  engineering: ['projects','transactions'], compliance: ['projects','cases'], legal: ['cases'], support: ['support','transactions','cases'], product: ['products'],
 }
 // Request-local policy snapshots are loaded by authenticated server code, never from request input.
 const requestPolicies = new WeakMap<object, NodeJS.ProcessEnv>()
@@ -68,7 +69,7 @@ export function workspaceProjectIds(workspaceId: string, policy: OperationsPolic
 }
 
 export function workspaceSections(identity: OperationsIdentity, workspaceId: string, policy: OperationsPolicy): OperationsSection[] {
-  const available: OperationsSection[] = workspaceId === 'pocket' ? ['support', 'transactions'] : ['projects', 'agreements', 'trade-disputes']
+  const available: OperationsSection[] = workspaceId === 'pocket' ? ['support', 'transactions', 'cases'] : ['projects', 'agreements', 'trade-disputes', 'cases', 'products']
   if (isOperationsFounder(identity, policy)) return available
   return available.filter(section => policy.grants.some(g => g.email.toLowerCase() === identity.email.toLowerCase()
     && g.workspaceId === workspaceId && grantSections(g).includes(section)))
@@ -86,12 +87,14 @@ export function authorizeOperations(identity: OperationsIdentity, req: Pick<Requ
   if (!workspaceSections(identity, workspaceId, policy).includes(section)) fail('This account cannot access this workspace section.')
   if (recordProjectId !== undefined && !projectIds.includes(recordProjectId)) fail('Record not found in this workspace.', 404)
   const action = typeof req.body?.action === 'string' ? req.body.action.toLowerCase() : ''
+  if(action.startsWith('admin-verification-') && !isOperationsFounder(identity,policy) && !policy.grants.some(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspaceId&&g.roles?.includes('compliance')))fail('Only Compliance or an owner can access verification documents and decisions.')
   const read = !req.method || req.method === 'GET' || (req.method === 'POST' && ['admin-list','list','read','admin-verification-read','admin-verification-download','staff-list','staff-knowledge-list'].includes(action))
   if (!read && !isOperationsFounder(identity,policy)) {
     const grants=policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase() && g.workspaceId===workspaceId)
     const legacy=grants.some(g=>!g.roles && g.sections?.includes(section))
     const roles=grants.flatMap(g=>g.roles??[])
-    const allowed=section==='support' ? roles.includes('support') && ['staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
+    const allowed=section==='cases' ? (['case-create','case-note','case-assign','case-resolve','case-escalate'].includes(action) && roles.some(r=>['support','administrator'].includes(r))) || (action==='case-review' && roles.some(r=>['compliance','legal'].includes(r)))
+      : section==='support' ? roles.some(r=>['support','administrator'].includes(r)) && ['staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
       : section==='transactions' ? roles.includes('engineering') && action==='reconcile'
       : section==='projects' ? roles.includes('compliance') && ['admin-activate','admin-suspend','admin-reactivate','admin-verification-review'].includes(action) : false
     if(!legacy && !allowed) fail('Your role cannot perform this action.')

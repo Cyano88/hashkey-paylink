@@ -461,23 +461,9 @@ function OperationsControl({ project, busy, reason, setReason, onOperate }: {
 }
 
 export function OperationsSignIn() {
-  return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-6xl items-center px-4 py-12">
-    <section className="grid w-full overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-[0_32px_100px_rgba(15,23,42,.12)] dark:border-white/10 dark:bg-[#101114] lg:grid-cols-[1.05fr_.95fr]">
-      <div className="bg-[#050609] p-7 text-white sm:p-10 lg:p-12">
-        <Link to="/" className="text-sm font-semibold text-white/60 transition hover:text-white">Hash PayLink</Link>
-        <p className="mt-16 text-[10px] font-bold uppercase tracking-[0.24em] text-blue-300">Developer operations</p>
-        <h1 className="mt-4 max-w-lg text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">Control exceptions without touching developer funds.</h1>
-        <p className="mt-5 max-w-lg text-sm leading-6 text-white/55">Inspect trusted routing, resolve legacy activation, and suspend compromised integrations with a permanent operator record.</p>
-      </div>
-      <div className="flex flex-col justify-center p-7 sm:p-10 lg:p-12">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><ShieldCheck className="h-5 w-5" /></span>
-        <h2 className="mt-5 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Restricted operations</h2>
-        <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Sign in with an allowlisted operator email. Payer agreement links use the payer's separate email and cannot approve operator requests.</p>
-        <div className="mt-7"><PocketEmailLogin context="developer" /></div>
-        <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-gray-400"><Lock className="h-3 w-3" /> Privy identity and server allowlist required.</p>
-      </div>
-    </section>
-  </main>
+ return <main id="developer-content" className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md items-center px-5 py-12"><section className="w-full rounded-3xl border border-gray-200 bg-white p-7 dark:border-white/10 dark:bg-[#111216]">
+ <img src="/hash-logo-transparent.png" alt="" className="h-9 w-9 dark:invert"/><h1 className="mt-6 text-2xl font-semibold">Staff sign in</h1><p className="mt-3 text-sm leading-6 text-gray-500">Use your assigned work email to access Hash PayLink Admin.</p><div className="mt-6"><PocketEmailLogin context="developer"/></div><p className="mt-5 text-xs leading-5 text-gray-500">Your team role determines what you can access. Contact an owner if you need access.</p>
+ </section></main>
 }
 
 function SummaryCard({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'success' | 'warning' | 'danger' }) {

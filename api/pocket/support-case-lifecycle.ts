@@ -14,22 +14,24 @@ export type PocketSupportLifecycleCase = {
   messages: PocketSupportLifecycleMessage[]; updatedAt: number;
   waitingSince?: number; reminderSentAt?: number; resolvedAt?: number;
   resolutionRequestedAt?: number; resolutionPromptId?: string; supportEscalatedAt?: number;
-  assignedTo?: string; category?: string; humanSupport?: boolean
+  escalation?: {status:string}; assignedTo?: string; category?: string; humanSupport?: boolean
 }
 export function protectSupportCase(item: PocketSupportLifecycleCase) {
-  return item.priority === 'high' || item.category === 'stuck_transaction' || item.category === 'bank_payment'
+  return item.escalation?.status==='pending' || item.priority === 'high' || item.category === 'stuck_transaction' || item.category === 'bank_payment'
 }
 export function supportSystemMessage(item: PocketSupportLifecycleCase, kind: PocketSupportLifecycleMessage['kind'], text: string, now: number, uuid: () => string) {
   const message: PocketSupportLifecycleMessage = {id:uuid(),author:'agent',kind,text,createdAt:now}
   item.messages.push(message);return message.id
 }
 export function requestSupportResolution(item: PocketSupportLifecycleCase, now:number, uuid:()=>string) {
+  if(item.escalation?.status==='pending')throw Object.assign(new Error('Wait for the review decision before resolving this case.'),{status:409})
   if(item.status==='resolved' || item.resolutionRequestedAt) return
   item.status='waiting_user';item.waitingSince=now;item.reminderSentAt=undefined;item.updatedAt=now
   item.resolutionRequestedAt=now
   item.resolutionPromptId=supportSystemMessage(item,'resolution_prompt','Is there anything else you need help with?',now,uuid)
 }
 export function answerSupportResolution(item:PocketSupportLifecycleCase, promptId:string, answer:'yes'|'no', now:number, uuid:()=>string) {
+  if(item.escalation?.status==='pending')throw Object.assign(new Error('This case is under review and will stay open.'),{status:409})
   if(!item.resolutionRequestedAt || item.resolutionPromptId!==promptId) throw Object.assign(new Error('This resolution question is no longer active. Refresh the conversation.'),{status:409})
   supportSystemMessage(item,answer==='no'?'automatic_resolution':'case_reopened',answer==='no'?'This conversation is closed.':'You still need help. Your representative will revisit this conversation.',now,uuid)
   item.status=answer==='no'?'resolved':item.assignedTo?'assigned':'open'
@@ -39,7 +41,7 @@ export function answerSupportResolution(item:PocketSupportLifecycleCase, promptI
 export function advancePocketSupportLifecycle<T extends PocketSupportLifecycleCase>(cases:Record<string,T>,now:number,uuid:()=>string) {
   let changed=false
   for(const item of Object.values(cases)) {
-    if(item.status==='resolved')continue
+    if(item.status==='resolved'||item.escalation?.status==='pending')continue
     // Repair older answered AI chats without reclassifying human queues or payment reports.
     const last=item.messages.at(-1)
     if(item.status==='open' && item.humanSupport===false && !item.assignedTo && !protectSupportCase(item) && !item.messages.some(message=>message.author==='staff') && last?.author==='agent' && !last.kind) {

@@ -27,26 +27,28 @@ export async function verifyOperationsSection(req: Request, section: OperationsS
   return identity
 }
 
-type Project = { id: string; name: string; capabilities?: string[]; operationalStatus?: string }
+type Project = { id: string; name: string; capabilities?: string[]; operationalStatus?: string; environment?: string; accountType?: string; removal?: {status:string}; businessVerification?: {status:string} }
 export function operationsSession(identity: OperationsIdentity, projects: Project[], env = process.env) {
   const policy = operationsPolicy(env)
+  const removed=new Set(projects.filter(p=>p.removal).map(p=>p.id))
+  projects=projects.filter(p=>!p.removal)
   const assigned = new Set(policy.workspaces.flatMap(w => w.projectIds))
-  const definitions = [{ id: 'pocket', name: 'Pocket', projectIds: [] as string[] }, ...policy.workspaces,
+  const definitions = [{ id: 'pocket', name: 'Pocket', projectIds: [] as string[] }, ...policy.workspaces.filter(w=>!w.projectIds.every(id=>removed.has(id))),
     ...projects.filter(p => !assigned.has(p.id)).map(p => ({ id: p.id, name: p.name, projectIds: [p.id] }))]
   const workspaces = definitions.flatMap(w => {
     const integrations = projects.filter(p => w.projectIds.includes(p.id)).map(p => ({ id: p.id, name: p.name,
-      capabilities: p.capabilities || [], status: p.operationalStatus || 'active' }))
+      environment:p.environment||'live',accountType:p.accountType||'business',verificationStatus:p.businessVerification?.status||'not_started',capabilities: p.capabilities || [], status: p.operationalStatus || 'active' }))
     const sections = workspaceSections(identity, w.id, policy).filter(section => section === 'agreements'
       ? integrations.some(p => p.capabilities.includes('arc_agreements'))
       : section === 'trade-disputes' ? integrations.some(p => p.capabilities.includes('xstocks_agreements')) : true)
     if (!sections.length) return []
     // Missing mappings must be visible to the founder rather than silently reassigned.
     const allowed=(section:OperationsSection,action:string)=>{try{authorizeOperations(identity,{query:{workspace:w.id},method:'POST',body:{action}},section,undefined,env);return true}catch{return false}}
-    return [{ ...w, sections, integrations, permissions:{manageProjects:allowed('projects','admin-activate'),reconcile:allowed('transactions','reconcile')}, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===w.id).flatMap(g=>g.roles??[]))], missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
+    return [{ ...w, sections, integrations, permissions:{manageProjects:allowed('projects','admin-activate'),reconcile:allowed('transactions','reconcile'),manageCases:allowed('cases','case-escalate')}, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===w.id).flatMap(g=>g.roles??[]))], missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
   })
   const emergency = emergencyPermissions(identity, env)
   if (!workspaces.length && !emergency.pause && !emergency.resume) throw Object.assign(Error('This account has no operations access.'), { status: 403 })
-  return { ok: true, founder: isOperationsFounder(identity, policy), email: identity.email, workspaces,
+  return { ok: true, founder: isOperationsFounder(identity, policy), email: identity.email, workspaces, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()).flatMap(g=>g.roles??[]))],emergency,
     arcActivationEnabled: env.ARC_AGREEMENTS_ENABLED === 'true' }
 }
 

@@ -1,137 +1,69 @@
-import EmergencyPausePanel from '../components/EmergencyPausePanel'
+import OperationsAuditPanel from '../components/OperationsAuditPanel'
+import {useEffect,useState,useRef} from 'react'
+import {createPortal} from 'react-dom'
+import {Link,useLocation,useNavigate,useParams} from 'react-router-dom'
+import {usePrivy} from '@privy-io/react-auth'
+import {Menu,X,ArrowUpRight} from 'lucide-react'
+import {OperationsLoading,OperationsSignIn} from './DeveloperOperationsPage'
+import ProjectOperations from './DeveloperOperationsPage'
+import BusinessVerificationReview from '../components/BusinessVerificationReview'
 import OperationsTeamPanel from '../components/OperationsTeamPanel'
-import { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useLocation } from 'react-router-dom'
-import { createPortal } from 'react-dom'
-import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, ArrowUpRight, ChevronRight, Layers3, LogOut, Menu, RefreshCw, ShieldCheck, X } from 'lucide-react'
-import ProjectOperations, { OperationsLoading, OperationsSignIn } from './DeveloperOperationsPage'
-import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
-import TradeReviewOperationsPanel from '../components/TradeReviewOperationsPanel'
+import OperationsCasesPanel from '../components/OperationsCasesPanel'
 import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
 import PocketTransactionOperationsPanel from '../components/PocketTransactionOperationsPanel'
-import { cn } from '../lib/utils'
+import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
+import TradeReviewOperationsPanel from '../components/TradeReviewOperationsPanel'
+import EmergencyPausePanel from '../components/EmergencyPausePanel'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 
-type Section = 'projects' | 'agreements' | 'trade-disputes' | 'support' | 'transactions'
-type Workspace = { permissions?: {manageProjects:boolean;reconcile:boolean}; roles?: string[]; id: string; name: string; projectIds: string[]; sections: Section[]; missingProjectIds: string[];
-  integrations: Array<{ id: string; name: string; capabilities: string[]; status: string }> }
-type Session = { founder: boolean; email: string; workspaces: Workspace[]; arcActivationEnabled: boolean }
-const labels: Record<Section, string> = { projects: 'Integrations', agreements: 'Arc agreements', 'trade-disputes': 'Trade disputes', support: 'Support inbox', transactions: 'Transactions' }
-const descriptions: Record<Section, string> = {
-  projects: 'Project access, routing and integration history.', agreements: 'Agreement lifecycle, activation limits and controlled operations.',
-  'trade-disputes': 'Evidence, decisions and reviewer approvals.', support: 'Pocket customer conversations and Agent Hash handoffs.',
-  transactions: 'Unresolved Pocket payments and reconciliation.',
-}
-const path = (id: string, section?: string) => '/admin/workspaces/' + encodeURIComponent(id) + (section ? '/' + section : '')
-const card = 'rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#111216]'
-
-export default function OperationsWorkspacePage() {
-  const { ready, authenticated, user, getAccessToken, logout } = usePrivy()
-  const { workspaceId, section } = useParams()
-  const location=useLocation()
-  const [state, setState] = useState<{ owner: string; session: Session }>()
-  const [error, setError] = useState('')
-  const [reload, setReload] = useState(0)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menu = useRef<HTMLDialogElement>(null)
-  const identity = authenticated ? user?.id : undefined
-  useEffect(() => { setMenuOpen(false) }, [workspaceId, section, identity, reload])
-  useEffect(() => {
-    if (menuOpen && menu.current && !menu.current.open) menu.current.showModal()
-    else if (!menuOpen && menu.current?.open) menu.current.close()
-  }, [menuOpen])
-  useEffect(() => {
-    let current = true
-    setState(undefined); setError('')
-    if (!ready || !authenticated || !identity) return
-    void (async () => {
-      try {
-        const token = await getAccessToken()
-        if (!token) throw Error('Sign in again to open operations.')
-        const response = await fetch('/api/operations-session', { cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { authorization: 'Bearer ' + token } })
-        const data = await response.json()
-        if (!response.ok || !data.ok) throw Error(data.error || 'Operations could not be loaded.')
-        if (current) setState({ owner: identity, session: data })
-      } catch (e) { if (current) setError(e instanceof Error ? e.message : 'Operations could not be loaded.') }
-    })()
-    return () => { current = false }
-  }, [ready, authenticated, identity, reload]) // eslint-disable-line react-hooks/exhaustive-deps
-  if (!ready) return <OperationsLoading />
-  if (!authenticated) return <OperationsSignIn />
-  const session = state && state.owner === identity ? state.session : undefined
-  if (!session && !error) return <DeveloperLoadingSkeleton />
-  if (!session) return <main id="developer-content" className="mx-auto max-w-xl px-6 py-20">
-    <h1 className="text-2xl font-semibold">Hash PayLink Operations</h1>
-    <p role={error ? 'alert' : 'status'} className="mt-4 text-sm text-gray-500">{error || 'Checking your operations access…'}</p>
-    {error && <div className="mt-6 flex gap-3"><button className="developer-primary" onClick={() => setReload(v => v + 1)}>Retry</button><button onClick={() => void logout()}>Sign out</button></div>}
-  </main>
-  if(location.pathname==='/admin/team')return <main id="developer-content" className="mx-auto max-w-4xl px-5 py-8"><Link to="/admin" className="mb-6 inline-flex min-h-11 items-center text-sm text-gray-500">Back to operations</Link>{session.founder?<OperationsTeamPanel workspaces={session.workspaces}/>:<p role="alert">Only an owner can manage team access.</p>}</main>
-  const workspace = session.workspaces.find(w => w.id === workspaceId)
-  const authorizedSection = workspace?.sections.includes(section as Section)
-  const invalid = Boolean(workspaceId && !workspace) || Boolean(section && !authorizedSection && section !== 'escalations')
-    || Boolean(section === 'escalations' && (workspace?.id === 'pocket' || !session.founder))
-  const contextKey = `${identity}:${workspaceId}:${section || 'overview'}`
-  const menuSlot = document.getElementById('operations-navigation-trigger')
-  const titleSlot = document.getElementById('operations-workspace-title')
-  return <div className="min-h-[calc(100dvh-4rem)]">
-    {menuSlot && createPortal(<button type="button" aria-label="Open navigation" aria-controls="operations-menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-white/10"><Menu className="h-5 w-5" /></button>, menuSlot)}
-    {titleSlot && createPortal(<span>{workspace?.name || 'Operations'}</span>, titleSlot)}
-    <dialog id="operations-menu" ref={menu} aria-label="Operations menu" onCancel={() => setMenuOpen(false)} onClose={() => setMenuOpen(false)} onClick={e => { if (e.target === e.currentTarget) setMenuOpen(false) }} className="fixed inset-y-0 left-0 right-auto m-0 h-dvh max-h-none w-[min(20rem,calc(100vw-3rem))] max-w-none border-0 bg-white p-0 text-gray-950 shadow-xl backdrop:bg-black/40 dark:bg-[#0d0d0e] dark:text-white">
-    <aside className="relative flex min-h-full flex-col p-5" onClick={e => { if ((e.target as HTMLElement).closest('a')) setMenuOpen(false) }}>
-      <button type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-5 w-5" /></button>
-      <Link to="/admin" className="flex min-h-11 items-center gap-2 text-sm font-semibold"><Layers3 className="h-4 w-4" />Operations</Link>
-      <p className="mt-1 text-xs text-gray-500">{session.founder ? 'Owner access' : workspace?.roles?.map(role=>({engineering:'Engineering',compliance:'Compliance',support:'Customer support'}[role]??role)).join(' ? ') || 'Team access'}</p>
-      {session.founder && <Link to="/admin/team" className="mt-4 flex min-h-11 items-center text-sm font-medium">Team access</Link>}
-      <p className="mt-6 text-xs font-medium text-gray-500">Products</p>
-      <nav aria-label="Product workspaces" className="mb-6 mt-3 flex flex-col gap-1">
-        {session.workspaces.map(w => <Link key={w.id} to={path(w.id)} aria-current={workspace?.id === w.id ? 'page' : undefined} className={cn('min-h-11 rounded-xl px-3 py-3 text-sm font-medium', workspace?.id === w.id ? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}>{w.name}</Link>)}
-      </nav>
-      <div className="mt-auto border-t border-gray-200 pt-4 dark:border-white/10">
-        <a href="https://developer.hashpaylink.com" className="flex min-h-11 items-center justify-between text-xs text-gray-500">Developer portal<ArrowUpRight className="h-3.5 w-3.5" /></a>
-        <button onClick={() => void logout()} className="flex min-h-11 w-full items-center justify-between text-xs text-gray-500">Sign out<LogOut className="h-3.5 w-3.5" /></button>
-      </div>
-    </aside>
-    </dialog>
-    {workspace && <nav aria-label="Workspace sections" className="flex gap-5 overflow-x-auto border-b border-gray-200 bg-white px-5 dark:border-white/10 dark:bg-[#0a0a0a] sm:px-8 xl:px-10">
-      <SectionLink to={path(workspace.id)} active={!section}>Overview</SectionLink>
-      {workspace.sections.map(s => <SectionLink key={s} to={path(workspace.id, s)} active={section === s}>{labels[s]}</SectionLink>)}
-      {workspace.id !== 'pocket' && session.founder && <SectionLink to={path(workspace.id, 'escalations')} active={section === 'escalations'}>Escalations</SectionLink>}
-    </nav>}
-    <main id="developer-content" className="min-w-0 px-5 py-7 sm:px-8 xl:px-10">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 pb-6 dark:border-white/10">
-        <div>
-          {workspace && <Link to="/admin" className="mb-3 inline-flex items-center gap-1 text-xs text-gray-500"><ArrowLeft className="h-3 w-3" />All products</Link>}
-          <h1 className="text-2xl font-semibold tracking-[-0.035em]">{invalid ? 'Workspace unavailable' : workspace?.name || 'Products'}</h1>
-          <p className="mt-2 text-sm text-gray-500">{invalid ? 'Your account does not have access to this workspace section.' : workspace ? section === 'escalations' ? 'Cases submitted by this product’s support team.' : section ? descriptions[section as Section] : 'Manage this product’s connected operations.' : 'Choose a product to manage its operations.'}</p>
-        </div>
-        <button onClick={() => setReload(v => v + 1)} className="flex min-h-11 items-center gap-2 rounded-full border border-gray-200 px-4 text-xs font-semibold dark:border-white/10"><RefreshCw className="h-3.5 w-3.5" />Refresh access</button>
-      </header>
-      {!workspaceId && <EmergencyPausePanel key={identity} />}
-      {invalid ? <p role="alert" className="mt-8 text-sm text-gray-500">Choose an available product from the workspace selector.</p> : !workspace ? <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {session.workspaces.map(w => <Link to={path(w.id)} key={w.id} className={cn(card, 'group p-6 transition hover:border-gray-400 dark:hover:border-white/30')}>
-          <div className="flex items-center justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 font-semibold dark:bg-white/10">{w.name.slice(0, 1)}</span><ChevronRight className="h-4 w-4 text-gray-400" /></div>
-          <h2 className="mt-5 text-base font-semibold">{w.name}</h2><p className="mt-2 text-xs leading-6 text-gray-500">{w.sections.map(s => labels[s]).join(' · ')}</p>
-          <p className="mt-5 text-xs text-gray-400">{w.id === 'pocket' ? 'Hash PayLink product' : `${w.integrations.length} connected integration${w.integrations.length === 1 ? '' : 's'}`}</p>
-        </Link>)}
-      </div> : <div key={contextKey}>
-        {workspace.missingProjectIds.length > 0 && <p role="alert" className="mt-5 rounded-xl border border-amber-200 p-4 text-sm text-amber-800">Some mapped integrations are unavailable. Review the workspace mapping before operating.</p>}
-        {!section && <>
-          <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{workspace.sections.map(s => <Link key={s} to={path(workspace.id, s)} className={cn(card, 'p-6')}><h2 className="font-semibold">{labels[s]}</h2><p className="mt-2 text-sm leading-6 text-gray-500">{descriptions[s]}</p><span className="mt-5 inline-flex items-center gap-1 text-xs font-semibold">Open<ChevronRight className="h-3 w-3" /></span></Link>)}</div>
-          {workspace.id !== 'pocket' && <section className={cn(card, 'mt-6 p-6')}><h2 className="text-sm font-semibold">Connected integrations</h2><div className="mt-4 divide-y divide-gray-100 dark:divide-white/10">{workspace.integrations.map(p => <div key={p.id} className="flex flex-wrap justify-between gap-3 py-4 text-sm"><div><p>{p.name}</p><p className="mt-1 font-mono text-xs text-gray-400">{p.id}</p></div><span className="text-xs capitalize text-gray-500">{p.status}</span></div>)}</div></section>}
-          <p className="mt-6 flex items-center gap-2 text-xs text-gray-500"><ShieldCheck className="h-4 w-4" />Access to operations does not grant escrow signing authority.</p>
-        </>}
-        {section === 'projects' && <ProjectOperations workspaceId={workspace.id} canManage={Boolean(workspace.permissions?.manageProjects)} />}
-        {section === 'agreements' && <><ArcAgreementOperationsPanel workspaceId={workspace.id} /><details className={cn(card, 'mt-6 p-5')}><summary className="cursor-pointer text-sm font-semibold">Activation settings <span className="ml-2 font-normal text-gray-500">{session.arcActivationEnabled ? 'Global switch enabled' : 'Global activation paused'}</span></summary><ProjectOperations workspaceId={workspace.id} mode="agreements" arcActivationEnabled={session.arcActivationEnabled} /></details></>}
-        {section === 'trade-disputes' && <TradeReviewOperationsPanel workspaceId={workspace.id} />}
-        {section === 'support' && <PocketSupportOperationsPanel />}
-        {section === 'transactions' && <PocketTransactionOperationsPanel canReconcile={Boolean(workspace.permissions?.reconcile)} />}
-        {section === 'escalations' && <section className={cn(card, 'mt-7 max-w-3xl p-7')}><h2 className="font-semibold">Escalation connection not configured</h2><p className="mt-3 text-sm leading-7 text-gray-500">This product manages its own customer support. Its team will submit payment or escrow cases to Hash PayLink with the relevant evidence. That submission connection has not been built yet.</p><p className="mt-3 text-sm leading-7 text-gray-500">Existing agreement operations and Trade dispute review remain available in their sections. Customer inboxes are not connected here.</p></section>}
-      </div>}
-    </main>
-  </div>
-}
-
-function SectionLink({ to, active, children }: { to: string; active: boolean; children: React.ReactNode }) {
-  return <Link to={to} aria-current={active ? 'page' : undefined} className={cn('min-h-12 shrink-0 whitespace-nowrap border-b-2 py-4 text-xs font-medium', active ? 'border-gray-950 text-gray-950 dark:border-white dark:text-white' : 'border-transparent text-gray-500 hover:text-gray-950 dark:hover:text-white')}>{children}</Link>
+type Workspace={id:string;name:string;projectIds:string[];roles?:string[];sections:string[];permissions?:{manageProjects:boolean;reconcile:boolean;manageCases?:boolean};missingProjectIds:string[];integrations:Array<{id:string;name:string;capabilities:string[];status:string;environment?:string;accountType?:string;verificationStatus?:string}>}
+type Session={founder:boolean;email:string;roles?:string[];workspaces:Workspace[];arcActivationEnabled:boolean;emergency?:{pause:boolean;resume:boolean}}
+const roleNames:Record<string,string>={owner:'Owner',administrator:'Administrator',engineering:'Engineer',compliance:'Compliance',legal:'Legal',support:'Support',product:'Product Manager'}
+const panel='rounded-2xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#111216]'
+const sectionNames:Record<string,string>={projects:'Integrations',agreements:'Arc agreements','trade-disputes':'Trade disputes',support:'Pocket support',transactions:'Pocket payments',cases:'Business support',products:'Products'}
+const url=(view:string,workspace?:string)=>'/admin?view='+view+(workspace?'&workspace='+encodeURIComponent(workspace):'')
+export default function OperationsWorkspacePage(){
+ const {ready,authenticated,user,getAccessToken,logout}=usePrivy(),location=useLocation(),navigate=useNavigate(),params=useParams()
+ const [state,setState]=useState<{owner:string;session:Session}>(),[error,setError]=useState(''),[reload,setReload]=useState(0),[menu,setMenu]=useState(false),[search,setSearch]=useState(''),[environment,setEnvironment]=useState('live')
+ const menuRef=useRef<HTMLDialogElement>(null)
+ useEffect(()=>{if(menu&&!menuRef.current?.open)menuRef.current?.showModal();else if(!menu&&menuRef.current?.open)menuRef.current.close()},[menu])
+ const identity=authenticated?user?.id:undefined,query=new URLSearchParams(location.search)
+ const view=location.pathname==='/admin/team'?'team':params.workspaceId?'workspace':query.get('view')||'overview'
+ useEffect(()=>{setMenu(false);setSearch('')},[location.pathname,location.search,identity])
+ useEffect(()=>{let active=true;setState(undefined);setError('');if(!ready||!identity)return;void(async()=>{try{const token=await getAccessToken();if(!token)throw Error('Sign in again to continue.');const r=await fetch('/api/operations-session',{cache:'no-store',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+token}}),data=await r.json();if(!r.ok||!data.ok)throw Error(data.error||'Admin could not be loaded.');if(active)setState({owner:identity,session:data})}catch(e){if(active)setError((e as Error).message)}})();return()=>{active=false}},[ready,identity,reload]) // eslint-disable-line react-hooks/exhaustive-deps
+ if(!ready)return <OperationsLoading/>
+ if(!authenticated)return <OperationsSignIn/>
+ const session=state&&state.owner===identity?state.session:undefined
+ if(!session&&!error)return <DeveloperLoadingSkeleton/>
+ if(!session)return <main id="developer-content" className="mx-auto max-w-lg px-5 py-20"><h1 className="text-2xl font-semibold">Staff access</h1><p role="alert" className="mt-4 text-sm text-gray-500">{error}</p><div className="mt-6 flex gap-5"><button className="developer-primary" onClick={()=>setReload(v=>v+1)}>Retry</button><button onClick={()=>void logout()}>Sign out</button></div></main>
+ const has=(section:string)=>session.workspaces.some(w=>w.sections.includes(section)),roles=session.founder?['owner']:session.roles||[...new Set(session.workspaces.flatMap(w=>w.roles||[]))]
+ const nav=[['overview','Overview',true],['verification','Verification',session.workspaces.some(w=>w.permissions?.manageProjects)||has('cases')&&roles.includes('compliance')],['businesses','Businesses',has('projects')],['payments','Payments',has('transactions')],['support','Support',has('support')||has('cases')],['products','Products',has('products')],['team','Team & access',session.founder],['audit','Audit log',session.founder],['settings','Settings',session.founder||session.emergency?.pause||session.emergency?.resume]] as const
+ const permitted=nav.some(([id,,allowed])=>id===view&&allowed)||view==='workspace'
+ const desired=params.workspaceId||query.get('workspace')||''
+ const eligible=session.workspaces.filter(w=>view==='verification'?w.id!=='pocket'&&w.permissions?.manageProjects&&w.integrations.some(p=>p.accountType!=='individual'):view==='payments'?w.sections.includes('transactions'):view==='support'?w.sections.includes('cases')||w.sections.includes('support'):true)
+ const workspace=eligible.find(w=>w.id===desired)||(!desired?eligible[0]:undefined)
+ const title=view==='workspace'?workspace?.name||'Workspace':nav.find(([id])=>id===view)?.[1]||'Admin'
+ const account=document.getElementById('operations-account-menu'),trigger=document.getElementById('operations-navigation-trigger'),titleSlot=document.getElementById('operations-workspace-title')
+ const links=<><nav aria-label="Admin sections" className="space-y-1">{nav.filter(([, ,allowed])=>allowed).map(([id,label])=><Link key={id} to={url(id)} aria-current={view===id?'page':undefined} className={'flex min-h-11 items-center rounded-xl px-3 text-sm font-medium '+(view===id?'bg-gray-100 dark:bg-white/10':'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5')}>{label}</Link>)}</nav><div className="mt-auto border-t border-gray-200 pt-4 dark:border-white/10"><a href="https://developer.hashpaylink.com" className="flex min-h-11 items-center justify-between px-3 text-xs text-gray-500">Developer portal<ArrowUpRight className="h-3.5 w-3.5"/></a></div></>
+ function chooseWorkspace(){return <label className="mb-6 block max-w-md text-sm">{view==='support'?'Support queue':'Workspace'}<select aria-label={view==='support'?'Support queue':'Workspace'} className="mt-2 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 dark:border-white/10 dark:bg-[#111216]" value={workspace?.id||''} onChange={e=>navigate(url(view,e.target.value))}>{!workspace&&<option value="">Choose a workspace</option>}{eligible.map(w=><option key={w.id} value={w.id}>{w.id==='pocket'?'Pocket':w.name+' · Business'}</option>)}</select></label>}
+ return <div className="min-h-[calc(100dvh-4rem)] lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+ {account&&createPortal(<div className="flex items-center gap-3"><span title={session.email} className="max-w-44 truncate text-xs font-medium text-gray-600 dark:text-gray-300">{roles.map(r=>roleNames[r]||r).join(' · ')||'Assigned staff'}</span><button onClick={()=>void logout()} className="min-h-11 text-sm font-medium">Sign out</button></div>,account)}
+ {titleSlot&&createPortal(<span>Admin</span>,titleSlot)}
+ {trigger&&createPortal(<button aria-label="Open navigation" aria-expanded={menu} onClick={()=>setMenu(true)} className="flex h-11 w-11 items-center justify-center lg:hidden"><Menu className="h-5 w-5"/></button>,trigger)}
+ <aside className="sticky top-0 hidden h-[calc(100dvh-4rem)] flex-col border-r border-gray-200 bg-white px-4 py-6 dark:border-white/10 dark:bg-[#101114] lg:flex">{links}</aside>
+ <dialog ref={menuRef} aria-label="Admin navigation" onCancel={()=>setMenu(false)} onClose={()=>setMenu(false)} onClick={e=>{if(e.target===e.currentTarget)setMenu(false)}} className="fixed inset-y-0 left-0 right-auto m-0 h-dvh max-h-none w-[min(20rem,calc(100vw-3rem))] max-w-none border-0 bg-white p-0 text-gray-950 backdrop:bg-black/40 dark:bg-[#101114] dark:text-white lg:hidden"><aside className="flex min-h-full flex-col p-5"><button aria-label="Close navigation" onClick={()=>setMenu(false)} className="mb-4 flex h-11 w-11 items-center justify-center self-end"><X className="h-5 w-5"/></button>{links}</aside></dialog>
+ <main id="developer-content" className="min-w-0 px-5 py-7 sm:px-8"><header className="mb-7 flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-2xl font-semibold tracking-tight">{permitted?title:'Access unavailable'}</h1><p className="mt-2 text-sm text-gray-500">{view==='overview'?'Manage verification, businesses and customer cases.':view==='verification'?'Review business applications. Pocket identity issues follow the Compliance case queue.':view==='support'?'Keep customer support and specialist review connected.':view==='businesses'?'Business workspaces and their connected apps.':view==='products'?'Product access and configured capabilities.':view==='payments'?'Pocket payment investigation and reconciliation.':view==='settings'?'Restricted operational controls.':''}</p></div><button className="min-h-11 rounded-full border border-gray-200 px-4 text-xs font-medium dark:border-white/10" onClick={()=>setReload(v=>v+1)}>Refresh access</button></header>
+ {!permitted?<p role="alert">Your assigned role does not have access to this section.</p>:<>
+ {view==='overview'&&<><div className="grid gap-4 sm:grid-cols-3">{[['Business workspaces',session.workspaces.filter(w=>w.id!=='pocket').length],['Connected apps',session.workspaces.reduce((sum,w)=>sum+w.integrations.length,0)],['Your role',roles.map(r=>roleNames[r]||r).join(', ')||'Assigned staff']].map(([label,value])=><div key={label} className={panel}><p className="text-xs text-gray-500">{label}</p><p className="mt-3 text-xl font-semibold">{value}</p></div>)}</div><div className="mt-6 grid gap-4 sm:grid-cols-2">{nav.filter(([id,,allowed])=>allowed&&['verification','support','businesses','products'].includes(id)).map(([id,label])=><Link className={panel+' text-sm font-medium'} key={id} to={url(id)}>Open {label.toLowerCase()} <span aria-hidden="true">→</span></Link>)}</div></>}
+ {view==='businesses'&&<><div className="mb-4 flex flex-wrap gap-3"><input aria-label="Search businesses" placeholder="Search businesses" value={search} onChange={e=>setSearch(e.target.value)} className="min-h-11 rounded-xl border border-gray-200 bg-transparent px-3 text-sm dark:border-white/10"/><select aria-label="Business environment" value={environment} onChange={e=>setEnvironment(e.target.value)} className="min-h-11 rounded-xl border border-gray-200 bg-transparent px-3 text-sm dark:border-white/10"><option value="live">Production</option><option value="test">Sandbox</option><option value="all">All environments</option></select></div><div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500 dark:bg-white/5"><tr><th className="p-4">Business / app</th><th className="p-4">Environment</th><th className="p-4">Status</th></tr></thead><tbody>{session.workspaces.filter(w=>w.id!=='pocket'&&w.sections.includes('projects')).flatMap(w=>w.integrations.filter(p=>(environment==='all'||(p.environment||'live')===environment)&&(w.name+' '+p.name).toLowerCase().includes(search.toLowerCase())).map(p=><tr key={p.id} className="border-t border-gray-100 dark:border-white/5"><td className="p-4"><Link className="font-medium underline decoration-gray-300 underline-offset-4" to={'/admin/workspaces/'+w.id+'/projects'}>{p.name}</Link><p className="mt-1 text-xs text-gray-500">{w.name}</p></td><td className="p-4">{p.environment==='test'?'Sandbox':'Production'}</td><td className="p-4 capitalize">{p.status}</td></tr>))}</tbody></table></div></>}
+ {view==='verification'&&<>{chooseWorkspace()}{workspace?workspace.integrations.filter(p=>p.accountType!=='individual').map(p=><section key={p.id} className={panel+' mb-5'}><h2 className="font-semibold">{p.name}</h2><BusinessVerificationReview workspaceId={workspace.id} projectId={p.id}/></section>):<p className="text-sm text-gray-500">No business verification workspaces assigned.</p>}{session.workspaces.some(w=>w.id==='pocket'&&w.sections.includes('cases'))&&<div className="mt-8"><h2 className="font-semibold">Pocket Compliance cases</h2><OperationsCasesPanel key="pocket-review" workspaceId="pocket" reviewOnly/></div>}</>}
+ {view==='payments'&&<>{chooseWorkspace()}{workspace?<PocketTransactionOperationsPanel key={workspace.id} canReconcile={Boolean(workspace.permissions?.reconcile)}/>:<p>No payment workspace assigned.</p>}</>}
+ {view==='support'&&<><nav aria-label="Support teams" className="mb-5 flex gap-5 border-b border-gray-200 dark:border-white/10">{eligible.some(w=>w.id==='pocket')&&<Link className="min-h-11 py-3 text-sm font-medium" aria-current={workspace?.id==='pocket'?'page':undefined} to={url('support','pocket')}>Pocket</Link>}{eligible.some(w=>w.id!=='pocket')&&<Link className="min-h-11 py-3 text-sm font-medium" aria-current={workspace?.id!=='pocket'?'page':undefined} to={url('support',eligible.find(w=>w.id!=='pocket')!.id)}>Business</Link>}</nav>{chooseWorkspace()}{workspace?(workspace.id==='pocket'&&workspace.sections.includes('support')?<PocketSupportOperationsPanel key={workspace.id}/>:<OperationsCasesPanel key={workspace.id} workspaceId={workspace.id} projects={workspace.integrations}/>):<p>No support workspace assigned.</p>}</>}
+ {view==='products'&&<div className="space-y-4">{session.workspaces.filter(w=>w.sections.includes('products')).map(w=><section key={w.id} className={panel}><h2 className="font-semibold">{w.name}</h2>{w.integrations.map(p=><div key={p.id} className="mt-4 border-t border-gray-100 pt-4 dark:border-white/5"><p className="text-sm font-medium">{p.name}</p><p className="mt-2 text-sm text-gray-500">{p.capabilities.map(c=>(({hosted_checkout:'Checkout',polymarket_funding:'Polymarket funding',arc_agreements:'Arc agreements',xstocks_agreements:'Trade agreements'} as Record<string,string>)[c]||c.replace(/_/g,' '))).join(' · ')||'No capabilities configured'}</p></div>)}{w.sections.includes('agreements')&&<Link className="mt-4 inline-block text-sm underline" to={'/admin/workspaces/'+w.id+'/agreements'}>Agreement operations</Link>}</section>)}</div>}
+ {view==='team'&&<OperationsTeamPanel workspaces={session.workspaces}/>}
+ {view==='audit'&&<OperationsAuditPanel/>}
+ {view==='settings'&&<EmergencyPausePanel key={identity}/>}
+ {view==='workspace'&&(!workspace?<p role="alert">Workspace unavailable.</p>:<><div className="mb-6 flex flex-wrap gap-4"><Link className="text-sm underline" to={url('businesses')}>Back to businesses</Link>{workspace.sections.map(s=><Link key={s} className="text-sm" to={'/admin/workspaces/'+workspace.id+'/'+s}>{sectionNames[s]||s}</Link>)}</div>{workspace.missingProjectIds.length>0&&<p role="alert">Some mapped apps are unavailable. Review the workspace mapping.</p>}{params.section&&!workspace.sections.includes(params.section)?<p role="alert">Your role cannot access this section.</p>:!params.section?<p className="text-sm text-gray-500">Choose a section above.</p>:params.section==='projects'?<ProjectOperations workspaceId={workspace.id} canManage={Boolean(workspace.permissions?.manageProjects)}/>:params.section==='agreements'?<><ArcAgreementOperationsPanel workspaceId={workspace.id}/>{session.founder&&<details className={panel+' mt-5'}><summary className="cursor-pointer text-sm">Activation settings</summary><ProjectOperations workspaceId={workspace.id} mode="agreements" arcActivationEnabled={session.arcActivationEnabled}/></details>}</>:params.section==='trade-disputes'?<TradeReviewOperationsPanel workspaceId={workspace.id}/>:params.section==='support'?<PocketSupportOperationsPanel/>:params.section==='transactions'?<PocketTransactionOperationsPanel canReconcile={Boolean(workspace.permissions?.reconcile)}/>:params.section==='cases'?<OperationsCasesPanel key={workspace.id} workspaceId={workspace.id} projects={workspace.integrations}/>:<p className="text-sm">Open Products from the sidebar to view configuration.</p>}</>)}
+ </>}
+ </main></div>
 }

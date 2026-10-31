@@ -1,3 +1,4 @@
+import type {CaseReview,CaseEvent} from '../operations-cases.js'
 import {readPocketNotices,markPocketNoticesRead} from './notification-store.js'
 import {sendPocketPush} from './push-devices.js'
 import {readSupportFeatureRecords} from './support-feature-records.js'
@@ -28,6 +29,8 @@ import { advancePocketSupportLifecycle, requestSupportResolution, answerSupportR
 
 type SupportMessage = PocketSupportLifecycleMessage
 type SupportCase = {
+  escalation?:CaseReview
+  caseHistory?:CaseEvent[]
   id: string
   profileId: string
   notificationOwnerId?: string
@@ -89,7 +92,7 @@ async function currentStore() {
   return updated
 }
 function publicCase(item: SupportCase) {
-  const { notificationOwnerId: _notificationOwnerId, profileId: _profileId, assignedTo: _assignedTo, customer: _customer, ...safe } = item
+  const { escalation:_escalation,caseHistory:_caseHistory,notificationOwnerId: _notificationOwnerId, profileId: _profileId, assignedTo: _assignedTo, customer: _customer, ...safe } = item
   const lastReadAt = item.customerReadAt || 0
   const unreadCount = item.messages.filter(message => (
     (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution' || message.kind === 'resolution_prompt' || message.kind === 'staff_joined')

@@ -1,3 +1,5 @@
+import operationsAuditHandler from './api/operations-audit.js'
+import operationsCasesHandler from './api/operations-cases.js'
 import {reconcileCheckoutReceiptEmails} from './api/checkout-receipt-emails.js'
 import bscSendHandler,{reconcileBscSends} from './api/pocket/bsc-send-service.js'
 import operationsEmergencyPauseHandler from './api/operations-emergency-pause.js'
@@ -530,6 +532,8 @@ app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
+app.all('/api/operations-cases', strictLimiter, operationsCasesHandler)
+app.all('/api/operations-audit', strictLimiter, operationsAuditHandler)
 app.all('/api/operations-emergency-pause', strictLimiter, operationsEmergencyPauseHandler)
 app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
 app.all('/api/arc-trade-review', strictLimiter, arcTradeReviewHandler)
