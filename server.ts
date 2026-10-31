@@ -1,3 +1,4 @@
+import developerSupportHandler from './api/developer-support.js'
 import { retiredProductBoundary } from './api/product-retirement.js'
 import operationsAuditHandler from './api/operations-audit.js'
 import operationsCasesHandler from './api/operations-cases.js'
@@ -446,6 +447,7 @@ app.post('/api/pocket/esim/price', strictLimiter, pocketEsimPriceHandler)
 app.get('/api/pocket/esim/orders', readLimiter, pocketEsimOrdersHandler)
 app.post('/api/pocket/esim/orders', strictLimiter, pocketEsimOrdersHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
+app.all('/api/developer-support', strictLimiter, developerSupportHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/operations-team', strictLimiter, operationsTeamHandler)

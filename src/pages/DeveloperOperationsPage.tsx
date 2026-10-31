@@ -1,3 +1,4 @@
+import {RefreshButton} from '../components/SupportConversation'
 import BusinessVerificationReview from '../components/BusinessVerificationReview'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -266,14 +267,7 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => void loadProjects()}
-            disabled={loading}
-            className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.05]"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
-          </button>
+          <div className="mt-3 flex justify-end"><RefreshButton label="Refresh businesses" busy={loading} onClick={()=>void loadProjects()}/></div>
         </aside>
 
         <section className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">

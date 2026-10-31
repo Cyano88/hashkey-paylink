@@ -488,6 +488,7 @@ export async function verifyDeveloperProjectOwner(req: Request, projectIdValue: 
   return {
     id: project.id,
     ownerId: project.ownerId,
+    email: identity.email,
     name: productDisplayName(project.id, project.name),
     checkoutMode: projectCheckoutMode(project),
     capabilities: effectiveProductCapabilities(project) as DeveloperCapability[],

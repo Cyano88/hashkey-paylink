@@ -13,6 +13,7 @@ export default function DeveloperApp() {
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
     <Route element={<DeveloperLayout />}>
       <Route index element={<DeveloperPortalPage />} />
+      <Route path="support" element={<Navigate to="/?support=open" replace />} />
       <Route path="cli/authorize" element={<DeveloperCliAccessPage />} />
       <Route path="developers" element={<DeveloperPortalPage />} />
       <Route path="admin/team" element={<OperationsWorkspacePage />} />

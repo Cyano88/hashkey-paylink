@@ -1,3 +1,4 @@
+import DeveloperSupportWidget from '../components/DeveloperSupportWidget'
 import DeveloperTermsGate from '../developer/DeveloperTermsGate'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Moon, Sun } from 'lucide-react'
@@ -21,11 +22,10 @@ export default function DeveloperLayout() {
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {operations ? <div id="operations-account-menu" /> : <div id="developer-account-menu" />}
-          {!operations && <a href="mailto:support@hashpaylink.com" className="hidden min-h-11 items-center text-sm font-medium text-gray-600 dark:text-gray-300 lg:inline-flex">Need help?</a>}
           <button type="button" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10">{theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</button>
         </div>
       </nav>
     </header>
-    <DeveloperTermsGate><Outlet /></DeveloperTermsGate>
+    <DeveloperTermsGate><Outlet />{!operations&&<DeveloperSupportWidget/>}</DeveloperTermsGate>
   </div>
 }
