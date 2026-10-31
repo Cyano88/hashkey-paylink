@@ -1,3 +1,5 @@
+import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
+import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
 import type {PaylinkReceipt} from '../src/lib/paymentReceiptPdf.js'
 import type { Request, Response } from 'express'
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -19,6 +21,7 @@ export type StockCheckout = {
   id: string; partnerId: string; ownerId: string; environment: 'live'; network: 'xlayer'; checkoutMode: 'human'
   title: string; merchantName: string; brandImageUrl?: string; amount: string; asset: string; token: PaymentToken; recipient: string
   notionalUsd: string; returnUrl: string; swapEnabled: boolean; createdAt: string; expiresAt: string; requestHash: string
+  pricing?:CheckoutPricing
   integrity: string
   payment?: { status: 'paid'; txHash: string; payer: string; amount: string; network: 'xlayer'; confirmedAt: string; receiptId: string }
 }
@@ -29,6 +32,7 @@ function fail(message: string, status = 400): never { throw Object.assign(Error(
 function isProjectPolicy(value:unknown):value is DeveloperCheckoutPolicy {return Boolean(value&&typeof value==='object'&&'projectManaged' in value&&value.projectManaged===true)}
 const clean = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max)
 const defaults = {
+  quotePricing:quoteCheckoutPricing,
   expiryLimit: () => Number.POSITIVE_INFINITY,
   enabled: (projectId:string) => process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_ENABLED === 'true' && (process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_PROJECTS||'').split(',').map(s=>s.trim()).includes(projectId),
   secret: () => process.env.HOSTED_CHECKOUT_SIGNING_SECRET || '',
@@ -49,7 +53,7 @@ const defaults = {
 }
 type Dependencies = typeof defaults
 function signature(r: Omit<StockCheckout,'integrity'>, secret:string) {
- return createHmac('sha256',secret).update(JSON.stringify([r.id,r.partnerId,r.ownerId,r.environment,r.network,r.checkoutMode,r.title,r.merchantName,r.amount,r.asset,r.token.chainId,r.token.address,r.token.symbol,r.token.decimals,r.recipient,r.notionalUsd,r.returnUrl,r.swapEnabled,r.createdAt,r.expiresAt,r.requestHash,...(r.brandImageUrl!==undefined?[r.brandImageUrl]:[])])).digest('hex')
+ return createHmac('sha256',secret).update(JSON.stringify([r.id,r.partnerId,r.ownerId,r.environment,r.network,r.checkoutMode,r.title,r.merchantName,r.amount,r.asset,r.token.chainId,r.token.address,r.token.symbol,r.token.decimals,r.recipient,r.notionalUsd,r.returnUrl,r.swapEnabled,r.createdAt,r.expiresAt,r.requestHash,...(r.brandImageUrl!==undefined?[r.brandImageUrl]:[]),...(r.pricing?[checkoutPricingFields(r.pricing)]:[])])).digest('hex')
 }
 function valid(r:StockCheckout,d:Dependencies){const secret=d.secret();return secret.length>=32&&/^[a-f0-9]{64}$/.test(r.integrity)&&timingSafeEqual(Buffer.from(r.integrity),Buffer.from(signature(r,secret)))}
 export async function readStockCheckout(id: string, allowExpired = false, d: Dependencies = defaults) {
@@ -68,7 +72,7 @@ export async function readStockCheckoutBranding(ids:string[],d:Dependencies=defa
  return brands
 }
 const response = (r: StockCheckout) => ({ ok: true, checkoutId: r.id, checkoutUrl: '/pay/c/' + r.id, paymentUrl: '/xpay/' + r.id,
-  checkout: { id: r.id, title: r.title, merchantName: r.merchantName, brandImageUrl:r.brandImageUrl, amount: r.amount, asset: r.asset, token: r.token, network: 'xlayer', stockCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
+  checkout: { pricing:r.pricing,id: r.id, title: r.title, merchantName: r.merchantName, brandImageUrl:r.brandImageUrl, amount: r.amount, asset: r.asset, token: r.token, network: 'xlayer', stockCheckout: true, status: r.payment?.status ?? 'pending', expiresAt: r.expiresAt, swapEnabled: false },
 })
 
 export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencies> = {}) {
@@ -107,6 +111,7 @@ export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencie
       if (!chosen) fail('Checkout accepts supported stablecoins only. Choose an enabled stablecoin on X Layer.')
       if (!p.xlayerCheckout.assets.includes(chosen.address.toLowerCase())) fail('Choose a stablecoin accepted by this project.')
       const amountInput = clean(req.body?.amount, 100), title = clean(req.body?.title, 100) || 'Payment request'
+      const ngnPrice=validateCheckoutCurrency(req.body?.currency===undefined?{}:(p),req.body?.currency,amountInput)
       const returnUrl = clean(req.body?.returnUrl, 300)
       if (returnUrl) { let origin = ''; try { origin = new URL(returnUrl).origin } catch {} if (!p.allowedOrigins.includes(origin)) fail('Return URL is not allowlisted for this project.') }
       const swapEnabled = req.body?.swap === true
@@ -114,12 +119,14 @@ export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencie
       if (swapEnabled) fail('Swap in Pocket before paying. Checkout accepts a supported stablecoin balance.', 400)
       const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 15)
       if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 1440) fail('Expiry must be between 5 and 1440 minutes.')
-      const requestHash = createHash('sha256').update(JSON.stringify([amountInput, chosen.address.toLowerCase(), p.xlayerCheckout.recipient, title, returnUrl, swapEnabled, expiresInMinutes])).digest('hex')
+      const requestHash = createHash('sha256').update(JSON.stringify([amountInput, chosen.address.toLowerCase(), p.xlayerCheckout.recipient, title, returnUrl, swapEnabled, expiresInMinutes,...(ngnPrice?['NGN']:[])])).digest('hex')
       const scopedKey = p.partnerId + ':' + key, before = await d.read(), existing = before.checkouts[before.idempotency[scopedKey]]
       if (existing) { if (!valid(existing,d) || existing.requestHash !== requestHash) fail('Idempotency key is already bound to another checkout.', 409); await ensureStockCheckoutExecution(existing,d); return res.json({ ...response(existing), replayed: true }) }
       if (!d.enabled(p.partnerId)) fail('X Layer checkout is awaiting release activation.', 503)
       if(d.secret().length<32)fail('Checkout signing is unavailable.',503)
-      const token = paymentToken(await d.asset(chosen.address.toLowerCase()),'xlayer','xlayer')!, amount = paymentAssetAmount(amountInput, token)
+      validateCheckoutCurrency(p,req.body?.currency,amountInput)
+      const pricing=ngnPrice?await d.quotePricing(ngnPrice,chosen.symbol):undefined
+      const token = paymentToken(await d.asset(chosen.address.toLowerCase()),'xlayer','xlayer')!, amount = paymentAssetAmount(pricing?.paymentAmount??amountInput, token)
       const price = await d.price(chosen.address.toLowerCase())
       if (!price || !Number.isFinite(price) || price <= 0) fail('A fresh asset price is unavailable.', 503)
       const divisor = 10n ** BigInt(token.decimals + 12)
@@ -127,7 +134,7 @@ export function createHostedStockCheckoutsHandler(overrides: Partial<Dependencie
       if (notionalUnits <= 0n || notionalUnits > 100_000n * 1_000_000n) fail('Checkout value must be between 0.000001 and 100,000 USD.')
       const now = d.now()
       let record: StockCheckout = { id: d.id(), partnerId: p.partnerId, ownerId: p.ownerId!, environment: 'live', network: 'xlayer', checkoutMode: 'human', title,
-        merchantName: p.merchantName, ...(p.brandImageUrl?{brandImageUrl:p.brandImageUrl}:{}), amount, token, asset: token.symbol, recipient: p.xlayerCheckout.recipient, notionalUsd: formatUnits(notionalUnits, 6),
+        ...(pricing?{pricing}:{}),merchantName: p.merchantName, ...(p.brandImageUrl?{brandImageUrl:p.brandImageUrl}:{}), amount, token, asset: token.symbol, recipient: p.xlayerCheckout.recipient, notionalUsd: formatUnits(notionalUnits, 6),
         returnUrl, swapEnabled, createdAt: new Date(Math.floor(now/1000)*1000).toISOString(), expiresAt: new Date(Math.min(now + expiresInMinutes * 60_000,d.expiryLimit())).toISOString(), requestHash, integrity:'' }
       record.integrity=signature(record,d.secret())
       await d.mutate(s => {
@@ -189,7 +196,7 @@ export async function drainStockCheckoutWebhooks(d: Dependencies = defaults) {
     await d.mutate(s => { const n = s.outbox[notice.checkoutId]; if (!n || n.delivered || (n.leaseUntil ?? 0) > d.now()) return s; n.leaseUntil = d.now() + 60_000; n.attempts++; record = s.checkouts[n.checkoutId]; return s })
     if (!record?.payment || !valid(record,d)) continue
     let sent = false
-    try { const result = await d.notify(record.partnerId, 'payment.confirmed', { checkoutId: record.id, status: 'paid', network: 'xlayer', asset: record.asset, token: record.token.address, amount: record.amount, payer: record.payment.payer, transactionHash: record.payment.txHash, confirmedAt: record.payment.confirmedAt }, { eventId: 'stock-paid:' + record.id, createdAt: record.payment.confirmedAt }); sent = result.status === 'sent' } catch {}
+    try { const result = await d.notify(record.partnerId, 'payment.confirmed', { checkoutId: record.id, ...(record.pricing?{pricing:record.pricing}:{}), status: 'paid', network: 'xlayer', asset: record.asset, token: record.token.address, amount: record.amount, payer: record.payment.payer, transactionHash: record.payment.txHash, confirmedAt: record.payment.confirmedAt }, { eventId: 'stock-paid:' + record.id, createdAt: record.payment.confirmedAt }); sent = result.status === 'sent' } catch {}
     await d.mutate(s => { const n = s.outbox[notice.checkoutId]; n.delivered = sent; n.leaseUntil = undefined; n.nextAttemptAt = d.now() + Math.min(3_600_000, 10_000 * 2 ** Math.min(n.attempts, 8)); return s })
   }
 }

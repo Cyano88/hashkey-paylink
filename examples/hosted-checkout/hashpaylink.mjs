@@ -13,7 +13,7 @@ async function api(path,apiKey,options={},fetcher=fetch){
 
 export async function createCheckout(order,apiKey,fetcher=fetch){
  // These values come from YOUR saved order, never prices supplied by the browser.
- const data=await api('/api/v2/checkouts',apiKey,{method:'POST',headers:{'Idempotency-Key':order.attemptKey},body:JSON.stringify({kind:'service',checkoutMode:'human',paymentSelection:'stablecoins',title:order.description,amount:order.amount,returnUrl:order.returnUrl,expiresInMinutes:15})},fetcher)
+ const data=await api('/api/v2/checkouts',apiKey,{method:'POST',headers:{'Idempotency-Key':order.attemptKey},body:JSON.stringify({kind:'service',checkoutMode:'human',paymentSelection:'stablecoins',title:order.description,amount:order.amount,...(order.currency?{currency:order.currency}:{}),returnUrl:order.returnUrl,expiresInMinutes:15})},fetcher)
  const url=new URL(data.checkoutUrl,origin)
  if(url.origin!==origin||url.username||url.password||url.search||url.hash||!/^\/pay\/c\/chks_[a-f0-9]{24}$/.test(url.pathname)||data.checkoutId!==url.pathname.split('/').pop())throw Error('Unexpected checkout response')
  return {checkoutId:data.checkoutId,checkoutUrl:url.toString()}
@@ -39,8 +39,10 @@ export async function readOrderPayment(order,apiKey,fetcher=fetch){
  const asset=status.asset||status.checkout?.asset
  const network=status.network||status.payment?.network||status.checkout?.network
  const amount=status.payment?.amount??status.checkout?.amount??status.amount
- if(units(amount)!==units(order.amount)||!order.acceptedAssets.includes(asset)||!order.acceptedNetworks.includes(network))throw Error('Payment does not match the order')
- return {paid:true,status:'paid',checkoutId:order.checkoutId,selectedCheckoutId:status.selectedCheckoutId||null,asset,network,amount,receiptId:status.payment?.receiptId||null,transactionHash:status.payment?.txHash||null}
+ const pricing=status.pricing||status.checkout?.pricing
+ const priceMatches=order.currency==='NGN'?pricing?.currency==='NGN'&&units(pricing.amount)===units(order.amount)&&pricing.paymentAsset===asset&&units(amount)===units(pricing.paymentAmount)&&units(amount)>0n:!pricing&&units(amount)===units(order.amount)
+ if(!priceMatches||!order.acceptedAssets.includes(asset)||!order.acceptedNetworks.includes(network))throw Error('Payment does not match the order')
+ return {paid:true,status:'paid',checkoutId:order.checkoutId,selectedCheckoutId:status.selectedCheckoutId||null,asset,network,amount,pricing:pricing||null,receiptId:status.payment?.receiptId||null,transactionHash:status.payment?.txHash||null}
 }
 
 // Use on an authenticated order return and from your scheduled recovery worker.

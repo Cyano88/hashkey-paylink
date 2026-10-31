@@ -1,3 +1,4 @@
+import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
@@ -17,7 +18,7 @@ type HostedCheckoutLookup = {
   merchantName?:string
   brandImageUrl?:string
   selectedCheckoutUrl?:string
-  checkout?:{expiresAt?:string;id:string;bscCheckout?:boolean;stockCheckout?:boolean;status:string;amount:string;asset:string;merchantName:string;brandImageUrl?:string;title?:string;settlementCurrency?:string;settlementAmount?:string;paymentAttempt?:{status?:string}}
+  checkout?:{pricing?:CheckoutPricing;expiresAt?:string;id:string;bscCheckout?:boolean;stockCheckout?:boolean;status:string;amount:string;asset:string;merchantName:string;brandImageUrl?:string;title?:string;settlementCurrency?:string;settlementAmount?:string;paymentAttempt?:{status?:string}}
 }
 
 export default function HostedCheckoutEntry() {
@@ -33,6 +34,7 @@ export default function HostedCheckoutEntry() {
   const browser = new URLSearchParams(window.location.search).get('browser') === '1'
 
   useEffect(() => {
+    setSelection(null);setCheckout(null);setStock(null);setError('')
     let cancelled = false
     const controller = new AbortController()
     let timeout: ReturnType<typeof setTimeout>
@@ -45,7 +47,7 @@ export default function HostedCheckoutEntry() {
         const body = await response.json().catch(() => undefined) as HostedCheckoutLookup | undefined
         if(!cancelled&&response.status===410){setExpiredReturn(body?.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
         if(response.ok&&body?.ok&&(body.checkout as any)?.selectionCheckout&&body.checkout?.id===checkoutId&&/^chks_[a-f0-9]{24}$/.test(checkoutId)){
-          if(!cancelled){if(body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl,{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
+          if(!cancelled){if(body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl+(body.selectedCheckoutUrl.includes('?')?'&':'?')+(new URLSearchParams(location.search).get('browser')==='1'?'browser=1':new URLSearchParams(location.search).get('mode')==='pocket'?'pocket=1':''),{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
           return
         }
         if(response.ok&&body?.ok&&body.checkout?.bscCheckout&&body.checkout.id===checkoutId&&/^chkb_[a-f0-9]{24}$/.test(checkoutId)){
@@ -75,14 +77,15 @@ export default function HostedCheckoutEntry() {
   }, [attemptId, checkoutId, navigate, browser])
 
   if(error&&/expired/i.test(error))return <CheckoutExpired merchant={expiredBrand.name||checkout?.checkout?.merchantName||stock?.checkout?.merchantName} brandImageUrl={expiredBrand.logo||checkout?.checkout?.brandImageUrl||stock?.checkout?.brandImageUrl} returnUrl={expiredReturn||checkout?.returnUrl||stock?.returnUrl}/>
-  if(selection)return <CheckoutAssetChoice key={checkoutId} {...selection}/>
-  if(checkout?.checkout?.bscCheckout&&!browser&&checkout.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={`${checkout.checkout.amount} ${checkout.checkout.asset}`} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
+  if(selection){const mode=new URLSearchParams(location.search).get('mode');return browser||mode==='pocket'?<CheckoutAssetChoice key={checkoutId} {...selection} mode={mode==='pocket'?'pocket':'web'}/>:<div className="py-6"><CheckoutChoice id={checkoutId} merchant={selection.checkout.merchantName} brandImageUrl={selection.checkout.brandImageUrl} title={selection.checkout.title} expiresAt={selection.checkout.expiresAt} returnUrl={selection.returnUrl} amount={checkoutPriceLabel(selection.checkout.currency?{currency:selection.checkout.currency,amount:selection.checkout.amount}:undefined,selection.checkout.amount+' '+(selection.checkout.options[0]?.asset||''))} onPocket={()=>navigate('/pay/c/'+checkoutId+'?mode=pocket')} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1')}/></div>}
+
+  if(checkout?.checkout?.bscCheckout&&!browser&&checkout.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice autoOpenPocket={new URLSearchParams(location.search).get('pocket')==='1'} expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkoutPriceLabel(checkout.checkout.pricing,`${checkout.checkout.amount} ${checkout.checkout.asset}`)} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
   if(checkout?.checkout?.bscCheckout)return <Suspense fallback={<div role="status" aria-label="Opening payment" className="mx-auto h-96 max-w-md animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><BscCheckout checkout={checkout.checkout} returnUrl={checkout.returnUrl}/></Suspense>
-  if(stock?.checkout&&!browser&&stock.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice expiresAt={stock.checkout.expiresAt} returnUrl={stock.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={stock.checkout.brandImageUrl} merchant={stock.checkout.merchantName} title={stock.checkout.title} amount={stock.checkout.amount+' '+stock.checkout.asset} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
+  if(stock?.checkout&&!browser&&stock.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice autoOpenPocket={new URLSearchParams(location.search).get('pocket')==='1'} expiresAt={stock.checkout.expiresAt} returnUrl={stock.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={stock.checkout.brandImageUrl} merchant={stock.checkout.merchantName} title={stock.checkout.title} amount={checkoutPriceLabel(stock.checkout.pricing,stock.checkout.amount+' '+stock.checkout.asset)} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
   if(stock?.checkout)return stock.checkout.status==='paid'
-    ? <BrowserPaymentResult fullScreen state="successful" amount={stock.checkout.amount+' '+stock.checkout.asset} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
+    ? <BrowserPaymentResult fullScreen state="successful" amount={checkoutPriceLabel(stock.checkout.pricing,stock.checkout.amount+' '+stock.checkout.asset)} merchant={stock.checkout.merchantName} returnUrl={stock.returnUrl} detail="Your merchant payment has been verified on X Layer." />
     : <Suspense fallback={<div role="status" aria-label="Opening checkout" className="mx-auto h-96 max-w-md animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><StockCheckout merchantOverride={checkoutId} returnUrl={stock.returnUrl} brandImageUrl={stock.checkout.brandImageUrl}/></Suspense>
-  if (checkout?.checkout && (!error||/expired/i.test(error))) return <div className="py-6"><CheckoutChoice expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkout.checkout.settlementCurrency ? `${checkout.checkout.settlementCurrency} ${checkout.checkout.settlementAmount}` : `${checkout.checkout.amount} ${checkout.checkout.asset || 'USDC'}`} onBrowser={()=>navigate(checkout.paymentUrl!,{replace:true})}/></div>
+  if (checkout?.checkout && (!error||/expired/i.test(error))) return <div className="py-6"><CheckoutChoice autoOpenPocket={new URLSearchParams(location.search).get('pocket')==='1'} expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkoutPriceLabel(checkout.checkout.pricing,checkout.checkout.settlementCurrency ? `${checkout.checkout.settlementCurrency} ${checkout.checkout.settlementAmount}` : `${checkout.checkout.amount} ${checkout.checkout.asset || 'USDC'}`)} onBrowser={()=>navigate(checkout.paymentUrl!,{replace:true})}/></div>
   return (
     <div className="mx-auto w-full max-w-sm">
       <HashPayLinkCheckoutBrand />

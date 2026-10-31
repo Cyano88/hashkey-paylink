@@ -35,3 +35,10 @@ const blocked=await request('POST',body,{},'selection-test-key-disabled');enable
 assert.equal((await request('POST',{network:'base',asset:'USDC'},{id:blocked.data.checkoutId,action:'select-payment'})).code,409)
 assert.equal(count,before+1)
 console.log('PASS concurrent tabs bind one route; disabled projects cannot start a payment.')
+enabled=true;policy.profileCountry='NG';policy.accountType='business'
+assert.equal((await request('POST',body,{},'ngn-currency-missing-001')).code,409)
+const ngn=await request('POST',{...body,currency:'NGN',amount:'2000.00'},{},'ngn-selection-order-001')
+assert.equal(ngn.code,201,JSON.stringify(ngn));assert.equal(ngn.data.checkout.currency,'NGN');assert(ngn.data.checkout.options.every(o=>['USDC','USDT'].includes(o.asset)))
+assert.equal((await request('POST',{...body,currency:'NGN',amount:'2000.00'},{},'ngn-selection-order-001')).data.checkoutId,ngn.data.checkoutId)
+assert.equal((await request('POST',{network:'xlayer',asset:'USDT'},{id:ngn.data.checkoutId,action:'select-payment'})).code,200)
+console.log('PASS NGN selection: country enforcement, USDC/USDT options, original price and idempotent route creation.')

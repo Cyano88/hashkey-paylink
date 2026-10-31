@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {createFoodDemoHandler} from '../api/food-demo.ts'
 let store={orders:{}},enabled=false,calls=[],status='pending',clock=Date.now();const checkoutId='chkx_'+'1'.repeat(24)
-const h=createFoodDemoHandler({ready:()=>enabled,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},now:()=>clock,price:async()=>200,call:async(path,body,key)=>{calls.push({path,body,key});return body?{ok:true,checkoutId,checkoutUrl:'/pay/c/'+checkoutId}:{ok:true,status,checkout:{id:checkoutId,asset:'USDC',amount:'4.5'}}}})
+const h=createFoodDemoHandler({ngnPricing:async()=>false,ready:()=>enabled,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},now:()=>clock,price:async()=>200,call:async(path,body,key)=>{calls.push({path,body,key});return body?{ok:true,checkoutId,checkoutUrl:'/pay/c/'+checkoutId}:{ok:true,status,checkout:{id:checkoutId,asset:'USDC',amount:'4.5'}}}})
 async function call(method,body={},query={}){let code=200,data;await h({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return{code,data}}
 const id='a'.repeat(32),body={requestId:id,items:[{id:'jollof',quantity:1}],asset:'USDC',amount:'0.00001',recipient:'attacker'}
 assert.equal((await call('GET')).data.liveEnabled,false);assert.equal((await call('POST',body)).code,503);assert.equal(calls.length,0)
@@ -17,7 +17,7 @@ clock+=26*60_000;assert.equal((await call('POST',body)).code,410)
 console.log('PASS food store: gated live mode, server-priced basket, accepted assets, immutable retry, ignored recipient/amount overrides, authoritative paid status and expiry.')
 
 let circleStore={orders:{}},createdBody,circleStatus='pending'
-const circleId='chk_12345678',circleHandler=createFoodDemoHandler({ready:()=>true,read:async()=>structuredClone(circleStore),mutate:async fn=>{circleStore=fn(structuredClone(circleStore));return structuredClone(circleStore)},now:Date.now,price:async()=>{throw Error('USDC must not use stock pricing')},call:async(path,body)=>{if(body){createdBody=body;return{ok:true,checkoutId:circleId,checkoutUrl:'/pay/c/'+circleId+'?attempt=attempt_123'}}return{ok:true,checkoutId:circleId,status:circleStatus,settlementMode:'usdc',network:'base',payment:{amount:'4.5'}}}})
+const circleId='chk_12345678',circleHandler=createFoodDemoHandler({ngnPricing:async()=>false,ready:()=>true,read:async()=>structuredClone(circleStore),mutate:async fn=>{circleStore=fn(structuredClone(circleStore));return structuredClone(circleStore)},now:Date.now,price:async()=>{throw Error('USDC must not use stock pricing')},call:async(path,body)=>{if(body){createdBody=body;return{ok:true,checkoutId:circleId,checkoutUrl:'/pay/c/'+circleId+'?attempt=attempt_123'}}return{ok:true,checkoutId:circleId,status:circleStatus,settlementMode:'usdc',network:'base',payment:{amount:'4.5'}}}})
 async function circleCall(method,body={},query={}){let code=200,data;await circleHandler({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return{code,data}}
 const circleBody={requestId:'c'.repeat(32),items:[{id:'jollof',quantity:1}],asset:'USDC',rail:'circle'}
 assert.equal((await circleCall('POST',circleBody)).code,200)
@@ -29,7 +29,7 @@ assert.equal((await circleCall('POST',{...circleBody,requestId:'d'.repeat(32),as
 console.log('PASS Circle USDC routing, verified receipt, immutable rail and non-stablecoin rejection.')
 
 let draftStore={orders:{}},allowed=[{id:'circle',name:'Lunchroom',kind:'stablecoins',currency:'USD',assets:['USDC'],networks:['base'],revision:'1'}],sent
-const draftHandler=createFoodDemoHandler({ready:()=>true,choices:async()=>allowed,read:async()=>structuredClone(draftStore),mutate:async fn=>{draftStore=fn(structuredClone(draftStore));return structuredClone(draftStore)},now:Date.now,call:async(path,body)=>{sent=body;return {ok:true,checkoutId:'chk_12345678',checkoutUrl:'/pay/c/chk_12345678?attempt=test_123'}}})
+const draftHandler=createFoodDemoHandler({ngnPricing:async()=>false,ready:()=>true,choices:async()=>allowed,read:async()=>structuredClone(draftStore),mutate:async fn=>{draftStore=fn(structuredClone(draftStore));return structuredClone(draftStore)},now:Date.now,call:async(path,body)=>{sent=body;return {ok:true,checkoutId:'chk_12345678',checkoutUrl:'/pay/c/chk_12345678?attempt=test_123'}}})
 async function draftCall(method,body={},query={}){let code=200,data;await draftHandler({method,body,query},{setHeader(){},status(n){code=n;return this},json(d){data=d;return this},sendStatus(n){code=n}});return{code,data}}
 const draftId='e'.repeat(32)
 draftStore.drafts={[draftId]:{id:draftId,lines:[{id:'jollof',name:'Smoky jollof bowl',quantity:1,cents:450}],cents:450,createdAt:Date.now()}}
@@ -47,7 +47,7 @@ assert.equal((await draftCall('GET',{}, {id:draftId,purpose:'selection'})).data.
 for(const mode of ['ngn','ugx']){
  let localStore={orders:{}},localStatus='processing',reportedAmount='4.6',reportedMode=mode,createCount=0
  const destination={id:'circle',name:'Lunchroom',kind:'bank',currency:mode.toUpperCase(),assets:['USDC'],networks:['base'],revision:'1'}
- const handler=createFoodDemoHandler({ready:()=>true,choices:async()=>[destination],read:async()=>structuredClone(localStore),mutate:async fn=>{localStore=fn(structuredClone(localStore));return structuredClone(localStore)},call:async(path,body)=>{
+ const handler=createFoodDemoHandler({ngnPricing:async()=>false,ready:()=>true,choices:async()=>[destination],read:async()=>structuredClone(localStore),mutate:async fn=>{localStore=fn(structuredClone(localStore));return structuredClone(localStore)},call:async(path,body)=>{
   if(body){createCount++;assert.equal(body.amount,'4.5');return {ok:true,checkoutId:'chk_87654321',checkoutUrl:'/pay/c/chk_87654321',settlementMode:mode,amount:'4.6'}}
   return {ok:true,checkoutId:'chk_87654321',status:localStatus,settlementMode:reportedMode,network:'base',payment:{amount:reportedAmount}}
  }})

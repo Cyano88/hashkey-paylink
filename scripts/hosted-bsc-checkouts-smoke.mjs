@@ -21,6 +21,17 @@ try{for(const asset of bscCheckoutAssets){
  const d={enabled:()=>enabled,secret:()=> 'test-secret-'.repeat(4),hasStore:()=>true,read:async()=>structuredClone(store),mutate:async fn=>{const next=await fn(structuredClone(store));store=next;return structuredClone(store)},policy:async()=>policy,asset:async address=>({chainId:56,address,symbol:asset.symbol,decimals:asset.decimals}),price:async()=>1,executions,notify:async(...args)=>{notifications.push(args);if(failDelivery)throw Error('offline');return{status:'sent'}},now:()=>clock,id:()=> 'chkb_'+String(++seq).padStart(24,'0')}
  const handler=createHostedBscCheckoutsHandler(d)
  const call=async(method,body={},query={},key='stock-checkout-order-001')=>{let status=200,data;await handler({method,body,query,headers:{'idempotency-key':key}},{setHeader(){},status(n){status=n;return this},json(d){data=d;return this},sendStatus(n){status=n}});return{status,data}}
+ if(['USDC','USDT'].includes(asset.symbol)){
+  const legacyPolicy=policy;policy={...policy,profileCountry:'NG',accountType:'business'}
+  let quotes=0
+  const ngnHandler=createHostedBscCheckoutsHandler({...d,quotePricing:async(amount,symbol)=>{quotes++;return{currency:'NGN',amount,paymentAmount:'1.333334',paymentAsset:symbol,rate:'1500',source:'paycrest',referenceNetwork:'base',quotedAt:new Date(clock).toISOString()}}})
+  const ngnCall=async(body,key='ngn-rail-checkout-001')=>{let code=200,data;await ngnHandler({method:'POST',body,query:{},headers:{'idempotency-key':key}},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this}});return{code,data}}
+  const input={rail:'bsc',asset:asset.symbol,amount:'2000',currency:'NGN',returnUrl:'https://merchant.example/paid'}
+  const made=await ngnCall(input);assert.equal(made.code,201,JSON.stringify(made));assert.equal(made.data.checkout.amount,'1.333334');assert.equal(made.data.checkout.pricing.amount,'2000')
+  assert.equal((await ngnCall(input)).data.checkoutId,made.data.checkoutId);assert.equal(quotes,1)
+  assert.equal((await ngnCall({...input,currency:undefined},'ngn-rail-missing-001')).code,400)
+  policy=legacyPolicy
+ }
  const body={rail:'bsc',asset:asset.symbol,amount:'0.000001',returnUrl:'https://merchant.example/paid'}
  assert.equal((await call('POST',{...body,environment:'test'})).status,409)
  enabled=false;assert.equal((await call('POST',body)).status,503);enabled=true

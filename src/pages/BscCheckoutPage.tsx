@@ -1,3 +1,4 @@
+import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import useCheckoutReceipt from '../lib/useCheckoutReceipt'
 import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {pocketApiUrl} from '../pocket/lib/pocketRoutes'
@@ -14,12 +15,12 @@ import {requestPocketPaymentApproval,takePocketPaymentApproval} from '../pocket/
 import {bscPaymentRequest,validateBscPayment,type BscPaymentQuote} from '../pocket/lib/pocketBscPayment'
 import {PRIVY_APP_ID} from '../lib/authMode'
 
-export type BscCheckoutView={expiresAt?:string;id:string;amount:string;asset:string;merchantName:string;brandImageUrl?:string;title?:string;status:string}
+export type BscCheckoutView={pricing?:CheckoutPricing;expiresAt?:string;id:string;amount:string;asset:string;merchantName:string;brandImageUrl?:string;title?:string;status:string}
 type Operation={operationId:string;checkoutId:string;state:string;hash?:string;quote:BscPaymentQuote}
 export default function BscCheckoutPage({checkout,returnUrl,securityManaged=false}:{checkout:BscCheckoutView;returnUrl?:string;securityManaged?:boolean}){
  const identity=usePocketIdentity()
  const receipt=useCheckoutReceipt(checkout.id,checkout.status==='paid')
- if(checkout.status==='paid')return <BrowserPaymentResult receipt={receipt} fullScreen state="successful" amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} merchant={checkout.merchantName} returnUrl={returnUrl} detail="Payment received."/>
+ if(checkout.status==='paid')return <BrowserPaymentResult receipt={receipt} fullScreen state="successful" amount={checkoutPriceLabel(checkout.pricing,formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset)} merchant={checkout.merchantName} returnUrl={returnUrl} detail="Payment received."/>
  const content=<Payment key={identity.user?.id||'guest'} checkout={checkout} returnUrl={returnUrl}/>
  return identity.authenticated&&!securityManaged?<PocketPaymentSecurityGate email={identity.email} getAccessToken={identity.getAccessToken}>{content}</PocketPaymentSecurityGate>:content
 }
@@ -98,9 +99,9 @@ function Payment({checkout,returnUrl}:{checkout:BscCheckoutView;returnUrl?:strin
   }finally{lock.current=false;setBusy(false)}
  }
  if(!identity.ready)return <DeveloperLoadingSkeleton/>
- if(op&&['submitting','pending','completed'].includes(op.state))return <BrowserPaymentResult receipt={receipt} state={op.state==='completed'?'successful':'pending'} amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} merchant={checkout.merchantName} returnUrl={verifiedReturn} detail={op.state==='completed'?'Payment received.':'Your payment is being confirmed.'}/>
+ if(op&&['submitting','pending','completed'].includes(op.state))return <BrowserPaymentResult receipt={receipt} state={op.state==='completed'?'successful':'pending'} amount={checkoutPriceLabel(checkout.pricing,formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset)} merchant={checkout.merchantName} returnUrl={verifiedReturn} detail={op.state==='completed'?'Payment received.':'Your payment is being confirmed.'}/>
  const total=quote?BigInt(quote.amountUnits)+BigInt(quote.reimbursementUnits):null
  const required=total??(parseUnits(checkout.amount,18)+BigInt(fundingBuffer))
  const shortfall=balance!==null&&BigInt(balance)<required?formatUnits(required-BigInt(balance),18):null
- return <BrowserCheckoutCard expiresAt={checkout.expiresAt} returnUrl={returnUrl} brandImageUrl={checkout.brandImageUrl} fundingHint={!quote&&shortfall?`Add ${shortfall} ${checkout.asset} to cover the payment and fee reserve. Review the exact total before paying.`:undefined} id={checkout.id} attempt="" merchant={checkout.merchantName} title={checkout.title||''} amount={formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset} asset={checkout.asset} fiat={false} authenticated={identity.authenticated} email={identity.email} network="bsc" networks={[{value:'bsc',label:'BNB Chain'}]} onNetwork={()=>{}} walletReady={!!wallet.address} address={wallet.address||''} balance={balance===null?null:formatPocketAssetAmount(formatUnits(BigInt(balance),18),checkout.asset)} shortfall={shortfall} fee={quote?formatPocketAssetAmount(formatUnits(BigInt(quote.reimbursementUnits),18),checkout.asset):null} total={total===null?null:formatPocketAssetAmount(formatUnits(total,18),checkout.asset)} busy={busy||wallet.busy} blocked={identity.authenticated&&!loaded&&!wallet.error} error={error||wallet.error} prepare={async()=>{wallet.retry();await refresh()}} refresh={refresh} pay={pay} signOut={identity.logout}/>
+ return <BrowserCheckoutCard pricing={checkout.pricing} expiresAt={checkout.expiresAt} returnUrl={returnUrl} brandImageUrl={checkout.brandImageUrl} fundingHint={!quote&&shortfall?`Add ${shortfall} ${checkout.asset} to cover the payment and fee reserve. Review the exact total before paying.`:undefined} id={checkout.id} attempt="" merchant={checkout.merchantName} title={checkout.title||''} amount={checkoutPriceLabel(checkout.pricing,formatPocketAssetAmount(checkout.amount,checkout.asset)+' '+checkout.asset)} asset={checkout.asset} fiat={false} authenticated={identity.authenticated} email={identity.email} network="bsc" networks={[{value:'bsc',label:'BNB Chain'}]} onNetwork={()=>{}} walletReady={!!wallet.address} address={wallet.address||''} balance={balance===null?null:formatPocketAssetAmount(formatUnits(BigInt(balance),18),checkout.asset)} shortfall={shortfall} fee={quote?formatPocketAssetAmount(formatUnits(BigInt(quote.reimbursementUnits),18),checkout.asset):null} total={total===null?null:formatPocketAssetAmount(formatUnits(total,18),checkout.asset)} busy={busy||wallet.busy} blocked={identity.authenticated&&!loaded&&!wallet.error} error={error||wallet.error} prepare={async()=>{wallet.retry();await refresh()}} refresh={refresh} pay={pay} signOut={identity.logout}/>
 }

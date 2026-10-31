@@ -134,6 +134,7 @@ type DeveloperProject = {
 type DeveloperStore = { businessProfiles?: Record<string, BuilderProfile & {ownerId:string}>; projects: Record<string, DeveloperProject>; profiles?: Record<string, { name: string; role: string; updatedAt: string }> }
 
 export type DeveloperCheckoutPolicy = {
+  profileCountry?:string
   accountType?: DeveloperAccountType
   acceptedAssets?: CheckoutAcceptance
   checkoutDefaultNetwork?: 'xlayer' | 'bsc'
@@ -1238,7 +1239,7 @@ function policyForDeveloperProject(
     if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
     return {
       partnerId: project.id,
-      accountType: project.accountType ?? 'business',
+      profileCountry:project.profileCountry,accountType:project.accountType ?? 'business',
       ownerId: project.ownerId,
       ownerEmail: project.ownerEmail,
       merchantName: productDisplayName(project.id, project.name),
@@ -1267,6 +1268,7 @@ function policyForDeveloperProject(
     : paymentOptions[0]?.network ?? 'arc'
   return {
     partnerId: project.id,
+      profileCountry:project.profileCountry,accountType:project.accountType ?? 'business',
     acceptedAssets: project.acceptedAssets,
     checkoutDefaultNetwork: project.checkoutDefaultNetwork,
     bscCheckout: project.bscCheckout,
@@ -1374,7 +1376,7 @@ export function buildDeveloperWebhookRequest(
 }
 
 // Keep the exported name for existing callers; settlementMode binds the local currency.
-export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPolicy, checkoutId: string, requestedUsdc: string, dependencies = {availability:resolvePaycrestOfframpAvailability,createOrder:createPaycrestOfframpOrder}) {
+export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPolicy, checkoutId: string, requestedUsdc: string, dependencies = {availability:resolvePaycrestOfframpAvailability,createOrder:createPaycrestOfframpOrder}, orderPrice?:{currency:string;amount:string}) {
   const settlement = policy.nairaSettlement
   const amount = Number(requestedUsdc)
   if (!isLocalSettlement(policy.settlementMode) || !settlement) throw new Error('Local settlement is not configured for this project.')
@@ -1390,7 +1392,7 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
     throw Object.assign(new Error(`Up to ${availability.availableUsdc} USDC is available now. Enter this amount or less.`), { status: 409, code: 'PAYCREST_AMOUNT_UNAVAILABLE' })
   }
   const rate = availability.rate
-  const amountNgn = (amount * rate).toFixed(2)
+  const amountNgn = orderPrice?.currency===currency?orderPrice.amount:(amount * rate).toFixed(2)
   const order = await dependencies.createOrder({
     intentId: checkoutId,
     merchantId: policy.partnerId,
@@ -1406,6 +1408,7 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
     source: 'hosted-checkout',
     memo: policy.merchantName,
   })
+  if(orderPrice?.currency===currency&&Number(order.amount_ngn)!==Number(orderPrice.amount))throw Error('Provider settlement price did not match the order. Start a new checkout.')
   return {
     provider: 'paycrest' as const,
     orderId: order.paycrest_order_id,

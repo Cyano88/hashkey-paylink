@@ -1,3 +1,5 @@
+import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
+import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
 import {checkoutChildStatusRequest} from './checkout-child-request.js'
 import hostedBscCheckoutsHandler,{isBscCheckoutId,createHostedBscCheckoutsHandler} from './hosted-bsc-checkouts.js'
 import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
@@ -89,6 +91,7 @@ type HostedCheckoutSettlement = {
   accountName: string
 }
 export type CheckoutRecord = {
+  pricing?:CheckoutPricing
   environment?: 'live'
   id: string
   partnerId: string
@@ -137,6 +140,7 @@ export type HostedCheckoutWebhookEvent = {
 type CheckoutStore = { checkouts: Record<string, CheckoutRecord>; idempotency: Record<string, string>; outbox?: HostedCheckoutWebhookEvent[] }
 
 type Dependencies = {
+  quotePricing?:typeof quoteCheckoutPricing
   expiryLimit?: () => number
   hasStore: () => boolean
   read: (key: string) => Promise<CheckoutStore | undefined>
@@ -303,6 +307,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
     record.expiresAt,
     record.requestHash,
   ]
+  if(record.pricing)fields.push(['pricing',checkoutPricingFields(record.pricing)])
   if(record.asset !== undefined) fields.push(['asset',record.asset])
   // Keep the legacy single-network signature byte-for-byte stable. New
   // multi-network records append their immutable routing table.
@@ -560,6 +565,7 @@ export async function markHostedCheckoutPaid(input: {
       network: payment.network ?? record.network,
       amount: payment.amount,
       asset: record.asset || 'USDC',
+      ...(record.pricing?{pricing:record.pricing}:{}),
       ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
       payer: payment.payer,
       ...(payment.referenceType === 'circle_gateway_transfer'
@@ -689,6 +695,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     if (newlyDelivered) updated = enqueueWebhook(updated, record.partnerId, 'payment.confirmed', {
       checkoutId: record.id,
       status: 'paid',
+      pricing:record.pricing,
       settlementCurrency: record.settlement ? developerSettlementCurrency(record.settlement.mode) : undefined,
       settlementAmount: record.settlement?.amountNgn,
       providerStatus: status,
@@ -698,6 +705,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     if (newlyFailed) updated = enqueueWebhook(updated, record.partnerId, 'payment.failed', {
       checkoutId: record.id,
       status: 'failed',
+      pricing:record.pricing,
       settlementCurrency: record.settlement ? developerSettlementCurrency(record.settlement.mode) : undefined,
       settlementStatus: status,
       amount: record.payment?.amount,
@@ -780,6 +788,7 @@ function pruneCheckoutStore(store: CheckoutStore, nowMs: number) {
 }
 
 function checkoutRequestHash(input: {
+  currency?:string
   partnerId: string
   kind: string
   merchantName: string
@@ -817,6 +826,7 @@ function checkoutRequestHash(input: {
   if (input.paymentOptions !== undefined) {
     fields.push(input.paymentOptions.map(option => [option.network, option.recipient]))
   }
+  if(input.currency)fields.push(['currency',input.currency])
   if(input.asset !== undefined) fields.push(['asset',input.asset])
   if (input.brandImageUrl !== undefined) fields.push(input.brandImageUrl)
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex')
@@ -941,7 +951,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         const selectedPolicy={...policy,merchantName:record.merchantName,brandImageUrl:record.brandImageUrl,checkoutDefaultNetwork:undefined,paymentOptions:policy.paymentOptions.filter(o=>o.network===choice.network),defaultNetwork:choice.network as HostedCheckoutNetwork}
         const options={policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
         const handler=choice.network==='bsc'?createHostedBscCheckoutsHandler(options):choice.network==='xlayer'?createHostedStockCheckoutsHandler(options):createHostedCheckoutsHandler({...dependencies,...options})
-        const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}
+        const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,...(record.currency?{currency:record.currency}:{}),title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}
         return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id},body,query:{}})
       })
       if(req.method==='GET'&&req.query?.purpose==='status') {
@@ -993,7 +1003,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           expiresAt: record.expiresAt,
           settlementMode: record.settlement?.mode ?? 'usdc',
-          ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
+          ...(record.pricing?{pricing:record.pricing}:{}),
+      ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
           ...(record.payment ? { payment: record.payment } : {}),
         })
       }
@@ -1018,7 +1029,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
             asset: record.asset || 'USDC',
           availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           settlementMode: record.settlement?.mode ?? 'usdc',
-          ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
+          ...(record.pricing?{pricing:record.pricing}:{}),
+      ...(record.settlement ? {settlementCurrency: developerSettlementCurrency(record.settlement.mode), settlementAmount: record.settlement.amountNgn} : {}),
           status: record.payment?.status ?? 'pending',
           settlementStatus: record.payout?.status,
             expiresAt: record.expiresAt,
@@ -1077,7 +1089,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const brandImageUrl = 'projectManaged' in policy ? policy.brandImageUrl : undefined
     const title = clean(req.body?.title, 100) || (kind === 'service' ? 'Service checkout' : 'Payment request')
     const description = clean(req.body?.description, 240)
-    const amount = req.body?.flexible === true ? '' : normalizePositiveUsdc(req.body?.amount)
+    const ngnPrice=!providerRouting?validateCheckoutCurrency(req.body?.currency===undefined?{}:('projectManaged' in policy?policy:{}),req.body?.currency,req.body?.amount,req.body?.flexible===true):undefined
+    let amount = ngnPrice??(req.body?.flexible === true ? '' : normalizePositiveUsdc(req.body?.amount))
     const flexible = req.body?.flexible === true
     const isNairaProject = !providerRouting && 'projectManaged' in policy && isLocalSettlement(policy.settlementMode)
     const requestedNetwork = clean(req.body?.network, 20).toLowerCase()
@@ -1137,6 +1150,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'A valid Idempotency-Key header is required.' })
 
     const requestHash = checkoutRequestHash({
+      ...(ngnPrice?{currency:'NGN'}:{}),
       partnerId: policy.partnerId,
       kind,
       merchantName,
@@ -1167,6 +1181,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         replayed: true,
         checkoutId: existingRecord.id,
         amount: existingRecord.amount,
+        ...(existingRecord.pricing?{pricing:existingRecord.pricing}:{}),
         settlementMode: existingRecord.settlement?.mode ?? 'usdc',
         checkoutMode: hostedCheckoutMode(existingRecord),
         agenticType: existingRecord.agenticType,
@@ -1178,12 +1193,15 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         expiresAt: existingRecord.expiresAt,
       })
     }
+    if(!providerRouting&&req.body?.currency===undefined)validateCheckoutCurrency('projectManaged' in policy?policy:{},undefined,req.body?.amount,flexible)
+    const pricing=ngnPrice?await (dependencies.quotePricing||quoteCheckoutPricing)(ngnPrice,asset):undefined
+    if(pricing)amount=pricing.paymentAmount
     let createdId = isNairaProject ? dependencies.createId() : ''
     let replayed = false
     let idempotencyConflict = false
     const now = dependencies.now()
     const nairaOrder = isNairaProject
-      ? await dependencies.prepareNaira(policy as DeveloperCheckoutPolicy, createdId, amount)
+      ? await dependencies.prepareNaira(policy as DeveloperCheckoutPolicy, createdId, amount,undefined,pricing)
       : null
     const store = await dependencies.mutate(STORE_KEY, current => {
       const safe = pruneCheckoutStore(current ?? { checkouts: {}, idempotency: {} }, now.getTime())
@@ -1209,6 +1227,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       const unsigned: Omit<CheckoutRecord, 'integrity'> = {
         id: createdId,
         environment: 'live',
+        ...(pricing?{pricing}:{}),
         partnerId: policy.partnerId,
         kind: kind as CheckoutRecord['kind'],
         merchantName,
@@ -1256,6 +1275,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         agenticType: record.agenticType,
         paymentAttemptId: hostedCheckoutPaymentAttempt(record).id,
         amount: record.amount,
+        ...(record.pricing?{pricing:record.pricing}:{}),
         flexible: record.flexible,
         network: record.network,
         paymentPath: hostedCheckoutMode(record),
@@ -1272,6 +1292,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       checkoutId: record.id,
       checkoutMode: hostedCheckoutMode(record),
       amount: record.amount,
+      ...(record.pricing?{pricing:record.pricing}:{}),
       settlementMode: record.settlement?.mode ?? 'usdc',
       agenticType: record.agenticType,
       paymentAttemptId: hostedCheckoutPaymentAttempt(record).id,

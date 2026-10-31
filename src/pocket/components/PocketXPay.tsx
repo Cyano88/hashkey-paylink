@@ -1,3 +1,4 @@
+import {checkoutPriceLabel} from '../../lib/checkoutPricing'
 import {CheckoutFooter,HashPayLinkCheckoutBrand} from '../../components/CheckoutChrome'
 import BrowserCheckoutCard from '../../components/BrowserCheckoutCard'
 import {formatPocketAssetAmount} from '../lib/pocketAmountDisplay'
@@ -140,7 +141,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  const fundingProps={asset:fundingAsset,network:'xlayer' as const,address:wallet.address,locked:busy||wallet.busy||payment?.status==='submitted'||wallet.uncertain,onReturn:async()=>{await wallet.refresh();setError('');setReview(null);setPayment(null)},onCancel:()=>{setError('');setReview(null);setPayment(null);setUsd('')}}
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(converting&&merchant?.swapEnabled)return <PocketCheckoutSwap checkoutId={merchant.id} asset={token} onClose={()=>{setConverting(false);setReview(null);setPayment(null);setError('');void wallet.refresh().catch(()=>undefined)}}/>
- if(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&payment&&['paid','submitted','failed'].includes(payment.status))return <BrowserPaymentResult fullScreen={checkout} state={payment.status==='paid'?'successful':payment.status==='failed'?'failed':'pending'} amount={formatStockQuantity(payment.amount)+' '+payment.symbol} merchant={payment.merchantName} receipt={xpayReceipt(payment)} returnUrl={verifiedReturn||checkoutReturnUrl} detail={payment.status==='submitted'?'Your merchant payment is being verified. Do not pay again.':undefined}/>
+ if(checkout&&/^chkx_[a-f0-9]{24}$/.test(merchantId)&&payment&&['paid','submitted','failed'].includes(payment.status))return <BrowserPaymentResult fullScreen={checkout} state={payment.status==='paid'?'successful':payment.status==='failed'?'failed':'pending'} amount={checkoutPriceLabel(merchant?.pricing,formatStockQuantity(payment.amount)+' '+payment.symbol)} merchant={payment.merchantName} receipt={{...xpayReceipt(payment),...(merchant?.pricing?{pricing:merchant.pricing}:{})}} returnUrl={verifiedReturn||checkoutReturnUrl} detail={payment.status==='submitted'?'Your merchant payment is being verified. Do not pay again.':undefined}/>
  if(checkoutSeconds===0&&!busy&&!wallet.busy)return <CheckoutExpired merchant={merchant?.name} brandImageUrl={checkoutBrandImageUrl} returnUrl={verifiedReturn||checkoutReturnUrl}/>
  if(hosted&&loading&&!merchant)return <main className="mx-auto w-full max-w-md py-6"><HashPayLinkCheckoutBrand/><div aria-label="Opening checkout" role="status" className="h-96 animate-pulse rounded-3xl bg-gray-100"/><CheckoutFooter/></main>
  if(hosted){
@@ -155,7 +156,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
   const gasFee=review&&!review.sponsored&&!review.reimbursement?formatUnits(review.fee,18):null
   const refresh=async()=>{await wallet.refresh();await prepare()}
   const message=(error||wallet.error||'').replace(/You cannot pay your own XPay QR\./i,"You can't pay a checkout belonging to your own account. Change account to continue.").replace(/Your previous XPay payment needs confirmation\. Open XPay to check it\./i,'An earlier payment is still being confirmed. Wait before paying again.').replace(/Open your Pocket wallet first\./i,'Connect your wallet to continue.').replace(/XPay could not complete\./i,'Payment could not complete. Please try again.')
-  return <BrowserCheckoutCard id={merchantId} attempt={params.get('attempt')||''} merchant={merchant?.name||'Merchant'} title="" brandImageUrl={checkoutBrandImageUrl} returnUrl={checkoutReturnUrl} expiresAt={merchant?.expiresAt?new Date(merchant.expiresAt).toISOString():undefined}
+  return <BrowserCheckoutCard pricing={merchant?.pricing} id={merchantId} attempt={params.get('attempt')||''} merchant={merchant?.name||'Merchant'} title="" brandImageUrl={checkoutBrandImageUrl} returnUrl={checkoutReturnUrl} expiresAt={merchant?.expiresAt?new Date(merchant.expiresAt).toISOString():undefined}
    amount={amount?formatPocketAssetAmount(amount,asset)+' '+asset:''} asset={asset} fiat={false} authenticated={identity.authenticated} email={identity.email} signOut={identity.logout}
    network="xlayer" networks={[{value:'xlayer',label:'X Layer'}]} onNetwork={()=>{}} walletReady={!!wallet.address} address={wallet.address||''}
    balance={balance===null?null:formatPocketAssetAmount(balance,asset)} shortfall={shortfall} needsFunding={!!fundingAsset&&fundingAsset!=='OKB'}

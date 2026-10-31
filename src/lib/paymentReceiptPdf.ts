@@ -1,3 +1,4 @@
+import {checkoutPriceLabel,type CheckoutPricing} from './checkoutPricing'
 import {pocketApiUrl} from '../pocket/lib/pocketRoutes'
 import {pocketPaymentMethodPaths} from '../pocket/lib/pocketPaymentMethodPaths'
 import {webPaymentMethodLabel} from '../pocket/lib/pocketWebPaymentMethod'
@@ -6,6 +7,7 @@ import { CHAIN_META, type ChainKey } from './chains'
 import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
+  pricing?:CheckoutPricing
   paymentMethod?: 'wallet' | 'card' | 'bank_transfer'
   giftState?: 'funded' | 'claimed' | 'refunded'
   giftRecipient?: string
@@ -281,8 +283,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
-    variant:'general',badge:'Web payment',amount:`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`,timestamp:fmtTime(receipt.createdAt),reference,
+    variant:'general',badge:'Web payment',amount:checkoutPriceLabel(receipt.pricing,`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`),timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
+      ...(receipt.pricing?[{label:'Order price',value:checkoutPriceLabel(receipt.pricing,'')},{label:'Paid with',value:compactReceiptAmount(receipt.amount,receipt.asset)+' '+receipt.asset},{label:'Exchange rate',value:'1 '+receipt.pricing.paymentAsset+' = '+receipt.pricing.rate+' NGN'}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
       ...(receipt.brandKind!=='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)}]:[]),

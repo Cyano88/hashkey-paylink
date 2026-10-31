@@ -4,9 +4,9 @@ import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {useState} from 'react'
 import {QRCodeSVG} from 'qrcode.react'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
-export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,amount,onBrowser,expiresAt,returnUrl}:{expiresAt?:string;returnUrl?:string;id:string;attempt?:string;merchant:string;brandImageUrl?:string;title?:string;amount:string;onBrowser:()=>void}) {
- const [opened,setOpened]=useState(false)
- const handoff=checkoutHandoff(id,attempt)
+export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,amount,onBrowser,onPocket,autoOpenPocket=false,expiresAt,returnUrl}:{onPocket?:()=>void;autoOpenPocket?:boolean;expiresAt?:string;returnUrl?:string;id:string;attempt?:string;merchant:string;brandImageUrl?:string;title?:string;amount:string;onBrowser:()=>void}) {
+ const [opened,setOpened]=useState(autoOpenPocket)
+ const handoff=onPocket?null:checkoutHandoff(id,attempt)
  const seconds=useCheckoutExpiry(expiresAt)
  if(seconds===0)return <CheckoutExpired returnUrl={returnUrl} merchant={merchant} brandImageUrl={brandImageUrl}/>
  const android=/Android/i.test(navigator.userAgent)
@@ -16,9 +16,9 @@ export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,
   {title&&<p className="mt-2 text-center text-sm text-gray-500">{title}</p>}
   <CheckoutCountdown seconds={seconds}/>
   <div className="mt-8 space-y-3">
-   <a href={android?handoff.android:handoff.url} onClick={event=>{if(checkoutSecondsLeft(expiresAt)===0){event.preventDefault();return}setOpened(true);if(!android){event.preventDefault()}}} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Pay with Pocket</a>
+   <a href={handoff?(android?handoff.android:handoff.url):'#'} onClick={event=>{if(onPocket){event.preventDefault();onPocket();return}if(checkoutSecondsLeft(expiresAt)===0){event.preventDefault();return}setOpened(true);if(!android){event.preventDefault()}}} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Pay with Pocket</a>
    <button onClick={()=>{if(checkoutSecondsLeft(expiresAt)!==0)onBrowser()}} className="min-h-12 w-full rounded-full border border-gray-200 px-4 text-sm font-semibold dark:border-white/15">Pay on web</button>
   </div>
-  {opened&&<div className="mt-6 text-center"><div className="mx-auto w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={handoff.url} size={160}/></div><p role="status" className="mt-3 text-xs leading-5 text-gray-500">Scan with Pocket to review this payment. You can also continue in this browser.</p><p className="mt-2 text-xs text-gray-500">Opening the app does not send money.</p></div>}
+  {opened&&handoff&&<div className="mt-6 text-center"><div className="mx-auto w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={handoff.url} size={160}/></div><p role="status" className="mt-3 text-xs leading-5 text-gray-500">Scan with Pocket to review this payment. You can also continue in this browser.</p><p className="mt-2 text-xs text-gray-500">Opening the app does not send money.</p></div>}
  </section><CheckoutFooter/></div>
 }

@@ -1,11 +1,12 @@
+import {checkoutPriceLabel,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
 import {webPaymentMethodLabel} from '../src/pocket/lib/pocketWebPaymentMethod.js'
 import{receiptBrandImage}from'./receipt-brand-image.js'
 import PDFDocument from 'pdfkit'
 import {createRequire} from 'node:module'
 import {formatPocketDisplayAmount} from '../src/pocket/lib/pocketMoney.js'
-export type BillingReceipt={id:string;projectId?:string;merchant:string;merchantLogoUrl?:string;supportEmail?:string;timeZone?:string;description:string;amount:string;asset:string;network:string;paidAt:string;paymentMethod:'wallet'|'bank_transfer'|'card';settlement?:{amount:string;currency:string};receiptUrl:string}
+export type BillingReceipt={pricing?:CheckoutPricing;id:string;projectId?:string;merchant:string;merchantLogoUrl?:string;supportEmail?:string;timeZone?:string;description:string;amount:string;asset:string;network:string;paidAt:string;paymentMethod:'wallet'|'bank_transfer'|'card';settlement?:{amount:string;currency:string};receiptUrl:string}
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
-export const receiptAmount=(r:BillingReceipt)=>formatPocketDisplayAmount(r.amount)+' '+r.asset
+export const receiptAmount=(r:BillingReceipt)=>checkoutPriceLabel(r.pricing,formatPocketDisplayAmount(r.amount)+' '+r.asset)
 export const receiptPdfUrl=(id:string)=>'https://app.hashpaylink.com/api/receipt?id='+encodeURIComponent(id)+'&format=pdf'
 export function receiptPaidDate(r:BillingReceipt){
  return new Intl.DateTimeFormat('en-GB',{timeZone:r.timeZone||'UTC',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(new Date(r.paidAt))
@@ -19,13 +20,13 @@ export function receiptEmail(r:BillingReceipt){
  const header=logo?`<table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px"><tr><td bgcolor="#faf8f2" style="padding:10px 14px;border-radius:10px;background:#faf8f2"><img src="${escape(r.merchantLogoUrl!)}" alt="${escape(r.merchant)}" width="160" style="display:block;max-width:100%;height:auto;border:0"></td></tr></table>`:`<p style="margin:0 0 18px;font-size:20px;font-weight:700">${escape(r.merchant)}</p>`
  const supportHtml=support?`<p style="margin:22px 12px 0;text-align:center;font-size:13px;line-height:1.7;color:#667085">Questions about your purchase? <a href="mailto:${escape(support)}" style="color:inherit;font-weight:600;text-decoration:underline">Contact ${escape(r.merchant)}</a>.</p>`:''
  const downloadUrl=receiptPdfUrl(r.id)
- const text=`Receipt from ${r.merchant}\n${amount} paid on ${date}\n${order||r.description}\nPayment method: ${method}\nNetwork: ${r.network}${r.settlement?'\nMerchant settlement: '+formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency:''}\nReceipt reference: ${r.id}\nDownload receipt: ${downloadUrl}\nYour PDF receipt is attached.${support?'\n\nQuestions about your purchase? Contact '+r.merchant+': '+support:''}\n\nPowered by Hash PayLink`
+ const text=`Receipt from ${r.merchant}\n${amount} paid on ${date}\n${order||r.description}${r.pricing?'\nPaid with: '+formatPocketDisplayAmount(r.amount)+' '+r.asset+'\nExchange rate: 1 '+r.pricing.paymentAsset+' = '+r.pricing.rate+' NGN':''}\nPayment method: ${method}\nNetwork: ${r.network}${r.settlement?'\nMerchant settlement: '+formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency:''}\nReceipt reference: ${r.id}\nDownload receipt: ${downloadUrl}\nYour PDF receipt is attached.${support?'\n\nQuestions about your purchase? Contact '+r.merchant+': '+support:''}\n\nPowered by Hash PayLink`
  const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:transparent;font-family:Arial,sans-serif;color:#17181c"><main style="max-width:552px;margin:0 auto;background:transparent"><div data-receipt-content style="padding:24px 16px;background:#f4f5f7">
 ${header}<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border-radius:18px"><tr><td style="padding:24px">
 <p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:#667085">Receipt from ${escape(r.merchant)}</p>
 <h1 style="margin:0 0 10px;font-size:32px;line-height:1.2;letter-spacing:-0.5px">${escape(amount)}</h1>
 <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#667085">Paid on ${escape(date)}</p>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;line-height:1.6"><tr><td style="padding:4px 12px 4px 0;color:#667085">Payment method</td><td align="right" style="padding:4px 0">${escape(method)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#667085">Network</td><td align="right" style="padding:4px 0">${escape(r.network)}</td></tr>${r.settlement?`<tr><td style="padding:4px 12px 4px 0;color:#667085">Merchant settlement</td><td align="right">${escape(formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency)}</td></tr>`:''}</table>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;line-height:1.6">${r.pricing?`<tr><td style="padding:4px 12px 4px 0;color:#667085">Paid with</td><td align="right">${escape(formatPocketDisplayAmount(r.amount)+' '+r.asset)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#667085">Exchange rate</td><td align="right">${escape('1 '+r.pricing.paymentAsset+' = '+r.pricing.rate+' NGN')}</td></tr>`:''}<tr><td style="padding:4px 12px 4px 0;color:#667085">Payment method</td><td align="right" style="padding:4px 0">${escape(method)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#667085">Network</td><td align="right" style="padding:4px 0">${escape(r.network)}</td></tr>${r.settlement?`<tr><td style="padding:4px 12px 4px 0;color:#667085">Merchant settlement</td><td align="right">${escape(formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency)}</td></tr>`:''}</table>
 </td></tr></table>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background:#ffffff;border-radius:18px"><tr><td style="padding:24px">
 <p style="margin:0 0 20px;font-size:16px;font-weight:700;line-height:1.5">${escape(order||'Payment details')}</p>
@@ -50,14 +51,18 @@ export async function billingReceiptPdf(r:BillingReceipt):Promise<Buffer>{
   doc.roundedRect(438,54,108,26,13).fill('#f3f4f6');doc.fillColor('#374151').fontSize(8).text('WEB PAYMENT',448,62,{width:88,align:'center'})
   doc.roundedRect(235,125,142,40,20).fill('#f3f4f6');doc.fillColor('#16803d').fontSize(15).text('Successful',235,136,{width:142,align:'center'})
   doc.fillColor('#667085').fontSize(11).text(receiptPaidDate(r),52,179,{width:508,align:'center'})
-  doc.fillColor('#17181c').fontSize(34).text(receiptAmount(r),52,215,{width:508})
+  doc.fillColor('#17181c').fontSize(34).text(r.pricing?'NGN '+formatPocketDisplayAmount(r.pricing.amount):receiptAmount(r),52,215,{width:508})
   doc.moveTo(52,278).lineTo(560,278).strokeColor('#e5e7eb').stroke()
+  const footer=()=>doc.fillColor('#667085').fontSize(10).text('Powered by Hash PayLink',52,728,{width:508,align:'center'})
   let y=308
-  for(const[label,value]of[['Merchant',r.merchant],['Type',webPaymentMethodLabel(r.paymentMethod)],['Network',r.network],['Description',r.description],...(r.settlement?[['Merchant settlement',formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency]]:[])]){
-   doc.fillColor('#667085').fontSize(10).text(label.toUpperCase(),52,y,{width:150});doc.fillColor('#17181c').fontSize(11).text(value,230,y,{width:330,align:'right'});y+=Math.max(42,doc.heightOfString(value,{width:330})+18)
+  for(const[label,value]of[...(r.pricing?[['Paid with',formatPocketDisplayAmount(r.amount)+' '+r.asset],['Exchange rate','1 '+r.pricing.paymentAsset+' = '+r.pricing.rate+' NGN']]:[]),['Merchant',r.merchant],['Type',webPaymentMethodLabel(r.paymentMethod)],['Network',r.network],['Description',r.description],...(r.settlement?[['Merchant settlement',formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency]]:[])]){
+   const rowHeight=Math.max(42,doc.fontSize(11).heightOfString(value,{width:330})+18)
+   if(y+rowHeight>680){footer();doc.addPage();y=60}
+   doc.fillColor('#667085').fontSize(10).text(label.toUpperCase(),52,y,{width:150});doc.fillColor('#17181c').fontSize(11).text(value,230,y,{width:330,align:'right'});y+=rowHeight
   }
+  if(y+40+doc.fontSize(9).heightOfString(r.id,{width:340})>700){footer();doc.addPage();y=60}
   doc.moveTo(52,y).lineTo(560,y).strokeColor('#e5e7eb').stroke();y+=20
   doc.fillColor('#667085').fontSize(10).text('RECEIPT REFERENCE',52,y,{width:160});doc.fillColor('#374151').fontSize(9).text(r.id,220,y,{width:340,align:'right'})
-  doc.fillColor('#667085').fontSize(10).text('Powered by Hash PayLink',52,728,{width:508,align:'center'});doc.end()
+  footer();doc.end()
  })
 }

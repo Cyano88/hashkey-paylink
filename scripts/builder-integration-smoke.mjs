@@ -32,3 +32,9 @@ await assert.rejects(readOrderPayment(order,key,async()=>new Response('<html>Ser
 await assert.rejects(readOrderPayment(order,key,async()=>new Response('null')))
 await assert.rejects(createCheckout(order,key,async()=>new Response(JSON.stringify({ok:true,checkoutId:id,checkoutUrl:'https://user@app.hashpaylink.com/pay/c/'+id}))),/Unexpected checkout/)
 console.log('PASS missed-webhook recovery: stable evidence, atomic adapter contract, no writes for pending/mismatched status, readable transient errors and credential-free checkout URLs.')
+
+const ngnOrder={...order,currency:'NGN',amount:'2000.00'},ngnPaid={...paid,pricing:{currency:'NGN',amount:'2000',paymentAsset:'USDT',paymentAmount:'1.333334'},payment:{amount:'1.333334'}}
+await createCheckout(ngnOrder,key,create);assert.equal(JSON.parse(calls.at(-1).options.body).currency,'NGN')
+assert.equal((await readOrderPayment(ngnOrder,key,fetchStatus(ngnPaid))).paid,true)
+for(const patch of [{pricing:{...ngnPaid.pricing,amount:'1999'}},{pricing:undefined},{payment:{amount:'1.333333'}},{asset:'USDC'}])await assert.rejects(readOrderPayment(ngnOrder,key,fetchStatus({...ngnPaid,...patch})))
+console.log('PASS builder NGN order and stablecoin debit are independently matched.')

@@ -26,7 +26,7 @@ export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined
  const status=failed?'failed':p.status==='paid'&&delivered?'confirmed':'pending'
  const destination=('paymentOptions' in record?record.paymentOptions?.find(option=>option.network===network)?.recipient:undefined)||record.recipient
  const receiptId='receiptId' in p?p.receiptId:record.id
- return {type:'money_out',receiptId,receiptHash:p.txHash,eventId:record.id,txHash:p.txHash,title:'Web payment',status,chain:network,
+ return {...(record.pricing?{pricing:record.pricing}:{}),type:'money_out',receiptId,receiptHash:p.txHash,eventId:record.id,txHash:p.txHash,title:'Web payment',status,chain:network,
   payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset||'USDC',createdAt:Date.parse(p.confirmedAt),paymentMethod:'wallet',
   source:'hosted_checkout',settlementType:'hosted_checkout',merchantId:record.id,recipient:record.merchantName,destination,
   referenceId:receiptId,brandName:record.merchantName,brandImageUrl:record.brandImageUrl,brandKind:'partner',
@@ -50,7 +50,7 @@ export function checkoutBillingReceipt(receipt:PaylinkReceipt,projectId?:string,
  const network=checkoutNetworkNames[receipt.chain]
  if(!network)throw Error('Receipt network is unavailable.')
  return {id:receipt.receiptId,projectId,merchant:receipt.recipient||receipt.brandName||'Merchant',merchantLogoUrl:receipt.brandImageUrl,
-  description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
+  pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
   supportEmail:settings?.supportEmail,timeZone:settings?.timeZone||'UTC',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(receipt.receiptId),
   ...(receipt.amountNgn&&receipt.fiatCurrency?{settlement:{amount:receipt.amountNgn,currency:receipt.fiatCurrency}}:{})}
 }

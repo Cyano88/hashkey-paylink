@@ -693,3 +693,18 @@ const completedAfterExpiry=await request(handler,'GET',{query:{id:created.body.c
 assert.equal(completedAfterExpiry.statusCode,200)
 assert.equal(completedAfterExpiry.body.checkout.status,'paid')
 console.log('PASS confirmed checkout remains a receipt after its payment deadline.')
+
+let fxCalls=0
+const ngnPolicy={...acceptanceDependencies.policy(),profileCountry:'NG',accountType:'business'}
+const ngnHandler=createHostedCheckoutsHandler({...dependencies,policy:()=>ngnPolicy,quotePricing:async(amount,asset)=>{fxCalls++;return{currency:'NGN',amount,paymentAmount:'1.333334',paymentAsset:asset,rate:'1500',source:'paycrest',referenceNetwork:'base',quotedAt:now.toISOString()}}})
+const ngnBody={...acceptanceBody,amount:'2000',currency:'NGN'}
+const ngnHeaders={...headers,'idempotency-key':'ngn-fixed-checkout-0001'}
+const ngnMade=await request(ngnHandler,'POST',{body:ngnBody,headers:ngnHeaders})
+assert.equal(ngnMade.statusCode,201,JSON.stringify(ngnMade.body));assert.equal(ngnMade.body.amount,'1.333334');assert.equal(ngnMade.body.pricing.amount,'2000')
+assert.equal((await request(ngnHandler,'POST',{body:ngnBody,headers:ngnHeaders})).body.checkoutId,ngnMade.body.checkoutId);assert.equal(fxCalls,1)
+assert.equal((await request(ngnHandler,'POST',{body:{...ngnBody,currency:undefined},headers:{...headers,'idempotency-key':'ngn-currency-required'}})).statusCode,400)
+store.checkouts[ngnMade.body.checkoutId].pricing=Object.fromEntries(Object.entries(store.checkouts[ngnMade.body.checkoutId].pricing).reverse())
+const ngnLookup=await request(ngnHandler,'GET',{query:{id:ngnMade.body.checkoutId}});assert.equal(ngnLookup.body.checkout.pricing.amount,'2000')
+store.checkouts[ngnMade.body.checkoutId].pricing.amount='1'
+assert.equal((await request(ngnHandler,'GET',{query:{id:ngnMade.body.checkoutId}})).statusCode,409,'Price snapshot is integrity protected')
+console.log('PASS NGN Circle checkout: conversion, immutable retry, required currency, API metadata and price tamper rejection.')

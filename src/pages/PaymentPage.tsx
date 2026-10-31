@@ -1,3 +1,4 @@
+import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
 import useCheckoutReceipt from '../lib/useCheckoutReceipt'
 import {CheckoutExpired} from '../components/CheckoutExpiry'
@@ -590,6 +591,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedPayoutFailed, setHostedPayoutFailed] = useState(false)
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
   const [expiredBrand,setExpiredBrand]=useState<{name?:string;logo?:string}>({})
+  const [hostedPricing,setHostedPricing]=useState<CheckoutPricing>()
   const [hostedExpiresAt,setHostedExpiresAt]=useState<string|undefined>()
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
@@ -677,6 +679,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   useEffect(() => {
     if (!isHostedCheckout) return
     let cancelled = false
+    setHostedPricing(undefined)
     setHostedIntentStatus('checking')
     setHostedIntentError('')
     void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&purpose=return`, { cache: 'no-store', signal: AbortSignal.timeout(15000) })
@@ -687,7 +690,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           returnUrl?: string
           merchantName?:string
           brandImageUrl?:string
-          checkout?: { expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
+          checkout?: { pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
           error?: string
         } | undefined
         if(!cancelled&&response.status===410){if(body?.returnUrl)setHostedReturnUrl(body.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
@@ -707,7 +710,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         }
         if (!cancelled) {
           setHostedReturnUrl(body.returnUrl || '')
-          setHostedExpiresAt(body.checkout?.expiresAt)
+          setHostedExpiresAt(body.checkout?.expiresAt);setHostedPricing(body.checkout?.pricing)
           setHostedIntentStatus('verified')
           const attempt = body.checkout?.paymentAttempt
           if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc' || attempt?.network === 'ethereum' || attempt?.network === 'polygon' || attempt?.network === 'solana') {
@@ -3463,6 +3466,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
   const pocketFunding={asset:checkoutAsset === 'USDT' ? 'USDT' : (((circleWalletNeedsFunds||circleSolanaNeedsFunds)&&!pocketMovePayExpected)||pocketRouteInsufficient?'USDC':fundingShortfall(circlePasskeyError||circleSolanaError||'')),network:chain,onReturn:async()=>{if(chain==='solana')await refreshCircleSolanaBalance();else await refetchCircleWalletBalance();setCircleFeeQuote(null);setSolanaFeeQuote(null);setFeeQuoteRefresh(n=>n+1);setPocketCheckoutRoute(null);setPocketFundingRevision(n=>n+1);setCirclePasskeyError(null);setCircleSolanaError(null)},onCancel:()=>{setFlexAmt('');pocketScan?.onBack()},locked:circlePasskeyPending||circleSolanaPending||circleEvmPaymentProcessing||circleEvmAcceptedPending||pocketMovePayBusy||pocketMovePayWaiting}
   const pocketPosReviewRows: [string, string][] = [
+    ...(hostedPricing?[['Order price',checkoutPriceLabel(hostedPricing,'')]] as [string,string][]:[]),
     ['Merchant', hostedMerchantName || memo || 'Merchant'], ['Network', meta.label],
     ...(isNgPosPaycrestOfframp ? [['Merchant receives', (paycrestOrder?.fiat_currency || 'NGN')+' '+(paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt)] as [string,string]] : []),
     ...(displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits),6)+' '+checkoutAsset], ['Gas', formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' '+checkoutAsset], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : []),
@@ -4023,7 +4027,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
       type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
-    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
+    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={checkoutPriceLabel(hostedPricing,String(payableAmt)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
   }
 
   if (pocketScan?.native) {
@@ -4057,9 +4061,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const failed = isEvmReverted || isBasePaymasterFailed || hostedPayoutFailed
     const state = checkoutCompletion({transferConfirmed:isConfirmed,checkoutVerified:!isHostedCheckout||hostedConfirmationStatus==='verified',payoutSettled:!isNgPosPaycrestOfframp||(isHostedLocalSettlement?hostedConfirmationStatus==='verified':paycrestOrder?.status==='settled'),fundingComplete:!isPolymarketBridge||polymarketBridgeComplete,reverted:failed})
     const confirmedReceipt=canonicalCheckoutReceipt||paymentReceipt
-    const receipt = confirmedReceipt ? { ...confirmedReceipt, status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
+    const receipt = confirmedReceipt ? { ...confirmedReceipt, ...(hostedPricing?{pricing:hostedPricing}:{}), status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
     return <><HashPayLinkCheckoutBrand/><BrowserPaymentResult fullScreen={fullScreenHumanCheckout}
-      state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={String(payableAmt)+' '+meta.asset} receipt={receipt}
+      state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={checkoutPriceLabel(hostedPricing,String(payableAmt)+' '+meta.asset)} receipt={receipt}
       statusLabel={state==='successful' && (isPolymarketFunding||isAgentOrWalletFunding) ? 'Funded' : undefined}
       detail={state === 'successful' ? undefined : hostedPayoutFailed ? 'Local delivery failed. Check the refund status or contact support. Do not pay again.' : failed ? 'The transaction failed. Check its status before starting another payment.' : isPolymarketBridge ? 'Waiting for funds to reach your Polymarket account. Do not pay again.' : isHostedLocalSettlement && hostedConfirmationStatus === 'processing' || isNgPosPaycrestOfframp && isConfirmed ? (posFiatCurrency === 'UGX' ? 'USDC confirmed. Mobile money delivery is processing.' : 'USDC confirmed. Bank delivery is processing.') : 'Waiting for payment verification. Do not pay again.'}
       returnUrl={isPolymarketBridge ? resolvedPolymarketReturnUrl : isAgentOrWalletFunding ? agentFundingBackUrl : hostedReturnUrl || undefined}
@@ -4113,10 +4117,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
-      amount={isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={isHostedLocalSettlement}
+      amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={false}
       authenticated={privyAuthenticated} email={privyEmail} signOut={logout} network={chain} networks={availableChains.map(value=>({value,label:value==='arc'?'Arc':CHAIN_META[value].label}))}
       onNetwork={value=>{if(availableChains.includes(value as typeof chain))setChain(value as typeof chain)}}
       walletReady={walletReady} address={walletReady?(solanaCheckout?circleSolanaSession!.wallet.address:circleEvmEmailSession!.wallet.address):''} balance={balance===null?null:formatUnits(balance,6)} shortfall={shortfall}

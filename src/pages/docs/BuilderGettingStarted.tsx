@@ -41,6 +41,7 @@ export default function BuilderGettingStarted(){const{hash}=useLocation();useEff
  <Section title="2. Save an order, then create its checkout" id="create">
   <p>Your backend is your server. It must load the product and calculate the price itself. Do not accept a price or receiving wallet supplied by the customer’s browser.</p>
   <p>Save an order before calling Hash PayLink: your order ID, customer, description, exact amount as a string, permitted assets/networks, return URL and a payment-attempt key. An <strong>idempotency key</strong> means “this is the same request again”: keep it unchanged when retrying an uncertain request.</p>
+  <p>For a Nigerian business profile, your catalog and saved order must use NGN. Add <Code>"currency": "NGN"</Code> and set <Code>amount</Code> to the naira price, for example <Code>"2000.00"</Code>. Checkout converts that order price into the selected stablecoin. Your receiving currency remains the one configured in your project.</p>
   <CodeBlock lang="bash">{`curl https://app.hashpaylink.com/api/v2/checkouts \\
   -H "X-API-Key: $HASHPAYLINK_API_KEY" \\
   -H "Idempotency-Key: order:YOUR_SAVED_ORDER_ID:1" \\
@@ -55,7 +56,7 @@ export default function BuilderGettingStarted(){const{hash}=useLocation();useEff
     "expiresInMinutes": 15
   }'`}</CodeBlock>
   <p>Run this on your server or terminal with your real saved order and approved HTTPS return URL. The key must be 16–128 letters, digits, colons, underscores or hyphens. Expiry defaults to 15 minutes; the API accepts 5–1440 minutes.</p>
-  <p><Code>paymentSelection: "stablecoins"</Code> lets the customer select from your saved routes. The amount is an exact token quantity: <Code>1.50</Code> means 1.50 of the selected stablecoin, not an FX conversion or a swap. Leave <Code>asset</Code> out of this request. Your saved accepted assets control which tokens checkout offers.</p>
+  <p><Code>paymentSelection: "stablecoins"</Code> lets the customer select from your saved routes. Without <Code>currency</Code>, for profiles that allow stablecoin pricing, the amount is an exact token quantity: <Code>1.50</Code> means 1.50 of the selected stablecoin, not an FX conversion or a swap. Leave <Code>asset</Code> out of this request. Your saved accepted assets control which tokens checkout offers.</p>
   <CodeBlock lang="json">{`{
   "ok": true,
   "checkoutId": "chks_...",
@@ -117,7 +118,7 @@ app.use(express.json());`}</CodeBlock>
  <Section title="5. Confirm the order on your server" id="confirm">
   <CodeBlock lang="bash">{`curl "https://app.hashpaylink.com/api/v2/checkouts?purpose=status&id=YOUR_SAVED_CHECKOUT_ID" \\
   -H "X-API-Key: $HASHPAYLINK_API_KEY"`}</CodeBlock>
-  <p>Query the saved parent ID. After the customer selects a route, the response also identifies <Code>selectedCheckoutId</Code>. Require <Code>status: "paid"</Code>, the correct checkout ID, exact amount and an accepted asset/network before delivery. Keep the order pending while a payment is processing.</p>
+  <p>Query the saved parent ID. After the customer selects a route, the response also identifies <Code>selectedCheckoutId</Code>. Require <Code>status: "paid"</Code>, the correct checkout ID, exact order price and an accepted asset/network before delivery. For NGN orders, match <Code>pricing.currency</Code> and <Code>pricing.amount</Code>; record the actual stablecoin amount separately. Keep the order pending while a payment is processing.</p>
   <Table headers={['Status','What your app should do']} rows={[
    ['pending','Show awaiting payment. Keep the existing checkout available until it expires.'],
    ['processing','Show payment being checked. Do not ask the customer to pay again.'],
@@ -154,7 +155,7 @@ for (const order of await orders.listDuePaymentChecks({limit: 100})) {
  <Section title="Server helpers you can copy" id="sample">
   <p>The following Node.js module implements checkout creation, signature verification and authoritative status matching. It uses built-in fetch and crypto. Save it as <Code>hashpaylink.mjs</Code> on your server and import the functions used above.</p>
   <details className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><summary className="cursor-pointer font-semibold">Show complete server helper module</summary><div className="mt-4"><CodeBlock lang="javascript">{serverHelpers}</CodeBlock></div></details>
-  <p>Your order record must provide <Code>id</Code>, <Code>attemptKey</Code>, <Code>description</Code>, <Code>amount</Code>, <Code>returnUrl</Code>, <Code>acceptedAssets</Code>, <Code>acceptedNetworks</Code>, and the saved <Code>checkoutId</Code>. Keep those values stable for one attempt. The accepted assets and networks must cover the project routes offered for that order; these arrays validate the result, they do not restrict checkout choices. Selection checkout uses your saved project settings.</p>
+  <p>Your order record must provide <Code>id</Code>, <Code>attemptKey</Code>, <Code>description</Code>, <Code>amount</Code>, <Code>returnUrl</Code>, <Code>acceptedAssets</Code>, <Code>acceptedNetworks</Code>, and the saved <Code>checkoutId</Code>. For Nigerian businesses also save <Code>currency: "NGN"</Code>. Keep those values stable for one attempt. The accepted assets and networks must cover the project routes offered for that order; these arrays validate the result, they do not restrict checkout choices. Selection checkout uses your saved project settings.</p>
   <Table headers={['Your database operation','Required behavior']} rows={[
    ['Load an owned order','Check the signed-in customer owns it; calculate the amount from your catalog.'],
    ['Save checkout result','Persist checkoutId and absolute checkoutUrl before replying to the browser. Retry creation with the SAME attemptKey if the response is lost.'],
@@ -165,7 +166,7 @@ for (const order of await orders.listDuePaymentChecks({limit: 100})) {
   ]}/>
  </Section>
  <Section title="7. Test before you launch" id="test">
-  <InfoBox>The dashboard Sandbox simulates checkout states and generates signed webhook fixtures. Test keys only work at /api/developer-projects?resource=sandbox, with the example shown in the dashboard. It does not create a hosted payment page, move funds, deliver webhooks or receipts, or test local fiat and provider compliance. The code above is for production. A real end-to-end test needs configured, enabled routes and the payer’s own approval.</InfoBox>
+  <InfoBox>The dashboard Sandbox simulates checkout states and generates signed webhook fixtures. Test keys only work at /api/developer-projects?resource=sandbox, with the example shown in the dashboard. It does not create a hosted payment page, move funds, deliver webhooks or receipts, or test live NGN conversion, local fiat and provider compliance. The code above is for production. A real end-to-end test needs configured, enabled routes and the payer’s own approval.</InfoBox>
   <ul className="list-disc space-y-2 pl-5"><li>Retry checkout creation with the same key; confirm it returns the same checkout. Changing its amount with that key must fail.</li><li>Reject invalid or stale webhook signatures; accept a valid duplicate without delivering twice.</li><li>Simulate an API timeout and a webhook retry. Preserve the order and avoid a second payment.</li><li>Confirm the amount, asset, network, order and receipt agree after a small approved payment. Use a separate payer account.</li><li>Verify webhook delivery, your actual fulfillment action, receipt/email coverage and the customer’s return to your app.</li><li>Close and reopen the order, refresh the receipt, and download its PDF. A paid order must stay paid.</li><li>Test expiry, insufficient balance, declined approval and service outages. Provide a clear recovery message.</li></ul>
  </Section>
  <Section title="When something goes wrong" id="errors">

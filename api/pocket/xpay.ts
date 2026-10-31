@@ -33,7 +33,7 @@ async function checkoutMerchant(id:string,readOnly=false):Promise<Merchant|undef
  const r=await readStockCheckout(id,readOnly)
  if(!r||(!readOnly&&r.payment))fail('This checkout is unavailable or already paid.',409)
  if(!readOnly)await assertStockCheckoutPayable(r)
- return {id:r.id,owner:r.ownerId,pocketId:'',name:r.merchantName,wallet:r.recipient,tokens:[r.token.address.toLowerCase()],fixedAmount:r.amount,expiresAt:Date.parse(r.expiresAt),swapEnabled:false,updatedAt:Date.parse(r.createdAt)}
+ return {id:r.id,owner:r.ownerId,pocketId:'',name:r.merchantName,wallet:r.recipient,tokens:[r.token.address.toLowerCase()],pricing:r.pricing,fixedAmount:r.amount,expiresAt:Date.parse(r.expiresAt),swapEnabled:false,updatedAt:Date.parse(r.createdAt)}
 }
 async function syncStockPayment(p:Payment){
  if(!isStockCheckoutId(p.merchantId)||p.status!=='paid'||p.checkoutSynced)return p
@@ -87,7 +87,7 @@ export default async function handler(req:Request,res:Response){
   if(req.method==='GET'){
    const id=String(req.query?.id||'');if(!/^[0-9a-f-]{36}$/.test(id)&&!isStockCheckoutId(id))fail('Invalid XPay link.',400)
    const merchant=(await read()).merchants[id]||await checkoutMerchant(id,true);if(!merchant||merchant.deletedAt)fail('This XPay link is unavailable.',404)
-   return res.json({ok:true,terminalId:await legacyXPayTerminal(id,merchant.createKey),merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens,...(isStockCheckoutId(id)?{fixedAmount:merchant.fixedAmount,expiresAt:merchant.expiresAt}:{})}})
+   return res.json({ok:true,terminalId:await legacyXPayTerminal(id,merchant.createKey),merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens,...(isStockCheckoutId(id)?{pricing:merchant.pricing,fixedAmount:merchant.fixedAmount,expiresAt:merchant.expiresAt}:{})}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId,b=req.body||{},action=b.action
