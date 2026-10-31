@@ -996,9 +996,9 @@ export function TelegramHelperPanel({
     const recentThread = messages
       .slice(-8)
       .map(message => [
-        `User: ${message.question.replace(/\s+/g, ' ').slice(0, 220)}`,
-        `Agent Hash: ${message.answer.replace(/\s+/g, ' ').slice(0, 320)}`,
-      ].join('\n'))
+        message.question ? `User: ${message.question.replace(/\s+/g, ' ').slice(0, 220)}` : '',
+        message.answer ? `Agent Hash: ${message.answer.replace(/\s+/g, ' ').slice(0, 320)}` : '',
+      ].filter(Boolean).join('\n'))
       .join('\n')
     return [
       activeMode ? `Agent Hash mode is ${activeMode.label}. Route the answer for this mode.` : '',

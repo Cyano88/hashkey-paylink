@@ -2,6 +2,7 @@ import type { PocketBridgeNetwork } from '../api/pocketBridgeClient'
 
 export type PocketBridgeProgress = 'submitted' | 'arriving' | 'completed' | 'failed' | 'needs_attention'
 export type PocketPendingBridge = {
+  purpose?: 'cash'
   id: string
   source: PocketBridgeNetwork
   destination: PocketBridgeNetwork
