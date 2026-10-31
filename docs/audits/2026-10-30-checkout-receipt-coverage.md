@@ -25,3 +25,9 @@ Playwright checks receipt presentation at 320/390/1280 in light/dark themes, cor
 These are fixture and browser checks, not a new funded transaction on every network. A new paid checkout and actual email delivery on a non-X-Layer network remain to be verified. The Pixel native checkout repository has not been rebuilt or shipped by this change. Existing non-hosted Pocket transaction receipts are preserved.
 
 No merchant settings were saved, funds moved or real customer emails sent during verification. Existing unsaved developer settings tabs were preserved. Unrelated billing work and generated dist files are excluded from the release.
+
+## Release verification
+
+Source commit `46e41879937a85b1e499e177c13c0f01c0314288` deployed as Render `dep-dbihjv6gekts73fc9a90`, live at 2026-10-30T22:33:16.971672Z. Full production build succeeded. Full TypeScript comparison: the same 43 existing errors, zero new diagnostics.
+
+Live checks completed 2026-10-31: the existing Lunchroom receipt retained 1.50 USDT, Wallet payment, X Layer, merchant logo and original reference. Its server PDF downloaded successfully and was rendered/visually checked as one clean page. The contact endpoint rejected an unauthenticated POST with 401. Playwright confirmed the released Receipts & support panel describes all supported Checkout networks and local delivery gates. No settings save or real email/payment was triggered.
