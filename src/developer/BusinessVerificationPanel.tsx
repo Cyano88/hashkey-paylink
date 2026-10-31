@@ -1,8 +1,9 @@
+import {BUILDER_COUNTRIES} from '../lib/builderCountries'
 import {useEffect,useRef,useState} from 'react'
 import {Upload,FileCheck2,Check} from 'lucide-react'
 import {usePrivy} from '@privy-io/react-auth'
 import {isRequiredBusinessDocument,businessDocumentSlots,emptyBusinessApplication,emptyBusinessOwner,verificationLabels,type BusinessApplication,type BusinessOwner,type BusinessVerification,type VerificationDocument} from './verificationTypes'
-const countries='NG UG KE GH ZA US GB CA AE AU DE FR NL IE IN SG RW TZ ZM CM SN CI EG MA ET BJ TG AO BW BR CH CN CY ES IT JP LU MT MU MX NZ PK PT SA SE TR'.split(' ').map(value=>({value,label:new Intl.DisplayNames(['en'],{type:'region'}).of(value)??value})).sort((a,b)=>a.label.localeCompare(b.label))
+const countries=BUILDER_COUNTRIES.map(({code,name})=>({value:code,label:name}))
 const input='verification-input'
 export default function BusinessVerificationPanel({profileCountry,projectId,onDirty,onChanged,onBusy}:{profileCountry?:string;projectId:string;onDirty:(dirty:boolean)=>void;onChanged:()=>void;onBusy:(busy:boolean)=>void}){
  const {getAccessToken,user}=usePrivy()

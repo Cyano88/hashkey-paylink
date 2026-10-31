@@ -10,7 +10,7 @@ async function call(body,query={}){const r=recorder();await handler({method:body
 let response=await call();assert.deepEqual(response.body.builderProfiles,[{id:'personal',name:'Personal',type:'individual'}])
 const app=(name,extra={})=>call({action:'create',name,checkoutMode:'human',capabilities:['hosted_checkout'],...extra})
 assert.equal((await app('Country required',{accountType:'individual',builderProfileId:'personal'})).statusCode,409)
-assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'KE'})).statusCode,400)
+assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'ZZ'})).statusCode,400)
 assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'NG',fullName:'Example Builder'})).statusCode,200)
 const personal=(await app('Personal app',{accountType:'individual',builderProfileId:'personal'})).body.project
 assert.equal(personal.builderProfileId,'personal')
@@ -91,4 +91,8 @@ assert.equal((await call({action:'set-builder-country',profileId:'personal',coun
 owner='owner-a'
 assert.equal((await call()).body.builderProfiles.find(p=>p.id==='personal').country,'NG')
 assert.equal((await call()).body.projects.find(p=>p.id===personal.id).businessVerification.status,'not_started')
-console.log('Country: profile-bound persistence, separate-country businesses, owner isolation, no approval side effects and Kenya unavailable passed.')
+console.log('Country: profile-bound persistence, separate-country businesses, owner isolation, no approval side effects and worldwide profile selection passed.')
+
+for(const country of ['KE','GB','CA','BR','JP','NZ']){const r=await call({action:'create-builder-profile',name:country+' Company',country});assert.equal(r.statusCode,201);assert.equal(r.body.builderProfile.country,country)}
+assert.equal((await call({action:'create-builder-profile',name:'Invalid Country',country:'ZZ'})).statusCode,400)
+console.log('Worldwide profile countries accepted without changing payment access; invalid codes rejected.')

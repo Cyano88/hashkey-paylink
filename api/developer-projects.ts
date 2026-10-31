@@ -705,7 +705,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if(req.method==='POST'&&action==='set-builder-country') {
         const profile=await ownedProfile(identity.userId,req.body?.profileId)
         const country=req.body?.country
-        if(!validBuilderCountry(country))return res.status(400).json({ok:false,error:'Choose Nigeria, Uganda or United States. Kenya is coming soon.'})
+        if(!validBuilderCountry(country))return res.status(400).json({ok:false,error:'Choose a valid country.'})
         if(profile.country&&profile.country!==country)return res.status(409).json({ok:false,error:'Contact support to change this profile country. Use a separate profile for a different legal business.'})
         const projects=await dependencies.read(STORE_KEY)
         for(const project of Object.values(projects?.projects??{}).filter(p=>p.ownerId===identity.userId&&projectBuilderProfileId(p)===profile.id&&!p.removal)){
@@ -732,7 +732,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if(existing.type!=='business'||!existing.needsSetup)return res.status(409).json({ok:false,error:'This profile does not need setup.'})
         const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
         if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
-        if(req.body?.country!==undefined&&!validBuilderCountry(req.body.country))return res.status(400).json({ok:false,error:'Choose a supported country.'})
+        if(req.body?.country!==undefined&&!validBuilderCountry(req.body.country))return res.status(400).json({ok:false,error:'Choose a valid country.'})
         if(existing.country&&req.body?.country&&existing.country!==req.body.country)return res.status(409).json({ok:false,error:'Contact support to change this profile country.'})
         const submitted=Object.values((await dependencies.read(STORE_KEY))?.projects??{}).filter(p=>p.ownerId===identity.userId&&projectBuilderProfileId(p)===existing.id&&!p.removal)
         for(const project of submitted){const record=project.businessVerification;if(req.body?.country&&record?.cipher&&['submitted','approved'].includes(record.status)&&JSON.parse(openVerification(record.cipher,secret)).country!==req.body.country)return res.status(409).json({ok:false,error:'Use the registration country on your submitted business verification.'})}
@@ -748,7 +748,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if(req.method==='POST'&&action==='create-builder-profile') {
         const name=typeof req.body?.name==='string'?req.body.name.trim().replace(/\s+/g,' '):''
         if(name.length<2||name.length>100)return res.status(400).json({ok:false,error:'Enter a business profile name between 2 and 100 characters.'})
-        if(req.body?.country!==undefined&&!validBuilderCountry(req.body.country))return res.status(400).json({ok:false,error:'Choose a supported country.'})
+        if(req.body?.country!==undefined&&!validBuilderCountry(req.body.country))return res.status(400).json({ok:false,error:'Choose a valid country.'})
         const profile:BuilderProfile={id:'business_'+randomUUID().replace(/-/g,''),name,type:'business',country:req.body?.country,createdAt:dependencies.now().toISOString()}
         await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>{
           if(Object.values(current?.businessProfiles??{}).filter(p=>p.ownerId===identity.userId).length>=20)throw Object.assign(Error('Contact support before adding more business profiles.'),{status:409})

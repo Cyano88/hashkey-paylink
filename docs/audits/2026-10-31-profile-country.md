@@ -4,7 +4,7 @@ Developer/admin web scope only. No Pocket app source, build, install or live ide
 
 ## Behaviour
 
-- Personal profiles store residence country; each business profile stores registration country. Supported profile choices: Nigeria, Uganda, United States; Kenya is visibly coming soon and rejected by the write API.
+- Personal profiles store residence country; each business profile stores registration country. All 249 ISO country/territory codes are accepted for profile setup, independently of local payment availability. Kenya is selectable as a profile country; its payment route remains coming soon.
 - First signup requires Personal or Business, full name or business name, and country before continuing to Sandbox. KYC or KYB is not required to explore Sandbox. Existing incomplete profiles show a compact setup prompt, including on Settings. Name and country are required before creating a production app or opening verification.
 - A login can own multiple businesses in different countries. Owner and profile isolation are preserved. Personal country records use an owner-specific storage key.
 - New apps created against an explicit profile require its name and country server-side. Existing legacy API calls without a builder profile retain compatibility; country metadata is not a payment authorization control.
@@ -15,7 +15,7 @@ Developer/admin web scope only. No Pocket app source, build, install or live ide
 
 ## Verification
 
-Passed real-handler fixture suites: developer-builder-profiles (including separate-country business ownership, immutable country, Kenya rejection, persistence and no approval side effects), developer-verification (including country mismatch), developer-production-access, operations-workspace (including country projection).
+Passed real-handler fixture suites: developer-builder-profiles (including separate-country business ownership, immutable country, worldwide country acceptance and invalid-code rejection, persistence and no approval side effects), developer-verification (including country mismatch), developer-production-access, operations-workspace (including country projection).
 
 Passed browser suites with mocked identity and real in-memory handlers: fresh onboarding and builder profile switching, including 320/390/640/768/1440 light/dark layouts. Existing console and receipt settings browser regressions passed. Playwright checked admin country filtering/mobile width and Base-only local settlement network presentation.
 

@@ -571,6 +571,7 @@ function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, set
         </div>}
 
 
+    {draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&<p className="mt-3 text-xs leading-5 text-gray-500">Local settlement: Nigeria and Uganda, subject to verification. Kenya ? Coming soon.</p>}
     {localSettlement && <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200">Customers pay USDC on Base. {mobileMoney ? 'You receive UGX in your configured MTN or Airtel mobile money account.' : 'You receive NGN in your configured Nigerian bank account.'} Delivery is confirmed before checkout is marked paid.</p>}
     </div>
 
