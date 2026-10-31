@@ -9,9 +9,9 @@ const env={OPERATIONS_FOUNDER_EMAILS:'owner@example.test',OPERATIONS_GRANTS_JSON
 const files=createSupportAttachmentHandler({identity:async()=>({userId:user}),staff:async()=>({userId:'staff-id',email:staff}),env:()=>env,read,write,uuid:()=>String(++n).padStart(8,'0')+'-0000-0000-0000-000000000000',now:()=>now})
 const attachments=createAttachmentResolver(read)
 const typing={set:async(id,side,on,t)=>presence.set(id+side,on?t+8000:0),read:async(id,side,t)=>({expiresIn:Math.max(0,(presence.get(id+side)||0)-t)})}
-const builder=createDeveloperSupportHandler({identity:async()=>({userId:user,email:'builder@example.test'}),read:async()=>await read(BUSINESS_SUPPORT_KEY)||{cases:{}},mutate,attachments,presence:typing,now:()=>now++,uuid:()=>String(++n)})
+const builder=createDeveloperSupportHandler({profiles:async()=>undefined,identity:async()=>({userId:user,email:'builder@example.test'}),read:async()=>await read(BUSINESS_SUPPORT_KEY)||{cases:{}},mutate,attachments,presence:typing,now:()=>now++,uuid:()=>String(++n)})
 const avatar='data:image/png;base64,iVBORw0KGgo='
-const admin=createOperationsCasesHandler({verify:async()=>({userId:'staff-id',email:staff}),env:()=>env,read:async()=>await read(BUSINESS_SUPPORT_KEY),mutate:async(_w,fn)=>mutate(fn),attachments,presence:typing,staffProfile:async()=>({displayName:'Shy',avatarDataUrl:avatar}),now:()=>now++,uuid:()=>String(++n)})
+const admin=createOperationsCasesHandler({profiles:async()=>undefined,verify:async()=>({userId:'staff-id',email:staff}),env:()=>env,read:async()=>await read(BUSINESS_SUPPORT_KEY),mutate:async(_w,fn)=>mutate(fn),attachments,presence:typing,staffProfile:async()=>({displayName:'Shy',avatarDataUrl:avatar}),now:()=>now++,uuid:()=>String(++n)})
 async function call(handler,method,query={},body){const r={code:200,headers:{},setHeader(k,v){this.headers[k]=v},status(v){this.code=v;return this},json(v){this.body=v;return this},send(v){this.body=v;return this}};await handler({method,query,body,headers:{}},r);return r}
 const uploaded=await call(files,'POST',{name:'details.txt',mime:'text/plain'},Buffer.from('Fixture details only'));assert.equal(uploaded.code,200);const file=uploaded.body.attachment
 assert(!JSON.stringify(file).includes('data'));assert.equal((await call(files,'POST',{name:'attack.png',mime:'image/png'},Buffer.from('<script>bad</script>'))).code,400)
