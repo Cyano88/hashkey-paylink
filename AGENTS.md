@@ -26,7 +26,17 @@ Merchant treasury/recipient configuration, Pocket send/withdraw money
 movement, Polymarket bridge destinations, and agent-wallet/App Pay funding are
 separate current concepts and must be evaluated in their own flows.
 
-## Hash PayStream migration boundary
+## Retired product boundary (owner decision, 2026-10-31)
+
+The owner retired the embedded app and non-trade offerings. Archived source is
+under `hash paystream roll downs`. Do not mount its routes or restore its UI.
+Historical records and receipt identifiers must remain recoverable. General
+Hash PayLink escrow is under development and must not expose public endpoints.
+Trade remains a separate product boundary; do not disable its settlement or
+recovery dependencies without reconciliation. This decision supersedes the
+prior embedded-client parity prerequisite below.
+
+## Previous Hash PayStream migration boundary (historical)
 
 The embedded app under `modules/streampay` is a compatibility product while the
 Arc Agreements API and a new standalone Hash PayStream client are built.

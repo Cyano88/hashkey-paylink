@@ -15,10 +15,9 @@ const StockWalletPage = lazy(() => import('../pages/StockWalletPage'))
 const WalletSwapPage = lazy(() => import('../pages/WalletSwapPage'))
 const WalletConnectionPage = lazy(() => import('../pages/WalletConnectionPage'))
 const XStocksAgreementPage = lazy(() => import('../pages/XStocksAgreementPage'))
-const ArcAgreementPayerPage = lazy(() => import('../pages/ArcAgreementPayerPage'))
+
 const ArcTradeAgreementPage = lazy(() => import('../pages/ArcTradeAgreementPage'))
 const X402Receipt = lazy(() => import('../pages/X402Receipt'))
-const StreamPayApp = lazy(() => import('../../modules/streampay/src/StreamPayApp'))
 
 function CheckoutHome() {
   return <section className="mx-auto max-w-md py-16 text-center">
@@ -27,11 +26,6 @@ function CheckoutHome() {
   </section>
 }
 export default function CheckoutApp() {
-  // Historical StreamPay links retain their original router and identifiers.
-  const path = window.location.pathname
-  if (path === '/stream' || path.startsWith('/stream/') || ['/recipient', '/creator', '/creator-admin', '/arena'].includes(path)) {
-    return <Suspense fallback={null}><StreamPayApp /></Suspense>
-  }
   return <SolanaProvider><BrowserRouter><Suspense fallback={<div role="status" aria-label="Loading checkout" className="mx-auto max-w-md space-y-4 p-6"><div className="h-7 w-2/3 animate-pulse rounded-xl bg-gray-100 dark:bg-white/10" /><div className="h-32 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/10" /><div className="h-11 animate-pulse rounded-full bg-gray-100 dark:bg-white/10" /></div>}><Routes>
     <Route path="pocket/*" element={<ExternalRedirect origin="https://pocket.hashpaylink.com" stripPrefix="/pocket" />} />
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
@@ -53,7 +47,7 @@ export default function CheckoutApp() {
       <Route path="wallet/connect/:connectionId" element={<WalletConnectionPage />} />
       <Route path="agreements/xstocks/:agreementId" element={<XStocksAgreementPage />} />
       <Route path="agreements/trade/:agreementId" element={<ArcTradeAgreementPage />} />
-      <Route path="agreements/:agreementId" element={<ArcAgreementPayerPage />} />
+      <Route path="agreements/:agreementId" element={<section className="mx-auto max-w-md py-16"><h1 className="text-xl font-semibold">Escrow service</h1><p className="mt-3 text-sm text-gray-500">Coming soon. This service is under development.</p><a className="mt-6 inline-block text-sm underline" href="mailto:support@hashpaylink.com">Contact support about an existing record</a></section>} />
       <Route path="receipt/:activityId" element={<X402Receipt />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
       <Route path="*" element={<CheckoutHome />} />

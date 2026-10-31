@@ -181,14 +181,14 @@ export function compactReceiptAmount(value?: string, asset = 'USDC') {
 }
 
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
-  const prefix = receipt?.source === 'streampay' ? 'hashpaystream'
+  const prefix = receipt?.source === 'streampay' ? 'hashpaylink'
     : receipt?.source === 'arc-agreement' ? 'arc-agreement'
     : receipt?.source === 'agentic-checkout' ? 'agent-checkout'
     : receipt?.source === 'bank-receive' ? 'bank-receive'
     : receipt?.source === 'bank-send' ? 'bank-send'
     : receipt?.source === 'ngpos' ? 'pos'
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
-    : receipt?.source === 'x402' ? 'hashpaystream'
+    : receipt?.source === 'x402' ? 'hashpaylink'
     : 'paylink'
   const brand = receipt?.brandKind === 'pocket' ? 'pocket' : 'hashpaylink'
   return `${brand}-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`

@@ -161,7 +161,7 @@ const RECEIPT_FILTERS: Array<{ key: ReceiptFilter; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'paylink', label: 'PayLink' },
   { key: 'pos', label: 'POS' },
-  { key: 'streampay', label: 'HashpayStream' },
+  { key: 'streampay', label: 'Hash PayLink' },
   { key: 'direct', label: 'Direct' },
 ]
 const LOCAL_HISTORY_TABS: Array<{ key: LocalHistoryFilter; label: string; description: string }> = [
@@ -737,7 +737,7 @@ export default function Dashboard() {
     if (row.source === 'streampay' || row.settlementType === 'stream-created') {
       return {
         key: 'streampay' as const,
-        label: 'HashpayStream',
+        label: 'Hash PayLink',
         className: 'border-purple-100 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/30 dark:text-purple-300',
       }
     }

@@ -40,11 +40,11 @@ async function readSource(relativePath) {
 
 async function assertSourceContracts() {
   const [linkFactory, apiContent, streamGate, creatorPage, streamPayApp, appRouter, server] = await Promise.all([
-    readSource('modules/streampay/src/components/creator/LinkFactory.tsx'),
-    readSource('modules/streampay/api/content.ts'),
-    readSource('modules/streampay/src/components/creator/StreamGate.tsx'),
-    readSource('modules/streampay/src/components/creator/CreatorPage.tsx'),
-    readSource('modules/streampay/src/StreamPayApp.tsx'),
+    readSource('hash paystream roll downs/streampay/src/components/creator/LinkFactory.tsx'),
+    readSource('hash paystream roll downs/streampay/api/content.ts'),
+    readSource('hash paystream roll downs/streampay/src/components/creator/StreamGate.tsx'),
+    readSource('hash paystream roll downs/streampay/src/components/creator/CreatorPage.tsx'),
+    readSource('hash paystream roll downs/streampay/src/StreamPayApp.tsx'),
     readSource('src/App.tsx'),
     readSource('server.ts'),
   ])

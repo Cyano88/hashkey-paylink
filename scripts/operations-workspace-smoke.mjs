@@ -26,7 +26,7 @@ assert.throws(() => operationsPolicy({ ...env, OPERATIONS_GRANTS_JSON: '[{"email
 const projects = [{ id: a, name: 'Human', capabilities: ['arc_agreements', 'xstocks_agreements'] }, { id: b, name: 'Agent', capabilities: ['arc_agreements'] }, { id: c, name: 'Human', capabilities: ['hosted_checkout'] }]
 const session = operationsSession(staff, projects, env)
 assert.equal(session.workspaces.length, 1)
-assert.deepEqual(session.workspaces[0].sections, ['agreements', 'trade-disputes'])
+assert.deepEqual(session.workspaces[0].sections, ['trade-disputes'])
 assert.equal(session.arcActivationEnabled, false)
 assert.equal(operationsSession(founder, projects, env).workspaces.length, 3)
 assert.throws(() => operationsSession({ ...staff, email: 'outsider@example.test' }, projects, env), { status: 403 })

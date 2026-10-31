@@ -128,6 +128,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (!policy || policy.environment !== 'live' || policy.checkoutMode !== 'human'
         || !policy.capabilities.includes('xstocks_agreements')) fail(403, 'An xStocks Agreement project key is required.')
       if (req.method === 'GET' && req.query.purpose === 'assets') {
+        if (req.query.kind !== 'trade') fail(410, 'General escrow is under development.')
         return res.json({ ok: true, ...await d.assets(req.query.kind === 'trade' ? tradeCheckoutEnvironment(d.env(), policy.partnerId) : d.env()) })
       }
       if (req.method === 'GET') {
@@ -135,6 +136,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         if (lookup !== undefined && (typeof lookup !== 'string' || !/^[a-zA-Z0-9:_-]{16,128}$/.test(lookup))) fail(400, 'Invalid idempotency key.')
         const record = await d.read(key(id(lookup ? 'xag_' + hash(JSON.stringify([policy.partnerId, lookup])) : req.query.id)))
         if (!record || record.partnerId !== policy.partnerId) fail(404, 'Agreement not found.')
+        if (record!.terms.kind !== 'trade') fail(410, 'General escrow is under development.')
         if (req.query.reconcile !== undefined && req.query.reconcile !== 'true') fail(400,'Choose a valid refresh option.')
         if (req.query.reconcile === 'true') {
           const next = await observeTrade(record!)
@@ -143,6 +145,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         return res.json({ ok: true, agreement: view(record!) })
       }
       if (req.body?.action !== undefined) fail(400, 'Developer keys may create drafts only.')
+      if (req.body?.kind !== 'trade') fail(410, 'General escrow is under development.')
       if ((req.body?.paymentRail !== undefined && req.body.paymentRail !== 'xlayer')
         || (req.body?.network !== undefined && req.body.network !== 'xlayer')
         || (req.body?.checkoutMode !== undefined && req.body.checkoutMode !== 'human')) fail(400, 'This route supports human xStocks Agreements on X Layer only.')
@@ -185,6 +188,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       const agreementId = id(req.body?.agreementId)
       let record = await d.read(key(agreementId))
       if (!record) fail(404, 'Agreement not found.')
+      if (record!.terms.kind !== 'trade') fail(410, 'General escrow is under development.')
       const authority = agreementPrivyAuthority(d.env())
       if (record!.walletAppId !== authority.appId) fail(409, 'The Agreement wallet app changed. Contact support.')
       const userId = await d.identity(req, authority.env)

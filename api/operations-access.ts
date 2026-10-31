@@ -1,3 +1,4 @@
+import {productDisplayName} from '../src/lib/retiredProductPresentation.js'
 import {emergencyPermissions} from './operations-policy.js'
 import {loadOperationsTeam} from './operations-team-store.js'
 import {operationsRequestPolicy} from './operations-policy.js'
@@ -34,22 +35,22 @@ export function operationsSession(identity: OperationsIdentity, projects: Projec
   projects=projects.filter(p=>!p.removal)
   const assigned = new Set(policy.workspaces.flatMap(w => w.projectIds))
   const definitions = [{ id: 'pocket', name: 'Pocket', projectIds: [] as string[] }, ...policy.workspaces.filter(w=>!w.projectIds.every(id=>removed.has(id))),
-    ...projects.filter(p => !assigned.has(p.id)).map(p => ({ id: p.id, name: p.name, projectIds: [p.id] }))]
+    ...projects.filter(p => !assigned.has(p.id)).map(p => ({ id: p.id, name: productDisplayName(p.id,p.name), projectIds: [p.id] }))]
   const workspaces = definitions.flatMap(w => {
-    const integrations = projects.filter(p => w.projectIds.includes(p.id)).map(p => ({ id: p.id, name: p.name,
+    const integrations = projects.filter(p => w.projectIds.includes(p.id)).map(p => ({ id: p.id, name: productDisplayName(p.id,p.name),
       environment:p.environment||'live',accountType:p.accountType||'business',verificationStatus:p.businessVerification?.status||'not_started',capabilities: p.capabilities || [], status: p.operationalStatus || 'active' }))
     const sections = workspaceSections(identity, w.id, policy).filter(section => section === 'agreements'
-      ? integrations.some(p => p.capabilities.includes('arc_agreements'))
+      ? false
       : section === 'trade-disputes' ? integrations.some(p => p.capabilities.includes('xstocks_agreements')) : true)
     if (!sections.length) return []
     // Missing mappings must be visible to the founder rather than silently reassigned.
     const allowed=(section:OperationsSection,action:string)=>{try{authorizeOperations(identity,{query:{workspace:w.id},method:'POST',body:{action}},section,undefined,env);return true}catch{return false}}
-    return [{ ...w, sections, integrations, permissions:{manageProjects:allowed('projects','admin-activate'),reconcile:allowed('transactions','reconcile'),manageCases:allowed('cases','case-escalate')}, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===w.id).flatMap(g=>g.roles??[]))], missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
+    return [{ ...w, name:w.id==='hashpaystream'?'Trade':w.name, sections, integrations, permissions:{manageProjects:allowed('projects','admin-activate'),reconcile:allowed('transactions','reconcile'),manageCases:allowed('cases','case-escalate')}, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===w.id).flatMap(g=>g.roles??[]))], missingProjectIds: w.projectIds.filter(id => !projects.some(p => p.id === id)) }]
   })
   const emergency = emergencyPermissions(identity, env)
   if (!workspaces.length && !emergency.pause && !emergency.resume) throw Object.assign(Error('This account has no operations access.'), { status: 403 })
   return { ok: true, founder: isOperationsFounder(identity, policy), email: identity.email, workspaces, roles:isOperationsFounder(identity,policy)?['owner']:[...new Set(policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()).flatMap(g=>g.roles??[]))],emergency,
-    arcActivationEnabled: env.ARC_AGREEMENTS_ENABLED === 'true' }
+    arcActivationEnabled: false }
 }
 
 export default async function operationsSessionHandler(req: Request, res: Response) {

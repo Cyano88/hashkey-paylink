@@ -59,7 +59,7 @@ export function ProductsPanel({project,onConfigure}:{project:ProjectSummary;onCo
       return <section key={group.id} className="py-5"><h2 className="text-base font-semibold">Payment options</h2>
         {options.map(option=><div key={option.capability} className="mt-4 flex items-start justify-between gap-4"><div><h3 className="text-sm font-semibold">{option.title}</h3><p className={muted}>{option.detail}</p></div><span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-white/5">{!project.capabilities.includes(option.capability)?'Not selected':project.operationalStatus==='suspended'?'Suspended':project.enabledCapabilities&&!project.enabledCapabilities.includes(option.capability)?'Verification required':project.settlementStatus==='ready'?'Configured':'Setup required'}</span></div>)}
       </section>
-    })}</div><p className={'mt-4 '+muted}>Payment processing is available after setup and any required approval.</p><button type="button" onClick={onConfigure} className="developer-primary mt-6">Configure payments</button></div>
+    })}</div><p className={'mt-4 '+muted}>Payment processing is available after setup and any required approval.</p><button type="button" onClick={onConfigure} className="developer-primary mt-6">Configure payments</button><ComingSoonProducts/></div>
 }
 export function CliGuide({projectId}:{projectId:string}){return <div className="mt-6 rounded-2xl border border-gray-200 p-5 dark:border-white/10"><h2 className="text-base font-semibold">Connect the CLI</h2><p className={'mt-2 '+muted}>Optional: manage this project from your terminal. Keep secret API keys on your server. Customers approve their own payments.</p><pre className="mt-4 overflow-x-auto rounded-xl bg-gray-950 p-4 text-xs leading-6 text-white">{`hashpaylink auth login --project ${projectId} --json\nhashpaylink auth complete --json\nhashpaylink doctor --json`}</pre><Link to="/cli/authorize" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-blue-600 dark:text-blue-300">Manage CLI access<ChevronRight className="ml-1 h-4 w-4"/></Link></div>}
 
@@ -67,7 +67,7 @@ export function ComingSoonProducts() {
   return <section className="mt-10 border-t border-gray-200 pt-6 dark:border-white/10" aria-label="Coming soon">
     <h2 className="text-sm font-semibold text-gray-500">Coming soon</h2>
     <div className="mt-3 space-y-3 text-sm text-gray-500">
-      <p>Agreements &amp; Hash PayStream</p>
+      <div><p className="flex items-center gap-3">Escrow service <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs dark:bg-white/5">Coming soon</span></p><p className="mt-2 text-xs leading-5">Under development. Add escrow to your own product using Hash PayLink checkout. Not available for integration yet.</p></div>
       <p>Agent payments <span className="text-xs">(x402)</span></p>
     </div>
   </section>

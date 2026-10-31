@@ -1,3 +1,4 @@
+import { retiredProductBoundary } from './api/product-retirement.js'
 import operationsAuditHandler from './api/operations-audit.js'
 import operationsCasesHandler from './api/operations-cases.js'
 import {reconcileCheckoutReceiptEmails} from './api/checkout-receipt-emails.js'
@@ -50,34 +51,6 @@ import solanaBalanceHandler   from './api/solana-balance.js'
 import evmReadHandler from './api/evm-read.js'
 import evmBalanceHandler      from './api/evm-balance.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
-import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
-import relayCheckpointHandler           from './modules/streampay/api/relay-checkpoint.js'
-import streamOgHandler                 from './modules/streampay/api/stream-og.js'
-import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
-import {
-  storeContent,
-  getContent,
-  getContentStreamEscrow,
-  getContentCheckpointEscrow,
-  getCreatorCheckpointVault,
-  saveCreatorCheckpointVault,
-  getContentX402,
-  listCreatorContent,
-  listApprovedCreatorContent,
-  listCreatorAdminContent,
-  listCreatorEarnings,
-  getHashpayStreamAgentContext,
-  getCreatorBook,
-  getCreatorSocial,
-  recordCreatorContentView,
-  setCreatorReaction,
-  addCreatorComment,
-  setCreatorCommentReaction,
-  reviewCreatorContent,
-  unlockContentX402WithAgent,
-} from './modules/streampay/api/content.js'
-import { registerVault, getVault, listViewers } from './modules/streampay/api/vault-registry.js'
-import { registerEventPayment, listEventPayments } from './api/event-registry.js'
 import {
   buildSolanaTx, relaySolanaTx,
   getSolanaVaultAddress, sweepSolanaVault,
@@ -160,9 +133,6 @@ import pocketTransactionOperationsHandler from './api/pocket/transaction-operati
 import pocketWalletsHandler from './api/pocket/wallets/index.js'
 import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
-import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
-import streamHistoryHandler from './api/stream-history.js'
-import arenaRoomHandler from './api/arena-room.js'
 import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import agentWalletHandler  from './api/agent-wallet.js'
@@ -194,21 +164,8 @@ import arcWalletHandler from './api/arc-wallet.js'
 import { createWalletConnectionHandlers } from './api/wallet-connections.js'
 import { createXStocksAgreementHandlers } from './api/xstocks-agreement/http.js'
 import { createArcTradeHandlers } from './api/trade-agreement/arc-http.js'
-import arcAgreementsHandler from './api/arc-agreements.js'
-import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipients.js'
-import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
-import arcAgreementProjectPayerHandler from './api/arc-agreement-project-payer.js'
-import arcAgreementAgentHandler from './api/arc-agreement-agent.js'
 import xstocksReviewHandler from './api/xstocks-agreement/reviewer.js'
 import arcTradeReviewHandler from './api/trade-agreement/reviewer.js'
-import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
-import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
-import hashPayStreamArcWebhookHandler from './api/hashpaystream-arc-webhook.js'
-import hashPayStreamArcAgreementsHandler from './api/hashpaystream-arc-agreements.js'
-import hashPayStreamAgreementGateway from './modules/streampay/api/agreement-gateway.js'
-import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-activation-worker.js'
-import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
-import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import {drainStockCheckoutWebhooks} from './api/hosted-stock-checkouts.js'
 import hostedStockCheckoutSwapHandler from './api/hosted-stock-checkout-swap.js'
@@ -229,6 +186,7 @@ loadEnv({ path: '.env', override: false })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+app.use(retiredProductBoundary)
 // Render terminates TLS behind one trusted proxy. Express derives req.ip from
 // that boundary instead of application code trusting arbitrary forwarded headers.
 app.set('trust proxy', 1)
@@ -304,12 +262,6 @@ app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit:
 app.post('/api/pocket/usd-account/webhook', rateLimit({ name: 'usd-account-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), usdAccountWebhook)
 app.post('/api/pocket/bridge-sandbox/webhook', rateLimit({ name: 'bridge-sandbox-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), bridgeSandboxWebhook)
 app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
-app.post(
-  '/api/hashpaystream/arc-agreement-webhook',
-  hashPayStreamArcWebhookLimiter,
-  express.raw({ type: 'application/json', limit: '64kb' }),
-  hashPayStreamArcWebhookHandler,
-)
 
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.
@@ -373,33 +325,6 @@ app.post('/api/solana-balance',        readLimiter, solanaBalanceHandler)
 app.post('/api/evm-read/:network', readLimiter, evmReadHandler)
 app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
-app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
-app.post('/api/relay-checkpoint',      relayLimiter, relayCheckpointHandler)
-app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
-app.post('/api/store-content',         strictLimiter, storeContent)
-app.get('/api/list-creator-content',   readLimiter, listCreatorContent)
-app.get('/api/creator-earnings',       readLimiter, listCreatorEarnings)
-app.get('/api/hashpaystream-agent-context', readLimiter, getHashpayStreamAgentContext)
-app.get('/api/creator-discover-content', readLimiter, listApprovedCreatorContent)
-app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
-app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)
-app.get('/api/get-content',            readLimiter, getContent)
-app.get('/api/get-content-stream',     readLimiter, getContentStreamEscrow)
-app.get('/api/get-content-checkpoint', readLimiter, getContentCheckpointEscrow)
-app.get('/api/creator-checkpoint-vault', readLimiter, getCreatorCheckpointVault)
-app.post('/api/creator-checkpoint-vault', strictLimiter, saveCreatorCheckpointVault)
-app.get('/api/get-content-x402',       readLimiter, getContentX402)
-app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)
-app.get('/api/creator-social',         readLimiter, getCreatorSocial)
-app.post('/api/creator-content-view',  strictLimiter, recordCreatorContentView)
-app.post('/api/creator-social/reaction', strictLimiter, setCreatorReaction)
-app.post('/api/creator-social/comment', strictLimiter, addCreatorComment)
-app.post('/api/creator-social/comment-reaction', strictLimiter, setCreatorCommentReaction)
-app.post('/api/register-vault',        registerVault)
-app.get('/api/get-vault',              getVault)
-app.get('/api/list-viewers',           listViewers)
-app.post('/api/event-register',        relayLimiter, registerEventPayment)
-app.get('/api/list-event-payments',    readLimiter, listEventPayments)
 // ── Solana relay ──────────────────────────────────────────────────────────────
 app.post('/api/solana-build-tx',       relayLimiter, buildSolanaTx)
 app.post('/api/solana-relay',          relayLimiter, relaySolanaTx)
@@ -496,9 +421,6 @@ app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
 app.all('/api/pocket/support/cases',      strictLimiter, pocketSupportCasesHandler)
 startPocketSupportLifecycle()
 app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
-app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
-app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
-app.all('/api/arena-room',             arenaLimiter, arenaRoomHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
 app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
@@ -510,7 +432,6 @@ app.post('/api/agent-governance',      strictLimiter, agentGovernanceHandler)
 app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)
 app.get('/api/poly-worldcup-news',      readLimiter, polyWorldcupNewsHandler)
 app.get('/api/poly-stream',             readLimiter, polyStreamHandler)
-app.get('/api/creator-book',            readLimiter, getCreatorBook)
 app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
 app.post('/api/zeroscout/polymarket-brief', strictLimiter, zeroScoutPolymarketBriefHandler)
 app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
@@ -524,10 +445,6 @@ app.get('/api/pocket/esim/catalog', readLimiter, pocketEsimCatalogHandler)
 app.post('/api/pocket/esim/price', strictLimiter, pocketEsimPriceHandler)
 app.get('/api/pocket/esim/orders', readLimiter, pocketEsimOrdersHandler)
 app.post('/api/pocket/esim/orders', strictLimiter, pocketEsimOrdersHandler)
-app.get('/api/hashpaystream/arc-agreements', readLimiter, hashPayStreamArcAgreementsHandler)
-app.post('/api/hashpaystream/arc-agreements', strictLimiter, hashPayStreamArcAgreementsHandler)
-app.get('/api/hashpaystream/v2/agreements', readLimiter, hashPayStreamAgreementGateway)
-app.post('/api/hashpaystream/v2/agreements', strictLimiter, hashPayStreamAgreementGateway)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
@@ -537,10 +454,6 @@ app.all('/api/operations-audit', strictLimiter, operationsAuditHandler)
 app.all('/api/operations-emergency-pause', strictLimiter, operationsEmergencyPauseHandler)
 app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
 app.all('/api/arc-trade-review', strictLimiter, arcTradeReviewHandler)
-app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
-app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
-app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectPayerHandler)
-app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
 const walletConnectionHandlers = createWalletConnectionHandlers()
 const walletSwapSessions=createWalletSwapSessionHandlers()
 app.all('/api/v2/wallets/swap-sessions', strictLimiter, walletSwapSessions.developer)
@@ -561,10 +474,6 @@ app.all('/api/v2/trade-agreements/participant', strictLimiter, arcTradeHandlers.
 app.get('/api/v2/xstocks-agreements', readLimiter, xstocksAgreementHandlers.developer)
 app.all('/api/v2/xstocks-agreements', strictLimiter, xstocksAgreementHandlers.developer)
 app.all('/api/v2/xstocks-agreements/participant', strictLimiter, xstocksAgreementHandlers.participant)
-app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
-app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)
-app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcRecipientsHandler)
-app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
 app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
 app.all('/api/v2/cli/keys', strictLimiter, developerCliKeysHandler)
@@ -594,8 +503,6 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 // OG tag injection — must be before the SPA catch-all
-app.get('/stream/:vaultAddress',       streamOgHandler)
-app.get('/stream',                     streamOgHandler)
 
 // /agent — dual-purpose: browser gets SPA, API clients get JSON verification
 app.get('/agent', strictLimiter, (req, res, next) => {
@@ -717,42 +624,4 @@ pocketMoneyPushTimer.unref()
 void drainPocketMoneyPushWorker().catch(error => {
   console.error('[pocket-money-push] startup run failed:', error instanceof Error ? error.message : String(error))
 })
-const arcAgreementOutboxTimer = setInterval(() => {
-  void drainArcAgreementWebhookOutbox().catch(error => {
-    console.error('[arc-agreement-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))
-  })
-}, 10_000)
-arcAgreementOutboxTimer.unref()
-void drainArcAgreementWebhookOutbox().catch(error => {
-  console.error('[arc-agreement-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
-})
-
-const arcAgreementActivationReconciliationTimer = setInterval(() => {
-  void drainArcAgreementActivationReconciliations().catch(error => {
-    console.error('[arc-agreement-activation] scheduled reconciliation failed:', error instanceof Error ? error.message : String(error))
-  })
-}, 10_000)
-arcAgreementActivationReconciliationTimer.unref()
-void drainArcAgreementActivationReconciliations().catch(error => {
-  console.error('[arc-agreement-activation] startup reconciliation failed:', error instanceof Error ? error.message : String(error))
-})
-
-const arcAgreementLifecycleReconciliationTimer = setInterval(() => {
-  void drainArcAgreementLifecycleReconciliations().catch(error => {
-    console.error('[arc-agreement-lifecycle] scheduled reconciliation failed:', error instanceof Error ? error.message : String(error))
-  })
-}, 15_000)
-arcAgreementLifecycleReconciliationTimer.unref()
-void drainArcAgreementLifecycleReconciliations().catch(error => {
-  console.error('[arc-agreement-lifecycle] startup reconciliation failed:', error instanceof Error ? error.message : String(error))
-})
-
-const arcAgreementOperatorTimer = setInterval(() => {
-  void drainArcAgreementOperatorActions().catch(error => {
-    console.error('[arc-agreement-operator] scheduled drain failed:', error instanceof Error ? error.message : String(error))
-  })
-}, 10_000)
-arcAgreementOperatorTimer.unref()
-void drainArcAgreementOperatorActions().catch(error => {
-  console.error('[arc-agreement-operator] startup drain failed:', error instanceof Error ? error.message : String(error))
-})
+// General escrow is under development. No public agreement handlers or workers are mounted.

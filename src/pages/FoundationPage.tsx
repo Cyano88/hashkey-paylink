@@ -1528,7 +1528,6 @@ export default function FoundationPage() {
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             {[
-              {name:'Hash PayStream',label:'Payments, work and trade',copy:'Send USDC, manage work agreements and trade using XStocks on X Layer. Hash PayLink connects the payment steps, status updates and receipts.',href:'https://hashpaystream.app'},
               {name:'PolyDesk',label:'Tools for Polymarket apps and agents',copy:'Tools that help apps and AI agents work with Polymarket prediction markets. Hash PayLink handles funding checkout, payment checks and receipts.',href:'https://polydesk.trade'},
             ].map(project => <article key={project.name} className="foundation-surface-card flex flex-col rounded-[28px] p-6 sm:p-8">
               <p className="text-xs font-medium text-blue-700">{project.label}</p>

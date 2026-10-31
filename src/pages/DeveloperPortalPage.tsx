@@ -660,7 +660,7 @@ function QuickstartPanel({ project }: { project: Project }) {
   if(project.checkoutMode==='human' && project.settlementMode==='usdc' && project.capabilities.includes('hosted_checkout'))return <BuilderQuickstart returnOrigin={project.allowedOrigins[0]||project.website||'https://shop.example'} hasFunding={project.capabilities.includes('polymarket_funding')}/>
   const paymentPath = project.checkoutMode
   const hasCheckout = project.capabilities.includes('hosted_checkout')
-  const hasAgreements = project.capabilities.includes('arc_agreements')
+  const hasAgreements = false // General escrow is under development; no integration snippet is offered.
   const hasFunding = project.capabilities.includes('polymarket_funding')
   const fundingCode = `const response = await fetch("https://developer.hashpaylink.com/api/v2/funding/polymarket/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASHPAYLINK_API_KEY,\n    "Content-Type": "application/json",\n    "Idempotency-Key": "funding_order_0001"\n  },\n  body: JSON.stringify({\n    polymarketWallet: customer.polymarketWallet,\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n});\nif (!response.ok) throw new Error("Funding request failed");\nconst funding = await response.json();\n// Read the funding status API; payment confirmation is not bridge completion.`
   const modeFields = `    checkoutMode: "${paymentPath}",${paymentPath === 'agentic' ? '\n    agenticType: "agent_treasury",\n    network: process.env.HASH_PAYLINK_NETWORK,' : project.settlementMode === 'usdc' ? '\n    paymentSelection: "stablecoins",' : ''}`

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHashPayStreamAgreementGateway } from '../modules/streampay/api/agreement-gateway.ts'
+import { createHashPayStreamAgreementGateway } from '../hash paystream roll downs/streampay/api/agreement-gateway.ts'
 
 function responseRecorder() {
   return {

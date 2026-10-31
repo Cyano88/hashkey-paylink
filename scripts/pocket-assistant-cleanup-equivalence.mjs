@@ -6,7 +6,7 @@ const mocks={
  './helper-profile.js':`export const readHelperProfileMemory=async()=>globalThis.fixtureMemory||''`,
  './zeroscout-sponsored-action.js':`export const getZeroScoutHelperGuidance=async(input)=>{globalThis.fixtureCalls.push(JSON.parse(JSON.stringify(input)));if(globalThis.fixtureFailure)throw Error('fixture unavailable');return globalThis.fixtureGuidance};export const sponsorZeroScoutAction=async(input)=>{globalThis.fixtureCalls.push(JSON.parse(JSON.stringify(input)));if(globalThis.fixtureFailure)throw Error('fixture unavailable');return {fixture:true}}`,
  './render-durable-store.js':`let state={usage:{}};export const readDurableJson=async()=>state;export const writeDurableJson=async(k,v)=>{state=v}`,
- '../modules/streampay/api/content.js':`export const buildHashpayStreamAgentContext=async()=>{throw Error('Retired context executed')}`,
+ '../hash paystream roll downs/streampay/api/content.js':`export const buildHashpayStreamAgentContext=async()=>{throw Error('Retired context executed')}`,
 };
 for(const [name,contents]of [['before',old],['after',fs.readFileSync('api/agent-ask.ts','utf8')]])await build({stdin:{contents,resolveDir:path.resolve('api'),sourcefile:'agent-ask.ts',loader:'ts'},outfile:'.codex-temp/equivalence-'+name+'.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mocks',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'js'}))}}]});
 const before=(await import('../.codex-temp/equivalence-before.mjs')).default,after=(await import('../.codex-temp/equivalence-after.mjs')).default;

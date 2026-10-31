@@ -8,7 +8,6 @@ import FoodDemoPage from './pages/FoodDemoPage'
 import X402Receipt   from './pages/X402Receipt'
 import AgentTerms    from './pages/AgentTerms'
 import { SolanaProvider } from './lib/SolanaContext'
-import StreamPayApp from '../modules/streampay/src/StreamPayApp'
 import PocketLegalDocumentPage from './pocket/pages/PocketLegalDocumentPage'
 import CirclePocketApp from './pocket/CirclePocketApp'
 import { isPocketHostname, POCKET_ORIGIN } from './pocket/lib/pocketRoutes'
@@ -19,14 +18,6 @@ import { isPocketHostname, POCKET_ORIGIN } from './pocket/lib/pocketRoutes'
 const { hostname, pathname } = window.location
 const IS_APP_HOST = hostname === 'app.hashpaylink.com'
 const IS_POCKET_HOST = isPocketHostname(hostname)
-const isStreamPayRoute =
-  pathname === '/stream' ||
-  pathname.startsWith('/stream/') ||
-  pathname === '/recipient' ||
-  pathname === '/creator' ||
-  pathname === '/creator-admin' ||
-  pathname === '/arena'
-
 export default function App() {
   // Pocket owns clean root-level routes on its dedicated production hostname.
   if (IS_POCKET_HOST) {
@@ -47,7 +38,7 @@ export default function App() {
 
   // Hidden rollback boundary for historical links. No current Hash PayLink
   // navigation exposes this embedded compatibility app.
-  if (isStreamPayRoute) return <StreamPayApp />
+
 
   const appShellRoutes = (
     <Route element={<SurfaceLayout />}>
@@ -78,7 +69,7 @@ export default function App() {
       <Routes>
         <Route path="launchroom" element={<FoodDemoPage />} />
         <Route path="pay/order/:orderId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
-        <Route path="hashpaystream/docs" element={<StandaloneHashPayStreamRedirect />} />
+        <Route path="hashpaystream/docs" element={<Navigate to="/docs" replace />} />
         <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
         {!IS_APP_HOST && <Route index element={<FoundationPage />} />}
         {appShellRoutes}
@@ -86,13 +77,6 @@ export default function App() {
     </BrowserRouter>
     </SolanaProvider>
   )
-}
-
-function StandaloneHashPayStreamRedirect() {
-  useEffect(() => {
-    window.location.replace('https://hashpaystream.app/docs')
-  }, [])
-  return <main className="grid min-h-screen place-items-center bg-white text-sm font-semibold text-gray-500 dark:bg-gray-950 dark:text-gray-400">Opening HashPayStream...</main>
 }
 
 function PocketLegacyEntry() {

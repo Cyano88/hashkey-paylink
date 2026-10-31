@@ -871,7 +871,7 @@ export default function ArcAgreementPayerPage() {
                   <ArrowRightIcon className="h-4 w-4" />
                 </button>
                 <a
-                  href="mailto:support@hashpaylink.com?subject=HashPayStream%20agreement%20access"
+                  href="mailto:support@hashpaylink.com?subject=Escrow%20record%20access"
                   className="flex h-11 w-full items-center justify-center rounded-full border border-gray-200 px-5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
                 >
                   Contact support

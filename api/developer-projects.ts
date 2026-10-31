@@ -1,3 +1,4 @@
+import {productDisplayName} from '../src/lib/retiredProductPresentation.js'
 import {builderProfilesForProjects,projectBuilderProfileId,validBuilderProfileId,type BuilderProfile} from '../src/lib/builderProfiles.js'
 import {productionCapabilities, productionVerificationAllows, type DeveloperAccountType} from '../src/lib/developerAccess.js'
 import {createDeveloperSandboxHandler} from './developer-sandbox.js'
@@ -423,7 +424,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     removal: project.removal ? {status:project.removal.status,at:project.removal.at}:undefined,
     businessVerification: publicVerification(project.businessVerification),
     directoryProfile: project.directoryProfile,
-    name: project.name,
+    name: productDisplayName(project.id, project.name),
     ownerEmail: project.ownerEmail,
     website: project.website,
     brandImageUrl: project.brandImageUrl ?? '',
@@ -487,7 +488,7 @@ export async function verifyDeveloperProjectOwner(req: Request, projectIdValue: 
   return {
     id: project.id,
     ownerId: project.ownerId,
-    name: project.name,
+    name: productDisplayName(project.id, project.name),
     checkoutMode: projectCheckoutMode(project),
     capabilities: effectiveProductCapabilities(project) as DeveloperCapability[],
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' as const : 'active' as const,
@@ -657,7 +658,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
-        if (resource === 'businesses') return res.json({ok:true,businesses:Object.values(store?.projects??{}).filter(project=>!project.removal&&project.businessVerification?.status==='approved'&&project.operationalStatus!=='suspended'&&project.directoryProfile?.enabled).map(project=>({id:project.id,name:project.name,website:project.website,logo:project.brandImageUrl??'',introduction:project.directoryProfile!.introduction})).sort((a,b)=>a.name.localeCompare(b.name))})
+        if (resource === 'businesses') return res.json({ok:true,businesses:Object.values(store?.projects??{}).filter(project=>!project.removal&&project.businessVerification?.status==='approved'&&project.operationalStatus!=='suspended'&&project.directoryProfile?.enabled).map(project=>({id:project.id,name:productDisplayName(project.id,project.name),website:project.website,logo:project.brandImageUrl??'',introduction:project.directoryProfile!.introduction})).sort((a,b)=>a.name.localeCompare(b.name))})
         if (resource === 'activity' || resource === 'payments') {
           const projectId = clean(req.query?.projectId, 80)
           const project = findOwnedProject(store, projectId, identity.userId)
@@ -1196,7 +1197,7 @@ function policyForDeveloperProject(
       accountType: project.accountType ?? 'business',
       ownerId: project.ownerId,
       ownerEmail: project.ownerEmail,
-      merchantName: project.name,
+      merchantName: productDisplayName(project.id, project.name),
       brandImageUrl: project.brandImageUrl,
       allowedOrigins: project.allowedOrigins,
       defaultNetwork: 'base',
@@ -1228,7 +1229,7 @@ function policyForDeveloperProject(
     xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     ownerId: project.ownerId,
     ownerEmail: project.ownerEmail,
-    merchantName: project.name,
+    merchantName: productDisplayName(project.id, project.name),
     brandImageUrl: project.brandImageUrl,
     allowedOrigins: project.allowedOrigins,
     defaultNetwork,

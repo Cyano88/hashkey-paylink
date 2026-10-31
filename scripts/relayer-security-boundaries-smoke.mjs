@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import {Keypair,Connection} from '@solana/web3.js'
 import {buildSolanaTx,getSolanaVaultAddress,sweepSolanaVault} from '../api/relay-solana.ts'
 import {preparePocketSolanaCctpTransaction} from '../api/pocket/solana-cctp-relay.ts'
-import checkpoint from '../modules/streampay/api/relay-checkpoint.ts'
-import stream from '../modules/streampay/api/relay-stream.ts'
-import poa from '../modules/streampay/api/settle-poa.ts'
+import checkpoint from '../hash paystream roll downs/streampay/api/relay-checkpoint.ts'
+import stream from '../hash paystream roll downs/streampay/api/relay-stream.ts'
+import poa from '../hash paystream roll downs/streampay/api/settle-poa.ts'
 import builder from '../api/polymarket-relayer-builder-signer.ts'
 
 const sponsor=Keypair.generate(),user=Keypair.generate(),recipient=Keypair.generate()

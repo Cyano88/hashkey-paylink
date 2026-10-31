@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { ensureAgentActivityArchived, findAgentActivity } from './agent-activity.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
-import { findCheckpointReceipt, findCreatorUnlockReceipt, updateCreatorUnlockOgProof } from '../modules/streampay/api/content.js'
+import { findCheckpointReceipt, findCreatorUnlockReceipt, updateCreatorUnlockOgProof } from '../hash paystream roll downs/streampay/api/content.js'
 
 const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE_MAINNET ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = String(

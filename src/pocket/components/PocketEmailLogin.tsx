@@ -38,7 +38,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
   const [codeFocused, setCodeFocused] = useState(false)
   const codeInputRef = useRef<HTMLInputElement>(null)
   const idPrefix = context === 'hashpaystream' ? 'hashpaystream-payer' : context === 'agreement' ? 'agreement-payer' : context
-  const productName = context === 'pocket' ? 'Pocket' : context === 'hashpaystream' ? 'HashPayStream' : 'Hash PayLink'
+  const productName = context === 'pocket' ? 'Pocket' : context === 'hashpaystream' ? 'Hash PayLink' : 'Hash PayLink'
   const emailInputId = `${idPrefix}-sign-in-email`
   const codeInputId = `${idPrefix}-email-code`
 

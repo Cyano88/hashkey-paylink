@@ -1,0 +1,758 @@
+import operationsAuditHandler from './api/operations-audit.js'
+import operationsCasesHandler from './api/operations-cases.js'
+import {reconcileCheckoutReceiptEmails} from './api/checkout-receipt-emails.js'
+import bscSendHandler,{reconcileBscSends} from './api/pocket/bsc-send-service.js'
+import operationsEmergencyPauseHandler from './api/operations-emergency-pause.js'
+import foodDemoWebhook from './api/food-demo-webhook.js'
+import bscPaymentHandler,{reconcileBscPayments} from './api/pocket/bsc-payment-service.js'
+import {drainBscCheckoutWebhooks} from './api/hosted-bsc-checkouts.js'
+import developerAppRemovalApiHandler from './api/developer-app-removal-api.js'
+import {developerVerificationUploadHandler} from './api/developer-projects.js'
+import pocketNativeSolanaSendHandler from './api/pocket/native-solana-send.js'
+import pocketBscInboundBridgeHandler from './api/pocket/bsc-inbound-bridge.js'
+import pocketBscOutboundBridgeHandler from './api/pocket/bsc-outbound-bridge.js'
+import usdAccountHandler, { usdAccountWebhook } from './api/pocket/usd-account.js'
+import pocketBscAccountHandler from './api/pocket/bsc-account.js'
+import pocketBscSwapHandler from './api/pocket/bsc-service.js'
+import {createExchangeRateLimit} from './api/pocket/exchange-rate-limit.js'
+import pocketNativeSolanaSwapHandler from './api/pocket/native-solana-swap.js'
+import pocketNativeEvmSwapHandler from './api/pocket/native-evm-swap.js'
+import pocketCashConversionHandler from './api/pocket/cash-conversion.js'
+import bridgeSandboxHandler, { bridgeSandboxWebhook } from './api/pocket/bridge-sandbox.js'
+import pocketNativeSendHandler from './api/pocket/native-send.js'
+import foodDemoHandler from './api/food-demo.js'
+import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
+import {drainPocketGifts} from './api/pocket/gifts/worker.js'
+import { createStockWalletSessionHandlers } from './api/stock-wallet-account.js'
+import {createWalletSwapSessionHandlers} from './api/wallet-swap-sessions.js'
+import stockWalletBalancesHandler from './api/stock-wallet-balances.js'
+import pocketCheckoutConfig from './api/pocket/checkout-config.js'
+import pocketMigrationLegacyFlowHandler from './api/pocket/wallet-migration-legacy-flow.js'
+/**
+ * Express server for Render deployment.
+ *
+ * Serves:
+ *   - /api/relay-v2      POST  — V2 ghost-vault relay (RELAYER_PRIVATE_KEY)
+ *   - /api/relay-stream  POST  — Streampay gasless claim/cancel on Arc
+ *   - /api/health        GET   — liveness probe (used by RelayerWakeUp component)
+ *   - /*                       — Vite production build (dist/)
+ */
+
+import express from 'express'
+import type { NextFunction, Request, Response } from 'express'
+import { config as loadEnv } from 'dotenv'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join, sep } from 'path'
+import relayV2Handler         from './api/relay-v2.js'
+import txStatusHandler        from './api/tx-status.js'
+import solanaBalanceHandler   from './api/solana-balance.js'
+import evmReadHandler from './api/evm-read.js'
+import evmBalanceHandler      from './api/evm-balance.js'
+// ── Streampay module ──────────────────────────────────────────────────────────
+import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
+import relayCheckpointHandler           from './modules/streampay/api/relay-checkpoint.js'
+import streamOgHandler                 from './modules/streampay/api/stream-og.js'
+import settlePoaHandler                from './modules/streampay/api/settle-poa.js'
+import {
+  storeContent,
+  getContent,
+  getContentStreamEscrow,
+  getContentCheckpointEscrow,
+  getCreatorCheckpointVault,
+  saveCreatorCheckpointVault,
+  getContentX402,
+  listCreatorContent,
+  listApprovedCreatorContent,
+  listCreatorAdminContent,
+  listCreatorEarnings,
+  getHashpayStreamAgentContext,
+  getCreatorBook,
+  getCreatorSocial,
+  recordCreatorContentView,
+  setCreatorReaction,
+  addCreatorComment,
+  setCreatorCommentReaction,
+  reviewCreatorContent,
+  unlockContentX402WithAgent,
+} from './modules/streampay/api/content.js'
+import { registerVault, getVault, listViewers } from './modules/streampay/api/vault-registry.js'
+import { registerEventPayment, listEventPayments } from './api/event-registry.js'
+import {
+  buildSolanaTx, relaySolanaTx,
+  getSolanaVaultAddress, sweepSolanaVault,
+} from './api/relay-solana.js'
+import fxRateHandler from './api/fx-rate.js'
+import relayArbitrumUsdcHandler from './api/relay-arbitrum-usdc.js'
+import basePaymasterHandler from './api/base-paymaster.js'
+import circleSolanaEmailHandler from './api/circle-solana-email.js'
+import privyCircleLinkHandler from './api/privy-circle-link.js'
+import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
+import telegramRequestHandler from './api/telegram-request.js'
+import pocketPaylinkRequestsHandler from './api/pocket/paylink-requests.js'
+import polymarketBridgeHandler from './api/polymarket-bridge.js'
+import polymarketBuilderHandoffHandler from './api/polymarket-builder-handoff.js'
+import polymarketBuilderSignerHandler from './api/polymarket-builder-signer.js'
+import polymarketOrderHandler from './api/polymarket-order.js'
+import polymarketPortfolioHandler from './api/polymarket-portfolio.js'
+import polymarketRelayerBuilderSignerHandler from './api/polymarket-relayer-builder-signer.js'
+import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
+import ngPosHandler from './api/ng-pos.js'
+import localCurrencyProfileHandler from './api/local-currency-profile.js'
+import pocketProfileHandler from './api/pocket/profile.js'
+import pocketAccountHandler from './api/pocket/account.js'
+import pocketPaymentSecurityHandler from './api/pocket/payment-security.js'
+import pocketPosHandler from './api/pocket/pos.js'
+import pocketKycHandler, { pocketKycCallback } from './api/pocket/kyc.js'
+import pocketBankReceiveHandler from './api/pocket/bank-receive.js'
+import pocketBankInstitutionsHandler from './api/pocket/bank-receive-institutions.js'
+import pocketBankVerifyHandler from './api/pocket/bank-receive-verify.js'
+import pocketBankSendHandler from './api/pocket/bank-send.js'
+import pocketBankWithdrawHandler from './api/pocket/bank-withdraw.js'
+import pocketEvmTransferStatusHandler from './api/pocket/evm-transfer-status.js'
+import {
+  pocketSolanaTransferPrepareHandler,
+  pocketSolanaTransferSubmitHandler,
+} from './api/pocket/solana-transfers.js'
+import {
+  pocketSolanaCctpPrepareHandler,
+  pocketSolanaCctpSubmitHandler,
+} from './api/pocket/solana-cctp-relay.js'
+import pocketActivityHandler from './api/pocket/activity.js'
+import pocketLedgerHandler from './api/pocket/ledger.js'
+import pocketPaylinksHandler from './api/pocket/paylinks.js'
+import pocketRequestsHandler from './api/pocket/requests.js'
+import pocketGiftsHandler from './api/pocket/gifts/index.js'
+import pocketNotificationsHandler from './api/pocket/notifications.js'
+import pocketPushDevicesHandler from './api/pocket/push-devices.js'
+import pocketBridgeHandler from './api/pocket/bridge.js'
+import pocketXPayBankHandler from './api/pocket/xpay-bank.js'
+import pocketUnifiedXPayHandler from './api/pocket/unified-xpay.js'
+import pocketXPayHandler, { drainXPayPayments } from './api/pocket/xpay.js'
+import pocketEarnEarningsHandler from './api/pocket/earn-earnings.js'
+import pocketStockNotificationsHandler from './api/pocket/xstocks-notifications.js'
+import { drainStockNotifications } from './api/pocket/xstocks-notifications-store.js'
+import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
+import pocketStockPricesHandler from './api/pocket/xstocks-prices.js'
+import pocketStockSwapHandler from './api/pocket/xstocks-swap.js'
+import pocketXLayerSponsorshipHandler from './api/pocket/xlayer-sponsorship.js'
+import pocketArcSwapHandler from './api/pocket/arc-swap.js'
+import pocketUsdtBridgeHandler from './api/pocket/usdt-bridge.js'
+import pocketXLayerBridgeHandler from './api/pocket/xlayer-bridge.js'
+import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
+import pocketBalancesHandler from './api/pocket/balances.js'
+import pocketWalletUpdateStatusHandler from './api/pocket/wallet-update-status.js'
+import pocketAdditionalMigrationHandler from './api/pocket/wallet-additional-flow.js'
+import pocketMigrationFlowHandler from './api/pocket/wallet-migration-flow.js'
+import pocketFxQuoteHandler from './api/pocket/fx-quote.js'
+import pocketSpendingLimitsHandler from './api/pocket/spending-limits.js'
+import pocketRecipientBalanceHandler from './api/pocket/recipient-balance.js'
+import pocketX402Handler from './api/pocket/x402.js'
+import pocketX402ConnectHandler from './api/pocket/x402-connect.js'
+import pocketX402ActivateHandler from './api/pocket/x402-activate.js'
+import pocketMarketplaceHandler from './api/pocket/marketplace.js'
+import pocketAgentAskHandler from './api/pocket/agent-ask.js'
+import pocketSupportCasesHandler, { startPocketSupportLifecycle } from './api/pocket/support-cases.js'
+import { readPocketOperationsHealth } from './api/pocket/operations-health.js'
+import { drainPocketReconciliation, pocketReconciliationHandler } from './api/pocket/reconciliation-worker.js'
+import { drainPocketMoneyPushWorker } from './api/pocket/money-push-worker.js'
+import pocketTransactionOperationsHandler from './api/pocket/transaction-operations.js'
+import pocketWalletsHandler from './api/pocket/wallets/index.js'
+import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
+import { paycrestWebhookHandler } from './api/paycrest-pos.js'
+import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
+import streamHistoryHandler from './api/stream-history.js'
+import arenaRoomHandler from './api/arena-room.js'
+import agentVerifyHandler   from './api/agent-verify.js'
+import agentAskHandler     from './api/agent-ask.js'
+import agentWalletHandler  from './api/agent-wallet.js'
+import helperProfileHandler from './api/helper-profile.js'
+import circlePocketActionsHandler from './api/circle-pocket-actions.js'
+import agentProfileHandler from './api/agent-profile.js'
+import agentGovernanceHandler from './api/agent-governance.js'
+import agentLegalProfileHandler from './api/agent-legal-profile.js'
+import polyWorldcupNewsHandler from './api/poly-worldcup-news.js'
+import polyStreamHandler from './api/poly-stream.js'
+import x402PolymarketScoutHandler from './api/x402-polymarket-scout.js'
+import zeroScoutPolymarketBriefHandler from './api/zeroscout-polymarket-brief.js'
+import x402ReceiptHandler from './api/x402-receipt.js'
+import receiptHandler from './api/receipt.js'
+import checkAgentUrlHandler from './api/check-agent-url.js'
+import dashboardPaymentsHandler from './api/dashboard-payments.js'
+import paymentTxLookupHandler from './api/payment-tx-lookup.js'
+import publicConfigHandler from './api/public-config.js'
+import { pocketEsimCatalogHandler, pocketEsimPriceHandler } from './api/pocket/esim.js'
+import { pocketEsimOrdersHandler, drainPocketEsimOrders } from './api/pocket/esim-checkout.js'
+import { runtimePublicConfigScript } from './api/runtime-public-config.js'
+import partnerAccessHandler from './api/partner-access.js'
+import developerProjectsHandler from './api/developer-projects.js'
+import operationsSessionHandler from './api/operations-access.js'
+import operationsTeamHandler from './api/operations-team.js'
+import developerCapabilitiesHandler from './api/developer-capabilities.js'
+import { developerEnvironmentBoundary } from './api/developer-environment.js'
+import arcWalletHandler from './api/arc-wallet.js'
+import { createWalletConnectionHandlers } from './api/wallet-connections.js'
+import { createXStocksAgreementHandlers } from './api/xstocks-agreement/http.js'
+import { createArcTradeHandlers } from './api/trade-agreement/arc-http.js'
+import arcAgreementsHandler from './api/arc-agreements.js'
+import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipients.js'
+import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
+import arcAgreementProjectPayerHandler from './api/arc-agreement-project-payer.js'
+import arcAgreementAgentHandler from './api/arc-agreement-agent.js'
+import xstocksReviewHandler from './api/xstocks-agreement/reviewer.js'
+import arcTradeReviewHandler from './api/trade-agreement/reviewer.js'
+import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
+import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
+import hashPayStreamArcWebhookHandler from './api/hashpaystream-arc-webhook.js'
+import hashPayStreamArcAgreementsHandler from './api/hashpaystream-arc-agreements.js'
+import hashPayStreamAgreementGateway from './modules/streampay/api/agreement-gateway.js'
+import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-activation-worker.js'
+import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
+import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
+import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
+import {drainStockCheckoutWebhooks} from './api/hosted-stock-checkouts.js'
+import hostedStockCheckoutSwapHandler from './api/hosted-stock-checkout-swap.js'
+import agenticCheckoutsHandler from './api/agentic-checkouts.js'
+import developerCliProjectHandler from './api/developer-cli-project.js'
+import developerCliAuthHandler from './api/developer-cli-auth.js'
+import developerCliKeysHandler from './api/developer-cli-keys.js'
+import { cliRequestScope } from './api/developer-cli-grants.js'
+import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
+import polymarketFundingCheckoutsHandler from './api/polymarket-funding-checkouts.js'
+import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
+import { pocketBillsRefundHandler, pocketBillsUserRefundHandler } from './api/pocket/bills-refunds.js'
+import vtpassBillsWebhookHandler from './api/pocket/bills-webhook.js'
+import { rateLimit } from './api/rate-limit.js'
+
+loadEnv({ path: '.env.local', override: false })
+loadEnv({ path: '.env', override: false })
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const app = express()
+// Render terminates TLS behind one trusted proxy. Express derives req.ip from
+// that boundary instead of application code trusting arbitrary forwarded headers.
+app.set('trust proxy', 1)
+
+function sendSpaIndex(res: Response) {
+  const indexPath = join(__dirname, 'dist', 'index.html')
+  const html = readFileSync(indexPath, 'utf8')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.type('html').send(html.replace('</head>', `${runtimePublicConfigScript()}</head>`))
+}
+
+app.use((_req, res, next) => {
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'camera=(self "https://cdn.smileidentity.com" "https://cdn.usesmileid.com" "https://hashkey-paylink.onrender.com"), microphone=(), geolocation=()')
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com https://cdn.smileidentity.com https://cdn.usesmileid.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "connect-src 'self' https: wss:",
+      "frame-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://cdn.usesmileid.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "child-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://cdn.usesmileid.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; '),
+  )
+  next()
+})
+
+// Keep third-party identity components isolated from Pocket's app origin.
+app.get('/pocket/identity-frame', (req, res) => {
+  if (req.hostname !== 'hashkey-paylink.onrender.com' && process.env.NODE_ENV === 'production') return res.sendStatus(404)
+  res.removeHeader('X-Frame-Options')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('Cache-Control', 'no-store')
+  if (process.env.POCKET_KYC_ENROLLMENT_PAUSED === 'true') {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com https://developer.hashpaylink.com http://localhost:5173; base-uri 'none'; form-action 'none'")
+    return res.sendFile(join(__dirname, 'vendor', 'smile-id', 'coming-soon.html'))
+  }
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'none'",
+    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://cdn.usesmileid.com https://web-models.smileidentity.com https://secure.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
+    "style-src 'unsafe-inline' https://cdn.smileidentity.com https://cdn.usesmileid.com https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com data:",
+    "img-src https: data: blob:",
+    "connect-src https: wss: data:",
+    "worker-src blob: https://cdn.smileidentity.com https://cdn.usesmileid.com",
+    "media-src blob:",
+    "frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com https://developer.hashpaylink.com http://localhost:5173",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "sandbox allow-scripts allow-same-origin allow-forms allow-popups",
+  ].join('; '))
+  return res.sendFile(join(__dirname, 'vendor', 'smile-id', req.query.method === 'government_id' ? 'doc-verification.html' : 'biometric-kyc.html'))
+})
+
+const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })
+const hashPayStreamArcWebhookLimiter = rateLimit({ name: 'hashpaystream-arc-webhook', windowMs: 60_000, max: 120 })
+
+app.post('/api/pocket/kyc/callback', rateLimit({ name: 'smile-callback', windowMs: 60_000, max: 120 }), express.json({ limit: '1536kb' }), pocketKycCallback)
+app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
+app.post('/api/pocket/usd-account/webhook', rateLimit({ name: 'usd-account-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), usdAccountWebhook)
+app.post('/api/pocket/bridge-sandbox/webhook', rateLimit({ name: 'bridge-sandbox-webhook', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '256kb' }), bridgeSandboxWebhook)
+app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
+app.post(
+  '/api/hashpaystream/arc-agreement-webhook',
+  hashPayStreamArcWebhookLimiter,
+  express.raw({ type: 'application/json', limit: '64kb' }),
+  hashPayStreamArcWebhookHandler,
+)
+
+// Parse JSON bodies before any route handler sees req.body. Creator Studio
+// publish payloads can include sanitized article HTML plus a compressed cover.
+app.all('/api/pocket/gifts/events', rateLimit({ name: 'gift-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketGiftEventWebhook)
+app.post('/api/developer-verification/documents', rateLimit({name:'business-documents',windowMs:60_000,max:20}), express.raw({type:'application/octet-stream',limit:'5mb'}), developerVerificationUploadHandler)
+app.post('/api/demo/food/webhook', rateLimit({name:'food-webhook',windowMs:60_000,max:120}), express.raw({type:'application/json',limit:'64kb'}), foodDemoWebhook)
+app.use(express.json({ limit: '256kb' }))
+
+// A CLI credential must not activate a different API surface, including public
+// mutations that do not otherwise resolve a developer policy.
+app.all('/api/v2/capabilities', developerCapabilitiesHandler)
+app.use(['/api/v2/checkouts', '/api/v2/agreements', '/api/v2/funding'], developerEnvironmentBoundary)
+
+app.use('/api', (req, res, next) => {
+  const usesScoped = [req.headers.authorization, req.headers['x-api-key']].some(value => /hpl_(?:cli|app)_/.test(String(value ?? '')))
+  if (usesScoped && req.path !== '/v2/cli/auth' && !cliRequestScope(req)) {
+    return res.status(403).json({ ok: false, error: 'Scoped credentials are not permitted on this route.' })
+  }
+  next()
+})
+
+const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
+const exchangeLimiter = createExchangeRateLimit(strictLimiter)
+const circleEmailOtpLimiter = rateLimit({ name: 'circle-email-otp', windowMs: 10 * 60_000, max: 5 })
+const billsQuoteLimiter = rateLimit({ name: 'bills-quote', windowMs: 60_000, max: 12 })
+const billsPayLimiter = rateLimit({ name: 'bills-pay', windowMs: 60_000, max: 40 })
+const billsRefundLimiter = rateLimit({ name: 'bills-refund', windowMs: 10 * 60_000, max: 8 })
+const relayLimiter = rateLimit({ name: 'relay', windowMs: 60_000, max: 30 })
+const readLimiter = rateLimit({ name: 'read', windowMs: 60_000, max: 120 })
+// Arena: 4s polling + question fetches + actions, often multiple players sharing a NAT IP.
+// Auth-gated per-room, so a generous bucket is fine.
+const arenaLimiter = rateLimit({ name: 'arena', windowMs: 60_000, max: 240 })
+
+function billsBrowserBoundary(req: Request, res: Response, next: NextFunction) {
+  const fetchSite = String(req.headers['sec-fetch-site'] ?? '').trim().toLowerCase()
+  if (fetchSite === 'cross-site') {
+    return res.status(403).json({ ok: false, error: { code: 'CROSS_SITE_REQUEST_BLOCKED', message: 'Cross-site Bills requests are not allowed.', retryable: false } })
+  }
+  const origin = String(req.headers.origin ?? '').trim()
+  if (origin) {
+    try {
+      if (new URL(origin).host.toLowerCase() !== String(req.headers.host ?? '').trim().toLowerCase()) {
+        return res.status(403).json({ ok: false, error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Bills request origin is not allowed.', retryable: false } })
+      }
+    } catch {
+      return res.status(403).json({ ok: false, error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Bills request origin is invalid.', retryable: false } })
+    }
+  }
+  return next()
+}
+
+function circleEmailOtpBoundary(req: Request, res: Response, next: NextFunction) {
+  if (String(req.body?.action ?? '') !== 'requestEmailOtp') return next()
+  return circleEmailOtpLimiter(req, res, next)
+}
+
+// ── API routes ────────────────────────────────────────────────────────────────
+app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
+app.post('/api/tx-status',             readLimiter, txStatusHandler)
+app.post('/api/solana-balance',        readLimiter, solanaBalanceHandler)
+app.post('/api/evm-read/:network', readLimiter, evmReadHandler)
+app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
+// ── Streampay routes ──────────────────────────────────────────────────────────
+app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
+app.post('/api/relay-checkpoint',      relayLimiter, relayCheckpointHandler)
+app.post('/api/settle-poa',            relayLimiter, settlePoaHandler)
+app.post('/api/store-content',         strictLimiter, storeContent)
+app.get('/api/list-creator-content',   readLimiter, listCreatorContent)
+app.get('/api/creator-earnings',       readLimiter, listCreatorEarnings)
+app.get('/api/hashpaystream-agent-context', readLimiter, getHashpayStreamAgentContext)
+app.get('/api/creator-discover-content', readLimiter, listApprovedCreatorContent)
+app.get('/api/admin/creator-content',  strictLimiter, listCreatorAdminContent)
+app.post('/api/admin/creator-content', strictLimiter, reviewCreatorContent)
+app.get('/api/get-content',            readLimiter, getContent)
+app.get('/api/get-content-stream',     readLimiter, getContentStreamEscrow)
+app.get('/api/get-content-checkpoint', readLimiter, getContentCheckpointEscrow)
+app.get('/api/creator-checkpoint-vault', readLimiter, getCreatorCheckpointVault)
+app.post('/api/creator-checkpoint-vault', strictLimiter, saveCreatorCheckpointVault)
+app.get('/api/get-content-x402',       readLimiter, getContentX402)
+app.post('/api/creator-unlock-x402',   strictLimiter, unlockContentX402WithAgent)
+app.get('/api/creator-social',         readLimiter, getCreatorSocial)
+app.post('/api/creator-content-view',  strictLimiter, recordCreatorContentView)
+app.post('/api/creator-social/reaction', strictLimiter, setCreatorReaction)
+app.post('/api/creator-social/comment', strictLimiter, addCreatorComment)
+app.post('/api/creator-social/comment-reaction', strictLimiter, setCreatorCommentReaction)
+app.post('/api/register-vault',        registerVault)
+app.get('/api/get-vault',              getVault)
+app.get('/api/list-viewers',           listViewers)
+app.post('/api/event-register',        relayLimiter, registerEventPayment)
+app.get('/api/list-event-payments',    readLimiter, listEventPayments)
+// ── Solana relay ──────────────────────────────────────────────────────────────
+app.post('/api/solana-build-tx',       relayLimiter, buildSolanaTx)
+app.post('/api/solana-relay',          relayLimiter, relaySolanaTx)
+app.get('/api/solana-vault',           readLimiter, getSolanaVaultAddress)
+app.post('/api/solana-sweep',          relayLimiter, sweepSolanaVault)
+app.get('/api/fx-rate',                fxRateHandler)
+app.all('/api/relay-arbitrum-usdc',    relayArbitrumUsdcHandler)
+app.all('/api/base-paymaster',         basePaymasterHandler)
+app.post('/api/circle-solana-email',   circleEmailOtpBoundary, circleSolanaEmailHandler)
+app.post('/api/privy-circle-link',     strictLimiter, privyCircleLinkHandler)
+app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
+app.all('/api/telegram-request',        strictLimiter, telegramRequestHandler)
+app.all('/api/polymarket-bridge',       strictLimiter, polymarketBridgeHandler)
+app.post('/api/polymarket-builder-handoff', strictLimiter, polymarketBuilderHandoffHandler)
+app.post('/api/polymarket-builder-signer', strictLimiter, polymarketBuilderSignerHandler)
+app.post('/api/polymarket-order',       strictLimiter, polymarketOrderHandler)
+app.all('/api/polymarket-portfolio',    readLimiter,   polymarketPortfolioHandler)
+app.post('/api/polymarket-relayer-builder-signer', strictLimiter, polymarketRelayerBuilderSignerHandler)
+app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHandler)
+app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
+app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
+app.all('/api/pocket/profile',           strictLimiter, pocketProfileHandler)
+app.delete('/api/pocket/account',         strictLimiter, pocketAccountHandler)
+app.all('/api/pocket/payment-security',  strictLimiter, pocketPaymentSecurityHandler)
+const pocketKycReadLimiter = rateLimit({ name: 'pocket-kyc-read', windowMs: 60_000, max: 60 })
+const pocketKycSessionLimiter = rateLimit({ name: 'pocket-kyc-session', windowMs: 60_000, max: 10 })
+app.all('/api/pocket/kyc', (req, res, next) => (['start', 'resume'].includes(req.body?.action) ? pocketKycSessionLimiter : pocketKycReadLimiter)(req, res, next), pocketKycHandler)
+app.all('/api/pocket/pos',               strictLimiter, pocketPosHandler)
+app.all('/api/pocket/bank-receive',      strictLimiter, pocketBankReceiveHandler)
+app.all('/api/pocket/bank-receive/institutions', readLimiter, pocketBankInstitutionsHandler)
+app.all('/api/pocket/bank-receive/verify', strictLimiter, pocketBankVerifyHandler)
+app.all('/api/pocket/bank-send',          strictLimiter, pocketBankSendHandler)
+const pocketBankReadLimiter = rateLimit({ name: 'pocket-bank-read', windowMs: 60_000, max: 90 })
+const pocketBankWriteLimiter = rateLimit({ name: 'pocket-bank-write', windowMs: 60_000, max: 20 })
+app.all('/api/pocket/bank-withdraw', (req, res, next) => (['status', 'routeStatus', 'recover'].includes(req.body?.action) ? pocketBankReadLimiter : pocketBankWriteLimiter)(req, res, next), pocketBankWithdrawHandler)
+app.all('/api/pocket/transfers/evm-status', readLimiter, pocketEvmTransferStatusHandler)
+app.all('/api/pocket/transfers/prepare',  strictLimiter, pocketSolanaTransferPrepareHandler)
+app.all('/api/pocket/transfers/submit',   strictLimiter, pocketSolanaTransferSubmitHandler)
+app.all('/api/pocket/bridge/solana/prepare', relayLimiter, pocketSolanaCctpPrepareHandler)
+app.all('/api/pocket/bridge/solana/submit', relayLimiter, pocketSolanaCctpSubmitHandler)
+app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
+app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
+app.all('/api/pocket/native-solana-send', strictLimiter, pocketNativeSolanaSendHandler)
+app.all('/api/pocket/native-send', strictLimiter, pocketNativeSendHandler)
+app.get('/api/pocket/bsc-account', readLimiter, pocketBscAccountHandler)
+app.post('/api/pocket/bsc-send', (req,res,next)=>(['capabilities','pending','status'].includes(req.body?.action)?readLimiter:exchangeLimiter)(req,res,next), bscSendHandler)
+app.post('/api/pocket/bsc-payment', (req,res,next)=>(['balance','pending'].includes(req.body?.action)?readLimiter:exchangeLimiter)(req,res,next), bscPaymentHandler)
+app.post('/api/pocket/bsc-swap', exchangeLimiter, pocketBscSwapHandler)
+app.all('/api/pocket/native-evm-swap', exchangeLimiter, pocketNativeEvmSwapHandler)
+app.all('/api/pocket/cash-conversion', exchangeLimiter, pocketCashConversionHandler)
+app.all('/api/pocket/bridge-sandbox', strictLimiter, bridgeSandboxHandler)
+app.all('/api/pocket/usd-account', strictLimiter, usdAccountHandler)
+app.all('/api/pocket/native-solana-swap', exchangeLimiter, pocketNativeSolanaSwapHandler)
+app.all('/api/pocket/wallet-update/status', readLimiter, pocketWalletUpdateStatusHandler)
+app.all('/api/pocket/wallet-update/flow', strictLimiter, pocketMigrationFlowHandler)
+app.all('/api/pocket/wallet-update/recovery', strictLimiter, pocketMigrationLegacyFlowHandler)
+app.all('/api/pocket/wallet-update/additional', strictLimiter, pocketAdditionalMigrationHandler)
+app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
+app.get('/api/pocket/spending-limits',   readLimiter, pocketSpendingLimitsHandler)
+app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
+app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
+app.get('/api/pocket/ledger',            readLimiter, pocketLedgerHandler)
+app.all('/api/pocket/paylink-requests',  strictLimiter, pocketPaylinkRequestsHandler)
+app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
+app.get('/api/pocket/notifications', readLimiter, pocketNotificationsHandler)
+app.post('/api/pocket/notifications', strictLimiter, pocketNotificationsHandler)
+app.get('/api/pocket/gifts', readLimiter, pocketGiftsHandler)
+app.all('/api/pocket/gifts', (req,res,next)=>(['prepare-claim','claim-status','owner-status'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketGiftsHandler)
+app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
+app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
+app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
+app.all('/api/pocket/bridge',            exchangeLimiter, pocketBridgeHandler)
+app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
+app.post('/api/pocket/xpay/bank', (req,res,next)=>(['list','status'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketXPayBankHandler)
+app.all('/api/pocket/xpay', (req,res,next)=>(req.method==='GET'||['mine','history'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketUnifiedXPayHandler)
+app.all('/api/pocket/xstocks/xpay', (req,res,next) => (req.method === 'POST' && ['mine','merchant','status'].includes(req.body?.action) ? readLimiter : strictLimiter)(req,res,next), pocketXPayHandler)
+app.all('/api/pocket/earn/earnings', readLimiter, pocketEarnEarningsHandler)
+app.all('/api/pocket/xstocks/notifications', (req,res,next) => (req.method === 'GET' ? readLimiter : strictLimiter)(req,res,next), pocketStockNotificationsHandler)
+app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
+app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
+app.all('/api/pocket/xstocks/swap', exchangeLimiter, pocketStockSwapHandler)
+app.post('/api/pocket/xlayer/sponsorship', exchangeLimiter, pocketXLayerSponsorshipHandler)
+app.all('/api/pocket/arc-swap',          exchangeLimiter, pocketArcSwapHandler)
+app.all('/api/pocket/usdt-bridge',       exchangeLimiter, pocketUsdtBridgeHandler)
+app.all('/api/pocket/xlayer-bridge', exchangeLimiter, pocketXLayerBridgeHandler)
+app.all('/api/pocket/bsc-inbound-bridge', exchangeLimiter, pocketBscInboundBridgeHandler)
+app.all('/api/pocket/bsc-outbound-bridge', exchangeLimiter, pocketBscOutboundBridgeHandler)
+app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)
+app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)
+app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler)
+app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandler)
+app.all('/api/pocket/marketplace',       strictLimiter, pocketMarketplaceHandler)
+app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
+app.all('/api/pocket/support/cases',      strictLimiter, pocketSupportCasesHandler)
+startPocketSupportLifecycle()
+app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
+app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
+app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
+app.all('/api/arena-room',             arenaLimiter, arenaRoomHandler)
+// ── Agentic Economy — 0G payment verification primitives ─────────────────────
+app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
+app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
+app.all('/api/agent-wallet',           strictLimiter, agentWalletHandler)
+app.all('/api/helper-profile',         strictLimiter, helperProfileHandler)
+app.get('/api/circle-pocket-actions',  strictLimiter, circlePocketActionsHandler)
+app.all('/api/agent-profile',          strictLimiter, agentProfileHandler)
+app.post('/api/agent-governance',      strictLimiter, agentGovernanceHandler)
+app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)
+app.get('/api/poly-worldcup-news',      readLimiter, polyWorldcupNewsHandler)
+app.get('/api/poly-stream',             readLimiter, polyStreamHandler)
+app.get('/api/creator-book',            readLimiter, getCreatorBook)
+app.get('/api/x402/polymarket-scout',  strictLimiter, x402PolymarketScoutHandler)
+app.post('/api/zeroscout/polymarket-brief', strictLimiter, zeroScoutPolymarketBriefHandler)
+app.get('/api/x402/receipt',           readLimiter, x402ReceiptHandler)
+app.get('/api/receipt',                readLimiter, receiptHandler)
+app.post('/api/receipt', strictLimiter, receiptHandler)
+app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
+app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
+app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
+app.get('/api/public-config',          readLimiter, publicConfigHandler)
+app.get('/api/pocket/esim/catalog', readLimiter, pocketEsimCatalogHandler)
+app.post('/api/pocket/esim/price', strictLimiter, pocketEsimPriceHandler)
+app.get('/api/pocket/esim/orders', readLimiter, pocketEsimOrdersHandler)
+app.post('/api/pocket/esim/orders', strictLimiter, pocketEsimOrdersHandler)
+app.get('/api/hashpaystream/arc-agreements', readLimiter, hashPayStreamArcAgreementsHandler)
+app.post('/api/hashpaystream/arc-agreements', strictLimiter, hashPayStreamArcAgreementsHandler)
+app.get('/api/hashpaystream/v2/agreements', readLimiter, hashPayStreamAgreementGateway)
+app.post('/api/hashpaystream/v2/agreements', strictLimiter, hashPayStreamAgreementGateway)
+app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
+app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
+app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
+app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
+app.all('/api/operations-cases', strictLimiter, operationsCasesHandler)
+app.all('/api/operations-audit', strictLimiter, operationsAuditHandler)
+app.all('/api/operations-emergency-pause', strictLimiter, operationsEmergencyPauseHandler)
+app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)
+app.all('/api/arc-trade-review', strictLimiter, arcTradeReviewHandler)
+app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
+app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
+app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectPayerHandler)
+app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
+const walletConnectionHandlers = createWalletConnectionHandlers()
+const walletSwapSessions=createWalletSwapSessionHandlers()
+app.all('/api/v2/wallets/swap-sessions', strictLimiter, walletSwapSessions.developer)
+app.all('/api/v2/wallets/swap-sessions/participant', strictLimiter, walletSwapSessions.participant)
+app.all('/api/v2/wallets/arc', strictLimiter, arcWalletHandler)
+const stockWalletSessions = createStockWalletSessionHandlers()
+app.all('/api/v2/wallets/stocks/open', strictLimiter, stockWalletSessions.developer)
+app.all('/api/v2/wallets/stocks/participant', strictLimiter, stockWalletSessions.participant)
+app.all('/api/v2/wallets/stocks/balances', strictLimiter, stockWalletBalancesHandler)
+app.all('/api/v2/wallets/stocks/receive', strictLimiter, stockWalletBalancesHandler)
+app.all('/api/v2/wallet-connections', strictLimiter, walletConnectionHandlers.developer)
+app.all('/api/v2/wallet-connections/participant', strictLimiter, walletConnectionHandlers.participant)
+const xstocksAgreementHandlers = createXStocksAgreementHandlers()
+const arcTradeHandlers = createArcTradeHandlers()
+app.get('/api/v2/trade-agreements', readLimiter, arcTradeHandlers.developer)
+app.all('/api/v2/trade-agreements', strictLimiter, arcTradeHandlers.developer)
+app.all('/api/v2/trade-agreements/participant', strictLimiter, arcTradeHandlers.participant)
+app.get('/api/v2/xstocks-agreements', readLimiter, xstocksAgreementHandlers.developer)
+app.all('/api/v2/xstocks-agreements', strictLimiter, xstocksAgreementHandlers.developer)
+app.all('/api/v2/xstocks-agreements/participant', strictLimiter, xstocksAgreementHandlers.participant)
+app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
+app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)
+app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcRecipientsHandler)
+app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
+app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
+app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
+app.all('/api/v2/cli/keys', strictLimiter, developerCliKeysHandler)
+app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
+app.get('/api/v2/project/removal', strictLimiter, developerAppRemovalApiHandler)
+app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
+app.all('/api/demo/food/orders', strictLimiter, foodDemoHandler)
+app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
+app.post('/api/v2/checkouts/stock-swap', strictLimiter, hostedStockCheckoutSwapHandler)
+app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
+app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
+app.all('/api/v2/funding/polymarket/checkouts', strictLimiter, polymarketFundingCheckoutsHandler)
+app.all('/api/pocket/bills/quote',     billsQuoteLimiter, billsBrowserBoundary, pocketBillsQuoteHandler)
+app.get('/api/pocket/bills/catalog',   billsQuoteLimiter, billsBrowserBoundary, pocketBillsCatalogHandler)
+app.post('/api/pocket/bills/verify',   billsQuoteLimiter, billsBrowserBoundary, pocketBillsVerifyHandler)
+app.all('/api/pocket/bills/pay',       billsPayLimiter, billsBrowserBoundary, pocketBillsPayHandler)
+app.post('/api/pocket/bills/refund',   billsRefundLimiter, billsBrowserBoundary, pocketBillsUserRefundHandler)
+app.post('/api/admin/pocket/bills/refunds/process', strictLimiter, pocketBillsRefundHandler)
+app.post('/api/admin/pocket/reconciliation/run', strictLimiter, pocketReconciliationHandler)
+app.all('/api/admin/pocket/transactions', strictLimiter, pocketTransactionOperationsHandler)
+app.get('/api/health', async (_req, res) => {
+  try {
+    const pocket = await readPocketOperationsHealth()
+    return res.status(pocket.configured && pocket.database ? 200 : 503).json({ ok: pocket.configured && pocket.database, ts: Date.now(), pocket })
+  } catch {
+    return res.status(503).json({ ok: false, ts: Date.now(), pocket: { configured: true, healthy: false, database: false } })
+  }
+})
+// OG tag injection — must be before the SPA catch-all
+app.get('/stream/:vaultAddress',       streamOgHandler)
+app.get('/stream',                     streamOgHandler)
+
+// /agent — dual-purpose: browser gets SPA, API clients get JSON verification
+app.get('/agent', strictLimiter, (req, res, next) => {
+  const { eventId, payer } = req.query as Record<string, string>
+  const acceptsJson = (req.headers.accept ?? '').includes('application/json')
+  if (eventId && payer && acceptsJson) return agentVerifyHandler(req, res)
+  next()
+})
+
+// ── Static frontend (Vite build output) ──────────────────────────────────────
+// Keep API mistakes from falling through to the SPA shell. A wrong method,
+// stale frontend route, or missing API mount must return JSON to callers.
+app.use('/api', (req, res) => {
+  res.status(404).json({ ok: false, error: `API route not found: ${req.method} ${req.originalUrl}` })
+})
+
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+  const fingerprints = String(process.env.ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS ?? '')
+    .split(/[\n,]+/)
+    .map(value => value.trim().toUpperCase())
+    .filter(value => /^(?:[A-F0-9]{2}:){31}[A-F0-9]{2}$/.test(value))
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+  res.setHeader('Content-Type', 'application/json')
+  if (!fingerprints.length) {
+    return res.status(503).json({ error: 'Android App Links certificate fingerprints are not configured.' })
+  }
+  return res.json([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'com.hashpaylink.pocket',
+      sha256_cert_fingerprints: fingerprints,
+    },
+  }])
+})
+
+app.get('/.well-known/apple-app-site-association', (_req, res) => {
+  const teamId = String(process.env.APPLE_TEAM_ID ?? '').trim().toUpperCase()
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+  res.setHeader('Content-Type', 'application/json')
+  if (!/^[A-Z0-9]{10}$/.test(teamId)) {
+    return res.status(503).json({ error: 'Apple Team ID is not configured.' })
+  }
+  return res.json({
+    applinks: {
+      details: [{
+        appIDs: [`${teamId}.com.hashpaylink.pocket`],
+        components: [{ '/': '/*', comment: 'Open Hash PayLink Pocket links in the iOS app.' }],
+      }],
+    },
+  })
+})
+
+app.get(['/pitch', '/pitch/'], (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache')
+  res.sendFile(join(__dirname, 'dist', 'pitch', 'index.html'))
+})
+
+app.use(express.static(join(__dirname, 'dist'), {
+  index: false,
+  setHeaders(res, filePath) {
+    if (filePath.includes(`${sep}assets${sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      return
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+  },
+}))
+
+// ── SPA fallback — send index.html for all non-API routes ────────────────────
+app.get('*', (_req, res) => {
+  sendSpaIndex(res)
+})
+
+// ── Listen ───────────────────────────────────────────────────────────────────
+const PORT = Number(process.env.PORT) || 3000
+app.listen(PORT, () => {
+  console.log(`HashKey PayLink running on port ${PORT}`)
+})
+
+const hostedCheckoutOutboxTimer = setInterval(() => {
+  void reconcileCheckoutReceiptEmails().catch(()=>console.warn('[receipt-email] delivery deferred'))
+  void drainBscCheckoutWebhooks().catch(()=>console.warn('[bsc-checkout] webhook delivery deferred'))
+  void reconcileBscSends().catch(()=>console.warn('[bsc-send] confirmation deferred'))
+  void reconcileBscPayments().catch(()=>console.warn('[bsc-checkout] confirmation deferred'))
+  void drainStockCheckoutWebhooks().catch(()=>console.warn('[stock-checkout] webhook delivery deferred'))
+  void drainHostedCheckoutWebhookOutbox().catch(error => {
+    console.error('[developer-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+hostedCheckoutOutboxTimer.unref()
+void drainHostedCheckoutWebhookOutbox().catch(error => {
+  console.error('[developer-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
+})
+
+const pocketGiftTimer = setInterval(() => { void drainPocketGifts().catch(() => console.warn('[pocket-gifts] reconciliation deferred')) }, 30_000)
+pocketGiftTimer.unref()
+const pocketEsimTimer = setInterval(() => { void drainPocketEsimOrders().catch(() => console.warn('[pocket-esim] reconciliation deferred')) }, 30_000)
+pocketEsimTimer.unref()
+const pocketReconciliationTimer = setInterval(() => {
+  void drainPocketReconciliation().catch(error => {
+    console.error('[pocket-reconciliation] scheduled run failed:', error instanceof Error ? error.message : String(error))
+  })
+}, Math.max(30_000, Number(process.env.POCKET_RECONCILIATION_INTERVAL_MS ?? 60_000)))
+pocketReconciliationTimer.unref()
+void drainPocketReconciliation().catch(error => {
+  console.error('[pocket-reconciliation] startup run failed:', error instanceof Error ? error.message : String(error))
+})
+
+const stockNotificationTimer = setInterval(() => { void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] scan deferred')); void drainXPayPayments().catch(() => console.warn('[xpay] confirmation deferred')) }, 30_000)
+stockNotificationTimer.unref()
+void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] startup deferred'))
+const pocketMoneyPushTimer = setInterval(() => {
+  void drainPocketMoneyPushWorker().catch(error => {
+    console.error('[pocket-money-push] scheduled run failed:', error instanceof Error ? error.message : String(error))
+  })
+}, Math.max(15_000, Number(process.env.POCKET_MONEY_PUSH_INTERVAL_MS ?? 30_000)))
+pocketMoneyPushTimer.unref()
+void drainPocketMoneyPushWorker().catch(error => {
+  console.error('[pocket-money-push] startup run failed:', error instanceof Error ? error.message : String(error))
+})
+const arcAgreementOutboxTimer = setInterval(() => {
+  void drainArcAgreementWebhookOutbox().catch(error => {
+    console.error('[arc-agreement-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+arcAgreementOutboxTimer.unref()
+void drainArcAgreementWebhookOutbox().catch(error => {
+  console.error('[arc-agreement-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementActivationReconciliationTimer = setInterval(() => {
+  void drainArcAgreementActivationReconciliations().catch(error => {
+    console.error('[arc-agreement-activation] scheduled reconciliation failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+arcAgreementActivationReconciliationTimer.unref()
+void drainArcAgreementActivationReconciliations().catch(error => {
+  console.error('[arc-agreement-activation] startup reconciliation failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementLifecycleReconciliationTimer = setInterval(() => {
+  void drainArcAgreementLifecycleReconciliations().catch(error => {
+    console.error('[arc-agreement-lifecycle] scheduled reconciliation failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 15_000)
+arcAgreementLifecycleReconciliationTimer.unref()
+void drainArcAgreementLifecycleReconciliations().catch(error => {
+  console.error('[arc-agreement-lifecycle] startup reconciliation failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementOperatorTimer = setInterval(() => {
+  void drainArcAgreementOperatorActions().catch(error => {
+    console.error('[arc-agreement-operator] scheduled drain failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+arcAgreementOperatorTimer.unref()
+void drainArcAgreementOperatorActions().catch(error => {
+  console.error('[arc-agreement-operator] startup drain failed:', error instanceof Error ? error.message : String(error))
+})
