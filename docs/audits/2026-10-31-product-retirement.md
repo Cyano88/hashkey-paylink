@@ -29,3 +29,5 @@ Sampled configured retirement signer/contract addresses had zero native balances
 Unrelated local billing changes and generated dist are excluded from the release.
 
 Additional read-only token inventory: 14 unique configured addresses had zero X Layer USDC and USDT balances (28 successful balanceOf calls). Native checks on Arc and X Layer were also zero. This only covers these addresses and assets, not every historical contract, stock asset or other chain. The eight Trade chain observations remain separate from persisted reconciliation, which is blocked by expired keys.
+
+Render rollback protection: both production services had automatic deployment enabled on older configured branches (standalone main; Hash PayLink release/pocket-solana-usdt-20261012). Automatic deployment was set to off and confirmed by a fresh service read. Future releases must use the reviewed exact commit; do not re-enable an older branch before reconciling it with this retirement. This does not suspend either web service.
