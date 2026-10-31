@@ -17,6 +17,6 @@ export default function PocketStyleSupportComposer({value,onChange,onSend,busy,d
    <textarea ref={input} rows={1} aria-label={label} placeholder={disabled?'This conversation is closed.':'Message...'} value={value} maxLength={1500} disabled={busy||disabled} onChange={event=>{onChange(event.target.value);onTyping?.(Boolean(event.target.value.trim()))}} onBlur={()=>onStopTyping?.()} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();send()}}} style={onFiles?{paddingLeft:48}:undefined} className="pocket-support-input"/>
    <DynamicSendButton inputText={value||(files.length||onFiles?'Attachment':'')} isLoading={busy} canStop={false} onSend={send} onStop={()=>{}} idleLabel={onFiles?'Attach files':'Write a message'} onAddAttachment={()=>onFiles?picker.current?.click():input.current?.focus()} disabled={disabled||Boolean(onFiles&&!value.trim()&&!files.length)} className="absolute bottom-1 right-1"/>
   </div>
-  {privacyHint&&<p className="mt-2 text-[11px] text-gray-400">Never share a PIN, password, sign-in code or API key.</p>}
+  {privacyHint&&<p className="mt-2 text-center text-[11px] text-gray-400">Never share a PIN, password, sign-in code or API key.</p>}
  </form>
 }
