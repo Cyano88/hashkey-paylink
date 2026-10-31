@@ -1,6 +1,6 @@
 import {validBuilderCountry} from '../src/lib/builderCountries.js'
 import {productDisplayName} from '../src/lib/retiredProductPresentation.js'
-import {builderProfilesForProjects,projectBuilderProfileId,validBuilderProfileId,type BuilderProfile} from '../src/lib/builderProfiles.js'
+import {builderProfilesForProjects,projectBuilderProfileId,validBuilderProfileId,builderProfileReady,type BuilderProfile} from '../src/lib/builderProfiles.js'
 import {productionCapabilities, productionVerificationAllows, type DeveloperAccountType} from '../src/lib/developerAccess.js'
 import {createDeveloperSandboxHandler} from './developer-sandbox.js'
 import{normalizeReceiptEmailSettings,defaultReceiptEmailSettings,type ReceiptEmailSettings}from'../src/lib/receiptEmailSettings.js'
@@ -627,8 +627,8 @@ function adminProjectIndex(store: DeveloperStore | undefined) {
 
 export function createDeveloperProjectsHandler(dependencies: Dependencies = defaults) {
   async function profilesForOwner(ownerId:string) {
-    const [projects,profiles]=await Promise.all([dependencies.read(STORE_KEY),dependencies.read('hashpaylink:developer-business-profiles:v1')])
-    return builderProfilesForProjects(Object.values(projects?.projects??{}).filter(p=>p.ownerId===ownerId),Object.values(profiles?.businessProfiles??{}).filter(p=>p.ownerId===ownerId).map(({ownerId,...profile})=>profile))
+    const [projects,profiles,account]=await Promise.all([dependencies.read(STORE_KEY),dependencies.read('hashpaylink:developer-business-profiles:v1'),dependencies.read('hashpaylink:developer-profiles:v1')])
+    return builderProfilesForProjects(Object.values(projects?.projects??{}).filter(p=>p.ownerId===ownerId),Object.values(profiles?.businessProfiles??{}).filter(p=>p.ownerId===ownerId).map(({ownerId,...profile})=>profile)).map(profile=>profile.id==='personal'&&account?.profiles?.[ownerId]?.name?{...profile,fullName:account.profiles[ownerId].name}:profile)
   }
   async function ownedProfile(ownerId:string,id:unknown) {
     if(!validBuilderProfileId(id))throw Object.assign(Error('Choose a valid profile.'),{status:400})
@@ -652,7 +652,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (resource === 'removal') return res.json(await (dependencies.removal??manageAppRemoval)({projectId:clean(req.query?.projectId,80),ownerId:identity.userId}))
         if (resource === 'profile') {
           const profiles = await dependencies.read('hashpaylink:developer-profiles:v1')
-          return res.json({ok:true,profile:{...profiles?.profiles?.[identity.userId],email:identity.email}})
+          const personal=(await profilesForOwner(identity.userId)).find(p=>p.id==='personal')
+          return res.json({ok:true,profile:{name:personal?.fullName||'',...profiles?.profiles?.[identity.userId],email:identity.email}})
         }
         if (resource === 'institutions') {
           if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Local settlement is temporarily unavailable.' })
@@ -714,7 +715,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
             if(application.country&&application.country!==country)return res.status(409).json({ok:false,error:'Choose the country on your submitted business verification. Contact support if it needs correction.'})
           }
         }
-        const next={...profile,country}
+        const fullName=profile.type==='individual'?clean(req.body?.fullName||profile.fullName,100):undefined
+        if(req.body?.fullName!==undefined&&(!fullName||fullName.length<2))return res.status(400).json({ok:false,error:'Enter your full name.'})
+        const next={...profile,country,...(fullName?{fullName}:{})}
         const key=profile.id==='personal'?'personal:'+identity.userId:profile.id
         await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>{
           const existing=current?.businessProfiles?.[key]
@@ -786,7 +789,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const capabilities = requestedCapabilities(req.body?.capabilities, checkoutMode)
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const selectedProfile=req.body?.builderProfileId===undefined?undefined:await ownedProfile(identity.userId,req.body.builderProfileId)
-        if(selectedProfile&&!selectedProfile.country)return res.status(409).json({ok:false,error:'Set your profile country before creating an app.'})
+        if(selectedProfile&&!builderProfileReady(selectedProfile))return res.status(409).json({ok:false,error:'Complete your profile name and country before creating an app.'})
         if(selectedProfile?.needsSetup)return res.status(409).json({ok:false,error:'Set your business profile name before adding another app.'})
         if(selectedProfile&&req.body?.accountType!==undefined&&req.body.accountType!==selectedProfile.type)return res.status(400).json({ok:false,error:'The app type must match its selected profile.'})
         if(selectedProfile?.type==='business')await dependencies.mutate('hashpaylink:developer-business-profiles:v1',current=>({projects:{},businessProfiles:{...current?.businessProfiles,[selectedProfile.id]:{...selectedProfile,ownerId:identity.userId}}}))

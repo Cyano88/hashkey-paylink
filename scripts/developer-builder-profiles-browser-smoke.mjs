@@ -7,7 +7,7 @@ const verify=async()=>({userId:'profile-browser-owner',email:'fixture@example.te
 const handler=createDeveloperProjectsHandler({hasStore:()=>true,portalSecret:()=> 'builder-browser-profile-secret-at-least-32-characters',read:async k=>stores.get(k),mutate:async(k,fn)=>{const v=fn(stores.get(k));stores.set(k,v);return v},verify,requireVerification:()=>true,now:()=>new Date(),createProjectId:()=>`dev_profilebrowser${++sequence}`,createKeyId:()=>`key_${++sequence}`,createSecret:p=>p+'_'+sequence,receivingWallets:async()=>({}),validateWebhook:async()=>{},adminEmails:()=>'',adminUserIds:()=>''})
 const recorder=()=>({statusCode:200,setHeader(){},status(n){this.statusCode=n;return this},json(b){this.body=b;return this}})
 async function api(body){const r=recorder();await handler({method:body?'POST':'GET',headers:{},query:{},body},r);assert.ok(r.statusCode<300,r.body?.error);return r.body}
-await api({action:'set-builder-country',profileId:'personal',country:'NG'})
+await api({action:'set-builder-country',profileId:'personal',country:'NG',fullName:'Example Builder'})
 await api({action:'create',name:'Personal app',checkoutMode:'human',accountType:'individual',builderProfileId:'personal'})
 const removed=(await api({action:'create',name:'Deleted legacy app',checkoutMode:'human',accountType:'business'})).project
 stores.get('hashpaylink:developer-projects:v1').projects[removed.id].removal={status:'deleted'}

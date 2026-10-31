@@ -1,4 +1,4 @@
-﻿export type BuilderProfile = {id:string;name:string;type:'individual'|'business';country?:string;createdAt?:string;needsSetup?:boolean;legacyAppName?:string}
+﻿export type BuilderProfile = {id:string;name:string;type:'individual'|'business';country?:string;fullName?:string;createdAt?:string;needsSetup?:boolean;legacyAppName?:string}
 export type ProfileProject = {id:string;name:string;accountType?:'individual'|'business';builderProfileId?:string;removal?:{status:string}}
 export const PERSONAL_PROFILE:BuilderProfile={id:'personal',name:'Personal',type:'individual'}
 export function projectBuilderProfileId(project:ProfileProject) {
@@ -16,3 +16,5 @@ export function builderProfilesForProjects(projects:readonly ProfileProject[],st
 export function validBuilderProfileId(value:unknown):value is string {
  return typeof value==='string'&&(value==='personal'||/^business_[a-zA-Z0-9_-]{8,90}$/.test(value))
 }
+
+export function builderProfileReady(profile:BuilderProfile){return Boolean(profile.country&&(profile.type==='business'?!profile.needsSetup:profile.fullName))}

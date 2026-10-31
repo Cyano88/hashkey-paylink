@@ -11,7 +11,7 @@ let response=await call();assert.deepEqual(response.body.builderProfiles,[{id:'p
 const app=(name,extra={})=>call({action:'create',name,checkoutMode:'human',capabilities:['hosted_checkout'],...extra})
 assert.equal((await app('Country required',{accountType:'individual',builderProfileId:'personal'})).statusCode,409)
 assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'KE'})).statusCode,400)
-assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'NG'})).statusCode,200)
+assert.equal((await call({action:'set-builder-country',profileId:'personal',country:'NG',fullName:'Example Builder'})).statusCode,200)
 const personal=(await app('Personal app',{accountType:'individual',builderProfileId:'personal'})).body.project
 assert.equal(personal.builderProfileId,'personal')
 const legacy=(await app('Existing company')).body.project
