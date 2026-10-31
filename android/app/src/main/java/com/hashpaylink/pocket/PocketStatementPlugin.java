@@ -47,25 +47,6 @@ public class PocketStatementPlugin extends Plugin {
         } catch (Exception error) { file.delete(); throw error; }
     }
 
-    @PluginMethod public void saveSupportFile(PluginCall call) {
-        try {
-            String encoded = call.getString("base64", "");
-            String name = call.getString("name", "");
-            String mime = call.getString("mimeType", "");
-            if (encoded.isEmpty() || encoded.length() > 7_000_000 || name.isEmpty() || name.length() > 180 || name.contains("/") || name.contains("\\") || name.chars().anyMatch(Character::isISOControl)) throw new IllegalArgumentException();
-            byte[] bytes = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT);
-            if (bytes.length == 0 || bytes.length > 5 * 1024 * 1024) throw new IllegalArgumentException();
-            String lower = name.toLowerCase(java.util.Locale.ROOT);
-            boolean valid = "application/pdf".equals(mime) && lower.endsWith(".pdf") && bytes.length >= 5 && new String(bytes, 0, 5, StandardCharsets.US_ASCII).equals("%PDF-");
-            valid |= "image/jpeg".equals(mime) && (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) && bytes.length >= 3 && (bytes[0] & 255) == 255 && (bytes[1] & 255) == 216 && (bytes[2] & 255) == 255;
-            valid |= "image/png".equals(mime) && lower.endsWith(".png") && bytes.length >= 8 && bytes[0] == (byte)137 && bytes[1] == 80 && bytes[2] == 78 && bytes[3] == 71;
-            valid |= "image/webp".equals(mime) && lower.endsWith(".webp") && bytes.length >= 12 && new String(bytes, 0, 4, StandardCharsets.US_ASCII).equals("RIFF") && new String(bytes, 8, 4, StandardCharsets.US_ASCII).equals("WEBP");
-            valid |= "text/plain".equals(mime) && lower.endsWith(".txt");
-            if (!valid) throw new IllegalArgumentException();
-            chooseDestination(call, bytes, name, mime);
-        } catch (Exception error) { call.reject("Support file could not be prepared."); }
-    }
-
     @PluginMethod public void savePdf(PluginCall call) {
         try {
             String encoded = call.getString("base64", "");

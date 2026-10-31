@@ -1,19 +1,11 @@
-# Pocket support parity audit
+# Developer dashboard / admin support scope correction
 
-Scope: Pocket customer chat and the Pocket operations inbox. Business Support remains separate. Existing conversations and escalations are retained.
+The requested scope is the developer dashboard and admin, including the Pocket support inbox inside admin. Pocket app UI, Android builds and phone installation are outside that scope.
 
-Implemented:
-- Both Pocket views use the shared rounded composer, paperclip, pending file list/removal and send button. PNG/JPG/WebP/PDF/TXT: three files per message, 5 MiB each.
-- File-only customer messages hand off to Pocket Support; the assistant does not claim to inspect file contents. Staff can reply with files only. Upload IDs and downloads remain authenticated and scoped to the correct user, rail, workspace and conversation.
-- Bidirectional typing uses separate expiring presence records and a separate rate limit, without draft text or case mutations.
-- Staff joins retain the saved profile image and private staff ID; customer responses strip that ID. Existing missing images use the shared unambiguous legacy-profile lookup. The support home uses saved team profiles instead of an unrelated portrait.
-- Staff reply retries are deduplicated; newlines are preserved. Resolved cases cannot be assigned or accept attachments. Open/Resolved selection and message search now agree with their labels.
-- Pocket chat uses the native API URL helper. Android downloads use the existing native document-save flow for supported support files; image previews handle native Back and release temporary URLs.
+The initial change incorrectly expanded into the native Pocket app. Deployment `dep-dbiv568u01pc73e1p9fg` for `6a2de0722ddd2b137a6dac463668366c37015fe4` was cancelled before it went live. Pocket customer UI, its page/API URL change, native download code and shared-hook native changes have been reverted to `2b84863e0`. The phone APK was already replaced in-place; source reversion does not restore the phone.
 
-Verification:
-- `scripts/pocket-support-parity-smoke.mjs`: real handlers with synthetic storage/auth tested private two-way file exchange, file-only handoff/reply, duplicate staff retry, avatar projection, identity privacy, cross-account/rail/workspace rejection, support-vs-legal permissions, presence TTL and no case mutation, closed cases, and POST-only writes.
-- Existing developer support, file/presence, Pocket conversation and operations-case regression fixtures passed.
-- Playwright synthetic customer/admin pages tested actual paperclip activation on both sides, file-only sends, image preview, document download, pending-file removal, both typing directions and stop, shared composer, failed-send retry without duplication, message search, resolution confirmation, disabled closed-case actions, filters and new conversations. Mobile and desktop screenshots were inspected. These are fixture tests, not live customer messages.
-- Source production build and Pocket native asset build passed. The existing frontend/support typecheck baseline has no new normalized diagnostics. The expanded Pocket backend graph reports existing diagnostics in older dependencies and existing `.at` uses; it is not globally typecheck-clean.
+The exact prior APK remains intact at `C:/Users/USER/hashpaylink-solana-bridge-release/android/app/build/outputs/apk/debug/app-debug.apk`. SHA-256: `5D28FCF313F798502B5CE31F13F49846E9B9310A6847AF3B0F6E4C402F1052D8`. It matches the successful Pixel installation and hash recorded at 2026-10-30 20:10:21 UTC in session `01a18486-5b45-7ac1-9669-d06d8ef4a965`. A verified copy is retained at `output/pocket-stable-20261030-5d28fcf3.apk`. No rebuild is needed. Device restoration is pending USB reconnection.
 
-Deployment and device evidence follow after release verification. No live customer message or file was sent by the automated checks.
+Retained dashboard/admin work: shared rounded composer and file picker in the Pocket inbox; authenticated staff-scoped attachment storage/retrieval; staff reply retry deduplication and newline preservation; saved profile avatars; closed-case assignment protection; message search and Open/Resolved selection fixes. Business Support is separate and retains its existing two-way chat support. No claim is made that the unchanged native Pocket client gains attachment rendering or typing through this dashboard-only release.
+
+Verification: admin backend fixtures cover file upload/download, file-only reply, retry deduplication, avatars, private staff-ID redaction, role/workspace/case/uploader isolation, closed cases and POST-only writes. Earlier Playwright fixture runs verified the shared admin composer, paperclip activation, file-only sends, image preview, downloads, retry and filtering; native/customer fixture results from the reverted expansion are not evidence for this release. Existing developer, operations and Pocket conversation fixtures passed.

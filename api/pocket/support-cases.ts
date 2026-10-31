@@ -135,7 +135,7 @@ export function createPocketSupportCasesHandler(overrides:Partial<typeof handler
   try {
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     const action = clean(req.body?.action || req.query.action, 40) || (req.method === 'GET' ? 'list-mine' : 'create')
-    if(['presence','typing','staff-presence','staff-typing'].includes(action))return pocketSupportPresenceHandler(req,res)
+    if(['staff-presence','staff-typing'].includes(action))return pocketSupportPresenceHandler(req,res)
     if (action.startsWith('staff-')) {
       const staff = await verifiedStaff(req)
       if(req.query.workspace!=='pocket')return res.status(403).json({ok:false,error:'Select Pocket support.'})
@@ -221,7 +221,7 @@ export function createPocketSupportCasesHandler(overrides:Partial<typeof handler
       const current = await currentStore()
       const rows = Object.values(current.cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
       const team = Object.entries(current.staffNames || {}).slice(0,3).map(([id,displayName])=>({displayName,avatarDataUrl:current.staffImages?.[id]||undefined}))
-      return res.json({ ok: true, cases: rows.map(c=>publicCase(withSupportStaffAvatars(c,current))), team })
+      return res.json({ ok: true, cases: rows.map(publicCase), team })
     }
     if (action === 'resolution-answer') {
       if (!['yes','no'].includes(req.body?.answer)) return res.status(400).json({ok:false,error:'Choose Yes or No.'})
@@ -242,22 +242,19 @@ export function createPocketSupportCasesHandler(overrides:Partial<typeof handler
       const optionId=req.body?.optionId as SupportActionId|undefined
       if(optionId!==undefined&&(typeof optionId!=='string'||!Object.prototype.hasOwnProperty.call(supportActions,optionId)))return res.status(400).json({ok:false,error:'Choose an available support option.'})
       if(optionId==='payment_details'&&(!req.body?.eventId||typeof req.body.eventId!=='string'||req.body.eventId.length>250))return res.status(400).json({ok:false,error:'Choose a payment from the list.'})
-      const attachments=await resolveSupportAttachments(req.body.attachments,{uploaderId:profileId,workspaceId:'pocket'})
-      const message=optionId?supportActions[optionId].message:(String(req.body?.message||'').trim()||(attachments.length?'Shared '+attachments.length+' file'+(attachments.length===1?'':'s')+'.':''))
+      const message=optionId?supportActions[optionId].message:String(req.body?.message||'').trim()
       const customer = await privateCustomerIdentity(identity)
       const snapshot=await store()
-      let accountAnswer=attachments.length?undefined:await supportAccountAnswer({identity,profileId,selectedEventId:optionId==='payment_details'?clean(req.body?.eventId,250):undefined,question:message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments,featureRecords:(owner,kind,selected)=>boundedSupportRead(owner+':feature:'+kind+':'+(selected||'list'),()=>readSupportFeatureRecords(owner,kind,selected)),chainCheck:(owner,network,hash)=>boundedSupportRead(owner+':tx:'+network+':'+hash,()=>checkSupportIncomingUsdc(owner,network,hash)),payoutStatus:row=>boundedSupportRead(identity.subject+':bank:'+row.eventId,()=>readSupportPayoutStatus(row)),balanceCheck:(owner,network,asset)=>boundedSupportRead(owner+':balance:'+network+':'+asset,()=>readSupportBalance(owner,network,asset)),billStatus:(owner,row)=>boundedSupportRead(owner+':bill:'+row.eventId,()=>readSupportBillStatus(owner,row))})
-      if(!attachments.length&&!accountAnswer&&!optionId){
+      let accountAnswer=await supportAccountAnswer({identity,profileId,selectedEventId:optionId==='payment_details'?clean(req.body?.eventId,250):undefined,question:message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments,featureRecords:(owner,kind,selected)=>boundedSupportRead(owner+':feature:'+kind+':'+(selected||'list'),()=>readSupportFeatureRecords(owner,kind,selected)),chainCheck:(owner,network,hash)=>boundedSupportRead(owner+':tx:'+network+':'+hash,()=>checkSupportIncomingUsdc(owner,network,hash)),payoutStatus:row=>boundedSupportRead(identity.subject+':bank:'+row.eventId,()=>readSupportPayoutStatus(row)),balanceCheck:(owner,network,asset)=>boundedSupportRead(owner+':balance:'+network+':'+asset,()=>readSupportBalance(owner,network,asset)),billStatus:(owner,row)=>boundedSupportRead(owner+':bill:'+row.eventId,()=>readSupportBillStatus(owner,row))})
+      if(!accountAnswer&&!optionId){
         const intent=await routeSupportIntent({profileId,message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
         if(intent)accountAnswer=await supportAccountAnswer({identity,profileId,question:intent==='selected_payment'?'What is its status?':supportActions[intent].message,requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases},{profile:async()=>customer?{resolvedName:customer.fullName}:undefined,payments:readSupportPayments,featureRecords:(owner,kind,selected)=>boundedSupportRead(owner+':feature:'+kind+':'+(selected||'list'),()=>readSupportFeatureRecords(owner,kind,selected)),chainCheck:(owner,network,hash)=>boundedSupportRead(owner+':tx:'+network+':'+hash,()=>checkSupportIncomingUsdc(owner,network,hash)),payoutStatus:row=>boundedSupportRead(identity.subject+':bank:'+row.eventId,()=>readSupportPayoutStatus(row)),balanceCheck:(owner,network,asset)=>boundedSupportRead(owner+':balance:'+network+':'+asset,()=>readSupportBalance(owner,network,asset)),billStatus:(owner,row)=>boundedSupportRead(owner+':bill:'+row.eventId,()=>readSupportBillStatus(owner,row))})
       }
-      const match=attachments.length||accountAnswer||optionId?undefined:await matchSupportQuestion({profileId,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,entries:snapshot.knowledge||{},tenantId:POCKET_SUPPORT_TENANT,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
+      const match=accountAnswer||optionId?undefined:await matchSupportQuestion({profileId,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80),caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,cases:snapshot.cases,entries:snapshot.knowledge||{},tenantId:POCKET_SUPPORT_TENANT,privateValues:[customer?.fullName,customer?.email,customer?.pocketId,customer?.kycReference].filter((v):v is string=>Boolean(v))})
       await mutateDurableJson<SupportStore>(STORE_KEY, current => {
         const next = current || {cases:{}}
         advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
-        const duplicate=Object.values(next.cases).some(c=>c.profileId===profileId&&c.messages.some(m=>m.requestId===clean(req.body?.requestId,80)))
-        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,message,optionId,requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{},match,accountAnswer,...(attachments.length?{fallbackAnswer:{text:'Your files have been shared with Pocket Support. The team will reply here.',handoff:true}}:{})})
-        const sent=saved.messages.find(m=>m.requestId===clean(req.body?.requestId,80));if(!duplicate&&sent&&attachments.length&&!sent.attachments)sent.attachments=attachments
+        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,newConversation:req.body?.newConversation===true,message,optionId,requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID(), {tenantId:POCKET_SUPPORT_TENANT,entries:next.knowledge||{},match,accountAnswer})
         saved.customer ||= customer
         saved.notificationOwnerId = identity.subject
         return next

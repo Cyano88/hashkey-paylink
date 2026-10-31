@@ -422,7 +422,7 @@ app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandle
 app.all('/api/pocket/marketplace',       strictLimiter, pocketMarketplaceHandler)
 app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
 const pocketSupportPresenceLimiter=rateLimit({name:'pocket-support-presence',windowMs:60_000,max:120})
-app.all('/api/pocket/support/cases', (req,res,next)=>(['presence','typing','staff-presence','staff-typing'].includes(req.body?.action)?pocketSupportPresenceLimiter:['list-mine','staff-list','mark-read'].includes(req.body?.action)||req.method==='GET'?readLimiter:strictLimiter)(req,res,next), pocketSupportCasesHandler)
+app.all('/api/pocket/support/cases', (req,res,next)=>(['staff-presence','staff-typing'].includes(req.body?.action)?pocketSupportPresenceLimiter:['list-mine','staff-list','mark-read'].includes(req.body?.action)||req.method==='GET'?readLimiter:strictLimiter)(req,res,next), pocketSupportCasesHandler)
 startPocketSupportLifecycle()
 app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
 // ── Agentic Economy — 0G payment verification primitives ─────────────────────
