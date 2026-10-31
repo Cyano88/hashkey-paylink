@@ -842,7 +842,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         }
         if(action.endsWith('-read')){
           if(reviewer)await change(v=>({...v,history:[...v.history,{action:'application_viewed',actor,at:now,revision:v.revision}]}))
-          return res.json({ok:true,verification:publicVerification(verification),application:verification.cipher?JSON.parse(openVerification(verification.cipher,secret)):null,...(reviewer?{history:verification.history}: {})})
+          return res.json({ok:true,verification:publicVerification(verification),application:verification.cipher?JSON.parse(openVerification(verification.cipher,secret)):null,...(reviewer?{history:verification.history,paymentAccess:{operationalStatus:project.operationalStatus||'active',suspensionReason:project.suspensionReason,suspendedAt:project.suspendedAt,suspendedBy:project.suspendedBy,operations:(project.operations||[]).filter(o=>o.action==='suspended'||o.action==='reactivated').slice(-50)}}: {})})
         }
         if(action.endsWith('-download')){
           const document=verification.documents.find(d=>d.id===req.body?.documentId)
