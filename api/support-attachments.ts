@@ -1,3 +1,5 @@
+import {resolveCirclePocketIdentity,circlePocketIdentityId} from './circle-pocket-identity.js'
+import {readSupportJson} from './hash-support/pocket-storage.js'
 import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
 import {readDurableJson,writeDurableJson} from './render-durable-store.js'
@@ -34,26 +36,28 @@ export function createAttachmentResolver(read=readDurableJson){return async(ids:
  }))
 }}
 export const resolveSupportAttachments=createAttachmentResolver()
-const defaults={identity:verifyDeveloper,owner:verifyDeveloperProjectOwner,staff:verifyOperationsIdentity,env:operationsRequestPolicy,read:readDurableJson,write:writeDurableJson,uuid:randomUUID,now:Date.now}
+const defaults={pocketIdentity:resolveCirclePocketIdentity,pocketRead:readSupportJson,identity:verifyDeveloper,owner:verifyDeveloperProjectOwner,staff:verifyOperationsIdentity,env:operationsRequestPolicy,read:readDurableJson,write:writeDurableJson,uuid:randomUUID,now:Date.now}
 export function createSupportAttachmentHandler(overrides:Partial<typeof defaults>={}){const d={...defaults,...overrides};return async(req:Request,res:Response)=>{
  res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff')
  try{
   if([req.headers.authorization,req.headers['x-api-key']].some(value=>/hpl_(?:cli|app)_/.test(String(value||''))))fail('Sign in to access support files.',403)
   if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Method not allowed.'})
-  const staff=req.query.audience==='staff',projectId=String(req.query.projectId||'')||undefined,caseId=String(req.query.caseId||'')||undefined
+  const pocket=['pocket-user','pocket-staff'].includes(String(req.query.audience)),staff=req.query.audience==='staff'||req.query.audience==='pocket-staff',projectId=String(req.query.projectId||'')||undefined,caseId=String(req.query.caseId||'')||undefined
   let scope:Scope,allowed:(c:OperationsCase)=>boolean
   if(staff){
-   const identity=await d.staff(req),env=d.env(req),policy=operationsPolicy(env),access=authorizeOperations(identity,{query:req.query,method:req.method,body:req.method==='POST'?{action:'case-attachment'}:undefined},'cases',undefined,env)
+   const identity=await d.staff(req),env=d.env(req),policy=operationsPolicy(env),access=authorizeOperations(identity,{query:req.query,method:req.method,body:req.method==='POST'?{action:pocket?'staff-attachment':'case-attachment'}:undefined},pocket?'support':'cases',undefined,env)
    const manage=isOperationsFounder(identity,policy)||policy.grants.some(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===access.workspaceId&&(g.roles||[]).some(r=>['support','administrator'].includes(r)))
-   if(!manage||access.workspaceId==='pocket')fail('Support access required.',403)
+   if(!manage||(pocket?access.workspaceId!=='pocket':access.workspaceId==='pocket'))fail('Support access required.',403)
    scope={uploaderId:identity.userId,workspaceId:access.workspaceId,caseId}
-   allowed=c=>c.humanSupport!==false&&c.workspaceId===access.workspaceId&&(access.workspaceId==='builders'?!c.projectId:access.projectIds.includes(c.projectId||''))
+   allowed=c=>pocket?true:c.humanSupport!==false&&c.workspaceId===access.workspaceId&&(access.workspaceId==='builders'?!c.projectId:access.projectIds.includes(c.projectId||''))
+  }else if(pocket){
+   const identity=await d.pocketIdentity(req);if(identity.kind!=='privy')fail('Sign in to Pocket.',401);const id=circlePocketIdentityId(identity);scope={uploaderId:id,workspaceId:'pocket'};allowed=c=>c.profileId===id
   }else{
    const identity=projectId?await d.owner(req,projectId):await d.identity(req).then(i=>({ownerId:i.userId}))
    scope={uploaderId:identity.ownerId,projectId};allowed=c=>c.projectId===projectId&&c.profileId===identity.ownerId+':'+(projectId||'account')
   }
   let c:OperationsCase|undefined
-  if(caseId){c=(await d.read<{cases:Record<string,OperationsCase>}>('hashpaylink:business-support:v1'))?.cases[caseId];if(!c||!allowed(c))fail('Conversation not found.',404)}
+  if(caseId){c=(pocket?await d.pocketRead<{cases:Record<string,OperationsCase>}>((process.env.POCKET_SUPPORT_STORE_KEY||'hashpaylink:pocket-support:v1').trim()):await d.read<{cases:Record<string,OperationsCase>}>('hashpaylink:business-support:v1'))?.cases[caseId];if(!c||!allowed(c))fail('Conversation not found.',404)}
   if(req.method==='POST'){
    if(staff&&!c)fail('Choose a conversation.')
    if(c?.status==='resolved')fail('This conversation is closed.',409)

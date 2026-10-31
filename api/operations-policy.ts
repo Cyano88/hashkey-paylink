@@ -88,13 +88,13 @@ export function authorizeOperations(identity: OperationsIdentity, req: Pick<Requ
   if (recordProjectId !== undefined && !projectIds.includes(recordProjectId)) fail('Record not found in this workspace.', 404)
   const action = typeof req.body?.action === 'string' ? req.body.action.toLowerCase() : ''
   if(action.startsWith('admin-verification-') && !isOperationsFounder(identity,policy) && !policy.grants.some(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspaceId&&g.roles?.includes('compliance')))fail('Only Compliance or an owner can access verification documents and decisions.')
-  const read = !req.method || req.method === 'GET' || (req.method === 'POST' && ['admin-list','list','read','admin-verification-read','admin-verification-download','staff-list','staff-knowledge-list'].includes(action))
+  const read = !req.method || req.method === 'GET' || (req.method === 'POST' && ['admin-list','list','read','admin-verification-read','admin-verification-download','staff-list','staff-presence','staff-knowledge-list'].includes(action))
   if (!read && !isOperationsFounder(identity,policy)) {
     const grants=policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase() && g.workspaceId===workspaceId)
     const legacy=grants.some(g=>!g.roles && g.sections?.includes(section))
     const roles=grants.flatMap(g=>g.roles??[])
     const allowed=section==='cases' ? (['case-create','case-note','case-assign','case-resolve','case-escalate','case-reply','typing','case-attachment'].includes(action) && roles.some(r=>['support','administrator'].includes(r))) || (action==='case-review' && roles.some(r=>['compliance','legal'].includes(r)))
-      : section==='support' ? roles.some(r=>['support','administrator'].includes(r)) && ['staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
+      : section==='support' ? roles.some(r=>['support','administrator'].includes(r)) && ['staff-typing','staff-attachment','staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
       : section==='transactions' ? roles.includes('engineering') && action==='reconcile'
       : section==='projects' ? roles.includes('compliance') && ['admin-activate','admin-suspend','admin-reactivate','admin-verification-review'].includes(action) : false
     if(!legacy && !allowed) fail('Your role cannot perform this action.')
