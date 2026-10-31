@@ -29,3 +29,7 @@ Admin Playwright matrix opened Overview, Verification, Businesses, Payments, Sup
 ## Country/profile direction discussed, not implemented
 
 Set Personal/Business and country once on each profile. Personal uses residence; Business uses registration. Country may suggest verification and available routes but does not grant production access. Distinguish customer payment method from merchant settlement currency. Additional country routes need explicit eligibility/approval. Reuse applicable existing personal verification; business verification remains separate. Record declared/verified country and approved routes for admin filtering when this feature is implemented.
+
+## Follow-up release result
+
+Commit ad22d2e7493720302189d4df508c9926acbbbf2e is live via Render deployment dep-dbivuek9v7es738of19g (31 October, 14:51:25 UTC). Production source build passed. After deployment, /api/health returned 200 and authenticated Playwright rechecked the icon-only launcher, existing automated reply avatars, centered warning and conversation recovery after reload. No real message was sent. Privileged admin actions remain fixture-verified only.
