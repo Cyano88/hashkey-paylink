@@ -33,7 +33,7 @@ export function operationsPolicy(env: NodeJS.ProcessEnv = process.env): Operatio
   if (!Array.isArray(workspaces) || !Array.isArray(grants)) fail('Operations access configuration is invalid.', 503)
   const ids = new Set<string>(), projects = new Set<string>()
   for (const w of workspaces) {
-    if (!w || typeof w.id !== 'string' || !/^[a-z][a-z0-9-]{1,63}$/.test(w.id) || w.id === 'pocket'
+    if (!w || typeof w.id !== 'string' || !/^[a-z][a-z0-9-]{1,63}$/.test(w.id) || ['pocket','builders'].includes(w.id)
       || typeof w.name !== 'string' || !w.name.trim() || w.name.length > 100 || ids.has(w.id)
       || !Array.isArray(w.projectIds) || !w.projectIds.length) fail('Operations workspace configuration is invalid.', 503)
     ids.add(w.id)
@@ -44,7 +44,7 @@ export function operationsPolicy(env: NodeJS.ProcessEnv = process.env): Operatio
   }
   for (const g of grants) {
     if (!g || !email(g.email) || typeof g.workspaceId !== 'string'
-      || !(g.workspaceId === 'pocket' || ids.has(g.workspaceId) || (projectId(g.workspaceId) && !projects.has(g.workspaceId)))
+      || !(['pocket','builders'].includes(g.workspaceId) || ids.has(g.workspaceId) || (projectId(g.workspaceId) && !projects.has(g.workspaceId)))
       || (g.roles !== undefined ? (!Array.isArray(g.roles) || !g.roles.length || g.roles.some(r=>!OPERATIONS_ROLES.includes(r)) || g.sections !== undefined)
         : (!Array.isArray(g.sections) || !g.sections.length || g.sections.some(s => !OPERATIONS_SECTIONS.includes(s))))) {
       fail('Operations grant configuration is invalid.', 503)
@@ -61,7 +61,7 @@ export function isOperationsFounder(identity: OperationsIdentity, policy: Operat
 }
 
 export function workspaceProjectIds(workspaceId: string, policy: OperationsPolicy) {
-  if (workspaceId === 'pocket') return []
+  if (workspaceId === 'pocket'||workspaceId==='builders') return []
   const workspace = policy.workspaces.find(w => w.id === workspaceId)
   if (workspace) return workspace.projectIds
   if (projectId(workspaceId) && !policy.workspaces.some(w => w.projectIds.includes(workspaceId))) return [workspaceId]
@@ -69,7 +69,7 @@ export function workspaceProjectIds(workspaceId: string, policy: OperationsPolic
 }
 
 export function workspaceSections(identity: OperationsIdentity, workspaceId: string, policy: OperationsPolicy): OperationsSection[] {
-  const available: OperationsSection[] = workspaceId === 'pocket' ? ['support', 'transactions', 'cases'] : ['projects', 'agreements', 'trade-disputes', 'cases', 'products']
+  const available: OperationsSection[] = workspaceId === 'pocket' ? ['support', 'transactions', 'cases'] : workspaceId==='builders'?['cases']: ['projects', 'agreements', 'trade-disputes', 'cases', 'products']
   if (isOperationsFounder(identity, policy)) return available
   return available.filter(section => policy.grants.some(g => g.email.toLowerCase() === identity.email.toLowerCase()
     && g.workspaceId === workspaceId && grantSections(g).includes(section)))

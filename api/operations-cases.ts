@@ -30,7 +30,7 @@ export function createOperationsCasesHandler(overrides:Partial<typeof defaults>=
    const {workspaceId,projectIds}=authorizeOperations(identity,req,'cases',undefined,env)
    const owner=isOperationsFounder(identity,policy),roles=policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspaceId).flatMap(g=>g.roles||[])
    const manage=owner||roles.some(r=>['support','administrator'].includes(r))
-   const visible=(c:OperationsCase)=>c.humanSupport!==false&&(workspaceId==='pocket'||c.workspaceId===workspaceId&&projectIds.includes(c.projectId||''))&&(manage||Boolean(c.escalation&&roles.includes(c.escalation.destination)))
+   const visible=(c:OperationsCase)=>c.humanSupport!==false&&(workspaceId==='pocket'||c.workspaceId===workspaceId&&(workspaceId==='builders'?!c.projectId:projectIds.includes(c.projectId||'')))&&(manage||Boolean(c.escalation&&roles.includes(c.escalation.destination)))
    if(req.method==='GET')return res.json({ok:true,cases:Object.values((await d.read(workspaceId)).cases).filter(visible).sort((a,b)=>b.updatedAt-a.updatedAt).map(caseView),permissions:{manage,review:owner?['compliance','legal']:roles.filter(r=>r==='compliance'||r==='legal')}})
    const action=clean(req.body?.action,40),now=d.now();let created:OperationsCase|undefined
    if(action==='case-create'){

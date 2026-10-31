@@ -28,7 +28,7 @@ const session = operationsSession(staff, projects, env)
 assert.equal(session.workspaces.length, 1)
 assert.deepEqual(session.workspaces[0].sections, ['trade-disputes'])
 assert.equal(session.arcActivationEnabled, false)
-assert.equal(operationsSession(founder, projects, env).workspaces.length, 3)
+assert.equal(operationsSession(founder, projects, env).workspaces.length, 4)
 assert.throws(() => operationsSession({ ...staff, email: 'outsider@example.test' }, projects, env), { status: 403 })
 assert.deepEqual(operationsSession(founder, projects, env).workspaces.find(w => w.id === c).sections, ['projects','cases','products'])
 
@@ -83,3 +83,5 @@ await reviewer({ ...req(), method: 'POST', body: { action: 'read', agreementId: 
 assert.equal(orphan.statusCode, 404)
 assert.equal(planned, 0)
 console.log('PASS: founder-only defaults, explicit grouping, section grants, cross-workspace reads/writes/signing denied before side effects, and scoped counts.')
+
+assert.deepEqual(operationsSession(founder, projects, env).workspaces.find(w=>w.id==='builders').sections,['cases']);

@@ -203,7 +203,7 @@ function linkedEmail(user: User) {
   return ''
 }
 
-async function verifyDeveloper(req: Request): Promise<VerifiedDeveloper> {
+export async function verifyDeveloper(req: Request): Promise<VerifiedDeveloper> {
   const appId = (process.env.PRIVY_APP_ID ?? process.env.VITE_PRIVY_APP_ID ?? '').trim()
   const secret = (process.env.PRIVY_APP_SECRET ?? '').trim()
   if (!appId || !secret) throw Object.assign(new Error('Developer authentication is not configured.'), { status: 503 })

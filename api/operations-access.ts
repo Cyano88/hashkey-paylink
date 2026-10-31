@@ -34,7 +34,7 @@ export function operationsSession(identity: OperationsIdentity, projects: Projec
   const removed=new Set(projects.filter(p=>p.removal).map(p=>p.id))
   projects=projects.filter(p=>!p.removal)
   const assigned = new Set(policy.workspaces.flatMap(w => w.projectIds))
-  const definitions = [{ id: 'pocket', name: 'Pocket', projectIds: [] as string[] }, ...policy.workspaces.filter(w=>!w.projectIds.every(id=>removed.has(id))),
+  const definitions = [{ id: 'pocket', name: 'Pocket', projectIds: [] as string[] }, {id:'builders',name:'Developer accounts',projectIds:[] as string[]}, ...policy.workspaces.filter(w=>!w.projectIds.every(id=>removed.has(id))),
     ...projects.filter(p => !assigned.has(p.id)).map(p => ({ id: p.id, name: productDisplayName(p.id,p.name), projectIds: [p.id] }))]
   const workspaces = definitions.flatMap(w => {
     const integrations = projects.filter(p => w.projectIds.includes(p.id)).map(p => ({ id: p.id, name: productDisplayName(p.id,p.name),

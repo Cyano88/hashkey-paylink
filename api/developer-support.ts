@@ -1,6 +1,6 @@
 import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
-import {verifyDeveloperProjectOwner} from './developer-projects.js'
+import {verifyDeveloperProjectOwner,verifyDeveloper} from './developer-projects.js'
 import {readDurableJson,mutateDurableJson} from './render-durable-store.js'
 import {BUSINESS_SUPPORT_KEY,type OperationsCase} from './operations-cases.js'
 import {submitSupportConversation,type Conversation} from './pocket/support-conversation.js'
@@ -14,21 +14,21 @@ export function developerSupportAnswer(message:string){
  if(/\b(card|subscription|recurring|escrow)\b/i.test(message))return {text:'Card checkout, automatic recurring subscriptions and the general Escrow service are not available in this release. Use the currently enabled payment methods shown in your app’s settings.',handoff:false}
  return {text:'I’ll pass this to Business Support so the team can help with your app. Describe the issue and include an order or checkout reference if it concerns a payment.',handoff:true}
 }
-const defaults={owner:verifyDeveloperProjectOwner,now:Date.now,uuid:randomUUID,workspace:(projectId:string)=>{const rows=JSON.parse(process.env.OPERATIONS_WORKSPACES_JSON||'[]') as Array<{id:string;projectIds:string[]}>;return rows.find(w=>w.projectIds.includes(projectId))?.id||projectId},read:async()=>await readDurableJson<Store>(BUSINESS_SUPPORT_KEY)||{cases:{}},mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(BUSINESS_SUPPORT_KEY,s=>fn(s||{cases:{}}))}
+const defaults={identity:verifyDeveloper,owner:verifyDeveloperProjectOwner,now:Date.now,uuid:randomUUID,workspace:(projectId:string)=>{const rows=JSON.parse(process.env.OPERATIONS_WORKSPACES_JSON||'[]') as Array<{id:string;projectIds:string[]}>;return rows.find(w=>w.projectIds.includes(projectId))?.id||projectId},read:async()=>await readDurableJson<Store>(BUSINESS_SUPPORT_KEY)||{cases:{}},mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(BUSINESS_SUPPORT_KEY,s=>fn(s||{cases:{}}))}
 // Customer projection deliberately excludes profile IDs, staff emails, evidence, internal notes and review decisions.
 export function developerCaseView(c:DeveloperCase){return {id:c.id,projectId:c.projectId,summary:c.summary,status:c.status,humanSupport:c.humanSupport,updatedAt:c.updatedAt,messages:c.messages.map(m=>({id:m.id,author:m.author,text:m.text,createdAt:m.createdAt}))}}
 export function createDeveloperSupportHandler(overrides:Partial<typeof defaults>={}){const d={...defaults,...overrides};return async(req:Request,res:Response)=>{
  res.setHeader('Cache-Control','private, no-store')
  try{
   if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Method not allowed.'})
-  const projectId=String(req.method==='GET'?req.query.projectId||'':req.body?.projectId||'');const owner=await d.owner(req,projectId);const profileId=owner.ownerId+':'+projectId
-  if(req.method==='GET')return res.json({ok:true,cases:Object.values((await d.read()).cases).filter(c=>c.projectId===projectId&&c.profileId===profileId).sort((a,b)=>b.updatedAt-a.updatedAt).map(developerCaseView)})
+  const projectId=String(req.method==='GET'?req.query.projectId||'':req.body?.projectId||'');const owner=projectId?await d.owner(req,projectId):await d.identity(req).then(i=>({ownerId:i.userId,email:i.email,name:i.email}));const scope=projectId||undefined;const profileId=owner.ownerId+':'+(projectId||'account')
+  if(req.method==='GET')return res.json({ok:true,cases:Object.values((await d.read()).cases).filter(c=>c.projectId===scope&&c.profileId===profileId).sort((a,b)=>b.updatedAt-a.updatedAt).map(developerCaseView)})
   if(req.body?.action!=='message')return res.status(400).json({ok:false,error:'Choose a supported action.'})
   const message=typeof req.body.message==='string'?req.body.message.trim():'';let saved:DeveloperCase|undefined
   await d.mutate(store=>{
-   const cases=Object.fromEntries(Object.entries(store.cases).filter(([,c])=>c.projectId===projectId&&c.profileId===profileId));
+   const cases=Object.fromEntries(Object.entries(store.cases).filter(([,c])=>c.projectId===scope&&c.profileId===profileId));
    saved=submitSupportConversation(cases,{profileId,message,requestId:req.body.requestId,caseId:req.body.caseId,newConversation:req.body.newConversation===true},d.now(),d.uuid,{tenantId:'developer:'+projectId,entries:{},fallbackAnswer:developerSupportAnswer(message),handoffText:'You are in the queue for Business Support.'})
-   saved.projectId=projectId;saved.workspaceId=d.workspace(projectId);saved.customer={fullName:owner.name,email:owner.email};store.cases[saved.id]=saved;return store
+   saved.projectId=scope;saved.workspaceId=projectId?d.workspace(projectId):'builders';saved.customer={fullName:owner.name,email:owner.email};store.cases[saved.id]=saved;return store
   });return res.json({ok:true,case:developerCaseView(saved!)})
  }catch(e){const status=(e as {status?:number}).status||503;return res.status(status).json({ok:false,error:status<500?(e as Error).message:'Support is temporarily unavailable. Please try again.'})}
 }}
