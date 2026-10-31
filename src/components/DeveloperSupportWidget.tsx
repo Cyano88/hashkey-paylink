@@ -5,7 +5,8 @@ import {usePrivy} from '@privy-io/react-auth'
 import {useLocation} from 'react-router-dom'
 import {ChatBubbleLeftRightIcon,XMarkIcon,PlusIcon} from '@heroicons/react/24/outline'
 
-import {Conversation,ReplyComposer,RefreshButton,type ChatMessage} from './SupportConversation'
+import {Conversation,type ChatMessage} from './SupportConversation'
+import PocketStyleSupportComposer from './PocketStyleSupportComposer'
 
 
 
@@ -38,7 +39,7 @@ function DeveloperSupportChat({visible,onClose}:{visible:boolean;onClose:()=>voi
  {!ready||loading?<div role="status" aria-label="Loading support" className="m-4 flex-1 animate-pulse rounded-xl bg-gray-100 dark:bg-white/5"/>:<>
  <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2 dark:border-white/10"><select aria-label="Support app" disabled={busy} value={projectId} onChange={e=>{drafts.current[projectId+':'+activeId]=message;setProject(e.target.value)}} className="min-h-9 min-w-0 flex-1 rounded-lg bg-transparent px-1 text-xs text-gray-500"><option value="">Your account</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>{cases.length>0&&<select aria-label="Previous conversations" disabled={busy} value={activeId} onChange={e=>selectConversation(e.target.value)} className="min-h-9 max-w-[45%] rounded-lg bg-transparent px-1 text-xs text-gray-500"><option value="">New conversation</option>{cases.map(c=><option key={c.id} value={c.id}>{c.summary}</option>)}</select>}</div>
  <div className="min-h-0 flex-1 overflow-y-auto">{active?<Conversation compact messages={active.messages} conversationId={active.id} outgoing="user" customerName="You" staffName="Business Support"/>:<div className="p-5"><div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/10"><ChatBubbleLeftRightIcon className="h-5 w-5"/></div><h3 className="text-lg font-semibold">How can we help?</h3><p className="mt-2 text-sm leading-6 text-gray-500">Ask about your integration or a payment. Hash provides automated guidance; our team can take over.</p><div className="mt-5 flex flex-col items-start gap-2">{['Getting started','Webhook confirmation','Talk to a person'].map(t=><button type="button" key={t} disabled={busy} onClick={()=>setMessage(t)} className="min-h-9 rounded-full border border-gray-200 px-3 text-xs hover:bg-gray-50 dark:border-white/15 dark:hover:bg-white/5">{t}</button>)}</div></div>}</div>
- <ReplyComposer value={message} onChange={setMessage} onSend={()=>void send()} busy={busy} disabled={active?.status==='resolved'} label="Write a message" privacyHint/>
+ <PocketStyleSupportComposer value={message} onChange={setMessage} onSend={()=>void send()} busy={busy} disabled={active?.status==='resolved'}/>
  </>}
  </>
 }
