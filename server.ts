@@ -1,3 +1,4 @@
+import supportAttachmentHandler from './api/support-attachments.js'
 import developerSupportHandler from './api/developer-support.js'
 import { retiredProductBoundary } from './api/product-retirement.js'
 import operationsAuditHandler from './api/operations-audit.js'
@@ -269,6 +270,7 @@ app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'appl
 app.all('/api/pocket/gifts/events', rateLimit({ name: 'gift-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketGiftEventWebhook)
 app.post('/api/developer-verification/documents', rateLimit({name:'business-documents',windowMs:60_000,max:20}), express.raw({type:'application/octet-stream',limit:'5mb'}), developerVerificationUploadHandler)
 app.post('/api/demo/food/webhook', rateLimit({name:'food-webhook',windowMs:60_000,max:120}), express.raw({type:'application/json',limit:'64kb'}), foodDemoWebhook)
+app.all('/api/support-files',rateLimit({name:'support-files',windowMs:60_000,max:40}),express.raw({type:'application/octet-stream',limit:'5mb'}),supportAttachmentHandler)
 app.use(express.json({ limit: '256kb' }))
 
 // A CLI credential must not activate a different API surface, including public
@@ -447,11 +449,13 @@ app.post('/api/pocket/esim/price', strictLimiter, pocketEsimPriceHandler)
 app.get('/api/pocket/esim/orders', readLimiter, pocketEsimOrdersHandler)
 app.post('/api/pocket/esim/orders', strictLimiter, pocketEsimOrdersHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
-app.all('/api/developer-support', strictLimiter, developerSupportHandler)
+const supportPresenceLimiter=rateLimit({name:'support-presence',windowMs:60_000,max:120})
+const supportRequestLimiter=(req:express.Request,res:express.Response,next:express.NextFunction)=>((req.method==='GET'&&req.query.presence)||(req.method==='POST'&&req.body?.action==='typing')?supportPresenceLimiter:strictLimiter)(req,res,next)
+app.all('/api/developer-support', supportRequestLimiter, developerSupportHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
-app.all('/api/operations-cases', strictLimiter, operationsCasesHandler)
+app.all('/api/operations-cases', supportRequestLimiter, operationsCasesHandler)
 app.all('/api/operations-audit', strictLimiter, operationsAuditHandler)
 app.all('/api/operations-emergency-pause', strictLimiter, operationsEmergencyPauseHandler)
 app.all('/api/xstocks-review', strictLimiter, xstocksReviewHandler)

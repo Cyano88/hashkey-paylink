@@ -93,7 +93,7 @@ export function authorizeOperations(identity: OperationsIdentity, req: Pick<Requ
     const grants=policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase() && g.workspaceId===workspaceId)
     const legacy=grants.some(g=>!g.roles && g.sections?.includes(section))
     const roles=grants.flatMap(g=>g.roles??[])
-    const allowed=section==='cases' ? (['case-create','case-note','case-assign','case-resolve','case-escalate','case-reply'].includes(action) && roles.some(r=>['support','administrator'].includes(r))) || (action==='case-review' && roles.some(r=>['compliance','legal'].includes(r)))
+    const allowed=section==='cases' ? (['case-create','case-note','case-assign','case-resolve','case-escalate','case-reply','typing','case-attachment'].includes(action) && roles.some(r=>['support','administrator'].includes(r))) || (action==='case-review' && roles.some(r=>['compliance','legal'].includes(r)))
       : section==='support' ? roles.some(r=>['support','administrator'].includes(r)) && ['staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
       : section==='transactions' ? roles.includes('engineering') && action==='reconcile'
       : section==='projects' ? roles.includes('compliance') && ['admin-activate','admin-suspend','admin-reactivate','admin-verification-review'].includes(action) : false

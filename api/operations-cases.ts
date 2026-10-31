@@ -1,3 +1,6 @@
+import {resolveSupportAttachments} from './support-attachments.js'
+import type {SupportAttachment} from '../src/lib/supportAttachments.js'
+import {supportPresence} from './support-presence.js'
 import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
 import {verifyOperationsIdentity} from './operations-access.js'
@@ -8,18 +11,18 @@ import {readReceiptCheckout} from './checkout-receipts.js'
 
 export type CaseReview={destination:'compliance'|'legal';status:'pending'|'reviewed';reason:string;requestedBy:string;requestedAt:number;decision?:string;reviewedBy?:string;reviewedAt?:number}
 export type CaseEvent={destination?:'compliance'|'legal';id:string;action:string;actor:string;at:number;text:string}
-export type OperationsCase={profileId?:string;humanSupport?:boolean;priority?:'normal'|'high';customer?:{fullName:string;email:string};waitingSince?:number;reminderSentAt?:number;resolutionRequestedAt?:number;resolutionPromptId?:string;supportEscalatedAt?:number;id:string;workspaceId?:string;projectId?:string;checkoutId?:string;orderReference?:string;summary:string;category?:string;status:string;assignedTo?:string;messages?:Array<{id:string;author:string;text:string;createdAt:number;kind?:string;displayName?:string;avatarDataUrl?:string}>;transaction?:Record<string,unknown>;reference?:string;proof?:unknown;evidence?:string[];escalation?:CaseReview;caseHistory?:CaseEvent[];createdAt:number;updatedAt:number}
+export type OperationsCase={profileId?:string;humanSupport?:boolean;priority?:'normal'|'high';customer?:{fullName:string;email:string};waitingSince?:number;reminderSentAt?:number;resolutionRequestedAt?:number;resolutionPromptId?:string;supportEscalatedAt?:number;id:string;workspaceId?:string;projectId?:string;checkoutId?:string;orderReference?:string;summary:string;category?:string;status:string;assignedTo?:string;messages?:Array<{id:string;author:string;text:string;createdAt:number;kind?:string;displayName?:string;avatarDataUrl?:string;attachments?:SupportAttachment[]}>;transaction?:Record<string,unknown>;reference?:string;proof?:unknown;evidence?:string[];escalation?:CaseReview;caseHistory?:CaseEvent[];createdAt:number;updatedAt:number}
 type Store={cases:Record<string,OperationsCase>;[key:string]:unknown}
 export const BUSINESS_SUPPORT_KEY='hashpaylink:business-support:v1'
 const pocketKey=()=>(process.env.POCKET_SUPPORT_STORE_KEY||'hashpaylink:pocket-support:v1').trim()
-const defaults={staffProfile:async(userId:string)=>{const profiles=await readSupportJson<{staffNames?:Record<string,string>;staffImages?:Record<string,string>}>(pocketKey());const name=profiles?.staffNames?.[userId];const image=profiles?.staffImages?.[userId];return {displayName:typeof name==='string'?name.trim().slice(0,60):'',avatarDataUrl:typeof image==='string'&&image.length<=16000&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(image)?image:undefined}},verify:verifyOperationsIdentity,env:operationsRequestPolicy,now:Date.now,uuid:randomUUID,
+const defaults={attachments:resolveSupportAttachments,presence:supportPresence,staffProfile:async(userId:string)=>{const profiles=await readSupportJson<{staffNames?:Record<string,string>;staffImages?:Record<string,string>}>(pocketKey());const name=profiles?.staffNames?.[userId];const image=profiles?.staffImages?.[userId];return {displayName:typeof name==='string'?name.trim().slice(0,60):'',avatarDataUrl:typeof image==='string'&&image.length<=16000&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(image)?image:undefined}},verify:verifyOperationsIdentity,env:operationsRequestPolicy,now:Date.now,uuid:randomUUID,
  read:async(workspace:string)=>(workspace==='pocket'?await readSupportJson<Store>(pocketKey()):await readDurableJson<Store>(BUSINESS_SUPPORT_KEY))||{cases:{}},
  mutate:(workspace:string,fn:(s:Store)=>Store)=>workspace==='pocket'?mutateSupportJson<Store>(pocketKey(),s=>fn(s||{cases:{}})):mutateDurableJson<Store>(BUSINESS_SUPPORT_KEY,s=>fn(s||{cases:{}})),checkout:readReceiptCheckout}
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status})}
 const clean=(value:unknown,max:number)=>typeof value==='string'?value.trim().slice(0,max):''
 function evidence(value:unknown){if(value===undefined)return [];if(!Array.isArray(value)||value.length>10)fail('Use up to 10 evidence links.');return value.map(v=>{const text=clean(v,2000);try{const u=new URL(text);if(u.protocol!=='https:'||u.username||u.password)throw Error();return text}catch{return fail('Evidence links must use HTTPS.')}})}
 // Explicit projection keeps Pocket identity documents, internal profile identifiers and staff profiles out of this API.
-export function caseView(c:OperationsCase){return {id:c.id,workspaceId:c.workspaceId,projectId:c.projectId,checkoutId:c.checkoutId,orderReference:c.orderReference,summary:c.summary,category:c.category,status:c.status,assignedTo:c.assignedTo,...(c.workspaceId&&c.workspaceId!=='pocket'&&c.customer?{customer:c.customer}:{}),messages:c.messages?.map(m=>({id:m.id,author:m.author,text:m.text,createdAt:m.createdAt,...(c.workspaceId!=='pocket'?{kind:m.kind,displayName:m.displayName,avatarDataUrl:m.avatarDataUrl}:{})})),transaction:c.transaction,reference:c.reference,proof:c.proof,evidence:c.evidence||[],escalation:c.escalation,caseHistory:c.caseHistory||[],createdAt:c.createdAt,updatedAt:c.updatedAt}}
+export function caseView(c:OperationsCase){return {id:c.id,workspaceId:c.workspaceId,projectId:c.projectId,checkoutId:c.checkoutId,orderReference:c.orderReference,summary:c.summary,category:c.category,status:c.status,assignedTo:c.assignedTo,...(c.workspaceId&&c.workspaceId!=='pocket'&&c.customer?{customer:c.customer}:{}),messages:c.messages?.map(m=>({id:m.id,author:m.author,text:m.text,createdAt:m.createdAt,...(c.workspaceId!=='pocket'?{kind:m.kind,displayName:m.displayName,avatarDataUrl:m.avatarDataUrl,attachments:m.attachments}:{})})),transaction:c.transaction,reference:c.reference,proof:c.proof,evidence:c.evidence||[],escalation:c.escalation,caseHistory:c.caseHistory||[],createdAt:c.createdAt,updatedAt:c.updatedAt}}
 export function createOperationsCasesHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  return async(req:Request,res:Response)=>{
@@ -31,6 +34,15 @@ export function createOperationsCasesHandler(overrides:Partial<typeof defaults>=
    const owner=isOperationsFounder(identity,policy),roles=policy.grants.filter(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspaceId).flatMap(g=>g.roles||[])
    const manage=owner||roles.some(r=>['support','administrator'].includes(r))
    const visible=(c:OperationsCase)=>c.humanSupport!==false&&(workspaceId==='pocket'||c.workspaceId===workspaceId&&(workspaceId==='builders'?!c.projectId:projectIds.includes(c.projectId||'')))&&(manage||Boolean(c.escalation&&roles.includes(c.escalation.destination)))
+   if((req.method==='GET'&&req.query.presence)||(req.method==='POST'&&req.body?.action==='typing')){
+    if(!manage||workspaceId==='pocket')fail('Support access required.',403)
+    const caseId=clean(req.method==='GET'?req.query.presence:req.body.caseId,100);const c=(await d.read(workspaceId)).cases[caseId]
+    if(!c||!visible(c))fail('Case not found in this workspace.',404)
+    if(req.method==='GET')return res.json({ok:true,...(c.status==='resolved'?{expiresIn:0}:await d.presence.read(c.id,'user',d.now()))})
+    if(typeof req.body.typing!=='boolean')fail('Invalid typing state.')
+    if(c.status==='resolved')fail('This case is closed.',409)
+    await d.presence.set(c.id,'staff',req.body.typing,d.now());return res.json({ok:true})
+   }
    if(req.method==='GET')return res.json({ok:true,cases:Object.values((await d.read(workspaceId)).cases).filter(visible).sort((a,b)=>b.updatedAt-a.updatedAt).map(caseView),permissions:{manage,review:owner?['compliance','legal']:roles.filter(r=>r==='compliance'||r==='legal')}})
    const action=clean(req.body?.action,40),now=d.now();const staffProfile=workspaceId!=='pocket'&&manage&&['case-assign','case-reply'].includes(action)?await d.staffProfile(identity.userId).catch(()=>({displayName:'',avatarDataUrl:undefined})):undefined;let created:OperationsCase|undefined
    if(action==='case-create'){
@@ -43,13 +55,14 @@ export function createOperationsCasesHandler(overrides:Partial<typeof defaults>=
     if(checkoutId){const checkout=await d.checkout(checkoutId);if(!checkout||checkout.partnerId!==projectId)fail('Checkout does not belong to this business.',404);if(checkout.payment)transaction={network:checkout.payment.network||checkout.network,asset:checkout.asset||'USDC',amount:checkout.payment.amount,transactionHash:checkout.payment.txHash,status:checkout.payment.status,confirmedAt:checkout.payment.confirmedAt}}
     created={id:'case_'+d.uuid(),workspaceId,projectId,checkoutId:checkoutId||undefined,orderReference:orderReference||undefined,category,summary,transaction,status:'open',assignedTo:identity.email,messages:[],evidence:evidence(req.body.evidence),caseHistory:[],createdAt:now,updatedAt:now}
    }
+   const files=action==='case-reply'&&manage?await d.attachments(req.body.attachments,{uploaderId:identity.userId,workspaceId,caseId:clean(req.body.caseId,100)}):[]
    let saved:OperationsCase|undefined
    await d.mutate(workspaceId,s=>{
     const c=created||s.cases[clean(req.body?.caseId,100)]
     if(!c||!created&&!visible(c))fail('Case not found in this workspace.',404)
     if(!created&&Number(req.body.updatedAt)!==c.updatedAt)fail('This case changed. Refresh it before continuing.',409)
-    const text=clean(req.body?.reason||req.body?.message,3000)
-    const join=()=>{if(workspaceId==='pocket')return;if(!manage)fail('Support access required.',403);if(c.assignedTo!==identity.email){c.messages=[...c.messages||[],{id:d.uuid(),author:'agent',kind:'staff_joined',text:(staffProfile?.displayName||'A support agent')+' joined the conversation.',createdAt:now}]}c.assignedTo=identity.email;c.humanSupport=true}
+    const text=clean(req.body?.reason||req.body?.message,3000)||(files.length?'Shared '+files.length+' file'+(files.length===1?'':'s')+'.':'')
+    const join=()=>{if(workspaceId==='pocket')return;if(!manage)fail('Support access required.',403);if(c.assignedTo!==identity.email){c.messages=[...c.messages||[],{id:d.uuid(),author:'agent',kind:'staff_joined',displayName:staffProfile?.displayName||'Hash Support',avatarDataUrl:staffProfile?.avatarDataUrl,text:(staffProfile?.displayName||'A support agent')+' joined the conversation.',createdAt:now}]}else if(staffProfile?.avatarDataUrl){const earlier=[...c.messages||[]].reverse().find(m=>m.kind==='staff_joined'&&m.text===staffProfile.displayName+' joined the conversation.');if(earlier&&!earlier.avatarDataUrl){earlier.avatarDataUrl=staffProfile.avatarDataUrl;earlier.displayName=staffProfile.displayName}}c.assignedTo=identity.email;c.humanSupport=true}
 
     if(c.status==='resolved'&&action!=='case-create')fail('This case is closed.',409)
     if(action==='case-escalate'){
@@ -64,7 +77,7 @@ export function createOperationsCasesHandler(overrides:Partial<typeof defaults>=
      c.escalation={...c.escalation,status:'reviewed',decision:text,reviewedBy:identity.email,reviewedAt:now}
      if(workspaceId==='pocket'){c.status=c.assignedTo?'assigned':'open';delete c.waitingSince;delete c.reminderSentAt;delete c.resolutionRequestedAt;delete c.resolutionPromptId;delete c.supportEscalatedAt}
     }else if(action==='case-reply'){
-     if(workspaceId==='pocket')fail('Reply from the Pocket conversation.',409);if(!manage)fail('Support access required.',403);if(!text||text.length>1500)fail('Enter a reply of up to 1,500 characters.');join();c.messages=[...c.messages||[],{id:d.uuid(),author:'staff',text,createdAt:now,displayName:staffProfile?.displayName||'Hash Support',avatarDataUrl:staffProfile?.avatarDataUrl}];c.humanSupport=true;c.status='waiting_user';c.assignedTo=c.assignedTo||identity.email
+     if(workspaceId==='pocket')fail('Reply from the Pocket conversation.',409);if(!manage)fail('Support access required.',403);if(!text||text.length>1500)fail('Enter a reply of up to 1,500 characters.');join();c.messages=[...c.messages||[],{id:d.uuid(),author:'staff',text,createdAt:now,displayName:staffProfile?.displayName||'Hash Support',avatarDataUrl:staffProfile?.avatarDataUrl,...(files.length?{attachments:files}:{})}];c.humanSupport=true;c.status='waiting_user';c.assignedTo=c.assignedTo||identity.email
     }else if(action==='case-assign'){if(workspaceId==='pocket')c.assignedTo=identity.email;else{join();c.status='assigned'}}
     else if(action==='case-note'){if(text.length<3)fail('Enter a case note.');c.evidence=[...c.evidence||[],...evidence(req.body.evidence)].slice(-30)}
     else if(action==='case-resolve'){
