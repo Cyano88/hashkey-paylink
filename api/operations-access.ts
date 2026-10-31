@@ -59,7 +59,9 @@ export function withAttentionCounts(session:ReturnType<typeof operationsSession>
  return {...session,workspaces:session.workspaces.map(w=>{
   const canSupport=w.sections.includes('support')||w.sections.includes('cases')&&Boolean(w.permissions.manageCases)
   const cases=canSupport?Object.values((w.id==='pocket'?pocket:business)||{}).filter(c=>needsSupportReply(c)&&(w.id==='pocket'||c.workspaceId===w.id&&(w.id==='builders'?!c.projectId:w.projectIds.includes(c.projectId||'')))):[]
-  return {...w,supportPending:(w.id==='pocket'?pocket:business)===null?undefined:cases.length,integrations:w.integrations.map(p=>({...p,supportPending:(w.id==='pocket'?pocket:business)===null?undefined:cases.filter(c=>c.projectId===p.id).length}))}
+  const source=w.id==='pocket'?pocket:business
+  const reviews=w.sections.includes('cases')?Object.values(source||{}).filter(c=>c.humanSupport!==false&&c.status!=='resolved'&&c.escalation?.status==='pending'&&(w.id==='pocket'||c.workspaceId===w.id&&(w.id==='builders'?!c.projectId:w.projectIds.includes(c.projectId||'')))&&(session.founder||w.permissions.manageCases||(w.roles||[]).some(r=>r===c.escalation?.destination))):[]
+  return {...w,reviewPending:source===null?undefined:reviews.length,supportPending:(w.id==='pocket'?pocket:business)===null?undefined:cases.length,integrations:w.integrations.map(p=>({...p,supportPending:(w.id==='pocket'?pocket:business)===null?undefined:cases.filter(c=>c.projectId===p.id).length}))}
  })}
 }
 
@@ -79,8 +81,8 @@ export default async function operationsSessionHandler(req: Request, res: Respon
     const session=operationsSession(identity, Object.values(store?.projects || {}), env)
     const canSupport=(w:typeof session.workspaces[number])=>w.sections.includes('support')||w.sections.includes('cases')&&Boolean(w.permissions.manageCases)
     const [business,pocket]=await Promise.all([
-      session.workspaces.some(w=>w.id!=='pocket'&&canSupport(w))?readDurableJson<{cases:Record<string,AttentionCase>}>('hashpaylink:business-support:v1').then(s=>s?.cases||{}).catch(()=>null):{},
-      session.workspaces.some(w=>w.id==='pocket'&&canSupport(w))?readSupportJson<{cases:Record<string,AttentionCase>}>((process.env.POCKET_SUPPORT_STORE_KEY||'hashpaylink:pocket-support:v1').trim()).then(s=>s?.cases||{}).catch(()=>null):{},
+      session.workspaces.some(w=>w.id!=='pocket'&&(canSupport(w)||w.sections.includes('cases')))?readDurableJson<{cases:Record<string,AttentionCase>}>('hashpaylink:business-support:v1').then(s=>s?.cases||{}).catch(()=>null):{},
+      session.workspaces.some(w=>w.id==='pocket'&&(canSupport(w)||w.sections.includes('cases')))?readSupportJson<{cases:Record<string,AttentionCase>}>((process.env.POCKET_SUPPORT_STORE_KEY||'hashpaylink:pocket-support:v1').trim()).then(s=>s?.cases||{}).catch(()=>null):{},
     ])
     return res.json(withAttentionCounts(session,business,pocket))
   } catch (e) {

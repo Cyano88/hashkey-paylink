@@ -17,3 +17,15 @@ assert.equal(withAttentionCounts({workspaces:[workspace('one')]},{...cases,a:{..
 console.log('Operations attention counts: statuses, workspace isolation, role isolation, and resolution passed.')
 
 assert.equal(withAttentionCounts({workspaces:[workspace('one')]},null,{}).workspaces[0].supportPending,undefined)
+
+const reviewCases={
+ c:{id:'c',workspaceId:'one',projectId:'app',status:'assigned',escalation:{status:'pending',destination:'compliance'}},
+ l:{id:'l',workspaceId:'one',projectId:'app',status:'assigned',escalation:{status:'pending',destination:'legal'}},
+ r:{id:'r',workspaceId:'one',projectId:'app',status:'resolved',escalation:{status:'pending',destination:'compliance'}},
+ foreign:{id:'foreign',workspaceId:'other',projectId:'app',status:'assigned',escalation:{status:'pending',destination:'compliance'}}
+}
+assert.equal(withAttentionCounts({workspaces:[workspace('one')]},reviewCases,{}).workspaces[0].reviewPending,2)
+assert.equal(withAttentionCounts({workspaces:[{...workspace('one',false),roles:['compliance']}]},reviewCases,{}).workspaces[0].reviewPending,1)
+assert.equal(withAttentionCounts({workspaces:[{...workspace('one',false),roles:['legal']}]},reviewCases,{}).workspaces[0].reviewPending,1)
+assert.equal(withAttentionCounts({workspaces:[{...workspace('one',false),roles:[]}]},reviewCases,{}).workspaces[0].reviewPending,0)
+console.log('PASS: specialist review counts isolate destination, workspace and resolved cases.')
