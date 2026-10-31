@@ -7,10 +7,11 @@ import {ChatBubbleLeftRightIcon,XMarkIcon,PlusIcon} from '@heroicons/react/24/ou
 
 import {Conversation,type ChatMessage} from './SupportConversation'
 import PocketStyleSupportComposer from './PocketStyleSupportComposer'
+import {developerSupportTopics,developerSupportOption,type DeveloperSupportOption} from '../lib/developerSupportFlow'
 
 
 
-type Case={id:string;summary:string;status:string;humanSupport:boolean;messages:ChatMessage[]}
+type Case={id:string;summary:string;status:string;humanSupport:boolean;staffJoined?:boolean;supportOptions?:DeveloperSupportOption[];messages:ChatMessage[]}
 
 function DeveloperSupportChat({visible,onClose}:{visible:boolean;onClose:()=>void}){
 
@@ -18,7 +19,7 @@ function DeveloperSupportChat({visible,onClose}:{visible:boolean;onClose:()=>voi
 
  const drafts=useRef<Record<string,string>>({})
 
- const lock=useRef(false),request=useRef<{id:string;text:string;caseId:string;projectId:string}>(),generation=useRef(0)
+ const lock=useRef(false),request=useRef<{id:string;text:string;caseId:string;projectId:string;optionId?:string}>(),generation=useRef(0)
 
  const call=useCallback(async(url:string,body?:object)=>{const token=await getAccessToken();if(!token)throw Error('Sign in to contact support.');const r=await fetch(url,{method:body?'POST':'GET',cache:'no-store',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Support could not be loaded.');return d},[getAccessToken])
 
@@ -31,15 +32,25 @@ function DeveloperSupportChat({visible,onClose}:{visible:boolean;onClose:()=>voi
 
  const active=cases.find(c=>c.id===activeId)
 
- async function send(){if(lock.current||!message.trim())return;lock.current=true;setBusy(true);setError('');const current=generation.current;const text=message.trim();if(!request.current||request.current.text!==text||request.current.caseId!==activeId||request.current.projectId!==projectId)request.current={id:crypto.randomUUID(),text,caseId:activeId,projectId};try{const d=await call('/api/developer-support',{action:'message',projectId,message:text,caseId:activeId||undefined,newConversation:!activeId,requestId:request.current.id});if(current===generation.current){setCases(rows=>[d.case,...rows.filter(c=>c.id!==d.case.id)]);setActive(d.case.id);setMessage('');delete drafts.current[projectId+':'+activeId];request.current=undefined}}catch(e){if(current===generation.current)setError((e as Error).message)}finally{lock.current=false;setBusy(false)}}
+ async function send(optionId?:string){
+  if(lock.current||(!optionId&&!message.trim()))return
+  lock.current=true;setBusy(true);setError('');const current=generation.current
+  const text=optionId==='human'?message.trim():optionId?developerSupportOption(optionId)?.label||'':message.trim()
+  if(!request.current||request.current.text!==text||request.current.caseId!==activeId||request.current.projectId!==projectId||request.current.optionId!==optionId)request.current={id:crypto.randomUUID(),text,caseId:activeId,projectId,optionId}
+  try{const d=await call('/api/developer-support',{action:'message',projectId,message:text,optionId,caseId:activeId||undefined,newConversation:!activeId,requestId:request.current.id});if(current===generation.current){setCases(rows=>[d.case,...rows.filter(c=>c.id!==d.case.id)]);setActive(d.case.id);if(!optionId||optionId==='human'){setMessage('');delete drafts.current[projectId+':'+activeId]}request.current=undefined}}catch(e){if(current===generation.current)setError((e as Error).message)}finally{lock.current=false;setBusy(false)}
+ }
 
  const selectConversation=(id:string)=>{drafts.current[projectId+':'+activeId]=message;setActive(id);setMessage(drafts.current[projectId+':'+id]||'');request.current=undefined}
- return <><header className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/10"><div><h2 id="developer-support-title" className="text-sm font-semibold">{active?.humanSupport?'Business Support':'Hash support'}</h2><p className="mt-1 text-[11px] text-gray-500">{active?.humanSupport?'Our team will reply here.':'Ask Hash, or talk to our team.'}</p></div><div className="flex items-center gap-1"><button type="button" disabled={busy} aria-label="New conversation" title="New conversation" onClick={()=>selectConversation('')} className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"><PlusIcon className="h-4 w-4"/></button><button type="button" onClick={onClose} aria-label="Minimize support chat" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"><XMarkIcon className="h-4 w-4"/></button></div></header>
+ const choices=!active?.humanSupport&&active?.status!=='resolved'&&<div aria-label="Support topics" className="flex max-h-48 shrink-0 flex-wrap gap-2 overflow-y-auto px-4 py-3">{(active?.supportOptions||developerSupportTopics).map(option=><button type="button" key={option.id} disabled={busy} onClick={()=>void send(option.id)} className="min-h-9 rounded-full border border-gray-200 px-3 py-2 text-xs hover:bg-gray-50 disabled:opacity-40 dark:border-white/15 dark:hover:bg-white/5">{option.label}</button>)}</div>
+ return <><header className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/10"><div><h2 id="developer-support-title" className="text-sm font-semibold">Hash Support</h2><p className="mt-1 text-[11px] text-gray-500">{active?.status==='resolved'?'Conversation resolved':active?.humanSupport?(active.staffJoined?'Our team is here to help.':'Waiting for our team.'):'Choose a topic, or talk to us.'}</p></div><div className="flex items-center gap-1"><button type="button" disabled={busy} aria-label="New conversation" title="New conversation" onClick={()=>selectConversation('')} className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"><PlusIcon className="h-4 w-4"/></button><button type="button" onClick={onClose} aria-label="Minimize support chat" className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"><XMarkIcon className="h-4 w-4"/></button></div></header>
  {error&&<p role="alert" className="mx-4 mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
  {!ready||loading?<div role="status" aria-label="Loading support" className="m-4 flex-1 animate-pulse rounded-xl bg-gray-100 dark:bg-white/5"/>:<>
  {(projects.length>0||cases.length>0)&&<div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2 dark:border-white/10">{projects.length>0&&<select aria-label="Support app" disabled={busy} value={projectId} onChange={e=>{drafts.current[projectId+':'+activeId]=message;setProject(e.target.value)}} className="min-h-9 min-w-0 flex-1 rounded-lg bg-transparent px-1 text-xs text-gray-500"><option value="">Your account</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}{cases.length>0&&<select aria-label="Previous conversations" disabled={busy} value={activeId} onChange={e=>selectConversation(e.target.value)} className="min-h-9 max-w-[45%] rounded-lg bg-transparent px-1 text-xs text-gray-500"><option value="">New conversation</option>{cases.map(c=><option key={c.id} value={c.id}>{c.summary}</option>)}</select>}</div>}
- <div className="min-h-0 flex-1 overflow-y-auto">{active?<Conversation compact messages={active.messages} conversationId={active.id} outgoing="user" customerName="You" staffName="Business Support"/>:<div className="p-5"><div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/10"><ChatBubbleLeftRightIcon className="h-5 w-5"/></div><h3 className="text-lg font-semibold">How can we help?</h3><p className="mt-2 text-sm leading-6 text-gray-500">Ask about your integration or a payment. Hash provides automated guidance; our team can take over.</p><div className="mt-5 flex flex-col items-start gap-2">{['Getting started','Webhook confirmation','Talk to a person'].map(t=><button type="button" key={t} disabled={busy} onClick={()=>setMessage(t)} className="min-h-9 rounded-full border border-gray-200 px-3 text-xs hover:bg-gray-50 dark:border-white/15 dark:hover:bg-white/5">{t}</button>)}</div></div>}</div>
- <PocketStyleSupportComposer value={message} onChange={setMessage} onSend={()=>void send()} busy={busy} disabled={active?.status==='resolved'}/>
+ <div className="min-h-0 flex-1 overflow-y-auto">{active?<Conversation compact messages={active.messages} conversationId={active.id} outgoing="user" customerName="You" staffName="Hash Support"/>:<div className="p-5"><div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-white/10"><ChatBubbleLeftRightIcon className="h-5 w-5"/></div><h3 className="text-lg font-semibold">What can we help you with?</h3><div className="-mx-4 mt-4">{choices}</div></div>}</div>
+ {active&&choices}
+
+ {active?.status==='resolved'?<button type="button" onClick={()=>selectConversation('')} className="m-4 min-h-11 rounded-full bg-gray-950 px-4 text-sm text-white dark:bg-white dark:text-gray-950">Start a new conversation</button>:<PocketStyleSupportComposer value={message} onChange={setMessage} onSend={()=>void send()} busy={busy}/>}
+
  </>}
  </>
 }
