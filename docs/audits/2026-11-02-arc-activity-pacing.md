@@ -1,0 +1,9 @@
+# Arc activity rate-limit mitigation - 2026-11-02
+
+Live evidence: the provider-usage window 2026-11-01 23:27:46-23:32:46 UTC contained 23 successful Arc eth_getLogs requests, two rate-limited requests and one aborted sibling. The preceding startup window had six successful log requests. The original network failure was not permanent; intermittent public-provider rate limiting remains.
+
+The activity scanner previously dispatched both log directions concurrently across wallets. Add a process-wide activity-only queue for the configured public Arc endpoint: one active log read, starts spaced at least 350 ms apart, maximum 32 active/queued reads. This is a conservative application pacing choice, not a claim about the provider's published quota. It adds no retries, endpoints or requests. Cancellation prevents queued dispatch and aborts pacing waits; failures cannot poison the queue. Other networks and private Arc endpoints retain their behavior. The existing 10-second scan deadline remains authoritative; unusually large explicit scan ranges may reach it rather than extending resource use.
+
+Incoming/outgoing filters, block coverage, scan schedule, recent-activity retention and provider cooldown remain unchanged. Activity rows are not settlement proof. This mitigates application bursts; it cannot guarantee public-provider availability or recover history outside the existing bounded lookback. Durable missed-event recovery remains separate work.
+
+Validation: new fixture covers cross-wallet concurrency, spacing, bounded queue, cancellation before dispatch/during pacing, failure recovery and exact default bidirectional 120-block coverage. Existing activity RPC-budget/recovery and history-efficiency smoke tests plus targeted backend TypeScript check pass. Live evidence follows after deployment.

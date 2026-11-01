@@ -1,4 +1,5 @@
 import {withProviderFeature} from './provider-usage.js'
+import {createActivityReadPacer} from './activity-read-pacing.js'
 import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { createActivityLogReader, createFinalizedActivityReader } from './activity-rpc-budget.js'
 import type { ParsedTransactionWithMeta } from '@solana/web3.js'
@@ -13,6 +14,7 @@ import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
 
 const readActivityLogs = createActivityLogReader()
+const pacePublicArcLogs = createActivityReadPacer()
 const readFinalizedTransactions = createFinalizedActivityReader<ParsedTransactionWithMeta>()
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
@@ -75,9 +77,12 @@ export function evmTransferTouchesTopic(topics: readonly string[] | undefined, w
 
 export async function evmActivity(network: EvmNetwork, wallet: string, signal: AbortSignal, read = readEvmRpc): Promise<PocketActivityRow[]> {
   if (!/^0x[\da-f]{40}$/i.test(wallet)) throw new Error('Invalid activity wallet.')
+  const arcEndpoint = process.env.PRIVATE_RPC_URL_ARC_MAINNET?.trim()
+  const publicArc = network === 'arc' && (!arcEndpoint || /^https:\/\/rpc\.mainnet\.arc\.io\/?$/.test(arcEndpoint))
   async function rpc<T>(method: string, params: any[]): Promise<T> {
     signal.throwIfAborted()
-    const result = await withProviderFeature('wallet-activity',()=>read(network, method, params, signal))
+    const perform=()=>withProviderFeature('wallet-activity',()=>read(network, method, params, signal))
+    const result = await (publicArc&&method==='eth_getLogs'?pacePublicArcLogs(signal,perform):perform())
     signal.throwIfAborted()
     return result as T
   }
@@ -89,8 +94,6 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   // a ten-block fallback without changing coverage or the polling cadence.
   const blockRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, 120)))
   const maxChunks = Math.min(12, positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12))
-  const arcEndpoint = process.env.PRIVATE_RPC_URL_ARC_MAINNET?.trim()
-  const publicArc = network === 'arc' && (!arcEndpoint || /^https:\/\/rpc\.mainnet\.arc\.io\/?$/.test(arcEndpoint))
   // Preserve the previous maximum coverage even on an explicitly larger lookback.
   const previousRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, publicArc ? 120 : 10)))
   const coverage = lookback < previousRange * BigInt(maxChunks) ? lookback : previousRange * BigInt(maxChunks)
