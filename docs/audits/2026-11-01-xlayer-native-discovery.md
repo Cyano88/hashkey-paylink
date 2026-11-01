@@ -13,3 +13,11 @@ Validation: pagination, malformed/foreign/out-of-range rows, cache restart, dela
 Official endpoint reference: https://web3.okx.com/onchainos/dev-docs/xlayer/developer/data/normal-transactions-by-address-and-block
 
 Live pre-release evidence: the exact new candidate/proof functions verified a historical direct OKB transfer. An earlier native notice had zero top-level transaction value and was correctly excluded from direct-transfer proof. The live empty-range API response is code 0, page 1, totalPage empty string, and an empty transactionList; this specific representation is accepted and covered by a regression fixture. Empty totalPage with nonempty rows remains rejected. The broad diagnostic did not complete successfully before this empty-page correction and is not counted as a pass.
+
+## Live rollout
+
+Deployed commit b89c6a4e71223abbe2ade418e2d2bfd8a768ce8c on Render as dep-dbjrs3s9v7es73avr1sg, live at 2026-11-01 22:39:34 UTC. Production build passed. Startup transition briefly returned 502; final public health is healthy with zero unresolved and zero stale executions.
+
+Live telemetry from 22:39:34 through 22:43:08 UTC shows indexed mode, zero candidates/proofs in the replay range, and cursor lag falling 67 -> 37 -> 6 -> 0 blocks, then staying at zero for multiple runs. Each idle run queries the 10,000-block window in one batched address-index request for the current 10 wallets, instead of fetching 30-60 full blocks. Header/log checks remain. This is observed idle-path request reduction, not measured invoice savings or a newly funded payment acceptance test.
+
+Historical direct-native proof was verified before rollout; generic internal transfers are still outside this change's coverage. Remaining work is broader verified wallet-event coverage, provider usage/billing attribution and the deferred Zivah cross-app KYC test. The rollback switch remains POCKET_XLAYER_NATIVE_DISCOVERY=blocks.
