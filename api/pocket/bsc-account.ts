@@ -5,7 +5,12 @@ import {readBscWallet} from './bsc-wallet.js'
 import {createBscRuntime} from './bsc-runtime.js'
 import {readBscDisplayBalances} from './bsc-display-balances.js'
 
-export async function readBscAccount(owner:string,d:{wallet:typeof readBscWallet;runtime:typeof createBscRuntime;display?:typeof readBscDisplayBalances}={wallet:readBscWallet,runtime:createBscRuntime,display:readBscDisplayBalances}){
+// Display requests share the runtime's bounded price cache. Payment runtimes
+// remain independent and keep their own fresh fee/balance checks.
+let displayRuntime: ReturnType<typeof createBscRuntime> | undefined
+const accountRuntime = () => displayRuntime ??= createBscRuntime()
+
+export async function readBscAccount(owner:string,d:{wallet:typeof readBscWallet;runtime:typeof createBscRuntime;display?:typeof readBscDisplayBalances}={wallet:readBscWallet,runtime:accountRuntime,display:readBscDisplayBalances}){
  const wallet=await d.wallet(owner)
  const assets=['BNB','USDC','USDT'] as const
  if(!wallet)return {address:null,rows:assets.map(symbol=>({symbol,quantity:0,valueUsd:0})),observedAt:Date.now()}

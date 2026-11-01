@@ -233,16 +233,18 @@ export async function readPocketActivity({
   accessToken,
   recent = false,
   fresh = false,
+  observe = false,
   signal,
   fetcher = fetch,
 }: {
   accessToken: string
   recent?: boolean
   fresh?: boolean
+  observe?: boolean
   signal?: AbortSignal
   fetcher?: typeof fetch
 }): Promise<PocketActivityReadResult> {
-  const query = [recent ? 'scope=recent' : '', fresh ? 'refresh=1' : ''].filter(Boolean).join('&')
+  const query = [recent ? 'scope=recent' : '', observe ? 'observe=1' : fresh ? 'refresh=1' : ''].filter(Boolean).join('&')
   const response = await fetcher(POCKET_API.activity + (query ? '?' + query : ''), {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },

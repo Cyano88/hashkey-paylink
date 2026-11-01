@@ -19,7 +19,6 @@ export default function usePocketWallets({ authenticated, email, getAccessToken 
   const reader = useRef(getAccessToken); reader.current = getAccessToken
   const stableReader = useCallback(() => reader.current(), [])
   const scope = usePocketReadScope(owner, stableReader)
-  const failureCount = useRef(0)
   const lastAttemptAt = useRef(0)
   const [, render] = useState(0)
   const [state, setState] = useState({ scope, busy: false, attempted: false, error: '' })
@@ -32,9 +31,9 @@ export default function usePocketWallets({ authenticated, email, getAccessToken 
     setState({ scope, busy: true, attempted: false, error: '' })
     try {
       await loadPocketBalance(owner, stableReader, fresh, valid)
-      if (valid()) { failureCount.current = 0; setState({ scope, busy: false, attempted: true, error: '' }) }
+      if (valid()) { setState({ scope, busy: false, attempted: true, error: '' }) }
     } catch (error) {
-      if (valid()) { failureCount.current++; setState({ scope, busy: false, attempted: true, error: error instanceof Error ? error.message : 'Try refreshing balances again.' }) }
+      if (valid()) { setState({ scope, busy: false, attempted: true, error: error instanceof Error ? error.message : 'Try refreshing balances again.' }) }
     }
   }, [owner, scope, stableReader])
   const refreshBalances = useCallback(() => refresh(true), [refresh])
@@ -59,13 +58,7 @@ export default function usePocketWallets({ authenticated, email, getAccessToken 
     window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus)
     return () => { unsubscribe(); unregister(); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus) }
   }, [owner, scope, refresh, refreshBalances])
-  useEffect(() => {
-    if (!owner) return
-    // No RPC while hidden. Failures back off to 60s; user refresh remains immediate.
-    const delay = snapshot?.totalComplete ? 45_000 : Math.min(60_000, 15_000 * 2 ** Math.max(0, failureCount.current - 1))
-    const timer = window.setTimeout(() => { if (document.visibilityState === 'visible') void refresh() }, delay)
-    return () => window.clearTimeout(timer)
-  }, [owner, refresh, snapshot?.totalComplete, state])
+  // Initial load, resume, payment completion and pull-to-refresh own reads; no idle polling.
 
   const active = state.scope === scope ? state : { busy: false, attempted: false, error: '' }
   const stale = Boolean(snapshot?.displayRows.some(row => row.stale))

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Address } from 'viem'
 import { readStockDisplayCache, saveStockDisplayCache } from '../lib/pocketStockDisplayCache'
 import { stockBalanceCache } from '../lib/pocketStockBalanceCache'
@@ -21,7 +21,8 @@ export default function usePocketStockBalances(ownerKey: string, address: Addres
       void stockBalanceCache.load(ownerKey, address, false, reader)
     }
     tick()
-    const timer = window.setInterval(tick, 5_000)
+    // Expiry changes display state only; it must not start another balance read.
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') render(n => n + 1) }, 5_000)
     const unregister = registerPocketRefreshHandler(refresh)
     window.addEventListener('focus', tick); window.addEventListener('online', tick); document.addEventListener('visibilitychange', tick)
     return () => { unsubscribe(); unregister(); window.clearInterval(timer); window.removeEventListener('focus', tick); window.removeEventListener('online', tick); document.removeEventListener('visibilitychange', tick) }

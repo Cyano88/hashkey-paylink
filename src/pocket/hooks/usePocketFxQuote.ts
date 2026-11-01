@@ -50,14 +50,14 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
     }
     void update()
     const visible = () => { if (document.visibilityState === 'visible') void update() }
-    const timer = window.setInterval(visible, 30_000)
+    const timer = retainDisplayEstimate ? undefined : window.setInterval(visible, 30_000)
     window.addEventListener('focus', visible)
     document.addEventListener('visibilitychange', visible)
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible) }
-  }, [key, amount, currency, asset, enabled, revision])
+  }, [key, amount, currency, asset, enabled, revision, retainDisplayEstimate])
   useEffect(() => enabled ? registerPocketRefreshHandler(refresh) : undefined, [enabled, refresh])
   useEffect(() => {
-    if (!quote || quote.expiresAt <= Date.now()) return
+    if (!quote || quote.expiresAt <= Date.now() || retainDisplayEstimate) return
     const timer = window.setTimeout(() => { if (!retainDisplayEstimate) setQuote(null); void refresh() }, quote.expiresAt - Date.now())
     return () => window.clearTimeout(timer)
   }, [quote, refresh, retainDisplayEstimate])

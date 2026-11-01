@@ -44,13 +44,13 @@ export function subscribePocketActivity(scope: string, callback: () => void) {
   return () => { subscriptions.delete(callback); if (!subscriptions.size) listeners.delete(scope) }
 }
 
-export async function refreshPocketActivity(scope: string, getAccessToken: () => Promise<string | null>, recent: boolean, isCurrent: () => boolean = () => true, fresh = false): Promise<void> {
+export async function refreshPocketActivity(scope: string, getAccessToken: () => Promise<string | null>, recent: boolean, isCurrent: () => boolean = () => true, fresh = false, observe = false): Promise<void> {
   if (!scope) return
-  fresh = fresh || dirtyScopes.has(scope)
+  fresh = !observe && (fresh || dirtyScopes.has(scope))
   const active = pending.get(scope)
   if (active) {
     await active.promise
-    if ((fresh && !active.fresh) || (!recent && !cachedPocketActivity(scope)?.full)) return refreshPocketActivity(scope, getAccessToken, recent, isCurrent, fresh)
+    if ((fresh && !active.fresh) || (!recent && !cachedPocketActivity(scope)?.full)) return refreshPocketActivity(scope, getAccessToken, recent, isCurrent, fresh, observe)
     return
   }
   const work = (async () => {
@@ -63,7 +63,7 @@ export async function refreshPocketActivity(scope: string, getAccessToken: () =>
           controller.signal.throwIfAborted()
           if (!isCurrent()) throw new Error('Activity account changed.')
           if (!token) throw new Error('Sign in again to load activity.')
-          const incoming = await readPocketActivity({ accessToken: token, recent, fresh, signal: controller.signal })
+          const incoming = await readPocketActivity({ accessToken: token, recent, fresh, observe, signal: controller.signal })
           controller.signal.throwIfAborted()
           if (!isCurrent()) throw new Error('Activity account changed.')
           const previous = cachedPocketActivity(scope)

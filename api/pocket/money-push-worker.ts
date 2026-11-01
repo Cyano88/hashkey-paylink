@@ -1,3 +1,4 @@
+import {selectPocketPushOwners} from './fair-owner-batch.js'
 import {readDeferredTransferPushes,saveDeferredTransferPushes} from './deferred-transfer-push.js'
 import {readBscWalletActivity} from './bsc-wallet-activity.js'
 import {exchangeTransferDisposition} from './exchange-transfer-notifications.js'
@@ -23,6 +24,7 @@ type Dependencies = {
   readDeferred: typeof readDeferredTransferPushes
   saveDeferred: typeof saveDeferredTransferPushes
   configured: () => boolean
+  selectOwners: typeof selectPocketPushOwners
   listOwners: typeof listPocketPushOwners
   readActivity: typeof readPocketWalletChainActivity
   readWallets: typeof readPocketLinkedWalletAddresses
@@ -54,6 +56,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
     readDeferred: readDeferredTransferPushes,
     saveDeferred: saveDeferredTransferPushes,
     configured: pocketPushConfigured,
+    selectOwners: selectPocketPushOwners,
     listOwners: listPocketPushOwners,
     readActivity: async (owner,options)=>{const [circle,bsc]=await Promise.all([readPocketWalletChainActivity(owner,options),readBscWalletActivity(owner).catch(()=>[])]);return [...circle,...bsc]},
     readWallets: async owner=>{const [circle,bsc]=await Promise.all([readPocketLinkedWalletAddresses(owner),readBscWallet(owner).catch(()=>null)]);return [...circle,...(bsc?[{network:'bsc',walletAddress:bsc.address}]:[])]},
@@ -73,7 +76,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
   if (!dependencies.configured()) return { ok: true, owners: 0, notifications: 0, errors: 0 }
   const ownerLimit = Math.max(1, Math.min(Number(process.env.POCKET_MONEY_PUSH_OWNER_LIMIT ?? 50), 200))
   const lookbackMs = Math.max(60_000, Math.min(Number(process.env.POCKET_MONEY_PUSH_LOOKBACK_MS ?? 10 * 60_000), 24 * 60 * 60_000))
-  const owners = (await dependencies.listOwners()).slice(0, ownerLimit)
+  const owners = await dependencies.selectOwners(await dependencies.listOwners(), ownerLimit)
   let notifications = 0
   let errors = 0
   for (const ownerId of owners) {
@@ -211,4 +214,3 @@ export function drainPocketMoneyPushWorker() {
   if (!inFlight) inFlight = runPocketMoneyPushWorker().finally(() => { inFlight = null })
   return inFlight
 }
-

@@ -30,10 +30,12 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
   const now = dependencies.now ?? Date.now
   const pending = new Map<string, Promise<void>>()
   const retryAfter = new Map<string, number>()
+  const sourceRetries = new Map<string, {failures: number; nextAt: number}>()
   const sourceNames = Object.keys(dependencies.sources)
   async function refresh(owner: string, key: string, saved: ActivityFeed | undefined, force: boolean) {
     const tasks = sourceNames.map(async name => {
-      if (!force && now() - (saved?.sources[name]?.updatedAt ?? 0) < 15_000) return
+      const sourceKey = key + ':' + name
+      if (!force && ((saved?.sources[name] && now() - saved.sources[name].updatedAt < 60_000) || (sourceRetries.get(sourceKey)?.nextAt ?? 0) > now())) return
       const startedAt = now()
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
@@ -50,7 +52,11 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
             startedAt, updatedAt: now(),
           } } }
         })
+        sourceRetries.delete(sourceKey)
       } catch {
+        const failures = (sourceRetries.get(sourceKey)?.failures ?? 0) + 1
+        if (sourceRetries.size >= 1000 && !sourceRetries.has(sourceKey)) sourceRetries.delete(sourceRetries.keys().next().value!)
+        sourceRetries.set(sourceKey, {failures, nextAt: now() + Math.min(300_000, 15_000 * 2 ** Math.min(failures - 1, 5))})
         // Neither a provider failure nor a storage failure deletes saved rows.
         // Do not log owner identifiers, provider URLs, tokens or financial data.
         console.warn('[pocket-activity] source refresh unavailable', { source: name })
@@ -81,9 +87,10 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
         return res.json({ok:true,archivedKeys:updated.archivedKeys||[]})
       }
 
-      const force = req.query?.refresh === '1'
-      const stale = force || sourceNames.some(name => now() - (saved?.sources[name]?.updatedAt ?? 0) >= 15_000)
-      if (stale && !pending.has(key) && (retryAfter.get(key) ?? 0) <= now() && pending.size < 16) {
+      const observe = req.query?.observe === '1'
+      const force = !observe && req.query?.refresh === '1'
+      const stale = force || sourceNames.some(name => !saved?.sources[name] || now() - saved.sources[name].updatedAt >= 60_000)
+      if (!observe && stale && !pending.has(key) && (retryAfter.get(key) ?? 0) <= now() && pending.size < 16) {
         const work = refresh(userId, key, saved, force).finally(() => {
           pending.delete(key)
           if (retryAfter.size >= 256) retryAfter.delete(retryAfter.keys().next().value!)

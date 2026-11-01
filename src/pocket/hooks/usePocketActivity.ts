@@ -28,14 +28,17 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
   const generation = useRef(0)
   const tokenReader = useRef(getAccessToken)
   tokenReader.current = getAccessToken
+  const followups = useRef(0)
+  const lastStarted = useRef(0)
   const snapshot = cachedPocketActivity(scope)
-  const refresh = useCallback(async (fresh = false) => {
+  const refresh = useCallback(async (fresh = false, observe = false) => {
     if (!scope) return
+    if (!observe) { followups.current = 0; lastStarted.current = Date.now() }
     const epoch = generation.current
     const valid = () => current.current === scope && generation.current === epoch
     if (valid()) setState({ scope, busy: true, error: '', attempted: false })
     try {
-      await refreshPocketActivity(scope, () => tokenReader.current(), recent, () => current.current === scope, fresh)
+      await refreshPocketActivity(scope, () => tokenReader.current(), recent, valid, fresh, observe)
       if (valid()) setState({ scope, busy: false, error: '', attempted: true })
     } catch (reason) {
       if (valid()) setState({ scope, busy: false, attempted: true, error: !navigator.onLine
@@ -49,18 +52,24 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
     if (!scope || !enabled) return
     const unsubscribe = subscribePocketActivity(scope, () => render(value => value + 1))
     void refresh()
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
+    const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - lastStarted.current >= 30_000) void refresh() }
     window.addEventListener('focus', onVisible)
     document.addEventListener('visibilitychange', onVisible)
     const unregister = registerPocketRefreshHandler(() => refresh(true))
     return () => { generation.current++; unsubscribe(); unregister(); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
   }, [enabled, scope, refresh])
 
+  // Observe completion of the one requested refresh. These reads cannot start
+  // another provider scan, and stop after five attempts or when the app hides.
   useEffect(() => {
-    if (!scope || !enabled) return
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh() }, snapshot?.refreshing ? 2_000 : 20_000)
-    return () => window.clearInterval(timer)
-  }, [scope, enabled, refresh, snapshot?.refreshing])
+    if (!scope || !enabled || !snapshot?.refreshing || state.busy || followups.current >= 5) return
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState !== 'visible') return
+      followups.current++
+      void refresh(false, true)
+    }, 2_000)
+    return () => window.clearTimeout(timer)
+  }, [scope, enabled, refresh, snapshot?.refreshing, snapshot?.savedAt, state.busy])
 
   useEffect(()=>{const update=()=>render(value=>value+1);window.addEventListener(POCKET_SENDS_UPDATED,update);window.addEventListener(POCKET_OPERATIONS_UPDATED,update);return()=>{window.removeEventListener(POCKET_SENDS_UPDATED,update);window.removeEventListener(POCKET_OPERATIONS_UPDATED,update)}},[])
   let localError=''
@@ -68,13 +77,14 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
   if(authenticated)try{rows=collapsePocketAssetMoves(mergePocketOperations(mergeSendActivity(rows,readSendAttempts(email)),readPocketOperations(email)))}catch{localError='Some saved transfers could not be loaded.'}
   const scoped = state.scope === scope ? state : { busy: false, error: '', attempted: false }
   const hasContent = Boolean(rows.length || snapshot?.merchants.length || snapshot?.collections.length)
+  const awaitingRefresh = Boolean(snapshot?.refreshing && followups.current < 5 && !scoped.error)
   return {
     rows: recent ? personalPocketActivity(rows).filter(row=>!isIncomingPosPayment(row)&&!snapshot?.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0,4):rows,
     archivedKeys: snapshot?.archivedKeys ?? [],
     merchants: snapshot?.merchants ?? [], collections: snapshot?.collections ?? [],
-    busy: scoped.busy && !hasContent,
-    resolved: !authenticated || hasContent || Boolean(snapshot?.complete) || scoped.attempted,
-    error: localError || scoped.error || (snapshot?.partial ? snapshot.refreshing ? 'Activity is updating.' : 'Some activity is still updating. Your saved history is retained.' : ''),
+    busy: (scoped.busy || awaitingRefresh) && !hasContent,
+    resolved: !authenticated || hasContent || Boolean(snapshot?.complete) || (scoped.attempted && !awaitingRefresh),
+    error: localError || scoped.error || (snapshot?.partial && !awaitingRefresh ? 'Some activity could not be updated. Pull to refresh.' : ''),
     refresh,
   }
 }

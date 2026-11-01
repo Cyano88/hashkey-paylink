@@ -28,9 +28,9 @@ export default function usePocketBscBalances(){
  useEffect(()=>{
   if(!owner)return
   const tick=()=>{void load()};tick()
-  const timer=window.setInterval(tick,45000),unregister=registerPocketRefreshHandler(refresh)
+  const unregister=registerPocketRefreshHandler(refresh)
   window.addEventListener('online',tick);document.addEventListener('visibilitychange',tick)
-  return()=>{clearInterval(timer);unregister();window.removeEventListener('online',tick);document.removeEventListener('visibilitychange',tick)}
+  return()=>{unregister();window.removeEventListener('online',tick);document.removeEventListener('visibilitychange',tick)}
  },[owner,load,refresh])
  const snapshot=owner?active.snapshot:undefined
  const holdings=['BNB','USDC','USDT'].map(symbol=>{const row=snapshot?.rows.find(r=>r.symbol===symbol);return {id:'bsc:'+symbol,symbol,icon:symbol==='BNB'?'/brand/bnb.svg':symbol==='USDC'?'/brand/usdc-circle-logo.png':'/brand/usdt.svg',network:'BNB Chain',networkIcon:'/brand/bnb.svg',quantity:row?.quantity??0,valueUsd:!owner?0:row?.valueUsd??null,known:!owner||!!row,stale:!!active.error,valueLoading:!!active.busy}})
