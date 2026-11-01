@@ -1,3 +1,4 @@
+import {startVisibleCheckoutPoll} from '../lib/visibleCheckoutPoll'
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { lazy, Suspense, useEffect, useState } from 'react'
@@ -36,27 +37,24 @@ export default function HostedCheckoutEntry() {
   useEffect(() => {
     setSelection(null);setCheckout(null);setStock(null);setError('')
     let cancelled = false
-    const controller = new AbortController()
-    let timeout: ReturnType<typeof setTimeout>
-    let poll: ReturnType<typeof setTimeout>
     setError(''); setExpiredReturn(undefined); setExpiredBrand({}); setCheckout(null); setStock(null);setSelection(null)
-    async function openCheckout() {
-      timeout = setTimeout(() => controller.abort(), 15000)
-      try {
-        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}&purpose=return`, { cache: 'no-store', signal: controller.signal })
+    async function openCheckout(signal: AbortSignal): Promise<boolean> {
+        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}&purpose=return`, { cache: 'no-store', signal })
         const body = await response.json().catch(() => undefined) as HostedCheckoutLookup | undefined
+        signal.throwIfAborted()
+        if(cancelled)return false
         if(!cancelled&&response.status===410){setExpiredReturn(body?.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
         if(response.ok&&body?.ok&&(body.checkout as any)?.selectionCheckout&&body.checkout?.id===checkoutId&&/^chks_[a-f0-9]{24}$/.test(checkoutId)){
           if(!cancelled){if(body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl+(body.selectedCheckoutUrl.includes('?')?'&':'?')+(new URLSearchParams(location.search).get('browser')==='1'?'browser=1':new URLSearchParams(location.search).get('mode')==='pocket'?'pocket=1':''),{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
-          return
+          return false
         }
         if(response.ok&&body?.ok&&body.checkout?.bscCheckout&&body.checkout.id===checkoutId&&/^chkb_[a-f0-9]{24}$/.test(checkoutId)){
-          if(!cancelled){setCheckout(body);if(!browser&&body.checkout.status!=='paid')poll=setTimeout(()=>void openCheckout(),10000)}
-          return
+          if(!cancelled)setCheckout(body)
+          return !browser&&body.checkout.status!=='paid'
         }
         if(response.ok&&body?.ok&&body.checkout?.stockCheckout&&body.checkout.id===checkoutId&&/^chkx_[a-f0-9]{24}$/.test(checkoutId)){
-          if(!cancelled){setStock(body);if(!browser&&body.checkout.status!=='paid')poll=setTimeout(()=>void openCheckout(),10000)}
-          return
+          if(!cancelled)setStock(body)
+          return !browser&&body.checkout.status!=='paid'
         }
         if (!response.ok || !body?.ok || body.checkout?.id !== checkoutId || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This checkout could not be opened.')
@@ -64,16 +62,14 @@ export default function HostedCheckoutEntry() {
         if (!cancelled) {
           const status = body.checkout?.paymentAttempt?.status || body.checkout?.status
           if (browser || status === 'paid' || status === 'processing') navigate(body.paymentUrl, { replace: true })
-          else {setCheckout(body); poll = setTimeout(() => void openCheckout(), 10000)}
+          else {setCheckout(body); return true}
         }
-      } catch (cause) {
-        if (!cancelled) setError(controller.signal.aborted ? 'Checkout took too long to respond. Please reopen the link.' : cause instanceof Error ? cause.message : 'This checkout could not be opened.')
-      } finally {
-        window.clearTimeout(timeout)
-      }
+      return false
     }
-    void openCheckout()
-    return () => { cancelled = true; controller.abort(); clearTimeout(timeout); clearTimeout(poll) }
+    const stop = startVisibleCheckoutPoll(openCheckout, (cause, timedOut) => {
+      if (!cancelled) setError(timedOut ? 'Checkout took too long to respond. Please reopen the link.' : cause instanceof Error ? cause.message : 'This checkout could not be opened.')
+    })
+    return () => { cancelled = true; stop() }
   }, [attemptId, checkoutId, navigate, browser])
 
   if(error&&/expired/i.test(error))return <CheckoutExpired merchant={expiredBrand.name||checkout?.checkout?.merchantName||stock?.checkout?.merchantName} brandImageUrl={expiredBrand.logo||checkout?.checkout?.brandImageUrl||stock?.checkout?.brandImageUrl} returnUrl={expiredReturn||checkout?.returnUrl||stock?.returnUrl}/>

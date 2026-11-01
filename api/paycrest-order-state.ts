@@ -15,6 +15,9 @@ export function mergePaycrestOrder(current: PaycrestOrderRecord | undefined, inc
  for(const key of ['tx_hash','payer_email','payer_wallet','provider_amount_paid','provider_amount_returned','provider_percent_settled'] as const){
   if(!merged[key])merged[key]=current[key]||incoming[key]
  }
+ if(current.funding_tx_hash && incoming.funding_tx_hash && current.funding_tx_hash.toLowerCase()!==incoming.funding_tx_hash.toLowerCase())throw new Error('Verified funding transaction cannot be replaced.')
+ const funding=current.funding_tx_hash||incoming.funding_tx_hash
+ if(funding){merged.funding_tx_hash=funding;merged.tx_hash=funding}
  if(merged.source==='bank-send'){
   if(['settled','refunded'].includes(merged.status.toLowerCase()))merged.status_detail=undefined
   else if(held)merged.status_detail='under_review'
@@ -32,4 +35,10 @@ export function updatePaycrestOrderStore(current: {orders: Record<string,Paycres
  if(!active || active.paycrest_order_id===saved.paycrest_order_id || allowReplacement)orders[saved.intent_id]=saved
  orders[saved.paycrest_order_id]=saved
  return {orders}
+}
+
+/** Provider lifecycle references are hints, never replacements for verified funding. */
+export function paycrestTransactionReferences(record: PaycrestOrderRecord, data: any) {
+ const provider = [data?.txHash,data?.tx_hash,data?.transactionHash,data?.transaction_hash,data?.depositTxHash,data?.deposit_tx_hash,data?.source?.txHash,data?.source?.tx_hash,data?.payment?.txHash,data?.payment?.tx_hash,record.provider_tx_hash].find(value=>typeof value==='string'&&/^0x[a-fA-F0-9]{64}$/.test(value))
+ return {tx_hash:record.funding_tx_hash||record.tx_hash||provider,provider_tx_hash:provider}
 }

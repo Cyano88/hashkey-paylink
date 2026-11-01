@@ -1,4 +1,5 @@
 import {createHash,createHmac} from 'node:crypto'
+import {dueHistoryProofs,deferHistoryProof,type HistoryProofRetries} from './history-proof-retry.js'
 import {decodeEventLog,formatUnits,parseAbiItem} from 'viem'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {okxCredentials} from './xstocks-swap-provider.js'
@@ -56,7 +57,7 @@ export async function bscTransferRows(wallet:string,hash:string,rpc:Rpc,internal
  return rows
 }
 
-type ScanState={end:number;begin?:number;cursor:string;pending:string[];seen:string[];complete:boolean;rows?:PocketActivityRow[];internal?:string[]}
+type ScanState={end:number;begin?:number;cursor:string;pending:string[];seen:string[];complete:boolean;rows?:PocketActivityRow[];internal?:string[];retries?:HistoryProofRetries}
 export async function readBscHistoryPage(wallet:string,state:Pick<ScanState,'end'|'begin'|'cursor'>){
  const c=okxCredentials();if(!c.key||!c.secret||!c.passphrase)throw Error('BNB history unavailable.')
  const path='/api/v6/dex/post-transaction/transactions-by-address?'+new URLSearchParams({address:wallet,chains:'56',end:String(state.end),limit:'20',...(state.begin?{begin:String(state.begin)}:{}),...(state.cursor?{cursor:state.cursor}:{})})
@@ -88,10 +89,11 @@ export async function readBscWalletActivity(owner:string):Promise<PocketActivity
    await mutateDurableJson(key,()=>state)
   }
   const rpc=createBscRuntime().rpc,rows:PocketActivityRow[]=[]
-  for(const hash of state.pending.slice(0,4)){
+  for(const hash of dueHistoryProofs(state.pending,state.retries)){
    let verified:PocketActivityRow[]
-   try{verified=await bscTransferRows(wallet.address,hash,rpc,state.internal?.includes(hash))}catch{state.pending=[...state.pending.filter(h=>h!==hash),hash];await mutateDurableJson(key,()=>state);continue}
+   try{verified=await bscTransferRows(wallet.address,hash,rpc,state.internal?.includes(hash))}catch{state.retries=deferHistoryProof(state.retries||{},hash);state.pending=[...state.pending.filter(h=>h!==hash),hash];await mutateDurableJson(key,()=>state);continue}
    await persistObservedWalletActivity(owner,verified)
+   if(state.retries)delete state.retries[hash]
    rows.push(...verified);state.rows=[...(state.rows||[]).filter(r=>!verified.some(v=>v.eventId===r.eventId)),...verified].sort((a,b)=>b.ts-a.ts).slice(0,100);state.pending=state.pending.filter(h=>h!==hash);state.seen=[...state.seen,hash].slice(-2000)
    await mutateDurableJson(key,()=>state)
   }

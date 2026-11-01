@@ -1,7 +1,7 @@
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
 import { paycrestComplianceFields } from './paycrest-compliance-state.js'
-import { updatePaycrestOrderStore } from './paycrest-order-state.js'
+import { updatePaycrestOrderStore, paycrestTransactionReferences } from './paycrest-order-state.js'
 import type { Request, Response } from 'express'
 import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
 import { createHmac, timingSafeEqual } from 'crypto'
@@ -32,6 +32,8 @@ export type PaycrestOrderRecord = {
   payer_name?: string
   source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'bank-send' | 'hosted-checkout'
   tx_hash?: string
+  funding_tx_hash?: string // Canonically verified customer funding; provider updates cannot replace it.
+  provider_tx_hash?: string
   status: string
   status_detail?: 'under_review'
   refund_reason?: 'payer_mismatch' | 'payer_unverified'
@@ -596,6 +598,7 @@ export async function markPaycrestPosPayment(input: { id: string; txHash: string
   const updated = {
     ...record,
     tx_hash: input.txHash,
+    funding_tx_hash: input.txHash,
     payer_email: input.payerEmail || record.payer_email,
     payer_wallet: input.payerWallet || record.payer_wallet,
     updated_at: new Date().toISOString(),
@@ -628,24 +631,11 @@ export async function refreshPaycrestOrderStatus(id: string) {
   if (!record) return null
   const data = await paycrestFetch<any>(`/v2/sender/orders/${encodeURIComponent(record.paycrest_order_id)}`, { method: 'GET' })
   const status = firstText(data?.status, record.status)
-  const txHash = firstText(
-    data?.txHash,
-    data?.tx_hash,
-    data?.transactionHash,
-    data?.transaction_hash,
-    data?.depositTxHash,
-    data?.deposit_tx_hash,
-    data?.source?.txHash,
-    data?.source?.tx_hash,
-    data?.payment?.txHash,
-    data?.payment?.tx_hash,
-    record.tx_hash,
-  )
   const updated = {
     ...record,
     ...paycrestComplianceFields(data),
     status,
-    tx_hash: txHash,
+    ...paycrestTransactionReferences(record,data),
     provider_amount_paid: firstText(data?.amountPaid, data?.amount_paid, record.provider_amount_paid),
     provider_amount_returned: firstText(data?.amountReturned, data?.amount_returned, record.provider_amount_returned),
     provider_percent_settled: firstText(data?.percentSettled, data?.percent_settled, record.provider_percent_settled),
@@ -695,19 +685,7 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
     ...record,
     ...paycrestComplianceFields(data, payload.event),
     status: firstText(data.status, record.status),
-    tx_hash: firstText(
-      data.txHash,
-      data.tx_hash,
-      data.transactionHash,
-      data.transaction_hash,
-      data.depositTxHash,
-      data.deposit_tx_hash,
-      data.source?.txHash,
-      data.source?.tx_hash,
-      data.payment?.txHash,
-      data.payment?.tx_hash,
-      record.tx_hash,
-    ),
+    ...paycrestTransactionReferences(record,data),
     raw: payload,
     updated_at: new Date().toISOString(),
   }

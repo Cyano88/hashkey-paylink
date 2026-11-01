@@ -104,3 +104,6 @@ store.requests[attemptId].providerFailure={status:200};journal=null;
 const repaired=await handler.reconcileOutbound('owner',quoted.body.bridgeQuoteToken);
 assert.equal(repaired.hash,hash);assert.equal(repaired.status,'completed');assert.equal(store.requests[attemptId].hash,hash);assert.equal(broadcasts,1);
 console.log('PASS orphaned batch recovery requires canonical exact-order deposit and fee; no duplicate broadcast.');
+import {outboundBridgeCalls as unsupportedAssetCalls} from '../api/pocket/xlayer-outbound-bridge.ts'
+for(const asset of ['USDe','USDG'])assert.throws(()=>unsupportedAssetCalls({fee:{asset}}),/unavailable or changed/)
+console.log('PASS unsupported Relay funding assets are rejected before constructing calls')

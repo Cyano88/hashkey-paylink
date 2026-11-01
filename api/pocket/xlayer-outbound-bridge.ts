@@ -25,6 +25,7 @@ const invalid=():never=>{throw Error('Outbound bridge quote is unavailable or ch
 export function outboundBridgeCalls(q:Pick<XLayerOutboundQuote,'orderId'|'fee'|'conversion'|'lifi'>){
  if(q.lifi){if(q.fee.asset!=='USDT'||q.conversion)invalid();return lifiOutboundCalls(q.lifi,q.fee.issuedAt??Date.now())}
  if(q.conversion){if(q.fee.asset!=='USDT')invalid();return xlayerConversionCalls(q.conversion,q.fee.walletAddress,q.fee.amountUnits,q.orderId,q.fee.issuedAt??Date.now())}
+ if(q.fee.asset!=='USDC'&&q.fee.asset!=='USDT')return invalid()
  const token=getAddress(stablecoinAddress('xlayer',q.fee.asset)),depository=getAddress(RELAY_STABLECOIN_CHAINS.xlayer.depository)
  const approval=(amount:bigint)=>({to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'approve',args:[depository,amount]})})
  return [approval(0n),approval(BigInt(q.fee.amountUnits)),{to:depository,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[q.fee.walletAddress,token,BigInt(q.fee.amountUnits),q.orderId]})},approval(0n)]
@@ -98,7 +99,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    await refreshXLayerReimbursement(q.fee,outboundBridgeCalls(q),estimate,d.now)
   },
   async recoverSource(q:XLayerOutboundQuote):Promise<Hex|null>{
-   if(q.lifi)return null
+   if(q.lifi || (q.fee.asset!=='USDC'&&q.fee.asset!=='USDT'))return null
    if(!d.apiKey())return null
    const r=await d.fetch('https://api.relay.link/intents/status/v3?requestId='+encodeURIComponent(q.requestId),{headers:{'x-api-key':d.apiKey()},redirect:'error',signal:AbortSignal.timeout(15000)})
    if(!r.ok)return null
@@ -109,11 +110,12 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    return source&&xlayerBridgeSourceProven(binding,source,candidate)?candidate:null
   },
   async status(q:XLayerOutboundQuote,sourceHash:Hex){
-   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,refundOptions:q.refundOptions,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
    const source=await receipt('xlayer',sourceHash)
    if(!source)return {status:'pending' as const}
    if(source.status==='reverted')return {status:'failed' as const}
    if(q.lifi){if(!lifiSourceProven(q.lifi,q.fee.networkFeeUnits,source,sourceHash))return {status:'needs_attention' as const};return lifiDelivery(q.lifi,sourceHash,receipt,d.fetch)}
+   if(q.fee.asset!=='USDC'&&q.fee.asset!=='USDT')return {status:'needs_attention' as const}
+   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,refundOptions:q.refundOptions,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
    if(!xlayerBridgeSourceProven(binding,source,sourceHash))return {status:'needs_attention' as const}
    const get=async(path:string)=>{if(!d.apiKey())invalid();const r=await d.fetch('https://api.relay.link'+path,{headers:{'x-api-key':d.apiKey()},redirect:'error',signal:AbortSignal.timeout(15000)});if(!r.ok)invalid();return r.json()}
    const status=await get('/intents/status/v3?requestId='+encodeURIComponent(q.requestId))

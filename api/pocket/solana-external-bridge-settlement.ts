@@ -13,7 +13,7 @@ export async function externalBridgeReceived(network:'solana'|'bsc'|'xlayer',ass
   const tx=await new Connection(getRpc(),'confirmed').getParsedTransaction(hash,{commitment:'finalized',maxSupportedTransactionVersion:0})
   if(!tx?.meta||tx.meta.err!==null||tx.transaction.signatures[0]!==hash)return null
   const mint=bscBridgeTokenAddress(network,asset)
-  const sum=(rows:any[])=>{const seen=new Set<number>();return rows.filter(r=>r.owner===recipient&&r.mint===mint).reduce((v,r)=>{if(!Number.isSafeInteger(r.accountIndex)||r.accountIndex<0||seen.has(r.accountIndex)||r.uiTokenAmount?.decimals!==6||!/^\d+$/.test(r.uiTokenAmount.amount))throw Error('Invalid refund evidence.');seen.add(r.accountIndex);return v+BigInt(r.uiTokenAmount.amount)},0n)}
+  const sum=(rows:any[]):bigint=>{const seen=new Set<number>();return rows.filter(r=>r.owner===recipient&&r.mint===mint).reduce((v:bigint,r:any)=>{if(!Number.isSafeInteger(r.accountIndex)||r.accountIndex<0||seen.has(r.accountIndex)||r.uiTokenAmount?.decimals!==6||!/^\d+$/.test(r.uiTokenAmount.amount))throw Error('Invalid refund evidence.');seen.add(r.accountIndex);return v+BigInt(r.uiTokenAmount.amount)},0n)}
   if(!tx.meta.preTokenBalances||!tx.meta.postTokenBalances)return null
   return sum(tx.meta.postTokenBalances)-sum(tx.meta.preTokenBalances)
  }
@@ -44,6 +44,7 @@ export async function reconcileSolanaExternalBridge(owner:string,id:string,overr
  const binding={...r.quote,source:'solana' as const,sender:r.walletAddress,recipient:r.destinationAddress}
  const candidate=r.quote.destination==='bsc'?bscBridgeDeliveryCandidate(binding as any,r.signature,status,requests):xlayerBridgeDeliveryCandidate(binding as any,r.signature,status,requests)
  if(candidate.status!=='verify_delivery')return candidate
+ if(candidate.asset!=='USDC'&&candidate.asset!=='USDT')return {status:'needs_attention'}
  if(candidate.network!=='solana'&&candidate.network!==r.quote.destination)return {status:'needs_attention'}
  const received=await d.received(candidate.network as 'solana'|'bsc'|'xlayer',candidate.asset,candidate.hash,candidate.recipient)
  if(received===null)return {status:'pending'}

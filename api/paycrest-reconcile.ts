@@ -6,7 +6,7 @@ import {
   type PaycrestOrderRecord,
 } from './paycrest-pos.js'
 import { registerVerifiedPayment } from './event-registry.js'
-import { findEvmUsdcTransfer } from './usdc-transfer-verify.js'
+import { findEvmUsdcTransfer, verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
 
 const reconcileInFlight = new Set<string>()
 
@@ -110,10 +110,19 @@ export async function registerPaycrestBankSendReceipt(order: PaycrestOrderRecord
   })
 }
 
-export async function reconcilePaycrestOrderPayment(id: string, options: { allowTerminalScan?: boolean } = {}) {
+/** Only a canonical transfer can repair an overwritten provider reference. */
+export async function recoverPaycrestFundingReference(order: PaycrestOrderRecord, hash?: string, dependencies = {verify:verifyEvmUsdcTransfer, mark:markPaycrestPosPayment}) {
+  if (!validTxHash(hash) || order.funding_tx_hash) return order
+  await dependencies.verify({chain:'base',token:baseStablecoin(order.source_token),txHash:hash,recipient:order.receive_address,minAmount:order.amount_usdc,payer:order.payer_wallet,notBefore:order.created_at})
+  return await dependencies.mark({id:order.intent_id,txHash:hash,payerWallet:order.payer_wallet}) ?? order
+}
+
+export async function reconcilePaycrestOrderPayment(id: string, options: { allowTerminalScan?: boolean; fundingTxHash?: string } = {}) {
   let order: PaycrestOrderRecord | null = await refreshPaycrestOrderStatus(id).catch(() => null)
   order ??= await getPaycrestPosOrder(id)
   if (!order) return { ok: false, found: false, error: 'Paycrest order not found.' }
+
+  order = await recoverPaycrestFundingReference(order, options.fundingTxHash)
 
   if (validTxHash(order.tx_hash)) {
     const receipt = await registerOrderReceipt(order, order.tx_hash)

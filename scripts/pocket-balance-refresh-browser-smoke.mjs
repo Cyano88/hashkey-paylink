@@ -35,7 +35,7 @@ try {
  await boot();await mount('a@fixture.invalid');await page.waitForFunction(()=>window.calls.length===2)
  assert.equal(await count(),1,'StrictMode and two consumers share one balance request')
  await page.getByRole('status',{name:'Loading balances',exact:true}).waitFor()
- await page.getByRole('status',{name:'Loading base balance',exact:true}).waitFor()
+ assert.equal((await state()).displayRows.find(row=>row.key==='base')?.known??false,false,'unverified balance remains unknown')
  await resolve(7);await page.waitForFunction(()=>JSON.parse(document.getElementById('state').textContent).displayTotal===7)
  assert.equal((await state()).displayComplete,true)
  // A short drag must not perform a network refresh.
@@ -47,7 +47,7 @@ try {
  // Pull past the current threshold, then release. Wait for the real refresh.
  await page.locator('[data-pocket-scroller]').evaluate(el=>{
   el.scrollTop=0
-  for(const [type,y] of [['touchstart',100],['touchmove',210],['touchmove',250],['touchend',250]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:type==='touchend'?[]:[{clientY:y,clientX:100}]});el.dispatchEvent(event)}
+  for(const [type,y] of [['touchstart',100],['touchmove',210],['touchmove',330],['touchend',330]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:type==='touchend'?[]:[{clientY:y,clientX:100}]});el.dispatchEvent(event)}
  })
  await page.getByRole('status',{name:'Refreshing Pocket',exact:true}).waitFor();await page.waitForFunction(()=>window.calls.length===4)
  assert.equal(await count(),2)
@@ -60,12 +60,12 @@ try {
  assert.equal((await state()).displayRows[0].stale,true)
  assert.equal(await page.getByRole('button',{name:'Retry balance refresh',exact:true}).count(),0)
  assert.equal(await page.getByText(/Last updated/).count(),0)
- // Automatic retry observes a synthetic confirmed deposit; no user refresh call.
- await page.evaluate(()=>window.timers.filter(timer=>timer.delay===15_000).at(-1).fn())
+ // Confirmed payment/push refresh event observes the deposit; idle timers do not read.
+ await page.evaluate(()=>{void window.refresh()})
  await page.waitForFunction(()=>window.calls.length===6);await resolve(9)
  await page.waitForFunction(()=>JSON.parse(document.getElementById('state').textContent).displayTotal===9)
  const before=await count()
- await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});window.timers.filter(timer=>timer.delay===45_000).at(-1).fn()})
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'))})
  assert.equal(await count(),before,'hidden app must not poll RPCs')
  await boot();await mount('a@fixture.invalid');await page.waitForFunction(()=>window.calls.length===2)
  assert.equal((await state()).displayTotal,9,'saved balance restores before any network response')
@@ -73,11 +73,11 @@ try {
  // Current linked wallet changed while an old balance response is outstanding.
  await resolve(9,{replacement:true,oldRevision:true});await page.waitForFunction(()=>!JSON.parse(document.getElementById('state').textContent).balanceBusy)
  assert.equal((await state()).displayRows[0].known,false)
- await page.getByRole('status',{name:'Loading base balance',exact:true}).waitFor()
+ assert.equal((await state()).displayRows.find(row=>row.key==='base')?.known??false,false,'unverified balance remains unknown')
  await mount('b@fixture.invalid');await page.waitForFunction(()=>window.calls.length===4)
  assert.equal((await state()).displayRows.length,0,'another account never sees saved balances')
  await resolve(0);await page.waitForFunction(()=>JSON.parse(document.getElementById('state').textContent).displayComplete)
  assert.equal((await state()).displayTotal,0,'verified zero replaces shimmer')
  assert.deepEqual(errors,[])
- console.log('PASS: cold shimmer, saved balance during failure/reload, automatic deposit update, wallet-change safety, owner isolation, hidden-tab RPC pause, single-flight StrictMode and larger pull ring awaiting real completion.')
+ console.log('PASS: cold shimmer, saved balance during failure/reload, event-triggered deposit update, wallet-change safety, owner isolation, hidden-tab RPC pause, single-flight StrictMode and larger pull ring awaiting real completion.')
 } finally {await browser.close()}

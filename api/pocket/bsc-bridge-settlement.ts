@@ -9,7 +9,8 @@ import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 import type {BscBridgeSettlement} from './bsc-bridge-operations.js'
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 export function createBscBridgeSettlement(env:NodeJS.ProcessEnv=process.env,fetcher=fetch){
- const clients=Object.fromEntries(Object.entries(inboundChains).map(([network,chain])=>[network,createPublicClient({chain,transport:http(env['PRIVATE_RPC_URL_'+network.toUpperCase()],{retryCount:0})})])) as Record<keyof typeof inboundChains,ReturnType<typeof createPublicClient>>
+ const clientFor=(network:keyof typeof inboundChains)=>createPublicClient({chain:inboundChains[network],transport:http(env['PRIVATE_RPC_URL_'+network.toUpperCase()],{retryCount:0})})
+ const clients=Object.fromEntries((Object.keys(inboundChains) as Array<keyof typeof inboundChains>).map(network=>[network,clientFor(network)])) as Record<keyof typeof inboundChains,ReturnType<typeof clientFor>>
  const receipt=async(network:keyof typeof inboundChains,hash:Hex)=>{const c=clients[network];if(await c.getChainId()!==inboundChains[network].id)throw Error('Bridge network mismatch.');const r=await c.getTransactionReceipt({hash}).catch(()=>null);if(!r)return null;const [block,head]=await Promise.all([c.getBlock({blockNumber:r.blockNumber}),c.getBlockNumber()]);if(!same(block.hash,r.blockHash)||head<r.blockNumber+(network==='bsc'?14n:2n))return null;return r}
  return async(q:BscOutboundQuote,hash:Hex,userOperationHash?:Hex):Promise<BscBridgeSettlement>=>{
   const waiting={status:'pending' as const};const r=await receipt('bsc',hash);if(!r)return waiting

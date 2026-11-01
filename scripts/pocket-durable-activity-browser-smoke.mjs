@@ -5,7 +5,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright')
 const mocks = {
   '../api/pocketReadClient': `export async function readPocketActivity(input){return new Promise((resolve,reject)=>{window.reads.push({input,resolve,reject});input.signal?.addEventListener('abort',()=>reject(new Error('aborted')),{once:true})})}`,
   '../hooks/usePocketIdentity': `export default ()=>({authenticated:true,email:window.owner,getAccessToken:async()=>window.owner})`,
-  '../hooks/usePocketWallets': `export default ()=>({resolved:true,error:null,total:3.5,totalComplete:true,rows:[{key:'base',balance:3.5}],walletUpdate:'hidden',displayRows:[{key:'base',balance:3.5,known:true}],displayTotal:3.5,displayComplete:true})`,
+  '../hooks/usePocketWallets': `export default ()=>({resolved:true,error:null,total:3.5,totalComplete:true,rows:[{key:'base',balance:3.5}],walletUpdate:'hidden',wallets:{},displayRows:[{key:'base',balance:3.5,known:true}],displayTotal:3.5,displayComplete:true})`,
   '../hooks/usePocketProfile': `export default ()=>({profile:{displayCurrency:'USD'}})`,
   '../hooks/usePocketFxQuote': `export default ()=>({quote:null,busy:false})`,
 }

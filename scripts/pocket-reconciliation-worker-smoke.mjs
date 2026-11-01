@@ -9,6 +9,7 @@ const intents = new Map([
   ['bill', { id: 'bill', ownerId: 'owner-1', kind: 'bill_payment', state: 'processing', resourceId: 'bill-1', amount: '1', asset: 'USDC', sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'bill', metadata: {}, updatedAt: 1, createdAt: 1 }],
   ['wallet', { id: 'wallet', ownerId: 'owner-1', kind: 'wallet_transfer', state: 'submitted', resourceId: '0xabc', amount: '1', asset: 'USDC', sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'wallet', metadata: {}, updatedAt: 1, createdAt: 1 }],
 ])
+for(const [id,network,prefix] of [['stock-missing','xlayer','chkx_'],['bsc-missing','bsc','chkb_']])intents.set(id,{...intents.get('paycrest'),id,ownerId:'partner:fixture',kind:'hosted_checkout',state:'prepared',resourceId:prefix+'a'.repeat(24),sourceNetwork:network,settlementNetwork:network})
 const updates = []
 const repository = {
   async listUnresolved(limit) { return [...intents.values()].filter(item => !['completed', 'failed', 'expired'].includes(item.state)).slice(0, limit) },
@@ -39,6 +40,8 @@ const result = await runPocketReconciliation({
     return { intent: { state: 'delivered', quoteExpiresAt: now + 1 }, execution: intents.get('bill'), requeried: true }
   },
   readCheckout: async () => null,
+  readStockCheckout: async () => null,
+  readBscCheckout: async () => null,
   syncCheckout: async () => undefined,
   expireCheckout: async () => undefined,
   readPolymarketFunding: async () => ({ transactions: [], latest: null }),
@@ -69,3 +72,6 @@ assert.ok(actionUpdates.some(item => item.action === 'bank-withdraw.route' && it
 assert.ok(actionUpdates.some(item => item.action === 'bank-withdraw.route' && item.status === 'failed' && item.metadata.paymentState === 'expired'))
 assert.equal(actionUpdates.some(item => item.idempotencyKey === recentBankRoute.idempotencyKey), false, 'a recent unsigned approval must remain available')
 console.log('Pocket reconciliation worker smoke tests passed: provider truth advances Paycrest, VTpass and Circle bridge records without guessing wallet-transfer outcomes.')
+
+for(const id of ['stock-missing','bsc-missing']){assert.equal(intents.get(id).state,'needs_review');assert.equal(intents.get(id).failureCode,'CHECKOUT_RECORD_UNVERIFIED')}
+console.log('PASS unsupported rail records enter review without fabricated paid/expired outcomes')

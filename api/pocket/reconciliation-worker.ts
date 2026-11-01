@@ -1,3 +1,5 @@
+import {readStockCheckout} from '../hosted-stock-checkouts.js'
+import {readBscCheckout} from '../hosted-bsc-checkouts.js'
 import {reconcileBscInboundBridge} from './bsc-inbound-bridge.js'
 import {reconcileBscOutboundBridges} from './bsc-outbound-bridge.js'
 import {reconcileBscSwaps} from './bsc-service.js'
@@ -37,10 +39,12 @@ type Dependencies = {
   reconcileSolanaSwap:typeof reconcileNativeSolanaSwap
   reconcileNativeSwap: typeof reconcileNativeEvmSwap
   reconcileNative: typeof reconcileNativeSend
-  auditXLayerBilling:typeof checkXLayerBillingCoverage
+  auditXLayerBilling:() => Promise<void>
   executions: PaymentExecutionRepository
   reconcilePaycrest: typeof reconcilePaycrestOrderPayment
   reconcileBill: typeof reconcilePocketBillExecutionByResource
+  readStockCheckout: typeof readStockCheckout
+  readBscCheckout: typeof readBscCheckout
   readCheckout: typeof readVerifiedHostedCheckoutRecord
   syncCheckout: typeof syncHostedCheckoutExecution
   expireCheckout: typeof expireHostedCheckoutExecution
@@ -104,8 +108,11 @@ function providerWindowExpired(order: any, intent: PaymentExecutionIntent, now: 
 async function reconcileExecution(intent: PaymentExecutionIntent, dependencies: Dependencies): Promise<ItemResult> {
   if (intent.kind === 'bank_payout' || intent.kind === 'pos_settlement') {
     if (!intent.resourceId) return { id: intent.id, kind: intent.kind, result: 'review', message: 'Missing Paycrest order reference.' }
-    const result = await dependencies.reconcilePaycrest(intent.resourceId, { allowTerminalScan: true })
-    if (!result.order) return { id: intent.id, kind: intent.kind, result: 'unchanged', message: 'Paycrest order is not available yet.' }
+    const result = await dependencies.reconcilePaycrest(intent.resourceId, { allowTerminalScan: true, fundingTxHash: intent.transactionHash })
+    if (!result.order) {
+      if (dependencies.now()-intent.createdAt>24*60*60_000 && intent.state!=='needs_review') await advance(dependencies.executions,intent,'needs_review',{failureCode:'PAYOUT_RECORD_UNAVAILABLE'})
+      return { id: intent.id, kind: intent.kind, result: 'review', message: 'Paycrest order is unavailable; preserve execution for review.' }
+    }
     const target = paycrestTarget(result.order.status)
     if (!target) return { id: intent.id, kind: intent.kind, result: 'unchanged' }
     if (String(result.order.status ?? '').trim().toLowerCase() === 'pending' && !result.order.tx_hash && !intent.transactionHash) {
@@ -135,6 +142,16 @@ async function reconcileExecution(intent: PaymentExecutionIntent, dependencies: 
     return { id: intent.id, kind: intent.kind, result: 'reconciled' }
   }
   if (intent.kind === 'hosted_checkout' || intent.kind === 'service_funding') {
+    if (/^chk[bx]_[a-f0-9]{24}$/.test(intent.resourceId || '')) {
+      const record = intent.resourceId!.startsWith('chkb_') ? await dependencies.readBscCheckout(intent.resourceId!,true) : await dependencies.readStockCheckout(intent.resourceId!,true)
+      if (!record || 'partner:'+record.partnerId!==intent.ownerId) {
+        if(intent.state!=='needs_review')await advance(dependencies.executions,intent,'needs_review',{failureCode:'CHECKOUT_RECORD_UNVERIFIED'})
+        return {id:intent.id,kind:intent.kind,result:'review',message:'Signed checkout record is unavailable or ownership does not match.'}
+      }
+      // These rails have their own canonical settlement engines. Expiry alone
+      // cannot prove that an in-flight user operation never transferred funds.
+      return {id:intent.id,kind:intent.kind,result:'review',message:'Requires rail-specific payment reconciliation; no expiry-only closure.'}
+    }
     if (!intent.resourceId?.startsWith('chk_')) return { id: intent.id, kind: intent.kind, result: 'unchanged', message: 'No hosted checkout reference.' }
     const checkout = await dependencies.readCheckout(intent.resourceId, { allowExpiredForReconciliation: true })
     if (!checkout) return { id: intent.id, kind: intent.kind, result: 'review', message: 'Signed checkout record is unavailable.' }
@@ -278,7 +295,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     reconcileNative:reconcileNativeSend,
     auditXLayerBilling:scheduledBillingAudit,
     executions: paymentExecutionRepository, reconcilePaycrest: reconcilePaycrestOrderPayment,
-    reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
+    readStockCheckout, readBscCheckout, reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
     syncCheckout: syncHostedCheckoutExecution, expireCheckout: expireHostedCheckoutExecution,
     readPolymarketFunding: getDepositStatus, listBridges: listUnresolvedCirclePocketActions,
     reconcileUsdt: reconcileUsdtBridge, reconcileXLayer:reconcileXLayerBridge, reconcileXLayerOutbound:reconcileXLayerOutboundBridge, readBridge: readCircleBridgeStatus, recordAction: recordCirclePocketAction, appendLedger: appendPocketMoneyLedgerEvent,
