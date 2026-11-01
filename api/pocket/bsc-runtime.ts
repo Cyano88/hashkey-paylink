@@ -1,4 +1,5 @@
 import {createHmac} from 'node:crypto'
+import {recordPocketRpcRead} from './rpc-usage.js'
 import {encodeFunctionData, parseAbi} from 'viem'
 import {okxCredentials, okxGet} from './xstocks-swap-provider.js'
 import {createBscFeeEstimator, type BscFeePrice, type BscFeePolicy} from './bsc-fee-estimator.js'
@@ -42,6 +43,7 @@ export function createBscRuntime(env:NodeJS.ProcessEnv=process.env,fetcher:typeo
  const rpc=async(method:string,params:unknown[])=>{
   const id=++requestId
   try{
+   recordPocketRpcRead('bsc-read','bsc',method)
    const response=await fetcher(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(15000),body:JSON.stringify({jsonrpc:'2.0',id,method,params})})
    const body=await response.json()
    if(!response.ok||body.id!==id||body.error||body.result===undefined)return unavailable()

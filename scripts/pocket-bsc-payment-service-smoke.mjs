@@ -6,9 +6,14 @@ for(const asset of ['USDC','USDT']){
  let store,queue=Promise.resolve(),owner='payer',sends=0,settlements=0,billing=0,approval=true,paid=false,settlement='pending'
  const checkout={id:'chkb_'+'1'.repeat(24),amount:'1.000000000000000001',asset,recipient:'0x'+'2'.repeat(40),token:POCKET_BSC.assets[asset],expiresAt:new Date(Date.now()+600000).toISOString()}
  const deps={env,durable:()=>true,read:async()=>structuredClone(store),mutate:(key,fn)=>{const work=queue.then(()=>{store=fn(structuredClone(store));return store});queue=work.catch(()=>{});return work},identity:async()=>({userId:owner}),wallet:async()=>({id:'wallet12345678',address:'0x'+'1'.repeat(40)}),runtime:()=>({chainId:async()=>56,balance:async()=>100n*10n**18n,rpc:async method=>method==='eth_blockNumber'?'0x10':null}),estimate:()=>async q=>({feeUnits:'10000000000000000',coverageFeeUnits:'10000000000000000',expiresAt:q.expiresAt}),readCheckout:async()=>checkout,assertPayable:async()=>{if(paid)throw Error('Already paid')},settleCheckout:async proof=>{assert.equal(proof.units,'1000000000000000001');settlements++;paid=true},approval:async()=>approval,billing:async()=>{billing++},journal:async()=>{},settlement:async()=>({status:settlement}),fetcher:async(url,options)=>{sends++;const b=JSON.parse(options.body);assert.equal(b.caip2,'eip155:56');assert.equal(b.sponsor,true);assert.equal(b.params.calls.length,2);assert.equal(options.headers['privy-authorization-signature'],'user-signature');return {ok:true,status:200,json:async()=>({data:{caip2:'eip155:56',hash:'0x'+'a'.repeat(64),transaction_id:'transaction123'}})}}}
+ let displayReads=0
+ deps.display=async address=>{assert.equal(address,'0x'+'1'.repeat(40));displayReads++;return {units:{BNB:0n,USDC:0n,USDT:0n},observedAt:Date.now()}}
  let service=createBscPaymentService(deps)
  async function call(body,headers={}){let status=200,data;await service.handler({method:'POST',body,headers},{setHeader(){},sendStatus(n){status=n},status(n){status=n;return this},json(v){data=v;return this}});return {status,data}}
+ const display=await call({action:'balance',checkoutId:checkout.id});assert.equal(display.data.balanceUnits,'0');assert.equal(displayReads,1)
  const quote=await call({action:'quote',checkoutId:checkout.id});assert.equal(quote.status,200);assert.equal(quote.data.quote.asset,asset)
+ assert.equal(quote.data.balanceUnits,String(100n*10n**18n),'Quote ignores cached display and checks current chain balance')
+ assert.equal(displayReads,1)
  const token=quote.data.quoteToken
  assert.equal((await call({action:'prepare',quoteToken:token+'0'})).status,503)
  owner='intruder';assert.equal((await call({action:'prepare',quoteToken:token})).status,503);owner='payer'

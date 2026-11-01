@@ -14,9 +14,10 @@ import {consumePocketPaymentApproval} from './payment-security.js'
 import {recoverBscUserOperation,findBscUserOperation} from './bsc-user-operation.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
 import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
+import {readBscDisplayBalances} from './bsc-display-balances.js'
 const key='pocket:bsc-payment-operations:v1'
 const unavailable=():never=>{throw Error('BNB Chain payments are temporarily unavailable.')}
-const dependencies={env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,readCheckout:readBscCheckout,assertPayable:assertBscCheckoutPayable,settleCheckout:settleBscCheckout,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscPaymentFeeEstimator,settlement:readBscPaymentSettlement}
+const dependencies={display:readBscDisplayBalances,env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,readCheckout:readBscCheckout,assertPayable:assertBscCheckoutPayable,settleCheckout:settleBscCheckout,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscPaymentFeeEstimator,settlement:readBscPaymentSettlement}
 export function createBscPaymentService(overrides:Partial<typeof dependencies>={}){
  const d={...dependencies,...overrides}
  const env=d.env,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||'',quoteSecret=env.POCKET_SWAP_QUOTE_SECRET||''
@@ -75,7 +76,8 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
    if(action==='balance'){
     const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)
     if(c.asset!=='USDC'&&c.asset!=='USDT')return unavailable()
-    return res.json({ok:true,balanceUnits:String(await runtime.balance(c.asset,wallet.address)),address:wallet.address,fundingBufferUnits:String(bscConfiguredFeePolicy(d.env).maximumFeeUnits)})
+    const display=await d.display(wallet.address)
+    return res.json({ok:true,balanceUnits:String(display.units[c.asset]),observedAt:display.observedAt,address:wallet.address,fundingBufferUnits:String(bscConfiguredFeePolicy(d.env).maximumFeeUnits)})
    }
    if(action==='quote'){
     const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)

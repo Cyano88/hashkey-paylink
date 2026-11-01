@@ -1,4 +1,5 @@
 import {bscSendCoverage} from './bsc-send-coverage.js'
+import {recordPocketRpcRead} from './rpc-usage.js'
 import type {BscSendOperationStore} from './bsc-send-operations.js'
 import {bscPaymentCoverage} from './bsc-payment-coverage.js'
 import type {BscPaymentOperationStore} from './bsc-payment-operations.js'
@@ -101,7 +102,7 @@ export async function checkXLayerBillingCoverage(wallet?:string){
  if(!appId||!secret||!url)return unavailable()
  const read=await readDurableJson<{requests:{[id:string]:Attempt}}>('pocket:xlayer-sponsorship:v1')
  const guard=createXLayerBillingGuard({now:Date.now,readHalt:()=>readDurableJson<Halt>(key),halt:value=>mutateDurableJson<Halt>(key,old=>old||value),prices:readStockMarketPrices,
-  rpc:async(method,params)=>{const r=await fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(15000)});const b=await r.json();if(!r.ok||b.error||b.result===undefined)return unavailable();return b.result},
+  rpc:async(method,params)=>{recordPocketRpcRead('xlayer-billing','xlayer',method);const r=await fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(15000)});const b=await r.json();if(!r.ok||b.error||b.result===undefined)return unavailable();return b.result},
   ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED==='true'?{additionalCoverage:async(wallet?:string)=>{
    const store=await readDurableJson<BscOperationStore>('pocket:bsc-operations:v1')
    const ops=Object.values(store?.operations||{})

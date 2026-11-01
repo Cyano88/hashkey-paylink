@@ -7,6 +7,8 @@ import {reconcileCashConversion} from './cash-conversion-reconciliation.js'
 import {reconcileNativeSend} from './native-send-reconciliation.js'
 import {reconcileXLayerOutboundBridge} from './xlayer-sponsorship.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
+import {createBackgroundBillingAudit} from './background-billing-audit.js'
+import {createRecoveryBackoff} from './recovery-backoff.js'
 import {reconcileUsdtBridge} from './usdt-bridge.js'
 import {reconcileXLayerBridge} from './xlayer-bridge.js'
 import type { Request, Response } from 'express'
@@ -23,6 +25,9 @@ import { expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './ho
 import { appendPocketMoneyLedgerEvent } from './money-ledger.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository, type PaymentExecutionState } from './payment-execution-intents.js'
 import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalExpired } from './payment-timeouts.js'
+
+const scheduledBillingAudit = createBackgroundBillingAudit(() => checkXLayerBillingCoverage())
+const scheduledExecutionRecovery = createRecoveryBackoff()
 
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
@@ -271,7 +276,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     reconcileSolanaSwap:reconcileNativeSolanaSwap,
     reconcileNativeSwap:reconcileNativeEvmSwap,
     reconcileNative:reconcileNativeSend,
-    auditXLayerBilling:checkXLayerBillingCoverage,
+    auditXLayerBilling:scheduledBillingAudit,
     executions: paymentExecutionRepository, reconcilePaycrest: reconcilePaycrestOrderPayment,
     reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
     syncCheckout: syncHostedCheckoutExecution, expireCheckout: expireHostedCheckoutExecution,
@@ -283,7 +288,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
   const intents = await dependencies.executions.listUnresolved(limit)
   const results: ItemResult[] = []
   for (const intent of intents) {
-    try { results.push(await reconcileExecution(intent, dependencies)) }
+    try { results.push(await scheduledExecutionRecovery(JSON.stringify(intent), () => reconcileExecution(intent, dependencies))) }
     catch (error) { results.push({ id: intent.id, kind: intent.kind, result: 'error', message: errorText(error) }) }
   }
   for(const record of await dependencies.listBridges('wallet.usdt-bridge',Math.min(limit,20))){
