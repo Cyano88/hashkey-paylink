@@ -21,3 +21,11 @@ General EVM wallet activity still uses bounded overlapping history scans rather 
 Provider usage smoke checks cover closed labels and privacy, provider hostname spoof rejection, concurrent feature context, bounded cardinality, logger failures, preserved return/error identity, batch/request accounting, transparent response bodies and abort signals, and an EVM rate-limit -> public fallback -> cache hit fixture.
 
 Existing EVM reads, Solana budget, activity efficiency, BSC runtime, RPC cost controls, native balance API and X Layer discovery smoke checks pass. Targeted backend TypeScript check passes. Live deployment evidence will be appended after verification.
+
+## Live proof
+
+Commit bf0637c56b5a7dcb89af6523d8f331ae3e691562 deployed as dep-dbjsbqgae00c73f5dscg, live at 2026-11-01 23:11:41.568 UTC. Source build passed. A brief transition 502 recovered; health reported ok, healthy database, unresolved=0 and stale=0.
+
+First report: 23:11:35.728-23:12:35.729 UTC, 60001 ms, overflow=0. Actual attribution includes six successful Alchemy eth_getLogs calls on each of Base, Arbitrum, Ethereum and Polygon; six Solana signature requests and one HTTP batch containing twenty logical operations; zero-request cache hits; two OKX X Layer discovery pages; and X Layer billing-audit Alchemy traffic of thirty receipt reads, thirty block reads and one chain ID read. This startup window is not a steady-state cost estimate. Billing-audit repetition is a concrete next investigation target, with canonical payment verification preserved.
+
+Arc activity emitted a public-RPC network error and an aborted sibling request in this window. This is a separate remaining provider reliability observation, not a successful scan or evidence of a telemetry regression. X Layer discovery stayed indexed and lag fell 67 -> 36 -> 6 -> 0, remaining zero on the next scan. No new payment outcome or invoice savings are claimed.
