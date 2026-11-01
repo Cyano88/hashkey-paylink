@@ -1,4 +1,4 @@
-﻿# X Layer native discovery cost control - 1 November 2026
+# X Layer native discovery cost control - 1 November 2026
 
 The notification worker previously fetched every block with full transactions, up to 60 every 30 seconds, to discover direct OKB transfers. This release uses OKX's X Layer normal-transactions-by-address-and-block endpoint to discover candidate hashes for registered wallets. Canonical transaction, receipt, chain, block hash, value, parties and confirmation-window checks still determine transfers. Indexer amounts do not authorize or settle payments.
 
@@ -11,3 +11,5 @@ Boundary: this replaces discovery of top-level native transfers only; generic in
 Validation: pagination, malformed/foreign/out-of-range rows, cache restart, delayed indexing, canonical proof mismatches, reverted and unrelated transactions, request fulfillment, duplicate replay, fallback, dual-provider failure, and reorg recovery pass. Existing X Layer notifications, trade-notification fixtures and reconciliation-worker fixtures pass. Changed backend TypeScript passes. Live comparison/deployment evidence will be added after verification.
 
 Official endpoint reference: https://web3.okx.com/onchainos/dev-docs/xlayer/developer/data/normal-transactions-by-address-and-block
+
+Live pre-release evidence: the exact new candidate/proof functions verified a historical direct OKB transfer. An earlier native notice had zero top-level transaction value and was correctly excluded from direct-transfer proof. The live empty-range API response is code 0, page 1, totalPage empty string, and an empty transactionList; this specific representation is accepted and covered by a regression fixture. Empty totalPage with nonempty rows remains rejected. The broad diagnostic did not complete successfully before this empty-page correction and is not counted as a pass.

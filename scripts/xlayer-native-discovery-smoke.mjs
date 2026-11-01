@@ -10,6 +10,8 @@ let calls=0
 let candidates=await readXLayerNativeCandidates([a,a.toUpperCase().replace('0X','0x')],100n,160n,async()=>{calls++;return page([row])})
 assert.equal(calls,1);assert.equal(candidates.length,1)
 assert.deepEqual(await readXLayerNativeCandidates([a],100n,160n,async()=>page([],'0')),[])
+assert.deepEqual(await readXLayerNativeCandidates([a],100n,160n,async()=>page([],'')),[])
+await assert.rejects(()=>readXLayerNativeCandidates([a],100n,160n,async()=>page([row],'')))
 assert.deepEqual(await readXLayerNativeCandidates([a],100n,160n,async()=>page([],'1')),[])
 let pages=0
 await assert.rejects(()=>readXLayerNativeCandidates([a],100n,160n,async()=>page([row],'2',String(++pages))),/Repeated/)

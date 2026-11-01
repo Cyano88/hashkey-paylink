@@ -34,7 +34,7 @@ export async function readXLayerNativeCandidates(addresses: string[], from: bigi
       const timestamp=new Date().toISOString()
       const response=await fetcher('https://web3.okx.com'+path,{headers:{'OK-ACCESS-KEY':c.key,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp,'OK-ACCESS-SIGN':createHmac('sha256',c.secret).update(timestamp+'GET'+path).digest('base64')},signal:AbortSignal.timeout(10000),redirect:'error'})
       const body=await response.json(),data=body.data?.[0]
-      if(!response.ok || String(body.code)!=='0' || !data || !Array.isArray(data.transactionList) || data.transactionList.length>100 || Number(data.page)!==page || !/^\d+$/.test(String(data.totalPage))) throw Error('Invalid X Layer index page')
+      if(!response.ok || String(body.code)!=='0' || !data || !Array.isArray(data.transactionList) || data.transactionList.length>100 || Number(data.page)!==page || (!/^\d+$/.test(String(data.totalPage)) && !(data.totalPage==='' && page===1 && data.transactionList.length===0))) throw Error('Invalid X Layer index page')
       const pages=Number(data.totalPage)
       if(!Number.isSafeInteger(pages) || pages>10 || pages<0 || (pages===0 && data.transactionList.length) || (page>1 && pages!==total) || (pages>1 && !data.transactionList.length)) throw Error('Incomplete X Layer index pages')
       total=pages
