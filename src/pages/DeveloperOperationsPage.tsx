@@ -1,6 +1,7 @@
 import {RefreshButton} from '../components/SupportConversation'
 import BusinessVerificationReview from '../components/BusinessVerificationReview'
 import AdminProfileTypeChange from '../components/AdminProfileTypeChange'
+import {builderCountryName} from '../lib/builderCountries'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
@@ -41,6 +42,8 @@ type ArcPilotPolicy = {
 }
 type Project = {
   accountType?: 'individual' | 'business'
+  profileCountry?: string
+  productionAccess?: boolean
   id: string
   name: string
   ownerEmail: string
@@ -79,6 +82,7 @@ const EMPTY_SUMMARY: Summary = { total: 0, active: 0, setupRequired: 0, suspende
 function projectState(project: Project) {
   if (project.operationalStatus === 'suspended') return 'Suspended'
   if (project.settlementStatus !== 'ready') return 'Setup required'
+  if (project.productionAccess === false) return 'Verification required'
   return 'Active'
 }
 
@@ -157,8 +161,9 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
   }, [ready, authenticated, workspaceId, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => projects.filter(project => {
+    if (projects.length <= 1) return true
     if (filter === 'active') return projectState(project) === 'Active'
-    if (filter === 'setup') return projectState(project) === 'Setup required'
+    if (filter === 'setup') return ['Setup required','Verification required'].includes(projectState(project))
     if (filter === 'suspended') return projectState(project) === 'Suspended'
     return true
   }), [filter, projects])
@@ -230,15 +235,15 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
 
   return (
     <div>
-      <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {projects.length > 1 && <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Integrations" value={summary.total} />
         <SummaryCard label="Active" value={summary.active} tone="success" />
         <SummaryCard label="Setup required" value={summary.setupRequired} tone="warning" />
         <SummaryCard label="Suspended" value={summary.suspended} tone="danger" />
-      </div>
+      </div>}
 
       <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-start">
-        <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
+        {projects.length > 1 && <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
           <PocketSelect
             value={active?.id ?? ''}
             options={filtered.map(project => ({ value: project.id, label: `${project.name} · ${project.checkoutMode === 'agentic' ? 'Agentic' : 'Human'}` }))}
@@ -270,7 +275,7 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
             ))}
           </div>
           <div className="mt-3 flex justify-end"><RefreshButton label="Refresh businesses" busy={loading} onClick={()=>void loadProjects()}/></div>
-        </aside>
+        </aside>}
 
         <section className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
           {loading && !projects.length
@@ -313,24 +318,23 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
   const activeKeys = project.keys.filter(key => !key.revokedAt)
   return <div>
     <PanelHeader
-      eyebrow="Developer operations"
-      title={project.name}
-      copy="Inspect trusted routing and control project availability without changing developer-owned configuration."
+      eyebrow=""
+      title="App details"
+      copy=""
       status={state}
     />
 
     <div className="mt-7 grid gap-3 sm:grid-cols-2">
       <Detail label="Owner" value={project.ownerEmail || 'Email unavailable'} />
       <Detail label="Profile type" value={project.accountType==='individual'?'Personal':'Business'} />
-      <Detail label="Payment path" value={project.checkoutMode === 'agentic' ? 'Agentic x402' : 'Human checkout'} />
-      <Detail label="Settlement" value={project.settlementMode === 'ugx' ? 'Uganda mobile money via Paycrest' : project.settlementMode === 'ngn' ? 'Naira via Paycrest' : 'Receive USDC'} />
-      <Detail label="Credentials" value={`${activeKeys.length} active key${activeKeys.length === 1 ? '' : 's'}`} />
-      <Detail label="Created" value={formatDate(project.createdAt)} />
-      <Detail label="Last changed" value={formatDate(project.updatedAt)} />
+      <Detail label={project.accountType==='individual'?'Country of residence':'Country of registration'} value={project.profileCountry?builderCountryName(project.profileCountry):'Not supplied'} />
+      <Detail label="Receives" value={project.settlementMode === 'ugx' ? 'UGX · Mobile money' : project.settlementMode === 'ngn' ? 'NGN · Bank account' : 'Stablecoins · Wallet'} />
     </div>
 
+    {canManage && <AdminProfileTypeChange key={project.id} currentType={project.accountType??'business'} projectId={project.id} workspaceId={workspaceId} onChanged={onProfileChanged}/>}
+
     <section className="mt-6 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
-      <p className="text-xs font-semibold text-gray-950 dark:text-white">Product declaration</p>
+      <p className="text-sm font-semibold text-gray-950 dark:text-white">About the app</p>
       <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{project.useCase}</p>
       <a href={project.website} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-300">
         {project.website} <ChevronRight className="h-3.5 w-3.5" />
@@ -340,8 +344,8 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
     <section className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold text-gray-950 dark:text-white">Trusted routing</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Read-only. Developers control these destinations.</p>
+          <p className="text-sm font-semibold text-gray-950 dark:text-white">Receiving accounts</p>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Configured by the builder.</p>
         </div>
         <Lock className="h-4 w-4 text-gray-400" />
       </div>
@@ -352,17 +356,22 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
             <RouteRow label="Verified bank" value={`${project.bankName || 'Missing'} · ${project.bankAccountName || 'Account unavailable'} · ••••${project.bankAccountLast4 || '----'}`} />
             <RouteRow label="Base refund" value={project.refundAddress || 'Missing'} />
           </>}
-        <RouteRow label="Return origin" value={project.allowedOrigins.join(', ') || 'Missing'} />
-        <RouteRow label="Webhook" value={project.webhookConfigured ? project.webhookUrl || 'Configured' : 'Not configured'} />
       </div>
     </section>
 
-    {canManage && <AdminProfileTypeChange key={project.id} projectId={project.id} workspaceId={workspaceId} onChanged={onProfileChanged}/>}
     {canManage && project.accountType!=='individual' && <BusinessVerificationReview key={project.id+project.updatedAt} projectId={project.id} workspaceId={workspaceId}/>}
-    {canManage && <OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} />}
+    <details className="mt-6 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-semibold">Integration details</summary><div className="mt-4 space-y-2">
+      <RouteRow label="Payment flow" value={project.checkoutMode==='agentic'?'Agentic x402':'Hosted checkout'}/>
+      <RouteRow label="API keys" value={`${activeKeys.length} active`}/>
+      <RouteRow label="Return origins" value={project.allowedOrigins.join(', ')||'Not configured'}/>
+      <RouteRow label="Webhook" value={project.webhookConfigured?project.webhookUrl||'Configured':'Not configured'}/>
+      <RouteRow label="Created" value={formatDate(project.createdAt)}/>
+      <RouteRow label="Last changed" value={formatDate(project.updatedAt)}/>
+    </div></details>
+    {canManage && <details className="mt-6 border-t border-gray-200 pt-5 dark:border-white/10" open={state!=='Active'}><summary className="cursor-pointer text-sm font-semibold">Payment access</summary><OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} /></details>}
 
-    <section className="mt-4">
-      <p className="text-xs font-semibold text-gray-950 dark:text-white">Operations history</p>
+    <details className="mt-6 border-t border-gray-200 pt-5 dark:border-white/10">
+      <summary className="cursor-pointer text-sm font-semibold">Admin history{project.operations?.length?` · ${project.operations.length}`:''}</summary>
       <div className="mt-3 space-y-2">
         {project.operations?.length
           ? [...project.operations].reverse().map(operation => (
@@ -378,7 +387,7 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
           ))
           : <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-xs text-gray-400 dark:border-white/10">No operator actions recorded.</div>}
       </div>
-    </section>
+    </details>
   </div>
 }
 
@@ -487,20 +496,20 @@ function PanelHeader({ eyebrow, title, copy, status }: { eyebrow: string; title:
       : 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300'
   return <div className="flex items-start justify-between gap-4">
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">{eyebrow}</p>
+      {eyebrow && <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">{eyebrow}</p>}
       <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">{title}</h1>
-      <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">{copy}</p>
+      {copy && <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">{copy}</p>}
     </div>
     <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide', tone)}>{status}</span>
   </div>
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</p><p className="mt-1 text-xs font-semibold text-gray-800 dark:text-gray-200">{value}</p></div>
+  return <div className="min-w-0 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><p className="text-xs text-gray-500 dark:text-gray-400">{label}</p><p className="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-200">{value}</p></div>
 }
 
 function RouteRow({ label, value }: { label: string; value: string }) {
-  return <div className="flex min-w-0 items-center justify-between gap-4 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]"><span className="shrink-0 text-[10px] font-semibold text-gray-500 dark:text-gray-400">{label}</span><code title={value} className="min-w-0 truncate text-right text-[10px] text-gray-700 dark:text-gray-300">{value.startsWith('0x') ? shortAddress(value) : value}</code></div>
+  return <div className="flex min-w-0 items-center justify-between gap-4 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]"><span className="shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">{label}</span><code title={value} className="min-w-0 truncate text-right text-xs text-gray-700 dark:text-gray-300">{value.startsWith('0x') ? shortAddress(value) : value}</code></div>
 }
 
 function Message({ tone, children }: { tone: 'error' | 'success'; children: React.ReactNode }) {

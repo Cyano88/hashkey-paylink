@@ -26,3 +26,11 @@ Validation: handler fixtures cover both directions, unchanged sibling apps and
 credentials, private evidence retention, stale submissions, role boundaries and
 payment suspension. Browser checks use the real component with fixture responses;
 no real builder app is moved as part of testing.
+
+Follow-up UI verification: the owner's open AlveronFashion tab was still running
+the pre-change page. Reloading that exact Chrome tab displayed Profile type and
+Change profile type. The detail view now places a directional Change to Personal /
+Change to Business action near the top, hides redundant single-app counters and
+filters, and collapses connection details, payment controls and admin history.
+Playwright checked single/multiple apps, incomplete targets, read-only staff,
+mobile/desktop layout and disclosure behavior. No live profile was changed.
