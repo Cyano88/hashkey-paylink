@@ -2836,8 +2836,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           payer_name: attendeeName.trim(),
         }),
       })
-      const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
-      if (!response.ok || !data.ok || !data.order) {notifyPocketKycRequirement(data);throw new Error(data.error || 'Could not prepare payout.')}
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string; code?: string }
+      if (!response.ok || !data.ok || !data.order) {notifyPocketKycRequirement(data);throw Object.assign(new Error(data.error || 'Could not prepare payout.'),{code:data.code})}
       if (isHostedLocalSettlement) assertHostedLocalSettlementOrder(data.order,{id:hostedCheckoutId,recipient:activeRecipient,amount:effectiveAmt,currency:posFiatCurrency})
       if (pocketScan) assertPocketScanPayoutPayable(data.order)
       const needsReview = !!pocketScan && pocketScanPayoutNeedsReview(paycrestOrder, data.order)
@@ -2850,7 +2850,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       const message = readableErrorMsg(err, 'Could not prepare payout.')
       setCirclePasskeyError(message)
       // Review callers render their own errors; preserve the actionable reason.
-      if (reviewOnly) throw new Error(message)
+      if (reviewOnly) throw Object.assign(new Error(message), {code: (err as {code?:string})?.code})
       return null
     } finally {
       setPaycrestPreparing(false)

@@ -22,7 +22,7 @@ function loadSmile() {
   return Promise.resolve()
 }
 
-export default function PocketKycPanel({ getAccessToken, email = '', surface = 'pocket', initialLevel }: { email?:string; surface?:'pocket'|'developer'; initialLevel?:'basic'|'advanced'; getAccessToken: () => Promise<string | null> }) {
+export default function PocketKycPanel({ getAccessToken, email = '', surface = 'pocket', initialLevel }: { email?:string; surface?:'pocket'|'developer'|'checkout'; initialLevel?:'basic'|'advanced'; getAccessToken: () => Promise<string | null> }) {
   const [country,setCountry]=useState<'NG'|'UG'>(()=>surface==='developer' && ['NG','UG'].includes(new URLSearchParams(window.location.search).get('verificationCountry')||'') ? new URLSearchParams(window.location.search).get('verificationCountry') as 'NG'|'UG' : readPocketCountry(email))
   const [ugandaIdentity,setUgandaIdentity]=useState({fullName:'',idNumber:'',cardNumber:'',dob:''})
   const identityRef=useRef(ugandaIdentity);identityRef.current=ugandaIdentity
@@ -43,8 +43,8 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   const inFlight = useRef(false)
   const opening = useRef(false)
   const requestGeneration = useRef(0)
-  const supportHref = surface==='developer'?'mailto:support@hashpaylink.com':POCKET_BASE_PATH + POCKET_ROUTES.assistant
-  const actionClass = surface==='developer'?'developer-primary':'pocket-cta-primary'
+  const supportHref = surface!=='pocket'?'mailto:support@hashpaylink.com':POCKET_BASE_PATH + POCKET_ROUTES.assistant
+  const actionClass = surface==='checkout'?'min-h-12 rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950':surface==='developer'?'developer-primary':'pocket-cta-primary'
   const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
   const retryNotBefore = useRef(0)
   const [retryAt, setRetryAt] = useState(0)
@@ -149,7 +149,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   const passed = state?.status === 'passed'
   const dailyAllowance=country==='UG'?(state?.advancedDailyLimitNgn||50_000):50_000
   const resultTitle = basicPassed && passed && state?.environment==='production' && !state?.workflow?.complete ? country==='UG'?'Verification complete':'Basic verification complete' : guidance?.title ? guidance.title : passed ? state.verified ? 'Verification complete' : 'Sandbox test completed' : 'Verification submitted'
-  const resultText = basicPassed && passed && state?.environment==='production' && !complete ? <>Your daily allowance is {limitDisplay.usdc(dailyAllowance)}. {country==='NG'?surface==='developer'?'You can continue with Advanced verification below.':'Advanced verification is optional.':''}</> : guidance?.message ? guidance.message : passed ? state.verified ? surface==='developer'?'Your identity check passed. You can continue setting up your payments.':'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
+  const resultText = basicPassed && passed && state?.environment==='production' && !complete ? <>Your daily allowance is {limitDisplay.usdc(dailyAllowance)}. {country==='NG'?surface==='developer'?'You can continue with Advanced verification below.':'Advanced verification is optional.':''}</> : guidance?.message ? guidance.message : passed ? state.verified ? surface==='checkout'?'Your identity check passed. Return to payment to continue.':surface==='developer'?'Your identity check passed. You can continue setting up your payments.':'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
   const retryable = !complete && guidance?.action !== 'support' && (selectedLevel==='advanced' ? basicPassed && (needsAdditional || state?.canResume === true || state?.status==='failed') : !basicPassed && (state?.canCorrectNames === true || state?.status === 'not_started' || state?.status === 'failed' || state?.canResume === true))
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}

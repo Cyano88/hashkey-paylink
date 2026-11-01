@@ -7,6 +7,7 @@ import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft}
 import CheckoutMerchant from './CheckoutMerchant'
 import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {checkoutMessage} from '../lib/checkoutMessage'
+import CheckoutVerification,{checkoutVerificationLevel} from './CheckoutVerification'
 import {useEffect,useRef,useState} from 'react'
 import {QRCodeSVG} from 'qrcode.react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
@@ -19,15 +20,18 @@ export default function BrowserCheckoutCard(p:Props){
  const reset=readCheckoutPinReset(window.location.pathname+window.location.search)
  const seconds=useCheckoutExpiry(p.expiresAt)
  const [funding,setFunding]=useState(false),[localBusy,setLocalBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false)
+ const [verificationLevel,setVerificationLevel]=useState<'basic'|'advanced'|null>(null),[verifying,setVerifying]=useState(false)
  const lock=useRef(false),refreshRef=useRef(p.refresh);refreshRef.current=p.refresh
  const handoff=checkoutHandoff(p.id,p.attempt)
- async function run(action:()=>Promise<unknown>){if(lock.current||p.busy)return;lock.current=true;setLocalBusy(true);setError('');try{if(checkoutSecondsLeft(p.expiresAt)===0)throw Error('Checkout expired. Return to the store.');await action()}catch(e){setError((e as Error).message||'Please try again.')}finally{lock.current=false;setLocalBusy(false)}}
+ async function run(action:()=>Promise<unknown>){if(lock.current||p.busy)return;lock.current=true;setLocalBusy(true);setError('');try{if(checkoutSecondsLeft(p.expiresAt)===0)throw Error('Checkout expired. Return to the store.');await action()}catch(e){const level=checkoutVerificationLevel(e);if(level)setVerificationLevel(level);setError((e as Error).message||'Please try again.')}finally{lock.current=false;setLocalBusy(false)}}
  useEffect(()=>{setFunding(false);setCopied(false);setError('')},[p.network,p.address,p.email])
+ useEffect(()=>{setVerificationLevel(null);setVerifying(false)},[p.network,p.email,p.authenticated])
  useEffect(()=>{if(!funding||seconds===0)return;let active=true,timer:ReturnType<typeof setTimeout>;const tick=async()=>{if(!active)return;if(document.visibilityState==='visible'&&!lock.current){lock.current=true;try{await refreshRef.current();if(active)setError('')}catch{if(active)setError('Balance could not be refreshed. Try again.')}finally{lock.current=false}}if(active)timer=setTimeout(tick,10000)};timer=setTimeout(tick,5000);return()=>{active=false;clearTimeout(timer)}},[funding,seconds===0])
  const busy=p.busy||localBusy
  const message=busy?'':checkoutMessage(error||p.error)
  const needsRefresh=p.walletReady&&(p.balance===null||p.total===null)
  const canFund=Boolean((p.shortfall||p.needsFunding)&&p.address)
+ if(p.authenticated&&verifying&&verificationLevel)return <main className="mx-auto w-full max-w-md py-6 text-gray-950 dark:text-white"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114] sm:p-8"><CheckoutMerchant name={p.merchant} logo={p.brandImageUrl}/><CheckoutVerification email={p.email} level={verificationLevel} expired={seconds===0} onBack={()=>setVerifying(false)} onContinue={async()=>{if(checkoutSecondsLeft(p.expiresAt)===0)throw Error('Checkout expired. Return to the store.');await p.prepare();setError('');setVerificationLevel(null);setVerifying(false)}}/></section><CheckoutFooter/></main>
  if(seconds===0&&!busy)return <CheckoutExpired returnUrl={p.returnUrl} merchant={p.merchant} brandImageUrl={p.brandImageUrl}/>
  return <main className="mx-auto w-full max-w-md py-6 text-gray-950 dark:text-white"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114] sm:p-8">
   <CheckoutMerchant name={p.merchant} logo={p.brandImageUrl}/><h1 className="mt-3 text-center text-3xl font-semibold tracking-tight">{checkoutPriceLabel(p.pricing,p.amount)}</h1>{p.pricing&&<p className="mt-2 text-center text-sm text-gray-500">Payment: {p.amount}</p>}{p.title&&<p className="mt-2 text-center text-sm text-gray-500">{p.title}</p>}
@@ -44,7 +48,7 @@ export default function BrowserCheckoutCard(p:Props){
    {p.walletReady&&p.total!==null&&p.fee!==null&&<dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-gray-500">Fees</dt><dd>{p.fee+' '+(p.feeAsset||asset)}</dd></div><div className="flex justify-between font-semibold"><dt>You pay</dt><dd>{p.total+' '+asset+(p.totalAdditionalFee?' + '+p.totalAdditionalFee:'')}</dd></div></dl>}
    {p.walletReady&&p.quoteLoading&&!canFund&&!message&&p.total===null&&<div aria-label="Checking fees" className="mt-5 space-y-3"><div className="h-4 animate-pulse rounded bg-gray-100 dark:bg-white/10"/><div className="h-4 animate-pulse rounded bg-gray-100 dark:bg-white/10"/></div>}
    {message?<p role="alert" className="mt-5 text-center text-sm leading-5 text-gray-500">{message}</p>:!p.walletReady&&<p className="mt-5 text-center text-sm leading-5 text-gray-500">Confirm your email to access your balance securely.</p>}
-   <button disabled={busy||p.blocked||(!funding&&!canFund&&Boolean(p.quoteLoading))} onClick={()=>void run(async()=>{if(!p.walletReady){await p.prepare();return}if(funding){setFunding(false);return}if(canFund){setFunding(true);return}if(needsRefresh){await p.refresh();return}await prepareCheckoutReceiptContact({checkoutId:p.id,network:p.network,payer:p.address,getAccessToken});await p.pay()})} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950">{busy?'Please wait…':!p.walletReady?'Continue':funding?'Return to payment':canFund?'Add funds':needsRefresh?'Continue':'Pay securely'}</button>
+   <button disabled={busy||p.blocked||(!verificationLevel&&!funding&&!canFund&&Boolean(p.quoteLoading))} onClick={()=>void run(async()=>{if(verificationLevel){setVerifying(true);return}if(!p.walletReady){await p.prepare();return}if(funding){setFunding(false);return}if(canFund){setFunding(true);return}if(needsRefresh){await p.refresh();return}await prepareCheckoutReceiptContact({checkoutId:p.id,network:p.network,payer:p.address,getAccessToken});await p.pay()})} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950">{busy?'Please wait…':verificationLevel?'Verify identity':verificationLevel?'Verify identity':!p.walletReady?'Continue':funding?'Return to payment':canFund?'Add funds':needsRefresh?'Continue':'Pay securely'}</button>
    {p.walletReady&&!busy&&<button onClick={()=>void run(p.refresh)} className="mt-2 min-h-11 w-full text-xs text-gray-500">Update balance</button>}
   </>}
   <a href={handoff.browser.replace('browser=1','choose=1')} className="mt-5 block py-2 text-center text-xs text-gray-500">Other ways to continue</a>
