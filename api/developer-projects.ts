@@ -6,7 +6,7 @@ import {createDeveloperSandboxHandler} from './developer-sandbox.js'
 import{normalizeReceiptEmailSettings,defaultReceiptEmailSettings,type ReceiptEmailSettings}from'../src/lib/receiptEmailSettings.js'
 import {developerReceivingWallets} from './developer-receiving-wallets.js'
 import {normalizeBscCheckoutConfig,type BscCheckoutConfig} from '../src/lib/bscCheckoutConfig.js'
-import {normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
+import {acceptedCheckoutAssets,normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import {manageAppRemoval} from './developer-app-removal.js'
 import {listDeveloperPayments} from './developer-payments.js'
@@ -150,6 +150,8 @@ export type DeveloperCheckoutPolicy = {
   allowedOrigins: string[]
   defaultNetwork: DeveloperNetwork
   paymentOptions: Array<{ network: DeveloperNetwork; recipient: string }>
+  payerOptions?: Array<{network:string;asset:string}>
+  payerDefaultNetwork?: DeveloperNetwork
   settlementMode: SettlementMode
   environment: DeveloperEnvironment
   checkoutMode: DeveloperCheckoutMode
@@ -1078,18 +1080,18 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
         if (settlementMode === 'ugx' && currentProject.settlementMode !== 'ugx') return res.status(403).json({ok:false,error:'Uganda mobile money settlement is coming soon. Choose stablecoins or Nigeria bank settlement.'})
-        if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human stablecoin Checkout.'})
+        if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human Checkout.'})
         let receiptEmails:ReceiptEmailSettings
         try{receiptEmails=normalizeReceiptEmailSettings(req.body?.receiptEmails,currentProject.receiptEmails,dependencies.now().toISOString())}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
         if(receiptEmails.enabled&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')))return res.status(400).json({ok:false,error:'Customer receipt emails require human Checkout.'})
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
-        const networks = !routingRequired ? [] : isLocalSettlement(settlementMode) ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
-        const defaultNetwork = !routingRequired ? 'arc' : isLocalSettlement(settlementMode) ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
+        const networks = !routingRequired ? [] : requestedPaymentNetworks
+        const defaultNetwork = !routingRequired ? 'arc' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
         let acceptedAssets:CheckoutAcceptance
         try{acceptedAssets=normalizeCheckoutAcceptance(req.body?.acceptedAssets ?? currentProject.acceptedAssets,networks)}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
         const checkoutDefaultNetwork = req.body?.checkoutDefaultNetwork === 'xlayer' ? 'xlayer' as const : req.body?.checkoutDefaultNetwork==='bsc'?'bsc' as const:undefined
-        if(checkoutDefaultNetwork==='bsc'&&(!bscCheckout||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'Enable BNB Chain acceptance before making it the default.'})
-        if(checkoutDefaultNetwork==='xlayer' && (!xlayerCheckout || settlementMode !== 'usdc')) return res.status(400).json({ok:false,error:'Enable X Layer acceptance before making it the default.'})
+        if(checkoutDefaultNetwork==='bsc'&&!bscCheckout)return res.status(400).json({ok:false,error:'Enable BNB Chain acceptance before making it the default.'})
+        if(checkoutDefaultNetwork==='xlayer' && !xlayerCheckout) return res.status(400).json({ok:false,error:'Enable X Layer acceptance before making it the default.'})
         const recipients = Object.fromEntries(NETWORKS.flatMap(network => {
           const recipient = validRecipient(req.body?.recipients?.[network], network)
           return recipient ? [[network, recipient]] : []
@@ -1106,7 +1108,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const rawAccount = clean(req.body?.bankAccountNumber, 30)
         const bankAccountNumber = isLocalSettlement(settlementMode) ? normalizePayoutAccount(rawAccount, currency) : ''
         if (isLocalSettlement(settlementMode) && rawAccount && !bankAccountNumber) return res.status(400).json({ok:false,error:currency === 'UGX' ? 'Enter a valid Uganda mobile money number.' : 'Enter a valid 10-digit Nigerian account number.'})
-        if (isLocalSettlement(settlementMode) && xlayerCheckout) return res.status(400).json({ok:false,error:'Local settlement accepts Base USDC. Disable X Layer acceptance for this project.'})
+        if (settlementMode === 'ngn' && (!networks.includes('base') || !acceptedCheckoutAssets('base',acceptedAssets).includes('USDC'))) return res.status(400).json({ok:false,error:'Keep Base USDC enabled for NGN settlement. Other payment choices are retained but cannot fund NGN settlement yet.'})
         if (name.length < 2 || !website || useCase.length < 20) return res.status(400).json({ ok: false, error: 'Complete the platform details.' })
         if (requestedBrandImageUrl && !brandImageUrl) return res.status(400).json({ ok: false, error: 'Checkout brand marks must be PNG, WebP, or JPG files hosted on the project website origin.' })
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
@@ -1161,10 +1163,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
             personalKycVerified: isLocalSettlement(settlementMode) && latest.accountType === 'individual' ? true : latest.personalKycVerified,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
-            acceptedAssets, checkoutDefaultNetwork, networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
-            bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: isLocalSettlement(settlementMode) ? bankVerifiedAt : undefined,
-            bankAccountLast4: isLocalSettlement(settlementMode) ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
-            bankAccountCipher: isLocalSettlement(settlementMode) ? (bankAccountNumber ? encryptValue(secret, bankAccountNumber) : latest.bankAccountCipher) : '',
+            acceptedAssets, checkoutDefaultNetwork, networks, defaultNetwork, recipients, refundAddress, allowedOrigins, webhookUrl,
+            bankCode: isLocalSettlement(settlementMode) ? bankCode : latest.bankCode, bankName: isLocalSettlement(settlementMode) ? bankName : latest.bankName, bankAccountName: isLocalSettlement(settlementMode) ? verifiedBankName : latest.bankAccountName, bankVerifiedAt: isLocalSettlement(settlementMode) ? bankVerifiedAt : latest.bankVerifiedAt,
+            bankAccountLast4: isLocalSettlement(settlementMode) ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : latest.bankAccountLast4,
+            bankAccountCipher: isLocalSettlement(settlementMode) ? (bankAccountNumber ? encryptValue(secret, bankAccountNumber) : latest.bankAccountCipher) : latest.bankAccountCipher,
             updatedAt: dependencies.now().toISOString(),
           }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
@@ -1279,6 +1281,12 @@ function policyForDeveloperProject(
       brandImageUrl: project.brandImageUrl,
       allowedOrigins: project.allowedOrigins,
       defaultNetwork: 'base',
+      payerDefaultNetwork: project.defaultNetwork,
+      checkoutDefaultNetwork: project.checkoutDefaultNetwork,
+      acceptedAssets: project.acceptedAssets,
+      payerOptions: project.networks.flatMap(network=>acceptedCheckoutAssets(network,project.acceptedAssets).map(asset=>({network,asset}))),
+      xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
+      bscCheckout: project.bscCheckout,
       paymentOptions,
       settlementMode: project.settlementMode,
       environment,

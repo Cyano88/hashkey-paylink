@@ -946,7 +946,14 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if(isCheckoutSelection(req.query?.id)||req.body?.paymentSelection==='stablecoins') {
       if(verifiedProviderRouting.has(req))return res.status(400).json({ok:false,error:'Account funding uses its fixed USDC checkout.'})
       try {assertLiveDeveloperRequest(req)}catch(error){return res.status(403).json({ok:false,error:(error as Error).message})}
-      const selection=createCheckoutSelectionHandler(async(policy,record)=>{
+      const selection=createCheckoutSelectionHandler(async(policy,record,recoverOnly)=>{
+        if(recoverOnly){
+          const stored=await dependencies.read(STORE_KEY)
+          const childId=stored?.idempotency[policy.partnerId+':selection:'+record.id]
+          const child=childId?stored?.checkouts[childId]:undefined
+          if(!child||!integrityValid(child,dependencies.signingSecret())||child.partnerId!==policy.partnerId||child.settlement?.mode!=='ngn')throw Error('Payment preparation has not been confirmed. Try again to check its status, or return to the store for a new checkout.')
+          return {checkoutId:child.id,checkoutUrl:hostedCheckoutUiUrl(child)}
+        }
         const choice=record.choice!
         const selectedPolicy={...policy,merchantName:record.merchantName,brandImageUrl:record.brandImageUrl,checkoutDefaultNetwork:undefined,paymentOptions:policy.paymentOptions.filter(o=>o.network===choice.network),defaultNetwork:choice.network as HostedCheckoutNetwork}
         const options={policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
@@ -957,8 +964,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       if(req.method==='GET'&&req.query?.purpose==='status') {
         const result=await invokeCheckoutHandler(selection,req).catch(error=>({ok:false,error:(error as Error).message}))
         if(!result.ok)return res.status(409).json(result)
-        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId)).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:'usdc'})}
-        return res.json({...result,status:result.status||'pending',settlementMode:'usdc'})
+        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId)).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:child.settlementMode||result.settlementMode||'usdc'})}
+        return res.json({...result,status:result.status||'pending',settlementMode:result.settlementMode||'usdc'})
       }
       return selection(req,res)
     }
@@ -1000,6 +1007,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           settlementStatus: record.payout?.status,
           network: record.payment?.network ?? hostedCheckoutPaymentAttempt(record).network ?? record.network,
           asset: record.asset || 'USDC',
+          amount: record.amount,
           availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           expiresAt: record.expiresAt,
           settlementMode: record.settlement?.mode ?? 'usdc',
@@ -1067,12 +1075,12 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       return res.status(403).json({ ok: false, error: 'This API key is not enabled for the requested funding product.' })
     }
 
-    if('projectManaged' in policy && policy.checkoutDefaultNetwork==='bsc' && !providerRouting && req.body?.rail===undefined){
+    if('projectManaged' in policy && policy.settlementMode==='usdc' && policy.checkoutDefaultNetwork==='bsc' && !providerRouting && req.body?.rail===undefined){
       const originalBody=req.body
       req.body={...originalBody,rail:'bsc',asset:originalBody?.asset??policy.bscCheckout?.assets[0]}
       try{return await hostedBscCheckoutsHandler(req,res)}finally{req.body=originalBody}
     }
-    if('projectManaged' in policy && policy.checkoutDefaultNetwork === 'xlayer' && !providerRouting && req.body?.rail === undefined) {
+    if('projectManaged' in policy && policy.settlementMode==='usdc' && policy.checkoutDefaultNetwork === 'xlayer' && !providerRouting && req.body?.rail === undefined) {
       const originalBody=req.body
       req.body={...originalBody,rail:'xlayer',asset:originalBody?.asset ?? policy.xlayerCheckout?.assets[0]}
       try{return await hostedStockCheckoutsHandler(req,res)}finally{req.body=originalBody}

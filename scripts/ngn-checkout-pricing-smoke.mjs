@@ -48,3 +48,19 @@ const payout=await prepareDeveloperNairaCheckout(localPolicy,'chk_fixture','1.33
 assert.equal(providerInput.amountNgn,'2000');assert.equal(payout.amountNgn,'2000');assert.equal(payout.payableUsdc,'1.35')
 await assert.rejects(prepareDeveloperNairaCheckout(localPolicy,'chk_fixture','1.333334',{...provider,createOrder:async()=>({amount_ngn:'1999.99'})},{currency:'NGN',amount:'2000'}),/did not match/)
 console.log('PASS NGN payout keeps exact order price and rejects a mismatched provider payout.')
+
+// Local settlement fulfillment binds the selected child's provider amount.
+let localStore={orders:{}},localState='pending',badAmount=false,badSettlement=false
+const localSession='chks_'+'f'.repeat(24),localOrderId='f'.repeat(32)
+const localHandler=createFoodDemoHandler({ngnPricing:async()=>true,rate:async()=>1500,selectionEnabled:async()=>true,ready:()=>true,choices:async()=>[{assets:['USDC','USDT']}],now:()=>clock,read:async()=>structuredClone(localStore),mutate:async fn=>{localStore=fn(structuredClone(localStore));return structuredClone(localStore)},call:async(path,body)=>{
+ if(body){assert.equal(body.paymentSelection,'stablecoins');assert.equal(body.asset,undefined);return {ok:true,checkoutId:localSession,checkoutUrl:'/pay/c/'+localSession,settlementMode:'ngn',checkout:{selectionCheckout:true,currency:'NGN',amount:'2250'}}}
+ return {ok:true,checkoutId:localSession,status:localState,amount:'1.523804',asset:'USDC',network:'base',settlementMode:badSettlement?'usdc':'ngn',pricing:{...pricing,amount:'2250',paymentAsset:'USDC'},payment:{amount:badAmount?'1.5':'1.523804',receiptId:'fixture-local-receipt-123'}}
+}})
+async function localRequest(method,body={},query={}){let code=200,data;await localHandler({method,body,query},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this},sendStatus(n){code=n}});return {code,data}}
+const localMenu=await localRequest('GET');assert.equal((await localRequest('POST',{action:'prepare',requestId:localOrderId,items:[{id:'plantain',quantity:1}],quoteId:localMenu.data.quoteId})).code,200)
+localState='processing';assert.equal((await localRequest('GET',{}, {id:localOrderId})).data.order.status,'processing')
+localState='paid';badAmount=true;assert.equal((await localRequest('GET',{}, {id:localOrderId})).data.order.status,'pending')
+badAmount=false;badSettlement=true;assert.equal((await localRequest('GET',{}, {id:localOrderId})).data.order.status,'pending')
+badSettlement=false;const localReceipt=(await localRequest('GET',{}, {id:localOrderId})).data.order
+assert.equal(localReceipt.status,'paid');assert.equal(localReceipt.amount,'1.523804');assert.equal(localReceipt.asset,'USDC');assert.equal(localReceipt.network,'base');assert.equal(localReceipt.orderPrice.amount,'2250');assert.equal(localReceipt.receiptUrl,'/receipt/fixture-local-receipt-123')
+console.log('PASS NGN selection merchant recovery: processing is not paid; exact child amount and local settlement required; original price and receipt retained.')

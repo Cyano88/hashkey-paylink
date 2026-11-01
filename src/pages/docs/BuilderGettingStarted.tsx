@@ -97,7 +97,7 @@ export default function BuilderGettingStarted(){const{hash}=useLocation();useEff
     "expiresInMinutes": 15
   }'`}</CodeBlock>
   <p>Run this on your server or terminal with your real saved order and approved HTTPS return URL. The key must be 16–128 letters, digits, colons, underscores or hyphens. Expiry defaults to 15 minutes; the API accepts 5–1440 minutes.</p>
-  <p><Code>paymentSelection: "stablecoins"</Code> lets the customer select from your saved routes. Without <Code>currency</Code>, for profiles that allow stablecoin pricing, the amount is an exact token quantity: <Code>1.50</Code> means 1.50 of the selected stablecoin, not an FX conversion or a swap. Leave <Code>asset</Code> out of this request. Your saved accepted assets control which tokens checkout offers.</p>
+  <p><Code>paymentSelection: "stablecoins"</Code> lets the customer select from your saved routes. Without <Code>currency</Code>, for profiles that allow stablecoin pricing, the amount is an exact token quantity: <Code>1.50</Code> means 1.50 of the selected stablecoin, not an FX conversion or a swap. Leave <Code>asset</Code> out of this request. Your saved accepted assets control which tokens checkout offers. Payer networks and assets are stored separately from merchant settlement; choosing Nigeria bank settlement does not clear them. The selection page keeps configured choices visible and explains when a choice cannot fund the selected settlement. Currently only Base USDC can fund NGN settlement. Other configured assets cannot continue into payment until their conversion route is supported. Hash PayLink does not silently replace a selected network or asset.</p>
   <CodeBlock lang="json">{`{
   "ok": true,
   "checkoutId": "chks_...",
