@@ -735,8 +735,8 @@ export async function resumeCircleProductionEvmWallet(session: CircleEvmEmailSes
   return { ...session, ...ensured, chain }
 }
 
-export async function resumeCircleAdditionalEvmWallet(session: CircleEvmEmailSession, chain: 'ethereum' | 'polygon', privyAccessToken: string): Promise<CircleEvmEmailSession> {
-  const read = () => circleWalletApi<{wallet?:CircleEvmWallet;challengeId?:string}>({action:'prepareAdditionalPocketWallet',userToken:session.userToken,chain},{privyAccessToken})
+export async function resumeCircleAdditionalEvmWallet(session: CircleEvmEmailSession, chain: 'ethereum' | 'polygon', privyAccessToken: string, receivingSetup=false): Promise<CircleEvmEmailSession> {
+  const read = () => circleWalletApi<{wallet?:CircleEvmWallet;challengeId?:string}>({action:'prepareAdditionalPocketWallet',userToken:session.userToken,chain,...(receivingSetup?{receivingSetup:true}:{})},{privyAccessToken})
   let result=await read()
   for (let step=0; !result.wallet && step<3; step++) {
     if (!result.challengeId) throw new Error('Circle did not finish '+CHAIN_CONFIG[chain].label+' wallet setup. Try again.')

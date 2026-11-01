@@ -25,9 +25,9 @@ export default function EnablePocketWallets({ wallets, onReady, onBusy }: {
     try {
       // Reuse Pocket's owner-bound setup, session recovery and network linking.
       // Loading this card never opens Circle or provisions a wallet.
-      const { reconnectPocketBaseWallet } = await import('../pocket/controllers/usePocketWalletController')
+      const { prepareDeveloperReceivingWallets } = await import('./prepareReceivingWallets')
       if (!active()) return
-      await reconnectPocketBaseWallet({ authenticated: true, email, getAccessToken, shouldContinue: active })
+      await prepareDeveloperReceivingWallets({ authenticated: true, email, getAccessToken, shouldContinue: active })
       if (!active()) return
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to load your Pocket wallets.')
@@ -49,7 +49,7 @@ export default function EnablePocketWallets({ wallets, onReady, onBusy }: {
     <p className="mt-2 text-sm leading-6 text-gray-500">Receive payments in Pocket, or enter a wallet address you control.</p>
     {ready ? <p role="status" className="mt-2 text-sm text-gray-500">Your Pocket wallets are ready. Choose a wallet below, then save your settings.</p> : <>
       <p className="mt-2 text-xs leading-5 text-gray-500">Verify your email with Circle to set up your wallets. Existing wallets are reused.</p>
-      <button type="button" disabled={busy} onClick={() => void enable()} className="developer-primary mt-3 min-h-11 px-4 text-sm font-semibold disabled:opacity-50">{busy ? 'Enabling Pocket wallets…' : 'Enable Pocket wallets'}</button>
+      <button type="button" disabled={busy} onClick={() => void enable()} className="developer-primary mt-3 min-h-11 px-4 text-sm font-semibold disabled:opacity-50">{busy ? 'Enabling Pocket walletsâ€¦' : 'Enable Pocket wallets'}</button>
     </>}
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
   </section>

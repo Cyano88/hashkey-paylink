@@ -618,9 +618,19 @@ export default async function handler(req: Request, res: Response) {
       const source=existingLink?await readCircleUserWallet(userToken,chain,existingLink.circleWalletId):null
       if(existingLink) {
         requireCircleGasStationEvmWallet({chain,walletId:existingLink.circleWalletId,walletAddress:existingLink.circleWalletAddress,wallets:source?[source]:[]})
+        if(req.body?.receivingSetup===true)return res.json({ok:true,wallet:source})
         if(source!.address.toLowerCase()===anchor!.address.toLowerCase())return res.json({ok:true,wallet:source})
       }
       const inventory=await listCircleUserWallets(userToken,chain)
+      if(req.body?.receivingSetup===true && !existingLink){
+        const {developerAdditionalWallet}=await import('./pocket/developer-wallet-recovery.js')
+        const recovered=developerAdditionalWallet(inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[],chain)
+        if(recovered){
+          requireCircleGasStationEvmWallet({chain,walletId:recovered.id,walletAddress:recovered.address,wallets:[recovered]})
+          await compareAndSetCircleLink(circleLinkKey(identity.userId,chain),{privyUserId:identity.userId,email:identity.email,chain,purpose:'payment',circleWalletId:recovered.id,circleWalletAddress:recovered.address,circleBlockchain:recovered.blockchain,updatedAt:Date.now()})
+          return res.json({ok:true,wallet:recovered})
+        }
+      }
       const alignment=additionalAlignmentPlan(anchor as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord,inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[],chain)
       if(alignment.request) {
         const data=await circleJson('/v1/w3s/user/wallets',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify(alignment.request)})
