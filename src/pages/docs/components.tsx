@@ -21,7 +21,7 @@ export function DocHeader({ title, description, badge }: { title: string; descri
 
 export function Section({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
   return (
-    <section id={id} className="space-y-4">
+    <section id={id} className="scroll-mt-24 space-y-4">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h2>
       <div className="space-y-3 text-gray-600 dark:text-gray-400 leading-relaxed">{children}</div>
     </section>
