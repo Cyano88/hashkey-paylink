@@ -56,4 +56,3 @@ type PublicMerchant = {
   fx_rate_ngn_per_usdc?: string
   fx_source?: string
 }
-
