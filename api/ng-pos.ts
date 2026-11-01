@@ -1349,8 +1349,10 @@ export default async function handler(req: Request, res: Response) {
       const payerWallet = cleanText(body.payer_wallet, '') as `0x${string}`
       const payerName = cleanText(body.payer_name, '')
       if (!intentId || !isAddress(refundAddress)) return res.status(400).json({ ok: false, error: 'Circle wallet is required before creating naira settlement.' })
-      if (!payerName) return res.status(400).json({ ok: false, error: 'Payer name is required before creating naira settlement.' })
       let existing = await getPaycrestPosOrder(intentId)
+      // Hosted checkout already created this payout server-side. Restoring it does
+      // not collect another payer name; authentication and KYC still run below.
+      if (!payerName && existing?.source !== 'hosted-checkout') return res.status(400).json({ ok: false, error: 'Payer name is required before creating naira settlement.' })
       const ensurePayable = body.ensure_payable === true
       const store = await readStore()
       const intent = store.intents?.[intentId]
