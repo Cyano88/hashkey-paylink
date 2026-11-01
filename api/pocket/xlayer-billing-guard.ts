@@ -1,4 +1,5 @@
 import {providerRpcFetch} from './provider-usage.js'
+import {createBillingReceiptReader} from './xlayer-billing-receipts.js'
 import {bscSendCoverage} from './bsc-send-coverage.js'
 import {recordPocketRpcRead} from './rpc-usage.js'
 import type {BscSendOperationStore} from './bsc-send-operations.js'
@@ -35,9 +36,12 @@ export function createXLayerBillingGuard(d:{
  transactionSpend?(records:Attempt[]):Promise<bigint>;
  additionalCoverage?(wallet?:string):Promise<BscCollectedCoverage[]>;
  rpc(method:string,params:unknown[]):Promise<any>;
+ receiptReader?:ReturnType<typeof createBillingReceiptReader>;
  prices:typeof readStockMarketPrices;
 }){
+ const receiptReader=d.receiptReader||createBillingReceiptReader(d.now)
  return async(attempts:Attempt[],wallet?:string)=>{
+  const readReceipt=receiptReader(d.rpc)
   if(await d.readHalt())throw Object.assign(Error('X Layer sponsorship is paused for a fee review.'),{status:503})
   const now=d.now(),recent=attempts.filter(r=>r.coverage&&r.at>=now-28*86400000&&(!wallet||same(r.wallet,wallet)))
   const extra=await d.additionalCoverage?.(wallet)||[]
@@ -65,10 +69,7 @@ export function createXLayerBillingGuard(d:{
      if(r.providerFailure?.status===400&&r.providerFailure.code==='transaction_broadcast_failure')return 0n
      return unavailable()
     }
-    const receipt=await d.rpc('eth_getTransactionReceipt',[r.hash])
-    if(!receipt||!same(receipt.transactionHash,r.hash))return unavailable()
-    const block=await d.rpc('eth_getBlockByNumber',[receipt.blockNumber,false])
-    if(!block||!same(block.hash,receipt.blockHash))return unavailable()
+    const receipt=await readReceipt(r.hash)
     if(receipt.status==='0x0')return 0n
     if(receipt.status!=='0x1')return unavailable()
     const c=r.coverage!,token=tokens[c.asset],price=prices[token]
@@ -97,12 +98,15 @@ export function createXLayerBillingGuard(d:{
 
 // Read-only billing is eventually consistent. This stops new spending after a
 // detected shortfall; it is not a hard provider spend cap or zero-loss promise.
-export async function checkXLayerBillingCoverage(wallet?:string){
+let receiptEndpoint:string|undefined
+let sharedReceiptReader=createBillingReceiptReader()
+export async function checkXLayerBillingCoverage(wallet?:string,options?:{reuseReceipts?:boolean}){
  if(process.env.POCKET_XLAYER_FEE_POLICY!=='observed_cost')return
  const env=process.env,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID,secret=env.PRIVY_APP_SECRET,url=env.PRIVATE_RPC_URL_XLAYER
  if(!appId||!secret||!url)return unavailable()
+ if(receiptEndpoint!==url){receiptEndpoint=url;sharedReceiptReader=createBillingReceiptReader()}
  const read=await readDurableJson<{requests:{[id:string]:Attempt}}>('pocket:xlayer-sponsorship:v1')
- const guard=createXLayerBillingGuard({now:Date.now,readHalt:()=>readDurableJson<Halt>(key),halt:value=>mutateDurableJson<Halt>(key,old=>old||value),prices:readStockMarketPrices,
+ const guard=createXLayerBillingGuard({receiptReader:options?.reuseReceipts?sharedReceiptReader:createBillingReceiptReader(),now:Date.now,readHalt:()=>readDurableJson<Halt>(key),halt:value=>mutateDurableJson<Halt>(key,old=>old||value),prices:readStockMarketPrices,
   rpc:async(method,params)=>{recordPocketRpcRead('xlayer-billing','xlayer',method);const r=await providerRpcFetch('billing-audit','xlayer')(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(15000)});const b=await r.json();if(!r.ok||b.error||b.result===undefined)return unavailable();return b.result},
   ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED==='true'?{additionalCoverage:async(wallet?:string)=>{
    const store=await readDurableJson<BscOperationStore>('pocket:bsc-operations:v1')

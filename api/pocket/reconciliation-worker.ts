@@ -29,7 +29,7 @@ import { appendPocketMoneyLedgerEvent } from './money-ledger.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository, type PaymentExecutionState } from './payment-execution-intents.js'
 import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalExpired } from './payment-timeouts.js'
 
-const scheduledBillingAudit = createBackgroundBillingAudit(() => checkXLayerBillingCoverage())
+const scheduledBillingAudit = createBackgroundBillingAudit(() => checkXLayerBillingCoverage(undefined,{reuseReceipts:true}))
 const scheduledExecutionRecovery = createRecoveryBackoff()
 
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
