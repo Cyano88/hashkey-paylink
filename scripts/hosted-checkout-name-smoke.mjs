@@ -5,7 +5,7 @@ const source=await readFile('api/ng-pos.ts','utf8')
 const block=source.slice(source.indexOf("    if (action === 'createOfframpOrder') {"),source.indexOf("    if (action === 'createBankSendOrder') {"))
 const js=(await transform('async function handle(req,res){const body=req.body,action=body.action;'+block+'}',{loader:'ts',target:'es2020'})).code
 let existing={intent_id:'chk_fixture',source:'hosted-checkout'},verified=true,kyc=true,checks=0
-const deps={cleanText:(v,f)=>typeof v==='string'?v:f,isAddress:v=>/^0x[a-f0-9]{40}$/.test(v),getPaycrestPosOrder:async()=>existing,readStore:async()=>({intents:{},merchants:{}}),verifiedPrivyUser:async()=>{if(!verified)throw Error('sign in');return{userId:'payer'}},requirePocketBasicKyc:async()=>{checks++;if(!kyc)throw Error('verify identity')},syncOwnedPosExecution:async()=>null}
+const deps={checkCheckoutBuyerAllowance:async()=>{},cleanText:(v,f)=>typeof v==='string'?v:f,isAddress:v=>/^0x[a-f0-9]{40}$/.test(v),getPaycrestPosOrder:async()=>existing,readStore:async()=>({intents:{},merchants:{}}),verifiedPrivyUser:async()=>{if(!verified)throw Error('sign in');return{userId:'payer'}},requirePocketBasicKyc:async()=>{checks++;if(!kyc)throw Error('verify identity')},syncOwnedPosExecution:async()=>null}
 const handler=Function(...Object.keys(deps),js+';return handle')(...Object.values(deps))
 async function run(body={}){let code=200,data;await handler({body:{action:'createOfframpOrder',intent_id:'chk_fixture',refund_address:'0x'+'1'.repeat(40),...body}},{status(n){code=n;return this},json(v){data=v;return this}});return{code,data}}
 assert.equal((await run()).data.order,existing);assert.equal(checks,1)

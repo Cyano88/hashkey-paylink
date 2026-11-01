@@ -8,8 +8,9 @@ mkdirSync('.codex-temp', {recursive:true})
 const mocks = {
  './evm-read.js': `export const readEvmRpc=async()=> '0x'+BigInt(globalThis.fixtureBalance??10000000000n).toString(16).padStart(64,'0')`,
  './paycrest-pos.js': `export const getPaycrestPosOrder=async()=>globalThis.fixturePayout`,
- './privy-circle-link.js': `export const circleLinkKey=()=>''; export const readCircleLink=async()=>null; export const findPaymentCircleLinkByWallet=async()=>null; export const verifiedPrivyUser=async()=>{throw Error('Unexpected Pocket identity lookup')}`,
- './pocket/payment-security.js': `export const requiresPocketPaymentApproval=async()=>{throw Error('Unexpected approval lookup')}; export const consumePocketPaymentApproval=async()=>false`,
+ './privy-circle-link.js': `export const circleLinkKey=()=>''; export const readCircleLink=async()=>null; export const findPaymentCircleLinkByWallet=async()=>globalThis.fixturePayout?.source==='hosted-checkout'?{privyUserId:'fixture-buyer'}:null; export const verifiedPrivyUser=async()=>{if(globalThis.fixturePayout?.source==='hosted-checkout')return{userId:'fixture-buyer'};throw Error('Unexpected Pocket identity lookup')}`,
+ './checkout-buyer-allowance.js': `export const checkCheckoutBuyerAllowance=async(owner,order,checkOnly)=>{globalThis.allowanceCalls.push({owner,checkOnly});if(globalThis.allowanceDenied)throw Object.assign(Error('Checkout daily limit reached'),{status:403,code:'CHECKOUT_DAILY_LIMIT'})};export const checkoutPaymentExecutionKey=()=> '44444444-4444-4444-a444-444444444444'`,
+ './pocket/payment-security.js': `export const requiresPocketPaymentApproval=async()=>{if(globalThis.fixturePayout?.source==='hosted-checkout')return false;throw Error('Unexpected approval lookup')}; export const consumePocketPaymentApproval=async()=>false`,
  './pocket/wallet-migration-guard.js': `export const withOrdinaryWalletMutation=async(id,run)=>run()`,
 }
 await build({entryPoints:['api/circle-solana-email.ts'],outfile:'.codex-temp/circle-payment-retry-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path] && (a.path!=='./paycrest-pos.js'||a.importer.endsWith('circle-solana-email.ts'))?{path:a.path,namespace:'mock'}:undefined);b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
@@ -127,6 +128,18 @@ try {
   const calls=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData}).args[0]
   assert.equal(decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns(bool)']),data:calls[1].data}).args[1],BigInt(priced.quote.networkFeeUnits))
  }
+ blockchain='BASE';globalThis.allowanceCalls=[]
+ globalThis.fixturePayout={source:'hosted-checkout',intent_id:'hosted1',paycrest_order_id:'provider1',receive_address:recipient,refund_address:payer,amount_usdc:'100',status:'initiated',valid_until:new Date(Date.now()+600000).toISOString()}
+ const hosted={...base,feeBps:'0',payoutIntentId:'hosted1'}
+ hosted.feeQuoteToken=(await call({...hosted,action:'quoteEvmPayment'})).token
+ const beforeHosted=executions.length
+ globalThis.allowanceDenied=true;await call(hosted,403);assert.equal(executions.length,beforeHosted);globalThis.allowanceDenied=false
+ const firstHosted=await call(hosted),secondHosted=await call({...hosted,idempotencyKey:'55555555-5555-4555-8555-555555555555'})
+ assert.equal(firstHosted.challengeId,secondHosted.challengeId)
+ assert.equal(executions.at(-1).idempotencyKey,'44444444-4444-4444-a444-444444444444')
+ assert.equal(globalThis.allowanceCalls.filter(c=>c.checkOnly===false).length,2)
+ assert(globalThis.allowanceCalls.every(c=>c.owner==='fixture-buyer'))
+ console.log('PASS: hosted checkout checks and reserves verified buyer allowance before signing; over-limit creates no challenge and changed client retry keys still use one server-bound execution.')
  console.log('PASS: wallet sends on all five EVM rails retain gas only; payment/send quote crossover rejected for both assets.')
  console.log('PASS: USDT batch recipient and fee use exact pinned contracts; cross-asset quotes, Arc and USDC-only payout exemptions rejected.')
  console.log('PASS: five configured EVM rails preserve retry key and exact gross recipient; invalid keys and wrong-chain wallet submit nothing. Provider deduplication is mocked, not a live guarantee.')

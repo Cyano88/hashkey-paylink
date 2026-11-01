@@ -3,21 +3,22 @@ import { verifiedPrivyUser } from "../privy-circle-link.js";
 import { resolvePaycrestOfframpAvailability } from "../paycrest-pos.js";
 
 const CACHE_MS = 5 * 60_000;
-let cached: {
+const cache = new Map<string, {
   expiresAt: number;
   value: { maxUsdc: number; ngnEquivalent: number; asOf: number };
-} | null = null;
-let inFlight: Promise<{
+}>();
+const pending = new Map<string, Promise<{
   maxUsdc: number;
   ngnEquivalent: number;
   asOf: number;
-}> | null = null;
+}>>();
 
-async function readBankPayoutLimit() {
+async function readBankPayoutLimit(fiat: 'NGN' | 'UGX' = 'NGN') {
   const now = Date.now();
+  const cached = cache.get(fiat), inFlight = pending.get(fiat);
   if (cached && cached.expiresAt > now) return cached.value;
   if (inFlight) return inFlight;
-  inFlight = (async () => {
+  const work = (async () => {
     const configuredCeiling = Number(
       process.env.POCKET_BANK_PAYOUT_LIMIT_PROBE_USDC || 10_000,
     );
@@ -28,7 +29,7 @@ async function readBankPayoutLimit() {
       amount: String(ceiling),
       network: "base",
       token: "USDC",
-      fiat: "NGN",
+      fiat,
       maxProbes: 10,
     });
     const maxUsdc = Number(availability.availableUsdc);
@@ -45,16 +46,17 @@ async function readBankPayoutLimit() {
       ngnEquivalent: maxUsdc * availability.rate,
       asOf: Date.now(),
     };
-    cached = { value, expiresAt: Date.now() + CACHE_MS };
+    cache.set(fiat, { value, expiresAt: Date.now() + CACHE_MS });
     return value;
   })().finally(() => {
-    inFlight = null;
+    pending.delete(fiat);
   });
-  return inFlight;
+  pending.set(fiat, work);
+  return work;
 }
 
-export async function readPocketBankPayoutLimit() {
-  return readBankPayoutLimit();
+export async function readPocketBankPayoutLimit(fiat: 'NGN' | 'UGX' = 'NGN') {
+  return readBankPayoutLimit(fiat);
 }
 
 export default async function pocketSpendingLimitsHandler(

@@ -2,6 +2,7 @@ import {isPocketBankActivityVisible} from '../src/pocket/lib/pocketBankActivityV
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
 import {requirePocketBasicKyc} from './pocket/kyc-level.js'
+import {checkCheckoutBuyerAllowance} from './checkout-buyer-allowance.js'
 import {reservePocketBankAllowance} from './pocket/transfer-allowance.js'
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
 import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
@@ -1361,7 +1362,8 @@ export default async function handler(req: Request, res: Response) {
       if (!existing && merchant && await isPosRetired(merchant.merchant_id)) return res.status(410).json({ok:false,error:'This collection is closed.'})
       const payerIdentity=await verifiedPrivyUser(req)
       await requirePocketBasicKyc(payerIdentity.userId)
-      if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc,token:baseStablecoin(intent.source_token)},true)
+      if(existing?.source==='hosted-checkout')await checkCheckoutBuyerAllowance(payerIdentity.userId,existing,true)
+      else if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc,token:baseStablecoin(intent.source_token)},true)
       if (existing && !ensurePayable) {
         const execution = await syncOwnedPosExecution(existing)
         return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
@@ -1519,7 +1521,7 @@ export default async function handler(req: Request, res: Response) {
     const error = err as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number }
     const providerUnavailable = isPaycrestAmountUnavailable(error)
     const message = providerUnavailable ? 'Bank payout is unavailable for this amount. Try a different amount. Your money has not moved.' : error.message || 'Nigerian POS request failed'
-    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
+    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('CHECKOUT_')?{code:error.code}:{}), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
   }
 }
 

@@ -21,6 +21,7 @@ try{for(const width of [390,1280]){
  await page.getByRole('button',{name:'Verify identity',exact:true}).click()
  await page.getByRole('heading',{name:'Verify your identity'}).waitFor()
  await page.getByRole('button',{name:'Verify Basic',exact:true}).waitFor()
+ assert.equal(await page.getByRole('button',{name:/Advanced/}).count(),0,'Checkout does not offer Advanced KYC')
  await page.getByRole('button',{name:'Continue to payment',exact:true}).click()
  await page.getByRole('alert').filter({hasText:'Verification is not complete yet'}).waitFor()
  level='basic';environment='sandbox'
