@@ -1,3 +1,4 @@
+import {withProviderFeature} from './pocket/provider-usage.js'
 import type { Request, Response } from 'express'
 import { readEvmRpc } from './evm-read.js'
 import { createPublicClient, defineChain, http, encodeFunctionData } from 'viem'
@@ -76,7 +77,7 @@ function safeBalanceError(chainLabel: string) {
 async function fetchEvmUsdcBalanceUnits(chainKey: EvmBalanceChain, address: `0x${string}`) {
   const config = CHAIN_CONFIG[chainKey]
   if (chainKey !== 'base-sepolia') {
-    const result = await readEvmRpc(chainKey, 'eth_call', [{ to: config.tokenAddress, data: encodeFunctionData({ abi: ERC20_BALANCE_OF_ABI, functionName: 'balanceOf', args: [address] }) }, 'latest'])
+    const result = await withProviderFeature('balance-read',()=>readEvmRpc(chainKey, 'eth_call', [{ to: config.tokenAddress, data: encodeFunctionData({ abi: ERC20_BALANCE_OF_ABI, functionName: 'balanceOf', args: [address] }) }, 'latest']))
     if (typeof result !== 'string' || !/^0x[\da-f]{64}$/i.test(result)) throw new Error('Invalid balance result.')
     return BigInt(result)
   }

@@ -1,3 +1,4 @@
+import {providerUsageFetch,circleUsageOperation} from './pocket/provider-usage.js'
 import {quoteEvmBridgeFee,sealEvmBridgeFee,openEvmBridgeFee} from './pocket/evm-bridge-reimbursement.js'
 import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../src/pocket/lib/pocketUsdtAssets.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
@@ -124,7 +125,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
     const request=JSON.parse(init.body)
     if(typeof request.walletId==='string' && request.walletId)return withOrdinaryWalletMutation(request.walletId,()=>circleJson<T>(path,{...init,migrationInternal:true,signal:init.signal??AbortSignal.timeout(15_000)}))
   }
-  const res = await fetch(`${circleBaseUrl()}${path}`, {
+  const res = await providerUsageFetch({feature:'circle-wallet',operation:circleUsageOperation(path,init.method)})(`${circleBaseUrl()}${path}`, {
     ...requestInit,
     headers: {
       ...circleHeaders(init.userToken, apiKey),

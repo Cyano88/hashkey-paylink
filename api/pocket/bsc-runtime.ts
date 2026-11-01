@@ -1,3 +1,4 @@
+import {observeProvider} from './provider-usage.js'
 import {createHmac} from 'node:crypto'
 import {recordPocketRpcRead} from './rpc-usage.js'
 import {encodeFunctionData, parseAbi} from 'viem'
@@ -40,7 +41,7 @@ export function createBscRuntime(env:NodeJS.ProcessEnv=process.env,fetcher:typeo
  const endpoint=new URL(env.PRIVATE_RPC_URL_BSC||'')
  if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password)unavailable()
  let requestId=0
- const rpc=async(method:string,params:unknown[])=>{
+ const rpc=async(method:string,params:unknown[])=>observeProvider({endpoint,network:'bsc',operation:method},async()=>{
   const id=++requestId
   try{
    recordPocketRpcRead('bsc-read','bsc',method)
@@ -49,7 +50,7 @@ export function createBscRuntime(env:NodeJS.ProcessEnv=process.env,fetcher:typeo
    if(!response.ok||body.id!==id||body.error||body.result===undefined)return unavailable()
    return body.result
   }catch{return unavailable()}
- }
+ })
  let priceCache:{at:number;values:Record<string,BscFeePrice>}|undefined,priceWork:Promise<Record<string,BscFeePrice>>|undefined
  const readPrices=async()=>{
   if(priceCache&&Date.now()-priceCache.at<10000)return priceCache.values

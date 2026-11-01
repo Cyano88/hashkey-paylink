@@ -1,3 +1,4 @@
+import {providerUsageFetch} from './provider-usage.js'
 import {createHmac} from 'node:crypto'
 import type {Address} from 'viem'
 import {okxCredentials} from './xstocks-swap-provider.js'
@@ -32,7 +33,7 @@ export async function readXLayerNativeCandidates(addresses: string[], from: bigi
       if(++requests>10) throw Error('X Layer index page budget exceeded')
       const path='/api/v5/xlayer/address/normal-transaction-list-multi?'+new URLSearchParams({chainShortName:'xlayer',address:batch.join(','),startBlockHeight:String(from),endBlockHeight:String(to),limit:'100',page:String(page)})
       const timestamp=new Date().toISOString()
-      const response=await fetcher('https://web3.okx.com'+path,{headers:{'OK-ACCESS-KEY':c.key,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp,'OK-ACCESS-SIGN':createHmac('sha256',c.secret).update(timestamp+'GET'+path).digest('base64')},signal:AbortSignal.timeout(10000),redirect:'error'})
+      const response=await providerUsageFetch({feature:'xlayer-discovery',network:'xlayer',operation:'history-page'},fetcher)('https://web3.okx.com'+path,{headers:{'OK-ACCESS-KEY':c.key,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp,'OK-ACCESS-SIGN':createHmac('sha256',c.secret).update(timestamp+'GET'+path).digest('base64')},signal:AbortSignal.timeout(10000),redirect:'error'})
       const body=await response.json(),data=body.data?.[0]
       if(!response.ok || String(body.code)!=='0' || !data || !Array.isArray(data.transactionList) || data.transactionList.length>100 || Number(data.page)!==page || (!/^\d+$/.test(String(data.totalPage)) && !(data.totalPage==='' && page===1 && data.transactionList.length===0))) throw Error('Invalid X Layer index page')
       const pages=Number(data.totalPage)

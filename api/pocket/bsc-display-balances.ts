@@ -1,3 +1,4 @@
+import {providerUsageFetch,recordProviderUsage,withProviderFeature} from './provider-usage.js'
 import {createHmac} from 'node:crypto'
 import {parseUnits} from 'viem'
 import {POCKET_BSC, type PocketBscAsset} from '../../src/pocket/lib/pocketBsc.js'
@@ -32,7 +33,7 @@ export async function fetchBscDisplayBalances(wallet: string, fetcher = fetch): 
   const path = '/api/v6/dex/balance/token-balances-by-address'
   const body = JSON.stringify({address: wallet, tokenContractAddresses: assets.map(a => ({chainIndex: '56', tokenContractAddress: a.native ? '' : a.address})), excludeRiskToken: '1'})
   const timestamp = new Date().toISOString()
-  const response = await fetcher('https://web3.okx.com' + path, {method: 'POST', headers: {
+  const response = await providerUsageFetch({feature:'balance-display',network:'bsc',operation:'wallet-balances'},fetcher)('https://web3.okx.com' + path, {method: 'POST', headers: {
     'Content-Type': 'application/json', 'OK-ACCESS-KEY': c.key, 'OK-ACCESS-PASSPHRASE': c.passphrase,
     'OK-ACCESS-TIMESTAMP': timestamp, 'OK-ACCESS-SIGN': createHmac('sha256', c.secret).update(timestamp + 'POST' + path + body).digest('base64'),
   }, body, redirect: 'error', signal: AbortSignal.timeout(6000)})
@@ -59,8 +60,8 @@ export function createBscDisplayReader(provider: (wallet: string) => Promise<Bal
       }
       entry = {retryAt: 0, failedUntil: 0}; entries.set(key, entry)
     }
-    if (entry.pending) { const result = await entry.pending; return {...result, units: {...result.units}} }
-    if (entry.value && entry.observedAt !== undefined && now() - entry.observedAt < 15_000) return {units: {...entry.value}, observedAt: entry.observedAt}
+    if (entry.pending) { recordProviderUsage({feature:'balance-display',network:'bsc',operation:'wallet-balances'},'shared'); const result = await entry.pending; return {...result, units: {...result.units}} }
+    if (entry.value && entry.observedAt !== undefined && now() - entry.observedAt < 15_000) {recordProviderUsage({feature:'balance-display',network:'bsc',operation:'wallet-balances'},'cache-hit');return {units: {...entry.value}, observedAt: entry.observedAt}}
     if (now() < entry.failedUntil) throw unavailable()
     const current = entry
     current.pending = (async () => {
@@ -70,7 +71,7 @@ export function createBscDisplayReader(provider: (wallet: string) => Promise<Bal
         try { units = await provider(wallet); current.retryAt = 0 }
         catch { current.retryAt = now() + 60_000 }
       }
-      units ??= await fallback(wallet)
+      units ??= await withProviderFeature('balance-display',()=>fallback(wallet))
       current.value = {...units}; current.observedAt = observedAt; current.failedUntil = 0
       return {units, observedAt}
     })().catch(() => { current.failedUntil = now() + 10_000; throw unavailable() }).finally(() => { current.pending = undefined })

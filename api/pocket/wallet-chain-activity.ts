@@ -1,3 +1,4 @@
+import {withProviderFeature} from './provider-usage.js'
 import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { createActivityLogReader, createFinalizedActivityReader } from './activity-rpc-budget.js'
 import type { ParsedTransactionWithMeta } from '@solana/web3.js'
@@ -76,7 +77,7 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   if (!/^0x[\da-f]{40}$/i.test(wallet)) throw new Error('Invalid activity wallet.')
   async function rpc<T>(method: string, params: any[]): Promise<T> {
     signal.throwIfAborted()
-    const result = await read(network, method, params, signal)
+    const result = await withProviderFeature('wallet-activity',()=>read(network, method, params, signal))
     signal.throwIfAborted()
     return result as T
   }
@@ -205,7 +206,7 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
     commitment: 'confirmed', disableRetryOnRateLimit: true,
     fetch: async (url, init) => {
       signal.throwIfAborted()
-      const response = await fetcher(url, { ...init, signal })
+      const response = await withProviderFeature('wallet-activity',()=>fetcher(url, { ...init, signal }))
       if (!response.ok) {
         await response.body?.cancel()
         throw Object.assign(new Error('Activity provider unavailable.'), { code: response.status === 429 || response.status >= 500 ? -32004 : -32003 })

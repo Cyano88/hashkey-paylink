@@ -1,3 +1,4 @@
+import {observeProvider,recordProviderUsage} from './pocket/provider-usage.js'
 import { recordPocketRpcRead } from './pocket/rpc-usage.js'
 import type { Request, Response } from 'express'
 
@@ -71,6 +72,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
     signal?.throwIfAborted()
     if (now() - windowStart >= 60_000) { windowStart = now(); used = 0 }
     if (++used > 300) throw new ReadRpcError(-32005, 'Read capacity reached. Try again shortly.')
+    return observeProvider({endpoint:url,network,operation:method},async()=>{
     recordPocketRpcRead('evm-read', network, method)
     let response: Awaited<ReturnType<typeof fetch>>
     try { response = await fetcher(url, {
@@ -101,6 +103,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
     }
     if (!Object.hasOwn(data, 'result')) throw new ReadRpcError(-32004, 'Invalid upstream response.')
     return data.result
+    })
   }
   return async (network: ReadNetwork, method: string, params: any[], signal?: AbortSignal) => {
     signal?.throwIfAborted()
@@ -110,10 +113,10 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
     if (method === 'eth_chainId') return '0x' + config.id.toString(16)
     const key = JSON.stringify([network, validated])
     const hit = cache.get(key)
-    if (hit && hit.expires > now()) return hit.result
+    if (hit && hit.expires > now()) {recordProviderUsage({provider:'none',network,operation:method},'cache-hit');return hit.result}
     // Cancellable scans share work at the wallet level; their abort must not
     // cancel an unrelated checkout read with identical RPC parameters.
-    if (!signal && pending.has(key)) return pending.get(key)
+    if (!signal && pending.has(key)) {recordProviderUsage({provider:'none',network,operation:method},'shared');return pending.get(key)}
     const pendingKey = signal ? Symbol(key) : key
     if (pending.size >= 16) throw new ReadRpcError(-32005, 'Read service busy. Try again shortly.')
     const work = (async () => {

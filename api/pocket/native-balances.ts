@@ -1,3 +1,4 @@
+import {providerUsageFetch,circleUsageOperation} from './provider-usage.js'
 import {circleLinkKey,type CircleLinkRecord} from '../privy-circle-link.js'
 import {createHmac} from 'node:crypto'
 import {okxCredentials} from './xstocks-swap-provider.js'
@@ -13,7 +14,7 @@ export async function fetchCircleNativeBalance(link:CircleLinkRecord,fetcher=fet
  const key=process.env.CIRCLE_API_KEY
  if(!asset||!chain||!key||key.startsWith('TEST_')||link.circleBlockchain!==chain)throw Error('Native balance unavailable.')
  const signal=AbortSignal.timeout(8000)
- const request=async(path:string)=>{const r=await fetcher('https://api.circle.com'+path,{headers:{Authorization:'Bearer '+key},signal,redirect:'error'});if(!r.ok)throw Error('Native balance unavailable.');return {body:await r.json(),next:/;\s*rel="next"/.test(r.headers.get('link')||'')}}
+ const request=async(path:string)=>{const r=await providerUsageFetch({feature:'balance-display',network:link.chain,operation:circleUsageOperation(path)},fetcher)('https://api.circle.com'+path,{headers:{Authorization:'Bearer '+key},signal,redirect:'error'});if(!r.ok)throw Error('Native balance unavailable.');return {body:await r.json(),next:/;\s*rel="next"/.test(r.headers.get('link')||'')}}
  const path='/v1/w3s/wallets/'+encodeURIComponent(link.circleWalletId)
  // Fetch identity and first balance page together; publish only after both validate.
  const [{body:{data:{wallet}={}}},firstPage]=await Promise.all([request(path),request(path+'/balances?'+new URLSearchParams({includeAll:'true',pageSize:'50'}))])
@@ -50,7 +51,7 @@ export function createNativeBalanceReader(read=fetchCircleNativeBalance,fetcher=
    const c=okxCredentials();if(!c.key||!c.secret||!c.passphrase)throw Error('Price unavailable')
    const path='/api/v6/dex/market/price',body=JSON.stringify(priceAssets.map(({chainIndex,tokenContractAddress})=>({chainIndex,tokenContractAddress}))),timestamp=new Date(now()).toISOString()
    const signature=createHmac('sha256',c.secret).update(timestamp+'POST'+path+body).digest('base64')
-   const r=await fetcher('https://web3.okx.com'+path,{method:'POST',headers:{'Content-Type':'application/json','OK-ACCESS-KEY':c.key,'OK-ACCESS-SIGN':signature,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp},body,signal:AbortSignal.timeout(5000),redirect:'error'})
+   const r=await providerUsageFetch({feature:'balance-display',network:'multi',operation:'price'},fetcher)('https://web3.okx.com'+path,{method:'POST',headers:{'Content-Type':'application/json','OK-ACCESS-KEY':c.key,'OK-ACCESS-SIGN':signature,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp},body,signal:AbortSignal.timeout(5000),redirect:'error'})
    if(!r.ok)throw Error('Price unavailable')
    const b=await r.json(),values:Partial<Record<string,number>>={}
    if(String(b.code)!=='0'||!Array.isArray(b.data))throw Error('Price unavailable')

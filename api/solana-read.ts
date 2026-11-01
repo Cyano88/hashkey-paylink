@@ -1,3 +1,4 @@
+import {observeProvider} from './pocket/provider-usage.js'
 import { recordPocketRpcRead } from './pocket/rpc-usage.js'
 const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com'
 const METHODS = new Set(['getAccountInfo', 'getTokenAccountBalance', 'getSignaturesForAddress', 'getTransaction', 'getGenesisHash'])
@@ -16,6 +17,7 @@ export function createSolanaReadFetch(fetcher: typeof fetch = fetch, now = Date.
     if (used + cost > 120) throw new SolanaReadError('capacity', -32005)
     used += cost
     const raw=JSON.parse(String(init.body)), items=Array.isArray(raw)?raw:[raw]
+    return observeProvider({endpoint:url,network:'solana',operation:items.length>1?'batch':items[0].method,count:items.length},async()=>{
     for(const item of items)recordPocketRpcRead('solana-read','solana',item.method)
     let response: Response
     try {
@@ -49,6 +51,7 @@ export function createSolanaReadFetch(fetcher: typeof fetch = fetch, now = Date.
       if (!item || !Object.hasOwn(item, 'result')) throw new SolanaReadError('rpc', -32003)
     }
     return new Response(text, { status: 200, headers: { 'content-type': 'application/json' } })
+    })
   }
   return async (_input, init: RequestInit = {}) => {
     init.signal?.throwIfAborted()

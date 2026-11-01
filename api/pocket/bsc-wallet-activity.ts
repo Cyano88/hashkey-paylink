@@ -1,3 +1,4 @@
+import {withProviderFeature,providerUsageFetch} from './provider-usage.js'
 import {createHash,createHmac} from 'node:crypto'
 import {dueHistoryProofs,deferHistoryProof,type HistoryProofRetries} from './history-proof-retry.js'
 import {decodeEventLog,formatUnits,parseAbiItem} from 'viem'
@@ -17,6 +18,7 @@ type Rpc=(method:string,params:unknown[])=>Promise<any>
  * token identity, parties, timestamps and finality. Never infer a deposit from a
  * balance delta or count approval/fee logs as a separate swap. */
 export async function bscTransferRows(wallet:string,hash:string,rpc:Rpc,internalNative=false):Promise<PocketActivityRow[]>{
+ const underlying=rpc;rpc=(method,params)=>withProviderFeature('wallet-activity',()=>underlying(method,params))
  if(!hashPattern.test(hash))throw Error('Invalid BNB transaction.')
  if(BigInt(await rpc('eth_chainId',[]))!==56n)throw Error('Wrong BNB chain.')
  const [tx,receipt,head]=await Promise.all([rpc('eth_getTransactionByHash',[hash]),rpc('eth_getTransactionReceipt',[hash]),rpc('eth_blockNumber',[])])
@@ -62,7 +64,7 @@ export async function readBscHistoryPage(wallet:string,state:Pick<ScanState,'end
  const c=okxCredentials();if(!c.key||!c.secret||!c.passphrase)throw Error('BNB history unavailable.')
  const path='/api/v6/dex/post-transaction/transactions-by-address?'+new URLSearchParams({address:wallet,chains:'56',end:String(state.end),limit:'20',...(state.begin?{begin:String(state.begin)}:{}),...(state.cursor?{cursor:state.cursor}:{})})
  const timestamp=new Date().toISOString()
- const response=await fetch('https://web3.okx.com'+path,{headers:{'OK-ACCESS-KEY':c.key,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp,'OK-ACCESS-SIGN':createHmac('sha256',c.secret).update(timestamp+'GET'+path).digest('base64')},redirect:'error',signal:AbortSignal.timeout(10000)})
+ const response=await providerUsageFetch({feature:'okx-history',network:'bsc',operation:'history-page'})('https://web3.okx.com'+path,{headers:{'OK-ACCESS-KEY':c.key,'OK-ACCESS-PASSPHRASE':c.passphrase,'OK-ACCESS-TIMESTAMP':timestamp,'OK-ACCESS-SIGN':createHmac('sha256',c.secret).update(timestamp+'GET'+path).digest('base64')},redirect:'error',signal:AbortSignal.timeout(10000)})
  const data=await response.json(),page=data.data?.[0]
  if(!response.ok||String(data.code)!=='0'||!Array.isArray(page?.transactions)||page.transactions.length>20)throw Error('BNB history unavailable.')
  const hashes:string[]=[],internal:string[]=[]

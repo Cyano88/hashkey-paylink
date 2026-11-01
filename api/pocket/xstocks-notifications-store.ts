@@ -1,3 +1,4 @@
+import {providerRpcFetch} from './provider-usage.js'
 import {readXLayerNativeCandidates,verifyXLayerNativeCandidates,NATIVE_REPLAY_BLOCKS,type NativeDiscoveryState} from './xlayer-native-discovery.js'
 import {enrichWebPaymentNotices} from './web-payment-notices.js'
 import {pocketStockNoticeActivity} from '../../src/pocket/lib/pocketStockNoticeActivity.js'
@@ -21,7 +22,7 @@ export const STOCK_NOTICE_KEY = 'hashpaylink:pocket-xstocks-notifications:v1'
 export const normalizeStockNotices = (s?: StockNoticeStore): StockNoticeStore => ({nativeDiscovery:s?.nativeDiscovery,nativeRetryAt:s?.nativeRetryAt,investments:s?.investments||{},wallets:s?.wallets||{},notices:s?.notices||{},requests:s?.requests||{},reads:s?.reads||{},cursor:s?.cursor,cursorHash:s?.cursorHash})
 export const readStockNotices = async () => normalizeStockNotices(await readDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY))
 export const mutateStockNotices = (fn: (s: StockNoticeStore) => void) => mutateDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY, current => {const s=normalizeStockNotices(current);archiveStockInvestments(s);fn(s);archiveStockInvestments(s);return s})
-export const stockNoticeClient = createPublicClient({chain:xLayer,transport:http(process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',{timeout:10000,retryCount:0})})
+export const stockNoticeClient = createPublicClient({chain:xLayer,transport:http(process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',{timeout:10000,retryCount:0,fetchFn:providerRpcFetch('xlayer-discovery','xlayer')})})
 const allowed = new Map([stockUsdc,stockUsdt,stockUsde,stockUsdg,...stockAssets].map(a=>[a.address.toLowerCase(),a]))
 const decimals = new Map<string,number>([[stockUsdc.address.toLowerCase(),6],[stockUsdt.address.toLowerCase(),6],['native',18]])
 export async function stockNoticeAsset(token: string) {
