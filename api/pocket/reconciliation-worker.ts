@@ -1,3 +1,4 @@
+import {readCheckoutExpiryEvidence,canExpireUnusedCheckout} from './checkout-expiry-evidence.js'
 import {readStockCheckout} from '../hosted-stock-checkouts.js'
 import {readBscCheckout} from '../hosted-bsc-checkouts.js'
 import {reconcileBscInboundBridge} from './bsc-inbound-bridge.js'
@@ -43,6 +44,7 @@ type Dependencies = {
   executions: PaymentExecutionRepository
   reconcilePaycrest: typeof reconcilePaycrestOrderPayment
   reconcileBill: typeof reconcilePocketBillExecutionByResource
+  checkoutExpiryEvidence: typeof readCheckoutExpiryEvidence
   readStockCheckout: typeof readStockCheckout
   readBscCheckout: typeof readBscCheckout
   readCheckout: typeof readVerifiedHostedCheckoutRecord
@@ -147,6 +149,13 @@ async function reconcileExecution(intent: PaymentExecutionIntent, dependencies: 
       if (!record || 'partner:'+record.partnerId!==intent.ownerId) {
         if(intent.state!=='needs_review')await advance(dependencies.executions,intent,'needs_review',{failureCode:'CHECKOUT_RECORD_UNVERIFIED'})
         return {id:intent.id,kind:intent.kind,result:'review',message:'Signed checkout record is unavailable or ownership does not match.'}
+      }
+      if(intent.state==='prepared'&&!record.payment&&Date.parse(record.expiresAt)<=dependencies.now()-60_000){
+        const evidence=await dependencies.checkoutExpiryEvidence(intent)
+        if(canExpireUnusedCheckout(intent,record,evidence,dependencies.now())){
+          const closed=await advance(dependencies.executions,intent,'expired',{failureCode:'CHECKOUT_EXPIRED_UNUSED',metadata:{closureReason:'expired_without_submission',evidenceVersion:'checkout-expiry-v1'}})
+          return {id:intent.id,kind:intent.kind,result:closed.state==='expired'?'reconciled':'review',message:closed.state==='expired'?'Expired checkout had no submitted payment.':'Execution changed during reconciliation.'}
+        }
       }
       // These rails have their own canonical settlement engines. Expiry alone
       // cannot prove that an in-flight user operation never transferred funds.
@@ -295,7 +304,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     reconcileNative:reconcileNativeSend,
     auditXLayerBilling:scheduledBillingAudit,
     executions: paymentExecutionRepository, reconcilePaycrest: reconcilePaycrestOrderPayment,
-    readStockCheckout, readBscCheckout, reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
+    checkoutExpiryEvidence:readCheckoutExpiryEvidence, readStockCheckout, readBscCheckout, reconcileBill: reconcilePocketBillExecutionByResource, readCheckout: readVerifiedHostedCheckoutRecord,
     syncCheckout: syncHostedCheckoutExecution, expireCheckout: expireHostedCheckoutExecution,
     readPolymarketFunding: getDepositStatus, listBridges: listUnresolvedCirclePocketActions,
     reconcileUsdt: reconcileUsdtBridge, reconcileXLayer:reconcileXLayerBridge, reconcileXLayerOutbound:reconcileXLayerOutboundBridge, readBridge: readCircleBridgeStatus, recordAction: recordCirclePocketAction, appendLedger: appendPocketMoneyLedgerEvent,

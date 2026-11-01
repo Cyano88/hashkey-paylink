@@ -10,6 +10,9 @@ const intents = new Map([
   ['wallet', { id: 'wallet', ownerId: 'owner-1', kind: 'wallet_transfer', state: 'submitted', resourceId: '0xabc', amount: '1', asset: 'USDC', sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'wallet', metadata: {}, updatedAt: 1, createdAt: 1 }],
 ])
 for(const [id,network,prefix] of [['stock-missing','xlayer','chkx_'],['bsc-missing','bsc','chkb_']])intents.set(id,{...intents.get('paycrest'),id,ownerId:'partner:fixture',kind:'hosted_checkout',state:'prepared',resourceId:prefix+'a'.repeat(24),sourceNetwork:network,settlementNetwork:network})
+const checkoutToken={chainId:196,address:'0x'+'1'.repeat(40),symbol:'USDC',decimals:6}
+const unusedCheckout={id:'chkx_'+'b'.repeat(24),partnerId:'fixture',network:'xlayer',asset:'USDC',amount:'1',token:checkoutToken,expiresAt:new Date(now-120000).toISOString()}
+intents.set('unused-checkout',{...intents.get('stock-missing'),id:'unused-checkout',resourceId:unusedCheckout.id,token:checkoutToken})
 const updates = []
 const repository = {
   async listUnresolved(limit) { return [...intents.values()].filter(item => !['completed', 'failed', 'expired'].includes(item.state)).slice(0, limit) },
@@ -40,7 +43,8 @@ const result = await runPocketReconciliation({
     return { intent: { state: 'delivered', quoteExpiresAt: now + 1 }, execution: intents.get('bill'), requeried: true }
   },
   readCheckout: async () => null,
-  readStockCheckout: async () => null,
+  readStockCheckout: async id => id===unusedCheckout.id?unusedCheckout:null,
+  checkoutExpiryEvidence:async()=>({xpay:[],bsc:[],journal:[],ledger:[{state:'prepared'}]}),
   readBscCheckout: async () => null,
   syncCheckout: async () => undefined,
   expireCheckout: async () => undefined,
@@ -65,7 +69,9 @@ assert.equal(intents.get('bill').state, 'completed')
 assert.equal(intents.get('wallet').state, 'submitted', 'unsupported wallet execution must never be guessed terminal')
 assert.equal(ledger.length, 1)
 assert.equal(ledger[0].state, 'completed')
-assert.equal(result.reconciled, 6)
+assert.equal(result.reconciled, 7)
+assert.equal(intents.get('unused-checkout').state,'expired')
+assert.equal(intents.get('unused-checkout').failureCode,'CHECKOUT_EXPIRED_UNUSED')
 assert.equal(result.errors, 0)
 assert.ok(updates.some(item => item.intentId === 'paycrest' && item.expectedState === 'processing'))
 assert.ok(actionUpdates.some(item => item.action === 'bank-withdraw.route' && item.status === 'completed'))
