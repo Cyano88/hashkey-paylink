@@ -17,20 +17,13 @@ const beforeSuccessfulSave=structuredClone(store);verification='BANK RETURNED NA
 verification='UGANDA MERCHANT';console.log('PASS pre-save NGN account lookup: exact provider name, no persistence, validation, owner isolation, and save rejects missing provider name instead of trusting a typed name.')
 assert.equal((await request('GET',{}, {resource:'institutions',currency:'KES'})).statusCode,400)
 assert.deepEqual((await request('GET',{}, {resource:'institutions',currency:'UGX'})).body.institutions.map(i=>i.code),['MOMOUGPC','AIRTUGPC'])
-eligible=false;assert.equal((await request('PUT',config)).statusCode,403);assert.equal(store.projects[config.projectId].settlementMode,'usdc');eligible=true
-assert.equal((await request('PUT',{...config,bankCode:'OPAYNGPC'})).statusCode,400)
-assert.equal((await request('PUT',{...config,bankAccountNumber:'1234'})).statusCode,400)
-verification='';assert.equal((await request('PUT',config)).statusCode,503);assert.equal(store.projects[config.projectId].settlementMode,'usdc')
-verification='OK';assert.equal((await request('PUT',{...config,bankAccountName:''})).statusCode,400)
-const ug=await request('PUT',config);assert.equal(ug.statusCode,200);assert.equal(ug.body.project.settlementMode,'ugx');assert.deepEqual(ug.body.project.networks,['base']);assert.equal(ug.body.project.bankAccountLast4,'3456');assert.ok(ug.body.project.bankVerifiedAt);assert.ok(!JSON.stringify(ug.body).includes('256772123456'));assert.deepEqual(verificationCalls.at(-1),{institution:'MOMOUGPC',accountIdentifier:'256772123456',currency:'UGX'});assert.ok(eligibilityChecks>0)
-const key=await request('POST',{action:'create-key',projectId:config.projectId,name:'Local payments',environment:'live'});assert.equal(key.statusCode,201)
-const policy=developerPolicyFromStore(store,key.body.apiKey,secret);assert.equal(policy.settlementMode,'ugx');assert.equal(policy.nairaSettlement.accountNumber,'256772123456');assert.equal(policy.defaultNetwork,'base')
-const noAccount={...config,bankAccountNumber:''}
-assert.equal((await request('PUT',{...noAccount,bankCode:'AIRTUGPC',bankName:'Airtel'})).statusCode,400)
-assert.equal((await request('PUT',{...noAccount,settlementMode:'ngn',bankCode:'OPAYNGPC',bankName:'OPay'})).statusCode,400)
-assert.equal((await request('PUT',noAccount)).statusCode,200)
-assert.equal((await request('PUT',{...config,xlayerCheckout:{recipient:'0x2222222222222222222222222222222222222222',assets:['0xb6ceceab302e2e4948951ee7843fc24e92933061']}})).statusCode,400)
-console.log('PASS local settlement: country/provider binding, Uganda number normalization, identity eligibility, provider failure, protected account details and Base-only routing.')
+const beforeUganda=JSON.stringify(store),beforeProvider=verificationCalls.length
+const lockedUganda=await request('PUT',config)
+assert.equal(lockedUganda.statusCode,403);assert.match(lockedUganda.body.error,/coming soon/)
+assert.equal(JSON.stringify(store),beforeUganda);assert.equal(verificationCalls.length,beforeProvider)
+// Historical payout records retain their provider-bound reconciliation support.
+const policy={settlementMode:'ugx',nairaSettlement:{bankCode:'MOMOUGPC',bankName:'MTN',accountName:'UGANDA MERCHANT',accountNumber:'256772123456',refundAddress:'0x1111111111111111111111111111111111111111'}}
+console.log('PASS UGX setup locked before provider calls or persistence; Nigeria setup remains available.')
 const expected={id:'chk_bound',recipient:'0x1111111111111111111111111111111111111111',amount:'1.25',currency:'UGX'}
 const order={intent_id:expected.id,receive_address:expected.recipient,amount_usdc:'1.250000',fiat_currency:'UGX'}
 assertHostedLocalSettlementOrder(order,expected)

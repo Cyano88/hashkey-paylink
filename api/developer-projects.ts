@@ -1077,6 +1077,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         catch (error) { return res.status(400).json({ ok: false, error: (error as Error).message }) }
         if (xlayerCheckout && (currentCheckoutMode !== 'human' || !capabilities.includes('hosted_checkout'))) return res.status(400).json({ ok: false, error: 'X Layer asset acceptance requires human Checkout.' })
         const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
+        if (settlementMode === 'ugx' && currentProject.settlementMode !== 'ugx') return res.status(403).json({ok:false,error:'Uganda mobile money settlement is coming soon. Choose stablecoins or Nigeria bank settlement.'})
         if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')||settlementMode!=='usdc'))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human stablecoin Checkout.'})
         let receiptEmails:ReceiptEmailSettings
         try{receiptEmails=normalizeReceiptEmailSettings(req.body?.receiptEmails,currentProject.receiptEmails,dependencies.now().toISOString())}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}

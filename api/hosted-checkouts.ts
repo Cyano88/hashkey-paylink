@@ -1058,6 +1058,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const policy = await dependencies.policy(req)
     if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
     if (!policy) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
+    if ('projectManaged' in policy && policy.settlementMode === 'ugx') return res.status(403).json({ok:false,error:'Uganda mobile money settlement is coming soon. New UGX checkouts are temporarily unavailable.'})
     const providerRouting = verifiedProviderRouting.get(req)
     if (!providerRouting && 'projectManaged' in policy && !policy.capabilities.includes('hosted_checkout')) {
       return res.status(403).json({ok:false,error:'Enable Checkout for this project before creating a checkout.'})
