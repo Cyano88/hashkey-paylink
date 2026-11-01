@@ -2847,7 +2847,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       return needsReview && !reviewOnly ? null : data.order
     } catch (err) {
       setPaycrestStatusText('')
-      setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare Naira payout.'))
+      const message = readableErrorMsg(err, 'Could not prepare payout.')
+      setCirclePasskeyError(message)
+      // Review callers render their own errors; preserve the actionable reason.
+      if (reviewOnly) throw new Error(message)
       return null
     } finally {
       setPaycrestPreparing(false)
