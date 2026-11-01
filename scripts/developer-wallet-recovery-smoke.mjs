@@ -29,7 +29,16 @@ try{
  delete walletFixture.links.ethereum;walletFixture.conflict=true;await call({},409);assert.equal(walletFixture.writes,1);walletFixture.conflict=false
  walletFixture.inventory.push({...original,id:'second-original'});await call({},409);assert.equal(walletFixture.writes,1);walletFixture.inventory.pop()
  walletFixture.denied=true;await call({},401);walletFixture.denied=false
- // Original Pocket alignment behavior is unchanged without the receiving-only flag.
- await call({receivingSetup:false},500);assert.equal(walletFixture.writes,1)
+ // Released Pocket clients omit receivingSetup. First-time linking must recover
+ // the same original without creating a replacement or migrating funds.
+ assert.equal((await call({receivingSetup:undefined})).wallet.id,'original');assert.equal(walletFixture.writes,2)
+ delete walletFixture.links.ethereum
+ assert.equal((await call({receivingSetup:false})).wallet.id,'original');assert.equal(walletFixture.writes,3)
+ delete walletFixture.links.ethereum
+ walletFixture.inventory.push({...original,id:'second-original'})
+ await call({receivingSetup:undefined},409);assert.equal(walletFixture.writes,3)
+ walletFixture.inventory.pop()
+ walletFixture.inventory=[anchor,{...original,blockchain:'MATIC'},{...candidate,blockchain:'MATIC'}]
+ assert.equal((await call({chain:'polygon',receivingSetup:undefined})).wallet.id,'original');assert.equal(walletFixture.writes,4)
 }finally{globalThis.fetch=savedFetch}
 console.log('PASS receiving-wallet recovery: Ethereum/Polygon originals, linked reuse, candidate exclusion, ambiguous history, auth, concurrent link conflict and no migration or funds movement.')

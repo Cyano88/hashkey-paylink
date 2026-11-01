@@ -622,7 +622,11 @@ export default async function handler(req: Request, res: Response) {
         if(source!.address.toLowerCase()===anchor!.address.toLowerCase())return res.json({ok:true,wallet:source})
       }
       const inventory=await listCircleUserWallets(userToken,chain)
-      if(req.body?.receivingSetup===true && !existingLink){
+      // First-time linking must recover an owned original before considering
+      // alignment. Older Pocket clients do not send receivingSetup during
+      // startup; requiring it strands accounts with an existing Circle wallet.
+      // The recovery helper rejects ambiguous history and replacement candidates.
+      if(!existingLink){
         const {developerAdditionalWallet}=await import('./pocket/developer-wallet-recovery.js')
         const recovered=developerAdditionalWallet(inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[],chain)
         if(recovered){
