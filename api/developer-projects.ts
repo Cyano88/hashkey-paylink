@@ -82,6 +82,7 @@ type DeveloperProject = {
   removal?: {status:'closed'|'deleted';at:string;by:string}
   directoryProfile?: {enabled:boolean; introduction:string}
   businessVerification?: VerificationRecord
+  profileChanges?: Array<{at:string;actor:string;reason:string;fromProfileId:string;toProfileId:string;accountType:DeveloperAccountType;country?:string;verification?:VerificationRecord;personalKycVerified?:boolean}>
   id: string
   ownerId: string
   ownerEmail: string
@@ -120,7 +121,7 @@ type DeveloperProject = {
   keys: DeveloperKey[]
   operations?: Array<{
     id: string
-    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled' | 'cli_key_created' | 'cli_key_revoked' | 'app_closed' | 'app_deleted'
+    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled' | 'cli_key_created' | 'cli_key_revoked' | 'app_closed' | 'app_deleted' | 'profile_type_changed'
     actor: string
     reason?: string
     details?: Record<string, string | number | boolean>
@@ -822,6 +823,37 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if(action.startsWith('admin-')) requireDeveloperAdmin(identity,dependencies,req)
         else if(currentStore.projects[projectId].ownerId!==identity.userId)return res.status(404).json({ok:false,error:'App not found.'})
         return res.status(409).json({ok:false,error:'This app is closed. Its payment records remain available.'})
+      }
+
+      if (req.method === 'POST' && ['admin-profile-options','admin-change-profile'].includes(action)) {
+        requireDeveloperAdmin(identity,dependencies,req,'projects',projectId)
+        const project=currentStore?.projects?.[projectId]
+        if(!project)return res.status(404).json({ok:false,error:'App not found.'})
+        const profiles=await profilesForOwner(project.ownerId)
+        const currentType=project.accountType??'business'
+        const targets=profiles.filter(p=>p.type!==currentType)
+        if(action==='admin-profile-options')return res.json({ok:true,updatedAt:project.updatedAt,currentProfileId:projectBuilderProfileId(project),profiles:targets.map(p=>({...p,ready:builderProfileReady(p)}))})
+        const target=targets.find(p=>p.id===req.body?.targetProfileId)
+        if(!target||!builderProfileReady(target))return res.status(400).json({ok:false,error:'Choose a complete profile of the other type belonging to this app owner. The builder must save its name and country first.'})
+        const reason=clean(req.body?.reason,500)
+        if(reason.length<12||req.body?.confirmPause!==true)return res.status(400).json({ok:false,error:'Record the builder request and confirm that new payments will be paused for review.'})
+        const now=dependencies.now().toISOString(),actor=identity.email||identity.userId
+        let updated:DeveloperProject|undefined
+        await dependencies.mutate(STORE_KEY,current=>{
+          const latest=current?.projects?.[projectId]
+          if(!latest||latest.ownerId!==project.ownerId||latest.removal||latest.updatedAt!==req.body?.expectedUpdatedAt||projectBuilderProfileId(latest)!==projectBuilderProfileId(project))throw Object.assign(Error('This app changed. Reload the profile options before continuing.'),{status:409})
+          // One atomic app move. Profile records, other apps, keys, orders and receipts are untouched.
+          updated={...latest,builderProfileId:target.id,accountType:target.type,profileCountry:target.country,
+            personalKycVerified:false,businessVerification:{...verificationEmpty(latest.businessVerification?.required),revision:(latest.businessVerification?.revision??0)+1,history:[{action:'profile_type_changed',actor,at:now,revision:(latest.businessVerification?.revision??0)+1,note:reason}]},
+            profileChanges:[...(latest.profileChanges??[]),{at:now,actor,reason,fromProfileId:projectBuilderProfileId(latest),toProfileId:target.id,accountType:latest.accountType??'business',country:latest.profileCountry,verification:latest.businessVerification,personalKycVerified:latest.personalKycVerified}],
+            operationalStatus:'suspended',suspendedAt:now,suspendedBy:actor,suspensionReason:'Profile type changed; review identity and receiving setup before reactivation.'+(latest.suspensionReason?' Previous restriction: '+latest.suspensionReason:''),
+            settlementStatus:'review_required',bankVerifiedAt:undefined,
+            directoryProfile:latest.directoryProfile?{...latest.directoryProfile,enabled:false}:undefined,
+            arcAgreementPilot:latest.arcAgreementPilot?{...latest.arcAgreementPilot,status:'disabled',disabledAt:now,disabledBy:actor,reason:'Profile type changed',updatedAt:now,updatedBy:actor}:undefined,
+            operations:appendOperation(latest,{id:'op_'+randomUUID(),action:'profile_type_changed',actor,reason,createdAt:now,details:{from:projectBuilderProfileId(latest),to:target.id,type:target.type,country:target.country!}}),updatedAt:now}
+          return {...current,projects:{...current?.projects,[projectId]:updated}}
+        })
+        return res.json({ok:true,project:projectPublic(updated!,true)})
       }
 
       if (req.method === 'POST' && (action.startsWith('verification-') || action.startsWith('admin-verification-'))) {

@@ -1,5 +1,6 @@
 import {RefreshButton} from '../components/SupportConversation'
 import BusinessVerificationReview from '../components/BusinessVerificationReview'
+import AdminProfileTypeChange from '../components/AdminProfileTypeChange'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
@@ -39,6 +40,7 @@ type ArcPilotPolicy = {
   reason?: string
 }
 type Project = {
+  accountType?: 'individual' | 'business'
   id: string
   name: string
   ownerEmail: string
@@ -286,6 +288,7 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
                   reason={suspensionReason}
                   setReason={setSuspensionReason}
                   onOperate={operate}
+                  onProfileChanged={loadProjects}
                 />
               : !error && <EmptyProjects />}
           {error && <Message tone="error">{error}</Message>}
@@ -296,7 +299,8 @@ export default function DeveloperOperationsPage({ workspaceId, mode = 'projects'
   )
 }
 
-function ProjectOperations({ project, busy, reason, setReason, onOperate, canManage, workspaceId }: {
+function ProjectOperations({ project, busy, reason, setReason, onOperate, canManage, workspaceId, onProfileChanged }: {
+  onProfileChanged:()=>Promise<void>
   workspaceId:string
   canManage:boolean
   project: Project
@@ -317,6 +321,7 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
 
     <div className="mt-7 grid gap-3 sm:grid-cols-2">
       <Detail label="Owner" value={project.ownerEmail || 'Email unavailable'} />
+      <Detail label="Profile type" value={project.accountType==='individual'?'Personal':'Business'} />
       <Detail label="Payment path" value={project.checkoutMode === 'agentic' ? 'Agentic x402' : 'Human checkout'} />
       <Detail label="Settlement" value={project.settlementMode === 'ugx' ? 'Uganda mobile money via Paycrest' : project.settlementMode === 'ngn' ? 'Naira via Paycrest' : 'Receive USDC'} />
       <Detail label="Credentials" value={`${activeKeys.length} active key${activeKeys.length === 1 ? '' : 's'}`} />
@@ -352,7 +357,8 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
       </div>
     </section>
 
-    {canManage && <BusinessVerificationReview projectId={project.id} workspaceId={workspaceId}/>}
+    {canManage && <AdminProfileTypeChange key={project.id} projectId={project.id} workspaceId={workspaceId} onChanged={onProfileChanged}/>}
+    {canManage && project.accountType!=='individual' && <BusinessVerificationReview key={project.id+project.updatedAt} projectId={project.id} workspaceId={workspaceId}/>}
     {canManage && <OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} />}
 
     <section className="mt-4">

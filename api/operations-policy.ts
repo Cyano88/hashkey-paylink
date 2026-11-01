@@ -87,6 +87,7 @@ export function authorizeOperations(identity: OperationsIdentity, req: Pick<Requ
   if (!workspaceSections(identity, workspaceId, policy).includes(section)) fail('This account cannot access this workspace section.')
   if (recordProjectId !== undefined && !projectIds.includes(recordProjectId)) fail('Record not found in this workspace.', 404)
   const action = typeof req.body?.action === 'string' ? req.body.action.toLowerCase() : ''
+  if(['admin-profile-options','admin-change-profile'].includes(action) && !isOperationsFounder(identity,policy) && !policy.grants.some(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspaceId&&g.roles?.includes('compliance')))fail('Only Compliance or an owner can change an app profile type.')
   if(action.startsWith('admin-verification-') && !isOperationsFounder(identity,policy) && !policy.grants.some(g=>g.email.toLowerCase()===identity.email.toLowerCase()&&g.workspaceId===workspaceId&&g.roles?.includes('compliance')))fail('Only Compliance or an owner can access verification documents and decisions.')
   const read = !req.method || req.method === 'GET' || (req.method === 'POST' && ['admin-list','list','read','admin-verification-read','admin-verification-download','staff-list','staff-presence','staff-knowledge-list'].includes(action))
   if (!read && !isOperationsFounder(identity,policy)) {
@@ -96,7 +97,7 @@ export function authorizeOperations(identity: OperationsIdentity, req: Pick<Requ
     const allowed=section==='cases' ? (['case-create','case-note','case-assign','case-resolve','case-escalate','case-reply','typing','case-attachment'].includes(action) && roles.some(r=>['support','administrator'].includes(r))) || (action==='case-review' && roles.some(r=>['compliance','legal'].includes(r)))
       : section==='support' ? roles.some(r=>['support','administrator'].includes(r)) && ['staff-typing','staff-attachment','staff-reply','staff-assign','staff-resolve','staff-profile','staff-knowledge-draft'].includes(action)
       : section==='transactions' ? roles.includes('engineering') && action==='reconcile'
-      : section==='projects' ? roles.includes('compliance') && ['admin-activate','admin-suspend','admin-reactivate','admin-verification-review'].includes(action) : false
+      : section==='projects' ? roles.includes('compliance') && ['admin-activate','admin-suspend','admin-reactivate','admin-verification-review','admin-profile-options','admin-change-profile'].includes(action) : false
     if(!legacy && !allowed) fail('Your role cannot perform this action.')
   }
   return { workspaceId, projectIds }
