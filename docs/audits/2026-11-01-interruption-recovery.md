@@ -1,0 +1,11 @@
+﻿# Interruption recovery - 1 November 2026
+
+Source thread: 01a18486-5b45-7ac1-9669-d06d8ef4a965. Last work was in C:\Users\USER\hashpaylink-rpc-cost-fix-20261101, branch fix/rpc-cost-controls-20261101. The main release checkout retains unrelated frontend/native changes; preserve them.
+
+The interrupted deployment 6139fe5756c73639f4de57c3ecf72276900198d5 is now verified live on Render (dep-dbjqr30ae00c73f1ggjg, finished 21:27:27 UTC). Public health and a separate production repository read both return zero unresolved executions. Public health also reports zero stale executions. This completes the pending deployment/queue check, not a new funded-payment test.
+
+Concrete next problem: api/pocket/xstocks-notifications-store.ts fetches every block with includeTransactions:true to detect native OKB transfers, up to 60 per run; server.ts schedules it every 30 seconds. A durable global cursor and block hash already exist. Indexed address-history replacement was being researched but was not implemented. Verify chain 196 support, pagination, delayed indexing, native/internal transfers, restart/reorg and deduplication before replacing discovery. Preserve canonical receipts and incoming-transfer/request fulfillment. No dollar savings have been established.
+
+Decisions preserved: standalone POS and non-Trade Hash PayStream are retired; historical records stay readable. Trade was explicitly deferred, including expired-key renewal. Admin roles, scoped support escalation and guided Hash Support remain. Pocket 1.0.5 (6) was reported active for internal testing; later web/backend cost fixes did not update the APK. Zivah (zivahedward23@gmail.com) is the chosen account for the deferred developer-portal personal app/KYC to Pocket test. Alchemy credits were not confirmed; the user reported access restored. Broader wallet-event coverage and provider usage instrumentation remain open. Existing Circle gift events do not establish wallet-event coverage.
+
+The previous queue went from 37 to 25 after bank-payout recovery, to 24 after unused XPay closure, and now zero after guarded unused hosted-checkout expiry. Retain fresh-payment checks and durable recovery; do not make payment completion depend on a refresh CTA.

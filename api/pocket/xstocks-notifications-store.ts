@@ -1,3 +1,4 @@
+import {readXLayerNativeCandidates,verifyXLayerNativeCandidates,NATIVE_REPLAY_BLOCKS,type NativeDiscoveryState} from './xlayer-native-discovery.js'
 import {enrichWebPaymentNotices} from './web-payment-notices.js'
 import {pocketStockNoticeActivity} from '../../src/pocket/lib/pocketStockNoticeActivity.js'
 import {listCirclePocketActions} from '../circle-pocket-action-journal.js'
@@ -9,15 +10,15 @@ import {pocketEarnCompletion,type PocketEarnMovement} from '../../src/pocket/lib
 import { randomUUID } from 'node:crypto'
 import { createPublicClient, http, parseAbiItem, decodeEventLog, formatUnits, type Address } from 'viem'
 import { xLayer } from 'viem/chains'
-import { mutateDurableJson, readDurableJson, hasRenderDurableStore } from '../render-durable-store.js'
+import { mutateDurableJson, readDurableJson, hasRenderDurableStore, withDurableSessionLock } from '../render-durable-store.js'
 import { stockAssets, stockUsdc, stockUsdt,stockUsde,stockUsdg, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { formatStockQuantity } from '../../src/pocket/lib/pocketStockDisplay.js'
 import { sendPocketPush, pocketPushConfigured, listPocketPushOwners } from './push-devices.js'
 export type StockNotice = {webPayment?:{merchantImageUrl?:string;merchantId:string;merchantName:string;receiptId:string}; pushSuppressed?:boolean; tradeChecked?:boolean; trade?:{serviceFeeAmount?:string;feeAmount?:string;action:'buy'|'sell'|'swap';input:{symbol:string;amount:string};output:{symbol:string;amount:string}}; id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; earn?: PocketEarnMovement; earnChecked?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
 export type StockRequest = { id: string; eventId: string; sender: string; payer: string; senderPocketId: string; payerPocketId: string; address: string; payerAddress: string; token: string; symbol: string; amount: string; units: string; decimals: number; status: 'pending' | 'accepted' | 'declined' | 'paid'; at: number; updatedAt: number; hash?: string }
-export type StockNoticeStore = { investments?: Record<string,Record<string,StockNotice>>; wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
+export type StockNoticeStore = { nativeDiscovery?: NativeDiscoveryState; nativeRetryAt?: number;  investments?: Record<string,Record<string,StockNotice>>; wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
 export const STOCK_NOTICE_KEY = 'hashpaylink:pocket-xstocks-notifications:v1'
-export const normalizeStockNotices = (s?: StockNoticeStore): StockNoticeStore => ({investments:s?.investments||{},wallets:s?.wallets||{},notices:s?.notices||{},requests:s?.requests||{},reads:s?.reads||{},cursor:s?.cursor,cursorHash:s?.cursorHash})
+export const normalizeStockNotices = (s?: StockNoticeStore): StockNoticeStore => ({nativeDiscovery:s?.nativeDiscovery,nativeRetryAt:s?.nativeRetryAt,investments:s?.investments||{},wallets:s?.wallets||{},notices:s?.notices||{},requests:s?.requests||{},reads:s?.reads||{},cursor:s?.cursor,cursorHash:s?.cursorHash})
 export const readStockNotices = async () => normalizeStockNotices(await readDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY))
 export const mutateStockNotices = (fn: (s: StockNoticeStore) => void) => mutateDurableJson<StockNoticeStore>(STOCK_NOTICE_KEY, current => {const s=normalizeStockNotices(current);archiveStockInvestments(s);fn(s);archiveStockInvestments(s);return s})
 export const stockNoticeClient = createPublicClient({chain:xLayer,transport:http(process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',{timeout:10000,retryCount:0})})
@@ -65,40 +66,65 @@ export function addStockRequest(s: StockNoticeStore,input: Omit<StockRequest,'id
   putStockNotice(s,{id:r.payer+':request:'+r.id,owner:r.payer,title:'Payment request',body:'ID:'+r.senderPocketId+' requested '+formatStockQuantity(r.amount)+' '+r.symbol+'.',at:now,requestId:r.id});return r
 }
 let running: Promise<unknown>|null=null
-export function drainStockNotifications(){if(!running)running=(async()=>{try{await runStockNotifications()}finally{await deliverStockNotices()}})().finally(()=>{running=null});return running}
-async function runStockNotifications(){
+export function drainStockNotifications(){if(!running)running=(async()=>{try{if(hasRenderDurableStore())await withDurableSessionLock('pocket:xlayer-notification-scan',async()=>runStockNotifications())}finally{await deliverStockNotices()}})().finally(()=>{running=null});return running}
+const stockScanDeps={available:hasRenderDurableStore,read:readStockNotices,mutate:mutateStockNotices,client:stockNoticeClient,candidates:readXLayerNativeCandidates,verifyNative:verifyXLayerNativeCandidates,enrich:enrichEarnTransfers,proofs:confirmedTradeProofs,now:Date.now}
+export async function runStockNotifications(overrides:Partial<typeof stockScanDeps>={}){
+ const {available:hasRenderDurableStore,read:readStockNotices,mutate:mutateStockNotices,client:stockNoticeClient,candidates:readXLayerNativeCandidates,verifyNative:verifyXLayerNativeCandidates,enrich:enrichEarnTransfers,proofs:confirmedTradeProofs,now}= {...stockScanDeps,...overrides}
  if(!hasRenderDurableStore())return
  const snapshot=await readStockNotices(),owners=Object.entries(snapshot.wallets)
  if(!owners.length)return
  if(await stockNoticeClient.getChainId()!==196)throw Error('Wrong stock notification chain')
- const head=await stockNoticeClient.getBlock();if(Date.now()-Number(head.timestamp)*1000>60000)throw Error('Stock notification node is behind')
+ const head=await stockNoticeClient.getBlock();if(now()-Number(head.timestamp)*1000>60000)throw Error('Stock notification node is behind')
  const safe=head.number>12n?head.number-12n:0n
  if(!snapshot.cursor){const block=await stockNoticeClient.getBlock({blockNumber:safe});await mutateStockNotices(s=>{if(!s.cursor){s.cursor=String(safe);s.cursorHash=block.hash}})}else{
   let cursor=BigInt(snapshot.cursor)
   const previous=await stockNoticeClient.getBlock({blockNumber:cursor})
-  if(previous.hash!==snapshot.cursorHash)cursor=cursor>24n?cursor-24n:0n
+  const reorg=previous.hash!==snapshot.cursorHash
+  if(reorg)cursor=cursor>24n?cursor-24n:0n
   const end=safe<cursor+60n?safe:cursor+60n
   if(end>cursor){
    const addresses=[...new Set(owners.map(([,w])=>w.address as Address))],event=parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
    const logs=(await Promise.all([stockNoticeClient.getLogs({event,args:{from:addresses},fromBlock:cursor+1n,toBlock:end}),stockNoticeClient.getLogs({event,args:{to:addresses},fromBlock:cursor+1n,toBlock:end})])).flat()
    const transfers: ConfirmedStockTransfer[]=[],blocks=new Map<bigint,Awaited<ReturnType<typeof stockNoticeClient.getBlock>>>()
-   // One bounded block scan is shared across all registered wallets, including native OKB transfers.
-   for(let n=cursor+1n;n<=end;n++){
-    const b=await stockNoticeClient.getBlock({blockNumber:n,includeTransactions:true});blocks.set(n,b as never)
-    for(const tx of b.transactions){if(!tx.to||tx.value===0n||!addresses.some(a=>a.toLowerCase()===tx.from.toLowerCase()||a.toLowerCase()===tx.to?.toLowerCase()))continue
-      const receipt=await stockNoticeClient.getTransactionReceipt({hash:tx.hash});if(receipt.status!=='success')continue
-      transfers.push({id:tx.hash+':native',hash:tx.hash,from:tx.from,to:tx.to,token:'native',symbol:'OKB',units:String(tx.value),decimals:18,at:Number(b.timestamp)*1000})
+   // The index is only a hash discovery source. Replay a bounded historical
+   // window for late indexing; full-block discovery remains the error fallback.
+   let nativeDiscovery=snapshot.nativeDiscovery,nativeRetryAt=snapshot.nativeRetryAt||0,indexed=false
+   const replayFrom=end>NATIVE_REPLAY_BLOCKS?end-NATIVE_REPLAY_BLOCKS:0n
+   if(process.env.POCKET_XLAYER_NATIVE_DISCOVERY!=='blocks' && now()>=nativeRetryAt){
+    try{
+     const candidates=await readXLayerNativeCandidates(addresses,replayFrom,end)
+     const result=await verifyXLayerNativeCandidates(candidates,addresses,replayFrom,end,reorg?undefined:nativeDiscovery,stockNoticeClient,now())
+     transfers.push(...result.transfers);nativeDiscovery=result.state;nativeRetryAt=0;indexed=true
+     console.info('[xlayer-native-discovery]',JSON.stringify({mode:'indexed',candidates:candidates.length,proofs:result.proofs,rangeBlocks:Number(end-replayFrom+1n),advanceBlocks:Number(end-cursor),lagBlocks:Number(safe-end)}))
+    }catch{
+     nativeRetryAt=now()+300000
+     console.warn('[xlayer-native-discovery] index unavailable or incomplete; using canonical block scan')
     }
    }
+   if(!indexed){
+    if(reorg)nativeDiscovery=undefined
+    for(let n=cursor+1n;n<=end;n++){
+     const b=await stockNoticeClient.getBlock({blockNumber:n,includeTransactions:true});blocks.set(n,b as never)
+     for(const tx of b.transactions){if(!tx.to||tx.value===0n||!addresses.some(a=>a.toLowerCase()===tx.from.toLowerCase()||a.toLowerCase()===tx.to?.toLowerCase()))continue
+       const receipt=await stockNoticeClient.getTransactionReceipt({hash:tx.hash})
+       if(receipt.transactionHash!==tx.hash||receipt.blockHash!==b.hash||receipt.blockNumber!==n||tx.blockHash!==b.hash)throw Error('Native transfer block changed')
+       if(receipt.status!=='success')continue
+       transfers.push({id:tx.hash+':native',hash:tx.hash,from:tx.from,to:tx.to,token:'native',symbol:'OKB',units:String(tx.value),decimals:18,at:Number(b.timestamp)*1000})
+     }
+    }
+    console.info('[xlayer-native-discovery]',JSON.stringify({mode:'blocks',blocks:Number(end-cursor),lagBlocks:Number(safe-end)}))
+   }
+   const readBlock=async(n:bigint)=>{let block=blocks.get(n);if(!block){block=await stockNoticeClient.getBlock({blockNumber:n});blocks.set(n,block)}return block}
+   await readBlock(end)
    for(const log of logs){if(!log.transactionHash||log.logIndex===null||!log.args.from||!log.args.to||log.args.value===undefined||!allowed.has(log.address.toLowerCase()))continue
-    const asset=await stockNoticeAsset(log.address),b=blocks.get(log.blockNumber!)!
+    const asset=await stockNoticeAsset(log.address),b=await readBlock(log.blockNumber!)
     if(log.blockHash!==b.hash)throw Error('Stock notification block changed')
     transfers.push({id:log.transactionHash+':'+log.logIndex,hash:log.transactionHash,from:log.args.from,to:log.args.to,token:log.address.toLowerCase(),symbol:asset.symbol,units:String(log.args.value),decimals:asset.decimals,at:Number(b.timestamp)*1000})
    }
    await enrichEarnTransfers(transfers)
    const tradeProofs=await confirmedTradeProofs(transfers)
    const endBlock=await stockNoticeClient.getBlock({blockNumber:end});if(endBlock.hash!==blocks.get(end)?.hash)throw Error('Stock notification chain changed')
-   await mutateStockNotices(s=>{if(s.cursor!==snapshot.cursor||s.cursorHash!==snapshot.cursorHash)return;transfers.forEach(t=>recordStockTransfer(s,t));recordStockTradeNotices(s,transfers,tradeProofs);archiveStockInvestments(s);s.cursor=String(end);s.cursorHash=endBlock.hash;const cutoff=Date.now()-45*86400000;Object.entries(s.notices).forEach(([id,n])=>{if(n.at<cutoff)delete s.notices[id]});Object.entries(s.requests).forEach(([id,r])=>{if(r.updatedAt<cutoff&&(r.status==='paid'||r.status==='declined'))delete s.requests[id]})})
+   await mutateStockNotices(s=>{if(s.cursor!==snapshot.cursor||s.cursorHash!==snapshot.cursorHash||JSON.stringify(s.wallets)!==JSON.stringify(snapshot.wallets))return;transfers.forEach(t=>recordStockTransfer(s,t));recordStockTradeNotices(s,transfers,tradeProofs);archiveStockInvestments(s);s.cursor=String(end);s.cursorHash=endBlock.hash;s.nativeDiscovery=nativeDiscovery;s.nativeRetryAt=nativeRetryAt;const cutoff=now()-45*86400000;Object.entries(s.notices).forEach(([id,n])=>{if(n.at<cutoff)delete s.notices[id]});Object.entries(s.requests).forEach(([id,r])=>{if(r.updatedAt<cutoff&&(r.status==='paid'||r.status==='declined'))delete s.requests[id]})})
   }
  }
 }

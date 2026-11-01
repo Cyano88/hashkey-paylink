@@ -19,3 +19,9 @@ Expiry is not used as evidence that a submitted payment failed. Authorizers alre
 Passed checkout-expiry evidence tests for X Layer and BNB, including paid/submitted/unknown/mismatch/missing-ledger/active-window rejection. Passed recovery-worker integration including the guarded expiry and existing provider-backed recovery. Changed API/dependency TypeScript passed. This is backend-only; no APK build or installation.
 
 Live deployment and post-recovery counts are recorded after rollout.
+
+## Next cost finding (not changed by this release)
+
+The X Layer notification scanner already has a durable global block cursor and block hash. It queries Transfer logs, but also fetches every block in a range (up to 60 per run) with full transactions to discover native OKB transfers. The server schedules this worker every 30 seconds. This is a verified request multiplier even with a small number of registered wallets; it is not a measured dollar attribution. Previous notes describing all incremental scan cursors as absent were too broad.
+
+Do not simply stop this worker or require a Refresh button: it discovers incoming transfers and fulfills accepted requests. Before replacing native block discovery, verify the indexer's support on chain 196, pagination completeness, delayed indexing, native/internal transfer treatment, restart/reorg recovery and duplicate handling. Canonical receipt checks remain necessary for candidates. Then add feature/provider/outcome instrumentation so usage can be compared with Alchemy compute units.
