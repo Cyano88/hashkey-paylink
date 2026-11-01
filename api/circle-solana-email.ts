@@ -7,6 +7,7 @@ import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } 
 import { readNativeUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
 import { paymentFeeBreakdown, EVM_PLATFORM_TREASURY } from '../src/lib/platformFees.js'
 import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
+import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
@@ -538,6 +539,12 @@ export default async function handler(req: Request, res: Response) {
           metadata: ['Base','Arbitrum','Arc','Ethereum','Polygon'].map(name=>({name:'Pocket '+name,refId:'pocket:canonical-evm:v1'})),
         }),
       })
+      // Circle can finish the challenge before wallet-list reads catch up.
+      // Persist only a session hash and timestamp, never the session token.
+      if (hasRenderDurableStore()) await writeDurableJson(
+        'pocket:initial-wallet-observation:v1:'+crypto.createHash('sha256').update(userToken).digest('hex'),
+        { initializedAt: Date.now() },
+      )
       return res.json({ ok: true, ...data })
     }
 
@@ -749,12 +756,26 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'createUnifiedEvmWallets') {
       const { userToken } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
+      const recent = hasRenderDurableStore() ? await readDurableJson<{initializedAt:number}>(
+        'pocket:initial-wallet-observation:v1:'+crypto.createHash('sha256').update(userToken).digest('hex'),
+      ) : undefined
+      if (recent && Date.now()-recent.initializedAt < 10*60_000) {
+        return res.status(409).json({ok:false,code:'WALLET_SETUP_RETRY',error:'Your wallets are still being prepared. Wait a moment, then retry Circle sign in.'})
+      }
+      // Released clients can request this fallback immediately after successful
+      // initialization. Recheck ownership-scoped inventory before any creation.
+      const inventory = await listCircleUserWallets(userToken, 'base')
+      if (inventory.length >= 50 || inventory.some(wallet =>
+        ['BASE', 'ARB', 'ARC', 'ETH', 'MATIC'].includes(wallet.blockchain)
+        && !isEvmReplacementCandidate(wallet))) {
+        return res.status(409).json({ ok: false, code: 'WALLET_SETUP_RETRY', error: 'Your existing wallets are being restored. Retry Circle sign in.' })
+      }
       const data = await circleJson('/v1/w3s/user/wallets', {
         method: 'POST',
         userToken,
         apiKey: circleApiKey({ blockchain: 'BASE' }),
         body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: (() => { const hash=crypto.createHash('sha256').update('pocket-unified-create-v1:'+userToken).digest('hex'); return hash.slice(0,8)+'-'+hash.slice(8,12)+'-4'+hash.slice(13,16)+'-a'+hash.slice(17,20)+'-'+hash.slice(20,32) })(),
           accountType: 'SCA',
           scaConfiguration: { scaCore: 'circle_6900_singleowner_v4' },
           blockchains: ['BASE', 'ARB', 'ARC', 'ETH', 'MATIC'],

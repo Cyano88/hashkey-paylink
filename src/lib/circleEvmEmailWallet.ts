@@ -683,30 +683,33 @@ async function ensureProductionEvmWallet(
     throw new Error('Your Pocket EVM wallets need address consolidation before this network can be opened.')
   }
 
-  try {
-    const init = await circleWalletApi<{ challengeId?: string }>({
-      action: 'initializeUnifiedEvmUser',
-      userToken,
-      accountType: 'SCA',
-      refId: POCKET_CANONICAL_EVM_REF_ID,
-    })
-    if (init.challengeId) await executeChallenge(sdk, init.challengeId)
-  } catch (err) {
-    if (!readableError(err).includes('already_initialized')) throw err
-  }
-
-  topology = await readTopology()
-  if (topology.status === 'empty') {
-    const created = await circleWalletApi<{ challengeId?: string }>({
-      action: 'createUnifiedEvmWallets',
-      userToken,
-      accountType: 'SCA',
-      refId: POCKET_CANONICAL_EVM_REF_ID,
-    })
-    if (!created.challengeId) throw new Error('Circle did not return a unified EVM wallet challenge.')
-    await executeChallenge(sdk, created.challengeId)
-    topology = await readTopology()
-  }
+  const { finishInitialCircleWalletSetup } = await import('./circleInitialWalletSetup')
+  topology = await finishInitialCircleWalletSetup({
+    read: readTopology,
+    empty: snapshot => snapshot.status === 'empty',
+    wait: () => new Promise(resolve => setTimeout(resolve, 1000)),
+    initialize: async () => {
+      try {
+        const init = await circleWalletApi<{ challengeId?: string }>({
+          action: 'initializeUnifiedEvmUser', userToken,
+          accountType: 'SCA', refId: POCKET_CANONICAL_EVM_REF_ID,
+        })
+        if (init.challengeId) await executeChallenge(sdk, init.challengeId)
+        return true
+      } catch (err) {
+        if (!readableError(err).includes('already_initialized')) throw err
+        return false
+      }
+    },
+    create: async () => {
+      const created = await circleWalletApi<{ challengeId?: string }>({
+        action: 'createUnifiedEvmWallets', userToken,
+        accountType: 'SCA', refId: POCKET_CANONICAL_EVM_REF_ID,
+      })
+      if (!created.challengeId) throw new Error('Circle did not return a unified EVM wallet challenge.')
+      await executeChallenge(sdk, created.challengeId)
+    },
+  })
 
   const wallet = topology.wallets[chain]
   if (topology.status !== 'unified' || !wallet || !topology.canonicalAddress) {
