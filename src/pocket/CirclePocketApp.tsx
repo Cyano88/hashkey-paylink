@@ -46,8 +46,6 @@ const PocketSendPage = lazy(() => import('./pages/PocketSendPage'))
 const PocketNotificationsPage = lazy(() => import('./pages/PocketNotificationsPage'))
 const PocketMoveBankPage = lazy(() => import('./pages/PocketMoveBankPage'))
 const PocketUnifiedXPayPage = lazy(() => import('./pages/PocketUnifiedXPayPage'))
-const PocketPosManagePage = lazy(() => import('./pages/PocketPosManagePage'))
-const PocketMovePosPage = lazy(() => import('./pages/PocketMovePosPage'))
 const PocketMoveUsdcPage = lazy(() => import('./pages/PocketMoveUsdcPage'))
 
 function PocketPageBoundary({ active, children }: { active: PocketNavTab; children: ReactNode }) {
@@ -306,7 +304,6 @@ export default function CirclePocketApp() {
   else if (route?.section === 'xstocks' && route.view !== 'account' && route.view !== 'verify-name') content = <PocketPageBoundary active={route.view === 'portfolio' ? 'profile' : route.view === 'xpay' ? 'xpay' : route.view === 'activity' ? 'activity' : 'home'}><PocketXStocksPage view={route.view} /></PocketPageBoundary>
   else if (route?.section === 'home' && (route.view === 'transfer' || route.view === 'receive')) content = <PocketPageBoundary active="home"><PocketTransferMenuPage kind={route.view === 'transfer' ? 'send' : 'receive'} /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'xpay') content = <PocketPageBoundary active="home"><PocketUnifiedXPayPage /></PocketPageBoundary>
-  else if (route?.section === 'home' && route.view === 'pos-manage') content = <PocketPageBoundary active="home"><PocketPosManagePage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'deposit') content = <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'scan') content = <PocketPageBoundary active='home'><PocketScanPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'send') content = <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>
@@ -321,7 +318,6 @@ export default function CirclePocketApp() {
   else if (route?.section === 'assistant') content = <PocketPageBoundary active="home"><PocketAssistantPage /></PocketPageBoundary>
   else if (route?.section === 'move' && route.view === 'usdc') content = <PocketPageBoundary active="home"><PocketMoveUsdcPage /></PocketPageBoundary>
   else if (route?.section === 'move' && route.view === 'bank') content = <PocketPageBoundary active="home"><PocketMoveBankPage /></PocketPageBoundary>
-  else if (route?.section === 'move' && route.view === 'pos') content = <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
 
   const securedContent = ready && authenticated && email && (stocks || canShowCachedHome || walletUnlockState === 'ready')
     ? <PocketPaymentSecurityGate email={email} getAccessToken={getAccessToken} onInitialStateResolved={() => setPaymentSecurityReady(true)}>{content}</PocketPaymentSecurityGate>

@@ -406,7 +406,7 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string; availab
   {
     id: 'circle-pocket',
     label: 'Pocket Support',
-    intro: 'I can help with Pocket balances, sending and receiving USDC, payment requests, bank payouts, Retail POS, bills, activity, receipts, and account support. What do you want to do?',
+    intro: 'I can help with Pocket balances, sending and receiving USDC, payment requests, bank payouts, XPay, bills, activity, receipts, and account support. What do you want to do?',
   },
   {
     id: 'daily',
@@ -1785,37 +1785,6 @@ export function TelegramHelperPanel({
     }
   }
 
-  async function createPosTerminalFromDraft(draft: PosTerminalDraft) {
-    const idempotencyKey = draft.idempotencyKey || window.crypto.randomUUID()
-    const res = await fetch('/api/ng-pos', {
-      method: 'POST',
-      headers: {
-        ...await helperProfileHeaders(true),
-        'Idempotency-Key': idempotencyKey,
-      },
-      body: JSON.stringify({
-        action: 'createMerchant',
-        display_name: draft.displayName,
-        payout_preference: draft.settlement,
-        supported_networks: [draft.network || 'base'],
-        circle_smart_wallet_address: draft.network === 'solana' ? '' : draft.wallet,
-        solana_wallet_address: draft.network === 'solana' ? draft.wallet : '',
-        use_saved_bank: draft.settlement === 'INSTANT_FIAT',
-      }),
-    })
-    const data = await res.json().catch(() => undefined) as {
-      ok?: boolean
-      error?: string
-      merchant?: { merchant_id?: string }
-    } | undefined
-    if (!res.ok || !data?.ok || !data.merchant?.merchant_id) {
-      throw new Error(data?.error || 'Could not create the POS terminal.')
-    }
-    return {
-      merchantId: data.merchant.merchant_id,
-      terminalUrl: `/pos/ng?merchant_id=${encodeURIComponent(data.merchant.merchant_id)}&manage=1`,
-    }
-  }
 
   async function handlePaylinkConversation(nextQuestion: string) {
     const posSettlementReply = posTerminalDraft ? extractPosSettlementChoice(nextQuestion) : ''
@@ -1831,7 +1800,7 @@ export function TelegramHelperPanel({
       setPendingPaymentRequestText('')
       finishHelperMessage(nextQuestion, {
         answer: isNewPaymentFlowIntent(nextQuestion) || /start over|restart|reset/i.test(nextQuestion)
-          ? 'Draft cleared. Which should I create next: a direct USDC PayLink, a Receive to Bank PayLink, or a POS contactless terminal?'
+          ? 'Draft cleared. Which should I create next: a direct USDC PayLink, a Receive to Bank PayLink, or a XPay checkout?'
           : 'Payment draft cancelled.',
       })
       return true
@@ -1849,113 +1818,10 @@ export function TelegramHelperPanel({
       : nextQuestion
 
     if ((posTerminalDraft && requestedLane !== 'usdc' && requestedLane !== 'bank') || requestedLane === 'pos') {
+      setPosTerminalDraft(null)
       setPaymentLanePromptPending(false)
       setPendingPaymentRequestText('')
-      setPaylinkDraft(null)
-      setBankPaylinkDraft(null)
-      const confirmingDraft = Boolean(posTerminalDraft?.awaitingConfirmation && isPaymentCreationConfirmIntent(nextQuestion))
-      let draft = buildPosTerminalDraft(paymentContextText, posTerminalDraft)
-      if (!draft.displayName) {
-        setPosTerminalDraft(draft)
-        finishHelperMessage(nextQuestion, { answer: 'POS selected. What should this terminal or store be called?' })
-        return true
-      }
-      if (!draft.settlement) {
-        setPosTerminalDraft(draft)
-        finishHelperMessage(nextQuestion, { answer: `How should ${draft.displayName} settle: keep USDC in a wallet, or receive Naira in your verified bank account?` })
-        return true
-      }
-      if (!helperAuthenticated) {
-        setPosTerminalDraft(draft)
-        finishHelperMessage(nextQuestion, {
-          answer: 'Sign in first so I can securely use your connected wallet or verified bank details.',
-          actionLink: { label: 'Open POS', url: '/?product=payment&tab=pos' },
-        })
-        return true
-      }
-      if (draft.settlement === 'INSTANT_FIAT') {
-        let savedBank
-        try {
-          savedBank = await savedBankReceiveProfile()
-        } catch (error) {
-          setPosTerminalDraft(draft)
-          finishHelperMessage(nextQuestion, { answer: error instanceof Error ? error.message : 'Could not check your saved bank account.' })
-          return true
-        }
-        if (!savedBank) {
-          setPosTerminalDraft(draft)
-          finishHelperMessage(nextQuestion, {
-            answer: 'No verified bank account is saved yet. Verify one first, then return to finish this terminal.',
-            actionLink: { label: 'Verify bank account', url: '/?product=payment&tab=bank' },
-          })
-          return true
-        }
-        draft = {
-          ...draft,
-          network: 'base',
-          wallet: '',
-          destinationLabel: `${savedBank.bank_name || 'Verified bank'}${savedBank.bank_last4 ? ` ending ${savedBank.bank_last4}` : ''}`,
-        }
-      } else {
-        if (!draft.network) {
-          setPosTerminalDraft(draft)
-          finishHelperMessage(nextQuestion, { answer: 'Which USDC network should this terminal accept: Base, Arbitrum, Arc, or Solana?' })
-          return true
-        }
-        const posNetwork = draft.network
-        if (!draft.wallet) {
-          const savedWallet = preferredWalletFor(posNetwork) || await linkedCircleReceiveWallet(posNetwork)
-          if (savedWallet && wantsSavedWallet(nextQuestion)) {
-            draft = { ...draft, wallet: savedWallet, offeredSavedWallet: true, destinationLabel: shortAddress(savedWallet) }
-          } else if (savedWallet && !draft.offeredSavedWallet && !wantsNewWallet(nextQuestion)) {
-            setPosTerminalDraft({ ...draft, offeredSavedWallet: true, destinationLabel: shortAddress(savedWallet) })
-            finishHelperMessage(nextQuestion, {
-              answer: `Use your connected ${requestNetworkLabels[posNetwork]} wallet ${shortAddress(savedWallet)}, or use another wallet?`,
-            })
-            return true
-          } else {
-            setPosTerminalDraft({ ...draft, offeredSavedWallet: true })
-            finishHelperMessage(nextQuestion, { answer: `Paste the ${requestNetworkLabels[posNetwork]} wallet that should receive this terminal's USDC.` })
-            return true
-          }
-        }
-        if (!walletMatchesNetwork(draft.wallet, posNetwork)) {
-          setPosTerminalDraft({ ...draft, wallet: '' })
-          finishHelperMessage(nextQuestion, { answer: `That wallet does not match ${requestNetworkLabels[posNetwork]}. Paste a compatible address or choose another network.` })
-          return true
-        }
-        draft = { ...draft, destinationLabel: shortAddress(draft.wallet) }
-      }
-
-      if (confirmingDraft) {
-        setThinkingState('paylink-build')
-        setAgentStatus('Creating POS terminal...')
-        try {
-          const terminal = await createPosTerminalFromDraft(draft)
-          setPosTerminalDraft(null)
-          finishHelperMessage(nextQuestion, {
-            answer: `${draft.displayName} is ready. It accepts ${requestNetworkLabels[draft.network || 'base']} USDC and settles to ${draft.destinationLabel}.`,
-            actionLink: { label: 'Open POS Terminal', url: terminal.terminalUrl },
-          })
-        } catch (error) {
-          setPosTerminalDraft(draft)
-          finishHelperMessage(nextQuestion, {
-            answer: error instanceof Error ? error.message : 'Could not create the POS terminal.',
-            actionLink: { label: 'Review POS setup', url: '/?product=payment&tab=pos' },
-          })
-        }
-        return true
-      }
-
-      const reviewDraft: PosTerminalDraft = {
-        ...draft,
-        awaitingConfirmation: true,
-        idempotencyKey: window.crypto.randomUUID(),
-      }
-      setPosTerminalDraft(reviewDraft)
-      finishHelperMessage(nextQuestion, {
-        answer: `Ready to create ${draft.displayName}: ${draft.settlement === 'INSTANT_FIAT' ? 'Naira bank settlement' : 'USDC wallet settlement'} on ${requestNetworkLabels[draft.network || 'base']}, to ${draft.destinationLabel}. This is a reusable contactless terminal; the amount is entered at checkout. Reply “confirm” to create it, or tell me what to change.`,
-      })
+      finishHelperMessage(nextQuestion, { answer: 'Set up your checkout and receiving options in XPay.', actionLink: { label: 'Open XPay', url: '/pocket/xpay' } })
       return true
     }
 
@@ -2061,7 +1927,7 @@ export function TelegramHelperPanel({
       setPaymentLanePromptPending(true)
       if (!paymentLanePromptPending) setPendingPaymentRequestText(nextQuestion)
       finishHelperMessage(nextQuestion, {
-        answer: 'Which payment flow should I create: a direct USDC PayLink, a Receive to Bank PayLink in Naira, or a POS contactless terminal?',
+        answer: 'Which payment flow should I create: a direct USDC PayLink, a Receive to Bank PayLink in Naira, or a XPay checkout?',
       })
       return true
     }

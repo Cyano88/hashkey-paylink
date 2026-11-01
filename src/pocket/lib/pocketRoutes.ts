@@ -117,8 +117,8 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   if (path === POCKET_ROUTES.notifications) return { section: 'notifications', view: 'inbox' }
   if (path === POCKET_ROUTES.usdc) return { section: 'move', view: 'usdc' }
   if (path === POCKET_ROUTES.bank) return { section: 'move', view: 'bank' }
-  if (path === POCKET_ROUTES.posManage) return { section: 'home', view: 'pos-manage' }
-  if (path === POCKET_ROUTES.pos) return { section: 'move', view: 'pos' }
+  if (path === POCKET_ROUTES.posManage) return { section: 'home', view: 'xpay' }
+  if (path === POCKET_ROUTES.pos) return { section: 'home', view: 'xpay' }
   if (path === POCKET_ROUTES.cards) return { section: 'cards', view: 'overview' }
   if (path === POCKET_ROUTES.bills) return { section: 'bills', view: 'overview' }
   if (path === POCKET_ROUTES.airtime) return { section: 'bills', view: 'airtime' }

@@ -1,7 +1,7 @@
 import {recoveryOptions,supportOptions,type SupportOption} from './pocketSupportActions'
 export const POCKET_SUPPORT_HANDOFF_TEXT = "I can't answer that reliably yet. I've passed your question to Pocket Support."
 export const pocketSupportFaqs = [
-  { question: 'What can I do with Pocket?', answer: 'Use Pocket to send and receive USDC, pay supported Nigerian bills, make bank transfers, create payment requests and use POS. XStocks has its own trading, receiving and sending flows.' },
+  { question: 'What can I do with Pocket?', answer: 'Use Pocket to send and receive USDC, pay supported Nigerian bills, make bank transfers, create payment requests and use XPay. XStocks has its own trading, receiving and sending flows.' },
   { question: 'How do I deposit USDC?', answer: 'Open Receive in Stablecoins, choose the network and copy the address shown there. Send supported USDC on that exact network. Always check the receiving address for the selected network.' },
   { question: 'Where can I see my transactions?', answer: 'On the Stablecoins Home screen, open View all beside Recent activity. XStocks has its own Activity tab. Select a transaction to see its recorded status and receipt.' },
   { question: 'Why is a transfer still processing?', answer: 'Processing means Pocket has not yet confirmed the required completion state. A transaction hash alone does not prove success. Open the transaction in Activity and report it there if you need us to check it. Avoid repeating a payment while its outcome is uncertain.' },

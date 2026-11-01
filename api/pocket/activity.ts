@@ -331,7 +331,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
     const row = billActivityRow(intent, refundPolicy)
     return row ? [row] : []
   })
-  const posPurchases=posPurchaseRecords.map(sanitizedActivityRow).map(row=>({...row,source:'purchase',direction:'out' as const,settlementType:'pos_payment',activityLabel:'POS payment',recipient:row.contextLabel||'Merchant',receiptId:paymentReceiptId(row.eventId,row.txHash),receiptUrl:'/receipt/'+paymentReceiptId(row.eventId,row.txHash)}))
+  const posPurchases=posPurchaseRecords.map(sanitizedActivityRow).map(row=>({...row,source:'purchase',direction:'out' as const,settlementType:'pos_payment',activityLabel:'XPay payment',recipient:row.contextLabel||'Merchant',receiptId:paymentReceiptId(row.eventId,row.txHash),receiptUrl:'/receipt/'+paymentReceiptId(row.eventId,row.txHash)}))
   const contextualTxHashes = new Set([...externalPayments,...posPurchases].map(row => row.chain + ":" + row.txHash.toLowerCase()))
   const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
     .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.chain + ":" + row.txHash.toLowerCase()))

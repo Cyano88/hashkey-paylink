@@ -14,7 +14,7 @@ type ReconciliationItem = { id: string; kind: string; result: 'reconciled' | 'un
 type Payload = { ok?: boolean; executions?: Execution[]; summary?: Summary; error?: string; reconciliation?: { processed: number; reconciled: number; unchanged: number; review: number; errors: number; results: ReconciliationItem[] } }
 
 const EMPTY: Summary = { unresolved: 0, processing: 0, needsReview: 0, stale: 0 }
-const LABELS: Record<string, string> = { bank_payout: 'Bank payout', bill_payment: 'Bill payment', pos_settlement: 'POS settlement', hosted_checkout: 'Checkout', wallet_transfer: 'Wallet transfer', service_funding: 'Service funding' }
+const LABELS: Record<string, string> = { bank_payout: 'Bank payout', bill_payment: 'Bill payment', pos_settlement: 'XPay settlement', xpay_settlement: 'XPay settlement', hosted_checkout: 'Checkout', wallet_transfer: 'Wallet transfer', service_funding: 'Service funding' }
 
 function elapsed(value: number) {
   if (value < 60_000) return 'Less than a minute'

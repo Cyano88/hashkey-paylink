@@ -18,7 +18,7 @@ type PocketTopSwitchProps = {
 const moveItems = [
   { key: 'usdc', label: 'USDC', icon: Coins },
   { key: 'bank', label: 'Bank', icon: Landmark },
-  { key: 'pos', label: 'POS', icon: Store },
+  { key: 'pos', label: 'XPay', icon: Store },
 ] as const
 
 const billItems = [
@@ -32,7 +32,7 @@ const activityItems = [
   { key: 'all', label: 'All', icon: History },
   { key: 'purchases', label: 'Purchases', icon: CreditCard },
   { key: 'bank', label: 'Bank receive', icon: Landmark },
-  { key: 'pos', label: 'POS', icon: Store },
+  { key: 'pos', label: 'XPay', icon: Store },
   { key: 'collections', label: 'Requests', icon: RequestMoney },
 ] as const
 

@@ -160,7 +160,7 @@ export default function usePocketPosPageController({
 
   const createMerchant = useCallback(async () => {
     if (!authenticated) {
-      setError('Sign in to create POS and save local currency receipts.')
+      setError('Sign in to set up XPay and save local currency receipts.')
       return
     }
     if (!canSubmit) return
@@ -168,7 +168,7 @@ export default function usePocketPosPageController({
     setError('')
     try {
       const accessToken = await getAccessToken()
-      if (!accessToken) throw new Error('Sign in again to create POS.')
+      if (!accessToken) throw new Error('Sign in again to set up XPay.')
       const idempotencyKey = setupKey || creationIdempotencyKey.current || window.crypto.randomUUID()
       creationIdempotencyKey.current = idempotencyKey
       const data = await createPocketPos({
@@ -194,7 +194,7 @@ export default function usePocketPosPageController({
       creationIdempotencyKey.current = ''
       onStepChange('ready')
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'POS setup failed')
+      setError(reason instanceof Error ? reason.message : 'XPay setup failed')
     } finally {
       setBusy(false)
     }
@@ -216,7 +216,7 @@ export default function usePocketPosPageController({
     actions: {
       selectCountry: selectedCountry => {
         if (!authenticated || !profileReady) {
-          setError('Sign in and save your payout profile before creating POS.')
+          setError('Sign in and save your payout profile before setting up XPay.')
           return
         }
         if (selectedCountry === country || (selectedCountry !== 'NG' && selectedCountry !== 'UG')) return

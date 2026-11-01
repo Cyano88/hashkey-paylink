@@ -271,7 +271,7 @@ const injectedEnrichment = __testAgentAskPaymentEnrichment.normalizePaymentEnric
 assert.equal(injectedEnrichment?.fields.missing_fields, undefined)
 assert.equal(injectedEnrichment?.fields.network, 'base')
 
-const posPageSource = await readFile(new URL('../src/pages/NigerianPos.tsx', import.meta.url), 'utf8')
+const posPageSource = await readFile(new URL('../archive/retired-pos/NigerianPos.tsx', import.meta.url), 'utf8')
 assert.match(posPageSource, /merchant\.payout_preference === 'INSTANT_FIAT' && !merchant\.bank_configured/)
 assert.doesNotMatch(posPageSource, /if \(!merchant\.bank_configured\) \{/)
 

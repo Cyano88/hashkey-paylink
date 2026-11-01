@@ -41,14 +41,14 @@ export function createPocketPosHandler(dependencies: PocketPosHandlerDependencie
       return fail(400, 'VALIDATION_FAILED', 'A valid Idempotency-Key header is required.', false, 'idempotencyKey')
     }
     if (!isPocketPosCreateRequest(req.body)) {
-      return fail(400, 'VALIDATION_FAILED', 'Enter a valid POS terminal request.', false, 'pos')
+      return fail(400, 'VALIDATION_FAILED', 'Enter a valid XPay receiving account request.', false, 'pos')
     }
 
     try {
       await dependencies.authorizeBankAccount?.(req, req.body)
       const result = await dependencies.createMerchant(req, req.body)
       if (!isPocketPosMerchant(result.merchant)) {
-        throw Object.assign(new Error('POS provider returned an invalid merchant.'), { status: 502 })
+        throw Object.assign(new Error('Receiving account provider returned an invalid merchant.'), { status: 502 })
       }
       const data: PocketPosCreateData = {
         merchant: result.merchant,
@@ -66,9 +66,10 @@ export function createPocketPosHandler(dependencies: PocketPosHandlerDependencie
       if (normalized.status === 400) return fail(400, 'VALIDATION_FAILED', normalized.message, false)
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)
       if (normalized.status === 403) return fail(403, 'FORBIDDEN', normalized.message, false)
+      if (normalized.status === 409) return fail(409, 'VALIDATION_FAILED', normalized.message, false)
       if (normalized.status === 429) return fail(429, 'RATE_LIMITED', normalized.message, true)
       if ((normalized.status ?? 0) >= 500) return fail(503, 'PROVIDER_UNAVAILABLE', normalized.message, true)
-      return fail(500, 'ACTION_FAILED', normalized.message || 'POS setup failed.', true)
+      return fail(500, 'ACTION_FAILED', normalized.message || 'XPay setup failed.', true)
     }
   }
 }

@@ -441,7 +441,7 @@ function getHelperResponse(question: string, payerName: string, _chain: string, 
   if (newName) return 'Got it, ' + newName + '. I will remember your name across Pocket Support.'
   if (isGreetingQuestion(question)) {
     const knownName = nameFromMemory(memorySummary, payerName)
-    return 'Hey' + (knownName ? ' ' + knownName : '') + '. I can help across Pocket: balances, sending and receiving USDC, requests, bank payouts, Retail POS, bills, activity, and receipts.'
+    return 'Hey' + (knownName ? ' ' + knownName : '') + '. I can help across Pocket: balances, sending and receiving USDC, requests, bank payouts, XPay, bills, activity, and receipts.'
   }
   if (circlePocketRoute && !circlePocketRoute.supported) return circlePocketRoute.answer
   if (zeroScoutAnswer) return zeroScoutAnswer

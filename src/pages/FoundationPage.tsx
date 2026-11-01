@@ -1488,7 +1488,7 @@ export default function FoundationPage() {
             <div className="border-b border-slate-100 py-3">
               <p className="text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Built for</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {['AI and API services', 'Marketplaces', 'Commerce and POS', 'Creator apps', 'SaaS and invoicing', 'Events and ticketing'].map(category => (
+                {['AI and API services', 'Marketplaces', 'Commerce and checkout', 'Creator apps', 'SaaS and invoicing', 'Events and ticketing'].map(category => (
                   <span key={category} className="rounded-full bg-blue-950 px-2.5 py-1 text-[10px] font-semibold text-white" style={{ backgroundColor: '#172554', color: '#ffffff' }}>{category}</span>
                 ))}
               </div>

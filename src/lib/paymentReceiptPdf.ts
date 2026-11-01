@@ -250,7 +250,7 @@ function receiptType(receipt: PaylinkReceipt) {
   if (receipt.brandKind === 'pocket' || receipt.brandName === 'Pocket') return receipt.title || (receipt.type === 'money_in' ? 'Received' : receipt.type === 'money_out' ? 'Sent' : 'Payment')
   if (receipt.source === 'bank-send' || settlement === 'paycrest_onramp') return 'USDC Settlement'
   if (receipt.source === 'bank-receive' || settlement === 'instant_fiat') return 'Bank Transfer'
-  if (receipt.source === 'ngpos') return 'POS Funding'
+  if (receipt.source === 'ngpos') return 'XPay payment'
   if (receipt.source === 'polymarket-funding' || settlement === 'polymarket_bridge') return 'External Funding'
   if (receipt.source === 'agentic-checkout' || receipt.source === 'x402' || settlement.includes('x402')) return 'Agent Payment'
   if (receipt.source === 'streampay') return settlement === 'checkpoint-escrow' ? 'Checkpoint Release' : 'Creator Payment'

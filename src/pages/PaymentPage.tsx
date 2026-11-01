@@ -786,7 +786,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         const response = await fetch(`/api/ng-pos?merchant_id=${encodeURIComponent(ngPosMerchantId)}`)
         const value = await response.json().catch(() => ({})) as { ok?: boolean; merchant?: { fx_rate_ngn_per_usdc?: string; fiat_currency?: string } }
         const rate = Number(value.merchant?.fx_rate_ngn_per_usdc)
-        if (!response.ok || !value.ok || !Number.isFinite(rate) || rate <= 0) throw new Error('POS quote is not ready.')
+        if (!response.ok || !value.ok || !Number.isFinite(rate) || rate <= 0) throw new Error('XPay quote is not ready.')
         if ((value.merchant?.fiat_currency || 'NGN') !== fxCurrency) throw new Error('Checkout currency does not match this terminal.')
         setFxRate(rate)
         setFxStale(false)
@@ -3643,7 +3643,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       xpayCheckoutId: ngPosUnifiedXPayId || undefined,
       txHash,
       chain,
-      payer: payer || 'POS payer',
+      payer: payer || 'XPay payer',
       memo: payerName,
       amount: actualAmt,
       source: isBankReceivePayment ? 'bank-receive' : 'ngpos',
@@ -4622,7 +4622,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   )}
                 </div>
               ) : (
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isNgPosPaycrestOfframp ? 'POS payment' : fullScreenHumanCheckout ? 'Amount' : 'Enter Amount'}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isNgPosPaycrestOfframp ? 'XPay payment' : fullScreenHumanCheckout ? 'Amount' : 'Enter Amount'}</p>
               )}
 
               {/* Input centered exactly under label; asset label floats right via absolute */}

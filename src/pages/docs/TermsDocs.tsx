@@ -17,7 +17,7 @@ export default function TermsDocs() {
 
       <Section title="1. Agreement and scope">
         <p>
-          These Terms apply when you access or use Hash PayLink websites, documentation, APIs, payment links, hosted or agentic checkouts, dashboards, merchant and POS tools, support tools, and the Pocket mobile or web application (together, the Services). By using a Service, you agree to these Terms and the Privacy Policy.
+          These Terms apply when you access or use Hash PayLink websites, documentation, APIs, payment links, hosted or agentic checkouts, dashboards, merchant and XPay tools, support tools, and the Pocket mobile or web application (together, the Services). By using a Service, you agree to these Terms and the Privacy Policy.
         </p>
         <p>
           You must be at least 18 years old, have legal capacity to enter this agreement, and use the Services only where permitted by the laws and third-party rules that apply to you. If you use the Services for an organisation, you confirm that you are authorised to bind it.
@@ -81,9 +81,9 @@ export default function TermsDocs() {
         </p>
       </Section>
 
-      <Section title="8. Payment requests, links, POS, and checkouts">
+      <Section title="8. Payment requests, links, XPay, and checkouts">
         <p>
-          A payment request, link, QR code, POS intent, or checkout does not guarantee payment. Creators and merchants are responsible for lawful descriptions, correct receiving details, fulfilment, refunds owed to customers, taxes, and disputes concerning their goods or services.
+          A payment request, link, QR code, XPay payment request, or checkout does not guarantee payment. Creators and merchants are responsible for lawful descriptions, correct receiving details, fulfilment, refunds owed to customers, taxes, and disputes concerning their goods or services.
         </p>
         <p>
           Request and activity records can change from awaiting to accepted, paid, expired, reversed, or refunded as the same payment progresses. Do not treat an awaiting or accepted request as paid.

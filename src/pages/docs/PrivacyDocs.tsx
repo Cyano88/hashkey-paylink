@@ -17,7 +17,7 @@ export default function PrivacyDocs() {
 
       <Section title="1. Scope and controller">
         <p>
-          This Policy applies to Hash PayLink websites, documentation, APIs, payment links, hosted or agentic checkouts, dashboards, merchant and POS tools, support tools, and the Pocket mobile or web application (together, the Services).
+          This Policy applies to Hash PayLink websites, documentation, APIs, payment links, hosted or agentic checkouts, dashboards, merchant and XPay tools, support tools, and the Pocket mobile or web application (together, the Services).
         </p>
         <p>
           Hash PayLink is the controller for personal data where it decides why and how that data is processed. Independent wallet, payment, hosting, bank, biller, blockchain, and support providers may act as processors or as separate controllers under their own policies.

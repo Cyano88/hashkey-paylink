@@ -29,7 +29,7 @@ export type CirclePocketRoute = {
 
 const ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRoute, 'source' | 'capability' | 'supported' | 'confidence'>> = {
   'wallet-overview': {
-    answer: 'Pocket keeps your balances, USDC transfers, requests, bank payouts, POS, bills, and activity in one place.',
+    answer: 'Pocket keeps your balances, USDC transfers, requests, bank payouts, XPay, bills, and activity in one place.',
     action: { label: 'Open Pocket', url: '/home' },
   },
   'send-usdc': {
@@ -57,15 +57,15 @@ const ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRoute, 'source' | 
     action: { label: 'Bank payout', url: '/move/bank' },
   },
   'retail-pos': {
-    answer: 'Retail POS creates a reusable contactless terminal QR after you confirm the merchant name and settlement destination.',
-    action: { label: 'Open Retail POS', url: '/move/pos' },
+    answer: 'XPay creates a reusable contactless terminal QR after you confirm the merchant name and settlement destination.',
+    action: { label: 'Open XPay', url: '/xpay' },
   },
   bills: {
     answer: 'Pocket supports airtime, data, TV, and electricity. Choose the bill, review its amount and live USDC quote, then confirm the payment.',
     action: { label: 'Open Bills', url: '/bills/airtime' },
   },
   activity: {
-    answer: 'Activity keeps your latest sends, receipts, requests, bill payments, bank payouts, POS collections, reversals, and refunds together.',
+    answer: 'Activity keeps your latest sends, receipts, requests, bill payments, bank payouts, XPay collections, reversals, and refunds together.',
     action: { label: 'Open Activity', url: '/activity' },
   },
   receipts: {
@@ -193,6 +193,6 @@ export function routeCirclePocketQuestion(question: string, helperMode: string, 
   return {
     ...result('wallet-overview', 'fallback'),
     supported: false,
-    answer: 'I can help with Pocket balances, deposits, sends, swaps, requests, bank payouts, POS, bills, activity, receipts, rates, limits, notifications, payment security, and human support. Tell me the Pocket task you want to complete.',
+    answer: 'I can help with Pocket balances, deposits, sends, swaps, requests, bank payouts, XPay, bills, activity, receipts, rates, limits, notifications, payment security, and human support. Tell me the Pocket task you want to complete.',
   }
 }

@@ -6,7 +6,7 @@ import {checkCheckoutBuyerAllowance} from './checkout-buyer-allowance.js'
 import {reservePocketBankAllowance} from './pocket/transfer-allowance.js'
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
 import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
-import {legacyXPayTerminal,assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
+import {legacyXPayTerminal,assertUnifiedXPayDestination,ownsTerminalSetupKey} from './pocket/unified-xpay-store.js'
 import type {XPayHistoryEntry} from '../src/pocket/lib/pocketUnifiedXPay.js'
 import { normalizePayoutAccount, pocketFiatCurrency, validPayoutCurrency } from '../src/pocket/lib/pocketFiatCorridors.js'
 import { pocketBankStatus } from '../src/pocket/lib/pocketBankStatus.js'
@@ -298,14 +298,14 @@ async function writeStore(store: Store) {
   await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
 
   if (IS_RENDER && !HAS_DURABLE_STORE) {
-    throw new Error('Durable POS storage is not configured. Add DATABASE_URL on Render before creating POS QR links.')
+    throw new Error('Durable XPay storage is not configured. Add DATABASE_URL on Render before creating XPay QR links.')
   }
 
   try {
     await writeDurableJson(NG_POS_STORE_KEY, normalized)
   } catch (error) {
     if (IS_RENDER) {
-      throw new Error('Durable POS storage failed. Check DATABASE_URL on Render before creating POS QR links.')
+      throw new Error('Durable XPay storage failed. Check DATABASE_URL on Render before creating XPay QR links.')
     }
     console.warn('[ng-pos] durable save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
   }
@@ -670,7 +670,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
             ? 'Direct bank payout'
           : isBankReceiveOrder
             ? 'Bank receive payment'
-            : 'Retail POS payment',
+            : 'XPay payment',
         amount: order.amount_usdc,
         assetSymbol: baseStablecoin(order.source_token),
         // Provider status refreshes must not move an older payment to the top.
@@ -685,7 +685,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
           ? `${order.destination_network || link?.destination_network || 'base'} USDC ${shortAddress(order.destination_address || link?.destination_address || '')}`.trim()
           : order.bank_name
             ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
-            : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
+            : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'XPay',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
         fiatCurrency: order.fiat_currency || 'NGN',
@@ -700,7 +700,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
           ? `${order.destination_network || link?.destination_network || 'base'} USDC wallet`
           : order.bank_name
             ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
-            : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
+            : isBankReceiveOrder ? 'Bank receive' : 'XPay',
         bankName: isBankSendOrder ? order.provider_institution : order.bank_name,
         bankLast4: isBankSendOrder ? (order.provider_account_identifier || '').slice(-4) : order.bank_last4,
         accountName: order.bank_account_name,
@@ -788,6 +788,7 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
     const replay = existingMerchant.creation_response ?? { ok: true, merchant: await publicMerchant(existingMerchant) }
     return { ...replay, replayed: true }
   }
+  if(preference!=='INSTANT_FIAT'||!await ownsTerminalSetupKey(ownerId,idempotencyKey,'bank'))throw ngPosRequestError(409,'Set up receiving accounts inside XPay.')
   let ownerEmail = cleanText(body.owner_email, '').toLowerCase()
   if (session.email && ownerEmail && session.email !== ownerEmail) {
     throw ngPosRequestError(403, 'Signed-in email does not match this payout profile.')
@@ -832,7 +833,7 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
   const bankCode = rawBankCode ? await resolvePaycrestInstitutionCode({ bankCode: rawBankCode, bankName, currency }) : ''
   const hasBank = Boolean(bankCode && Boolean(normalizePayoutAccount(accountNumber, currency)) && accountName)
   if (preference === 'INSTANT_FIAT' && !hasBank) {
-    throw ngPosRequestError(400, 'Verify a bank account before creating a bank-settled POS terminal.')
+    throw ngPosRequestError(400, 'Verify a bank account before creating a bank-settled XPay terminal.')
   }
   const now = new Date().toISOString()
   const merchant: MerchantProfile = {
@@ -1383,8 +1384,8 @@ export default async function handler(req: Request, res: Response) {
           return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
         }
       }
-      if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
-      if (!existing && new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
+      if (!intent) return res.status(404).json({ ok: false, error: 'XPay settlement intent expired. Start this payment again.' })
+      if (!existing && new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'XPay settlement intent expired. Start this payment again.' })
       if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
       const bank = decryptBankDetails(merchant.encrypted_bank_details)
       const bankCode = await resolvePaycrestInstitutionCode({ bankCode: bank.bank_code, bankName: merchant.bank_name, currency: pocketFiatCurrency(merchant.country) })
@@ -1457,7 +1458,7 @@ export default async function handler(req: Request, res: Response) {
       const txHash = cleanText(body.tx_hash, '')
       if (!id || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) return res.status(400).json({ ok: false, error: 'Valid order and tx hash are required.' })
       const existing = await getPaycrestPosOrder(id)
-      if (!existing) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
+      if (!existing) return res.status(404).json({ ok: false, error: 'Paycrest XPay order not found.' })
       try {
         await verifyEvmUsdcTransfer({
           chain: 'base',
@@ -1480,7 +1481,7 @@ export default async function handler(req: Request, res: Response) {
         payerEmail: cleanText(body.payer_email, ''),
         payerWallet: cleanText(body.payer_wallet, ''),
       })
-      if (!order) return res.status(404).json({ ok:false, error:'Paycrest POS order not found.' })
+      if (!order) return res.status(404).json({ ok:false, error:'Paycrest XPay order not found.' })
       // Exact on-chain handoff is already verified and durable. Receipt repair
       // must not hold the bank confirmation sheet open behind another RPC scan.
       if (order.source === 'bank-withdraw') schedulePaycrestOrderReconciliation(id)
@@ -1499,7 +1500,7 @@ export default async function handler(req: Request, res: Response) {
       const id = cleanText(body.intent_id || body.order_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
       if (!id) return res.status(400).json({ ok: false, error: 'Missing order id.' })
       let order = body.refresh ? await refreshPaycrestOrderStatus(id) : await getPaycrestPosOrder(id)
-      if (!order) return res.status(404).json({ ok: false, error: 'Paycrest POS order not found.' })
+      if (!order) return res.status(404).json({ ok: false, error: 'Paycrest XPay order not found.' })
       let receipt: unknown
       if (body.refresh && order.source === 'bank-send') {
         receipt = await registerPaycrestBankSendReceipt(order).catch(() => null)
@@ -1520,7 +1521,7 @@ export default async function handler(req: Request, res: Response) {
   } catch (err) {
     const error = err as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number }
     const providerUnavailable = isPaycrestAmountUnavailable(error)
-    const message = providerUnavailable ? 'Bank payout is unavailable for this amount. Try a different amount. Your money has not moved.' : error.message || 'Nigerian POS request failed'
+    const message = providerUnavailable ? 'Bank payout is unavailable for this amount. Try a different amount. Your money has not moved.' : error.message || 'XPay request failed'
     return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('CHECKOUT_')?{code:error.code}:{}), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
   }
 }
@@ -1550,7 +1551,7 @@ export async function listPocketBankRecipients(ownerId: string) {
   return [...recipients.values()].sort((a,b) => b.lastUsedAt - a.lastUsedAt).slice(0,500)
 }
 
-/** Owned, active POS destinations only; never return bank details or arbitrary redirects. */
+/** Owned, active XPay destinations only; never return bank details or arbitrary redirects. */
 export async function listPocketXPayPosDestinations(owner:string) {
  const [store,retired]=await Promise.all([readStore(),readPosRetirements()])
  return Object.values(store.merchants).filter(m=>m.owner_id===owner&&m.source==='pos'&&!retired[m.merchant_id]&&m.settlement_enabled&&m.kyc_status!=='RESTRICTED').flatMap(m=>{

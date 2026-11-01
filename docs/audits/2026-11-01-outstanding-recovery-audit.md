@@ -12,8 +12,8 @@
 
 37 unresolved executions:
 - 12 bank payouts: provider records stored settled. Each stored provider hash had a successful Base receipt but zero Transfer logs to the recorded deposit recipient. All 12 original execution hashes differed and passed canonical funding verification. This supports reference repair, not fabricated payment evidence.
-- 22 X Layer and 2 BNB prepared checkouts: raw records exist, are expired and contain no stored payment. Current signed readers reject them. The configured signing secret is present; both current and unbranded historical tuple checks fail, so this is not just an omitted logo field. Preserve raw records and investigate signature/version history; do not re-sign, delete, mark paid or assume expiry proves no funds moved.
-- 1 prepared POS settlement: referenced provider record is unavailable. Preserve and surface for review.
+- 22 X Layer and 2 BNB prepared checkouts: raw records exist, are expired and contain no stored payment. Standalone SSH readers rejected them, but live HTTP readers accepted one sample from each rail and returned the expected expired response. The diagnostic environment differs from server startup; signature corruption is not established. Preserve records and investigate rail-specific payment evidence; do not re-sign, delete or assume expiry proves no funds moved.
+- 1 legacy pos_settlement record: traced to an expired XPay quote, not a separate supported POS product. No provider order or transaction reference. Ledger contains only prepared/review events. See the XPay retirement audit for guarded closure.
 
 ## Acceptance
 

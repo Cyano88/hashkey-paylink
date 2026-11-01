@@ -43,7 +43,7 @@ export async function requireProductionKyc(userId: string) {
   try { return await requireV3ProductionKyc(userId) } catch (error) { if ((error as {status?:number}).status !== 403) throw error }
   const record = await readDurableJson<RecordState>(key(userId, 'production'))
   const job = completedPair(record?.jobs || [], 'production')
-  if (!job?.legalName) throw fail('Complete identity verification before setting up your POS.', 403)
+  if (!job?.legalName) throw fail('Complete identity verification before setting up your XPay.', 403)
   return job.legalName
 }
 

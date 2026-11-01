@@ -329,7 +329,7 @@ function archiveRecordFor(entry: PaymentEntry, payerWallet: string): PaymentEntr
     txHash: entry.txHash,
     chain: entry.chain,
     payer: payerWallet || entry.payer,
-    memo: entry.source === 'bank-send' ? 'Bank send funding' : entry.source === 'bank-receive' ? 'Bank receive payment' : 'Retail POS payment',
+    memo: entry.source === 'bank-send' ? 'Bank send funding' : entry.source === 'bank-receive' ? 'Bank receive payment' : 'XPay payment',
     amount: entry.amount,
     requestedAmount: entry.requestedAmount,
     ts: entry.ts,

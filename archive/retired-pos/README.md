@@ -1,0 +1,1 @@
+Standalone POS setup and management screens retired on 2026-11-01. Source is retained for reference only and is not imported by the application. Old Pocket POS routes resolve to unified XPay. Shared bank receiving, payment links, receipts and legacy storage identifiers remain compatible with XPay. Do not mount these archived screens.

@@ -55,7 +55,7 @@ export function PocketPosShell({
         <div className="relative flex min-h-8 items-center">
           {backButton}
           <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
-            <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Retail POS</p>
+            <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">XPay</p>
           </div>
         </div>
       )}
@@ -204,7 +204,7 @@ export function PocketPosReadyPanel({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">POS QR ready</h2>
+        <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">XPay QR ready</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">Payers scan once and enter their amount.</p>
       </div>
 
@@ -247,13 +247,13 @@ export function PocketPosSignInCard() {
     <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-[#262626] dark:bg-[#121212]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
       <PrivyConnectButton className="pocket-cta-primary group relative flex w-full items-center justify-center px-16 py-1.5 text-center transition-all">
         <Mail className="absolute left-5 h-4 w-4" />
-        <span>Sign in to POS</span>
+        <span>Sign in to XPay</span>
         <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
           <ArrowRight className="h-4 w-4" />
         </span>
       </PrivyConnectButton>
       <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-        Sign in to manage your POS and payments.
+        Sign in to manage your XPay and payments.
       </p>
     </div>
   )

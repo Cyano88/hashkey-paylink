@@ -150,23 +150,23 @@ type ContextFilter = 'all' | string
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type LocalHistoryFilter = 'all' | 'pos' | 'bank' | 'send' | 'bills'
 
-const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
+const XPAY_NETWORK_LABELS: Record<PosNetwork, string> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
   arc: 'Arc Mainnet',
   solana: 'Solana',
 }
-const POS_RECEIPT_PAGE_SIZE = 20
+const XPAY_RECEIPT_PAGE_SIZE = 20
 const RECEIPT_FILTERS: Array<{ key: ReceiptFilter; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'paylink', label: 'PayLink' },
-  { key: 'pos', label: 'POS' },
+  { key: 'pos', label: 'XPay' },
   { key: 'streampay', label: 'Hash PayLink' },
   { key: 'direct', label: 'Direct' },
 ]
 const LOCAL_HISTORY_TABS: Array<{ key: LocalHistoryFilter; label: string; description: string }> = [
   { key: 'all', label: 'All', description: 'Local currency receipts' },
-  { key: 'pos', label: 'POS', description: 'In-store QR payments' },
+  { key: 'pos', label: 'XPay', description: 'In-store QR payments' },
   { key: 'bank', label: 'Bank receive', description: 'Payment links to bank' },
   { key: 'send', label: 'Send from bank', description: 'Bank-funded USDC' },
   { key: 'bills', label: 'Bills', description: 'Bill payment receipts' },
@@ -281,7 +281,7 @@ export default function Dashboard() {
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
   const [posMerchantName, setPosMerchantName] = useState('')
   const [posReceiptBusy, setPosReceiptBusy] = useState(false)
-  const [visibleReceiptCount, setVisibleReceiptCount] = useState(POS_RECEIPT_PAGE_SIZE)
+  const [visibleReceiptCount, setVisibleReceiptCount] = useState(XPAY_RECEIPT_PAGE_SIZE)
   const [localProfile, setLocalProfile] = useState<LocalCurrencyProfile | null>(null)
   const lastReceiptCount = useRef<number | null>(null)
 
@@ -305,7 +305,7 @@ export default function Dashboard() {
         : solanaValid
           ? ['solana']
           : []
-  const receiptNetworkLabel = receiptNetworks.map(network => POS_NETWORK_LABELS[network]).join(' - ')
+  const receiptNetworkLabel = receiptNetworks.map(network => XPAY_NETWORK_LABELS[network]).join(' - ')
   const balanceChains: UnifiedBalanceChainKey[] = (() => {
     const isPortfolioBalanceView = isMultiChain || Boolean(eventId)
     if (isPortfolioBalanceView) {
@@ -574,7 +574,7 @@ export default function Dashboard() {
   function localHistoryLabel(row?: PaymentRow | null) {
     if (!row) return 'Local receipt'
     const kind = localHistoryKind(row)
-    return kind === 'bills' ? 'Bill payment' : kind === 'send' ? 'Send from Bank' : kind === 'bank' ? 'Bank receive' : 'POS'
+    return kind === 'bills' ? 'Bill payment' : kind === 'send' ? 'Send from Bank' : kind === 'bank' ? 'Bank receive' : 'XPay'
   }
   const totalReceived = payments.reduce((s, p) => s + receivedUsdc(p), 0)
   const totalNgnReceived = payments.reduce((s, p) => s + receivedNgn(p), 0)
@@ -624,7 +624,7 @@ export default function Dashboard() {
   const hiddenReceiptCount = Math.max(0, selectedPayments.length - visibleSelectedPayments.length)
 
   useEffect(() => {
-    setVisibleReceiptCount(POS_RECEIPT_PAGE_SIZE)
+    setVisibleReceiptCount(XPAY_RECEIPT_PAGE_SIZE)
   }, [dateFilter, customDate, isNgPosDashboard, localHistoryFilter])
 
   const todayStart = dayStart(new Date())
@@ -716,7 +716,7 @@ export default function Dashboard() {
     if (row.source === 'ngpos') {
       return {
         key: 'pos' as const,
-        label: 'POS receipt',
+        label: 'XPay receipt',
         className: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300',
       }
     }
@@ -967,7 +967,7 @@ export default function Dashboard() {
               className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
             >
               <Link2 className="h-3.5 w-3.5" />
-              Open POS QR
+              Open XPay QR
             </Link>
           ) : telegramUrl ? (
             <a
@@ -1000,8 +1000,8 @@ export default function Dashboard() {
                 {!privyReady
                   ? 'Checking your saved Hash PayLink profile.'
                   : privyAuthenticated
-                    ? 'Your bank payouts, bank-funded USDC, POS payments, and bill receipts appear here as they settle.'
-                    : 'Use the same email you used for bank receive, send from bank, POS, or bills.'}
+                    ? 'Your bank payouts, bank-funded USDC, XPay payments, and bill receipts appear here as they settle.'
+                    : 'Use the same email you used for bank receive, send from bank, XPay, or bills.'}
               </p>
             </div>
             {privyReady && !privyAuthenticated && (
@@ -1277,7 +1277,7 @@ export default function Dashboard() {
               {isNgPosDashboard ? 'No local currency payments yet' : 'No payments received yet'}
             </p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              {isNgPosDashboard ? 'Bank receive, send-from-bank, POS, and bill receipts will appear here after settlement.' : 'Share your PayLink to get started'}
+              {isNgPosDashboard ? 'Bank receive, send-from-bank, XPay, and bill receipts will appear here after settlement.' : 'Share your PayLink to get started'}
             </p>
             {isNgPosDashboard ? null : telegramUrl ? (
               <OgArchiveLink className="mt-6" />
@@ -1402,7 +1402,7 @@ export default function Dashboard() {
               {hiddenReceiptCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => setVisibleReceiptCount(count => count + POS_RECEIPT_PAGE_SIZE)}
+                  onClick={() => setVisibleReceiptCount(count => count + XPAY_RECEIPT_PAGE_SIZE)}
                   className="mt-1 flex w-full items-center justify-center rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-2.5 text-xs font-semibold text-gray-500 transition-all hover:border-gray-200 hover:bg-gray-100 hover:text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/15 dark:hover:bg-white/[0.07] dark:hover:text-gray-200"
                 >
                   View more receipts

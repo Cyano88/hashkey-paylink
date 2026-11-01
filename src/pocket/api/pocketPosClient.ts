@@ -8,19 +8,19 @@ import {
 } from '../lib/pocketSchemas'
 
 function posErrorMessage(value: unknown) {
-  if (!value || typeof value !== 'object') return 'POS setup failed.'
+  if (!value || typeof value !== 'object') return 'XPay setup failed.'
   const error = (value as { error?: unknown }).error
   if (typeof error === 'string') return error
   if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
     return (error as { message: string }).message
   }
-  return 'POS setup failed.'
+  return 'XPay setup failed.'
 }
 
 export function parsePocketPosCreate(value: unknown): PocketPosCreateData {
   if (!isPocketMutationResult<PocketPosCreateData>(value)) throw new Error(posErrorMessage(value))
-  if (!value.ok) throw new Error(value.error?.message ?? 'POS setup failed.')
-  if (!value.data || !isPocketPosCreateData(value.data)) throw new Error('POS setup response was invalid.')
+  if (!value.ok) throw new Error(value.error?.message ?? 'XPay setup failed.')
+  if (!value.data || !isPocketPosCreateData(value.data)) throw new Error('XPay setup response was invalid.')
   return value.data
 }
 

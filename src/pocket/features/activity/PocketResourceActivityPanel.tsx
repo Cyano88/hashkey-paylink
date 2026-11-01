@@ -105,7 +105,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           <div className="flex items-start justify-between gap-3">
 
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{selected.kind === 'pos' ? 'POS terminal' : selected.kind === 'request' ? 'Personal request' : 'Collection'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{selected.kind === 'pos' ? 'XPay checkout' : selected.kind === 'request' ? 'Personal request' : 'Collection'}</p>
               <h2 className="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">{resourceTitle(selected)}</h2>
               <p className="mt-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400">{selected.request ? `${selected.request.amount} USDC · ${selected.request.direction === 'outgoing' ? `To ${selected.request.recipientName}` : `From ${selected.request.senderName}`}` : `${payments.length} payment${payments.length === 1 ? '' : 's'} · ${totalLabel(payments)}`}</p>
             </div>
@@ -182,7 +182,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
       ) : busy ? <PocketRecentActivitySkeleton /> : !busy ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-[#262626] dark:bg-[#0D0D0D]">
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">No {view === 'pos' ? 'terminals' : 'requests or collections'} yet</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{view === 'pos' ? 'Create a POS terminal and it will appear here.' : 'Create one from Receive and it will appear here.'}</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{view === 'pos' ? 'Create a XPay checkout and it will appear here.' : 'Create one from Receive and it will appear here.'}</p>
         </div>
       ) : null}
     </div>
