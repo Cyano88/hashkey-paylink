@@ -1,3 +1,5 @@
+import {formatUnits,parseUnits} from 'viem'
+import type {MerchantPaymentFees} from './merchantPaymentFees'
 import {checkoutPriceLabel,type CheckoutPricing} from './checkoutPricing'
 import {pocketApiUrl} from '../pocket/lib/pocketRoutes'
 import {pocketPaymentMethodPaths} from '../pocket/lib/pocketPaymentMethodPaths'
@@ -7,6 +9,8 @@ import { CHAIN_META, type ChainKey } from './chains'
 import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
+  merchantFees?:MerchantPaymentFees
+  merchantSettlementAmount?:string
   pricing?:CheckoutPricing
   paymentMethod?: 'wallet' | 'card' | 'bank_transfer'
   giftState?: 'funded' | 'claimed' | 'refunded'
@@ -290,9 +294,13 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       {label:'Merchant',value:receipt.recipient||'Merchant'},
       ...(receipt.brandKind!=='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)}]:[]),
       {label:'Network',value:network},
-      ...(receipt.amountNgn&&receipt.fiatCurrency?[{label:'Merchant settlement',value:compactReceiptAmount(receipt.amountNgn)+' '+receipt.fiatCurrency}]:[]),
+      ...(receipt.amountNgn&&receipt.fiatCurrency?[{label:'Merchant settlement',value:compactReceiptAmount(receipt.merchantSettlementAmount||receipt.amountNgn)+' '+receipt.fiatCurrency}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
-      ...(receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
+      ...(receipt.merchantFees&&receipt.type==='money_in'?[
+        {label:'Order total',value:formatUnits(parseUnits(receipt.merchantFees.netAmount,18)+parseUnits(receipt.merchantFees.platformFee,18)+parseUnits(receipt.merchantFees.networkFee,18),18)+' '+receipt.asset},
+        {label:'Fee',value:formatUnits(parseUnits(receipt.merchantFees.platformFee,18)+parseUnits(receipt.merchantFees.networkFee,18),18)+' '+receipt.asset},
+        {label:'Net proceeds',value:receipt.merchantFees.netAmount+' '+receipt.asset},
+      ]:!receipt.merchantFees&&receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
   }
   if(['wallet-transfer','wallet-deposit','wallet-withdrawal'].includes(receipt.source||'')&&['money_in','money_out'].includes(receipt.type)){

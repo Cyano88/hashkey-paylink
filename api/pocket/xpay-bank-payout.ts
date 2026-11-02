@@ -1,3 +1,4 @@
+import {validateMerchantPaymentFees} from '../../src/lib/merchantPaymentFees.js'
 import type {Request,Response} from 'express'
 import {encodeFunctionData,getAddress,parseAbi,parseUnits,type Address} from 'viem'
 import ngPosHandler,{listPocketXPayPosDestinations} from '../ng-pos.js'
@@ -47,7 +48,7 @@ export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUse
  const q=await invoke(req,{action:'quote',merchant_id:bank.id,settlement_type:'INSTANT_FIAT',network:'base',amount_currency:bank.currency,amount:input.fiatAmount,xpay_checkout_id:input.checkoutId})
  const data=await invoke(req,{action:'createOfframpOrder',intent_id:q.quote.intent_id,ensure_payable:true,refund_address:link.circleWalletAddress,payer_wallet:link.circleWalletAddress,payer_email:identity.email,payer_name:payerName})
  const order=data.order as PaycrestOrderRecord,expiresAt=assertXPayPayoutPayable(order)
- assertXPaySenderFee(order.raw)
+ if(order.merchant_fees)validateMerchantPaymentFees(order.amount_usdc,order.merchant_fees,6);else assertXPaySenderFee(order.raw)
  return {intentId:order.intent_id,merchantId:bank.id,merchantName:bank.name,currency:bank.currency as 'NGN'|'UGX',fiatAmount:order.amount_ngn,fundingUnits:String(parseUnits(order.amount_usdc,6)),recipient:getAddress(order.receive_address),wallet:getAddress(link.circleWalletAddress),walletId:link.circleWalletId,expiresAt,providerOrderId:order.paycrest_order_id,bankName:order.bank_name,bankLast4:order.bank_last4}
 }
 export async function checkXPayPayout(quote:XPayPayoutQuote,owner?:string){const order=await getPaycrestPosOrder(quote.intentId);if(!order)fail('Bank order is unavailable.');assertXPayPayoutPayable(order,quote);if(owner){const {reservePocketBankAllowance}=await import('./transfer-allowance.js');await reservePocketBankAllowance(owner,{id:order.intent_id,amount:order.amount_ngn,currency:order.fiat_currency||'NGN',usdc:order.amount_usdc,providerOrderId:order.paycrest_order_id})};return order}

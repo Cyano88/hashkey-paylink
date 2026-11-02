@@ -55,3 +55,14 @@ await runStockSubmission({key:'fixture',kind:'send',sponsored:true,attemptId,sen
 assert.equal(readStockAttempts('fixture')[0].id,attemptId)
 await assert.rejects(()=>runStockSubmission({key:'fixture',kind:'send',sponsored:true,attemptId,send:async()=>{assert.fail('must not resend')},onPending(){},onUncertain(){}}),SponsoredTransferNotSubmitted)
 console.log('PASS USDC/USDT reviewed batch binding, fee/total/treasury validation, cancellation, account change, lost response, and quote attempt recovery. No funds moved.')
+
+const {xLayerFeeAssets}=await import('../src/pocket/lib/pocketXLayerFeeAssets.ts')
+for(const [asset,{address:token,decimals}]of Object.entries(xLayerFeeAssets)){
+ const gross=10n**BigInt(decimals),fee=gross*25n/10000n+250n,expiresAt=Date.now()+25000,attemptId=crypto.randomUUID()
+ const calls=[{to:token,value:'0x0',data:encodeFunctionData({abi,functionName:'transfer',args:[recipient,gross-fee]})},{to:token,value:'0x0',data:encodeFunctionData({abi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,fee]})}]
+ const q={owner,attemptId,intent:{asset,recipient,amountUnits:String(gross),merchantPaymentId:'server-payment'},quoteToken:'signed',feeUnits:String(fee),totalUnits:String(gross),expiresAt,request:makeSponsoredBatchRequest({appId:'fixture',walletId:'fixturewallet123',attemptId,expiresAt,calls})}
+ validateSponsoredStablecoinQuote(q)
+ assert.throws(()=>validateSponsoredStablecoinQuote({...q,totalUnits:String(gross+fee)}))
+ assert.throws(()=>validateSponsoredStablecoinQuote({...q,intent:{...q.intent,merchantPaymentId:undefined}}))
+}
+console.log('PASS all four merchant stablecoins: exact gross debit, net recipient, fee treasury, precision and personal-send isolation.')

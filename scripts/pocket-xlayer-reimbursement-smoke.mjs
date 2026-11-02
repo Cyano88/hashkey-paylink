@@ -1,3 +1,4 @@
+import {xLayerFeeAssets} from '../src/pocket/lib/pocketXLayerFeeAssets.ts'
 import assert from 'node:assert/strict'
 import {decodeFunctionData,encodeFunctionData,parseAbi} from 'viem'
 import {quoteXLayerReimbursement,sealXLayerReimbursement,openXLayerReimbursement,refreshXLayerReimbursement} from '../api/pocket/xlayer-reimbursement.ts'
@@ -39,3 +40,20 @@ for(const [asset,token] of [['USDC','0xb6ceceab302e2e4948951ee7843fc24e92933061'
  assert.equal(floored.networkFeeUnits,'500')
 }
 console.log('PASS USDC/USDT full-batch reimbursement, exact treasury/total binding, owner and intent isolation, expiry, missing estimate and unstable fee rejection. This suite uses a synthetic estimator; no funds moved.')
+
+for(const [asset,{address:token,decimals}] of Object.entries(xLayerFeeAssets)){
+ const gross=10n**BigInt(decimals)
+ const binding={merchantPaymentId:'merchant-payment',ownerId:'owner',walletId:'wallet',walletAddress:wallet,asset,amountUnits:String(gross),intentId:'intent'}
+ const calls=[{to:token,data:encodeFunctionData({abi,functionName:'transfer',args:[recipient,gross]}),value:'0x0'}]
+ const estimate=async()=>({feeUnits:'200',expiresAt:now+20000,estimateId:'merchant-cost'})
+ const q=await quoteXLayerReimbursement(binding,calls,now+60000,estimate,pricing,()=>now,gross)
+ assert.equal(q.totalUnits,String(gross));assert.equal(q.networkFeeUnits,'250')
+ assert.equal(decodeFunctionData({abi,data:q.calls[0].data}).args[1],gross-gross*25n/10000n-250n)
+ assert.equal(decodeFunctionData({abi,data:q.calls[1].data}).args[1],gross*25n/10000n+250n)
+ assert.deepEqual(openXLayerReimbursement(sealXLayerReimbursement(q),binding,calls,now),q)
+ assert.deepEqual(await refreshXLayerReimbursement(q,calls,estimate,()=>now),q)
+ assert.throws(()=>openXLayerReimbursement(sealXLayerReimbursement(q),{...binding,merchantPaymentId:'other'},calls,now))
+ const {merchantPaymentId,...personal}=binding
+ assert.throws(()=>openXLayerReimbursement(sealXLayerReimbursement(q),personal,calls,now))
+}
+console.log('PASS X Layer merchant-paid split for all four stablecoins: exact gross debit, service fee plus reimbursement, signed payment binding, refresh and personal-send isolation.')

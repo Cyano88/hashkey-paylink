@@ -1,3 +1,4 @@
+import {xLayerFeeAssets,type XLayerFeeAsset} from '../lib/pocketXLayerFeeAssets'
 import {executeStockGiftFunding} from '../api/pocketStockGiftExecution'
 import {stockGiftFundingReview,prepareStockGiftSettlement} from '../api/pocketStockGiftSettlement'
 import type {StockGiftIntent} from '../api/pocketStockGiftIntent'
@@ -92,13 +93,14 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
     if(embedded.length>1){setError('Multiple embedded wallets found. Wallet selection needs review.');return}
     setError('');setup.retry()
   }
-  const prepareTransfer=async(asset:StockTransfer['asset'],recipient:string,amount:string):Promise<StockTransfer>=>{
+  const prepareTransfer=async(asset:StockTransfer['asset'],recipient:string,amount:string,merchantPaymentId?:string):Promise<StockTransfer>=>{
     if(!address)throw Error('Your Pocket wallet is reconnecting.')
     const key=ownerKey,current=()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}
     const review=await prepareStockTransfer(address,asset,recipient,amount)
     current()
-    if(!review.sponsored||!isXLayerSendStablecoin(review.to))return review
-    const reimbursement=await quoteSponsoredStablecoin(address,{asset:asset.symbol as 'USDC'|'USDT',recipient:review.recipient,amountUnits:review.units.toString()},{getAccessToken,assertCurrent:current})
+    if(merchantPaymentId&&(!review.sponsored||!Object.hasOwn(xLayerFeeAssets,asset.symbol)))throw Error('Merchant payment sponsorship is unavailable.')
+    if(!review.sponsored||(!isXLayerSendStablecoin(review.to)&&!merchantPaymentId))return review
+    const reimbursement=await quoteSponsoredStablecoin(address,{...(merchantPaymentId?{merchantPaymentId}:{}),asset:asset.symbol as XLayerFeeAsset,recipient:review.recipient,amountUnits:review.units.toString()},{getAccessToken,assertCurrent:current})
     const balance=await stockClient.readContract({address:review.to,abi:stockTokenAbi,functionName:'balanceOf',args:[address]})
     current()
     if(balance<BigInt(reimbursement.totalUnits))throw Error('Insufficient '+asset.symbol+' balance including the network fee.')
@@ -140,7 +142,7 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
       const fresh = await prepareStockTransfer(address, review.asset, review.recipient, review.amount)
       if (!!fresh.sponsored !== !!review.sponsored) throw Error('Gas payment changed. Review this transfer again.')
-      if(fresh.sponsored&&isXLayerSendStablecoin(fresh.to)){
+      if(fresh.sponsored&&(isXLayerSendStablecoin(fresh.to)||review.reimbursement?.intent.merchantPaymentId)){
         const q=review.reimbursement
         if(!q||q.owner!==address||q.intent.recipient!==review.recipient||q.intent.amountUnits!==review.units.toString()||q.intent.asset!==review.asset.symbol)throw Error('Review the transfer fee before sending.')
         const balance=await stockClient.readContract({address:fresh.to,abi:stockTokenAbi,functionName:'balanceOf',args:[address]})

@@ -169,7 +169,14 @@ export type PocketX402ActivationData = {
   replayed: boolean
 }
 
+function isMerchantFeeRecord(value:unknown):boolean {
+ if(!isRecord(value))return false
+ return value.payer==='merchant'&&(value.rounding===undefined||value.rounding==='provider-4dp')&&['platformFee','networkFee','netAmount'].every(key=>typeof value[key]==='string'&&/^\d{1,78}(?:\.\d{1,18})?$/.test(value[key] as string))
+}
+
 export type PocketActivityRow = {
+  merchantFees?:import('../../lib/merchantPaymentFees').MerchantPaymentFees
+  merchantNetAmount?:string
   fundingOnly?: boolean
   paymentFunding?: PocketPaymentFunding[]
   fundingParent?: string
@@ -636,6 +643,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.amountNgn, 80)
     && (value.serviceFeeAmount === undefined || typeof value.serviceFeeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.serviceFeeAmount))
     && isOptionalBoundedString(value.serviceFeeAsset, 40)
+    && (value.merchantNetAmount === undefined || typeof value.merchantNetAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.merchantNetAmount))
+    && (value.merchantFees === undefined || isMerchantFeeRecord(value.merchantFees))
     && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.feeAmount))
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)

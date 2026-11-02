@@ -1455,6 +1455,7 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
     intentId: order.intent_id,
     requestedUsdc,
     payableUsdc: order.amount_usdc,
+    fees:order.merchant_fees,netAmountNgn:order.merchant_net_fiat,
     amountNgn: order.amount_ngn,
     receiveAddress: order.receive_address,
     bankName: order.bank_name ?? settlement.bankName,

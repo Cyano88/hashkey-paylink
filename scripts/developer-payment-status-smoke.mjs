@@ -16,6 +16,11 @@ assert.equal(paymentStatus({...group,product:'checkout'},{...checkout,paymentAtt
 assert.equal(paymentStatus(group,{...checkout,expiresAt:'2026-10-26T12:00:00Z',paymentAttempts:[{status:'processing'}]},undefined,now).status,'processing','Expiry cannot hide an in-flight payment')
 assert.throws(()=>paymentPageQuery({projectId:'dev_paymenttest123',cursor:'bad'}),{status:400})
 console.log('PASS evidence-based statuses, expiry, in-flight protection, cancellation and cursor validation.')
+const fees={payer:'merchant',platformFee:'0.0125',networkFee:'0.01',netAmount:'4.9775'}
+const merchant=paymentStatus({...group,product:'checkout'},{...checkout,payment:{status:'paid',referenceType:'evm_tx_hash',fees}},undefined,now)
+assert.equal(merchant.amount,'5');assert.deepEqual(merchant.merchantFees,fees)
+assert.equal(paymentStatus(group,{...checkout,payment:{status:'paid',fees}},undefined,now).merchantFees,undefined)
+console.log('PASS merchant gross, service fee, network reimbursement and net reporting; funding unchanged.')
 if(process.env.TEST_ACTIVITY_DATABASE_URL){
  const url=new URL(process.env.TEST_ACTIVITY_DATABASE_URL)
  if(url.hostname!=='127.0.0.1'||url.port!=='55439'||url.pathname!=='/activity_test'||url.username!=='activity_app')throw Error('Refusing non-disposable database.')

@@ -1,3 +1,4 @@
+import {merchantFeeTotal} from '../../src/lib/merchantPaymentFees.js'
 import {readPocketCheckoutActivity} from './checkout-activity.js'
 import {readBscWalletActivity} from './bsc-wallet-activity.js'
 import {bscSwapActivity} from '../../src/pocket/lib/pocketBscActivity.js'
@@ -238,6 +239,8 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     throw Object.assign(new Error('Stored Circle Pocket activity row was invalid.'), { status: 500 })
   }
   return {
+    ...(value.merchantNetAmount?{merchantNetAmount:value.merchantNetAmount}:{}),
+    ...(value.merchantFees?{merchantFees:value.merchantFees}:{}),
     eventId: value.eventId,
     txHash: value.txHash,
     chain: value.chain,
@@ -305,6 +308,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
     .map(sanitizedActivityRow)
     .map(row => ({
       ...row,
+      ...(row.merchantFees?{amount:row.merchantFees.netAmount,feeAmount:merchantFeeTotal(row.merchantFees,6)}:{}),
       source: 'collection',
       merchantId: row.eventId,
       contextLabel: collectionTitles.get(row.eventId) || row.memo || 'Collection',

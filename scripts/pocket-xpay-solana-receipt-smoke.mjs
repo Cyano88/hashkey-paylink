@@ -3,6 +3,7 @@ for(const key of ['DATABASE_URL','POSTGRES_URL','RENDER','RENDER_SERVICE_ID','RE
 const payer='11111111111111111111111111111111',recipient='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 globalThis.receiptFixture={stores:{'hashpaylink:ng-pos-merchants':{merchants:{shop:{merchant_id:'shop',supported_networks:['solana','ethereum','polygon'],network_wallets:{solana:recipient,ethereum:'0x'+'2'.repeat(40),polygon:'0x'+'3'.repeat(40)}}}}},proof:null};
 const mocks={
+'./ng-pos.js':`export const readPosCryptoFeeContext=async()=>{throw Error('Legacy receipt must not request a new merchant quote')}`,
 './render-durable-store.js':`export const hasRenderDurableStore=()=>true;export const readDurableJson=async k=>receiptFixture.stores[k];export const writeDurableJson=async(k,v)=>{receiptFixture.stores[k]=v};export const mutateDurableJson=async(k,fn)=>{receiptFixture.stores[k]=fn(receiptFixture.stores[k]);return receiptFixture.stores[k]}`,
 './solana-usdc-transfer-verify.js':`export const verifySolanaUsdcTransfer=async input=>{receiptFixture.proof=input;if(receiptFixture.reject)throw Error('Invalid proof')}`,
 './og-storage.js':`export const archivePayment=async()=>null`,

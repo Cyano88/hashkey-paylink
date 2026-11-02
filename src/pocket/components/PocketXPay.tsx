@@ -38,7 +38,7 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import { xStockPath } from '../lib/pocketRail'
 const card='rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262626] dark:bg-[#121212]'
 const cta='pocket-cta-primary w-full'
-export function xpayReceipt(p:XPayPayment):PaylinkReceipt{const hosted=/^chkx_[a-f0-9]{24}$/.test(p.merchantId);return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:hosted?'Web payment':'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:hosted?'Web payment':'XPay payment',amount:p.amount,asset:p.symbol,createdAt:p.status==='paid'?p.updatedAt:p.createdAt,source:hosted?'hosted_checkout':'xpay',settlementType:hosted?'hosted_checkout':undefined,recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:hosted?'Hash PayLink':'Pocket',brandKind:hosted?'hashpaylink':'pocket'}}
+export function xpayReceipt(p:XPayPayment):PaylinkReceipt{const hosted=/^chkx_[a-f0-9]{24}$/.test(p.merchantId);return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:hosted?'Web payment':'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:hosted?'Web payment':'XPay payment',...(p.fees?{merchantFees:p.fees,feeAmount:'0'}:{}),amount:p.amount,asset:p.symbol,createdAt:p.status==='paid'?p.updatedAt:p.createdAt,source:hosted?'hosted_checkout':'xpay',settlementType:hosted?'hosted_checkout':undefined,recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:hosted?'Hash PayLink':'Pocket',brandKind:hosted?'hashpaylink':'pocket'}}
 function CheckoutSurface({children}:ComponentProps<typeof PocketBottomSheet>){return <section className="rounded-3xl border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-[#121212]">{children}</section>}
 export default function PocketXPay({wallet,checkout=false,onLayoutChange,paymentContext,merchantOverride,checkoutReturnUrl,checkoutBrandImageUrl}:{checkoutBrandImageUrl?:string;checkoutReturnUrl?:string;merchantOverride?:string;paymentContext?:{merchantId:string;checkoutId:string;onClose:()=>void};onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
  const identity=usePocketIdentity(),{user,getAccessToken}=identity,navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=merchantOverride||paymentContext?.merchantId||params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
@@ -96,10 +96,10 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  const prepare=()=>run(async()=>{
   if(!wallet.address||!merchant)throw Error('Open your Pocket wallet first.')
   const currentScope=scope
-  const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID(),checkoutId:paymentContext?.checkoutId||new URLSearchParams(location.search).get('xpay_checkout_id')||undefined})
+  const data=await xpayRequest(getAccessToken,{action:'prepare',feePolicy:'merchant-v1',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID(),checkoutId:paymentContext?.checkoutId||new URLSearchParams(location.search).get('xpay_checkout_id')||undefined})
   if(scopeRef.current!==currentScope)return
   const asset=[...checkoutStablecoins('xlayer').map(a=>({...a,name:a.symbol,icon:''})),...stockAssets].find(a=>a.address.toLowerCase()===data.payment.token)!
-  const transfer=await wallet.prepareTransfer(asset,data.payment.recipient,data.payment.amount)
+  const transfer=await wallet.prepareTransfer(asset,data.payment.recipient,data.payment.amount,data.payment.feePayer==='merchant'?data.payment.id:undefined)
   setPayment(data.payment);setReview(transfer)
  })
  const pay=()=>run(async()=>{
@@ -110,7 +110,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
   // A materially higher fee needs a separate confirmation before PIN approval.
   let transfer=review
   if(review.expiresAt<=Date.now()){
-   transfer=await wallet.prepareTransfer(review.asset,review.recipient,review.amount)
+   transfer=await wallet.prepareTransfer(review.asset,review.recipient,review.amount,review.reimbursement?.intent.merchantPaymentId)
    if(scopeRef.current!==currentScope)throw Error('Your Pocket account changed.')
    setReview(transfer)
    if(transfer.reimbursement)throw Error('Review the refreshed network fee before paying.')
@@ -147,7 +147,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
  if(hosted){
   const asset=selected?.symbol||'USDC',decimals=stableTokens.find(t=>t.address.toLowerCase()===token)?.decimals??6,amount=merchant?.fixedAmount||payment?.amount||''
   const balance=stableTokens.find(t=>t.address.toLowerCase()===token)?.balance??null
-  const feeUnits=review?.reimbursement?BigInt(review.reimbursement.feeUnits):0n
+  const feeUnits=review?.reimbursement&&!review.reimbursement.intent.merchantPaymentId?BigInt(review.reimbursement.feeUnits):0n
   const totalUnits=review?review.units+feeUnits:null
   const amountUnits=amount?parseUnits(amount,decimals):0n
   const required=totalUnits??amountUnits
@@ -175,7 +175,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
    {!review&&<h2 className="mb-5 text-center text-base font-semibold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
     <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[
-      ['Merchant',payment.merchantName],['Network','X Layer'],['Gas',stockTransferGasLabel(review, fee => formatStockQuantity(stockQuantity(fee,18)))],
+      ['Merchant',payment.merchantName],['Network','X Layer'],...(payment.feePayer==='merchant'?[]:[['Fee',stockTransferGasLabel(review, fee => formatStockQuantity(stockQuantity(fee,18)))]] as [string,string][]),
     ]}/>
     <div className="mt-5"><PocketFundingAction {...fundingProps}><PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} status={busy||wallet.busy?'pending':'idle'} disabled={payment.status==='submitted'||busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onConfirm={()=>void (quoteExpired?prepare():pay())} labels={{idle:quoteExpired?'Update payment amount':'Confirm payment',pending:'Processing',disabled:'Payment pending'}}/></PocketFundingAction></div>
     {quoteExpired&&!busy&&<p role="status" className="mt-3 text-xs text-gray-500">Price expired. Update the amount to continue.</p>}

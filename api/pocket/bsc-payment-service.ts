@@ -8,7 +8,7 @@ import {readBscWallet} from './bsc-wallet.js'
 import {bscConfiguredFeePolicy,createBscRuntime} from './bsc-runtime.js'
 import {createBscPaymentFeeEstimator} from './bsc-fee-estimator.js'
 import {createBscPaymentOperations,type BscPaymentOperationStore,type BscPaymentOperation} from './bsc-payment-operations.js'
-import {validateBscPayment,bscPaymentRequest,type BscPaymentQuote} from '../../src/pocket/lib/pocketBscPayment.js'
+import {bscPaymentAmounts,validateBscPayment,bscPaymentRequest,type BscPaymentQuote} from '../../src/pocket/lib/pocketBscPayment.js'
 import {readBscPaymentSettlement} from './bsc-payment-settlement.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {recoverBscUserOperation,findBscUserOperation} from './bsc-user-operation.js'
@@ -46,15 +46,15 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
   await checkout(q);await d.billing(q.walletAddress)
   const fee=await estimate(q)
   if(BigInt(fee.coverageFeeUnits)>BigInt(q.reimbursementUnits))throw Error('Fees changed. Review the payment again.')
-  if(await runtime.balance(q.asset,q.walletAddress)<BigInt(q.amountUnits)+BigInt(q.reimbursementUnits))throw Error('Insufficient '+q.asset+'.')
+  if(await runtime.balance(q.asset,q.walletAddress)<bscPaymentAmounts(q).total)throw Error('Insufficient '+q.asset+'.')
  },
  send:async(request,authorization)=>{const r=await d.fetcher(request.url,{method:'POST',headers:{...request.headers,...headers,'Content-Type':'application/json','privy-authorization-signature':authorization},body:JSON.stringify(request.body),redirect:'error',signal:AbortSignal.timeout(30000)});return {ok:r.ok,status:r.status,body:await r.json()}},
  settle:(q,hash,op)=>d.settlement(q,hash,runtime.rpc,op)})
  async function publish(op:BscPaymentOperation){
   if(['prepared','cancelled'].includes(op.state))return op
   const q=op.quote
-  if(op.state==='completed')await d.settleCheckout({id:q.checkoutId,token:(await d.readCheckout(q.checkoutId,true))!.token.address,units:q.amountUnits,recipient:q.recipient,payer:q.walletAddress,hash:op.hash!.toLowerCase(),confirmedAt:new Date(op.updatedAt).toISOString(),paymentId:q.id})
-  await d.journal({ownerId:q.ownerId,idempotencyKey:'pocket:bsc-payment:'+q.id,action:'wallet.bsc-payment',status:op.state==='completed'?'completed':['failed','not_submitted'].includes(op.state)?'failed':'submitted',resourceId:q.checkoutId,metadata:{network:'bsc',operationId:q.id,walletAddress:q.walletAddress,assetSymbol:q.asset,amount:formatUnits(BigInt(q.amountUnits),18),fee:['failed','not_submitted'].includes(op.state)?'0':formatUnits(BigInt(q.reimbursementUnits),18),feeAsset:q.asset,...(op.hash?{txHash:op.hash}:{})}})
+  if(op.state==='completed')await d.settleCheckout({id:q.checkoutId,token:(await d.readCheckout(q.checkoutId,true))!.token.address,units:q.amountUnits,recipient:q.recipient,payer:q.walletAddress,hash:op.hash!.toLowerCase(),confirmedAt:new Date(op.updatedAt).toISOString(),paymentId:q.id,...(q.version===2?{fees:{payer:'merchant' as const,platformFee:formatUnits(bscPaymentAmounts(q).platformFee,18),networkFee:formatUnits(bscPaymentAmounts(q).networkFee,18),netAmount:formatUnits(bscPaymentAmounts(q).recipient,18)}}:{})})
+  await d.journal({ownerId:q.ownerId,idempotencyKey:'pocket:bsc-payment:'+q.id,action:'wallet.bsc-payment',status:op.state==='completed'?'completed':['failed','not_submitted'].includes(op.state)?'failed':'submitted',resourceId:q.checkoutId,metadata:{network:'bsc',operationId:q.id,walletAddress:q.walletAddress,assetSymbol:q.asset,amount:formatUnits(BigInt(q.amountUnits),18),fee:['failed','not_submitted'].includes(op.state)?'0':formatUnits(bscPaymentAmounts(q).treasury,18),feeAsset:q.asset,...(op.hash?{txHash:op.hash}:{})}})
   await d.mutate<BscPaymentOperationStore>(key,s=>{const saved=s?.operations[q.id];if(!saved)return unavailable();if(saved.state===op.state)saved.publishedState=op.state;return s!})
   return op
  }
@@ -77,12 +77,12 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
     const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)
     if(c.asset!=='USDC'&&c.asset!=='USDT')return unavailable()
     const display=await d.display(wallet.address)
-    return res.json({ok:true,balanceUnits:String(display.units[c.asset]),observedAt:display.observedAt,address:wallet.address,fundingBufferUnits:String(bscConfiguredFeePolicy(d.env).maximumFeeUnits)})
+    return res.json({ok:true,balanceUnits:String(display.units[c.asset]),observedAt:display.observedAt,address:wallet.address,fundingBufferUnits:'0'})
    }
    if(action==='quote'){
     const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)
     if(c.asset!=='USDC'&&c.asset!=='USDT')return unavailable()
-    const now=Date.now(),q:BscPaymentQuote={version:1,chainId:56,id:randomUUID(),checkoutId:c.id,...binding,asset:c.asset,recipient:c.recipient as `0x${string}`,amountUnits:parseUnits(c.amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:Math.min(now+30000,Date.parse(c.expiresAt))}
+    const now=Date.now(),q:BscPaymentQuote={version:2,chainId:56,id:randomUUID(),checkoutId:c.id,...binding,asset:c.asset,recipient:c.recipient as `0x${string}`,amountUnits:parseUnits(c.amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:Math.min(now+30000,Date.parse(c.expiresAt))}
     const fee=await estimate(q);q.reimbursementUnits=fee.feeUnits;q.expiresAt=fee.expiresAt
     let covered=false
     for(let i=0;i<3;i++){

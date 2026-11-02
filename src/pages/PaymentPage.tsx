@@ -115,6 +115,7 @@ const RefreshCw = ArrowPathIcon
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
 type PaycrestCheckoutOrder = {
+  merchant_net_fiat?:string
   intent_id: string
   paycrest_order_id: string
   fiat_currency?: 'NGN' | 'UGX'
@@ -591,6 +592,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedPayoutFailed, setHostedPayoutFailed] = useState(false)
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
   const [expiredBrand,setExpiredBrand]=useState<{name?:string;logo?:string}>({})
+  const [hostedMerchantPaidFees,setMerchantPaidFees]=useState(false)
   const [hostedPricing,setHostedPricing]=useState<CheckoutPricing>()
   const [hostedExpiresAt,setHostedExpiresAt]=useState<string|undefined>()
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
@@ -644,6 +646,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const ngPosBankAccount = (initParams.get('acct') ?? '').trim()
   const ngPosBankAccountName = (initParams.get('acctName') ?? '').trim()
   const isNgPosPaycrestOfframp = isNgPosPayment && ngPosSettlement === 'instant_fiat' && ngPosOfframpProvider === 'paycrest'
+  const merchantPaidFees=hostedMerchantPaidFees||(paySource==='ngpos'&&ngPosSettlement==='keep_crypto')
   const smartWalletOnlyFunding = isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isNgPosPaycrestOfframp || isBankSendPayment
   const isMainHashPaylinkPayment = !isTelegramSource && !smartWalletOnlyFunding
   const [attendeeName,   setAttendeeName]   = useState(() => initParams.get('payer') ?? '')
@@ -690,7 +693,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           returnUrl?: string
           merchantName?:string
           brandImageUrl?:string
-          checkout?: { pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
+          checkout?: { feePayer?:'merchant'; pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
           error?: string
         } | undefined
         if(!cancelled&&response.status===410){if(body?.returnUrl)setHostedReturnUrl(body.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
@@ -710,7 +713,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         }
         if (!cancelled) {
           setHostedReturnUrl(body.returnUrl || '')
-          setHostedExpiresAt(body.checkout?.expiresAt);setHostedPricing(body.checkout?.pricing)
+          setMerchantPaidFees(body.checkout?.feePayer==='merchant');setHostedExpiresAt(body.checkout?.expiresAt);setHostedPricing(body.checkout?.pricing)
           setHostedIntentStatus('verified')
           const attempt = body.checkout?.paymentAttempt
           if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc' || attempt?.network === 'ethereum' || attempt?.network === 'polygon' || attempt?.network === 'solana') {
@@ -1165,14 +1168,16 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
 
 
   const walletConnectBlocked = isNgPosPaycrestOfframp || (smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED)
-  const grossUpPlatformCharges = true
+  const grossUpPlatformCharges = !merchantPaidFees
+  const checkoutFeeMode=merchantPaidFees?'net' as const:'gross' as const
+  const feeCheckoutId=isHostedCheckout?hostedCheckoutId:paySource==='ngpos'&&ngPosSettlement==='keep_crypto'?'pos_'+ngPosMerchantId:undefined
   const grossUpEvmPlatformCharges = grossUpPlatformCharges && isSupportedEvmPayChain(chain)
   const grossUpSolanaPlatformCharges = grossUpPlatformCharges && chain === 'solana'
   const quotedPayoutId = paycrestOrder?.intent_id || ngPosPaycrestIntentId || undefined
   const circleQuoteNeeded = Boolean(circleEvmEmailSession && activeRecipient && payableAmt && !isBankSendPayment && (!isNgPosPaycrestOfframp || quotedPayoutId))
   const currentCircleFeeQuote = (() => {
     const q = circleFeeQuote?.quote
-    if (!q || !circleEvmEmailSession || q.chain !== chain || q.walletId !== circleEvmEmailSession.wallet.id || q.recipient !== activeRecipient?.toLowerCase() || q.walletAddress !== circleEvmEmailSession.wallet.address.toLowerCase() || q.mode !== 'gross' || q.feeBps !== hashPaylinkFeeBps || (q.asset ?? 'USDC') !== checkoutAsset) return null
+    if (!q || !circleEvmEmailSession || q.chain !== chain || q.walletId !== circleEvmEmailSession.wallet.id || q.recipient !== activeRecipient?.toLowerCase() || q.walletAddress !== circleEvmEmailSession.wallet.address.toLowerCase() || q.mode !== checkoutFeeMode || q.feeBps !== hashPaylinkFeeBps || (q.asset ?? 'USDC') !== checkoutAsset) return null
     try { if (q.amountUnits !== parseUnits(payableAmt || '0', 6).toString()) return null } catch { return null }
     return circleFeeQuote
   })()
@@ -1183,20 +1188,20 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const session = circleEvmEmailSession
     setCircleFeeQuoteLoading(true); setCircleFeeQuoteError(''); setCircleFeeQuote(null)
     const timer = window.setTimeout(() => {
-      void readCirclePaymentFeeQuote({ asset: checkoutAsset, session, recipient: activeRecipient, amount: payableAmt, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId: quotedPayoutId })
+      void readCirclePaymentFeeQuote({ checkoutId:feeCheckoutId, asset: checkoutAsset, session, recipient: activeRecipient, amount: payableAmt, feeMode: checkoutFeeMode, feeBps: hashPaylinkFeeBps, payoutIntentId: quotedPayoutId })
         .then(value => { if (!cancelled) setCircleFeeQuote(value) })
         .catch(error => { if (!cancelled) {const units=paymentFundingMinimum(error);setCircleFundingMinimum(units===null?null:{key:circleQuoteRequestKey,units});setCircleFeeQuoteError(readableErrorMsg(error, 'Fee quote unavailable. Try again.'))} })
         .finally(() => { if (!cancelled) setCircleFeeQuoteLoading(false) })
     }, 350)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [circleQuoteNeeded, circleEvmEmailSession?.userToken, circleEvmEmailSession?.wallet.id, chain, activeRecipient, payableAmt, hashPaylinkFeeBps, quotedPayoutId, checkoutAsset, feeQuoteRefresh])
+  }, [circleQuoteNeeded, circleEvmEmailSession?.userToken, circleEvmEmailSession?.wallet.id, chain, activeRecipient, payableAmt, hashPaylinkFeeBps, quotedPayoutId, checkoutAsset, feeQuoteRefresh,checkoutFeeMode,feeCheckoutId])
 
 
   const solanaQuoteSender = circleSolanaSession?.wallet.address || solanaWalletAddr || ''
   const solanaQuoteNeeded = chain === 'solana' && Boolean(solanaQuoteSender && resolvedSolana && effectiveAmt)
   const currentSolanaFeeQuote = (() => {
     const q = solanaFeeQuote?.quote
-    if (!q || q.chain !== 'solana' || q.walletAddress !== solanaQuoteSender || q.recipient !== resolvedSolana || q.mode !== 'gross' || (chain === 'solana' && (q.asset || 'USDC') !== checkoutAsset)) return null
+    if (!q || q.chain !== 'solana' || q.walletAddress !== solanaQuoteSender || q.recipient !== resolvedSolana || q.mode !== checkoutFeeMode || (chain === 'solana' && (q.asset || 'USDC') !== checkoutAsset)) return null
     try { if (q.amountUnits !== parseUnits(effectiveAmt || '0', 6).toString()) return null } catch { return null }
     return solanaFeeQuote
   })()
@@ -1207,7 +1212,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     setSolanaFeeQuote(null); setSolanaFeeQuoteLoading(true); setSolanaFeeQuoteError('')
     const timer = window.setTimeout(() => {
       void fetch('/api/solana-build-tx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.any([abort.signal,AbortSignal.timeout(12_000)]),
-        body: JSON.stringify({ from: solanaQuoteSender, to: resolvedSolana, amount: effectiveAmt, asset: checkoutAsset, quoteOnly: true }) })
+        body: JSON.stringify({ from: solanaQuoteSender, to: resolvedSolana, amount: effectiveAmt, asset: checkoutAsset, checkoutId:feeCheckoutId, feeMode:checkoutFeeMode, quoteOnly: true }) })
         .then(async response => {
           const data = await readApiJson<CirclePaymentFeeQuote & { ok?: boolean; error?: string }>(response, 'Solana fee quote')
           if (!response.ok || !data.ok || !data.quote || !data.token) throw new Error(data.error || 'Fee quote unavailable. Try again.')
@@ -1217,7 +1222,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         .finally(() => { if (!cancelled) setSolanaFeeQuoteLoading(false) })
     }, 350)
     return () => { cancelled = true; window.clearTimeout(timer); abort.abort() }
-  }, [solanaQuoteNeeded, solanaQuoteSender, resolvedSolana, effectiveAmt, checkoutAsset, feeQuoteRefresh])
+  }, [solanaQuoteNeeded, solanaQuoteSender, resolvedSolana, effectiveAmt, checkoutAsset, feeQuoteRefresh,checkoutFeeMode,feeCheckoutId])
   const displayedPaymentQuote = chain === 'solana' ? currentSolanaFeeQuote : currentCircleFeeQuote
   const paymentQuoteNeeded = chain === 'solana' ? solanaQuoteNeeded : circleQuoteNeeded
   const paymentQuoteLoading = chain === 'solana' ? solanaFeeQuoteLoading : circleFeeQuoteLoading
@@ -1388,6 +1393,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   function expectedEvmRecipientUnits() {
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
     if (totalUnits <= 0n) return 0n
+    if(currentCircleFeeQuote?.quote.amountUnits===totalUnits.toString())return BigInt(currentCircleFeeQuote.quote.recipientUnits)
     const { feeUnits, gasRecoveryUnits, sponsoredRecipientUnits } = evmPaymentBreakdown(totalUnits)
     const conservativeUnits = totalUnits - feeUnits - gasRecoveryUnits
     return grossUpEvmPlatformCharges ? totalUnits : (sponsoredRecipientUnits > 0n ? sponsoredRecipientUnits : totalUnits - feeUnits)
@@ -2476,8 +2482,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           to: resolvedSolana,
           amount: effectiveAmt,
           asset: checkoutAsset,
-          feeMode: 'gross',
+          feeMode: checkoutFeeMode,
           feeQuoteToken,
+          checkoutId:feeCheckoutId,
         }),
       })
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
@@ -2623,8 +2630,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           to: resolvedSolana,
           amount: effectiveAmt,
           asset: checkoutAsset,
-          feeMode: 'gross',
+          feeMode: checkoutFeeMode,
           feeQuoteToken,
+          checkoutId:feeCheckoutId,
         }),
       })
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
@@ -3027,13 +3035,13 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         let candidate = currentCircleFeeQuote
         const payoutIntentId = preparedPaycrestOrder?.intent_id || quotedPayoutId
         if (!candidate || candidate.quote.expiresAt <= Date.now() + 15_000 || candidate.quote.walletId !== session.wallet.id || candidate.quote.walletAddress !== session.wallet.address.toLowerCase() || candidate.quote.amountUnits !== paymentUnits.toString() || candidate.quote.recipient !== paymentRecipient.toLowerCase()) {
-          const fresh = await readCirclePaymentFeeQuote({ asset: checkoutAsset, session, recipient: paymentRecipient, amount: paymentAmount, feeMode: 'gross', feeBps: hashPaylinkFeeBps, payoutIntentId })
+          const fresh = await readCirclePaymentFeeQuote({ checkoutId:feeCheckoutId, asset: checkoutAsset, session, recipient: paymentRecipient, amount: paymentAmount, feeMode: checkoutFeeMode, feeBps: hashPaylinkFeeBps, payoutIntentId })
           setCircleFeeQuote(fresh); setCircleFeeQuoteError(''); resetCircleSmartWalletPending()
           setCirclePasskeyError('Review the fees, then confirm your payment.')
           return
         }
         if (!pocketScan && isHostedCheckout) {
-          const fresh = await readCirclePaymentFeeQuote({asset:checkoutAsset,session,recipient:paymentRecipient,amount:paymentAmount,feeMode:'gross',feeBps:hashPaylinkFeeBps,payoutIntentId})
+          const fresh = await readCirclePaymentFeeQuote({checkoutId:feeCheckoutId,asset:checkoutAsset,session,recipient:paymentRecipient,amount:paymentAmount,feeMode:checkoutFeeMode,feeBps:hashPaylinkFeeBps,payoutIntentId})
           setCircleFeeQuote(fresh)
           if (fresh.quote.totalUnits !== candidate.quote.totalUnits || fresh.quote.recipientUnits !== candidate.quote.recipientUnits) {
             resetCircleSmartWalletPending()
@@ -3070,6 +3078,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         if (isHostedCheckout && privyAuthenticated && (!paymentOwner || checkoutIdentityRef.current !== paymentOwner)) throw Error('Your account changed. Sign in again before paying.')
         if (pocketScan && preparedPaycrestOrder) assertPocketScanPayoutPayable(preparedPaycrestOrder)
         const txHash = await sendCircleEvmEmailPayment({
+          checkoutId:feeCheckoutId,
           asset: checkoutAsset,
           session,
           recipient: paymentRecipient as `0x${string}`,
@@ -3471,8 +3480,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketPosReviewRows: [string, string][] = [
     ...(hostedPricing?[['Order price',checkoutPriceLabel(hostedPricing,'')]] as [string,string][]:[]),
     ['Merchant', hostedMerchantName || memo || 'Merchant'], ['Network', meta.label],
-    ...(isNgPosPaycrestOfframp ? [['Merchant receives', (paycrestOrder?.fiat_currency || 'NGN')+' '+(paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt)] as [string,string]] : []),
-    ...(displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits),6)+' '+checkoutAsset], ['Gas', formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' '+checkoutAsset], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : []),
+    ...(isNgPosPaycrestOfframp ? [['Merchant receives', (paycrestOrder?.fiat_currency || 'NGN')+' '+(paycrestOrder?.merchant_net_fiat || paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt)] as [string,string]] : []),
+    ...(displayedPaymentQuote && merchantPaidFees ? [['Total',formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits)+BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' '+checkoutAsset], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : []),
   ]
   function resetCheckoutError() {
     setPaymentAttemptStarted(false)
@@ -3598,6 +3607,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
 
   function expectedNgPosSettlementAmount() {
+    if(merchantPaidFees)return payableAmt
     if (isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc) return paycrestOrder.amount_usdc
     if (!isNgPosPayment || !isEvmChain) return effectiveAmt
     try {
@@ -3630,7 +3640,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const txH = currentNgPosTxHash()
     if (!txH) return
     const txHash = txH
-    const actualAmt = receivedAmount != null
+    const actualAmt = merchantPaidFees?payableAmt:receivedAmount != null
       ? formatUnits(receivedAmount, meta.decimals)
       : payableAmt
     const expectedSettlementAmt = expectedNgPosSettlementAmount()
@@ -3639,6 +3649,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       return
     }
     const payload = {
+      merchantFeePolicy:merchantPaidFees&&ngPosSettlement==='keep_crypto'?'merchant-v1':undefined,
       eventId: ngPosEventId,
       xpayCheckoutId: ngPosUnifiedXPayId || undefined,
       txHash,
@@ -3681,7 +3692,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         ngPosRegisteredTx.current = txHash
         return
       }
-      const res = await fetch('/api/event-register', {
+      const res = await fetch('/api/checkout-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -4128,7 +4139,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       authenticated={privyAuthenticated} email={privyEmail} signOut={logout} network={chain} networks={availableChains.map(value=>({value,label:value==='arc'?'Arc':CHAIN_META[value].label}))}
       onNetwork={value=>{if(availableChains.includes(value as typeof chain))setChain(value as typeof chain)}}
       walletReady={walletReady} address={walletReady?(solanaCheckout?circleSolanaSession!.wallet.address:circleEvmEmailSession!.wallet.address):''} balance={balance===null?null:formatUnits(balance,6)} shortfall={shortfall}
-      total={total===null?null:formatUnits(total,6)} fee={quote?formatUnits(BigInt(quote.totalUnits)-BigInt(quote.recipientUnits),6):null}
+      total={total===null?null:formatUnits(total,6)} fee={quote?merchantPaidFees?'0':formatUnits(BigInt(quote.totalUnits)-BigInt(quote.recipientUnits),6):null}
       busy={circleSolanaPending||isSolanaConfirming||circlePasskeyPending||circleEvmPaymentProcessing||circleEvmAcceptedPending||privyCircleLinkLoading||paycrestPreparing}
       blocked={paymentAmountBlocked||(requiresAttendeeName&&!attendeeName.trim())} error={circleSolanaError||circlePasskeyError||(shortfall?'':paymentQuoteError)||((solanaCheckout?circleSolanaBalanceError:circleWalletBalanceReadFailed)?'Balance unavailable. Select Update balance to try again.':'')} prepare={prepare} refresh={pocketFunding.onReturn} pay={solanaCheckout?handleCircleSolanaEmailPay:handleCirclePasskeyPay}/>
   }
@@ -4848,8 +4859,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         <div className={cn(isNgPosPaycrestOfframp ? 'space-y-2 px-4 pb-4 pt-3' : 'space-y-3 p-4')}>
           {paymentQuoteNeeded && <div className="space-y-1 text-center text-[11px] font-medium text-slate-500">
             {displayedPaymentQuote ? <>
-              <p>Platform fee: {formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits), 6)} USDC{displayedPaymentQuote.quote.feeBps ? ' (0.25%)' : ''}</p>
-              <p>Network estimate: {formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits), 6)} USDC</p>
+              {!merchantPaidFees && <p>Fee: {formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits) + BigInt(displayedPaymentQuote.quote.networkFeeUnits), 6)} USDC</p>}
               <p className="font-semibold text-gray-900 dark:text-white">Total: {formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits), 6)} USDC</p>
             </> : paymentQuoteLoading ? <div role="status" aria-label="Calculating fees" className="mx-auto h-10 w-44 animate-pulse rounded bg-slate-100 dark:bg-white/10" /> : null}
             {paymentQuoteError && <p>{paymentQuoteError} <button type="button" className="underline" onClick={() => setFeeQuoteRefresh(value => value + 1)}>Retry</button></p>}

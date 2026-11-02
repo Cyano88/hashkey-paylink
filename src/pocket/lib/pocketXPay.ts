@@ -1,3 +1,4 @@
+import type {MerchantPaymentFees} from '../../lib/merchantPaymentFees'
 import type {CheckoutPricing} from '../../lib/checkoutPricing'
 ﻿export type XPayMerchant={pricing?:CheckoutPricing;id:string;pocketId:string;name:string;wallet:string;tokens:string[];updatedAt:number;deletedAt?:number;fixedAmount?:string;expiresAt?:number;swapEnabled?:boolean}
-export type XPayPayment={merchantImageUrl?:string;checkoutId?:string;id:string;key:string;merchantId:string;merchantName:string;pocketId:string;payer:string;recipient:string;token:string;symbol:string;amount:string;usd:string;status:'ready'|'submitted'|'paid'|'failed';createdAt:number;updatedAt:number;expiresAt:number;hash?:string}
+export type XPayPayment={feePayer?:'merchant';fees?:MerchantPaymentFees;merchantImageUrl?:string;checkoutId?:string;id:string;key:string;merchantId:string;merchantName:string;pocketId:string;payer:string;recipient:string;token:string;symbol:string;amount:string;usd:string;status:'ready'|'submitted'|'paid'|'failed';createdAt:number;updatedAt:number;expiresAt:number;hash?:string}

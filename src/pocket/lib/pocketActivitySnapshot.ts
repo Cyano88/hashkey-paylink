@@ -1,5 +1,6 @@
 import {isPocketBankActivityVisible} from './pocketBankActivityVisibility'
 import { EVM_PLATFORM_TREASURY } from '../../lib/platformFees'
+import {merchantFeeTotal} from '../../lib/merchantPaymentFees'
 import type { PocketActivityReadData, PocketActivityRow } from './pocketSchemas'
 
 const transactionKey = (row: PocketActivityRow) => JSON.stringify([
@@ -60,7 +61,15 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   for(const checkout of checkoutRows)for(const [key,row] of rows){
     if(row===checkout||!row.txHash||transactionKey(row)!==transactionKey(checkout)||row.direction!==checkout.direction)continue
     const address=(value:string)=>row.chain==='solana'?value:value.toLowerCase()
-    if(address(row.payer)!==address(checkout.payer)||(row.assetSymbol||'USDC')!==checkout.assetSymbol||decimalIdentity(row.amount)!==decimalIdentity(checkout.amount))continue
+    // A verified merchant split is already included in the customer's gross
+    // order amount. Remove only its exact EVM treasury leg, never another send.
+    if(checkout.direction==='out'&&checkout.merchantFees&&row.chain!=='solana'
+      && ['wallet-withdrawal','wallet-transfer'].includes(row.source||'')
+      && address(row.payer)===address(checkout.payer)
+      && (row.assetSymbol||'USDC')===checkout.assetSymbol
+      && address(row.recipient||'')===EVM_PLATFORM_TREASURY.toLowerCase()
+      && decimalIdentity(row.amount)===decimalIdentity(merchantFeeTotal(checkout.merchantFees,18))){rows.delete(key);continue}
+    if(address(row.payer)!==address(checkout.payer)||(row.assetSymbol||'USDC')!==checkout.assetSymbol||(decimalIdentity(row.amount)!==decimalIdentity(checkout.amount)&&(!checkout.merchantNetAmount||decimalIdentity(row.amount)!==decimalIdentity(checkout.merchantNetAmount))))continue
     const raw=['wallet-withdrawal','wallet-deposit','wallet-transfer'].includes(row.source||'')
     const sameCheckout=(row.settlementType==='hosted_checkout'||row.source==='hosted_checkout')&&(row.merchantId===checkout.merchantId)
     if(!raw&&!sameCheckout)continue

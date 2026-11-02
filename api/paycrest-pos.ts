@@ -1,3 +1,5 @@
+import {createMerchantPayoutBudget} from './merchant-payout-budget.js'
+import type {MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
 import { paycrestComplianceFields } from './paycrest-compliance-state.js'
@@ -17,6 +19,8 @@ const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID ||
 const HAS_DURABLE_STORE = hasRenderDurableStore()
 
 export type PaycrestOrderRecord = {
+  merchant_fees?:MerchantPaymentFees
+  merchant_net_fiat?:string
   intent_id: string
   paycrest_order_id: string
   merchant_id: string
@@ -416,15 +420,18 @@ export async function createPaycrestOfframpOrder(input: {
     reference,
   }
   // Current Pocket, XPay and hosted local payouts share the approved explicit fee policy.
-  const pocketSenderFee = input.unifiedXPay || input.source === 'bank-withdraw' || input.source === 'hosted-checkout'
+  const merchantPaid=input.source==='hosted-checkout'||input.source==='ngpos'
+  const pocketSenderFee = merchantPaid||input.unifiedXPay || input.source === 'bank-withdraw' || input.source === 'hosted-checkout'
   if (pocketSenderFee) Object.assign(payload, xpaySenderFee())
   else if (senderFeePercent) payload.senderFeePercent = senderFeePercent
 
-  const data = await paycrestFetch<any>('/v2/sender/orders', {
+  let data = await paycrestFetch<any>('/v2/sender/orders', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
-  if (pocketSenderFee) assertXPaySenderFee(data)
+  let merchantBudget:Awaited<ReturnType<typeof createMerchantPayoutBudget>>|undefined
+  if(merchantPaid){merchantBudget=await createMerchantPayoutBudget(input.estimatedAmountUsdc,payload,data,body=>paycrestFetch<any>('/v2/sender/orders',{method:'POST',body:JSON.stringify(body)}));data=merchantBudget.data}
+  else if (pocketSenderFee) assertXPaySenderFee(data)
   if (token === 'USDT' && (data?.source?.currency !== token || data?.source?.network !== 'base')) throw Error('Paycrest payout asset could not be verified.')
   const providerAccount = data?.providerAccount ?? data?.provider_account ?? {}
   const receiveAddress = firstText(providerAccount.receiveAddress, providerAccount.receive_address)
@@ -437,6 +444,7 @@ export async function createPaycrestOfframpOrder(input: {
 
   const now = new Date().toISOString()
   const record: PaycrestOrderRecord = {
+    ...(merchantBudget?{merchant_fees:merchantBudget.fees,merchant_net_fiat:merchantBudget.netFiat}:{}),
     intent_id: input.intentId,
     paycrest_order_id: firstText(data?.id, data?.orderId, data?.order_id),
     merchant_id: input.merchantId,

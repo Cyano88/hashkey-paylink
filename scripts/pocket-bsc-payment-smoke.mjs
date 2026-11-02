@@ -2,7 +2,7 @@ import {bscPaymentCoverage} from '../api/pocket/bsc-payment-coverage.ts'
 import assert from 'node:assert/strict'
 import {encodeEventTopics,encodeAbiParameters,encodeFunctionData,parseAbi,toHex} from 'viem'
 import {entryPoint07Abi} from 'viem/account-abstraction'
-import {bscPaymentCalls,bscPaymentRequest,validateBscPayment} from '../src/pocket/lib/pocketBscPayment.ts'
+import {bscPaymentAmounts,bscPaymentCalls,bscPaymentRequest,validateBscPayment} from '../src/pocket/lib/pocketBscPayment.ts'
 import {readBscPaymentSettlement} from '../api/pocket/bsc-payment-settlement.ts'
 import {createBscPaymentOperations} from '../api/pocket/bsc-payment-operations.ts'
 import {POCKET_BSC} from '../src/pocket/lib/pocketBsc.ts'
@@ -16,13 +16,15 @@ const transfer=(token,from,to,value)=>({address:token,topics:encodeEventTopics({
 function fixture(q){
  const op={sender:q.walletAddress,nonce:1n,initCode:'0x',callData:encodeXLayerSponsoredBatch(bscPaymentCalls(q,q.issuedAt)),accountGasLimits:toHex(0n,{size:32}),preVerificationGas:0n,gasFees:toHex(0n,{size:32}),paymasterAndData:'0x',signature:'0x'}
  const input=encodeFunctionData({abi:entryPoint07Abi,functionName:'handleOps',args:[[op],q.walletAddress]})
- const logs=[{address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:opAbi,eventName:'UserOperationEvent',args:{userOpHash:userOp,sender:q.walletAddress,paymaster:q.walletAddress}}),data:encodeAbiParameters([{type:'uint256'},{type:'bool'},{type:'uint256'},{type:'uint256'}],[1n,true,0n,1n])},transfer(POCKET_BSC.assets[q.asset].address,q.walletAddress,q.recipient,BigInt(q.amountUnits)),transfer(POCKET_BSC.assets[q.asset].address,q.walletAddress,EVM_PLATFORM_TREASURY,BigInt(q.reimbursementUnits))]
+ const logs=[{address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:opAbi,eventName:'UserOperationEvent',args:{userOpHash:userOp,sender:q.walletAddress,paymaster:q.walletAddress}}),data:encodeAbiParameters([{type:'uint256'},{type:'bool'},{type:'uint256'},{type:'uint256'}],[1n,true,0n,1n])},transfer(POCKET_BSC.assets[q.asset].address,q.walletAddress,q.recipient,bscPaymentAmounts(q).recipient),transfer(POCKET_BSC.assets[q.asset].address,q.walletAddress,EVM_PLATFORM_TREASURY,bscPaymentAmounts(q).treasury)]
  const s={chain:'0x38',head:'0x1e',blockHash,tx:{hash,to:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',chainId:'0x38',input},receipt:{transactionHash:hash,to:XLAYER_ENTRY_POINT,blockHash,blockNumber:'0x10',status:'0x1',logs}}
  const rpc=async method=>({eth_chainId:s.chain,eth_getTransactionByHash:s.tx,eth_getTransactionReceipt:s.receipt,eth_getBlockByNumber:{hash:s.blockHash,number:'0x10',timestamp:toHex(BigInt(Math.floor(now/1000)))},eth_blockNumber:s.head})[method]
  return {s,read:()=>readBscPaymentSettlement(q,hash,rpc,userOp)}
 }
-for(const asset of ['USDC','USDT']){
- const quote={...q,asset};let f=fixture(quote)
+for(const version of [1,2])for(const asset of ['USDC','USDT']){
+ const quote={...q,asset,version};
+ const amounts=bscPaymentAmounts(quote);assert.equal(amounts.total,version===2?BigInt(q.amountUnits):BigInt(q.amountUnits)+BigInt(q.reimbursementUnits));assert.equal(amounts.platformFee,version===2?BigInt(q.amountUnits)*25n/10000n:0n);
+let f=fixture(quote)
  assert.equal((await f.read()).status,'completed')
  f.s.head='0x1d';assert.equal((await f.read()).status,'pending')
  for(const change of [s=>s.chain='0xc4',s=>s.tx.chainId='0xc4',s=>s.blockHash='0x'+'d'.repeat(64),s=>s.tx.input='0x12345678',s=>s.receipt.logs.pop(),s=>s.receipt.logs[1].data=toHex(1n,{size:32}),s=>s.receipt.logs.push(s.receipt.logs[1])]){
@@ -53,3 +55,5 @@ await assert.rejects(()=>bscPaymentCoverage([{...coverageOp,state:'pending'}],co
 await assert.rejects(()=>bscPaymentCoverage([coverageOp,coverageOp],coverageContext))
 proof.s.receipt.logs.pop();await assert.rejects(()=>bscPaymentCoverage([coverageOp],coverageContext))
 console.log('PASS BNB checkout fee coverage: canonical reimbursement only; pending, duplicate and missing-fee records blocked.')
+
+assert.throws(()=>validateBscPayment({...q,version:2,reimbursementUnits:q.amountUnits},now))

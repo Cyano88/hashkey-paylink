@@ -1,3 +1,4 @@
+import {merchantFeeTotal} from '../src/lib/merchantPaymentFees.js'
 import {isPocketBankActivityVisible} from '../src/pocket/lib/pocketBankActivityVisibility.js'
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
 import {usdtPayoutAllowed} from './pocket/usdt-payout-gate.js'
@@ -671,7 +672,8 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
           : isBankReceiveOrder
             ? 'Bank receive payment'
             : 'XPay payment',
-        amount: order.amount_usdc,
+        amount: order.merchant_fees?.netAmount || order.amount_usdc,
+        ...(order.merchant_fees?{merchantFees:order.merchant_fees,merchantNetAmount:order.merchant_fees.netAmount,feeAmount:merchantFeeTotal(order.merchant_fees,6),feeAsset:baseStablecoin(order.source_token)}:{}),
         assetSymbol: baseStablecoin(order.source_token),
         // Provider status refreshes must not move an older payment to the top.
         // A registered receipt keeps its confirmation time in mergeRegisteredPaycrestActivity.
@@ -687,7 +689,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
             ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
             : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'XPay',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
-        amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
+        amountNgn: order.merchant_net_fiat || order.provider_amount_to_transfer || order.amount_ngn,
         fiatCurrency: order.fiat_currency || 'NGN',
         handoffVerified: isBankWithdrawOrder && /^0x[a-f0-9]{64}$/i.test(order.tx_hash || ''),
         bankSettlementStatus: isBankWithdrawOrder ? order.status : undefined,
@@ -707,7 +709,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
         ...(!isBankSendOrder&&!isBankWithdrawOrder&&!isBankReceiveOrder&&merchant?.display_name?{activityLabel:merchant.display_name}:{}),
       }
     })
-  const enrichedPayments = mergeRegisteredPaycrestActivity(payments, allPaycrestRows)
+  const enrichedPayments = mergeRegisteredPaycrestActivity(payments.map(p=>p.merchantFees?{...p,amount:p.merchantFees.netAmount,feeAmount:merchantFeeTotal(p.merchantFees,6),direction:'in'}:p), allPaycrestRows)
   const matchedOrders = new Set(enrichedPayments.map(row => 'providerReference' in row ? row.providerReference : undefined).filter(Boolean))
   const paycrestRows = allPaycrestRows
     .filter(row => !matchedOrders.has(row.providerReference) && (!row.txHash || !existingTxHashes.has(row.txHash.toLowerCase())))
@@ -1566,9 +1568,9 @@ export async function listPocketUnifiedXPayPosPayments(owner:string,checkoutId?:
  const ids=new Set(merchants.map(m=>m.merchant_id))
  const intents=new Set(Object.values(store.intents||{}).filter(i=>(!checkoutId||i.xpay_checkout_id===checkoutId||(!i.xpay_checkout_id&&legacyIds.includes(i.merchant_id)))&&ids.has(i.merchant_id)).map(i=>i.intent_id))
  const orders=await listPaycrestPosOrdersForMerchants([...ids])
- const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)&&hasXPayBankFunding(o)).map(o=>({merchantName:store.merchants[o.merchant_id]?.display_name,id:o.intent_id,rail:'stablecoins',amount:o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
+ const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)&&hasXPayBankFunding(o)).map(o=>({merchantName:store.merchants[o.merchant_id]?.display_name,id:o.intent_id,rail:'stablecoins',amount:o.merchant_net_fiat||o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
  const receipts=await listRegisteredPaymentsForEventIds([...ids].map(id=>'ngpos-'+id))
- const wallet:XPayHistoryEntry[]=receipts.filter(p=>(!checkoutId||p.xpayCheckoutId===checkoutId||(!p.xpayCheckoutId&&legacyIds.some(id=>p.eventId==='ngpos-'+id)))&&!bank.some(b=>b.hash?.toLowerCase()===p.txHash.toLowerCase())).map(p=>({merchantName:store.merchants[p.eventId.replace(/^ngpos-/,'')]?.display_name,id:p.txHash,rail:'stablecoins',amount:p.amount,asset:'USDC',state:'successful',createdAt:p.ts,hash:p.txHash,network:p.chain}))
+ const wallet:XPayHistoryEntry[]=receipts.filter(p=>(!checkoutId||p.xpayCheckoutId===checkoutId||(!p.xpayCheckoutId&&legacyIds.some(id=>p.eventId==='ngpos-'+id)))&&!bank.some(b=>b.hash?.toLowerCase()===p.txHash.toLowerCase())).map(p=>({merchantName:store.merchants[p.eventId.replace(/^ngpos-/,'')]?.display_name,id:p.txHash,rail:'stablecoins',amount:p.merchantFees?.netAmount||p.amount,asset:'USDC',state:'successful',createdAt:p.ts,hash:p.txHash,network:p.chain}))
  return [...bank,...wallet]
 }
 
@@ -1578,3 +1580,11 @@ export async function ownedPosSetupKey(owner:string,id:string){
 }
 
 export async function ownedPosSetupKeys(owner:string){return Object.fromEntries(Object.values((await readStore()).merchants).filter(m=>m.owner_id===owner).map(m=>[m.merchant_id,m.idempotency_key]))}
+
+export async function readPosCryptoFeeContext(id:string,network:string){
+ const merchant=(await readStore()).merchants[id]
+ if(!merchant||await isPosRetired(id)||merchant.source&&merchant.source!=='pos'||merchant.payout_preference!=='KEEP_CRYPTO'||!merchant.settlement_enabled||merchant.kyc_status==='RESTRICTED'||merchant.supported_networks&&!merchant.supported_networks.includes(network as PosNetwork))throw Error('This merchant is not accepting this payment.')
+ const recipient=merchant.network_wallets?.[network as PosNetwork]||(network==='solana'?merchant.solana_wallet_address:merchant.circle_smart_wallet_address)
+ if(!recipient)throw Error('Merchant payment network is unavailable.')
+ return {recipient,createdAt:merchant.created_at}
+}

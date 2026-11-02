@@ -1,3 +1,4 @@
+import {assertMerchantFeeBinding,rememberMerchantFeeQuote} from './merchant-checkout-fees.js'
 import {assertSolanaSponsorshipRunning} from './emergency-pause.js'
 import {POCKET_USDT_ASSETS} from '../src/pocket/lib/pocketUsdtAssets.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
@@ -243,7 +244,7 @@ export async function buildPocketSolanaWithdrawal(req: Request, res: Response): 
 }
 
 async function buildSolanaTransaction(req: Request, res: Response): Promise<void> {
-  const { from, to, amount, mode, quoteOnly, feeQuoteToken } = req.body as { from?: string; to?: string; amount?: string; mode?: string; quoteOnly?: boolean; feeQuoteToken?: string }
+  const { from, to, amount, mode, quoteOnly, feeQuoteToken, checkoutId, feeMode } = req.body as { checkoutId?:string;feeMode?:'net'|'gross'; from?: string; to?: string; amount?: string; mode?: string; quoteOnly?: boolean; feeQuoteToken?: string }
 
   if (!from || !to || !amount) {
     res.status(400).json({ ok: false, error: 'Missing from / to / amount' })
@@ -300,7 +301,8 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       // lamports (1e9 SOL), rate (1e8 USDC), output USDC base units (1e6).
       gasRecoveryRaw = solanaReimbursementUnits(lamports, rate)
       await checkSolanaRelayerBalance(connection, relayer.publicKey, lamports)
-      const binding = { purpose: mode === 'send' ? 'wallet-send' as const : 'payment' as const, asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: 'gross' as const }
+      const binding = { checkoutId, purpose: mode === 'send' ? 'wallet-send' as const : 'payment' as const, asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: feeMode==='net'?'net' as const:'gross' as const }
+      await assertMerchantFeeBinding(binding)
       if (quoteOnly) {
         quote = createPaymentFeeQuote(binding, gasRecoveryRaw)
         res.json({ ok: true, ...quote, includesAccountSetup: setupCount > 0 })
@@ -312,10 +314,14 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
         res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
       }
-      // The signed quote is a ceiling. A cheaper fresh estimate benefits the customer.
+      if(accepted.mode==='net'){gasRecoveryRaw=BigInt(accepted.networkFeeUnits);await rememberMerchantFeeQuote(feeQuoteToken!,accepted)}
+      // Gross legacy quotes retain their existing reimbursement behavior.
     }
     const treasuryRaw = feeRaw + gasRecoveryRaw
-    const requiredRaw = totalRaw + treasuryRaw
+    const recipientRaw=feeMode==='net'?totalRaw-treasuryRaw:totalRaw
+    const requiredRaw = feeMode==='net'?totalRaw:totalRaw + treasuryRaw
+    if(recipientRaw<=0n)throw Error('Amount cannot cover payment fees.')
+    tx.instructions[tx.instructions.length-(treasury?2:1)]=createTransferCheckedInstruction(fromATA,mint,toATA,fromPubkey,recipientRaw,USDC_DECIMALS)
     if (fromAmount === null || fromAmount < requiredRaw) {
       res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` }); return
     }
@@ -332,7 +338,7 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       lastValidBlockHeight,
       feeAmount: formatUsdc(feeRaw),
       totalAmount: formatUsdc(requiredRaw),
-      recipientAmount: formatUsdc(totalRaw),
+      recipientAmount: formatUsdc(recipientRaw),
       gasRecoveryAmount: formatUsdc(gasRecoveryRaw),
       ataRecoveryApplied: createsRecipientAta,
     })

@@ -1,3 +1,5 @@
+import {merchantFeeTotal,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
+import {verifyMerchantCheckoutTransfer,verifyPosMerchantTransfer} from './merchant-checkout-fees.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import {verifySolanaUsdcTransfer} from './solana-usdc-transfer-verify.js'
 import {isValidSolanaAddress} from '../src/lib/solanaAddress.js'
@@ -15,6 +17,10 @@ import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from './usdc-transfer-ve
 import { attachHostedCheckoutReceipt, hostedCheckoutMode, hostedCheckoutPaymentOption, markHostedCheckoutPaid, readVerifiedHostedCheckoutRecord } from './hosted-checkouts.js'
 
 type PaymentEntry = {
+  merchantFees?:MerchantPaymentFees
+  merchantNetAmount?:string
+  feeAmount?:string
+  feeAsset?:string
   assetSymbol?: 'USDC' | 'USDT'
   xpayCheckoutId?: string
   eventId:     string
@@ -44,6 +50,7 @@ export type RegisteredPaymentReceipt = PaymentEntry & {
 }
 
 export type RegisterPaymentInput = {
+  merchantFeePolicy?:unknown
   xpayCheckoutId?: unknown
   eventId?: unknown
   txHash?: unknown
@@ -239,6 +246,7 @@ function receiptHash(entry: PaymentEntry) {
     payer: entry.payer,
     memo: entry.memo,
     amount: entry.amount,
+    ...(entry.merchantFees?{merchantFees:entry.merchantFees}:{}),
     ...(entry.assetSymbol === 'USDT' ? {assetSymbol: entry.assetSymbol} : {}),
     ts: entry.ts,
     source: entry.source,
@@ -439,6 +447,7 @@ function usdcMicroUnits(value: string) {
 }
 
 export async function registerVerifiedPayment(input: RegisterPaymentInput) {
+  let merchantFees:MerchantPaymentFees|undefined
   let eventId: string
   let txHash: string
   let payer: string
@@ -509,7 +518,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
     const minimumAmount = checkout.flexible ? amount : checkout.amount
     try {
-      const verifiedTransfer = chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
+      const verifiedTransfer: {amount:string;confirmedAt?:string;fees?:MerchantPaymentFees} = checkout.feePayer==='merchant'&&!checkout.settlement?await verifyMerchantCheckoutTransfer(checkout,{txHash,payer,network:chain}):chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
         chain: evmChain!,
         token: assetSymbol,
         txHash,
@@ -528,6 +537,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         txHash,
         payer,
         amount: verifiedTransfer.amount,
+        ...('fees' in verifiedTransfer?{fees:verifiedTransfer.fees}:{}),
         confirmedAt: verifiedTransfer.confirmedAt,
         network: chain,
         referenceType: chain === 'solana' ? 'solana_signature' : 'evm_tx_hash',
@@ -567,7 +577,9 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
     try {
       const expected = await expectedNgPosRecipient({ source, merchantId, settlementType, intentId, chain:evmChain || chain })
-      if(chain==='solana')await verifySolanaUsdcTransfer({txHash,payer,recipient:expected.recipient,minAmount:expected.minAmount||preferredAmount(amount,requestedAmount)})
+      if(source==='ngpos'&&settlementType.toUpperCase()==='KEEP_CRYPTO'&&input.merchantFeePolicy==='merchant-v1'){
+        const verified=await verifyPosMerchantTransfer(merchantId,requestedAmount,{txHash,payer,network:chain});amount=verified.amount;merchantFees=verified.fees
+      }else if(chain==='solana')await verifySolanaUsdcTransfer({txHash,payer,recipient:expected.recipient,minAmount:expected.minAmount||preferredAmount(amount,requestedAmount)})
       else await verifyEvmUsdcTransfer({
         chain: evmChain!,
         txHash,
@@ -645,7 +657,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     if (duplicate) scheduleArchivePayment(duplicate, payer)
     return result
   }
-  const entry: PaymentEntry = { assetSymbol, eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
+  const entry: PaymentEntry = { ...(merchantFees?{merchantFees,merchantNetAmount:merchantFees.netAmount,feeAmount:'0',feeAsset:assetSymbol}:{}), assetSymbol, eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
   if(source==='ngpos' && (isAddress(payer)||chain==='solana'&&isValidSolanaAddress(payer)))entry.verifiedPayer=chain==='solana'?payer:payer.toLowerCase()
   if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source

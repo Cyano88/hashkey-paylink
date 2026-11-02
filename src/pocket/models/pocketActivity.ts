@@ -1,7 +1,10 @@
+import type {MerchantPaymentFees} from '../../lib/merchantPaymentFees'
 import type { PocketPaymentFunding } from '../lib/pocketPaymentFunding'
 import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
 
 export type PocketActivityRow = {
+  merchantFees?:MerchantPaymentFees
+  merchantNetAmount?: string
   merchantName?: string
   merchantImageUrl?: string
   paymentMethod?: 'wallet' | 'card' | 'bank_transfer'

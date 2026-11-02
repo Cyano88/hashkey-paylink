@@ -1,3 +1,4 @@
+import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
 import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
 import {checkoutChildStatusRequest} from './checkout-child-request.js'
@@ -47,6 +48,7 @@ type VerifiedProviderRouting = {
 }
 const verifiedProviderRouting = new WeakMap<Request, VerifiedProviderRouting>()
 type HostedCheckoutPayment = {
+  fees?:MerchantPaymentFees
   status: 'processing' | 'paid' | 'failed'
   referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer' | 'solana_signature'
   txHash: string
@@ -80,6 +82,8 @@ export type HostedCheckoutPaymentAttempt = {
   receiptUrl?: string
 }
 type HostedCheckoutSettlement = {
+  fees?:MerchantPaymentFees
+  netAmountNgn?:string
   mode: 'ngn' | 'ugx'
   provider: 'paycrest'
   orderId: string
@@ -91,6 +95,7 @@ type HostedCheckoutSettlement = {
   accountName: string
 }
 export type CheckoutRecord = {
+  feePayer?:'merchant'
   pricing?:CheckoutPricing
   environment?: 'live'
   id: string
@@ -307,6 +312,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
     record.expiresAt,
     record.requestHash,
   ]
+  if(record.feePayer)fields.push(['feePayer',record.feePayer])
   if(record.pricing)fields.push(['pricing',checkoutPricingFields(record.pricing)])
   if(record.asset !== undefined) fields.push(['asset',record.asset])
   // Keep the legacy single-network signature byte-for-byte stable. New
@@ -314,6 +320,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
   if (record.paymentOptions !== undefined) {
     fields.push(record.paymentOptions.map(option => [option.network, option.recipient]))
   }
+  if(record.settlement?.fees)fields.push(['merchantSettlementFees',record.settlement.fees.payer,record.settlement.fees.rounding||'',record.settlement.fees.platformFee,record.settlement.fees.networkFee,record.settlement.fees.netAmount,record.settlement.netAmountNgn||''])
   if (record.settlement !== undefined) {
     fields.push([
       record.settlement.mode,
@@ -471,6 +478,7 @@ export function hostedCheckoutPaymentOption(record: Pick<CheckoutRecord, 'networ
 }
 
 export async function markHostedCheckoutPaid(input: {
+  fees?:MerchantPaymentFees
   id: string
   txHash: string
   payer: string
@@ -532,7 +540,10 @@ export async function markHostedCheckoutPaid(input: {
       throw new Error('Hosted checkout is already linked to another payment network.')
     }
     newlyPaid = !record.payment
+    const verifiedFees=input.fees||record.settlement?.fees
+    if(record.feePayer==='merchant'&&!record.payment){if(!verifiedFees)throw Error('Verified merchant fees are required.');validateMerchantPaymentFees(amount,verifiedFees,6)}
     const payment: HostedCheckoutPayment = record.payment ?? {
+      ...(verifiedFees?{fees:verifiedFees}:{}),
       status: record.settlement && record.payout?.status !== 'validated' && record.payout?.status !== 'settled' ? 'processing' : 'paid',
       referenceType,
       txHash,
@@ -1024,6 +1035,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         ok: true,
           checkout: {
             id: record.id,
+            feePayer:record.feePayer,
             checkoutMode: hostedCheckoutMode(record),
             agenticType: record.agenticType,
           kind: record.kind,
@@ -1255,10 +1267,12 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         expiresAt: new Date(Math.min(hostedExpiry, Number.isFinite(providerExpiry) ? providerExpiry : hostedExpiry)).toISOString(),
         requestHash,
         checkoutMode,
+        ...(checkoutMode === 'human'&&!providerRouting&&(!nairaOrder||nairaOrder.fees)?{feePayer:'merchant' as const}:{}),
         ...(checkoutMode === 'agentic' ? { agenticType } : {}),
         ...(providerRouting ? { providerFunding: providerRouting.funding } : {}),
         ...(checkoutMode === 'human' && routingOptions && !nairaOrder ? { paymentOptions: routingOptions } : {}),
         ...(nairaOrder ? { settlement: {
+          ...(nairaOrder.fees?{fees:nairaOrder.fees,netAmountNgn:nairaOrder.netAmountNgn}:{}),
           mode: (policy as DeveloperCheckoutPolicy).settlementMode as 'ngn' | 'ugx',
           provider: 'paycrest' as const,
           orderId: nairaOrder.orderId,

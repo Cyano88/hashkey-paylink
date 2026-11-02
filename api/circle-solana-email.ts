@@ -1,3 +1,4 @@
+import {assertMerchantFeeBinding,rememberMerchantFeeQuote} from './merchant-checkout-fees.js'
 import {providerUsageFetch,circleUsageOperation} from './pocket/provider-usage.js'
 import {quoteEvmBridgeFee,sealEvmBridgeFee,openEvmBridgeFee} from './pocket/evm-bridge-reimbursement.js'
 import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../src/pocket/lib/pocketUsdtAssets.js'
@@ -875,7 +876,8 @@ export default async function handler(req: Request, res: Response) {
           if (balanceError) return res.status(400).json(balanceError)
         }
       }
-      const binding: PaymentFeeBinding = { purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
+      const binding: PaymentFeeBinding = { checkoutId:params.checkoutId, purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
+      await assertMerchantFeeBinding(binding)
       return res.json({ ok: true, ...createPaymentFeeQuote(binding, recovery, exempt) })
     }
 
@@ -897,12 +899,14 @@ export default async function handler(req: Request, res: Response) {
       paymentToken(chain as keyof typeof EVM_CHAINS, asset)
       const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
       let quote
-      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
+      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { checkoutId:params.checkoutId, purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
       catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' })
       const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: paymentToken(chain, asset), data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` })
+      await assertMerchantFeeBinding(quote)
+      await rememberMerchantFeeQuote(params.feeQuoteToken,quote)
       const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits), asset)
 
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },false)

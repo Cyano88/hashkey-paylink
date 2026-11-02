@@ -1,3 +1,4 @@
+import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
 import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
 import type {PaylinkReceipt} from '../src/lib/paymentReceiptPdf.js'
@@ -23,7 +24,7 @@ export type StockCheckout = {
   notionalUsd: string; returnUrl: string; swapEnabled: boolean; createdAt: string; expiresAt: string; requestHash: string
   pricing?:CheckoutPricing
   integrity: string
-  payment?: { status: 'paid'; txHash: string; payer: string; amount: string; network: 'xlayer'; confirmedAt: string; receiptId: string }
+  payment?: { fees?:MerchantPaymentFees; status: 'paid'; txHash: string; payer: string; amount: string; network: 'xlayer'; confirmedAt: string; receiptId: string }
 }
 type Notice = { checkoutId: string; attempts: number; nextAttemptAt: number; delivered?: boolean; leaseUntil?: number }
 type Store = { checkouts: Record<string, StockCheckout>; idempotency: Record<string, string>; outbox: Record<string, Notice> }
@@ -157,17 +158,18 @@ async function ensureStockCheckoutExecution(r: StockCheckout, d: Dependencies) {
 }
 
 /** Internal entry point: only call after the shared XPay engine verifies the transfer. */
-export async function settleStockCheckout(input: { id: string; token: string; units: string; recipient: string; payer: string; hash: string; confirmedAt: string; paymentId: string }, d: Dependencies = defaults) {
+export async function settleStockCheckout(input: { id: string; token: string; units: string; recipient: string; payer: string; hash: string; confirmedAt: string; paymentId: string; fees?:MerchantPaymentFees }, d: Dependencies = defaults) {
   if (!isAddress(input.payer) || !/^[1-9][0-9]*$/.test(input.units)) fail('Stock payment does not match checkout.', 409)
   let record: StockCheckout | undefined
   await d.mutate(s => {
     const r = s.checkouts[input.id]
     if (!r || !valid(r,d) || !/^0x[a-f0-9]{64}$/.test(input.hash) || input.token.toLowerCase() !== r.token.address.toLowerCase() || input.recipient.toLowerCase() !== r.recipient.toLowerCase() || BigInt(input.units) !== parseUnits(r.amount, r.token.decimals)) fail('Stock payment does not match checkout.', 409)
+    if(input.fees)validateMerchantPaymentFees(r.amount,input.fees,r.token.decimals)
     const at = Date.parse(input.confirmedAt)
     if (!Number.isFinite(at) || at < Date.parse(r.createdAt) || at > Date.parse(r.expiresAt)) fail('Payment is outside the checkout window.', 409)
     if (r.payment && r.payment.txHash !== input.hash) fail('Checkout already paid.', 409)
     if (Object.values(s.checkouts).some(other => other.id !== r.id && other.payment?.txHash === input.hash)) fail('Transfer already used.', 409)
-    r.payment ??= { status: 'paid', txHash: input.hash, payer: input.payer, amount: r.amount, network: 'xlayer', confirmedAt: input.confirmedAt, receiptId: input.paymentId }
+    r.payment ??= { ...(input.fees?{fees:input.fees}:{}), status: 'paid', txHash: input.hash, payer: input.payer, amount: r.amount, network: 'xlayer', confirmedAt: input.confirmedAt, receiptId: input.paymentId }
     s.outbox[r.id] ??= { checkoutId: r.id, attempts: 0, nextAttemptAt: d.now() }
     record = r; return s
   })
@@ -196,7 +198,7 @@ export async function drainStockCheckoutWebhooks(d: Dependencies = defaults) {
     await d.mutate(s => { const n = s.outbox[notice.checkoutId]; if (!n || n.delivered || (n.leaseUntil ?? 0) > d.now()) return s; n.leaseUntil = d.now() + 60_000; n.attempts++; record = s.checkouts[n.checkoutId]; return s })
     if (!record?.payment || !valid(record,d)) continue
     let sent = false
-    try { const result = await d.notify(record.partnerId, 'payment.confirmed', { checkoutId: record.id, ...(record.pricing?{pricing:record.pricing}:{}), status: 'paid', network: 'xlayer', asset: record.asset, token: record.token.address, amount: record.amount, payer: record.payment.payer, transactionHash: record.payment.txHash, confirmedAt: record.payment.confirmedAt }, { eventId: 'stock-paid:' + record.id, createdAt: record.payment.confirmedAt }); sent = result.status === 'sent' } catch {}
+    try { const result = await d.notify(record.partnerId, 'payment.confirmed', { checkoutId: record.id, ...(record.pricing?{pricing:record.pricing}:{}), status: 'paid', network: 'xlayer', asset: record.asset, token: record.token.address, amount: record.amount, ...(record.payment.fees?{fees:record.payment.fees}:{}), payer: record.payment.payer, transactionHash: record.payment.txHash, confirmedAt: record.payment.confirmedAt }, { eventId: 'stock-paid:' + record.id, createdAt: record.payment.confirmedAt }); sent = result.status === 'sent' } catch {}
     await d.mutate(s => { const n = s.outbox[notice.checkoutId]; n.delivered = sent; n.leaseUntil = undefined; n.nextAttemptAt = d.now() + Math.min(3_600_000, 10_000 * 2 ** Math.min(n.attempts, 8)); return s })
   }
 }

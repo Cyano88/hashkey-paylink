@@ -1,4 +1,5 @@
 import {build} from 'esbuild'
+import {parseUnits,formatUnits} from 'viem'
 import assert from 'node:assert/strict'
 const store=new Map();globalThis.__feePayerStore=store
 const mocks={
@@ -16,17 +17,19 @@ globalThis.fetch=async(url,init)=>{
  assert.equal(new URL(url).pathname,'/v2/sender/orders');assert.equal(init.method,'POST')
  payload=JSON.parse(init.body)
  const fullFee=payload.transactionFeePayer==='customer'&&!forceNetFee
- return Response.json({status:'success',data:{id:'provider-'+payload.reference,status:'initiated',amount:'0.732075',senderFeePercent:'0.25',senderFee:fullFee?'0.0018':'0',transactionFee:'0.02',providerAccount:{receiveAddress:'0x'+'2'.repeat(40),amountToTransfer:fullFee?'0.753875':'0.752075',currency:'USDC',validUntil:new Date(Date.now()+600000).toISOString()}}},{status:201})
+ if(payload.amountIn==='crypto'){const fee=forceNetFee?'0':payload.senderFee;return Response.json({status:'success',data:{id:'provider-'+payload.reference,status:'initiated',amount:payload.amount,rate:payload.rate,senderFee:fee,transactionFee:'0.02',source:payload.source,destination:payload.destination,providerAccount:{receiveAddress:'0x'+'2'.repeat(40),amountToTransfer:formatUnits(parseUnits(payload.amount,6)+parseUnits(fee,6)+20000n,6),currency:'USDC',validUntil:new Date(Date.now()+600000).toISOString()}}},{status:201})}
+ return Response.json({status:'success',data:{id:'provider-'+payload.reference,status:'initiated',amount:'0.732075',rate:'1365.98',senderFeePercent:'0.25',senderFee:fullFee?'0.0018':'0',transactionFee:'0.02',providerAccount:{receiveAddress:'0x'+'2'.repeat(40),amountToTransfer:fullFee?'0.753875':'0.752075',currency:'USDC',validUntil:new Date(Date.now()+600000).toISOString()}}},{status:201})
 }
 try{
  const {createPaycrestOfframpOrder}=await import('../.codex-temp/paycrest-fee-payer-fixture.mjs')
  const input={merchantId:'fixture',amountNgn:'1000',estimatedAmountUsdc:'0.732075',bankCode:'FIXTURE',accountNumber:'0000000001',accountName:'FIXTURE',refundAddress:'0x'+'1'.repeat(40),payerName:'FIXTURE'}
  for(const [intentId,source,fiatCurrency,unifiedXPay] of [['ng','bank-withdraw','NGN',false],['ug','bank-withdraw','UGX',false],['xpay','ngpos','NGN',true],['hosted-ng','hosted-checkout','NGN',false],['hosted-ug','hosted-checkout','UGX',false]]){
   const order=await createPaycrestOfframpOrder({...input,intentId,source,fiatCurrency,unifiedXPay})
-  assert.equal(payload.transactionFeePayer,'customer');assert.equal(payload.senderFeePercent,'0.25');assert.equal(payload.destination.currency,fiatCurrency)
-  assert.equal(order.amount_usdc,'0.753875','Exact funded amount includes full platform fee and provider transaction cost')
+  assert.equal(payload.transactionFeePayer,'customer');assert.equal(payload.senderFeePercent,source==='bank-withdraw'?'0.25':undefined);assert.equal(payload.destination.currency,fiatCurrency)
+  assert.equal(order.amount_usdc,source==='bank-withdraw'?'0.753875':'0.732075','Merchant customer total stays fixed; personal withdrawals retain their original policy')
+  if(source!=='bank-withdraw'){assert.equal(order.merchant_fees.platformFee,'0.0018');assert.equal(order.merchant_fees.netAmount,'0.710275');assert.equal(order.merchant_fees.networkFee,'0.02')}
  }
  forceNetFee=true
- for(const source of ['bank-withdraw','hosted-checkout'])await assert.rejects(createPaycrestOfframpOrder({...input,intentId:'bad-'+source,source}),/bank fee could not be verified/)
- console.log('PASS actual NG/UG bank, hosted local settlement and XPay requests pin customer fee payer, preserve full 0.25%, bind total, and reject net-fee responses; no real orders created.')
+ for(const source of ['bank-withdraw','hosted-checkout'])await assert.rejects(createPaycrestOfframpOrder({...input,intentId:'bad-'+source,source}),/bank fee could not be verified|bank settlement quote changed/)
+ console.log('PASS actual NG/UG bank, hosted local settlement and XPay requests separate personal withdrawals from merchant-paid fees, bind provider funding totals, and reject changed fee responses; no real orders created.')
 }finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.PAYCREST_API_KEY;else process.env.PAYCREST_API_KEY=oldKey;delete globalThis.__feePayerStore}

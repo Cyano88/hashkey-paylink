@@ -3,7 +3,7 @@ import fs from 'node:fs'
 fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
 '../developer-receipt-settings.js':`export const readDeveloperReceiptSettings=async()=>globalThis.fixture.emailEnabled?{enabled:true}:undefined`,
-'../hosted-stock-checkouts.js':`export const isStockCheckoutId=id=>typeof id==='string'&&/^chkx_[a-f0-9]{24}$/.test(id);export const readStockCheckout=async id=>globalThis.fixture.stockCheckout?.id===id?globalThis.fixture.stockCheckout:null;export const assertStockCheckoutPayable=async()=>{if(globalThis.fixture.stockDisabled)throw Object.assign(Error('Checkout disabled'),{status:409})};export const settleStockCheckout=async proof=>{globalThis.fixture.stockSettled=proof;globalThis.fixture.stockCheckout.payment={status:'paid',txHash:proof.hash}}`,
+'../hosted-stock-checkouts.js':`export const readStockCheckoutBranding=async()=>new Map();export const isStockCheckoutId=id=>typeof id==='string'&&/^chkx_[a-f0-9]{24}$/.test(id);export const readStockCheckout=async id=>globalThis.fixture.stockCheckout?.id===id?globalThis.fixture.stockCheckout:null;export const assertStockCheckoutPayable=async()=>{if(globalThis.fixture.stockDisabled)throw Object.assign(Error('Checkout disabled'),{status:409})};export const settleStockCheckout=async proof=>{globalThis.fixture.stockSettled=proof;globalThis.fixture.stockCheckout.payment={status:'paid',txHash:proof.hash}}`,
 './payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
 '../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner,email:globalThis.fixture.email});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
 '../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));globalThis.fixture.saved=state;return structuredClone(state)}`,
@@ -12,7 +12,7 @@ const mocks={
 './xstocks-prices.js':`export const readStockMarketPrices=async tokens=>Object.fromEntries(tokens.map(t=>[t,{usd:200,fetchedAt:Date.now()}]))`
 }
 await build({entryPoints:['api/pocket/xpay.ts'],outfile:'.codex-temp/xpay-handler-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
-const {default:handler,listPocketUnifiedXPayStockPayments}=await import('../.codex-temp/xpay-handler-test.mjs')
+const {default:handler,listPocketUnifiedXPayStockPayments,verifyXPayTransfer}=await import('../.codex-temp/xpay-handler-test.mjs')
 const {stockAssets}=await import('../src/pocket/lib/pocketXStocksWallet.ts')
 const {encodeEventTopics,encodeAbiParameters,parseAbiItem}=await import('viem')
 const assert=(await import('node:assert/strict')).default
@@ -127,3 +127,17 @@ assert.deepEqual(fixture.notices.slice(-2).map(n=>n.title),['Web payment sent','
 assert.equal(fixture.stockSettled.id,fixture.stockCheckout.id);assert.equal(fixture.stockSettled.units,'123456789000000000');
 await call({...stockBody,key:'fixture-stock-checkout-0003'},409);
 console.log('PASS shared developer stock engine: fixed units, disabled-project authorization, concurrent payer lock, verified settlement and paid-order replay rejection.');
+
+const {xLayerFeeAssets}=await import('../src/pocket/lib/pocketXLayerFeeAssets.ts')
+const {EVM_PLATFORM_TREASURY}=await import('../src/lib/platformFees.ts')
+const {formatUnits}=await import('viem')
+for(const [symbol,{address,decimals}]of Object.entries(xLayerFeeAssets)){
+ const gross=10n**BigInt(decimals),fee=gross*25n/10000n+250n,net=gross-fee,stamp=Date.now()
+ const p={payer:from,recipient:to,token:address,units:String(gross),authorizedAt:stamp-1000,feePayer:'merchant',fees:{payer:'merchant',platformFee:formatUnits(gross*25n/10000n,decimals),networkFee:formatUnits(250n,decimals),netAmount:formatUnits(net,decimals)}}
+ const log=(recipient,units)=>({address,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from,to:recipient}}),data:encodeAbiParameters([{type:'uint256'}],[units])})
+ const logs=[log(to,net),log(EVM_PLATFORM_TREASURY,fee)]
+ assert.equal(verifyXPayTransfer(p,{status:'success',logs},stamp),true)
+ assert.equal(verifyXPayTransfer(p,{status:'success',logs:logs.slice(0,1)},stamp),false)
+ assert.equal(verifyXPayTransfer(p,{status:'success',logs:[log(to,gross),logs[1]]},stamp),false)
+}
+console.log('PASS all four X Layer stablecoins require exact merchant net and full fee proof.')

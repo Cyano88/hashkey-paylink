@@ -1,6 +1,16 @@
+import {formatUnits,parseUnits} from 'viem'
 import assert from 'node:assert/strict'
-import { attachHostedCheckoutReceipt, createHostedCheckoutsHandler, drainHostedCheckoutWebhookOutbox, markHostedCheckoutNairaPayout, markHostedCheckoutPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
+import { attachHostedCheckoutReceipt, createHostedCheckoutsHandler, drainHostedCheckoutWebhookOutbox, markHostedCheckoutNairaPayout, markHostedCheckoutPaid as markPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
 import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
+
+async function markHostedCheckoutPaid(input,dependencies){
+ const r=(await dependencies.read()).checkouts[input.id]
+ if(r?.feePayer==='merchant'){
+  const gross=parseUnits(input.amount,6),platform=gross*25n/10000n
+  input={...input,fees:{payer:'merchant',platformFee:formatUnits(platform,6),networkFee:'0',netAmount:formatUnits(gross-platform,6)}}
+ }
+ return markPaid(input,dependencies)
+}
 
 function responseRecorder() {
   return {

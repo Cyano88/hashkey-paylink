@@ -921,11 +921,12 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
 }
 
 export type CirclePaymentFeeQuote = { quote: PaymentFeeQuote; token: string }
-export async function readCirclePaymentFeeQuote(params: { session: CircleEvmEmailSession; recipient: string; amount: string; asset?: 'USDC' | 'USDT'; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string; purpose?: 'payment' | 'wallet-send' }): Promise<CirclePaymentFeeQuote> {
-  return circleWalletApi<CirclePaymentFeeQuote>({ action: params.purpose === 'wallet-send' ? 'quoteEvmSend' : 'quoteEvmPayment', asset: params.asset ?? 'USDC', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
+export async function readCirclePaymentFeeQuote(params: { checkoutId?:string; session: CircleEvmEmailSession; recipient: string; amount: string; asset?: 'USDC' | 'USDT'; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string; purpose?: 'payment' | 'wallet-send' }): Promise<CirclePaymentFeeQuote> {
+  return circleWalletApi<CirclePaymentFeeQuote>({ checkoutId:params.checkoutId, action: params.purpose === 'wallet-send' ? 'quoteEvmSend' : 'quoteEvmPayment', asset: params.asset ?? 'USDC', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
 }
 
 export async function sendCircleEvmEmailPayment(params: {
+  checkoutId?:string
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
@@ -953,6 +954,7 @@ export async function sendCircleEvmEmailPayment(params: {
     transaction?: Record<string, unknown>
   }>({
     action: 'executeEvmPayment',
+    checkoutId:params.checkoutId,
     asset: params.asset ?? 'USDC',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,

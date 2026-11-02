@@ -1,5 +1,6 @@
+import {bindXPayFeeQuote} from './xpay.js'
 import {xLayerUsde,xLayerUsdg} from '../../src/pocket/lib/pocketXLayerPaymentAssets.js'
-import {xLayerFeeScale} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
+import {xLayerFeeAssets,type XLayerFeeAsset,xLayerFeeScale} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {readSponsoredSwapOutcome,type SponsoredSwapEvidence} from './xlayer-swap-settlement.js'
 import {encodeXLayerSponsoredBatch} from './xlayer-sponsored-cost.js'
@@ -61,12 +62,12 @@ const fail = (message: string, status = 400) => Object.assign(new Error(message)
 // Build stablecoin calls on the server. Client-supplied arbitrary batches never
 // reach the estimator or sponsor. Ownership is established by the handler first.
 function reimbursementTransfer(raw:any,ownerId:string,walletId:string,wallet:string,id:string,c:Config,now:number){
-  const token=raw?.asset==='USDC'?'0xb6ceceab302e2e4948951ee7843fc24e92933061':raw?.asset==='USDT'?'0x779ded0c9e1022225f8e0630b35a9b54be713736':null
-  if(!token||!isAddress(raw?.recipient)||typeof raw?.amountUnits!=='string'||! /^[1-9]\d{0,19}$/.test(raw.amountUnits)||BigInt(raw.amountUnits)>=2n**64n)throw fail('Invalid stablecoin transfer.')
+  const token=Object.hasOwn(xLayerFeeAssets,raw?.asset)&&(['USDC','USDT'].includes(raw.asset)||raw.merchantPaymentId)?xLayerFeeAssets[raw.asset as XLayerFeeAsset].address:null
+  if(!token||!isAddress(raw?.recipient)||typeof raw?.amountUnits!=='string'||! /^[1-9]\d{0,77}$/.test(raw.amountUnits)||BigInt(raw.amountUnits)>=2n**256n||(!raw.merchantPaymentId&&BigInt(raw.amountUnits)>=2n**64n))throw fail('Invalid stablecoin transfer.')
   const data=encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[raw.recipient,BigInt(raw.amountUnits)]})
   const request=makeSponsoredRequest({appId:c.appId,walletId,attemptId:id,expiresAt:now+30000,from:wallet,to:token,data})
   validateSponsoredRequest(request,walletId,c,now)
-  return {binding:{ownerId,walletId,walletAddress:wallet as Hex,asset:raw.asset as 'USDC'|'USDT',amountUnits:raw.amountUnits as string,intentId:id},calls:[{to:token as Hex,data,value:'0x0' as const}],token,units:BigInt(raw.amountUnits)}
+  return {binding:{...(raw.merchantPaymentId?{merchantPaymentId:String(raw.merchantPaymentId)}:{}),ownerId,walletId,walletAddress:wallet as Hex,asset:raw.asset as XLayerFeeAsset,amountUnits:raw.amountUnits as string,intentId:id},calls:[{to:token as Hex,data,value:'0x0' as const}],token,units:BigInt(raw.amountUnits)}
 }
 async function minimum(token:string,units:bigint) {
   if(isXLayerSendStablecoin(token)) return assertSponsoredSendMinimum(token,units,6)
@@ -210,8 +211,10 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         }
         if(req.body?.purpose!==undefined||!d.reimbursement)throw fail('Reimbursed transfers are not available yet.',503)
         const transfer=reimbursementTransfer(req.body.intent,identity.userId,embedded.id,wallet,req.body.attemptId,c,d.now())
+        if(transfer.binding.merchantPaymentId)await bindXPayFeeQuote(identity.userId,transfer.binding.merchantPaymentId,wallet,transfer.token,req.body.intent.recipient,transfer.binding.amountUnits)
         const quote=await quoteXLayerReimbursement(transfer.binding,transfer.calls,d.now()+30000,d.reimbursement.estimate,d.reimbursement.pricing,d.now)
-        return res.json({ok:true,quoteToken:sealXLayerReimbursement(quote),feeUnits:quote.networkFeeUnits,totalUnits:quote.totalUnits,expiresAt:quote.expiresAt,
+        if(quote.merchantPaymentId)await bindXPayFeeQuote(identity.userId,quote.merchantPaymentId,wallet,transfer.token,req.body.intent.recipient,quote.amountUnits,quote)
+        return res.json({ok:true,quoteToken:sealXLayerReimbursement(quote),feeUnits:String(BigInt(quote.networkFeeUnits)+(quote.merchantPaymentId?BigInt(quote.amountUnits)*25n/10000n:0n)),totalUnits:quote.totalUnits,expiresAt:quote.expiresAt,
           request:makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:quote.intentId,expiresAt:quote.expiresAt,calls:quote.calls})})
       }
       if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})
@@ -248,6 +251,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         if(earn||!d.reimbursement)throw fail('Reimbursed transfers are not available yet.',503)
         const transfer=reimbursementTransfer(req.body.intent,identity.userId,embedded.id,wallet,possibleId,c,d.now())
         try {approved=openXLayerReimbursement(req.body.quoteToken,transfer.binding,transfer.calls,d.now())}catch{throw fail('Transfer quote changed or expired. Review the transfer again.',422)}
+        if(approved.merchantPaymentId&&!reserved)await bindXPayFeeQuote(identity.userId,approved.merchantPaymentId,wallet,transfer.token,req.body.intent.recipient,approved.amountUnits,approved,true)
         const canonical=makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:approved.intentId,expiresAt:approved.expiresAt,calls:approved.calls})
         if(!isDeepStrictEqual(request,canonical))throw fail('Payment request does not match the approved transfer.')
         validated={id:approved.intentId,canonical,wallet,token:transfer.token,units:transfer.units}

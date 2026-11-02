@@ -1,7 +1,8 @@
+import type {MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import type {CheckoutRecord} from './hosted-checkouts.js'
 export type PaymentEvent={event:string;occurredAt:string;details:Record<string,string>}
 export type PaymentGroup={recordId:string;product:'checkout'|'funding';createdAt:string;updatedAt:string;events:PaymentEvent[]}
-export type StatusCheckout=Pick<CheckoutRecord,'amount'|'expiresAt'|'paymentAttempts'|'settlement'|'payout'>&{payment?:{status:string;referenceType?:string;txHash?:string}}
+export type StatusCheckout=Pick<CheckoutRecord,'amount'|'expiresAt'|'paymentAttempts'|'settlement'|'payout'>&{payment?:{fees?:MerchantPaymentFees;status:string;referenceType?:string;txHash?:string}}
 type Funding={checkoutId:string;amount:string;expiresAt:string;observation?:{status:string;paymentStatus:string;bridgeStatus:string;observedAt:string}}
 export function paymentStatus(group:PaymentGroup,checkout?:StatusCheckout,funding?:Funding,now=Date.now()){
  const events=group.events??[],latest=[...events].reverse(),details=latest.find(e=>e.details.amount)?.details??{}
@@ -24,5 +25,6 @@ export function paymentStatus(group:PaymentGroup,checkout?:StatusCheckout,fundin
  else if(has(['funding.expired','checkout.expired'])){status='expired';note='The payment window has closed.'}
  else if(has(['payment.gateway_accepted','checkout.payment_accepted','payment.processing','checkout.processing'])){status='processing';note='Payment submitted; final confirmation is unavailable.'}
  return {recordId:group.recordId,product:group.product,createdAt:group.createdAt,updatedAt:group.updatedAt,status,note,amount:funding?.amount??checkout?.amount??details.amount??'',asset:group.product==='funding'?'USDC':events.find(e=>e.event==='checkout.created')?.details.asset??details.asset??'USDC',expiresAt,
+  ...(group.product==='checkout'&&checkout?.payment?.fees?{merchantFees:checkout.payment.fees,...(checkout.settlement?.netAmountNgn?{merchantSettlement:{amount:checkout.settlement.netAmountNgn,currency:checkout.settlement.mode==='ugx'?'UGX':'NGN'}}:{})}:{}),
   transactions:[...new Set(events.flatMap(e=>[e.details.txHash,e.details.paymentTransaction,e.details.bridgeTransaction,e.details.transaction].filter(Boolean)))],events}
 }

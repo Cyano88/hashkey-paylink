@@ -28,9 +28,10 @@ export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined
  const receiptId='receiptId' in p?p.receiptId:record.id
  return {...(record.pricing?{pricing:record.pricing}:{}),type:'money_out',receiptId,receiptHash:p.txHash,eventId:record.id,txHash:p.txHash,title:'Web payment',status,chain:network,
   payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset||'USDC',createdAt:Date.parse(p.confirmedAt),paymentMethod:'wallet',
+  ...('fees' in p&&p.fees?{merchantFees:p.fees,feeAmount:'0',feeAsset:record.asset||'USDC'}:{}),
   source:'hosted_checkout',settlementType:'hosted_checkout',merchantId:record.id,recipient:record.merchantName,destination,
   referenceId:receiptId,brandName:record.merchantName,brandImageUrl:record.brandImageUrl,brandKind:'partner',
-  ...(local?{amountNgn:local.amountNgn,fiatCurrency:local.mode==='ugx'?'UGX' as const:'NGN' as const,bankSettlementStatus:payoutStatus||'processing'}:{})}
+  ...(local?{merchantSettlementAmount:local.netAmountNgn,amountNgn:local.amountNgn,fiatCurrency:local.mode==='ugx'?'UGX' as const:'NGN' as const,bankSettlementStatus:payoutStatus||'processing'}:{})}
 }
 const readers={checkout:readReceiptCheckout,stockReceipt:readStockCheckoutReceipt,bscReceipt:readBscCheckoutByReceipt,registered:findRegisteredPaymentReceipt}
 export async function readCheckoutReceipt(id:string,d=readers):Promise<PaylinkReceipt|undefined>{
@@ -52,5 +53,5 @@ export function checkoutBillingReceipt(receipt:PaylinkReceipt,projectId?:string,
  return {id:receipt.receiptId,projectId,merchant:receipt.recipient||receipt.brandName||'Merchant',merchantLogoUrl:receipt.brandImageUrl,
   pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
   supportEmail:settings?.supportEmail,timeZone:settings?.timeZone||'UTC',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(receipt.receiptId),
-  ...(receipt.amountNgn&&receipt.fiatCurrency?{settlement:{amount:receipt.amountNgn,currency:receipt.fiatCurrency}}:{})}
+  ...(receipt.amountNgn&&receipt.fiatCurrency?{settlement:{amount:receipt.merchantSettlementAmount||receipt.amountNgn,currency:receipt.fiatCurrency}}:{})}
 }

@@ -1,3 +1,7 @@
+import {xLayerFeeAssets,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
+import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {validateMerchantPaymentFees} from '../../src/lib/merchantPaymentFees.js'
+import type {XLayerFeeQuote} from './xlayer-reimbursement.js'
 import {checkoutStablecoins} from '../../src/lib/checkoutStablecoins.js'
 import{readDeveloperReceiptSettings}from'../developer-receipt-settings.js'
 import {ownsTerminalSetupKey,legacyXPayTerminal,assertUnifiedXPayDestination} from './unified-xpay-store.js'
@@ -38,7 +42,7 @@ async function checkoutMerchant(id:string,readOnly=false):Promise<Merchant|undef
 async function syncStockPayment(p:Payment){
  if(!isStockCheckoutId(p.merchantId)||p.status!=='paid'||p.checkoutSynced)return p
  if(!p.hash||!p.confirmedAt)fail('Payment confirmation is still being recorded.',503)
- await settleStockCheckout({id:p.merchantId,token:p.token,units:p.units,recipient:p.recipient,payer:p.payer,hash:p.hash,confirmedAt:p.confirmedAt,paymentId:p.id})
+ await settleStockCheckout({id:p.merchantId,token:p.token,units:p.units,recipient:p.recipient,payer:p.payer,hash:p.hash,confirmedAt:p.confirmedAt,paymentId:p.id,...(p.fees?{fees:p.fees}:{})})
  const result=await mutate(s=>{s.payments[p.id].checkoutSynced=true})
  return result.payments[p.id]
 }
@@ -48,9 +52,16 @@ export function xpayUnits(usd:string,price:number,decimals:number){
  const rate=parseUnits(price.toFixed(18),18);if(rate<=0n)fail('Price unavailable.')
  return (parseUnits(usd,18)*10n**BigInt(decimals)+rate-1n)/rate
 }
-export function verifyXPayTransfer(p:Pick<Payment,'payer'|'recipient'|'token'|'units'|'authorizedAt'>,receipt:{status:string;logs:readonly any[]},timestamp:number){
+export function verifyXPayTransfer(p:Pick<Payment,'payer'|'recipient'|'token'|'units'|'authorizedAt'|'fees'|'feePayer'>,receipt:{status:string;logs:readonly any[]},timestamp:number){
  if(receipt.status!=='success')return false
  if(!p.authorizedAt||timestamp<p.authorizedAt-5000)return false
+ if(p.feePayer==='merchant'){
+  if(!p.fees)return false
+  const decimals=Object.values(xLayerFeeAssets).find(a=>a.address.toLowerCase()===p.token.toLowerCase())?.decimals
+  if(decimals===undefined)return false
+  const amounts=validateMerchantPaymentFees(formatUnits(BigInt(p.units),decimals),p.fees,decimals)
+  return exactTokenTransfer({...p,units:String(amounts.net)},receipt)&&exactTokenTransfer({...p,recipient:EVM_PLATFORM_TREASURY,units:String(amounts.totalFee)},receipt)
+ }
  return exactTokenTransfer(p,receipt)
 }
 async function observe(p:Payment){
@@ -61,7 +72,7 @@ async function observe(p:Payment){
   if(Date.now()-Number(head.timestamp)*1000>60000||head.number<start+2n)return p
   const end=head.number-2n<start+499n?head.number-2n:start+499n
   const logs=await stockNoticeClient.getLogs({address:p.token as Hex,event,args:{from:p.payer as Hex,to:p.recipient as Hex},fromBlock:start,toBlock:end})
-  const updated=await mutate(s=>{const current=s.payments[p.id];if(current.hash)return;const match=logs.find(log=>String(log.args.value)===p.units&&log.transactionHash&&!s.hashes[log.transactionHash.toLowerCase()]);if(match?.transactionHash){current.hash=match.transactionHash.toLowerCase();s.hashes[current.hash]=p.id}else current.scanBlock=String(end)})
+  const updated=await mutate(s=>{const current=s.payments[p.id];if(current.hash)return;const match=logs.find(log=>String(log.args.value)===(p.fees?parseUnits(p.fees.netAmount,xLayerFeeAssets[p.symbol as XLayerFeeAsset].decimals).toString():p.units)&&log.transactionHash&&!s.hashes[log.transactionHash.toLowerCase()]);if(match?.transactionHash){current.hash=match.transactionHash.toLowerCase();s.hashes[current.hash]=p.id}else current.scanBlock=String(end)})
   p=updated.payments[p.id]
  }
  if(!p.hash)return p
@@ -76,8 +87,8 @@ async function observe(p:Payment){
  const result=await mutate(s=>{const current=s.payments[p.id];if(!current||current.hash!==p.hash)return;current.status=matches?'paid':'failed';current.updatedAt=Date.now();current.blockNumber=String(receipt.blockNumber);current.blockHash=receipt.blockHash;current.confirmedAt=new Date(Number(block.timestamp)*1000).toISOString()})
  const paid=await syncStockPayment(result.payments[p.id])
  if(paid.status==='paid'){
-  const log=receipt.logs.find(log=>verifyXPayTransfer(paid,{status:'success',logs:[log]},Number(block.timestamp)*1000))
-  if(log?.logIndex!=null)await mutateStockNotices(s=>{for(const owner of [paid.owner,paid.merchantOwner])putStockNotice(s,{id:owner+':transfer:'+paid.hash+':'+log.logIndex+':'+(owner===paid.owner?'out':'in'),owner,title:(isStockCheckoutId(paid.merchantId)?'Web payment':'XPay payment')+(owner===paid.owner?' sent':' received'),body:paid.amount+' '+paid.symbol,at:paid.updatedAt,hash:paid.hash})})
+  const log=receipt.logs.find(log=>exactTokenTransfer({...paid,units:paid.fees?parseUnits(paid.fees.netAmount,xLayerFeeAssets[paid.symbol as XLayerFeeAsset].decimals).toString():paid.units},{status:'success',logs:[log]}))
+  if(log?.logIndex!=null)await mutateStockNotices(s=>{for(const owner of [paid.owner,paid.merchantOwner])putStockNotice(s,{id:owner+':transfer:'+paid.hash+':'+log.logIndex+':'+(owner===paid.owner?'out':'in'),owner,title:(isStockCheckoutId(paid.merchantId)?'Web payment':'XPay payment')+(owner===paid.owner?' sent':' received'),body:(owner===paid.owner?paid.amount:paid.fees?.netAmount||paid.amount)+' '+paid.symbol,at:paid.updatedAt,hash:paid.hash})})
  }
  return paid
 }
@@ -131,6 +142,7 @@ export default async function handler(req:Request,res:Response){
    if(!isStockCheckoutId(id))await verifyStockWalletOwner(m.owner,m.wallet)
    const asset=await stockNoticeAsset(token),prices=await readStockMarketPrices([token]),price=prices[token]
    if(!price||Date.now()-price.fetchedAt>=60000)fail('A fresh asset price is unavailable. Try again.',503)
+   if(Object.hasOwn(xLayerFeeAssets,asset.symbol)&&b.feePolicy!=='merchant-v1')fail('Update Pocket or reload checkout to review merchant-paid fees.',409)
    const units=m.fixedAmount?parseUnits(m.fixedAmount,asset.decimals):xpayUnits(usd,price.usd,asset.decimals),now=Date.now()
    const receiptEmail=isStockCheckoutId(id)&&identity.email?await readStockCheckout(id,true).then(async checkout=>checkout&&await readDeveloperReceiptSettings(checkout.partnerId)?identity.email:undefined).catch(()=>undefined):undefined
    let payment:Payment|undefined
@@ -141,7 +153,7 @@ export default async function handler(req:Request,res:Response){
     if(Object.values(s.payments).filter(p=>p.owner===owner&&p.createdAt>now-86400000).length>=100)fail('Daily payment limit reached.',429)
     const current=s.merchants[id]||(isStockCheckoutId(id)?m:undefined);if(!current||current.deletedAt||current.updatedAt!==m.updatedAt)fail('Merchant settings changed. Review again.',409)
     if(isStockCheckoutId(id)&&Object.values(s.payments).some(p=>p.merchantId===id&&['submitted','paid'].includes(p.status)))fail('This checkout already has a payment in progress.',409)
-    payment={id:randomUUID(),checkoutId,key,owner,...(receiptEmail?{receiptEmail}:{}),merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd:m.fixedAmount?(Number(m.fixedAmount)*price.usd).toFixed(2):usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:Math.min(now+5*60_000,m.expiresAt||Infinity)}
+    payment={id:randomUUID(),...(Object.hasOwn(xLayerFeeAssets,asset.symbol)?{feePayer:'merchant' as const}:{}),checkoutId,key,owner,...(receiptEmail?{receiptEmail}:{}),merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd:m.fixedAmount?(Number(m.fixedAmount)*price.usd).toFixed(2):usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:Math.min(now+5*60_000,m.expiresAt||Infinity)}
     s.payments[payment.id]=payment
    })
    return res.json({ok:true,payment:publicPayment(payment!)})
@@ -177,7 +189,7 @@ export async function listPocketXPayStockDestinations(owner:string) {
 
 export async function listPocketUnifiedXPayStockPayments(owner:string,checkoutId?:string,legacyIds:string[]=[]):Promise<XPayHistoryEntry[]>{
  const s=await read()
- return Object.values(s.payments).filter(p=>p.merchantOwner===owner&&(!checkoutId||p.checkoutId===checkoutId||(!p.checkoutId&&legacyIds.includes(p.merchantId)))&&p.status!=='ready').map(p=>({merchantName:p.merchantName,id:p.id,rail:p.symbol==='USDC'?'stablecoins':'xstocks',amount:p.amount,asset:p.symbol,state:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',createdAt:p.createdAt,hash:p.hash,network:'xlayer'}))
+ return Object.values(s.payments).filter(p=>p.merchantOwner===owner&&(!checkoutId||p.checkoutId===checkoutId||(!p.checkoutId&&legacyIds.includes(p.merchantId)))&&p.status!=='ready').map(p=>({merchantName:p.merchantName,id:p.id,rail:Object.hasOwn(xLayerFeeAssets,p.symbol)?'stablecoins':'xstocks',amount:p.fees?.netAmount||p.amount,asset:p.symbol,state:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',createdAt:p.createdAt,hash:p.hash,network:'xlayer'}))
 }
 
 export async function ownedStockSetupKey(owner:string,id:string){
@@ -186,3 +198,17 @@ export async function ownedStockSetupKey(owner:string,id:string){
 }
 
 export async function ownedStockSetupKeys(owner:string){return Object.fromEntries(Object.values((await read()).merchants).filter(m=>m.owner===owner).map(m=>[m.id,m.createKey]))}
+
+/** Bound to a server-owned merchant order, never a client fee waiver for a personal send. */
+export async function bindXPayFeeQuote(owner:string,paymentId:string,wallet:string,token:string,recipient:string,units:string,quote?:XLayerFeeQuote,submitting=false){
+ const check=(p:Payment|undefined)=>{
+  if(!p||p.owner!==owner||p.feePayer!=='merchant'||p.payer.toLowerCase()!==wallet.toLowerCase()||p.token.toLowerCase()!==token.toLowerCase()||p.recipient.toLowerCase()!==recipient.toLowerCase()||p.units!==units||!Object.hasOwn(xLayerFeeAssets,p.symbol)||(!submitting&&p.status!=='ready')||(submitting&&p.status!=='submitted')||(!submitting&&p.expiresAt<=Date.now()))fail('Merchant payment changed. Review again.',409)
+  return p
+ }
+ const p=check((await read()).payments[paymentId]);if(!quote)return
+ const decimals=xLayerFeeAssets[p.symbol as XLayerFeeAsset].decimals
+ const gross=BigInt(units),platform=gross*25n/10000n,network=BigInt(quote.networkFeeUnits)
+ const fees={payer:'merchant' as const,platformFee:formatUnits(platform,decimals),networkFee:formatUnits(network,decimals),netAmount:formatUnits(gross-platform-network,decimals)}
+ validateMerchantPaymentFees(p.amount,fees,decimals)
+ await mutate(s=>{const current=check(s.payments[paymentId]);if(submitting){if(!current.fees||(['payer','platformFee','networkFee','netAmount'] as const).some(key=>current.fees![key]!==fees[key]))fail('Merchant fee approval changed.',409)}else current.fees=fees})
+}
