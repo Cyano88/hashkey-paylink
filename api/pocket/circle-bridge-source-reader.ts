@@ -1,5 +1,6 @@
 import type {Hex} from 'viem'
-import {inboundBridgeClient,inboundChains} from './inbound-bridge-networks.js'
+import {inboundChains} from './inbound-bridge-networks.js'
+import {readBridgeProofEvmRpc} from '../evm-read.js'
 import {proveCircleKitSource,type CircleKitSourceExpectation,type CircleKitSourceReceipt} from './circle-bridge-source-proof.js'
 import type {NativeCallTrace} from './native-send-quote.js'
 
@@ -30,7 +31,7 @@ function receipt(value:unknown,txHash:string){
 export async function readCircleKitSourceProof(expected:CircleKitSourceExpectation,rpcOverride?:Rpc){
  const source=expected.batch.source,txHash=hash(expected.txHash)
  if(!['base','arbitrum','ethereum','polygon','arc'].includes(source))pending()
- const rpc=rpcOverride??(inboundBridgeClient(source).request as unknown as Rpc)
+ const rpc=rpcOverride??(({method,params})=>readBridgeProofEvmRpc(source,method,params))
  const call=async(method:string,params:unknown[])=>{
   try{return await rpc({method,params})}catch{throw Object.assign(Error('Circle bridge source RPC evidence is unavailable. Try again.'),{status:503,code:'circle_bridge_source_unavailable'})}
  }

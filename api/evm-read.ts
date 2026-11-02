@@ -62,14 +62,21 @@ export function validateRead(method: unknown, input: unknown): { method: string;
 }
 
 // Limits are per server process. This endpoint is not a general developer RPC product.
-export function createReadService(fetcher: typeof fetch = fetch, now = Date.now, options: { publicOnly?: boolean; privateOnly?: boolean; verifyChain?:boolean } = {}) {
+export function createReadService(fetcher: typeof fetch = fetch, now = Date.now, options: { publicOnly?: boolean; privateOnly?: boolean; verifyChain?:boolean; bridgeProof?:boolean } = {}) {
   const cache = new Map<string, { expires: number; result: unknown }>()
   const pending = new Map<string | symbol, Promise<unknown>>()
   const cooldown = new Map<string, number>()
   const verifiedEndpoints = new Map<string, number>()
+  const traceCooldown = new Map<string, number>()
+  let traceWindow=now(),traceUsed=0,traceRunning=0
   let windowStart = now(), used = 0
   async function upstream(url: string, method: string, params: any[], signal?: AbortSignal, network = 'unknown') {
     signal?.throwIfAborted()
+    if(options.bridgeProof&&method==='debug_traceTransaction'){
+      if(now()-traceWindow>=60_000){traceWindow=now();traceUsed=0}
+      if(traceUsed>=6)throw new ReadRpcError(-32005,'Bridge trace capacity reached. Try again shortly.')
+      traceUsed++
+    }
     if (now() - windowStart >= 60_000) { windowStart = now(); used = 0 }
     if (++used > 300) throw new ReadRpcError(-32005, 'Read capacity reached. Try again shortly.')
     return observeProvider({endpoint:url,network,operation:method},async()=>{
@@ -107,29 +114,50 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
   }
   return async (network: ReadNetwork, method: string, params: any[], signal?: AbortSignal) => {
     signal?.throwIfAborted()
-    const validated = validateRead(method, params)
+    // Internal proof-only capability. The public handler still uses validateRead
+    // and cannot request traces, custom tracers, writes or state overrides.
+    let validated: {method:string;params:any[]}
+    if(options.bridgeProof&&method==='debug_traceTransaction'){
+      if(params.length!==2||!hash(params[0])||!record(params[1])||!only(params[1],['tracer'])||params[1].tracer!=='callTracer')throw new ReadRpcError(-32602,'Unsupported bridge trace parameters.','scope')
+      validated={method,params}
+    }else{
+      if(options.bridgeProof&&(!['eth_chainId','eth_getTransactionReceipt','eth_getBlockByNumber'].includes(method)||(method==='eth_getBlockByNumber'&&(params[1]!==false||(params[0]!=='finalized'&&!quantity(params[0]))))))throw new ReadRpcError(-32601,'Unsupported bridge proof read.','scope')
+      validated = validateRead(method, params)
+    }
     const config = NETWORKS[network]
     if (!config) throw new ReadRpcError(-32602, 'Unsupported network.')
-    if (method === 'eth_chainId') return '0x' + config.id.toString(16)
+    if (method === 'eth_chainId'&&!options.bridgeProof) return '0x' + config.id.toString(16)
     const key = JSON.stringify([network, validated])
     const hit = cache.get(key)
-    if (hit && hit.expires > now()) {recordProviderUsage({provider:'none',network,operation:method},'cache-hit');return hit.result}
+    if (!options.bridgeProof&&hit && hit.expires > now()) {recordProviderUsage({provider:'none',network,operation:method},'cache-hit');return hit.result}
     // Cancellable scans share work at the wallet level; their abort must not
     // cancel an unrelated checkout read with identical RPC parameters.
     if (!signal && pending.has(key)) {recordProviderUsage({provider:'none',network,operation:method},'shared');return pending.get(key)}
     const pendingKey = signal ? Symbol(key) : key
     if (pending.size >= 16) throw new ReadRpcError(-32005, 'Read service busy. Try again shortly.')
+    const tracing=options.bridgeProof&&method==='debug_traceTransaction'
+    if(tracing){
+      if((traceCooldown.get(network)??0)>now())throw new ReadRpcError(-32004,'Bridge trace capability is cooling down.','rpc')
+      if(now()-traceWindow>=60_000){traceWindow=now();traceUsed=0}
+      if(traceUsed>=6||traceRunning>=2)throw new ReadRpcError(-32005,'Bridge trace capacity reached. Try again shortly.')
+      traceRunning++
+    }
     const work = (async () => {
       const configured = options.publicOnly ? config.fallback : process.env[config.env]?.trim() || (network === 'polygon' ? process.env.POLYMARKET_RPC_URL?.trim() : '') || config.fallback
       if (options.privateOnly && new URL(configured).hostname === new URL(config.fallback).hostname) throw new ReadRpcError(-32003, 'Independent private RPC unavailable.', 'configuration')
       const primary = !options.privateOnly && (cooldown.get(network) ?? 0) > now() ? config.fallback : configured
       const checkedUpstream = async (url: string) => {
-        if ((options.verifyChain || network === 'ethereum' || network === 'polygon') && (verifiedEndpoints.get(`${network}:${url}`) ?? 0) <= now()) {
+        if (method!=='eth_chainId'&&(options.bridgeProof||options.verifyChain || network === 'ethereum' || network === 'polygon') && (verifiedEndpoints.get(`${network}:${url}`) ?? 0) <= now()) {
           const id = await upstream(url, 'eth_chainId', [], signal, network)
           if (typeof id !== 'string' || !/^0x[0-9a-f]+$/i.test(id) || BigInt(id) !== BigInt(config.id)) throw new ReadRpcError(-32003, 'RPC chain does not match the requested network.', 'configuration')
           verifiedEndpoints.set(`${network}:${url}`, now() + 300_000)
         }
-        return upstream(url, method, validated.params, signal, network)
+        const value=await upstream(url, method, validated.params, signal, network)
+        if(options.bridgeProof&&method==='eth_chainId'){
+          if(typeof value!=='string'||!/^0x[0-9a-f]+$/i.test(value)||BigInt(value)!==BigInt(config.id))throw new ReadRpcError(-32003,'RPC chain does not match the requested network.','configuration')
+          verifiedEndpoints.set(`${network}:${url}`,now()+300_000)
+        }
+        return value
       }
       let result: unknown
       try { result = await checkedUpstream(primary) }
@@ -144,15 +172,18 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
       if (cache.size >= 256) cache.delete(cache.keys().next().value!)
       // Never reuse a nonce or an arbitrary contract-state read when preparing signatures.
       const cacheable = method !== 'eth_getTransactionCount' && (method !== 'eth_call' || validated.params[0].data.startsWith('0x70a08231'))
-      if (cacheable && JSON.stringify(result).length <= 65_536) cache.set(key, { result, expires: now() + (result === null ? 1_000 : 3_000) })
+      if (!options.bridgeProof&&cacheable && JSON.stringify(result).length <= 65_536) cache.set(key, { result, expires: now() + (result === null ? 1_000 : 3_000) })
       return result
-    })().finally(() => pending.delete(pendingKey))
+    })().catch(error=>{if(tracing&&error instanceof ReadRpcError&&[-32601,-32611].includes(error.code))traceCooldown.set(network,now()+60_000);throw error}).finally(() => {pending.delete(pendingKey);if(tracing)traceRunning--})
     pending.set(pendingKey, work)
     return work
   }
 }
 export const readEvmRpc = createReadService()
 export const readRecoveryEvmRpc = createReadService(fetch,Date.now,{verifyChain:true})
+// Same endpoint selection, accounting, fallback and resource bounds as normal
+// reads. No settled-result cache: each proof/recheck observes current RPC state.
+export const readBridgeProofEvmRpc = createReadService(fetch,Date.now,{bridgeProof:true})
 // Internal independent reader; endpoints remain pinned to the network allowlist.
 export const readPublicEvmRpc = createReadService(fetch, Date.now, { publicOnly: true })
 // Quorum reads must never silently become a second read from the public endpoint.
