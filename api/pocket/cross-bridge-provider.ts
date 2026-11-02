@@ -1,3 +1,4 @@
+import {relayBridgeAppFee,relayBridgeAppFeeRequest,validateRelayBridgeAppFeeQuote,type RelayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey} from '@solana/web3.js'
 import {decodeFunctionData,encodeFunctionData,parseAbi,type Address,type Hex} from 'viem'
@@ -20,16 +21,16 @@ function checkInput(i:CrossBridgeInput){
  for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(typeof address==='string'&&(network==='solana'?new PublicKey(address).toBase58()===address:/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address)),'invalid wallet')
  return tokens
 }
-export function crossBridgeRelayRequest(i:CrossBridgeInput){
+export function crossBridgeRelayRequest(i:CrossBridgeInput,appFee?:RelayBridgeAppFee|null){
  const {tokenIn,tokenOut}=checkInput(i)
- return {user:i.sender,recipient:i.recipient,originChainId:RELAY_BSC_CHAINS[i.source].id,destinationChainId:RELAY_BSC_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:[]}
+ return {user:i.sender,recipient:i.recipient,originChainId:RELAY_BSC_CHAINS[i.source].id,destinationChainId:RELAY_BSC_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:relayBridgeAppFeeRequest(appFee)}
 }
 /** No signing or broadcasting. Keep this separate from the existing same-asset adapters. */
-export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now()){
+export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null){
  const {tokenIn,tokenOut}=checkInput(i),source=RELAY_BSC_CHAINS[i.source],destination=RELAY_BSC_CHAINS[i.destination],amount=BigInt(i.amountUnits)
  const protocol=q?.protocol?.v2,order=protocol?.orderData as Order
  requireThat(protocol?.hubType==='onchain'&&order?.version==='v1'&&order.inputs?.length===1&&order.output?.payments?.length===1&&order.output.calls?.length===0&&order.fees?.length===0,'unsupported order')
- requireThat(q.fees?.app?.amount==='0','unexpected app fee')
+ const platformFee=validateRelayBridgeAppFeeQuote(q,i.source,tokenIn,i.amountUnits,appFee)
  const input=order.inputs[0].payment,output=order.output.payments[0]
  requireThat(input.chainId===protocolChain(i.source)&&same(i.source,input.currency,tokenIn.address)&&input.amount===i.amountUnits&&input.weight==='1','input mismatch')
  requireThat(order.output.chainId===protocolChain(i.destination)&&same(i.destination,output.recipient,i.recipient)&&same(i.destination,output.currency,tokenOut.address),'output mismatch')
@@ -87,15 +88,15 @@ export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.
   const calls=tokenIn.native?[depositCall]:[approve(0n),approve(amount),depositCall,approve(0n)]
   execution={kind:'evm' as const,calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}
  }
- return {provider:'relay' as const,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
+ return {provider:'relay' as const,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
 }
-export async function quoteCrossBridgeRelay(i:CrossBridgeInput,apiKey:string,fetcher=fetch){
+export async function quoteCrossBridgeRelay(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee()){
  requireThat(apiKey.trim().length>0,'provider API key required')
- const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(crossBridgeRelayRequest(i)),signal:AbortSignal.timeout(20000)})
+ const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(crossBridgeRelayRequest(i,appFee)),signal:AbortSignal.timeout(20000)})
  if(!response.ok){
   const failure=await response.json().catch(()=>null),inputError=[400,422].includes(response.status)
   const tooSmall=inputError&&failure?.errorCode==='AMOUNT_TOO_LOW',noRoute=inputError&&failure?.errorCode==='NO_SWAP_ROUTES_FOUND'
   throw Object.assign(Error(tooSmall?'Amount too small.':noRoute?'No route is available for this token pair. Try another token or network.':response.status===429?'Bridge service is busy. Try again shortly.':'This bridge route is currently unavailable.'),{status:tooSmall||noRoute?422:response.status===429?429:503,code:tooSmall?'amount_too_low':noRoute?'route_unavailable':response.status===429?'rate_limited':'provider_unavailable',retryAfter:response.status===429?Math.max(1,Math.min(300,Number(response.headers.get('Retry-After'))||60)):undefined})
  }
- return validateCrossBridgeRelayQuote(await response.json(),i)
+ return validateCrossBridgeRelayQuote(await response.json(),i,Date.now(),appFee)
 }
