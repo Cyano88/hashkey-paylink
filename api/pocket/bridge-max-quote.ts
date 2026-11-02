@@ -15,6 +15,9 @@ export async function quoteBridgeMaximum<Q>(input:{balanceUnits:bigint;quote(amo
    // provider-minimum, rate-limit and connectivity errors retain their meaning.
    if(e.code!=='insufficient_balance'||typeof e.maximumAmountUnits!=='string'||! /^(0|[1-9]\d*)$/.test(e.maximumAmountUnits))throw error
    const hint=BigInt(e.maximumAmountUnits)
+   // A current authoritative zero cannot be improved by smaller quotes or
+   // replaced with an earlier affordable quote after balances/fees change.
+   if(hint===0n)fail('Your balance is too low to cover this route and its fees.','insufficient_balance')
    if(hint>=candidate)throw error
    high=candidate-1n
    if(high<=low)break

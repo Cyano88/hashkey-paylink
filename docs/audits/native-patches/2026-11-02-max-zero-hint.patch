@@ -1,0 +1,13 @@
+diff --git a/src/pocket/lib/pocketBridgeMaxQuote.ts b/src/pocket/lib/pocketBridgeMaxQuote.ts
+--- a/src/pocket/lib/pocketBridgeMaxQuote.ts
++++ b/src/pocket/lib/pocketBridgeMaxQuote.ts
+@@ -17,6 +17,9 @@
+    if(e.code!=='insufficient_balance'||typeof e.maximumAmountUnits!=='string'||! /^(0|[1-9]\d*)$/.test(e.maximumAmountUnits))throw error
+    const hint=BigInt(e.maximumAmountUnits)
++   // A current authoritative zero cannot be improved by smaller quotes or
++   // replaced with an earlier affordable quote after balances/fees change.
++   if(hint===0n)fail('Your balance is too low to cover this route and its fees.','insufficient_balance')
+    if(hint>=candidate)throw error
+    high=candidate-1n
+    if(high<=low)break
+    candidate=hint>low?hint:low+(high-low+1n)/2n;continue

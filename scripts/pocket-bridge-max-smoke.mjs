@@ -1,6 +1,27 @@
 import assert from 'node:assert/strict'
 import {quoteBridgeMaximum} from '../api/pocket/bridge-max-quote.ts'
 const now=Date.now()
+// An explicit zero spendable hint must not become a generic retry error.
+for(const balanceUnits of [1000000n,1000000000n,1000000000000000000n]){
+ let calls=0
+ await assert.rejects(()=>quoteBridgeMaximum({balanceUnits,quote:async()=>{calls++;throw Object.assign(Error('fee exceeds balance'),{code:'insufficient_balance',maximumAmountUnits:'0'})}}),e=>e.code==='insufficient_balance'&&e.status===422)
+ assert.equal(calls,1)
+}
+// A changed balance/fee can invalidate an earlier affordable candidate.
+let changingCalls=0
+await assert.rejects(()=>quoteBridgeMaximum({balanceUnits:100n,now:()=>now,quote:async amount=>{
+ changingCalls++
+ if(changingCalls===1)throw Object.assign(Error('reserve'),{code:'insufficient_balance',maximumAmountUnits:'50'})
+ if(changingCalls===2)return {quote:{},amountUnits:amount,totalUnits:60n,expiresAt:now+30000}
+ throw Object.assign(Error('balance changed'),{code:'insufficient_balance',maximumAmountUnits:'0'})
+}}),e=>e.code==='insufficient_balance')
+assert.equal(changingCalls,3)
+for(const maximumAmountUnits of [undefined,'-1','1.5','01','100']){
+ const error=Object.assign(Error('balance requires refresh'),{code:'insufficient_balance',maximumAmountUnits});let calls=0
+ await assert.rejects(()=>quoteBridgeMaximum({balanceUnits:100n,quote:async()=>{calls++;throw error}}),e=>e===error)
+ assert.equal(calls,1,'missing, malformed or non-reducing hints must not trigger retries')
+}
+await assert.rejects(()=>quoteBridgeMaximum({balanceUnits:0n,quote:async()=>{assert.fail('zero balance must not quote')}}),e=>e.code==='insufficient_balance')
 for(const decimals of [6,9,18]){
  const unit=10n**BigInt(decimals),balance=unit*5n,fee=unit/50n
  const result=await quoteBridgeMaximum({balanceUnits:balance,now:()=>now,quote:async amount=>({quote:{amount:String(amount)},amountUnits:amount,totalUnits:amount+fee,expiresAt:now+30000})})
