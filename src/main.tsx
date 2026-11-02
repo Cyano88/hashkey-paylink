@@ -1,3 +1,4 @@
+import PocketBootFallback from './pocket/components/PocketBootFallback'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import React, { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
@@ -47,7 +48,7 @@ const RootApp = lazy(() => rootAppModule)
 function AppBootFallback() {
   if (surface === 'developer' || surface === 'admin') return <DeveloperLoadingSkeleton fullPage />
   if (isPocketNativeRuntime()) {
-    return <main aria-label="Opening Pocket" className="min-h-screen bg-[#F5F5F7]" />
+    return <PocketBootFallback />
   }
   return <main aria-label="Opening app" className="min-h-screen bg-[#F5F5F7] dark:bg-[#0A0A0A]" />
 }

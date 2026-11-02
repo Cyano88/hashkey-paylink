@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
+import {checkoutHandoff} from '../lib/checkoutHandoff'
 import { SolanaProvider } from '../lib/SolanaContext'
 import SurfaceLayout from './SurfaceLayout'
 import ExternalRedirect from './ExternalRedirect'
@@ -25,6 +26,11 @@ function CheckoutHome() {
     <p className="mt-3 text-sm text-gray-500">Open your payment link to continue.</p>
   </section>
 }
+function PocketCheckoutFallback() {
+  const {checkoutId=''}=useParams(),location=useLocation()
+  try{return <Navigate replace to={checkoutHandoff(checkoutId,new URLSearchParams(location.search).get('attempt')||'').fallback}/>}
+  catch{return <CheckoutHome/>}
+}
 export default function CheckoutApp() {
   return <SolanaProvider><BrowserRouter><Suspense fallback={<div role="status" aria-label="Loading checkout" className="mx-auto max-w-md space-y-4 p-6"><div className="h-7 w-2/3 animate-pulse rounded-xl bg-gray-100 dark:bg-white/10" /><div className="h-32 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/10" /><div className="h-11 animate-pulse rounded-full bg-gray-100 dark:bg-white/10" /></div>}><Routes>
     <Route path="pocket/*" element={<ExternalRedirect origin="https://pocket.hashpaylink.com" stripPrefix="/pocket" />} />
@@ -41,6 +47,7 @@ export default function CheckoutApp() {
       <Route path="xpay/:merchantId" element={<XPayCheckout />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
+      <Route path="open/checkout/:checkoutId" element={<PocketCheckoutFallback />} />
       <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />
       <Route path="wallet/stocks/:sessionId" element={<StockWalletPage />} />
       <Route path="wallet/swap/:sessionId" element={<WalletSwapPage />} />

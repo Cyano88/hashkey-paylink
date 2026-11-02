@@ -1,25 +1,14 @@
 import { dispatchPocketNativeBack } from '../lib/pocketNativeBack'
 import {useTheme} from '../../lib/ThemeContext'
-import { pocketScanDestination } from '../lib/pocketScanCode'
+import { createPocketNativeLinkRouter } from '../lib/pocketNativeLinks'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { registerPlugin } from '@capacitor/core'
-import { isPocketNativeRuntime, POCKET_HOSTNAME, POCKET_BASE_PATH } from '../lib/pocketRoutes'
+import { isPocketNativeRuntime, POCKET_BASE_PATH } from '../lib/pocketRoutes'
 
-function nativePocketDestination(rawUrl: string) {
-  try {
-    const scan=pocketScanDestination(rawUrl)
-    if(scan)return scan
-    const url = new URL(rawUrl)
-    if (url.hostname !== POCKET_HOSTNAME && url.protocol !== 'pocket:') return ''
-    return `${url.pathname || '/'}${url.search}${url.hash}`
-  } catch {
-    return ''
-  }
-}
 
 type PocketNativeInsets = { top: number; bottom: number; topPx?: number; bottomPx?: number; density?: number }
 const PocketInsets = registerPlugin<{
@@ -69,6 +58,7 @@ export default function PocketNativeBridge() {
     if (!isPocketNativeRuntime()) return
     let active = true
     const listeners: Array<Promise<{ remove: () => Promise<void> }>> = []
+    const links = createPocketNativeLinkRouter((path, options) => navigateRef.current(path, options))
 
     // Android 16 enforces edge-to-edge and ignores overlaysWebView. Read the
     // native inset and expose it to CSS instead of trusting env() alone.
@@ -101,8 +91,7 @@ export default function PocketNativeBridge() {
       if (active) setOnline(status.connected)
     }))
     listeners.push(CapacitorApp.addListener('appUrlOpen', event => {
-      const destination = nativePocketDestination(event.url)
-      if (destination) navigateRef.current(destination)
+      links.event(event.url)
     }))
     listeners.push(CapacitorApp.addListener('appStateChange', state => {
       if (state.isActive) {
@@ -114,12 +103,12 @@ export default function PocketNativeBridge() {
     }))
 
     void CapacitorApp.getLaunchUrl().then(result => {
-      const destination = result?.url ? nativePocketDestination(result.url) : ''
-      if (active && destination) navigateRef.current(destination, { replace: true })
+      if (result?.url) links.launch(result.url)
     }).catch(() => undefined)
 
     return () => {
       active = false
+      links.dispose()
       window.removeEventListener('resize', syncInsets)
       window.removeEventListener('orientationchange', syncInsets)
       document.documentElement.style.removeProperty('--pocket-status-bar-inset')

@@ -43,9 +43,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="app.hashpaylink.com" android:path="/pay" />
-                <data android:scheme="https" android:host="app.hashpaylink.com" android:pathPrefix="/pay/c/" />
-                <data android:scheme="https" android:host="app.hashpaylink.com" android:path="/pos/ng" />
+                <data android:scheme="https" android:host="app.hashpaylink.com" android:pathPrefix="/open/checkout/" />
             </intent-filter>
 
             <intent-filter>

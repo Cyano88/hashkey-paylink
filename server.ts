@@ -1,3 +1,4 @@
+import { pocketAppLinkPaths, pocketAndroidLinkExtensions } from './api/pocket/app-link-policy.js'
 import supportAttachmentHandler from './api/support-attachments.js'
 import developerSupportHandler from './api/developer-support.js'
 import { retiredProductBoundary } from './api/product-retirement.js'
@@ -528,7 +529,7 @@ app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: `API route not found: ${req.method} ${req.originalUrl}` })
 })
 
-app.get('/.well-known/assetlinks.json', (_req, res) => {
+app.get('/.well-known/assetlinks.json', (req, res) => {
   const fingerprints = String(process.env.ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS ?? '')
     .split(/[\n,]+/)
     .map(value => value.trim().toUpperCase())
@@ -540,6 +541,7 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
   }
   return res.json([{
     relation: ['delegate_permission/common.handle_all_urls'],
+    relation_extensions: pocketAndroidLinkExtensions(req.hostname),
     target: {
       namespace: 'android_app',
       package_name: 'com.hashpaylink.pocket',
@@ -548,7 +550,7 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
   }])
 })
 
-app.get('/.well-known/apple-app-site-association', (_req, res) => {
+app.get('/.well-known/apple-app-site-association', (req, res) => {
   const teamId = String(process.env.APPLE_TEAM_ID ?? '').trim().toUpperCase()
   res.setHeader('Cache-Control', 'public, max-age=3600')
   res.setHeader('Content-Type', 'application/json')
@@ -559,7 +561,7 @@ app.get('/.well-known/apple-app-site-association', (_req, res) => {
     applinks: {
       details: [{
         appIDs: [`${teamId}.com.hashpaylink.pocket`],
-        components: [{ '/': '/*', comment: 'Open Hash PayLink Pocket links in the iOS app.' }],
+        components: [{ '/': pocketAppLinkPaths(req.hostname), comment: 'Open explicit Pocket links in the iOS app.' }],
       }],
     },
   })
