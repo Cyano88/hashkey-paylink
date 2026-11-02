@@ -21,3 +21,20 @@ Follow-up during investigation: builder receiving-wallet setup reports HTTP 409 
 our developerAdditionalWallet guard. Existing recovery fixtures pass; account-specific
 production read-only investigation underway. Do not bypass ambiguous history or choose
 an arbitrary newest wallet. No Circle recovery code or production links changed yet.
+
+## Pixel reproduction and release preparation
+
+After the user's checkout tap, Pixel showed a blank Pocket surface. CDP still
+reported a fully rendered /home/deposit page (133 text characters, visible layout),
+while Android's view hierarchy showed a retained android.window.SplashScreenView.
+CDP screenshots timed out. Calling PocketLaunch.ready did not release the overlay.
+Installed APK 1.0.4 (5) was pulled and its MainActivity inspected with apkanalyzer:
+it contains launchProvider, launchReleasePending, setOnExitAnimationListener and
+postOnAnimation/postVisualStateCallback cover-removal code absent from release
+source. A retained exit handler can hold a warm-launch splash after first release.
+Current source delegates splash exit removal to Android and has a 15-second hold
+limit. Native update must be verified on cold and warm link launches.
+
+Pixel APK signer matches the local Android debug certificate (SHA256 9B2452D8...ADCADDE).
+Preparing a compatible in-place test update, version 1.0.6 (7), preserving app data.
+Branch now includes deployed builder canonical recovery via merge 7ef1ffab3.
