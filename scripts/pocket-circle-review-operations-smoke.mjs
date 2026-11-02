@@ -42,3 +42,18 @@ const success=await service.prepare(fresh(),'fixture','pin')
 assert.equal((await service.submit(success.id,'fixture','session')).state,'pending');assert.equal(dispatches,2)
 await service.submit(success.id,'fixture','session');assert.equal(dispatches,2)
 console.log('PASS sealed Circle reviews, exact fee/batch/owner binding, expired recovery, durable single dispatch under concurrent calls, lost response/restart/late hash recovery, and no cancellation after dispatch. Fixtures only.')
+import {createCircleKitRuntime} from '../api/pocket/circle-bridge-runtime.ts'
+let runtimeStore,storageKey,ready=true,walletReads=0,providerCalls=0,found=null
+const expectedOwner='fixture'
+const runtimeOverrides={durable:()=>ready,now:()=>now,open:(token,owner,options)=>openCircleKitReview(token,owner,{...options,secret}),wallets:async binding=>{assert.equal(binding.ownerId,expectedOwner);walletReads++;return binding},read:async key=>{storageKey=key;return structuredClone(runtimeStore)},mutate:async(key,fn)=>{assert.equal(key,storageKey);runtimeStore=fn(structuredClone(runtimeStore))},approve:async(token,owner)=>{assert.equal(owner,expectedOwner);assert.equal(token,'approval-token');return true},dispatch:async args=>{providerCalls++;assert.equal(args.idempotencyKey,result.quote.id);assert.equal(args.refId,'pocket:bridge:'+result.quote.id);assert.equal(args.walletId,'source');assert.equal(args.walletAddress,wallets.source.address);assert.equal(args.callData,result.quote.callData);assert.equal(args.chain,'base');assert.equal(args.userToken,'session');throw Error('lost response')},transaction:async args=>{assert.equal(args.callData,result.quote.callData);return null},recover:async args=>{assert.equal(args.refId,'pocket:bridge:'+result.quote.id);assert.equal(args.walletId,'source');return found}}
+let preflights=0
+const runtime=createCircleKitRuntime(expectedOwner,async()=>{preflights++},runtimeOverrides)
+assert.throws(()=>runtime.read(result.quote.id,'other'),/owner mismatch/)
+ready=false;assert.throws(()=>runtime.prepare(result.quoteToken,expectedOwner,'approval-token'),/storage is unavailable/);assert.equal(providerCalls,0);ready=true
+await runtime.prepare(result.quoteToken,expectedOwner,'approval-token');assert.match(storageKey,/^pocket:circle-kit-operations:v1:[0-9a-f]{64}$/)
+assert.equal((await runtime.submit(result.quote.id,expectedOwner,'session')).state,'submitting');assert.equal(providerCalls,1);assert.equal(preflights,2);assert.equal(walletReads,3)
+const restartedRuntime=createCircleKitRuntime(expectedOwner,async()=>{throw Error('Recovery must not reprice or dispatch')},runtimeOverrides)
+assert.equal((await restartedRuntime.resume(result.quote.id,expectedOwner,'session')).state,'submitting');assert.equal(providerCalls,1)
+found='challenge-1';assert.equal((await restartedRuntime.resume(result.quote.id,expectedOwner,'session')).state,'pending');await restartedRuntime.submit(result.quote.id,expectedOwner,'session');assert.equal(providerCalls,1)
+assert.ok(!JSON.stringify(runtimeStore).includes('"session"'))
+console.log('PASS Circle runtime adapter: durable-store required, owner-scoped keys, approval argument order, exact wallet/batch/reference/idempotency dispatch, wallet revalidation and read-only restart recovery. Injected provider/store fixtures only.')
