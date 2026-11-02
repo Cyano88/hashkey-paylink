@@ -1,3 +1,4 @@
+import {readPocketCheckoutActivity} from './checkout-activity.js'
 import {readBscWalletActivity} from './bsc-wallet-activity.js'
 import {bscSwapActivity} from '../../src/pocket/lib/pocketBscActivity.js'
 import { nativeHistoryNetworks, readPocketNativeHistory } from './native-wallet-activity.js'
@@ -460,7 +461,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   transformSnapshot: transformPocketActivitySnapshot,
-  sources: { bsc: async owner=>({payments:await readBscWalletActivity(owner),merchants:[],collections:[]}), ...Object.fromEntries(nativeHistoryNetworks.map(network=>['native-'+network,(owner:string)=>readPocketNativeHistory(owner,network)])), earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
+  sources: { checkouts: async owner=>({payments:await readPocketCheckoutActivity(await readPocketPurchaseWalletAddresses(owner)),merchants:[],collections:[]}), bsc: async owner=>({payments:await readBscWalletActivity(owner),merchants:[],collections:[]}), ...Object.fromEntries(nativeHistoryNetworks.map(network=>['native-'+network,(owner:string)=>readPocketNativeHistory(owner,network)])), earn: readPocketEarnNoticeActivity, esim: readPocketEsimActivity, ...Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])) },
 })
@@ -468,7 +469,8 @@ export default createDurablePocketActivityHandler({
 /** Persisted purchase truth only: no wallet RPC scans or provider polling. */
 export async function readPocketNotificationActivity(owner:string) {
  const {readWalletHistory,readCollections,readCollectionPayments,...dependencies}=activityDependencies
- const rows=(await readActivitySnapshot(dependencies,{userId:owner} as VerifiedLinkUser,{recent:false,limit:100})).payments
+ const [snapshot,checkouts]=await Promise.all([readActivitySnapshot(dependencies,{userId:owner} as VerifiedLinkUser,{recent:false,limit:100}),readPocketPurchaseWalletAddresses(owner).then(readPocketCheckoutActivity)])
+ const rows=mergePocketActivityRows(snapshot.payments,checkouts)
  const routes=await listCirclePocketActions(owner,500,'bank-withdraw.route')
  return mergePocketActivityRows([],rows).map(row=>row.source==='wallet-bridge'&&routes.some(r=>r.metadata?.source===row.chain&&r.metadata?.txHash?.toLowerCase()===row.txHash.toLowerCase())?{...row,fundingParent:row.fundingParent||'bank-withdraw:linked'}:row)
 }

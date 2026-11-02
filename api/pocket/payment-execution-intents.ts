@@ -1,3 +1,4 @@
+import type {CheckoutRecord} from '../hosted-checkouts.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -16,8 +17,8 @@ export type PaymentExecutionIntent = {
 }
 type Store = { intents: Record<string, PaymentExecutionIntent>; idempotency: Record<string, string>; ledgerOutbox: Record<string, PocketMoneyLedgerInput> }
 type CreateInput = Pick<PaymentExecutionIntent, 'ownerId' | 'idempotencyKey' | 'kind' | 'amount' | 'sourceNetwork' | 'settlementNetwork' | 'destinationType'> & { token?: PaymentToken; metadata?: Record<string, string> }
-type UpdateInput = { ownerId: string; intentId: string; state?: PaymentExecutionState; expectedState?: PaymentExecutionState; resourceId?: string; providerReference?: string; transactionHash?: string; failureCode?: string; metadata?: Record<string, string> }
-type Options = { storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; createId?: () => string; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson; appendLedger?: typeof appendPocketMoneyLedgerEvent }
+type UpdateInput = { reconcileExpiredCheckout?: boolean; ownerId: string; intentId: string; state?: PaymentExecutionState; expectedState?: PaymentExecutionState; resourceId?: string; providerReference?: string; transactionHash?: string; failureCode?: string; metadata?: Record<string, string> }
+type Options = { readVerifiedCheckout?: (id:string)=>Promise<CheckoutRecord|null>; storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; createId?: () => string; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson; appendLedger?: typeof appendPocketMoneyLedgerEvent }
 
 const STORE_PATH = process.env.POCKET_PAYMENT_EXECUTION_STORE ?? './data/pocket-payment-executions.json'
 const STORE_KEY = (process.env.POCKET_PAYMENT_EXECUTION_STORE_KEY ?? 'hashpaylink:pocket-payment-executions').trim()
@@ -141,12 +142,19 @@ export function createPaymentExecutionRepository(options: Options = {}) {
         .sort((a, b) => b.updatedAt - a.updatedAt)
     },
     async update(input: UpdateInput) {
+      // This exception requires current, integrity-verified checkout truth; a
+      // caller flag or transaction hash alone cannot reopen an expired intent.
+      const expiredCandidate=input.reconcileExpiredCheckout?(await readStore()).intents[input.intentId]:undefined
+      const verified=expiredCandidate?.resourceId?await (options.readVerifiedCheckout||(async id=>(await import('../hosted-checkouts.js')).readVerifiedHostedCheckoutRecord(id,{allowExpiredForReconciliation:true})))(expiredCandidate.resourceId):null
       const result = await mutate(store => {
         const current = store.intents[input.intentId]
         if (!current || current.ownerId !== input.ownerId) throw new PaymentExecutionNotFoundError('Payment execution was not found.')
         if (input.expectedState && current.state !== input.expectedState) return current
-        if (input.state && input.state !== current.state && !transitions[current.state].includes(input.state)) throw new PaymentExecutionConflictError(`Payment execution cannot move from ${current.state} to ${input.state}.`)
-        const next: PaymentExecutionIntent = { ...current, ...(input.state ? { state: input.state } : {}), ...(input.resourceId ? { resourceId: clean(input.resourceId, 180) } : {}), ...(input.providerReference ? { providerReference: clean(input.providerReference, 180) } : {}), ...(input.transactionHash ? { transactionHash: clean(input.transactionHash, 180) } : {}), ...(input.failureCode ? { failureCode: clean(input.failureCode, 80) } : {}), metadata: { ...current.metadata, ...safeMetadata(input.metadata), ...tokenMetadata(current.token) }, updatedAt: now() }
+        const payment=verified?.payment
+        const confirmed=Date.parse(payment?.confirmedAt||'')
+        const recover=Boolean(input.reconcileExpiredCheckout&&current.state==='expired'&&current.failureCode==='CHECKOUT_EXPIRED'&&input.state==='submitted'&&['hosted_checkout','service_funding'].includes(current.kind)&&verified?.id===current.resourceId&&current.ownerId===`partner:${verified?.partnerId}`&&payment?.status==='paid'&&payment.txHash===current.transactionHash&&payment.amount===current.amount&&Number.isFinite(confirmed)&&confirmed>=Date.parse(verified!.createdAt)&&confirmed<=Date.parse(verified!.expiresAt))
+        if (input.state && input.state !== current.state && !recover && !transitions[current.state].includes(input.state)) throw new PaymentExecutionConflictError(`Payment execution cannot move from ${current.state} to ${input.state}.`)
+        const next: PaymentExecutionIntent = { ...current, ...(input.state ? { state: input.state } : {}), ...(input.resourceId ? { resourceId: clean(input.resourceId, 180) } : {}), ...(input.providerReference ? { providerReference: clean(input.providerReference, 180) } : {}), ...(input.transactionHash ? { transactionHash: clean(input.transactionHash, 180) } : {}), ...(input.failureCode ? { failureCode: clean(input.failureCode, 80) } : {}), metadata: { ...current.metadata, ...safeMetadata(input.metadata), ...tokenMetadata(current.token) }, ...(recover?{failureCode:undefined}:{}), updatedAt: now() }
         store.intents[next.id] = next
         const eventKey = `${next.id}:${next.state}:${next.updatedAt}`
         store.ledgerOutbox[eventKey] = { eventKey, ownerId: next.ownerId, executionId: next.id, rail: next.kind, state: next.state, asset: next.asset, amount: next.amount, sourceNetwork: next.sourceNetwork, settlementNetwork: next.settlementNetwork, resourceId: next.resourceId, providerReference: next.providerReference, transactionHash: next.transactionHash, failureCode: next.failureCode, metadata: next.metadata, recordedAt: next.updatedAt }

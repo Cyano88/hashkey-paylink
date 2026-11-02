@@ -95,6 +95,9 @@ export async function syncHostedCheckoutExecution(
     execution = await repository.update({ ownerId: ownerId(record), intentId: execution!.id, state, failureCode, ...reference })
   }
 
+  if(execution.state==='expired'&&execution.failureCode==='CHECKOUT_EXPIRED'&&record.payment.status==='paid'){
+    execution=await repository.update({ownerId:ownerId(record),intentId:execution.id,state:'submitted',reconcileExpiredCheckout:true,...reference})
+  }
   if (execution.state === 'prepared') await update('authorized')
   if (execution.state === 'authorized') await update('submitted')
 

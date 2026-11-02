@@ -17,7 +17,7 @@ const rowKey = (row: PocketActivityRow) => durableBsc(row) ? JSON.stringify([row
 /** Merge observed history. Absence from a bounded/provider response is not deletion. */
 export function mergePocketActivityRows(previous: PocketActivityRow[], incoming: PocketActivityRow[]) {
   const normalize = (row: PocketActivityRow): PocketActivityRow => !row.memo?.trim() && ['earn-deposit','earn-withdraw'].includes(row.source || '')
-    ? {...row,memo:row.source === 'earn-deposit' ? 'Added to Earn' : 'Withdrawn from Earn'} : row
+    ? {...row,memo:row.source === 'earn-deposit' ? 'Added to Earn' : 'Withdrawn from Earn'} : {...row}
   const rows = new Map<string,PocketActivityRow>()
   for(const row of previous.filter(isPocketBankActivityVisible).map(normalize)){const old=rows.get(rowKey(row));if(old&&terminalBsc(old)&&!terminalBsc(row))continue;rows.set(rowKey(row),row)}
   for (const row of incoming.filter(isPocketBankActivityVisible).map(normalize)) {
@@ -54,6 +54,21 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   }
   // Durable native-send records own their exact principal. Do not show the
   // indexer's copy of that same transfer as another send.
+  // Signed checkout records supersede both old execution projections and raw
+  // transfer rows. Match the exact movement so unrelated batch transfers stay.
+  const checkoutRows=[...rows.values()].filter(row=>row.source==='hosted_checkout'&&row.eventId.startsWith('checkout:'))
+  for(const checkout of checkoutRows)for(const [key,row] of rows){
+    if(row===checkout||!row.txHash||transactionKey(row)!==transactionKey(checkout)||row.direction!==checkout.direction)continue
+    const address=(value:string)=>row.chain==='solana'?value:value.toLowerCase()
+    if(address(row.payer)!==address(checkout.payer)||(row.assetSymbol||'USDC')!==checkout.assetSymbol||decimalIdentity(row.amount)!==decimalIdentity(checkout.amount))continue
+    const raw=['wallet-withdrawal','wallet-deposit','wallet-transfer'].includes(row.source||'')
+    const sameCheckout=(row.settlementType==='hosted_checkout'||row.source==='hosted_checkout')&&(row.merchantId===checkout.merchantId)
+    if(!raw&&!sameCheckout)continue
+    if(raw&&row.recipient&&address(row.recipient)!==address(checkout.destination||''))continue
+    if(row.feeAmount&&!checkout.feeAmount)checkout.feeAmount=row.feeAmount
+    if(row.feeAsset&&!checkout.feeAsset)checkout.feeAsset=row.feeAsset
+    rows.delete(key)
+  }
   const observed = [...rows.values()].filter(row => !row.txHash || row.eventId.startsWith('pocket-native-send:') || ![...rows.values()].some(parent =>
     parent.eventId.startsWith('pocket-native-send:') && parent.txHash && transactionKey(parent) === transactionKey(row)
     && row.source === 'wallet-withdrawal' && parent.assetSymbol === row.assetSymbol
@@ -91,7 +106,7 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     ? { ...row, feeAmount: fees.get(row) } : row)
   const refundKey = (row: PocketActivityRow) => transactionKey(row) + ':' + (row.assetSymbol || 'USDC') + ':' + Number(row.amount)
   const refundDeposits = new Set(values.filter(row => ['bills','esim'].includes(row.source || '') && row.refundTxHash).map(row => refundKey({ ...row, txHash: row.refundTxHash! })))
-  const contextual = new Set(values.filter(row => row.txHash && row.source && !['wallet-deposit', 'wallet-withdrawal', 'wallet-transfer'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
+  const contextual = new Set(values.filter(row => row.txHash && row.source && !row.eventId.startsWith('checkout:') && !['wallet-deposit', 'wallet-withdrawal', 'wallet-transfer'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
   for(const row of values){
     if(row.source==='wallet-bridge'&&row.destinationTxHash&&row.destination)contextual.add(transactionKey({...row,chain:row.destination,txHash:row.destinationTxHash})+':in')
   }

@@ -1336,3 +1336,16 @@ export async function createProviderRoutedHostedCheckout(
 }
 
 export default hostedCheckoutsHandler
+
+/** Verified paid records for personal activity, including confirmation after session expiry. */
+export async function readPaidHostedCheckoutActivity(wallets:string[]) {
+ if(!wallets.length||!defaults.hasStore())return []
+ const store=await defaults.read(STORE_KEY),secret=defaults.signingSecret()
+ if(secret.length<32)return []
+ return Object.values(store?.checkouts||{}).filter(record=>{
+  const p=record.payment;if(!p||record.providerFunding)return false
+  const network=p.network||record.network,match=(a:string)=>wallets.some(w=>network==='solana'?w===a:w.toLowerCase()===a.toLowerCase())
+  const recipient=hostedCheckoutPaymentOption(record,network)?.recipient||record.recipient
+  return (match(p.payer)||!record.settlement&&match(recipient))&&integrityValid(record,secret)
+ })
+}

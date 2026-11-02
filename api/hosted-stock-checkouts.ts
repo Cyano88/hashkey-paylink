@@ -208,3 +208,9 @@ export async function assertStockCheckoutPayable(r:StockCheckout,swap=false){
  if(!defaults.enabled(r.partnerId)||r.payment||Date.parse(r.expiresAt)<=Date.now()||!await resolveStockCheckoutProjectEnabled(r.partnerId,r.recipient,r.token.address,swap))fail('This checkout is not accepting new payments.',409)
  if(swap&&!r.swapEnabled)fail('Swap is not enabled for this checkout.',403)
 }
+
+export async function readPaidStockCheckoutActivity(wallets:string[],d:Dependencies=defaults) {
+ if(!wallets.length||!d.hasStore())return []
+ const owned=new Set(wallets.map(w=>w.toLowerCase()))
+ return Object.values((await d.read()).checkouts).filter(r=>r.payment&&(owned.has(r.payment.payer.toLowerCase())||owned.has(r.recipient.toLowerCase()))&&valid(r,d))
+}
