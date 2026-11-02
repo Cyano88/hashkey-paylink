@@ -8,7 +8,7 @@ import {createPublicClient,getAddress,http,parseAbi,parseUnits,formatUnits,type 
 import {base,xLayer} from 'viem/chains'
 import {verifiedPrivyUser,readCircleLink,circleLinkKey} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
-import {createCircleGasStationEvmChallenge,readCircleEvmChallenge,quoteCircleEvmBatchRecovery} from '../circle-solana-email.js'
+import {recoverCircleNativeSendChallenge,createCircleGasStationEvmChallenge,readCircleEvmChallenge,quoteCircleEvmBatchRecovery} from '../circle-solana-email.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 import {evmActivity} from './wallet-chain-activity.js'
 import {quoteRelayStablecoin,stablecoinAddress} from './xlayer-bridge-provider.js'
@@ -32,7 +32,7 @@ async function enabled(owner:string){
  const linked=await wallets(owner).catch(()=>null)
  return !!linked&&xlayerBridgeWalletEligible(linked.destinationAddress)
 }
-const defaults={identity:verifiedPrivyUser,wallets,client,quote:quoteRelayStablecoin,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,usdtEnabled:()=>process.env.POCKET_XLAYER_USDT_BRIDGE_ENABLED==='true',apiKey:()=>process.env.RELAY_API_KEY||''}
+const defaults={identity:verifiedPrivyUser,wallets,client,quote:quoteRelayStablecoin,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,recoverChallenge:recoverCircleNativeSendChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,usdtEnabled:()=>process.env.POCKET_XLAYER_USDT_BRIDGE_ENABLED==='true',apiKey:()=>process.env.RELAY_API_KEY||''}
 const key=(q:XLayerBridgeQuote)=>'pocket:xlayer-bridge:'+q.id
 const binding=(q:XLayerBridgeQuote)=>({...q,sender:q.walletAddress,recipient:q.destinationAddress})
 const metadata=(q:XLayerBridgeQuote,quoteToken:string)=>({quoteToken,intentFingerprint:q.walletAddress.toLowerCase()+':'+q.source+':xlayer',assetSymbol:q.asset,source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:'relay'})
@@ -62,11 +62,20 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
    if(outcome!=='failed')await d.ledger({eventKey:key(q)+':'+outcome,ownerId:owner,executionId:existing.id,rail:'wallet_bridge',state:outcome,asset:outcome==='refunded'?(meta.refundAsset||q.asset):q.asset,amount:outcome==='refunded'?meta.refundAmount:q.amount,sourceNetwork:q.source,settlementNetwork:outcome==='refunded'?meta.refundNetwork:'xlayer',resourceId:q.id,transactionHash:meta.txHash,metadata:{destinationTxHash:meta.destinationTxHash,provider:'relay'},recordedAt:existing.updatedAt})
    return {ok:true,status:meta.paymentState==='not_submitted'?'not_submitted':outcome,...(meta.paymentState==='not_submitted'?{reason:'approval_expired'}:{}),txHash:meta.txHash,destinationTxHash:meta.destinationTxHash,...(outcome==='refunded'?{refundAsset:meta.refundAsset||q.asset,refundAmount:meta.refundAmount,refundNetwork:meta.refundNetwork,refundTxHash:meta.refundTxHash||meta.destinationTxHash}:{})}
   }
+  if(!meta.txHash&&!meta.challengeId&&input.circleUserToken){
+   const recovered=await d.recoverChallenge({chain:q.source,userToken:input.circleUserToken,walletId:q.walletId,walletAddress:q.walletAddress,refId:key(q)})
+   if(recovered){meta.challengeId=recovered;await d.record({...existing,status:'submitted',metadata:meta})}
+  }
   let hash=meta.txHash||'',awaiting=false
   if(!hash&&meta.challengeId&&input.circleUserToken){
    const result=await d.readChallenge({chain:q.source,userToken:input.circleUserToken,walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId})
    hash=result.txHash||'';awaiting=result.status==='awaiting_approval'
-   if(result.status==='failed'&&'notSubmitted' in result&&result.notSubmitted===true){
+   if(result.status==='failed'&&!('notSubmitted' in result&&result.notSubmitted===true&&!hash)){
+    if(hash&&!/^0x[0-9a-f]{64}$/i.test(hash))throw Error('Invalid bridge transaction reference.')
+    await d.record({...existing,status:'failed',metadata:{...meta,...(hash?{txHash:hash}:{}),paymentState:'source_failed'}})
+    return {ok:true,status:'failed',txHash:hash||undefined}
+   }
+   if(result.status==='failed'&&!result.txHash&&'notSubmitted' in result&&result.notSubmitted===true){
     await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,paymentState:'not_submitted'}})
     return {ok:true,status:'not_submitted',reason:'approval_expired'}
    }

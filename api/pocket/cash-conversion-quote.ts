@@ -54,7 +54,7 @@ function cashProviderFee(tx:CashConversionQuote['tx'],expectedOutUnits:string){
 }
 export async function quoteCashConversion(b:CashConversionBinding,estimate:(data:Hex)=>Promise<string>,rateScaled8:bigint,read:typeof okxGet=okxGet,now:()=>number=Date.now){
  const units=binding(b),issuedAt=now()
- const data=await read('swap',{chainIndex:'8453',fromTokenAddress:BASE_STABLECOINS.USDT.address,toTokenAddress:BASE_STABLECOINS.USDC.address,amount:String(units),userWalletAddress:b.walletAddress,swapReceiverAddress:b.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',autoSlippage:'false',priceImpactProtectionPercent:'3'})
+ const data=await read('swap',{chainIndex:'8453',fromTokenAddress:BASE_STABLECOINS.USDT.address,toTokenAddress:BASE_STABLECOINS.USDC.address,amount:String(units),userWalletAddress:b.walletAddress,swapReceiverAddress:b.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
  const route=data?.routerResult
  if(!route||String(route.chainIndex)!=='8453'||String(route.fromTokenAmount)!==String(units)||route.swapMode&&route.swapMode!=='exactIn')fail()
  for(const [actual,expected] of [[route.fromToken,BASE_STABLECOINS.USDT],[route.toToken,BASE_STABLECOINS.USDC]])if(!actual||!sameCashAddress(actual.tokenContractAddress,expected.address)||String(actual.decimal)!=='6'||actual.isHoneyPot===true||actual.taxRate==null||!/^0(?:\.0+)?$/.test(String(actual.taxRate)))fail()

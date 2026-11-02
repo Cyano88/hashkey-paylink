@@ -95,7 +95,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    if(!challengeId||!userToken)return res.json({ok:true,status:'pending',challengeId})
    const provider=await d.challengeStatus({chain:network,userToken,walletId,walletAddress,challengeId})
    if(!provider.txHash&&((action==='cancel'&&provider.status==='awaiting_approval')||('notSubmitted' in provider&&provider.notSubmitted===true))){const saved=await d.record({...existing,status:action==='cancel'?'cancelled':'not_submitted',metadata:{...existing.metadata!,approvalOutcome:action==='cancel'?'cancelled':'expired'}});return res.json({ok:true,status:saved.metadata?.txHash?'pending':['cancelled','not_submitted'].includes(saved.status)?'not_submitted':saved.status,txHash:saved.metadata?.txHash,reason:action==='cancel'?'cancelled':'approval_expired'})}
-   if(provider.status==='failed'){const saved=await d.record({...existing,status:'failed'});return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash})}
+   if(provider.status==='failed'){if(provider.txHash&&!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid swap reference.');const saved=await d.record({...existing,status:'failed',metadata:{...existing.metadata!,...(provider.txHash?{txHash:provider.txHash}:{})}});return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash})}
    if(!provider.txHash)return res.json({ok:true,status:provider.status==='awaiting_approval'?'awaiting_approval':'pending',challengeId})
    if(!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid swap reference.')
    existing=await d.record({...existing,status:'submitted',metadata:{...existing.metadata!,txHash:provider.txHash}})

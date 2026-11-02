@@ -1191,6 +1191,7 @@ export async function readCircleEvmBridgeChallenge(session: CircleEvmEmailSessio
 }
 
 export async function bridgeCircleEvmEmailWallet(params: {
+  onBeforeChallenge?: () => void
   quoteToken?: string
   maxTotalUnits?: bigint
   privyAccessToken?: string
@@ -1217,6 +1218,7 @@ export async function bridgeCircleEvmEmailWallet(params: {
     chainLabel: `${CHAIN_META[params.session.chain].label} to ${params.destination === 'solana' ? 'Solana' : CHAIN_META[params.destination].label}`,
   })
   const amountUnits = parseUnits(params.amount || '0', 6)
+  params.onBeforeChallenge?.()
   const challenge = await circleWalletApi<{
     challengeId?: string
     id?: string
@@ -1666,4 +1668,9 @@ export async function restoreActivatedCircleEvmSession(session: CircleEvmEmailSe
 export async function approveCircleMigrationChallenge(session: CircleEvmEmailSession, challengeId: string, signal?: AbortSignal, checkConfirmed?:()=>Promise<boolean>) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challengeId)) throw new Error('Invalid wallet migration challenge.')
   return executeRecoverableCircleApproval(authenticatedSdk(session), challengeId, sdkError, signal, 120_000, checkConfirmed)
+}
+
+export async function recoverCircleEvmBridgeChallenge(session:CircleEvmEmailSession,idempotencyKey:string,privyAccessToken:string){
+ const data=await circleWalletApi<{challengeId?:string}>({action:'recoverEvmBridge',userToken:session.userToken,walletId:session.wallet.id,walletAddress:session.wallet.address,chain:session.chain,idempotencyKey},{privyAccessToken})
+ return data.challengeId
 }

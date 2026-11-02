@@ -1,0 +1,403 @@
+{
+  "input": {
+    "asset": "USDT",
+    "source": "base",
+    "destination": "xlayer",
+    "sender": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+    "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+    "amountUnits": "10000000"
+  },
+  "now": 1792031932037,
+  "response": {
+    "requestId": "0x1792031931ab58f58ab2509104f708c1ee5531cc7e569bfce41681c394687104",
+    "steps": [
+      {
+        "id": "approve",
+        "action": "Confirm transaction in your wallet",
+        "description": "Sign an approval for USDT",
+        "kind": "transaction",
+        "items": [
+          {
+            "status": "incomplete",
+            "data": {
+              "from": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+              "to": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+              "data": "0x095ea7b30000000000000000000000004cd00e387622c35bddb9b4c962c136462338bc310000000000000000000000000000000000000000000000000000000000989680",
+              "value": "0",
+              "chainId": 8453,
+              "gas": "60777",
+              "maxFeePerGas": "23709637",
+              "maxPriorityFeePerGas": "1150000"
+            }
+          }
+        ],
+        "requestId": "0x1792031931ab58f58ab2509104f708c1ee5531cc7e569bfce41681c394687104"
+      },
+      {
+        "id": "deposit",
+        "action": "Confirm transaction in your wallet",
+        "description": "Depositing funds to the relayer to execute the swap for USD₮0",
+        "kind": "transaction",
+        "items": [
+          {
+            "status": "incomplete",
+            "data": {
+              "from": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+              "to": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+              "data": "0xe8017952000000000000000000000000f3853789e1d4f227bca68e522240f1ca139babd1000000000000000000000000fde4c96c8593536e31f229ea8f37b2ada2699bb200000000000000000000000000000000000000000000000000000000009896806bde9d75f4ac2496fddcc5b8383f8f8699dcf093f41ddf05353a4632970a49be",
+              "value": "0",
+              "chainId": 8453,
+              "gas": "65416",
+              "maxFeePerGas": "23709637",
+              "maxPriorityFeePerGas": "1150000"
+            },
+            "check": {
+              "endpoint": "/intents/status/v3?requestId=0x1792031931ab58f58ab2509104f708c1ee5531cc7e569bfce41681c394687104",
+              "method": "GET"
+            }
+          }
+        ],
+        "requestId": "0x1792031931ab58f58ab2509104f708c1ee5531cc7e569bfce41681c394687104",
+        "depositAddress": ""
+      }
+    ],
+    "fees": {
+      "gas": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x0000000000000000000000000000000000000000",
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "metadata": {
+            "logoURI": "https://assets.relay.link/icons/1/light.png",
+            "verified": true
+          }
+        },
+        "amount": "1578053708138",
+        "amountFormatted": "0.000001578053708138",
+        "amountUsd": "0.003742",
+        "minimumAmount": "1578053708138"
+      },
+      "relayer": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "72625",
+        "amountFormatted": "0.072625",
+        "amountUsd": "0.072530",
+        "minimumAmount": "72625"
+      },
+      "relayerGas": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "2616",
+        "amountFormatted": "0.002616",
+        "amountUsd": "0.002613",
+        "minimumAmount": "2616"
+      },
+      "relayerService": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "70009",
+        "amountFormatted": "0.070009",
+        "amountUsd": "0.069917",
+        "minimumAmount": "70009"
+      },
+      "app": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "0",
+        "amountFormatted": "0.0",
+        "amountUsd": "0",
+        "minimumAmount": "0"
+      },
+      "subsidized": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "0",
+        "amountFormatted": "0.0",
+        "amountUsd": "0",
+        "minimumAmount": "0"
+      }
+    },
+    "details": {
+      "operation": "swap",
+      "sender": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+      "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+      "currencyIn": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "10000000",
+        "amountFormatted": "10.0",
+        "amountUsd": "9.986880",
+        "minimumAmount": "10000000"
+      },
+      "currencyOut": {
+        "currency": {
+          "chainId": 196,
+          "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+          "symbol": "USD₮0",
+          "name": "USD₮0",
+          "decimals": 6,
+          "metadata": {
+            "verified": false
+          }
+        },
+        "amount": "9924172",
+        "amountFormatted": "9.924172",
+        "amountUsd": "9.911646",
+        "minimumAmount": "9874551"
+      },
+      "refundCurrency": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+            "verified": true
+          }
+        },
+        "amount": "10000000",
+        "amountFormatted": "10.0",
+        "amountUsd": "9.986880",
+        "minimumAmount": "10000000"
+      },
+      "totalImpact": {
+        "usd": "-0.075234",
+        "percent": "-0.75"
+      },
+      "swapImpact": {
+        "usd": "-0.002704",
+        "percent": "-0.03"
+      },
+      "expandedPriceImpact": {
+        "swap": {
+          "usd": "-0.052621"
+        },
+        "execution": {
+          "usd": "-0.022612"
+        },
+        "relay": {
+          "usd": "0"
+        },
+        "app": {
+          "usd": "0"
+        },
+        "sponsored": {
+          "usd": "0"
+        }
+      },
+      "rate": "0.9924172",
+      "slippageTolerance": {
+        "total": "50",
+        "origin": {
+          "usd": "0.000000",
+          "value": "0",
+          "percent": "0.00"
+        },
+        "destination": {
+          "usd": "0.049558",
+          "value": "49621",
+          "percent": "0.50"
+        }
+      },
+      "timeEstimate": 2,
+      "userBalance": "0",
+      "isFixedRate": false,
+      "route": {
+        "origin": {
+          "inputCurrency": {
+            "currency": {
+              "chainId": 8453,
+              "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+              "symbol": "USDT",
+              "name": "Tether USD",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+                "verified": true
+              }
+            },
+            "amount": "10000000",
+            "amountFormatted": "10.0",
+            "amountUsd": "9.986880",
+            "minimumAmount": "10000000"
+          },
+          "outputCurrency": {
+            "currency": {
+              "chainId": 8453,
+              "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+              "symbol": "USDT",
+              "name": "Tether USD",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://coin-images.coingecko.com/coins/images/39963/large/usdt.png?1724952731",
+                "verified": true
+              }
+            },
+            "amount": "10000000",
+            "amountFormatted": "10.0",
+            "amountUsd": "9.986880",
+            "minimumAmount": "10000000"
+          },
+          "router": "relay"
+        },
+        "destination": {
+          "inputCurrency": {
+            "currency": {
+              "chainId": 196,
+              "address": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+              "symbol": "USDC",
+              "name": "USD Coin",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+                "verified": true
+              }
+            },
+            "amount": "9913934",
+            "amountFormatted": "9.913934",
+            "amountUsd": "9.912675",
+            "minimumAmount": "9913934"
+          },
+          "outputCurrency": {
+            "currency": {
+              "chainId": 196,
+              "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+              "symbol": "USD₮0",
+              "name": "USD₮0",
+              "decimals": 6,
+              "metadata": {
+                "verified": false
+              }
+            },
+            "amount": "9924172",
+            "amountFormatted": "9.924172",
+            "amountUsd": "9.911646",
+            "minimumAmount": "9874551"
+          },
+          "router": "okxEvm"
+        }
+      }
+    },
+    "protocol": {
+      "v2": {
+        "orderId": "0x6bde9d75f4ac2496fddcc5b8383f8f8699dcf093f41ddf05353a4632970a49be",
+        "hubType": "onchain",
+        "orderData": {
+          "version": "v1",
+          "solverChainId": "base",
+          "solver": "0xf70da97812cb96acdf810712aa562db8dfa3dbef",
+          "salt": "0xbc0aa41ed35f1df330c6ae68074d6fde335495d0ae9bbf6788de1fc016cc85a0",
+          "inputs": [
+            {
+              "payment": {
+                "chainId": "base",
+                "currency": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+                "amount": "10000000",
+                "weight": "1"
+              },
+              "refunds": [
+                {
+                  "chainId": "base",
+                  "recipient": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+                  "currency": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+                  "minimumAmount": "0",
+                  "deadline": 1792636732,
+                  "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+                },
+                {
+                  "chainId": "xlayer",
+                  "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+                  "currency": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+                  "minimumAmount": "0",
+                  "deadline": 1792636732,
+                  "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+                }
+              ]
+            }
+          ],
+          "output": {
+            "chainId": "xlayer",
+            "payments": [
+              {
+                "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+                "currency": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+                "minimumAmount": "9874551",
+                "expectedAmount": "9924172"
+              }
+            ],
+            "calls": [],
+            "deadline": 1792636732,
+            "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+          },
+          "fees": []
+        },
+        "orderSignature": "0xddb2a88a634207797e1430fdcdb03fe6686be4e923ecff387cbe7bcda69792886f2cea886df2c5f66ad0905065b26cb9e71d3ad4e19d3d89a1844bee648c3df71c",
+        "paymentDetails": {
+          "chainId": "base",
+          "depository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+          "currency": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+          "amount": "10000000"
+        }
+      }
+    }
+  }
+}

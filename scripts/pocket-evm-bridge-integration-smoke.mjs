@@ -18,6 +18,8 @@ globalThis.fetch=async(url,init)=>{
  if(u.hostname==='api.coingecko.com')return Response.json({ethereum:{usd:3000,last_updated_at:Date.now()/1000},'polygon-ecosystem-token':{usd:0.5,last_updated_at:Date.now()/1000},'usd-coin':{usd:1,last_updated_at:Date.now()/1000},tether:{usd:1,last_updated_at:Date.now()/1000}})
  if(u.pathname==='/v1/w3s/wallets/wallet')return Response.json({data:{wallet:{id:'wallet',address:payer,blockchain:network,accountType:'SCA',state:'LIVE'}}})
  if(u.pathname==='/v1/w3s/wallets')return Response.json({data:{wallets:[{id:'destination',address:recipient,blockchain:destinationNetwork}]}})
+ if(u.pathname==='/v1/w3s/user/challenges')return Response.json({data:{challenges:[{id:'22222222-2222-4222-8222-222222222222',correlationIds:['33333333-3333-4333-8333-333333333333']}]}})
+ if(u.pathname==='/v1/w3s/transactions/33333333-3333-4333-8333-333333333333')return Response.json({data:{transaction:{id:'33333333-3333-4333-8333-333333333333',refId:'pocket:bridge:11111111-1111-4111-8111-111111111111',walletId:'wallet',blockchain:network,operation:'CONTRACT_EXECUTION',contractAddress:payer,sourceAddress:payer}}})
  if(u.pathname.endsWith('/estimateFee')){assert.equal(init.headers['X-User-Token'],'session');const calls=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:JSON.parse(init.body).callData}).args[0];assert.equal(calls.length,3);return Response.json({data:{high:{networkFeeRaw:'0.000001'}}})}
  assert.equal(u.pathname,'/v1/w3s/user/transactions/contractExecution');executions.push(JSON.parse(init.body));return Response.json({data:{challengeId:'challenge'}})
 }
@@ -34,7 +36,9 @@ for(const [source,chain]of Object.entries({base:'BASE',arbitrum:'ARB',ethereum:'
  assert.equal(burn[0],1001000n);assert.equal(burn[5],1000n)
  const reimbursement=decodeFunctionData({abi:parseAbi(['function transfer(address,uint256) returns(bool)']),data:batch[2].data}).args[1]
  assert.equal(reimbursement,source==='polygon'||source==='arc'?1n:3000n)
+ assert.equal(first.refId,'pocket:bridge:'+body.idempotencyKey)
  const count=executions.length
+ const recovered=await execute({...body,action:'recoverEvmBridge'});assert.equal(recovered.status,200,JSON.stringify(recovered));assert.equal(recovered.result.challengeId,'22222222-2222-4222-8222-222222222222');assert.equal(executions.length,count,'recovery never writes another challenge')
  for(const altered of [{quoteToken:''},{quoteToken:q.quoteToken+'x'},{amountUnits:'2000000'}])assert.notEqual((await execute({...body,...altered})).status,200)
  globalThis.bridgeBalance=1000000n;assert.equal((await execute(body)).status,409);delete globalThis.bridgeBalance
  globalThis.bridgeOwner='other';assert.equal((await execute(body)).status,403);delete globalThis.bridgeOwner

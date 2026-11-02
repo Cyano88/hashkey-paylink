@@ -13,7 +13,7 @@ const sourceHash='0x'+'a'.repeat(64),destHash='0x'+'b'.repeat(64),blockHash='0x'
 const transfer=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const deposit=parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
 const log=(network,from,to,units)=>({address:stablecoinAddress(network,'USDC'),data:encodeAbiParameters(parseAbiParameters('uint256'),[units]),topics:encodeEventTopics({abi:transfer,eventName:'Transfer',args:{from,to}})})
-function harness(){
+function harness(challengeResult={status:'awaiting_approval'}){
  const records=new Map(),receipts=new Map();let sends=0,ledger=0,lost=false,identity=owner,changed=false,enabled=true,canonical=true,providerStatus='pending'
  const chainIds={base:8453,xlayer:196}
  const rpc=network=>({getChainId:async()=>chainIds[network],readContract:async()=>1000000000n,call:async()=>{},getBlock:async()=>({hash:canonical?blockHash:sourceHash}),getTransactionReceipt:async({hash})=>{if(!receipts.has(hash))throw Error('not found');return receipts.get(hash)}})
@@ -23,7 +23,7 @@ function harness(){
  find:async(_owner,key)=>records.get(key)||null,list:async()=>[...records.values()],
  claim:async input=>{if([...records.values()].some(r=>['started','submitted'].includes(r.status)))return {claimed:false};records.set(input.idempotencyKey,{...input,id:'journal',status:'started',createdAt:fixture.now,updatedAt:fixture.now});return {claimed:true}},
  record:async input=>{const r={...records.get(input.idempotencyKey),...input,updatedAt:fixture.now};records.set(input.idempotencyKey,r);return r},
- challenge:async()=>{sends++;if(lost)throw Error('lost response');return {challengeId:'challenge'}},readChallenge:async()=>({status:'awaiting_approval'}),activity:async()=>[],ledger:async()=>{ledger++},
+ challenge:async()=>{sends++;if(lost)throw Error('lost response');return {challengeId:'challenge'}},recoverChallenge:async()=> 'recovered-challenge',readChallenge:async()=>challengeResult,activity:async()=>[],ledger:async()=>{ledger++},
  fetch:async url=>({ok:true,json:async()=>url.includes('/intents/')?{status:providerStatus,originChainId:8453,destinationChainId:196,inTxHashes:[sourceHash],txHashes:[destHash]}:{requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},status:providerStatus,user:sender,recipient,data:{inTxs:[{txHash:sourceHash,chainId:8453,status:'success'}],outTxs:[{txHash:destHash,chainId:196,status:'success'}]}}]}})})
  const request=async(body,method='POST')=>{let code=200,result;await handler({method,body},{setHeader(){},status(value){code=value;return this},json(value){result=value;return this}});return {code,...result}}
  return {request,records,receipts,chainIds,get sends(){return sends},get ledger(){return ledger},set lost(v){lost=v},set identity(v){identity=v},set changed(v){changed=v},set enabled(v){enabled=v},set canonical(v){canonical=v},set providerStatus(v){providerStatus=v}}
@@ -78,3 +78,10 @@ assert.equal((await cancelled.request({...execute,quoteToken:cancelQuote.quoteTo
 assert.equal((await cancelled.request({},'GET')).pending.length,0)
 assert.equal(cancelled.sends,1)
 console.log('PASS X Layer inbound cancellation persists, disappears from pending, and cannot recreate an approval.')
+
+const recoveredLost=await lost.request({...lostExecute,action:'status'});assert.equal(recoveredLost.status,'awaiting_approval');assert.equal(recoveredLost.challengeId,'recovered-challenge');assert.equal(lost.sends,1);
+for(const txHash of [undefined,sourceHash]){
+ const failed=harness({status:'failed',txHash}),q=await failed.request(quoteBody);await failed.request({...execute,quoteToken:q.quoteToken});
+ const status=await failed.request({...execute,action:'status',quoteToken:q.quoteToken});assert.equal(status.status,'failed');assert.equal(status.txHash,txHash);assert.equal(failed.sends,1);
+}
+console.log('PASS lost approval response recovers same challenge; provider source failures terminate with retained transaction evidence');

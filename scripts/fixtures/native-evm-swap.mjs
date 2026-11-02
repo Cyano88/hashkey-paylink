@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeFunctionData,getAddress,formatUnits} from 'viem'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.ts'
@@ -11,7 +12,7 @@ export async function fixture(network='base',reverse=false,stable='USDC',small=f
  const data=encodeFunctionData({abi,functionName:'smartSwapByOrderId',args:[1n,{fromToken:BigInt(pair.tokenIn.address),toToken:getAddress(pair.tokenOut.address),fromTokenAmount:units,minReturnAmount:min,deadLine:BigInt(Math.floor(now/1000)+300)},[],[],[]]})
  const response={routerResult:{chainIndex:{base:'8453',ethereum:'1',arbitrum:'42161',polygon:'137'}[network],fromTokenAmount:String(units),toTokenAmount:String(out),priceImpactPercent:'0',fromToken:{tokenContractAddress:pair.tokenIn.address,decimal:String(pair.tokenIn.decimals),taxRate:'0'},toToken:{tokenContractAddress:pair.tokenOut.address,decimal:String(pair.tokenOut.decimals),taxRate:'0'}},tx:{from:wallet,to:getAddress(contracts.router),data,value:reverse?'0':String(units),minReceiveAmount:String(min)}}
  const binding={ownerId:owner,walletId:'wallet',walletAddress:wallet,network,from,to,amount:input}
- const provider=async path=>path==='swap'?structuredClone(response):{dexContractAddress:contracts.spender}
+ const provider=async(path,query)=>{if(path==='swap'){assert.equal(query.disableRFQ,'true','asynchronous approvals must exclude time-sensitive RFQ');assert.equal(query.slippagePercent,'0.5');return structuredClone(response)}return {dexContractAddress:contracts.spender}}
  const q=await quoteNativeEvmSwap(binding,async()=> '0.00001',provider,()=>now)
  const calls=nativeSwapCalls(q).map(call=>({type:'CALL',from:wallet,to:call.target,input:call.data,value:'0x'+call.value.toString(16)}))
  const router=calls.find(c=>c.to.toLowerCase()===contracts.router.toLowerCase())

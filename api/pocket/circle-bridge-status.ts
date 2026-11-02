@@ -11,9 +11,11 @@ export async function readCircleBridgeStatus(
   txHash: string,
   fetcher: typeof fetch = fetch,
 ): Promise<CircleBridgeStatus> {
-  const response = await fetcher(`https://iris-api.circle.com/v2/messages/${CCTP_DOMAIN[source]}?transactionHash=${encodeURIComponent(txHash)}`)
+  const response = await fetcher(`https://iris-api.circle.com/v2/messages/${CCTP_DOMAIN[source]}?transactionHash=${encodeURIComponent(txHash)}`, {signal:AbortSignal.timeout(10_000)})
   const data = await response.json().catch(() => ({})) as { messages?: Array<Record<string, unknown>> }
   if (!response.ok && response.status !== 404) throw new Error('Circle bridge status is temporarily unavailable.')
+  if (data.messages !== undefined && !Array.isArray(data.messages)) throw new Error('Circle bridge status is invalid.')
+  if (data.messages && data.messages.length > 1) throw new Error('Circle bridge transaction has ambiguous messages.')
   const message = data.messages?.[0]
   const forwardState = typeof message?.forwardState === 'string'
     ? message.forwardState.toLowerCase()

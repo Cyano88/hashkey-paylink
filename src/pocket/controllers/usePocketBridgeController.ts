@@ -127,8 +127,8 @@ export default function usePocketBridgeController(input: {
       const persist = () => { lastAttempt.current = active.id; savePocketBridgeTransfer(owner, active, localStorage); saved = true }
       setStatus('confirming')
       const txHash = input.source === 'solana'
-        ? await bridgeCircleSolanaWallet({ quoteToken: fresh.quoteToken, session: session as PocketSolanaEmailSession, destination: destination as Exclude<PocketBridgeNetwork, 'solana'>, destinationAddress: destinationWallet.address, amount, accessToken, onBeforeSubmit: persist })
-        : await bridgeCircleEvmEmailWallet({ quoteToken:fresh.quoteToken, privyAccessToken: accessToken, idempotencyKey: active.id, session: session as CircleEvmEmailSession, destination, destinationAddress: destinationWallet.address, amount, onChallenge: challengeId => { active = { ...active, challengeId }; persist() } })
+        ? await bridgeCircleSolanaWallet({ quoteToken: fresh.quoteToken, session: session as PocketSolanaEmailSession, destination: destination as Exclude<PocketBridgeNetwork, 'solana'>, destinationAddress: destinationWallet.address, amount, accessToken, onBeforeSubmit: txHash => { active={...active,txHash};persist() } })
+        : await bridgeCircleEvmEmailWallet({ quoteToken:fresh.quoteToken, privyAccessToken: accessToken, idempotencyKey: active.id, onBeforeChallenge:persist, session: session as CircleEvmEmailSession, destination, destinationAddress: destinationWallet.address, amount, onChallenge: challengeId => { active = { ...active, challengeId }; persist() } })
       active = { ...active, txHash, progress: 'submitted' }
       persist()
       // Track this transfer independently. A new form must never resume or

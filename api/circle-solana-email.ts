@@ -978,6 +978,14 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data, approval: { amount: formatUnits(total, 6), total: formatUnits(total, 6), asset } })
     }
 
+    if (action === 'recoverEvmBridge') {
+      const {userToken,walletId,walletAddress,chain,idempotencyKey}=params
+      if(!['base','arbitrum','arc','ethereum','polygon'].includes(chain)||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey||''))return res.status(400).json({ok:false,error:'Invalid bridge recovery request.'})
+      const identity=await verifiedPrivyUser(req),link=await findPaymentCircleLinkByWallet(walletId,walletAddress)
+      if(!link||link.privyUserId!==identity.userId)return res.status(403).json({ok:false,error:'Reconnect your Pocket wallet.'})
+      const challengeId=await recoverCircleNativeSendChallenge({chain:chain as CircleGasStationEvmChain,userToken,walletId,walletAddress,refId:'pocket:bridge:'+idempotencyKey})
+      return res.json({ok:true,challengeId})
+    }
     if (action === 'executeEvmBridge') {
       const { userToken, walletId, walletAddress, chain, destination, destinationAddress, amountUnits, idempotencyKey } = params
       if (!userToken || !walletId || !walletAddress || !chain || !destination || !destinationAddress || !amountUnits) {
@@ -1005,7 +1013,7 @@ export default async function handler(req: Request, res: Response) {
         walletId,
         walletAddress,
         chain,
-        refId: `circle-pocket-${chain}-to-${destination}`,
+        refId: idempotencyKey ? `pocket:bridge:${idempotencyKey}` : `circle-pocket-${chain}-to-${destination}`,
         idempotencyKey,
         callData: batchCallData,
       })
@@ -1397,9 +1405,9 @@ export async function createCircleNativeSolanaChallenge(input:{userToken:string;
   return circleJson<{challengeId?:string}>('/v1/w3s/user/sign/transaction',{method:'POST',userToken:input.userToken,apiKey:circleApiKey(),body:JSON.stringify({walletId:input.walletId,rawTransaction:input.rawTransaction,memo:input.purpose==='swap'?'Pocket Solana swap':'Pocket SOL transfer'})})
 }
 
-/** Recover only a unique server-issued native-send reference, without creating another challenge. */
-export async function recoverCircleNativeSendChallenge(input:{chain:Exclude<CircleGasStationEvmChain,'arc'>;userToken:string;walletId:string;walletAddress:string;refId:string}) {
-  const validReference=/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(input.refId)||(input.chain==='base'&&/^pocket:cash-conversion:[0-9a-f-]{36}$/i.test(input.refId))
+/** Recover only a unique server-issued transfer reference, without creating another challenge. */
+export async function recoverCircleNativeSendChallenge(input:{chain:CircleGasStationEvmChain;userToken:string;walletId:string;walletAddress:string;refId:string}) {
+  const validReference=/^pocket:(?:bridge|xlayer-bridge|bsc-inbound-bridge|usdt-bridge):[0-9a-f-]{36}$/i.test(input.refId)||/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(input.refId)||(input.chain==='base'&&/^pocket:cash-conversion:[0-9a-f-]{36}$/i.test(input.refId))
   if(!input.userToken||input.userToken.length>8000||!validReference)throw Error('Invalid transfer recovery request.')
   const owned=await readCircleUserWallet(input.userToken,input.chain,input.walletId)
   requireCircleGasStationEvmWallet({...input,wallets:owned?[owned]:[]})

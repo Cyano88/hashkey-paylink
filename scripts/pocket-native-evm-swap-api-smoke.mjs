@@ -31,3 +31,11 @@ for(const network of ['base','arbitrum','ethereum','polygon']){
  saved={...saved,status:'submitted'};state={status:'pending'};assert.equal((await request('cancel')).status,'pending');assert.equal(saved.status,'submitted','uncertain submission survives')
 }
 console.log('PASS all four EVM swap networks: durable cancellation, rollback-safe recovery, no stale re-execution, no unnecessary RPC scan, uncertain submission preserved.')
+
+{
+ let saved={ownerId:owner,idempotencyKey:'pocket:native-swap:'+q.id,action:'wallet.native-swap',status:'submitted',metadata:{network:'base',quoteToken:token,challengeId:'failed-challenge'}};
+ const h=createNativeEvmSwapHandler({...d,find:async()=>saved,list:async()=>[saved],record:async r=>(saved=r),challengeStatus:async()=>({status:'failed',txHash:hash})});
+ let response;await h({method:'POST',body:{action:'status',quoteToken:token,circleUserToken:'session'},headers:{}},{setHeader(){},status(){return this},json(v){response=v}});
+ assert.equal(response.status,'failed');assert.equal(response.txHash,hash);assert.equal(saved.metadata.txHash,hash);
+ console.log('PASS failed provider transaction hash remains available in durable swap receipt');
+}

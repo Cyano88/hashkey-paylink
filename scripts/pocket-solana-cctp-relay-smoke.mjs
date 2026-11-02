@@ -11,12 +11,9 @@ import {
   getAssociatedTokenAddress,
   SOLANA_TOKEN_PROGRAM_ID,
 } from '../api/solana-token.ts'
-import {
-  createPocketSolanaCctpPrepareHandler,
-  createPocketSolanaCctpSubmitHandler,
-  preparePocketSolanaCctpTransaction,
-  validatePocketSolanaCctpSignedTransaction,
-} from '../api/pocket/solana-cctp-relay.ts'
+import {build} from 'esbuild'
+await build({entryPoints:['api/pocket/solana-cctp-relay.ts'],outfile:'.codex-temp/solana-cctp-fixture.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'pause-state',setup(b){b.onResolve({filter:/render-durable-store\.js$/},a=>a.importer.endsWith('emergency-pause.ts')?{path:a.path,namespace:'pause-fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'pause-fixture'},()=>({contents:`export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>({paused:false,revision:0,history:[]});export const mutateDurableJson=async()=>{throw Error('Unexpected pause mutation')}`}))}}]})
+const {createPocketSolanaCctpPrepareHandler,createPocketSolanaCctpSubmitHandler,preparePocketSolanaCctpTransaction,validatePocketSolanaCctpSignedTransaction}=await import('../.codex-temp/solana-cctp-fixture.mjs')
 
 const relayer = Keypair.generate()
 const wallet = Keypair.generate()

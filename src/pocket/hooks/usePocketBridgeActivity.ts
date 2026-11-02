@@ -1,3 +1,4 @@
+import {recoverCircleEvmBridgeChallenge} from '../../lib/circleEvmEmailWallet'
 import {activePocketEvmSession} from '../controllers/usePocketWalletController'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { readPendingPocketBridges, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
@@ -37,18 +38,25 @@ export default function usePocketBridgeActivity(input: {
       const token = await current.current.getAccessToken()
       if (current.current.owner !== owner) return
       if (!token) throw new Error('Sign in again to check this transfer.')
-      if (active.challengeId && active.walletAddress && active.source !== 'solana' && !active.txHash) {
+      if (active.walletAddress && active.source !== 'solana' && !active.txHash) {
         const session = activePocketEvmSession(owner, active.source, active.walletAddress) ?? await current.current.getEvmSession(active.source, active.walletAddress)
         if (!session) return
         if (current.current.owner !== owner) return
-        const outcome = await readCircleEvmBridgeChallenge(session, active.challengeId)
+        if(!active.challengeId){
+          const challengeId=await recoverCircleEvmBridgeChallenge(session,active.id,token)
+          if(current.current.owner!==owner)return
+          if(!challengeId)return
+          active={...active,challengeId};savePocketBridgeTransfer(owner,active,localStorage)
+        }
+        const challengeId=active.challengeId!
+        const outcome = await readCircleEvmBridgeChallenge(session, challengeId)
         if (current.current.owner !== owner) return
         if (outcome.failedWithoutTransaction || outcome.sourceFailed) {
           savePocketBridgeTransfer(owner, { ...active, progress: 'failed' }, localStorage)
           setMessages(value => ({ ...value, [record.id]: 'The source transfer did not complete. You can start a new bridge.' }))
           return
         }
-        const result = outcome.txHash ? {txHash:outcome.txHash} : await reconcileCircleEvmEmailWithdraw({ session, challengeId: active.challengeId, timeoutMs: 5_000 })
+        const result = outcome.txHash ? {txHash:outcome.txHash} : await reconcileCircleEvmEmailWithdraw({ session, challengeId, timeoutMs: 5_000 })
         if (current.current.owner !== owner) return
         if (result.txHash) { active = { ...active, txHash: result.txHash, progress: 'submitted' }; savePocketBridgeTransfer(owner, active, localStorage) }
       }
@@ -89,7 +97,7 @@ export default function usePocketBridgeActivity(input: {
       const records = readPocketBridgeTransfers(owner, localStorage)
       for (const record of records) {
         if (current.current.owner !== owner) break
-        if ((record.txHash || record.challengeId) && record.progress !== 'failed' && !(record.progress === 'completed' && record.historySynced)) await check(record, false)
+        if ((record.txHash || record.challengeId || record.walletAddress) && record.progress !== 'failed' && !(record.progress === 'completed' && record.historySynced)) await check(record, false)
       }
     } catch { /* reload reports corrupt local records without claiming failure. */ }
     finally { syncing.current = false; if (current.current.owner === owner) reload() }

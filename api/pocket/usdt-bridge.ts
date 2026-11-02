@@ -7,7 +7,7 @@ import {createPublicClient,decodeEventLog,formatUnits,parseUnits,getAddress,http
 import {base,arbitrum,mainnet,polygon} from 'viem/chains'
 import {verifiedPrivyUser,circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {claimCirclePocketAction,findCirclePocketAction,listCirclePocketActions,recordCirclePocketAction} from '../circle-pocket-action-journal.js'
-import {createCircleGasStationEvmChallenge,readCircleEvmChallenge,quoteCircleEvmBatchRecovery} from '../circle-solana-email.js'
+import {recoverCircleNativeSendChallenge,createCircleGasStationEvmChallenge,readCircleEvmChallenge,quoteCircleEvmBatchRecovery} from '../circle-solana-email.js'
 import {evmActivity} from './wallet-chain-activity.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
@@ -96,7 +96,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
 }
 
 // Shared by the authenticated status route and background reconciliation.
-const recoveryDefaults={claimAction:claimCirclePocketAction,findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
+const recoveryDefaults={claimAction:claimCirclePocketAction,findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,recoverChallenge:recoverCircleNativeSendChallenge,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
 export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string;retireUnsubmitted?:boolean;cancelUnsigned?:boolean}={},overrides:Partial<typeof recoveryDefaults>={}){
   if(quoteToken.startsWith('solana:'))return recoverSolanaUsdtBridge(ownerId,quoteToken.slice(7))
   const deps={...recoveryDefaults,...overrides}
@@ -123,7 +123,11 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
         await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':refunded',ownerId,executionId:existing.id,rail:'wallet_bridge',state:'refunded',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:meta.refundNetwork,resourceId:q.id,transactionHash:meta.txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),refundTxHash:meta.refundTxHash,refundAmount:meta.refundAmount,provider:q.provider},recordedAt:existing.updatedAt})
         return {ok:true,status:'refunded',txHash:meta.txHash,destinationTxHash:meta.refundTxHash,settlement:{network:meta.refundNetwork,transactionHash:meta.refundTxHash,amountUnits:meta.refundAmountUnits}}
       }
-      return {ok:true,status:'failed'}
+      return {ok:true,status:'failed',txHash:meta.txHash}
+    }
+    if(!meta.txHash&&!meta.challengeId&&input.circleUserToken){
+      const recovered=await deps.recoverChallenge({chain:q.source,userToken:String(input.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,refId:journalKey})
+      if(recovered){meta.challengeId=recovered;await deps.recordAction({...existing,status:'submitted',metadata:meta})}
     }
     let txHash=meta.txHash||''
     let awaitingApproval=false
@@ -132,8 +136,9 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       const result=await deps.readChallenge({chain:q.source,userToken:String(input.circleUserToken),walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId}).catch(()=>{statusUnavailable=true;return {status:'pending' as const,txHash:undefined}})
       if(result.status==='failed'){
         const notSubmitted='notSubmitted' in result&&result.notSubmitted===true
-        await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,...(notSubmitted?{paymentState:'not_submitted'}:{})}})
-        return notSubmitted?{ok:true,status:'not_submitted',reason:'approval_expired'}:{ok:true,status:'failed'}
+        if(result.txHash&&!/^0x[0-9a-f]{64}$/i.test(result.txHash))throw Error('Invalid bridge reference.')
+        await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,...(result.txHash?{txHash:result.txHash}:{}),...(notSubmitted&&!result.txHash?{paymentState:'not_submitted'}:{})}})
+        return notSubmitted&&!result.txHash?{ok:true,status:'not_submitted',reason:'approval_expired'}:{ok:true,status:'failed',txHash:result.txHash}
       }
       txHash=result.txHash||''
       awaitingApproval=result.status==='awaiting_approval'

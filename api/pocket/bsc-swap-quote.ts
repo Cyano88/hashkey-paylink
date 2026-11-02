@@ -32,7 +32,7 @@ export async function quoteBscSwap(binding: BscSwapBinding, d: Dependencies): Pr
     if (fee >= total) throw Error('The amount is too small to cover the network fee.')
     const trade = total - fee
     const data = await d.read('swap', {chainIndex: '56', amount: String(trade), fromTokenAddress: input.address, toTokenAddress: output.address,
-      userWalletAddress: binding.walletAddress, swapReceiverAddress: binding.walletAddress, swapMode: 'exactIn', slippagePercent: '0.5', autoSlippage: 'false', priceImpactProtectionPercent: '3'})
+      userWalletAddress: binding.walletAddress, swapReceiverAddress: binding.walletAddress, swapMode: 'exactIn', slippagePercent: '0.5', disableRFQ: 'true', autoSlippage: 'false', priceImpactProtectionPercent: '3'})
     const route = data?.routerResult
     if (!route || String(route.chainIndex) !== '56' || route.fromTokenAmount !== String(trade)
       || route.fromToken?.tokenContractAddress?.toLowerCase() !== input.address.toLowerCase() || route.toToken?.tokenContractAddress?.toLowerCase() !== output.address.toLowerCase()

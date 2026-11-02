@@ -76,7 +76,7 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
    const error=e as Error&{status?:number};return res.status(error.status||503).json({ok:false,error:error.status?error.message:actionMessage(req.body?.action)})
   }
  }
- async function reconcile(limit=20){const pending=Object.values((await read())?.operations||{}).filter(o=>['submitting','pending'].includes(o.state)||['completed','failed','refunded'].includes(o.state)&&o.publishedState!==o.state).slice(0,limit);for(const op of pending)try{await publish(await operations.status(op.quote.id,op.quote))}catch{}return {checked:pending.length}}
+ async function reconcile(limit=20){const pending=Object.values((await read())?.operations||{}).filter(o=>['submitting','pending'].includes(o.state)||['completed','failed','refunded'].includes(o.state)&&o.publishedState!==o.state).slice(0,limit);let errors=0;for(const op of pending)try{await publish(await operations.status(op.quote.id,op.quote))}catch{errors++}return {checked:pending.length,errors}}
  return {handler,reconcile}
 }
 function actionMessage(action:unknown){return action==='quote'?'Could not update the bridge amount. Please try again.':'Bridge status is unavailable. Your transfer remains saved.'}

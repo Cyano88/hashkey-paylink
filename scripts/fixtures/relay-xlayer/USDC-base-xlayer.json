@@ -1,0 +1,405 @@
+{
+  "input": {
+    "asset": "USDC",
+    "source": "base",
+    "destination": "xlayer",
+    "sender": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+    "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+    "amountUnits": "10000000"
+  },
+  "now": 1792031927881,
+  "response": {
+    "requestId": "0x1792031928dd77423a902959a73a0feb5fde9f7aecd4258f5eaf98e97771b48d",
+    "steps": [
+      {
+        "id": "approve",
+        "action": "Confirm transaction in your wallet",
+        "description": "Sign an approval for USDC",
+        "kind": "transaction",
+        "items": [
+          {
+            "status": "incomplete",
+            "data": {
+              "from": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+              "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "data": "0x095ea7b30000000000000000000000004cd00e387622c35bddb9b4c962c136462338bc310000000000000000000000000000000000000000000000000000000000989680",
+              "value": "0",
+              "chainId": 8453,
+              "gas": "73112",
+              "maxFeePerGas": "24015627",
+              "maxPriorityFeePerGas": "1150000"
+            }
+          }
+        ],
+        "requestId": "0x1792031928dd77423a902959a73a0feb5fde9f7aecd4258f5eaf98e97771b48d"
+      },
+      {
+        "id": "deposit",
+        "action": "Confirm transaction in your wallet",
+        "description": "Depositing funds to the relayer to execute the swap for USDC",
+        "kind": "transaction",
+        "items": [
+          {
+            "status": "incomplete",
+            "data": {
+              "from": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+              "to": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+              "data": "0xe8017952000000000000000000000000f3853789e1d4f227bca68e522240f1ca139babd1000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda029130000000000000000000000000000000000000000000000000000000000989680460637f88ad23d38bd3ba3cf74e66f78bf0e72a8b4b35b1275f4e0f5f35f3548",
+              "value": "0",
+              "chainId": 8453,
+              "gas": "76194",
+              "maxFeePerGas": "24015627",
+              "maxPriorityFeePerGas": "1150000"
+            },
+            "check": {
+              "endpoint": "/intents/status/v3?requestId=0x1792031928dd77423a902959a73a0feb5fde9f7aecd4258f5eaf98e97771b48d",
+              "method": "GET"
+            }
+          }
+        ],
+        "requestId": "0x1792031928dd77423a902959a73a0feb5fde9f7aecd4258f5eaf98e97771b48d",
+        "depositAddress": ""
+      }
+    ],
+    "fees": {
+      "gas": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x0000000000000000000000000000000000000000",
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "metadata": {
+            "logoURI": "https://assets.relay.link/icons/1/light.png",
+            "verified": true
+          }
+        },
+        "amount": "1856910777784",
+        "amountFormatted": "0.000001856910777784",
+        "amountUsd": "0.004403",
+        "minimumAmount": "1856910777784"
+      },
+      "relayer": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "21200",
+        "amountFormatted": "0.0212",
+        "amountUsd": "0.021197",
+        "minimumAmount": "21200"
+      },
+      "relayerGas": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "198",
+        "amountFormatted": "0.000198",
+        "amountUsd": "0.000198",
+        "minimumAmount": "198"
+      },
+      "relayerService": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "21002",
+        "amountFormatted": "0.021002",
+        "amountUsd": "0.020999",
+        "minimumAmount": "21002"
+      },
+      "app": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "0",
+        "amountFormatted": "0.0",
+        "amountUsd": "0",
+        "minimumAmount": "0"
+      },
+      "subsidized": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "0",
+        "amountFormatted": "0.0",
+        "amountUsd": "0",
+        "minimumAmount": "0"
+      }
+    },
+    "details": {
+      "operation": "swap",
+      "sender": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+      "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+      "currencyIn": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "10000000",
+        "amountFormatted": "10.0",
+        "amountUsd": "9.998730",
+        "minimumAmount": "10000000"
+      },
+      "currencyOut": {
+        "currency": {
+          "chainId": 196,
+          "address": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+            "verified": true
+          }
+        },
+        "amount": "9978800",
+        "amountFormatted": "9.9788",
+        "amountUsd": "9.977533",
+        "minimumAmount": "9928906"
+      },
+      "refundCurrency": {
+        "currency": {
+          "chainId": 8453,
+          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "metadata": {
+            "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+            "verified": true
+          }
+        },
+        "amount": "10000000",
+        "amountFormatted": "10.0",
+        "amountUsd": "9.998730",
+        "minimumAmount": "10000000"
+      },
+      "totalImpact": {
+        "usd": "-0.021197",
+        "percent": "-0.21"
+      },
+      "swapImpact": {
+        "usd": "0.000000",
+        "percent": "0.00"
+      },
+      "expandedPriceImpact": {
+        "swap": {
+          "usd": "-0.001000"
+        },
+        "execution": {
+          "usd": "-0.020197"
+        },
+        "relay": {
+          "usd": "0"
+        },
+        "app": {
+          "usd": "0"
+        },
+        "sponsored": {
+          "usd": "0"
+        }
+      },
+      "rate": "0.99788",
+      "slippageTolerance": {
+        "total": "50",
+        "origin": {
+          "usd": "0.000000",
+          "value": "0",
+          "percent": "0.00"
+        },
+        "destination": {
+          "usd": "0.049888",
+          "value": "49894",
+          "percent": "0.50"
+        }
+      },
+      "timeEstimate": 2,
+      "userBalance": "0",
+      "isFixedRate": false,
+      "route": {
+        "origin": {
+          "inputCurrency": {
+            "currency": {
+              "chainId": 8453,
+              "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+              "symbol": "USDC",
+              "name": "USD Coin",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+                "verified": true
+              }
+            },
+            "amount": "10000000",
+            "amountFormatted": "10.0",
+            "amountUsd": "9.998730",
+            "minimumAmount": "10000000"
+          },
+          "outputCurrency": {
+            "currency": {
+              "chainId": 8453,
+              "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+              "symbol": "USDC",
+              "name": "USD Coin",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+                "verified": true
+              }
+            },
+            "amount": "10000000",
+            "amountFormatted": "10.0",
+            "amountUsd": "9.998730",
+            "minimumAmount": "10000000"
+          },
+          "router": "relay"
+        },
+        "destination": {
+          "inputCurrency": {
+            "currency": {
+              "chainId": 196,
+              "address": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+              "symbol": "USDC",
+              "name": "USD Coin",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+                "verified": true
+              }
+            },
+            "amount": "9978800",
+            "amountFormatted": "9.9788",
+            "amountUsd": "9.977533",
+            "minimumAmount": "9928906"
+          },
+          "outputCurrency": {
+            "currency": {
+              "chainId": 196,
+              "address": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+              "symbol": "USDC",
+              "name": "USD Coin",
+              "decimals": 6,
+              "metadata": {
+                "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+                "verified": true
+              }
+            },
+            "amount": "9978800",
+            "amountFormatted": "9.9788",
+            "amountUsd": "9.977533",
+            "minimumAmount": "9928906"
+          },
+          "router": "relay"
+        }
+      }
+    },
+    "protocol": {
+      "v2": {
+        "orderId": "0x460637f88ad23d38bd3ba3cf74e66f78bf0e72a8b4b35b1275f4e0f5f35f3548",
+        "hubType": "onchain",
+        "orderData": {
+          "version": "v1",
+          "solverChainId": "base",
+          "solver": "0xf70da97812cb96acdf810712aa562db8dfa3dbef",
+          "salt": "0x4c1ab24a172e0a8a2ff7d8d27a4a10ad2f161bf0110f4244c419c27542181633",
+          "inputs": [
+            {
+              "payment": {
+                "chainId": "base",
+                "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "amount": "10000000",
+                "weight": "1"
+              },
+              "refunds": [
+                {
+                  "chainId": "base",
+                  "recipient": "0xF3853789e1d4F227BCA68E522240f1Ca139BABd1",
+                  "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                  "minimumAmount": "0",
+                  "deadline": 1792636728,
+                  "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+                },
+                {
+                  "chainId": "xlayer",
+                  "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+                  "currency": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+                  "minimumAmount": "0",
+                  "deadline": 1792636728,
+                  "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+                }
+              ]
+            }
+          ],
+          "output": {
+            "chainId": "xlayer",
+            "payments": [
+              {
+                "recipient": "0xdA21792469F33476fdcadEF071cF026795f9F3Ff",
+                "currency": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+                "minimumAmount": "9928906",
+                "expectedAmount": "9978800"
+              }
+            ],
+            "calls": [],
+            "deadline": 1792636728,
+            "extraData": "0x000000000000000000000000b92fe925dc43a0ecde6c8b1a2709c170ec4fff4f"
+          },
+          "fees": []
+        },
+        "orderSignature": "0x44078c620dc885b9796605a2b006452f8ed82dd9600cd0c83fb1f5077be57d524314f3278689c58d863e5d6a16fdd7e281278df973082ea2c0dbe12b2cf827dd1b",
+        "paymentDetails": {
+          "chainId": "base",
+          "depository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+          "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "amount": "10000000"
+        }
+      }
+    }
+  }
+}

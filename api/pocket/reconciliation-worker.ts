@@ -35,6 +35,8 @@ const scheduledExecutionRecovery = createRecoveryBackoff()
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
 type Dependencies = {
+  reconcileBscInbound:typeof reconcileBscInboundBridge
+  reconcileBscOutbound:typeof reconcileBscOutboundBridges
   reconcileBsc:typeof reconcileBscSwaps
   reconcileCash:typeof reconcileCashConversion
   reconcileSolanaSwap:typeof reconcileNativeSolanaSwap
@@ -189,7 +191,7 @@ async function reconcileBridges(dependencies: Dependencies, limit: number): Prom
     const source = record.metadata?.source
     const destination = record.metadata?.destination
     const txHash = record.metadata?.txHash || record.resourceId || ''
-    if ((source !== 'base' && source !== 'arbitrum' && source !== 'solana') || !destination || !txHash) {
+    if ((source !== 'base' && source !== 'arbitrum' && source !== 'solana' && source !== 'ethereum' && source !== 'polygon' && source !== 'arc') || !destination || !txHash) {
       return { id: record.id, kind: 'wallet_bridge', result: 'review' as const, message: 'Bridge record is incomplete.' }
     }
     try {
@@ -297,6 +299,8 @@ async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[]
 
 export async function runPocketReconciliation(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    reconcileBscInbound:reconcileBscInboundBridge,
+    reconcileBscOutbound:reconcileBscOutboundBridges,
     reconcileBsc:reconcileBscSwaps,
     reconcileCash:reconcileCashConversion,
     reconcileSolanaSwap:reconcileNativeSolanaSwap,
@@ -344,8 +348,8 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch(error){results.push({id:record.id,kind:'cash_conversion',result:'error',message:errorText(error)})}
   }
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
-  for(const record of await dependencies.listBridges('wallet.bsc-bridge',Math.min(limit,20))){if(record.metadata?.source!=='bsc'&&record.metadata?.destination==='bsc'&&record.metadata.quoteToken)try{await reconcileBscInboundBridge(record.ownerId,record.metadata.quoteToken)}catch{}}
-  try{await reconcileBscOutboundBridges(Math.min(limit,20))}catch{}
+  for(const record of await dependencies.listBridges('wallet.bsc-bridge',Math.min(limit,20))){if(record.metadata?.source!=='bsc'&&record.metadata?.destination==='bsc'&&record.metadata.quoteToken)try{const result=await dependencies.reconcileBscInbound(record.ownerId,record.metadata.quoteToken);results.push({id:record.id,kind:'wallet_bridge',result:['completed','failed','refunded'].includes(result.status)?'reconciled':result.status==='needs_attention'?'review':'unchanged'})}catch(error){results.push({id:record.id,kind:'wallet_bridge',result:'error',message:errorText(error)})}}
+  try{const result=await dependencies.reconcileBscOutbound(Math.min(limit,20));if(result.errors)results.push({id:'bsc-outbound-bridges',kind:'wallet_bridge',result:'error',message:result.errors+' bridge status checks failed.'})}catch(error){results.push({id:'bsc-outbound-bridges',kind:'wallet_bridge',result:'error',message:errorText(error)})}
   try { const bsc=await dependencies.reconcileBsc(Math.min(limit,20));if(bsc.checked||bsc.billingChecked)results.push({id:'bsc-swaps',kind:'wallet_swap',result:bsc.unresolved?'review':'reconciled'}) }
   catch(error){results.push({id:'bsc-swaps',kind:'wallet_swap',result:'error',message:errorText(error)})}
   try { await dependencies.auditXLayerBilling() }

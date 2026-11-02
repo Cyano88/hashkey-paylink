@@ -1,3 +1,4 @@
+import {signedSolanaReference} from './pocketSignedSolanaReference'
 import {parseUnits} from 'viem'
 import {readPocketBridgeQuote} from '../api/pocketBridgeClient'
 import { pocketBridgeNetworkLabel } from './pocketBridgeNetworks'
@@ -18,7 +19,7 @@ export function pocketBridgeApiErrorMessage(value: unknown, fallback: string) {
 export async function bridgeCircleSolanaWallet(input: {
   maxTotalUnits?: bigint
   quoteToken?: string
-  onBeforeSubmit?: () => void
+  onBeforeSubmit?: (txHash:string) => void
   session: PocketSolanaEmailSession
   destination: Exclude<PocketBridgeNetwork, 'solana'>
   destinationAddress: string
@@ -58,7 +59,8 @@ export async function bridgeCircleSolanaWallet(input: {
     rawTransaction: prepared.transaction,
     memo: `Circle Pocket bridge ${input.amount} USDC from Solana to ${pocketBridgeNetworkLabel(input.destination)}`,
   })
-  input.onBeforeSubmit?.()
+  const expectedHash=signedSolanaReference(signedTransaction)
+  input.onBeforeSubmit?.(expectedHash)
   const submitResponse = await fetch(POCKET_API.solanaCctpSubmit, {
     method: 'POST',
     headers: { authorization: `Bearer ${input.accessToken}`, 'content-type': 'application/json' },
@@ -75,5 +77,6 @@ export async function bridgeCircleSolanaWallet(input: {
   if (!submitResponse.ok || !submitted.ok || !submitted.txHash) {
     throw new Error(pocketBridgeApiErrorMessage(submitted.error, 'Hash PayLink could not submit the sponsored Solana bridge.'))
   }
+  if(submitted.txHash!==expectedHash)throw new Error('Bridge transaction reference did not match the signed transaction.')
   return submitted.txHash
 }
