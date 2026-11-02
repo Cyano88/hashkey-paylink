@@ -1,3 +1,4 @@
+throw new GradleException('POCKET_NATIVE_SOURCE_RETIRED: Build Pocket only from C:/Users/USER/pocket-play-update-20261101.')
 apply plugin: 'com.android.application'
 
 def pocketUploadStoreFile = System.getenv('POCKET_UPLOAD_STORE_FILE')

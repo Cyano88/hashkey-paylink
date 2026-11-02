@@ -1,3 +1,4 @@
+throw new Error('POCKET_NATIVE_SOURCE_RETIRED: Build Pocket only from C:/Users/USER/pocket-play-update-20261101. This checkout is not the verified native release source.');
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
