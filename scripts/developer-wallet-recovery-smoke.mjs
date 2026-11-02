@@ -42,3 +42,40 @@ try{
  assert.equal((await call({chain:'polygon',receivingSetup:undefined})).wallet.id,'original');assert.equal(walletFixture.writes,4)
 }finally{globalThis.fetch=savedFetch}
 console.log('PASS receiving-wallet recovery: Ethereum/Polygon originals, linked reuse, candidate exclusion, ambiguous history, auth, concurrent link conflict and no migration or funds movement.')
+
+// Real incident shape: two canonical five-chain batches, with Base already
+// linked to one batch. Recency and inventory ordering must not choose the wallet.
+const canonicalRef='pocket:canonical-evm:v1'
+const activeBase={...anchor,refId:canonicalRef,createDate:'2026-10-27T08:29:20Z'}
+const oldBase={...activeBase,id:'old-base',address:oldAddress,createDate:'2026-10-27T08:29:08Z'}
+for(const [network,blockchain] of [['ethereum','ETH'],['polygon','MATIC']]){
+ const active={...activeBase,id:'active-'+network,blockchain}
+ const old={...oldBase,id:'old-'+network,blockchain}
+ const inventory=[old,activeBase,active,oldBase]
+ assert.equal(developerAdditionalWallet(inventory,network,activeBase).id,active.id)
+ assert.equal(developerAdditionalWallet([...inventory].reverse(),network,activeBase).id,active.id)
+ assert.equal(developerAdditionalWallet(inventory,network,oldBase).id,old.id,'Existing anchor wins even when older')
+ for(const invalid of [
+  inventory.filter(w=>w.id!==activeBase.id),
+  [...inventory,{...active,id:'duplicate-matching'}],
+  inventory.map(w=>w.id===active.id?{...w,state:'FROZEN'}:w),
+  inventory.map(w=>w.id===old.id?{...w,refId:''}:w),
+  inventory.map(w=>w.id===active.id?{...w,createDate:'2026-10-28T08:29:20Z'}:w),
+  inventory.map(w=>w.id===active.id?{...w,refId:'pocket:evm-candidate:v2:replacement'}:w).concat({...old,id:'another-old'}),
+ ])assert.throws(()=>developerAdditionalWallet(invalid,network,activeBase),e=>e.status===409)
+ assert.throws(()=>developerAdditionalWallet(inventory,network,{...activeBase,id:'foreign'}),e=>e.status===409)
+ assert.throws(()=>developerAdditionalWallet(inventory,network,{...activeBase,refId:''}),e=>e.status===409)
+}
+walletFixture.links={base:link(activeBase,'base')};walletFixture.writes=0
+walletFixture.inventory=[activeBase,oldBase,...['ETH','MATIC'].flatMap(blockchain=>[{...activeBase,id:'active-'+blockchain,blockchain},{...oldBase,id:'old-'+blockchain,blockchain}])]
+const frozenInventory=JSON.stringify(walletFixture.inventory)
+globalThis.fetch=async(url,options)=>{assert.ok(!options?.method||options.method==='GET');const u=new URL(url);if(u.pathname==='/v1/w3s/wallets')return Response.json({data:{wallets:walletFixture.inventory}});const wallet=walletFixture.inventory.find(w=>w.id===u.pathname.split('/').at(-1));assert.ok(wallet);return Response.json({data:{wallet}})}
+try{
+ assert.equal((await call()).wallet.id,'active-ETH')
+ assert.equal((await call({chain:'polygon'})).wallet.id,'active-MATIC')
+ assert.equal(walletFixture.writes,2)
+ assert.equal(JSON.stringify(walletFixture.inventory),frozenInventory,'No historical wallet changed')
+ assert.equal((await call()).wallet.id,'active-ETH')
+ assert.equal(walletFixture.writes,2,'Repeat setup reuses link')
+}finally{globalThis.fetch=savedFetch}
+console.log('PASS duplicate canonical batches recover the verified anchor batch for Ethereum and Polygon; history preserved and ambiguous/untrusted matches rejected.')

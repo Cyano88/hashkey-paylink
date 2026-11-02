@@ -636,7 +636,7 @@ export default async function handler(req: Request, res: Response) {
       // The recovery helper rejects ambiguous history and replacement candidates.
       if(!existingLink){
         const {developerAdditionalWallet}=await import('./pocket/developer-wallet-recovery.js')
-        const recovered=developerAdditionalWallet(inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[],chain)
+        const recovered=developerAdditionalWallet(inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[],chain,anchor as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord)
         if(recovered){
           requireCircleGasStationEvmWallet({chain,walletId:recovered.id,walletAddress:recovered.address,wallets:[recovered]})
           await compareAndSetCircleLink(circleLinkKey(identity.userId,chain),{privyUserId:identity.userId,email:identity.email,chain,purpose:'payment',circleWalletId:recovered.id,circleWalletAddress:recovered.address,circleBlockchain:recovered.blockchain,updatedAt:Date.now()})
