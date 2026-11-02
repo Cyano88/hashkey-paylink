@@ -39,3 +39,13 @@
 - Native verification now uses the signed quote recipient amount. Solana activity was checked separately: it projects the owner's total token balance delta, rather than separate treasury legs.
 - Native source guard and initial Vite native build passed. Final build, same-signer APK, device review, deployment and live checks remain to be recorded below.
 - Do not treat synthetic proofs or a source build as live-payment evidence.
+
+## Rollout verification
+
+- Fee implementation committed and pushed as `802058f16be9b69b7bfcd3798e2095db01f1427e`. Final incremental web TypeScript passed. Render built that revision from source and deployment `dep-dbk7i4o473hc73fs39s0` is live. Production health after rollout: healthy/database true; unresolved/stale zero. A transient 502 occurred during deployment and cleared once live.
+- Read-only production process check asserted the exact revision and fee arithmetic; the prior verified AlveronFashion payment remains paid, effective automatic receipts remain enabled, and the global receipt-delivery flag remains enabled. This check did not create a checkout or move funds.
+- Native final Vite build, Capacitor sync, JDK21 `assembleDebug` and original-source guard passed. APK is `C:/Users/USER/pocket-play-update-20261101/android/app/build/outputs/apk/debug/app-debug.apk`, version 1.0.9/code 10. SHA256 `B2FEB64AC87FF80AF81E955C4D9EFBE144B39B7A7B8C9254B467966A30D038CC`; signer unchanged (`9b2452d82db87452c51b36ea4bda0dc6d65918a193453f6c068438a39adcadde`). All 1,867 packaged web assets match the final native build.
+- Installed with `adb install -r` on the attached Pixel, preserving app data. Cold and warm invalid checkout links both reached Review payment with the expected not-found/retry state and no camera. Back returned Home. No new funded payment or real provider payout was performed.
+- Native manifest/source hashes and reviewed source ZIP saved under `native-release/merchant-fees-1.0.9.json` and `native-release/merchant-fees-source-1.0.9.zip`. This is a device debug update, not a new Google Play release. Final native typecheck still reports the older errors; the new hook compatibility error is gone. The existing PaymentPage replaceAll ES2020 error was verified in the pre-edit backup.
+- Main checkout retains pre-existing generated `dist/` and Android changes outside the scoped commit. Do not confuse those with native release source or delete them blindly.
+- Next phase remains bridge/swap. Start from this checkpoint and preserve the distinct native implementation. Carry the native bridge typing errors into that review; do not claim a clean native full typecheck.
