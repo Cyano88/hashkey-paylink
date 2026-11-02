@@ -17,6 +17,13 @@ const rowKey = (row: PocketActivityRow) => durableBsc(row) ? JSON.stringify([row
 
 /** Merge observed history. Absence from a bounded/provider response is not deletion. */
 export function mergePocketActivityRows(previous: PocketActivityRow[], incoming: PocketActivityRow[]) {
+  // A backend classification correction replaces its own cached legacy row.
+  // Require the same event, chain and transaction; never merge unrelated trades.
+  const swapIdentity=(row:PocketActivityRow)=>JSON.stringify([transactionKey(row),row.eventId])
+  const canonicalSwaps=new Set([...previous,...incoming].filter(row=>row.source==='wallet-swap'&&row.txHash&&row.eventId).map(swapIdentity))
+  const currentClassification=(row:PocketActivityRow)=>row.source!=='stock-swap'||!canonicalSwaps.has(swapIdentity(row))
+  previous=previous.filter(currentClassification)
+  incoming=incoming.filter(currentClassification)
   const normalize = (row: PocketActivityRow): PocketActivityRow => !row.memo?.trim() && ['earn-deposit','earn-withdraw'].includes(row.source || '')
     ? {...row,memo:row.source === 'earn-deposit' ? 'Added to Earn' : 'Withdrawn from Earn'} : {...row}
   const rows = new Map<string,PocketActivityRow>()
