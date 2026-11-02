@@ -45,7 +45,12 @@ RFQ exclusion mitigates time-sensitive routes; it cannot guarantee every market 
 
 ## Rollout verification
 
-Pending scoped backend deployment and same-signer native APK installation.
+- Backend code commit 418cbf5d465042e18974fd8aae0e2a82d0c21f70 pushed; Render deployment dep-dbk8frflk1mc73b606e0 is live. Read-only inspection of the running process verified that exact revision, RFQ exclusion in all four quote modules, and the new bridge recovery handler.
+- Production /api/health reports healthy=true, database=true, unresolved=0 and stale=0 after rollout.
+- Native 1.0.10/code11 Vite build passed with explicit exit 0; Capacitor sync and JDK21 assembleDebug passed. All 1,867 packaged assets match the built web assets. APK SHA256 F5A8A42B750D5145CFD4FEA25FD6C9D88A53CB72CFA0BEA1F7BE3C17C362E11C; signer unchanged: 9b2452d82db87452c51b36ea4bda0dc6d65918a193453f6c068438a39adcadde.
+- Installed with adb install -r on Pixel 5A160DLCH006VM; package/version verified, data preserved. Live Activity and Home show two failed 6.40 USDT swaps and the 1.10/1.80 USDC bridges under Swap/Bridge labels. No new funds moved. This is a debug device update, not a Google Play release.
+- Native source manifest and 39-file recovery archive: C:/Users/USER/pocket-play-update-20261101/native-release/bridge-swap-1.0.10.json and bridge-swap-source-1.0.10.zip. Original baseline is retained.
+- Main pre-existing generated dist/ and Android changes remain outside the scoped commit.
 
 ## Checkout boundaries
 
