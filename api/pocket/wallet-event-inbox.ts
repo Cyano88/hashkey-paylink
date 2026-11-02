@@ -4,6 +4,7 @@ import {findPaymentCircleLinkByWallet} from '../privy-circle-link.js'
 import {mutateDurableJson,queryDurablePostgres,withDurableSessionLock,hasRenderDurableStore} from '../render-durable-store.js'
 import {persistObservedWalletActivity} from './activity-feed.js'
 import {verifyWalletEvent} from './wallet-event-proof.js'
+import {queueWalletEventPushes} from './wallet-event-push.js'
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const chains=new Set(['BASE','ARB','ARC','SOL','ETH','MATIC','POLYGON'])
 export type WalletEvent={walletId:string;transactionId:string;blockchain:string;receivedAt:number;nextAt:number;attempts:number;done?:boolean}
@@ -47,6 +48,7 @@ export async function drainWalletEvents(){
     if(!link||link.circleBlockchain!==event.blockchain)throw Error('Wallet link unavailable.')
     const rows=await verifyWalletEvent(event,link)
     await persistObservedWalletActivity(link.privyUserId,rows)
+    await queueWalletEventPushes(link.privyUserId,rows)
     await mutateDurableJson<WalletEvent>(key,old=>({...old!,done:true}))
     console.info('[wallet-events]',JSON.stringify({network:link.chain,result:rows.length?'verified':'no-supported-transfer',rows:rows.length}))
    }catch{

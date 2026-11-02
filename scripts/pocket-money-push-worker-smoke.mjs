@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { runPocketMoneyPushWorker as runWorker } from '../api/pocket/money-push-worker.ts'
 
-const runPocketMoneyPushWorker = overrides => runWorker({readDeferred:async()=>[],saveDeferred:async()=>{},...overrides})
+const runPocketMoneyPushWorker = overrides => runWorker({readEventPushes:async()=>[],acknowledgeEventPushes:async()=>{},readDeferred:async()=>[],saveDeferred:async()=>{},...overrides})
 
 const now = 2_000_000
 const incomingHash = `0x${'1'.repeat(64)}`
@@ -147,3 +147,13 @@ let reads=0;const raced=[]
 await runPocketMoneyPushWorker({...giftDeps,listActions:async()=>++reads===1?[]:[{action:'wallet.bsc-bridge',status:'completed',metadata:{txHash:sourceHash,destinationTxHash:mintHash}}],readContext:async()=>[],readActivity:async()=>[row({txHash:mintHash,direction:'in'})],sendPush:async(owner,id,n)=>raced.push(n)})
 assert.equal(raced.length,0)
 console.log('PASS fresh journal re-read closes chain-indexing race.')
+
+// A provider event must reach push even after it falls outside the live scan.
+let queued=[row({txHash:oldHash,direction:'in',payer:'0xexternal',ts:now-60*60_000})],attempts=0,accept=false
+const eventDeps={configured:()=>true,listOwners:async()=>['event-owner'],readActivity:async()=>[],readWallets:async()=>[],listActions:async()=>[],listRequests:async()=>[],readContext:async()=>[],readEventPushes:async()=>queued,acknowledgeEventPushes:async(owner,ids)=>{queued=queued.filter(r=>!ids.includes(r.eventId))},sendPush:async()=>{attempts++;return accept},now:()=>now}
+await runPocketMoneyPushWorker(eventDeps);assert.equal(attempts,1);assert.equal(queued.length,1,'failed delivery remains durable')
+accept=true;await runPocketMoneyPushWorker(eventDeps);assert.equal(attempts,2);assert.equal(queued.length,0,'successful delivery acknowledges the event')
+await runPocketMoneyPushWorker(eventDeps);assert.equal(attempts,2)
+queued=[row({txHash:incomingHash,direction:'in',payer:'0xmine',ts:now-3600000})]
+await runPocketMoneyPushWorker({...eventDeps,readWallets:async()=>[{network:'base',walletAddress:'0xmine'}]});assert.equal(queued.length,0);assert.equal(attempts,2,'own-wallet suppression still applies')
+console.log('PASS durable wallet event pushes survive old timestamps and failed sends, acknowledge success, and preserve own-wallet suppression')

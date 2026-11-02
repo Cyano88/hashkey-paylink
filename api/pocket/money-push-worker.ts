@@ -1,4 +1,5 @@
 import {selectPocketPushOwners} from './fair-owner-batch.js'
+import {readWalletEventPushes,acknowledgeWalletEventPushes} from './wallet-event-push.js'
 import {readDeferredTransferPushes,saveDeferredTransferPushes} from './deferred-transfer-push.js'
 import {readBscWalletActivity} from './bsc-wallet-activity.js'
 import {exchangeTransferDisposition} from './exchange-transfer-notifications.js'
@@ -21,6 +22,8 @@ const acceptedRecoveryAttemptAt = new Map<string, number>()
 const ACCEPTED_RECOVERY_BACKOFF_MS = 10 * 60_000
 
 type Dependencies = {
+  readEventPushes:typeof readWalletEventPushes
+  acknowledgeEventPushes:typeof acknowledgeWalletEventPushes
   readDeferred: typeof readDeferredTransferPushes
   saveDeferred: typeof saveDeferredTransferPushes
   configured: () => boolean
@@ -53,6 +56,8 @@ function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions
 
 export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    readEventPushes:readWalletEventPushes,
+    acknowledgeEventPushes:acknowledgeWalletEventPushes,
     readDeferred: readDeferredTransferPushes,
     saveDeferred: saveDeferredTransferPushes,
     configured: pocketPushConfigured,
@@ -89,8 +94,9 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         dependencies.readContext(ownerId),
       ])
       const deferred = await dependencies.readDeferred(ownerId)
-      const deferredIds = new Set(deferred.map(row=>row.eventId))
-      const rows = mergePocketActivityRows(deferred,rawRows)
+      const eventPushes = await dependencies.readEventPushes(ownerId)
+      const deferredIds = new Set([...deferred,...eventPushes].map(row=>row.eventId))
+      const rows = mergePocketActivityRows([...deferred,...eventPushes],rawRows)
       const ownWallets = new Set(wallets.map(item => item.walletAddress.toLowerCase()))
       const ignoredHashes = actionHashes(actions)
       let notificationContext = context
@@ -193,15 +199,21 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         const counterparty = row.direction === 'in' ? row.payer : row.recipient
         return !counterparty || !ownWallets.has(counterparty.toLowerCase())
       })
+      const deliveredEventIds=new Set<string>()
       for (const row of confirmed) {
         const notice=pocketMoneyNotification(row)
         if(!notice)continue
-        await dependencies.sendPush(ownerId,notice.eventId,notice)
+        const delivered=await dependencies.sendPush(ownerId,notice.eventId,notice)
+        if(delivered===true)deliveredEventIds.add(row.eventId)
         notifications += 1
       }
       // Persist unresolved candidates so an unrelated genuine deposit is not lost
       // when an exchange takes longer than the normal scan lookback.
       if(waiting.length||deferred.length)await dependencies.saveDeferred(ownerId,waiting)
+      // Ack only delivered or intentionally suppressed events. Failed sends and
+      // exchange-classification waits remain durable across scans and restarts.
+      const waitingIds=new Set(waiting.map(row=>row.eventId)),confirmedIds=new Set(confirmed.map(row=>row.eventId))
+      await dependencies.acknowledgeEventPushes(ownerId,eventPushes.filter(row=>!waitingIds.has(row.eventId)&&(!confirmedIds.has(row.eventId)||deliveredEventIds.has(row.eventId))).map(row=>row.eventId))
     } catch (error) {
       errors += 1
       console.error('[pocket-money-push] owner scan failed:', error instanceof Error ? error.message : String(error))

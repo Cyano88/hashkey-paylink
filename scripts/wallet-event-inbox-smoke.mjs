@@ -17,10 +17,15 @@ const link={privyUserId:'owner',chain:'base',circleWalletId:walletId,circleWalle
 let circle={id,walletId,blockchain:'BASE',state:'COMPLETE',txHash:hash},changed=false,unfinal=false,reads=0
 const token='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const log={address:token,transactionHash:hash,blockNumber:'0x10',blockHash,logIndex:'0x0',data:'0x'+(1000000n).toString(16).padStart(64,'0'),topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',topic(other),topic(address)]}
-const deps={fetch:async()=>Response.json({data:{transaction:circle}}),read:async(_network,method,params)=>{reads++;if(method==='eth_getTransactionReceipt')return {transactionHash:hash,status:'0x1',blockNumber:'0x10',blockHash};if(method==='eth_getBlockByNumber')return {number:params[0]==='finalized'?(unfinal?'0xf':'0x20'):'0x10',hash:changed?'0x'+'c'.repeat(64):blockHash,timestamp:'0x6553f100'};if(method==='eth_getLogs')return [log];throw Error(method)}}
+const deps={fetch:async()=>Response.json({data:{transaction:circle}}),read:async(_network,method,params)=>{reads++;if(method==='eth_getTransactionReceipt')return {transactionHash:hash,status:'0x1',blockNumber:'0x10',blockHash};if(method==='eth_getBlockByNumber')return {number:params[0]==='latest'?(unfinal?'0xf':'0x20'):'0x10',hash:changed?'0x'+'c'.repeat(64):blockHash,timestamp:'0x6553f100'};if(method==='eth_getLogs')return [log];throw Error(method)}}
 const event={walletId,transactionId:id,blockchain:'BASE',receivedAt:0,nextAt:0,attempts:0}
 const rows=await verifyWalletEvent(event,link,deps);assert.equal(rows.length,1);assert.equal(rows[0].amount,'1');assert.equal(rows[0].direction,'in')
 circle={...circle,walletId:id};reads=0;await assert.rejects(verifyWalletEvent(event,link,deps));assert.equal(reads,0)
 circle={...circle,walletId,state:'CONFIRMED'};await assert.rejects(verifyWalletEvent(event,link,deps));assert.equal(reads,0)
-circle={...circle,state:'COMPLETE'};changed=true;await assert.rejects(verifyWalletEvent(event,link,deps),/changed/);changed=false;unfinal=true;await assert.rejects(verifyWalletEvent(event,link,deps),/finality/)
-console.log('PASS signed raw-body validation, duplicate inbox identity, storage retry, authenticated owner/state binding, finalized canonical proof and exact transfer rows')
+circle={...circle,state:'COMPLETE'};changed=true;await assert.rejects(verifyWalletEvent(event,link,deps),/changed/);changed=false;unfinal=true;await assert.rejects(verifyWalletEvent(event,link,deps),/confirmation/)
+console.log('PASS signed raw-body validation, duplicate inbox identity, storage retry, authenticated owner/state binding, confirmed canonical proof and exact transfer rows')
+
+const {mergeWalletEventPushes}=await import('../api/pocket/wallet-event-push.ts')
+const saved=mergeWalletEventPushes(undefined,[{eventId:'a'},{eventId:'b'}]);assert.equal(Object.keys(mergeWalletEventPushes(saved,[{eventId:'a'}])).length,2)
+assert.throws(()=>mergeWalletEventPushes(Object.fromEntries(Array.from({length:1000},(_,i)=>[String(i),{eventId:String(i)}])),[{eventId:'new'}]),/full/)
+console.log('PASS bounded idempotent durable event push queue')

@@ -1,0 +1,15 @@
+# Base deposit notification handoff - 2026-11-02
+
+A user-reported roughly 0.3 USDC Base deposit was received onchain as 0.344294 USDC at 03:15:01 UTC, hash 0x6aed5f20edf21f67c939f2e133d7f1a42bdf07fda5c3bd48d5c965e59d696d83. The real Circle-signed event reached the durable inbox at 03:15:05.895 UTC. Circle reported COMPLETE; the canonical receipt succeeded. At inspection the transaction had 149 confirmations while Base's finalized block was still 575 blocks behind it.
+
+Two gaps were found in the new path: the activity-only event verifier unnecessarily waited for L1 finalized history, and verified activity was not handed durably to the money-push worker. A delayed event could also age out of that worker's normal ten-minute scan window.
+
+EVM event notifications now require authenticated Circle COMPLETE, correct wallet/network identity, a successful canonical mined receipt below the current head, and exact supported transfer logs. The existing 30-second notification delay and contextual suppression still apply. Finalized recovery cursors, Solana finality, payment settlement and fulfillment checks are unchanged. This notification is confirmed activity, not an assertion of L1 economic finality.
+
+Verified event rows enter a separate per-owner durable push queue before the inbox marks them complete. The money-push worker reads this queue even outside the recent-scan window. Failed sends and classification waits remain pending. Successful sends use existing delivery deduplication and acknowledge the queued event; intended own-wallet/provider-leg suppression is preserved. Queue writes merge by event ID, cannot erase other new events, and fail rather than silently dropping beyond the 1000-row bound.
+
+Tests: signed inbox/canonical proof fixtures, queue idempotency/capacity checks, money-push worker regression including delayed delivery, failed send retry, acknowledgment and own-wallet suppression. Existing bridge/swap/gift/fee suppression and all-network stablecoin notification fixtures pass. Targeted backend typecheck is checked before deployment.
+
+This is the first real signed Base USDC inbound delivery evidence. Other chain/token/direction combinations remain unproven. The user's earlier BNB USDT deposit used the separate OKX discovery/canonical proof/push path.
+
+Typecheck evidence: the focused inbox/recovery check passes. Including the full money-push worker reaches pre-existing errors in esim-provider.ts and xpay.ts; running the same expanded check on the unchanged release checkout reproduces those errors. No new diagnostics point to the changed worker, event verifier or queue. These unrelated errors are not reported as a passing broad check.

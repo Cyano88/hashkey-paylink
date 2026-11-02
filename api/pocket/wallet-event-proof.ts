@@ -23,8 +23,11 @@ export async function verifyWalletEvent(event:WalletEvent,link:CircleLinkRecord,
  }
  if(typeof hash!=='string'||!/^0x[0-9a-f]{64}$/i.test(hash))throw Error('Invalid event hash.')
  const rpc=(method:string,params:any[])=>withProviderFeature('wallet-activity',()=>d.read(link.chain as Exclude<CircleLinkRecord['chain'],'solana'>,method,params,signal))
- const receipt=await rpc('eth_getTransactionReceipt',[hash]) as any,head=await rpc('eth_getBlockByNumber',['finalized',false]) as any
- if(!receipt||receipt.transactionHash?.toLowerCase()!==hash.toLowerCase()||receipt.status!=='0x1'||!receipt.blockNumber||!head?.number||BigInt(head.number)<BigInt(receipt.blockNumber))throw Error('Wallet event finality pending.')
+ // Activity notification only: Circle COMPLETE plus a canonical mined receipt.
+ // L1 finalization can lag Base activity by minutes. Recovery/settlement retain
+ // their own stronger finality policies; this path never authorizes fulfillment.
+ const receipt=await rpc('eth_getTransactionReceipt',[hash]) as any,head=await rpc('eth_getBlockByNumber',['latest',false]) as any
+ if(!receipt||receipt.transactionHash?.toLowerCase()!==hash.toLowerCase()||receipt.status!=='0x1'||!receipt.blockNumber||!head?.number||BigInt(head.number)<BigInt(receipt.blockNumber))throw Error('Wallet event confirmation pending.')
  const block=await rpc('eth_getBlockByNumber',[receipt.blockNumber,false]) as any
  if(!block?.hash||block.hash.toLowerCase()!==receipt.blockHash?.toLowerCase())throw Error('Wallet event block changed.')
  const rows=await evmActivity(link.chain,link.circleWalletAddress,signal,d.read,{from:BigInt(receipt.blockNumber),to:BigInt(receipt.blockNumber)})
