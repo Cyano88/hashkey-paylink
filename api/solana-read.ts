@@ -1,7 +1,7 @@
 import {observeProvider} from './pocket/provider-usage.js'
 import { recordPocketRpcRead } from './pocket/rpc-usage.js'
 const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com'
-const METHODS = new Set(['getAccountInfo', 'getTokenAccountBalance', 'getSignaturesForAddress', 'getTransaction', 'getGenesisHash'])
+const METHODS = new Set(['getAccountInfo', 'getTokenAccountBalance', 'getSignaturesForAddress', 'getTransaction', 'getGenesisHash','getSlot'])
 export class SolanaReadError extends Error {
   constructor(public reason: 'quota' | 'configuration' | 'network' | 'rpc' | 'capacity' | 'scope', public code = -32004) {
     super('Solana read temporarily unavailable.')

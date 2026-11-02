@@ -33,3 +33,13 @@ Official references: https://developers.circle.com/api-reference/wallets/common/
 Passed recovery replay/storage failure/abort/CAS/range/pagination/owner-isolation fixtures; signed inbox tamper/idempotency/storage retry/owner binding/finality/canonical block fixtures; existing EVM reads, activity budget/recovery, durable activity, Arc pacing and gift event-discovery fixtures; targeted recovery/inbox TypeScript check. Existing pocket-usdt-send-smoke fails with the same 503 on the unchanged release checkout and this worktree; it is not reported as a passing check.
 
 Live rollout evidence will be appended after deployment and subscription verification. No funds are sent for validation.
+
+## Initial live checks and empty-wallet correction
+
+Initial deployment 585aa4475 became live at 2026-11-02 02:37:22.998 UTC (dep-dbjvc47b9u1s73f60o4g). Health was healthy with zero unresolved/stale payments; unsigned webhook POST returned 401. The deployed proof reader verified two existing Base transactions into three supported transfer rows without persisting the test results or sending funds. Durable EVM checkpoints were present and sampled Polygon/Arc recovery logs reached zero lag; Solana recovery pages also completed.
+
+Circle accepted subscription 7cee6d3c-5c38-4dd5-a744-f3e70c335d4f at the wallet-events endpoint, enabled with normalized transactions.* types. A subsequent GET confirmed the prior contracts.* gifts subscription remains enabled. The list API returns data as an array; the initial creation script's reported existing count of zero was a parsing mistake, not deletion of the gift subscription. No gift settings were changed.
+
+Live empty Solana pages prompted an additional first-deposit edge-case test. Empty/new mint histories now save a finalized slot baseline, then paginate all later signatures even before any head signature exists. A burst exceeding five entries no longer becomes an implicit first-page baseline. The new fixture verifies a ten-signature burst across restart-safe pages. getSlot is read-only and restricted to the internal Solana read transport; the existing signature/transaction budgets remain.
+
+Subscription enablement and historical proof checks are not evidence that every chain/token has delivered a real signed event. Monitored-token scope returned HTTP 204 and remains unverified. Existing scans are still required.

@@ -10,7 +10,7 @@ import {withProviderFeature} from './provider-usage.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import type {PocketActivityRow} from '../../src/pocket/lib/pocketSchemas.js'
 
-export type RecoveryState={version:1;next?:string;span?:number;anchor?:{number:string;hash:string};head?:string;before?:string;cycleHead?:string}
+export type RecoveryState={version:1;next?:string;span?:number;anchor?:{number:string;hash:string};head?:string;before?:string;cycleHead?:string;floorSlot?:number}
 export function recoveryKey(owner:string,network:string,wallet:string,asset='stablecoins'){
  return 'pocket:wallet-recovery:v1:'+createHash('sha256').update(JSON.stringify([owner,network,network==='solana'?wallet:wallet.toLowerCase(),asset])).digest('hex')
 }
@@ -28,12 +28,13 @@ export function recoveryRange(next:string|undefined,head:bigint,budget=480n){
  if(from>head)return null
  return {from,to:from+budget-1n<head?from+budget-1n:head}
 }
-export function solanaRecoveryPage(prior:RecoveryState|undefined,signatures:string[],limit:number):RecoveryState{
+export function solanaRecoveryPage(prior:RecoveryState|undefined,signatures:string[],limit:number,complete=false):RecoveryState{
  if(new Set(signatures).size!==signatures.length||signatures.some(s=>s===prior?.before))throw Error('Repeated recovery page.')
  const head=prior?.cycleHead||signatures[0]||prior?.head
  // Initial activation establishes a baseline; it does not claim lifetime history.
- if(!prior?.head||signatures.length<limit)return {version:1,head}
- return {version:1,head:prior.head,cycleHead:head,before:signatures.at(-1)}
+ const floor=prior?.floorSlot===undefined?{}:{floorSlot:prior.floorSlot}
+ if(!prior||signatures.length<limit||complete)return {version:1,head,...floor}
+ return {version:1,head:prior.head,cycleHead:head,before:signatures.at(-1),...floor}
 }
 const hash=/^0x[0-9a-f]{64}$/i,quantity=/^0x[0-9a-f]+$/i
 function block(value:any){
@@ -77,13 +78,20 @@ export async function recoverWalletActivity(owner:string,network:string,wallet:s
  if(await connection.getGenesisHash()!=='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d')throw Error('Wrong Solana recovery network.')
  const ownerKey=new PublicKey(wallet),rows:PocketActivityRow[]=[]
  for(const mint of ['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',POCKET_USDT_ASSETS.solana.address]){
-  const key=recoveryKey(owner,network,wallet,mint),prior=await readDurableJson<RecoveryState>(key),ata=await getAssociatedTokenAddress(new PublicKey(mint),ownerKey,true)
-  const signatures=await connection.getSignaturesForAddress(ata,{limit:5,...(prior?.head?{until:prior.head}:{}),...(prior?.before?{before:prior.before}:{})},'finalized')
-  if(signatures.some(s=>s.confirmationStatus!=='finalized'))throw Error('Recovery finality pending.')
+  const key=recoveryKey(owner,network,wallet,mint),ata=await getAssociatedTokenAddress(new PublicKey(mint),ownerKey,true)
+  let prior=await readDurableJson<RecoveryState>(key)
+  if(!prior?.head&&prior?.floorSlot===undefined){
+   const floorSlot=await connection.getSlot('finalized')
+   if(!Number.isSafeInteger(floorSlot)||floorSlot<0)throw Error('Recovery slot unavailable.')
+   prior=await mutateDurableJson<RecoveryState>(key,old=>old?.head||old?.floorSlot!==undefined?old:{version:1,floorSlot})
+  }
+  const page=await connection.getSignaturesForAddress(ata,{limit:5,...(prior?.head?{until:prior.head}:{}),...(prior?.before?{before:prior.before}:{})},'finalized')
+  if(page.some(s=>s.confirmationStatus!=='finalized'||!Number.isSafeInteger(s.slot)))throw Error('Recovery finality pending.')
+  const signatures=page.filter(s=>prior?.floorSlot===undefined||s.slot>prior.floorSlot)
   const transactions=signatures.length?await connection.getParsedTransactions(signatures.map(s=>s.signature),{commitment:'finalized',maxSupportedTransactionVersion:0}):[]
   if(transactions.length!==signatures.length||transactions.some((tx,i)=>!tx||tx.transaction.signatures[0]!==signatures[i].signature||!tx.meta||!tx.blockTime))throw Error('Incomplete recovery transactions.')
   const found=solanaActivityRows(ownerKey,signatures,transactions)
-  const next=solanaRecoveryPage(prior,signatures.map(s=>s.signature),5)
+  const next=solanaRecoveryPage(prior,signatures.map(s=>s.signature),5,page.length<5||signatures.length<page.length)
   await commitRecovery(prior,next,found,{persist,mutate:fn=>mutateDurableJson<RecoveryState>(key,fn)},signal)
   rows.push(...found)
   console.info('[wallet-recovery]',JSON.stringify({network,signatures:signatures.length,paging:!!next.before}))

@@ -25,3 +25,11 @@ let calls=0
 const wrongChain=createReadService(async()=>{calls++;return Response.json({result:'0x1'})},Date.now,{verifyChain:true})
 await assert.rejects(wrongChain('base','eth_getBlockByNumber',['finalized',false]),/chain/);assert.equal(calls,1)
 console.log('PASS recovery rejects a wrong-chain provider before reading history')
+
+// An initially empty wallet must not skip a later burst larger than one page.
+let empty={version:1,floorSlot:100}
+empty=solanaRecoveryPage(empty,[],5);assert.equal(empty.floorSlot,100)
+empty=solanaRecoveryPage(empty,['n10','n9','n8','n7','n6'],5);assert.equal(empty.before,'n6');assert.equal(empty.head,undefined)
+empty=solanaRecoveryPage(empty,['n5','n4','n3','n2','n1'],5);assert.equal(empty.before,'n1');assert.equal(empty.cycleHead,'n10')
+empty=solanaRecoveryPage(empty,[],5,true);assert.equal(empty.head,'n10');assert.equal(empty.floorSlot,100);assert.equal(empty.before,undefined)
+console.log('PASS empty-wallet slot baseline preserves multi-page first-deposit catch-up')
