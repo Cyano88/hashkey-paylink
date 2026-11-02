@@ -23,7 +23,13 @@ try{for(const width of [390,1280])for(const mode of ['web','pocket']){
  })
  await page.goto('https://checkout.test/pay/c/'+sessionId)
  await page.getByRole('heading',{name:/2,000.00/}).waitFor();assert.equal(await page.getByLabel('Payment network').count(),0)
+ await page.getByRole('button',{name:'Stablecoins',exact:true}).click()
  await page.getByRole(mode==='web'?'button':'link',{name:mode==='web'?'Pay on web':'Pay with Pocket',exact:true}).click()
+ if(mode==='pocket'){
+  await page.getByText('Scan with Pocket to review this payment.',{exact:false}).waitFor()
+  assert.match(await page.getByRole('link',{name:'Pay with Pocket',exact:true}).getAttribute('href'),new RegExp('/open/checkout/'+sessionId))
+  assert.equal(writes,0);assert.deepEqual(errors,[]);await page.close();continue
+ }
  await page.getByLabel('Payment network').waitFor();await page.getByLabel('Payment network').selectOption('xlayer');assert.equal(await page.getByLabel('Payment asset').inputValue(),'USDT');assert.equal(writes,0)
  await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/ngn-'+mode+'-'+width+'.png'})
  await page.getByRole('button',{name:'Continue',exact:true}).click()
@@ -31,4 +37,4 @@ try{for(const width of [390,1280])for(const mode of ['web','pocket']){
  else {await page.getByRole('link',{name:'Pay with Pocket',exact:true}).waitFor();assert.match(page.url(),/pocket=1/);assert.equal(await page.getByLabel('Payment network').count(),0)}
  assert.equal(writes,1);assert.deepEqual(errors,[]);await page.close()
 }}finally{await browser.close()}
-console.log('PASS NGN mobile and desktop: Pocket/web first, stablecoin selection second, immutable amount, one request and correct child handoff.')
+console.log('PASS NGN mobile and desktop: payment methods, Pocket handoff without writes, web stablecoin selection, immutable amount and one selection request.')
