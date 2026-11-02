@@ -59,9 +59,11 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
     if(!enabled())fail('BNB Chain bridging is unavailable.')
     const purpose=cashBridgePurpose(req.body.purpose,req.body.destination);const asset=req.body.asset,amount=req.body.amount
     if(req.body.source!=='bsc'||!isBscBridgeDestination(req.body.destination)||req.body.destination==='arc'&&asset==='USDT'||!['USDC','USDT'].includes(asset)||typeof amount!=='string'||!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,18)<=0n)fail('Enter a valid bridge amount.',400)
-    const units=String(parseUnits(amount,18)),route=await quoteBscRelay({asset,source:'bsc',destination:target,sender:w.walletAddress,recipient:w.destinationAddress,amountUnits:units},env.RELAY_API_KEY!,fetcher)
+    const units=String(parseUnits(amount,18)),balance=await runtime.balance(asset,w.walletAddress)
+    if(balance<=BigInt(units))fail('Insufficient '+asset+' to cover the amount and fee.',422)
+    const route=await quoteBscRelay({asset,source:'bsc',destination:target,sender:w.walletAddress,recipient:w.destinationAddress,amountUnits:units},env.RELAY_API_KEY!,fetcher)
     const q:BscOutboundQuote={...purpose,version:1,id:randomUUID(),...w,source:'bsc',destination:target,asset,from:asset,amountUnits:units,refundOptions:route.refundOptions,minimumOutUnits:route.minimumUnits,receiveUnits:route.receiveUnits,reimbursementUnits:'1',totalInputUnits:String(BigInt(units)+1n),orderId:route.orderId as any,requestId:route.requestId as any,issuedAt:Date.now(),expiresAt:route.expiresAt}
-    for(let n=0;n<3;n++){const fee=await estimate(q,bscOutboundCalls(q));q.expiresAt=Math.min(q.expiresAt,fee.expiresAt);if(BigInt(fee.feeUnits)<=BigInt(q.reimbursementUnits))break;q.reimbursementUnits=fee.feeUnits;q.totalInputUnits=String(BigInt(units)+BigInt(fee.feeUnits));if(n===2)fail('Network fee changed. Review the bridge again.')}
+    for(let n=0;n<3;n++){const fee=await estimate(q,bscOutboundCalls(q));q.expiresAt=Math.min(q.expiresAt,fee.expiresAt);if(BigInt(fee.coverageFeeUnits)<=BigInt(q.reimbursementUnits))break;q.reimbursementUnits=fee.feeUnits;q.totalInputUnits=String(BigInt(units)+BigInt(fee.feeUnits));if(balance<BigInt(q.totalInputUnits))fail('Insufficient '+asset+' to cover the amount and fee.',422);if(n===2)fail('Network fee changed. Review the bridge again.')}
     validateBscOutbound(q);return res.json({ok:true,quote:bscOutboundPreview(q),quoteToken:sealBscOutbound(q,seal),sufficientBalance:await runtime.balance(asset,w.walletAddress)>=BigInt(q.totalInputUnits)})
    }
    const q=openBscOutbound(String(req.body.quoteToken||''),userId,seal)

@@ -7,7 +7,7 @@ import {readBscWallet} from './bsc-wallet.js'
 import {bscConfiguredFeePolicy,createBscRuntime} from './bsc-runtime.js'
 import {createBscSendFeeEstimator} from './bsc-send-fee-estimator.js'
 import {createBscSendOperations,type BscSendOperationStore,type BscSendOperation} from './bsc-send-operations.js'
-import {validateBscSend,bscSendRequest,type BscSendQuote} from '../../src/pocket/lib/pocketBscSend.js'
+import {validateBscSend,bscSendRequest,BSC_SEND_REVIEW_TTL_MS,type BscSendQuote} from '../../src/pocket/lib/pocketBscSend.js'
 import {readBscSendSettlement} from './bsc-send-settlement.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {recoverBscUserOperation,findBscUserOperation} from './bsc-user-operation.js'
@@ -71,18 +71,21 @@ export function createBscSendService(overrides:Partial<typeof dependencies>={}){
     const {asset,recipient,amount}=req.body;
     if(!['USDC','USDT'].includes(asset)||typeof recipient!=='string'||!isAddress(recipient)||typeof amount!=='string'||!/^(0|[1-9]\d{0,40})(?:\.\d{1,18})?$/.test(amount)||parseUnits(amount,18)<=0n)return res.status(400).json({ok:false,error:'Enter a supported asset, recipient and amount.'});
     await d.billing(binding.walletAddress);
-    const now=Date.now(),q:BscSendQuote={version:1,chainId:56,id:randomUUID(),transferId:'sendb_'+randomBytes(12).toString('hex'),...binding,asset,recipient:getAddress(recipient),amountUnits:parseUnits(amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:now+30000};
+    const now=Date.now(),q:BscSendQuote={version:1,chainId:56,id:randomUUID(),transferId:'sendb_'+randomBytes(12).toString('hex'),...binding,asset,recipient:getAddress(recipient),amountUnits:parseUnits(amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:now+BSC_SEND_REVIEW_TTL_MS};
     validateBscSend(q);
+    const balance=await runtime.balance(q.asset,q.walletAddress)
+    if(balance<=BigInt(q.amountUnits))return res.status(422).json({ok:false,error:'Insufficient '+asset+' to cover the amount and fee.'})
     const fee=await estimate(q);q.reimbursementUnits=fee.feeUnits;q.expiresAt=fee.expiresAt
     let covered=false
     for(let i=0;i<3;i++){
+     if(balance<BigInt(q.amountUnits)+BigInt(q.reimbursementUnits))return res.status(422).json({ok:false,error:'Insufficient '+asset+' to cover the amount and fee.'})
      const finalFee=await estimate(q);q.expiresAt=Math.min(q.expiresAt,finalFee.expiresAt)
      if(BigInt(finalFee.coverageFeeUnits)<=BigInt(q.reimbursementUnits)){covered=true;break}
      q.reimbursementUnits=finalFee.feeUnits
     }
     if(!covered)throw Error('Fees changed. Please continue again.')
     validateBscSend(q)
-    const balance=await runtime.balance(q.asset,q.walletAddress)
+    if(balance<BigInt(q.amountUnits)+BigInt(q.reimbursementUnits))return res.status(422).json({ok:false,error:'Insufficient '+asset+' to cover the amount and fee.'})
     return res.json({ok:true,quote:q,quoteToken:seal(q),balanceUnits:String(balance)})
    }
    if(action==='prepare'){

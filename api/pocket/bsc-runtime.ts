@@ -47,9 +47,10 @@ export function createBscRuntime(env:NodeJS.ProcessEnv=process.env,fetcher:typeo
    recordPocketRpcRead('bsc-read','bsc',method)
    const response=await fetcher(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(15000),body:JSON.stringify({jsonrpc:'2.0',id,method,params})})
    const body=await response.json()
+   if(response.ok&&body.id===id&&method==='eth_estimateUserOperationGas'&&/^(?:BEP20|ERC20): transfer amount exceeds balance$/i.test(String(body.error?.message||'')))throw Object.assign(Error('Insufficient balance to cover the amount and fee.'),{status:422,code:'insufficient_balance'})
    if(!response.ok||body.id!==id||body.error||body.result===undefined)return unavailable()
    return body.result
-  }catch{return unavailable()}
+  }catch(error){if((error as {code?:string}).code==='insufficient_balance')throw error;return unavailable()}
  })
  let priceCache:{at:number;values:Record<string,BscFeePrice>}|undefined,priceWork:Promise<Record<string,BscFeePrice>>|undefined
  const readPrices=async()=>{

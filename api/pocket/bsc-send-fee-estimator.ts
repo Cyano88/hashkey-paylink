@@ -20,7 +20,9 @@ export function createBscSendFeeEstimator(d:{rpc:XLayerCostRpc;prices(asset:'USD
   const networkWei=(gas.totalGas+25000n)*(suggested>nativePrice?suggested:nativePrice)
   const fee=priceBscSponsorship(networkWei,prices.bnb,prices.stable,policy,now())
   const coverage=priceBscSponsorship(networkWei,prices.bnb,prices.stable,{...policy,marginBps:0},now())
-  const expiresAt=Math.min(q.expiresAt,prices.bnb.observedAt+30000,prices.stable.observedAt+30000,blockTime+30000)
+  // Evidence freshness and the user's review deadline are separate. Prepare
+  // and submit both reprice the exact approved batch against fresh evidence.
+  const expiresAt=q.expiresAt
   if(expiresAt<=now())return fail()
   return {feeUnits:String(fee),coverageFeeUnits:String(coverage),expiresAt}
  }

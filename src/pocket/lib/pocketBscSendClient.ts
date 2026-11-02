@@ -1,5 +1,6 @@
 ﻿import {parseUnits} from 'viem'
 import {bscSendRequest,validateBscSend,type BscSendQuote} from './pocketBscSend'
+import {pocketJsonEqual} from './pocketJsonEqual'
 export type BscSendReview={quote:BscSendQuote;quoteToken:string;balanceUnits:string}
 export type BscSendResult={operationId:string;state:string;quote:BscSendQuote;hash?:string}
 export function createBscSendClient(d:{appId:string;owner:string;identity():Promise<string>;request(body:Record<string,unknown>,approval?:string):Promise<any>;sign(request:ReturnType<typeof bscSendRequest>):Promise<string>}){
@@ -25,12 +26,12 @@ export function createBscSendClient(d:{appId:string;owner:string;identity():Prom
    onPrepared(value.quote.id)
    const prepared=await d.request({action:'prepare',quoteToken:value.quoteToken},approval)
    await verify(prepared.quote,true)
-   if(prepared.operationId!==value.quote.id||JSON.stringify(prepared.quote)!==JSON.stringify(value.quote))throw Error('Transfer details changed. Review the transfer again.')
+   if(prepared.operationId!==value.quote.id||!pocketJsonEqual(prepared.quote,value.quote))throw Error('Transfer details changed. Review the transfer again.')
    if(prepared.state!=='prepared')return prepared
    let authorization:string
    try{
     const canonical=bscSendRequest(value.quote,d.appId)
-    if(JSON.stringify(canonical)!==JSON.stringify(prepared.request))throw Error('Transfer details changed. Review the transfer again.')
+    if(!pocketJsonEqual(canonical,prepared.request))throw Error('Transfer details changed. Review the transfer again.')
     authorization=await d.sign(structuredClone(canonical));await verify(value.quote)
    }catch(error){
     const cancelled=await d.request({action:'cancel',operationId:value.quote.id})

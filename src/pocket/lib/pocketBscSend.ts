@@ -10,6 +10,7 @@ const abi=parseAbi(['function transfer(address,uint256) returns(bool)'])
 const invalid=():never=>{throw Error('Transfer details changed. Review the transfer again.')}
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase()
 const units=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,77}$/.test(v)&&BigInt(v)<2n**256n
+export const BSC_SEND_REVIEW_TTL_MS = 120000
 export function validateBscSend(q:BscSendQuote,now=Date.now(),recovery=false){
  if(!q||q.version!==1||q.chainId!==56||!['USDC','USDT'].includes(q.asset)
  ||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q.id)
@@ -17,7 +18,8 @@ export function validateBscSend(q:BscSendQuote,now=Date.now(),recovery=false){
  ||!isAddress(q.walletAddress)||!isAddress(q.recipient)||/^0x0{40}$/i.test(q.walletAddress)||/^0x0{40}$/i.test(q.recipient)
  ||same(q.walletAddress,q.recipient)||same(q.walletAddress,EVM_PLATFORM_TREASURY)||same(q.recipient,EVM_PLATFORM_TREASURY)
  ||!units(q.amountUnits)||!units(q.reimbursementUnits)||BigInt(q.amountUnits)+BigInt(q.reimbursementUnits)>=2n**256n
- ||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=q.issuedAt||q.expiresAt-q.issuedAt>30000||(!recovery&&q.expiresAt<=now))invalid()
+ ||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=q.issuedAt||q.expiresAt-q.issuedAt>BSC_SEND_REVIEW_TTL_MS)invalid()
+ if(!recovery&&q.expiresAt<=now)throw Error('Transfer estimate expired. Review a fresh estimate.')
  return q
 }
 /** Exact recipient transfer and reimbursement in a single atomic sponsored batch. */
