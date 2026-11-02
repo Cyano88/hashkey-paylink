@@ -1,22 +1,12 @@
-import {createPublicKey,verify,type KeyObject} from 'node:crypto'
+import {verify,type KeyObject} from 'node:crypto'
+import {circleNotificationKey} from '../circle-notification-key.js'
+export {circleNotificationKey} from '../circle-notification-key.js'
 import {queryDurablePostgres} from '../../render-durable-store.js'
 import {durableGiftStore} from './store.js'
 import {GIFT_DEPLOYMENTS} from './index.js'
 import {MULTI_GIFT_DEPLOYMENTS} from './multi-deployment.js'
 import type {Hex} from 'viem'
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i,hash=/^0x[a-f0-9]{64}$/i
-const keys=new Map<string,KeyObject>()
-export async function circleNotificationKey(id:string){
- const cached=keys.get(id);if(cached)return cached
- const response=await fetch('https://api.circle.com/v2/notifications/publicKey/'+id,{headers:{Authorization:'Bearer '+process.env.CIRCLE_API_KEY},signal:AbortSignal.timeout(5000),redirect:'error'})
- if(!response.ok)throw Error('Notification key unavailable')
- const body=await response.json(),data=body.data
- if(data?.id!==id||data.algorithm!=='ECDSA_SHA_256'||typeof data.publicKey!=='string')throw Error('Invalid notification key')
- const key=createPublicKey({key:Buffer.from(data.publicKey,'base64'),format:'der',type:'spki'})
- if(key.asymmetricKeyType!=='ec')throw Error('Invalid notification key type')
- if(keys.size>=32)keys.delete(keys.keys().next().value!)
- keys.set(id,key);return key
-}
 export function createGiftEventWebhook(deps:{key(id:string):Promise<KeyObject>;contracts():string[];save(escrow:string,giftId:Hex,tx:Hex):Promise<void>}){
  return async(req:any,res:any)=>{
   res.setHeader('Cache-Control','no-store')

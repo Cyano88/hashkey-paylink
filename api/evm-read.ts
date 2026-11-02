@@ -62,7 +62,7 @@ export function validateRead(method: unknown, input: unknown): { method: string;
 }
 
 // Limits are per server process. This endpoint is not a general developer RPC product.
-export function createReadService(fetcher: typeof fetch = fetch, now = Date.now, options: { publicOnly?: boolean; privateOnly?: boolean } = {}) {
+export function createReadService(fetcher: typeof fetch = fetch, now = Date.now, options: { publicOnly?: boolean; privateOnly?: boolean; verifyChain?:boolean } = {}) {
   const cache = new Map<string, { expires: number; result: unknown }>()
   const pending = new Map<string | symbol, Promise<unknown>>()
   const cooldown = new Map<string, number>()
@@ -124,7 +124,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
       if (options.privateOnly && new URL(configured).hostname === new URL(config.fallback).hostname) throw new ReadRpcError(-32003, 'Independent private RPC unavailable.', 'configuration')
       const primary = !options.privateOnly && (cooldown.get(network) ?? 0) > now() ? config.fallback : configured
       const checkedUpstream = async (url: string) => {
-        if ((network === 'ethereum' || network === 'polygon') && (verifiedEndpoints.get(`${network}:${url}`) ?? 0) <= now()) {
+        if ((options.verifyChain || network === 'ethereum' || network === 'polygon') && (verifiedEndpoints.get(`${network}:${url}`) ?? 0) <= now()) {
           const id = await upstream(url, 'eth_chainId', [], signal, network)
           if (typeof id !== 'string' || !/^0x[0-9a-f]+$/i.test(id) || BigInt(id) !== BigInt(config.id)) throw new ReadRpcError(-32003, 'RPC chain does not match the requested network.', 'configuration')
           verifiedEndpoints.set(`${network}:${url}`, now() + 300_000)
@@ -152,6 +152,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
   }
 }
 export const readEvmRpc = createReadService()
+export const readRecoveryEvmRpc = createReadService(fetch,Date.now,{verifyChain:true})
 // Internal independent reader; endpoints remain pinned to the network allowlist.
 export const readPublicEvmRpc = createReadService(fetch, Date.now, { publicOnly: true })
 // Quorum reads must never silently become a second read from the public endpoint.

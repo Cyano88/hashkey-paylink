@@ -25,6 +25,7 @@ import bridgeSandboxHandler, { bridgeSandboxWebhook } from './api/pocket/bridge-
 import pocketNativeSendHandler from './api/pocket/native-send.js'
 import foodDemoHandler from './api/food-demo.js'
 import pocketGiftEventWebhook from './api/pocket/gifts/event-webhook.js'
+import pocketWalletEventWebhook,{drainWalletEvents} from './api/pocket/wallet-event-inbox.js'
 import {drainPocketGifts} from './api/pocket/gifts/worker.js'
 import { createStockWalletSessionHandlers } from './api/stock-wallet-account.js'
 import {createWalletSwapSessionHandlers} from './api/wallet-swap-sessions.js'
@@ -268,6 +269,7 @@ app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'appl
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.
 app.all('/api/pocket/gifts/events', rateLimit({ name: 'gift-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketGiftEventWebhook)
+app.all('/api/pocket/wallet-events', rateLimit({ name: 'wallet-events', windowMs: 60_000, max: 120 }), express.raw({ type: 'application/json', limit: '32kb' }), pocketWalletEventWebhook)
 app.post('/api/developer-verification/documents', rateLimit({name:'business-documents',windowMs:60_000,max:20}), express.raw({type:'application/octet-stream',limit:'5mb'}), developerVerificationUploadHandler)
 app.post('/api/demo/food/webhook', rateLimit({name:'food-webhook',windowMs:60_000,max:120}), express.raw({type:'application/json',limit:'64kb'}), foodDemoWebhook)
 app.all('/api/support-files',rateLimit({name:'support-files',windowMs:60_000,max:40}),express.raw({type:'application/octet-stream',limit:'5mb'}),supportAttachmentHandler)
@@ -606,6 +608,8 @@ void drainHostedCheckoutWebhookOutbox().catch(error => {
 })
 
 const pocketGiftTimer = setInterval(() => { void drainPocketGifts().catch(() => console.warn('[pocket-gifts] reconciliation deferred')) }, 30_000)
+const pocketWalletEventTimer = setInterval(() => { void drainWalletEvents().catch(() => console.warn('[wallet-events] worker deferred')) }, 30_000)
+pocketWalletEventTimer.unref()
 pocketGiftTimer.unref()
 const pocketEsimTimer = setInterval(() => { void drainPocketEsimOrders().catch(() => console.warn('[pocket-esim] reconciliation deferred')) }, 30_000)
 pocketEsimTimer.unref()

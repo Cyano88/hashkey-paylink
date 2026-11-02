@@ -1,6 +1,6 @@
 import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
 
-type Scan = (network: string, wallet: string, signal: AbortSignal) => Promise<PocketActivityRow[]>
+type Scan = (network: string, wallet: string, signal: AbortSignal, ownerId:string) => Promise<PocketActivityRow[]>
 type Snapshot = { rows: PocketActivityRow[]; freshUntil: number; retainUntil: number; retryAfter: number }
 
 /** Shared, bounded activity reads only; never used as payment settlement proof. */
@@ -26,7 +26,7 @@ export function createWalletActivityReader(scan: Scan, now = Date.now, deadlineM
       // Recent activity may wait only 900ms, but shares the same bounded scan
       // as the full page. The scan always aborts after this independent deadline.
       const deadline = setTimeout(() => controller.abort(), deadlineMs)
-      work = Promise.resolve().then(() => scan(network, wallet, controller.signal)).then(async rows => {
+      work = Promise.resolve().then(() => scan(network, wallet, controller.signal, ownerId)).then(async rows => {
         controller.signal.throwIfAborted()
         if (observe) await observe(ownerId, rows)
         const bounded = rows.sort((a, b) => b.ts - a.ts).slice(0, 100)

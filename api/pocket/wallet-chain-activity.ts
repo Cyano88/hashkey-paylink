@@ -1,4 +1,5 @@
 import {withProviderFeature} from './provider-usage.js'
+import {recoverWalletActivity} from './wallet-activity-recovery.js'
 import {createActivityReadPacer} from './activity-read-pacing.js'
 import {POCKET_USDT_ASSETS, supportsPocketUsdt} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { createActivityLogReader, createFinalizedActivityReader } from './activity-rpc-budget.js'
@@ -27,8 +28,8 @@ const EVM = {
   arc: { token: '0xfffffffffffffffffffffffffffffffffffffffe' },
 } as const
 
-type EvmNetwork = keyof typeof EVM
-type RpcLog = { address?: string; transactionHash?: string; blockNumber?: string; logIndex?: string; topics?: string[]; data?: string }
+export type EvmNetwork = keyof typeof EVM
+type RpcLog = { address?: string; transactionHash?: string; blockNumber?: string; blockHash?:string; removed?:boolean; logIndex?: string; topics?: string[]; data?: string }
 type SolanaTokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { uiAmountString?: string | null } }
 
 function addressTopic(address: string) {
@@ -75,7 +76,7 @@ export function evmTransferTouchesTopic(topics: readonly string[] | undefined, w
   return topics?.[1]?.toLowerCase() === normalized || topics?.[2]?.toLowerCase() === normalized
 }
 
-export async function evmActivity(network: EvmNetwork, wallet: string, signal: AbortSignal, read = readEvmRpc): Promise<PocketActivityRow[]> {
+export async function evmActivity(network: EvmNetwork, wallet: string, signal: AbortSignal, read = readEvmRpc, window?:{from:bigint;to:bigint}): Promise<PocketActivityRow[]> {
   if (!/^0x[\da-f]{40}$/i.test(wallet)) throw new Error('Invalid activity wallet.')
   const arcEndpoint = process.env.PRIVATE_RPC_URL_ARC_MAINNET?.trim()
   const publicArc = network === 'arc' && (!arcEndpoint || /^https:\/\/rpc\.mainnet\.arc\.io\/?$/.test(arcEndpoint))
@@ -87,7 +88,7 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
     return result as T
   }
   const config = EVM[network]
-  const latest = BigInt(await rpc<string>('eth_blockNumber', []))
+  const latest = window?.to??BigInt(await rpc<string>('eth_blockNumber', []))
   const lookback = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS, 120)))
   // Read the same bounded history in larger ranges when the provider permits.
   // Explicit small-range overrides remain supported. Restricted providers learn
@@ -97,7 +98,8 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   // Preserve the previous maximum coverage even on an explicitly larger lookback.
   const previousRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, publicArc ? 120 : 10)))
   const coverage = lookback < previousRange * BigInt(maxChunks) ? lookback : previousRange * BigInt(maxChunks)
-  const ranges = evmLogBlockRanges(latest, coverage, blockRange, maxChunks)
+  const ranges = window?evmLogBlockRanges(window.to,window.to-window.from+1n,blockRange,12):evmLogBlockRanges(latest, coverage, blockRange, maxChunks)
+  if(window&&BigInt(ranges[0].fromBlock)!==window.from)throw Error('Incomplete recovery range.')
   const topic = addressTopic(wallet)
   let logCount=0
   const logs = await readActivityLogs<RpcLog>(network, ranges, async range => {
@@ -110,15 +112,23 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   })
   const byId = new Map<string, RpcLog>()
   for (const log of logs) {
+    if(window&&(!log.transactionHash||!/^0x[0-9a-f]{64}$/i.test(log.transactionHash)||!log.blockHash||!/^0x[0-9a-f]{64}$/i.test(log.blockHash)||!log.blockNumber||!/^0x[0-9a-f]+$/i.test(log.blockNumber)||BigInt(log.blockNumber)<window.from||BigInt(log.blockNumber)>window.to||log.removed||!log.logIndex||!/^0x[0-9a-f]+$/i.test(log.logIndex)||!log.data||!/^0x[0-9a-f]{64}$/i.test(log.data)))throw Error('Invalid recovery log.')
     if (!evmTransferTouchesTopic(log.topics, topic)) continue
     if (log.transactionHash) byId.set(`${log.transactionHash}:${log.logIndex || '0'}`, log)
   }
-  const blockNumbers = [...new Set([...byId.values()].map(log => log.blockNumber).filter(Boolean) as string[])].slice(0, 30)
+  const allBlocks = [...new Set([...byId.values()].map(log => log.blockNumber).filter(Boolean) as string[])]
+  if(window&&allBlocks.length>30)throw Error('Recovery timestamp budget reached.')
+  const blockNumbers = allBlocks.slice(0, 30)
   const timestamps = new Map<string, number>()
   for (let index = 0; index < blockNumbers.length; index += 4) {
     await Promise.all(blockNumbers.slice(index, index + 4).map(async block => {
-      const value = await rpc<{ timestamp?: string }>('eth_getBlockByNumber', [block, false])
-      if (value?.timestamp) timestamps.set(block, Number(BigInt(value.timestamp)) * 1000)
+      const value = await rpc<{ timestamp?: string;hash?:string;number?:string }>('eth_getBlockByNumber', [block, false])
+      if(window&&(!value?.timestamp||!value.hash||value.number!==block||[...byId.values()].some(log=>log.blockNumber===block&&log.blockHash?.toLowerCase()!==value.hash?.toLowerCase())))throw Error('Recovery block changed.')
+      if (value?.timestamp) {
+        const ts=Number(BigInt(value.timestamp))*1000
+        if(window&&(!Number.isSafeInteger(ts)||ts<=0||ts>Date.now()+5000))throw Error('Invalid recovery timestamp.')
+        timestamps.set(block,ts)
+      }
     }))
   }
   return [...byId.entries()].flatMap(([id, log]) => {
@@ -227,6 +237,9 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
   signal.throwIfAborted()
   const transactions = await readFinalizedTransactions(rpcUrl, signatures, missing => connection.getParsedTransactions(missing, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }))
   signal.throwIfAborted()
+  return solanaActivityRows(owner,signatures,transactions)
+}
+export function solanaActivityRows(owner:PublicKey,signatures:Array<{signature:string;blockTime?:number|null}>,transactions:Array<ParsedTransactionWithMeta|null>):PocketActivityRow[]{
   return transactions.flatMap((transaction, index) => {
     if (!transaction || transaction.meta?.err) return []
     return (['USDC','USDT'] as const).flatMap(asset => {
@@ -262,10 +275,19 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
   })
 }
 
-const readWalletActivity = createWalletActivityReader((network, wallet, signal) => {
-  if (network === 'solana') return solanaActivity(wallet, signal)
+const readWalletActivity = createWalletActivityReader(async(network, wallet, signal, owner) => {
+  let rows:PocketActivityRow[]
+  if (network === 'solana') rows=await solanaActivity(wallet, signal)
+  else {
   if (!Object.hasOwn(EVM, network)) throw new Error('Unsupported activity network.')
-  return evmActivity(network as EvmNetwork, wallet, signal)
+  rows=await evmActivity(network as EvmNetwork, wallet, signal)
+  }
+  // Save the responsive recent view before bounded historical catch-up starts.
+  await persistObservedWalletActivity(owner,rows)
+  try{rows.push(...await recoverWalletActivity(owner,network,wallet,signal))}catch{
+    console.warn('[pocket-activity] recovery pending',{network})
+  }
+  return rows
 }, Date.now, 10_000, persistObservedWalletActivity)
 
 export async function readPocketWalletChainActivity(
