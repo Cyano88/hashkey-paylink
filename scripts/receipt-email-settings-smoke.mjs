@@ -1,9 +1,16 @@
-import assert from'node:assert/strict';import{normalizeReceiptEmailSettings as normalize}from'../src/lib/receiptEmailSettings.ts';import{activeReceiptSettings}from'../api/developer-receipt-settings.ts';
-const now='2026-10-29T15:00:00Z',later='2026-10-30T15:00:00Z';
-assert.equal(normalize(undefined,undefined,now).enabled,false);
-for(const bad of[{enabled:'true'},{enabled:true,supportEmail:''},{enabled:true,supportEmail:'a@b.test\r\nBcc:x@y.test'},{enabled:true,supportEmail:'a@b.test',timeZone:'not-a-zone'}])assert.throws(()=>normalize(bad,undefined,now));
-const s=normalize({enabled:true,supportEmail:'support@example.test',timeZone:'Africa/Lagos',enabledAt:'2000-01-01'},undefined,now);assert.equal(s.enabledAt,now);assert.equal(normalize({...s,timeZone:'UTC'},s,later).enabledAt,now);const off=normalize({...s,enabled:false},s,later);assert.equal(off.enabledAt,undefined);assert.equal(normalize(s,off,later).enabledAt,later);
-const p={receiptEmails:s,capabilities:['hosted_checkout'],checkoutMode:'human',xlayerCheckout:{},settlementMode:'usdc'};assert.deepEqual(activeReceiptSettings(p),s);for(const patch of[{operationalStatus:'suspended'},{removal:{}},{checkoutMode:'agentic'},{capabilities:[]},{receiptEmails:off}])assert.equal(activeReceiptSettings({...p,...patch}),undefined);
-console.log('PASS receipt settings: defaults, validated support/timezone, trusted enable time, re-enable cutoff and inactive project suppression.');
+import assert from 'node:assert/strict'
+import {normalizeReceiptEmailSettings as normalize} from '../src/lib/receiptEmailSettings.ts'
+import {activeReceiptSettings} from '../api/developer-receipt-settings.ts'
+const now='2026-11-02T12:00:00Z'
+for(const previous of [undefined,{enabled:false,supportEmail:'',timeZone:'UTC'}])assert.equal(normalize(undefined,previous,now).enabled,true)
+for(const enabled of [false,true,undefined])assert.equal(normalize({enabled,supportEmail:'',timeZone:'UTC'},undefined,now).enabled,true)
+for(const bad of [{enabled:'true'},{supportEmail:'a@b.test\r\nBcc:x@y.test'},{timeZone:'not-a-zone'}])assert.throws(()=>normalize(bad,undefined,now))
+const project={capabilities:['hosted_checkout'],checkoutMode:'human'}
+for(const receiptEmails of [undefined,{enabled:false,supportEmail:'',timeZone:'UTC'}])assert.deepEqual(activeReceiptSettings({...project,receiptEmails}),{enabled:true,supportEmail:'',timeZone:'UTC'})
+for(const patch of [{operationalStatus:'suspended'},{removal:{}},{checkoutMode:'agentic'},{capabilities:[]}])assert.equal(activeReceiptSettings({...project,...patch}),undefined)
+const old={enabled:true,supportEmail:'support@example.test',timeZone:'Africa/Lagos',enabledAt:'2026-10-29T15:00:00Z'}
+assert.deepEqual(activeReceiptSettings({...project,receiptEmails:old}),old)
+assert.equal(normalize({...old,enabled:false},old,now).enabledAt,old.enabledAt)
+console.log('PASS mandatory receipts: missing and legacy-disabled settings enabled, optional support, validation, historical cutoff and inactive project suppression.')
 
-for(const settlementMode of ['usdc','ngn','ugx'])assert.deepEqual(activeReceiptSettings({...p,xlayerCheckout:undefined,settlementMode}),s);
+const {default:React}=await import('react');const {renderToStaticMarkup}=await import('react-dom/server');const {default:Panel}=await import('../src/developer/ReceiptEmailSettings.tsx');const html=renderToStaticMarkup(React.createElement(Panel,{value:{enabled:false,supportEmail:'',timeZone:'UTC'},eligible:true,onChange(){}}));assert(!html.includes('type="checkbox"'));assert(html.includes('automatically receive'));assert(html.includes('Merchant support email'));console.log('PASS receipt panel renders automatic delivery with no developer opt-out.');
