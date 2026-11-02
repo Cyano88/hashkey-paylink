@@ -3726,7 +3726,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const attempts = hosted ? 4 : 1
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const res = await fetch('/api/event-register', {
+        const res = await fetch(hosted ? '/api/checkout-confirm' : '/api/event-register', {
+          signal: AbortSignal.timeout(20000),
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

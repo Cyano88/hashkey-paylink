@@ -1,3 +1,4 @@
+import checkoutConfirmationHandler from './api/checkout-confirmation.js'
 import { pocketAppLinkPaths, pocketAndroidLinkExtensions } from './api/pocket/app-link-policy.js'
 import supportAttachmentHandler from './api/support-attachments.js'
 import developerSupportHandler from './api/developer-support.js'
@@ -190,6 +191,8 @@ loadEnv({ path: '.env', override: false })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+// Narrow compatibility for installed Pocket clients; non-checkout event requests remain retired.
+app.post('/api/event-register', rateLimit({name:'checkout-confirmation-compat',windowMs:60_000,max:20}), express.json({limit:'16kb'}), checkoutConfirmationHandler)
 app.use(retiredProductBoundary)
 // Render terminates TLS behind one trusted proxy. Express derives req.ip from
 // that boundary instead of application code trusting arbitrary forwarded headers.
@@ -491,6 +494,7 @@ app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
 app.get('/api/v2/project/removal', strictLimiter, developerAppRemovalApiHandler)
 app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
 app.all('/api/demo/food/orders', strictLimiter, foodDemoHandler)
+app.post('/api/checkout-confirm', strictLimiter, checkoutConfirmationHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts/stock-swap', strictLimiter, hostedStockCheckoutSwapHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
