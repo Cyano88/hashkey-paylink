@@ -20,3 +20,20 @@ the incident-shaped two-batch cases for Ethereum and Polygon, including reversed
 inventory, older active anchor, invalid matches, repeat setup, preserved history
 and provider GET-only calls. Focused helper TypeScript check also run.
 Production deployment and read-only live-helper validation recorded separately.
+
+## Release verification
+
+Commit 1e9771edd36df8c442c0b0cb986b401af6cf99cf deployed as
+Render dep-dbk362vf3r2c738ig6o0, live 2026-11-02T06:56:58.299039Z.
+Post-release health: healthy, database available, zero unresolved/stale actions.
+Deployed helper was run read-only against the affected owner's 11 live Circle
+records, with provider ownership and complete-page checks. Both Ethereum and
+Polygon selected the exact existing wallet in the linked Base batch; both passed
+gas-station wallet validation. No provider writes, link changes or transfers.
+The builder must retry Enable Pocket wallets in his own authenticated session;
+successful client completion is not yet observed.
+
+Separate native-link work remains at d40954212 on fix/native-links-20261102 in
+hashpaylink-checkout-release-20261102. It is locally tested but not deployed or
+installed. The actual developer checkout link is still needed to reproduce the
+reported white screen; this backend release does not include native-link changes.
