@@ -28,9 +28,9 @@ export function CheckoutExpired({returnUrl,merchant,brandImageUrl}:{returnUrl?:s
     <HashPayLinkCheckoutBrand/>
     <section className="flex flex-1 flex-col items-center justify-center px-4 py-10">
     {(merchant||brandImageUrl)&&<CheckoutMerchant name={merchant||'Merchant'} logo={brandImageUrl}/>}
-    <h1 className="mt-6 text-xl font-semibold tracking-tight">Checkout expired</h1>
+    <h1 className="mt-6 text-xl font-semibold tracking-tight">Payment session expired</h1>
     <p className="mt-3 text-sm text-gray-500">Start a new checkout to continue.</p>
-    {safe&&<a href={safe} className="mt-7 flex min-h-12 w-full max-w-xs items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Back to store</a>}
+    {safe&&<a href={safe} className="mt-7 flex min-h-12 w-full max-w-xs items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Go back</a>}
     </section>
     <CheckoutFooter/>
   </main>

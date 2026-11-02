@@ -5,7 +5,8 @@ import CheckoutMerchant from './CheckoutMerchant'
 import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry} from './CheckoutExpiry'
 const names:Record<string,string>={base:'Base',arc:'Arc',xlayer:'X Layer',arbitrum:'Arbitrum',solana:'Solana',bsc:'BNB Chain',ethereum:'Ethereum',polygon:'Polygon'}
-export type CheckoutSelectionView={currency?:'NGN';defaultNetwork?:string;id:string;amount:string;merchantName:string;brandImageUrl?:string;title?:string;expiresAt:string;options:Array<{network:string;asset:string;unavailableReason?:string}>;selected?:{network:string;asset:string}}
+import {selectHostedCheckoutOption,type CheckoutSelectionView} from '../lib/checkoutSelection'
+export type {CheckoutSelectionView} from '../lib/checkoutSelection'
 export default function CheckoutAssetChoice({checkout,returnUrl,mode='web'}:{checkout:CheckoutSelectionView;returnUrl?:string;mode?:'web'|'pocket'}){
  const navigate=useNavigate(),lock=useRef(false)
  const [choice,setChoice]=useState<CheckoutSelectionView['options'][number]|undefined>(checkout.options.find(o=>o.network===checkout.selected?.network&&o.asset===checkout.selected?.asset)||checkout.options.find(o=>o.network===checkout.defaultNetwork)||checkout.options[0]),[busy,setBusy]=useState(false),[error,setError]=useState('')
@@ -14,7 +15,7 @@ export default function CheckoutAssetChoice({checkout,returnUrl,mode='web'}:{che
  const networks=[...new Set(checkout.options.map(o=>o.network))],assets=checkout.options.filter(o=>o.network===choice?.network)
  async function proceed(){
   if(lock.current||!choice||choice.unavailableReason)return;lock.current=true;setBusy(true);setError('')
-  try{const r=await fetch('/api/v2/checkouts?id='+encodeURIComponent(checkout.id)+'&action=select-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({network:choice.network,asset:choice.asset}),signal:AbortSignal.timeout(25000)}),d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Payment could not be prepared.');if(!/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(d.selectedCheckoutUrl))throw Error('Checkout could not be verified.');navigate(d.selectedCheckoutUrl+(d.selectedCheckoutUrl.includes('?')?'&':'?')+(mode==='web'?'browser=1':'pocket=1'),{replace:true})}catch(e){setError(e instanceof Error&&e.name==='TimeoutError'?'This is taking longer than usual. Continue to check your checkout.':(e as Error).message)}finally{lock.current=false;setBusy(false)}
+  try{const path=await selectHostedCheckoutOption(checkout.id,choice);navigate(path+(path.includes('?')?'&':'?')+(mode==='web'?'browser=1':'pocket=1'),{replace:true})}catch(e){setError(e instanceof Error&&e.name==='TimeoutError'?'This is taking longer than usual. Continue to check your checkout.':(e as Error).message)}finally{lock.current=false;setBusy(false)}
  }
  return <div className="mx-auto w-full max-w-md py-6"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114]">
   <CheckoutMerchant name={checkout.merchantName} logo={checkout.brandImageUrl}/>

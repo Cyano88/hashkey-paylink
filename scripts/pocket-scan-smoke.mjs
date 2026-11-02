@@ -4,6 +4,8 @@ import {resolvePocketPosCheckout} from '../api/pocket/scan-checkout.ts'
 const url='https://app.hashpaylink.com/pay?src=ngpos&merchant=pos_example&f=1'
 assert.equal(parsePocketScanCode(url).kind,'pos')
 assert.equal(parsePocketScanCode('https://app.hashpaylink.com/pay/c/chk_abcdefgh').kind,'checkout')
+assert.equal(parsePocketScanCode('https://app.hashpaylink.com/pay/c/chks_'+'a'.repeat(24)).kind,'checkout')
+assert.throws(()=>parsePocketScanCode('https://app.hashpaylink.com/pay/c/chks_short'))
 assert.equal(parsePocketScanCode('https://app.hashpaylink.com/pay/c/chkx_'+'a'.repeat(24)).kind,'checkout')
 assert.equal(parsePocketScanCode('https://pocket.hashpaylink.com/xpay/chkx_'+'a'.repeat(24)).kind,'xpay')
 assert.throws(()=>parsePocketScanCode('https://app.hashpaylink.com/pay/c/chkx_short'))

@@ -1,3 +1,5 @@
+import PocketHostedCheckoutChoice from '../components/PocketHostedCheckoutChoice'
+import {isSelectedCheckoutPath,type CheckoutSelectionView} from '../../lib/checkoutSelection'
 import type {BscCheckoutView} from '../../pages/BscCheckoutPage'
 import {xpayOrigin} from '../lib/pocketXPayNavigation'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
@@ -11,6 +13,7 @@ const PaymentPage=lazy(()=>import('../../pages/PaymentPage'))
 export default function PocketScanPage() {
  const navigate=useNavigate(),location=useLocation()
  const scanState={xpayOrigin:new URLSearchParams(location.search).get('rail')==='xstocks'?'xstocks':xpayOrigin(location.state),...(location.state?.xpayReturnTo?{xpayReturnTo:location.state.xpayReturnTo}:{})}
+ const [selection,setSelection]=useState<CheckoutSelectionView|null>(null)
  const [bsc,setBsc]=useState<{checkout:BscCheckoutView;returnUrl?:string}|null>(null)
  const [checkout,setCheckout]=useState<{params:string;merchant:string;settlement:string}|null>(null)
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[camera,setCamera]=useState(false),[pasted,setPasted]=useState('')
@@ -28,6 +31,13 @@ export default function PocketScanPage() {
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})
    const data=await response.json().catch(()=>null)
    if(!data)throw Error('Checkout is temporarily unavailable. Please try again.')
+   if(response.ok&&data.ok&&data.checkout?.selectionCheckout&&data.checkout.id===code.id&&/^chks_[a-f0-9]{24}$/.test(code.id)){
+    if(controller.signal.aborted)return
+    if(data.selectedCheckoutUrl){if(!isSelectedCheckoutPath(data.selectedCheckoutUrl))throw Error('Checkout could not be verified.');openSelected(data.selectedCheckoutUrl)}
+    else if(Array.isArray(data.checkout.options)&&data.checkout.options.length)setSelection(data.checkout)
+    else throw Error('This checkout has no payment choices available.')
+    return
+   }
    if(response.ok&&data.ok&&data.checkout?.bscCheckout&&data.checkout.id===code.id&&/^chkb_[a-f0-9]{24}$/.test(code.id)){
     if(!controller.signal.aborted)setBsc(data)
     return
@@ -46,6 +56,11 @@ export default function PocketScanPage() {
    if(!controller.signal.aborted)setCheckout({params:params.toString(),merchant:data.merchantName||data.checkout?.merchantName||'Merchant checkout',settlement:data.settlement||data.checkout?.settlementMode||'USDC'})
   }catch(reason){if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Checkout could not be opened.')}
   finally{if(!controller.signal.aborted){pending.current=false;setBusy(false)}}
+ }
+ const openSelected=(path:string)=>{
+  if(!isSelectedCheckoutPath(path))throw Error('Checkout could not be verified.')
+  setSelection(null)
+  navigate(POCKET_BASE_PATH+'/home/scan?code='+encodeURIComponent('https://app.hashpaylink.com'+path),{replace:true,state:scanState})
  }
  const start=async()=>{
   stop();setError('');const current=generation.current
@@ -74,7 +89,7 @@ export default function PocketScanPage() {
   }catch(reason){if(current===generation.current){stop();setError(reason instanceof DOMException&&reason.name==='NotAllowedError'?'Camera access was denied. Allow it in app settings or paste the checkout link below.':reason instanceof Error?reason.message:'Camera could not open.')}}
  }
  useEffect(()=>{
-  const code=new URLSearchParams(location.search).get('code');setCheckout(null);setBsc(null);pending.current=false
+  const code=new URLSearchParams(location.search).get('code');setCheckout(null);setBsc(null);setSelection(null);pending.current=false
   if(code)void open(code)
   else void start()
   return()=>{stop();abort.current?.abort();pending.current=false}
@@ -83,8 +98,8 @@ export default function PocketScanPage() {
  const back=()=>{stop();abort.current?.abort();if(location.state?.xpayReturnTo){navigate(location.state.xpayReturnTo,{replace:true,state:location.state});return}navigate(new URLSearchParams(location.search).get('rail')==='xstocks'?xStockPath('home'):POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
  return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white'>
   <div className='mx-auto w-full max-w-[462px]'>
-   <header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout||bsc?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>
-   {bsc?<Suspense fallback={<div role="status" aria-label="Opening payment" className="h-96 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><BscCheckout securityManaged checkout={bsc.checkout} returnUrl={bsc.returnUrl}/></Suspense>:checkout?<section aria-label='Payment review'><Suspense fallback={<p role='status'>Opening payment review...</p>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back,native:true,merchantName:checkout.merchant}}/></Suspense></section>:<>
+   <header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout||bsc||selection?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>
+   {selection?<><p className="mt-6 text-center text-sm text-gray-500">Review your payment options.</p><PocketHostedCheckoutChoice key={selection.id} checkout={selection} onSelected={openSelected} onClose={back}/></>:bsc?<Suspense fallback={<div role="status" aria-label="Opening payment" className="h-96 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><BscCheckout securityManaged checkout={bsc.checkout} returnUrl={bsc.returnUrl}/></Suspense>:checkout?<section aria-label='Payment review'><Suspense fallback={<p role='status'>Opening payment review...</p>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back,native:true,merchantName:checkout.merchant}}/></Suspense></section>:<>
     <p className='mb-4 text-center text-sm text-gray-500'>Scan a Hash PayLink merchant or checkout QR.</p>
     <div className='relative aspect-square overflow-hidden rounded-[26px] bg-gray-950'><video ref={video} muted playsInline aria-label='QR camera preview' className='h-full w-full object-cover'/><div aria-hidden='true' className='pointer-events-none absolute inset-12 rounded-2xl border-2 border-white/70'/>{!camera&&<p className='absolute inset-x-4 top-1/2 text-center text-sm text-white/70'>Point your camera at a merchant QR.</p>}</div>
     {busy?<p role='status' className='mt-4 text-center text-sm'>Verifying checkout...</p>:<button type='button' onClick={()=>camera?stop():void start()} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950'>{camera?'Stop camera':'Open camera'}</button>}
