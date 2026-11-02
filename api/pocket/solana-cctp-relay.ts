@@ -425,7 +425,8 @@ export async function preparePocketSolanaCctpTransaction(input: {
     // The operational SOL reserve is never included in customer reimbursement.
     await checkSolanaRelayerBalance(connection,relayer.publicKey,cost+RELAYER_OPERATIONAL_BUFFER_LAMPORTS)
     const balance=await readTokenAccountAmount(connection,sourceAta)
-    if(balance===null||balance<parseUsdcAmount(input.expected.amount)+providerFeeUnits+networkFeeUnits)throw fail(400,'Insufficient USDC to cover the bridge and network fee.')
+    const feeUnits=providerFeeUnits+networkFeeUnits
+    if(balance===null||balance<parseUsdcAmount(input.expected.amount)+feeUnits)throw Object.assign(fail(400,'Insufficient USDC to cover the bridge and network fee.'),{code:'insufficient_balance',maximumAmountUnits:String(balance!==null&&balance>feeUnits?balance-feeUnits:0n)})
     sponsored.instructions[sponsored.instructions.length-1]=createTransferCheckedInstruction(sourceAta,USDC_MINT,treasuryAta,wallet,networkFeeUnits,6)
     await assertSolanaSponsorshipRunning()
 

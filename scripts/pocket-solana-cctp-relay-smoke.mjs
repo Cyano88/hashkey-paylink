@@ -178,6 +178,14 @@ const quoted=await preparePocketSolanaCctpTransaction({walletAddress:wallet.publ
 assert.equal(reimbursementFeeReads,3)
 assert.equal(quoted.networkFeeUnits,'390500','Only 3900000 rent funding plus 5000 network lamports; reserve excluded')
 assert.equal(quoted.providerFeeUnits,'53591')
+for(const [balance,maximum] of [['1000000','555909'],['444091','0'],['0','0']]){
+ await assert.rejects(()=>preparePocketSolanaCctpTransaction({walletAddress:wallet.publicKey.toBase58(),expected,reimburse:true,connection:{...healthyConnection,getAccountInfo:async()=>({owner:SOLANA_TOKEN_PROGRAM_ID}),getTokenAccountBalance:async()=>({value:{amount:balance}})},buildBridge:async()=>bridgeInstructions(),readRate:async()=>10000000000n}),e=>e.code==='insufficient_balance'&&e.maximumAmountUnits===maximum&&e.status===400)
+}
+const sourceAtaForMax=await getAssociatedTokenAddress(usdcMint,wallet.publicKey,true)
+await assert.rejects(()=>preparePocketSolanaCctpTransaction({walletAddress:wallet.publicKey.toBase58(),expected,reimburse:true,connection:{...healthyConnection,getAccountInfo:async account=>account.equals(sourceAtaForMax)?null:{owner:SOLANA_TOKEN_PROGRAM_ID},getTokenAccountBalance:async()=>({value:{amount:'1000000000'}})},buildBridge:async()=>bridgeInstructions(),readRate:async()=>10000000000n}),e=>e.code==='insufficient_balance'&&e.maximumAmountUnits==='0')
+const rpcFailure=Error('RPC unavailable')
+await assert.rejects(()=>preparePocketSolanaCctpTransaction({walletAddress:wallet.publicKey.toBase58(),expected,reimburse:true,connection:{...healthyConnection,getAccountInfo:async account=>{if(account.equals(sourceAtaForMax))throw rpcFailure;return {owner:SOLANA_TOKEN_PROGRAM_ID}},getTokenAccountBalance:async()=>({value:{amount:'1000000000'}})},buildBridge:async()=>bridgeInstructions(),readRate:async()=>10000000000n}),e=>e===rpcFailure&&!e.maximumAmountUnits)
+console.log('PASS Solana Max hints: provider fee plus reimbursement reserved exactly, zero/missing balance bounded, RPC errors never labeled insufficient.')
 const approval={...quoted,...expected,walletAddress:wallet.publicKey.toBase58(),expiresAt:Date.now()+30000}
 const token=sealSolanaBridgeApproval(approval)
 assert.deepEqual(openSolanaBridgeApproval(token,{...expected,walletAddress:wallet.publicKey.toBase58()}),approval)
