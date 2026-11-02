@@ -420,6 +420,17 @@ async function bridgeSourceBalance(chain:keyof typeof EVM_CHAINS,token:string,wa
  if(typeof raw!=='string'||!/^0x[0-9a-f]{64}$/i.test(raw))throw Object.assign(Error('Balance could not be verified. Please try again.'),{status:503})
  return BigInt(raw)
 }
+/** Server-only estimator for an already validated owned-wallet batch, including Arc. */
+export async function estimateCircleOwnedEvmBatch(input:{chain:CircleGasStationEvmChain;userToken:string;walletId:string;walletAddress:string;callData:string}) {
+ if(!input.userToken||input.userToken.length>8000||!/^0x[0-9a-f]+$/i.test(input.callData)||input.callData.length>60000)throw Error('Unlock Pocket to estimate this bridge.')
+ const owned=await readCircleUserWallet(input.userToken,input.chain,input.walletId)
+ requireCircleGasStationEvmWallet({...input,wallets:owned?[owned]:[]})
+ const estimate=await circleJson<{high?:{networkFeeRaw?:string;networkFee?:string}}>('/v1/w3s/transactions/contractExecution/estimateFee',{method:'POST',userToken:input.userToken,apiKey:circleApiKey({chain:input.chain}),body:JSON.stringify({walletId:input.walletId,contractAddress:input.walletAddress,callData:input.callData})})
+ const fee=estimate.high?.networkFeeRaw||estimate.high?.networkFee
+ if(!fee||!/^\d+(?:\.\d{1,18})?$/.test(fee))throw Error('Bridge fee is unavailable. Try again.')
+ return fee
+}
+
 export async function quoteCircleEvmBatchRecovery(input:import('./pocket/evm-bridge-reimbursement.js').EvmBridgeFeeBinding&{userToken:string;bridgeCallData:import('viem').Hex;providerExpiresAt:number}) {
  const {userToken,...binding}=input
  const chain=input.source as keyof typeof EVM_CHAINS

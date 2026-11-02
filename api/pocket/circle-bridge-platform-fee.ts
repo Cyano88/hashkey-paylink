@@ -19,7 +19,7 @@ export type CircleKitFeeInput={source:typeof CIRCLE_KIT_EVM_SOURCES[number];dest
 export async function buildCircleKitFeeBatch(i:CircleKitFeeInput,env:NodeJS.ProcessEnv=process.env,revenueSnapshot?:EvmBridgeRevenue){
  if(!(CIRCLE_KIT_EVM_SOURCES as readonly string[]).includes(i.source)||!Object.hasOwn(CCTP_DOMAIN,i.destination)||i.source===i.destination||!isAddress(i.walletAddress)||/^0x0{40}$/i.test(i.walletAddress)||i.transferUnits<=0n||i.providerFeeUnits<0n||i.reimbursementUnits<=0n||![1000,2000].includes(i.finalityThreshold))throw Error('Invalid Circle bridge fee binding.')
  const revenue=revenueSnapshot??evmBridgeRevenue(i.transferUnits,env);validateEvmBridgeRevenue(revenue,i.transferUnits,i.walletAddress)
- if(BigInt(revenue.amountUnits)<=0n)throw Object.assign(Error('Amount too small for the configured bridge fee.'),{status:422})
+ if(BigInt(revenue.amountUnits)<=0n)throw Object.assign(Error('Amount too small for the configured bridge fee.'),{status:422,code:'amount_too_low'})
  const token=crossBridgeAsset(i.source,'USDC'),burnUnits=i.transferUnits+i.providerFeeUnits,approvalUnits=burnUnits+BigInt(revenue.amountUnits),totalUnits=approvalUnits+i.reimbursementUnits
  if(totalUnits>=2n**128n)throw Error('Circle bridge amount is too large.')
  let mintRecipient:Hex,hookData:Hex

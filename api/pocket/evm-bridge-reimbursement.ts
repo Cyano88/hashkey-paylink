@@ -32,7 +32,7 @@ export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallDat
  for(let pass=0;pass<4;pass++){
   if(availableUnits!==undefined&&BigInt(input.bridgeDebitUnits)+units>availableUnits){
    const maximum=BigInt(input.amountUnits)-(BigInt(input.bridgeDebitUnits)+units-availableUnits)
-   throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,maximumAmountUnits:(maximum>0n?maximum:0n).toString()})
+   throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,code:'insufficient_balance',maximumAmountUnits:(maximum>0n?maximum:0n).toString()})
   }
   const callData=withRecovery(input.bridgeCallData,input.tokenAddress,units)
   const next=nativeFeeToUsdcUnits(await estimate(callData),rateScaled8)

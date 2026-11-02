@@ -58,11 +58,11 @@ export async function readCctpForwardQuote(source: PocketBridgeNetwork, destinat
   }
 }
 
-export async function solanaRecipient(walletAddress: string) {
+export async function solanaRecipient(walletAddress: string, requireVerifiedLookup = false) {
   const wallet = new PublicKey(walletAddress)
   const ata = await getAssociatedTokenAddress(SOLANA_USDC_MINT, wallet, true)
   const connection = new Connection(process.env.SOLANA_RPC_URL?.trim() || 'https://api.mainnet-beta.solana.com', 'confirmed')
-  const exists = Boolean(await connection.getAccountInfo(ata, 'confirmed').catch(() => null))
+  const exists = Boolean(await connection.getAccountInfo(ata, 'confirmed').catch(error => { if (requireVerifiedLookup) throw error; return null }))
   return { wallet, ata, needsSetup: !exists }
 }
 

@@ -57,3 +57,34 @@ assert.equal((await restartedRuntime.resume(result.quote.id,expectedOwner,'sessi
 found='challenge-1';assert.equal((await restartedRuntime.resume(result.quote.id,expectedOwner,'session')).state,'pending');await restartedRuntime.submit(result.quote.id,expectedOwner,'session');assert.equal(providerCalls,1)
 assert.ok(!JSON.stringify(runtimeStore).includes('"session"'))
 console.log('PASS Circle runtime adapter: durable-store required, owner-scoped keys, approval argument order, exact wallet/batch/reference/idempotency dispatch, wallet revalidation and read-only restart recovery. Injected provider/store fixtures only.')
+import {createCircleKitPreflight} from '../api/pocket/circle-bridge-preflight.ts'
+for(const source of ['ethereum','base','arbitrum','polygon','arc']){
+ const destination=source==='base'?'arbitrum':'base',bound=structuredClone(wallets);bound.source.network=source;bound.destination.network=destination
+ const rate=source==='arc'?100000000n:200000000000n
+ const reviewed=await quoteCircleKitReview({...input,source,destination},bound,{estimate:async()=> '0.000001',feeShares:async gross=>[gross*9n/10n,gross/10n],availableUnits:10000000n,nativeRateScaled8:rate,providerExpiresAt:now+20000,now:()=>now},env)
+ let estimateCalls=0,currentBalance=reviewed.batch.totalUnits,estimate='0.000001',currentTime=now,policyChanged=false,guardBlocked=false
+ const deps={now:()=>currentTime,wallets:async b=>b,balance:async(s,token,address)=>{assert.equal(s,source);assert.equal(token,reviewed.batch.bridgeParams.burnToken);assert.equal(address,input.walletAddress);return currentBalance},rate:async()=>rate,shares:async(s,gross)=>policyChanged?[0n,gross]:[gross*9n/10n,gross/10n],estimate:async(q,token)=>{assert.equal(q.callData,reviewed.quote.callData);assert.equal(token,'session');estimateCalls++;return estimate}}
+ const check=createCircleKitPreflight('session',async()=>{if(guardBlocked)throw Error('Previous wallet action pending')},deps)
+ const before=JSON.stringify(reviewed.quote);await check(reviewed.quote);assert.equal(estimateCalls,1)
+ currentBalance--;await assert.rejects(()=>check(reviewed.quote),/Insufficient/);assert.equal(estimateCalls,1);currentBalance++
+ guardBlocked=true;await assert.rejects(()=>check(reviewed.quote),/Previous wallet action/);assert.equal(estimateCalls,1);guardBlocked=false
+ estimate='0.001';await assert.rejects(()=>check(reviewed.quote),/fee changed/);estimate='0.000001'
+ policyChanged=true;await assert.rejects(()=>check(reviewed.quote),/policy changed/);policyChanged=false
+ currentTime=now+20001;await assert.rejects(()=>check(reviewed.quote),/expired/)
+ assert.equal(JSON.stringify(reviewed.quote),before,'preflight must never silently reprice or mutate review')
+}
+console.log('PASS five Circle EVM sources: exact reviewed batch estimation, balance before simulation, shared-guard failure, fee rise/share changes/expiry rejected without mutating approved values. Fixtures only.')
+import {quoteOwnedCircleKitBridge} from '../api/pocket/circle-bridge-quote-runtime.ts'
+let quoteCount=0
+for(const source of ['ethereum','base','arbitrum','polygon','arc'])for(const destination of ['ethereum','base','arbitrum','polygon','arc','solana']){
+ if(source===destination)continue
+ const bound=structuredClone(wallets);bound.source.network=source;bound.destination.network=destination;if(destination==='solana')bound.destination.address=Keypair.fromSeed(new Uint8Array(32).fill(4)).publicKey.toBase58()
+ const value=await quoteOwnedCircleKitBridge({ownerId:'fixture',userToken:'session',source,destination,amountUnits:'1000000'},{now:()=>now,wallets:async(owner,from,to)=>{assert.equal(owner,'fixture');assert.equal(from,source);assert.equal(to,destination);return bound},recipient:async address=>{assert.equal(address,bound.destination.address);return true},provider:async(from,to,units,setup)=>{assert.equal(setup,destination==='solana');return {transferUnits:units,maxFeeUnits:200n,totalUnits:units+200n,forwardFeeUnits:200n,protocolFeeUnits:0n,finalityThreshold:2000}},balance:async()=>10000000n,rate:async()=>source==='arc'?100000000n:200000000000n,shares:async(s,gross)=>[gross*9n/10n,gross/10n],estimate:async request=>{assert.equal(request.userToken,'session');assert.equal(request.walletId,'source');assert.equal(request.chain,source);return '0.000001'}},env)
+ assert.equal(value.quote.input.source,source);assert.equal(value.quote.input.destination,destination);assert.equal(value.quote.input.includeRecipientSetup,destination==='solana');quoteCount++
+}
+assert.equal(quoteCount,25)
+console.log('PASS 25 owned Circle quote routes: server wallets, exact provider cost, Solana setup hook, source gas conversion, sealed total and source session estimator binding. Fixtures only.')
+import {quoteOwnedCircleKitMaximum} from '../api/pocket/circle-bridge-quote-runtime.ts'
+const maximum=await quoteOwnedCircleKitMaximum({ownerId:'fixture',userToken:'session',source:'base',destination:'arbitrum'},{now:()=>now,wallets:async()=>wallets,provider:async(from,to,units)=>({transferUnits:units,maxFeeUnits:200n,totalUnits:units+200n,forwardFeeUnits:200n,protocolFeeUnits:0n,finalityThreshold:2000}),balance:async()=>1000000n,rate:async()=>200000000000n,shares:async(s,gross)=>[gross-gross/10n,gross/10n],estimate:async()=> '0.000001'},env)
+assert.ok(maximum.totalUnits<=1000000n);assert.ok(maximum.unspentUnits<=1n);assert.ok(maximum.amountUnits<1000000n);assert.equal(maximum.quote.quote.totalUnits,String(maximum.totalUnits));assert.equal(maximum.quote.quote.input.transferUnits,String(maximum.amountUnits))
+console.log('PASS owned Circle Max integration: full balance reduced by provider/platform/reimbursement fees, final sealed review retained, at most one micro-USDC unspent in fixture.')
