@@ -3,7 +3,7 @@ import {PublicKey} from '@solana/web3.js'
 import {getAssociatedTokenAddress} from '../solana-token.js'
 import {CCTP_DOMAIN,CCTP_FORWARD_HOOK,cctpForwardHookForSolana,SOLANA_USDC_MINT,type PocketBridgeNetwork} from './cctp.js'
 import {crossBridgeAsset} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
-import {evmBridgeRevenue,validateEvmBridgeRevenue} from './bridge-revenue-config.js'
+import {evmBridgeRevenue,validateEvmBridgeRevenue,type EvmBridgeRevenue} from './bridge-revenue-config.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
 /** Circle Bridge Kit 1.17.0 mainnet registry; adapter-viem-v2 1.20.0 ABI.
@@ -16,9 +16,9 @@ const tokenAbi=parseAbi(['function approve(address spender,uint256 amount) retur
 const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 export type CircleKitFeeInput={source:typeof CIRCLE_KIT_EVM_SOURCES[number];destination:PocketBridgeNetwork;walletAddress:Hex;destinationAddress:string;transferUnits:bigint;providerFeeUnits:bigint;reimbursementUnits:bigint;finalityThreshold:1000|2000;includeRecipientSetup?:boolean}
 /** Fee collection is inside Circle's bridge call. Never add a direct revenue transfer. */
-export async function buildCircleKitFeeBatch(i:CircleKitFeeInput,env:NodeJS.ProcessEnv=process.env){
+export async function buildCircleKitFeeBatch(i:CircleKitFeeInput,env:NodeJS.ProcessEnv=process.env,revenueSnapshot?:EvmBridgeRevenue){
  if(!(CIRCLE_KIT_EVM_SOURCES as readonly string[]).includes(i.source)||!Object.hasOwn(CCTP_DOMAIN,i.destination)||i.source===i.destination||!isAddress(i.walletAddress)||/^0x0{40}$/i.test(i.walletAddress)||i.transferUnits<=0n||i.providerFeeUnits<0n||i.reimbursementUnits<=0n||![1000,2000].includes(i.finalityThreshold))throw Error('Invalid Circle bridge fee binding.')
- const revenue=evmBridgeRevenue(i.transferUnits,env);validateEvmBridgeRevenue(revenue,i.transferUnits,i.walletAddress)
+ const revenue=revenueSnapshot??evmBridgeRevenue(i.transferUnits,env);validateEvmBridgeRevenue(revenue,i.transferUnits,i.walletAddress)
  if(BigInt(revenue.amountUnits)<=0n)throw Object.assign(Error('Amount too small for the configured bridge fee.'),{status:422})
  const token=crossBridgeAsset(i.source,'USDC'),burnUnits=i.transferUnits+i.providerFeeUnits,approvalUnits=burnUnits+BigInt(revenue.amountUnits),totalUnits=approvalUnits+i.reimbursementUnits
  if(totalUnits>=2n**128n)throw Error('Circle bridge amount is too large.')
