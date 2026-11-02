@@ -90,3 +90,35 @@ Backend/web: C:/Users/USER/hashpaylink-checkout-release-20261102. Native: C:/Use
 - Final Pixel version 1.0.13/code14 supersedes 1.0.12 above. Vite, lineage guard, Capacitor, JDK21 APK build, unchanged signer and all 1867 packaged assets verified. SHA256 158DBC46B933FEB90405FBB94372A0EC7C68DDA4050F403FA6C08C857809F601. Source manifest/archive: native-release/resume-1.0.13.json and resume-source-1.0.13.zip (16 files). Previous release artifacts retained.
 - An ordinary pull-to-refresh on the updated Pixel corrected the existing historical row to USDG / Swap / 0.95 USDG. Read-only cache inspection confirmed exactly one wallet-swap row for that transaction. No application storage reset, signing or funds movement. Evidence snapshots in native .playwright-cli/usdg-corrected-live.yml and resume-after-background.yml.
 - Cross-asset bridging, transient quote-provider reliability and full signing/background cancellation boundaries remain OPEN as specified above. Do not claim this pass implements the all-network cross-asset execution matrix or completes the entire bridge audit.
+
+## Cross-asset bridge draft and selector agreement (2026-11-02)
+
+Status: local source/testing only. NOT mounted on PocketSwapPage, NOT deployed, NOT installed on Pixel. Installed release remains 1.0.13/code14; deployed backend remains 9194446a80fe480034e1abadfd2ce220bc7a87e3 as last verified above. No funds signed or submitted.
+
+### Implemented foundation
+
+- Backend/web catalog and selection helpers cover Ethereum, Base, Arbitrum, Polygon, Solana, Arc, BNB Chain and X Layer. Native SOL/POL (including wrapped aliases) are excluded as bridge tokens; Polygon/Solana stablecoins remain eligible. Arc has no invented USDT entry. Arc USDC uses the six-decimal ERC-20 route, BNB stablecoins use 18 decimals.
+- Separate cross-asset Relay validator binds both currencies, decimals, networks, amounts, owner-supplied sender/recipient, order ID, refund plan and execution calldata. It reconstructs pinned deposits and exact approvals; it does not authenticate wallet ownership or execute transactions. Existing same-asset validators are unchanged.
+- Relay depositNative/depositErc20 semantics checked against relayprotocol/relay-settlement contract blob 015bdcd735ed611e853c908489a38731843bfc39. Native deposit events alone are not sufficient source ownership proof: settlement must bind the actual call/value path, particularly for smart accounts.
+- Fixture matrix validates 496 eligible distinct-network asset pairs and mutation rejection. This is not 496 live supported routes.
+- Earlier read-only capture sampled 20 live provider requests: 16 valid quotes cover all eight source and destination networks; four returned NO_SWAP_ROUTES_FOUND (X Layer OKB -> Arbitrum USDT, X Layer USDe -> Solana USDC, Base EURC -> Arc USDC, Arc EURC -> Base USDC). Valid quotes include Base ETH -> USDC/USDT on Polygon and Solana. Captures replayed successfully against the validator. Local captures contain public wallet data and remain outside Git under .codex-temp.
+- Provider no-route responses now have a distinct 422/route_unavailable classification; amount-too-low is also 422. Service failure and rate limiting remain distinct, with sanitized messages and bounded Retry-After. No automatic retry behavior is claimed before the controller exists.
+
+### Native layout and shared confirmation
+
+Native checkout only: C:/Users/USER/pocket-play-update-20261101. Do not copy its full components over the divergent backend/web checkout.
+
+- User-approved layout preserves the existing From / reverse / To structure. Two network dropdowns sit above it; independent input/output token dropdowns replace the old Base/Arbitrum selectors inside the cards. The old global USDC header will be removed when this form is mounted by the new execution controller.
+- PocketCrossBridgeForm now adapts PocketCrossBridgeFields into the real shared PocketBridgeForm confirmation lifecycle. Quotes are bound to both network/token pairs and the exact input amount; stale route/amount responses cannot open approval. Retained review scope includes the destination token.
+- Paid with, received asset, Fee and Total retain their proper token identities. Small native amounts use significant precision. Keypad/presets use source token decimals and preserve exact string balances. There is one Fee row.
+- Review/processing locks network and token selectors and the keypad. Cross-asset tracking must carry matching selectionKey, asset and destinationAsset; legacy tracking cannot silently represent a cross-asset transfer. Unknown received amounts are not inferred one-for-one from the input.
+- Passed browser fixtures: layout at 360/390/430 widths in light/dark; shared cross-asset review cases spanning all eight networks; expiry/failed refresh/retry within the sheet; no implicit submission; processing/dismiss/reopen/remount; stale token/amount quote rejection; exact percentage/keypad precision for ETH, 18-decimal BNB USDT and 6-decimal Solana USDC. Existing stablecoin shared review and approval-gap suites passed across eight route/viewport cases. Native lineage/artwork guard passed.
+- Provider/catalog targeted TypeScript passes. Full native TypeScript remains a separate failing check outside this draft; final log is native-release/cross-bridge-draft-typecheck.log. Do not report the whole native checkout type-clean.
+
+### Required next implementation
+
+1. Authenticated source/destination wallet binding, fee estimation in source denomination, gas reimbursement and affordable balance checks for Circle smart accounts, Privy BNB/X Layer and Solana.
+2. Sealed reviewed quotes; durable prepare/submit-once and recovery with the existing PIN/approval system; no automatic cancellation or resubmission on backgrounding.
+3. Canonical source and destination/refund proofs for independent assets and native value, including smart-account call attribution; actual receipt amounts and Bridge activity classification.
+4. Connect the new form to that controller, build/install on Pixel, verify real screens and interruption boundaries. No mock data or incomplete execution is to be installed as a usable bridge.
+- Native draft recovery archive: native-release/cross-bridge-draft-20261102-192225.zip with matching JSON manifest (nine source/test/policy files). SHA256 F6BC869C3D3523A2EAAE288C474C31489065EC220C90482C9ABDBDCFC011B109; every archived entry rehashed against source. This is an uninstalled draft snapshot, not an APK/release. It layers on the preserved 1.0.13 native lineage.
