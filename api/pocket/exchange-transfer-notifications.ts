@@ -18,6 +18,10 @@ export function exchangeTransferDisposition(row:Transfer, actions:CirclePocketAc
   const bridge=bridges.has(action.action)
   const missingSettlement=bridge&&action.status==='completed'&&!m.destinationTxHash
   if((!['started','submitted'].includes(action.status)&&!missingSettlement)||row.ts<action.createdAt-30_000)continue
+  // A terminal bridge cannot own unrelated transfers mined after completion.
+  // Use the transfer timestamp, not discovery time, so late indexing of its
+  // actual settlement still waits. Match the existing 30s clock tolerance.
+  if(missingSettlement&&Number.isFinite(action.updatedAt)&&row.ts>action.updatedAt+30_000)continue
   if(m.approvalCancelled==='true'||['cancelled','not_submitted'].includes(m.paymentState))continue
   const network=bridge?(row.direction==='in'?m.destination:m.source):(m.network||(action.action==='wallet.swap'?'arc':action.action==='wallet.cash-conversion'?'base':action.action==='wallet.bsc-swap'?'bsc':undefined))
   if(network!==row.chain)continue

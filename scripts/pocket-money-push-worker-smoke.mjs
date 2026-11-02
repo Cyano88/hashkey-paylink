@@ -157,3 +157,7 @@ await runPocketMoneyPushWorker(eventDeps);assert.equal(attempts,2)
 queued=[row({txHash:incomingHash,direction:'in',payer:'0xmine',ts:now-3600000})]
 await runPocketMoneyPushWorker({...eventDeps,readWallets:async()=>[{network:'base',walletAddress:'0xmine'}]});assert.equal(queued.length,0);assert.equal(attempts,2,'own-wallet suppression still applies')
 console.log('PASS durable wallet event pushes survive old timestamps and failed sends, acknowledge success, and preserve own-wallet suppression')
+queued=[row({txHash:oldHash,direction:'in',payer:'0xexternal',ts:now-3600000})]
+await runPocketMoneyPushWorker({...eventDeps,listActions:async()=>[{action:'wallet.bridge',status:'completed',createdAt:now-86400000,updatedAt:now-86340000,metadata:{source:'polygon',destination:'base',assetSymbol:'USDC'}}]})
+assert.equal(attempts,3);assert.equal(queued.length,0,'old completed bridge releases durable external deposit')
+console.log('PASS old completed bridges cannot indefinitely hold new external event pushes')
