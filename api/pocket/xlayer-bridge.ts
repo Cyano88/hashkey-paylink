@@ -1,3 +1,4 @@
+import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import solanaBridgeHandler,{recoverSolanaUsdtBridge,listPendingSolanaUsdtBridges} from './solana-usdt-bridge-api.js'
 import {inboundBridgeClient,inboundChains,isInboundEvmSource,type InboundEvmSource} from './inbound-bridge-networks.js'
 import {POCKET_XLAYER_MINIMUM_AMOUNT,POCKET_XLAYER_MINIMUM_UNITS} from '../../src/pocket/lib/pocketXLayerMinimum.js'
@@ -168,7 +169,7 @@ export function createXLayerBridgeHandler(overrides:Partial<typeof defaults>={})
    if(!result.challengeId)throw Error('Bridge submission result is unknown.')
    await d.record({ownerId:userId,idempotencyKey:key(q),action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,challengeId:result.challengeId}})
    return res.json({ok:true,challengeId:result.challengeId})
-  }catch(reason){const e=reason as Error&{status?:number};return res.status(e.status||503).json({ok:false,error:e.status?e.message:req.body?.action==='quote'?'Could not update the bridge amount. Please try again.':'Bridge status is unavailable. Any submitted transfer remains saved; check Activity before retrying.'})}
+  }catch(reason){const e=reason as Error&{status?:number};return res.status(e.status||503).json({ok:false,...(req.body?.action==='quote'?bridgeQuoteErrorFields(e):{}),error:e.status?e.message:req.body?.action==='quote'?'Could not update the bridge amount. Please try again.':'Bridge status is unavailable. Any submitted transfer remains saved; check Activity before retrying.'})}
  }
  return Object.assign(handler,{reconcile:(owner:string,token:string)=>token.startsWith('solana:')?recoverSolanaUsdtBridge(owner,token.slice(7)):reconcile(owner,openXLayerBridgeQuote(token,owner),token,{})})
 }

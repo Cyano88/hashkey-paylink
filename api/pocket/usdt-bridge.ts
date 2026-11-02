@@ -1,3 +1,4 @@
+import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import type {Request,Response} from 'express'
 import {lifiRevenueProven,lifiRevenueMetadata} from './lifi-revenue-evidence.js'
@@ -92,7 +93,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       return res.json({ok:true,challengeId:result.challengeId})
     }
     return res.json(await reconcileUsdtBridge(identity.userId,quoteToken,{txHash:req.body.txHash,circleUserToken:req.body.circleUserToken,retireUnsubmitted:req.body.retireUnsubmitted===true}))
-  }catch(reason){const error=reason as Error&{status?:number;maximumAmountUnits?:string};console.error('[pocket-usdt-bridge]',{action:req.body?.action||req.method,reason:error.message});return res.status(error.status||503).json({ok:false,...(req.body?.action==='quote'&&error.maximumAmountUnits?{maximumAmountUnits:error.maximumAmountUnits}:{}),error:error.status?error.message:req.body?.action==='quote'?'Could not refresh the bridge quote. Try again.':'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
+  }catch(reason){const error=reason as Error&{status?:number;maximumAmountUnits?:string};console.error('[pocket-usdt-bridge]',{action:req.body?.action||req.method,reason:error.message});return res.status(error.status||503).json({ok:false,...(req.body?.action==='quote'?bridgeQuoteErrorFields(error):{}),error:error.status?error.message:req.body?.action==='quote'?'Could not refresh the bridge quote. Try again.':'USDT bridge is temporarily unavailable. Your pending transfer remains saved.'})}
 }
 
 // Shared by the authenticated status route and background reconciliation.

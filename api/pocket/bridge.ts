@@ -1,3 +1,4 @@
+import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import {quoteCircleEvmBridge} from '../circle-solana-email.js'
 import {quotePocketSolanaCctpReimbursement} from './solana-cctp-relay.js'
 import { resolvePocketFundingPayment } from './payment-funding.js'
@@ -127,7 +128,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
       return res.json({ok:true,quote})
     } catch (reason) {
       const status = Number((reason as { status?: number }).status) || 503
-      return res.status(status).json({ ok: false, error: { code: status === 401 ? 'AUTH_REQUIRED' : status < 500 ? 'VALIDATION_FAILED' : 'PROVIDER_UNAVAILABLE', message: reason instanceof Error ? reason.message : 'Bridge request failed.', retryable: status >= 500 } })
+      return res.status(status).json({ ok: false, ...(req.body?.action==='quote'?bridgeQuoteErrorFields(reason):{}), error: { code: status === 401 ? 'AUTH_REQUIRED' : status < 500 ? 'VALIDATION_FAILED' : 'PROVIDER_UNAVAILABLE', message: reason instanceof Error ? reason.message : 'Bridge request failed.', retryable: status >= 500 } })
     }
   }
 }

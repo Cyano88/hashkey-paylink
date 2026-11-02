@@ -36,5 +36,5 @@ export async function quoteBridgeMaximum<Q>(input:{balanceUnits:bigint;quote(amo
  }
  if(best){if(best.expiresAt<=now())fail('Max quote expired. Try again.','quote_expired',409);return {...best,balanceUnits:input.balanceUnits,unspentUnits:input.balanceUnits-best.totalUnits}}
  if(high===0n)fail('Your balance is too low to cover this route and its fees.','insufficient_balance')
- fail('Could not verify a spendable Max amount. Refresh the quote.','max_quote_unavailable',503)
+ return fail('Could not verify a spendable Max amount. Refresh the quote.','max_quote_unavailable',503)
 }

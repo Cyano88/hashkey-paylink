@@ -1,3 +1,4 @@
+import {relayBridgeQuoteError} from './bridge-quote-error.js'
 ﻿import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey,SystemProgram,TransactionInstruction} from '@solana/web3.js'
 import {SOLANA_TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID,SOLANA_ASSOCIATED_TOKEN_PROGRAM_ID as ASSOCIATED_TOKEN_PROGRAM_ID} from '../solana-token.js'
@@ -113,6 +114,6 @@ export function validateBscRelayQuote(q:any,i:BscRelayInput,now=Date.now(),polic
 export async function quoteBscRelay(i:BscRelayInput,apiKey:string,fetcher=fetch){
  requireThat(apiKey.trim().length>0,'provider API key required')
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(bscRelayRequest(i)),signal:AbortSignal.timeout(20000)})
- if(!response.ok){const failure=await response.json().catch(()=>null);throw Object.assign(Error([400,422].includes(response.status)&&failure?.errorCode==='AMOUNT_TOO_LOW'?'Amount too small.':response.status===429?'Bridge service is busy. Please try again shortly.':'Bridge service is temporarily unavailable. Please try again.'),{status:[400,422].includes(response.status)&&failure?.errorCode==='AMOUNT_TOO_LOW'?422:response.status===429?429:503})}
+ if(!response.ok)relayBridgeQuoteError(response.status,await response.json().catch(()=>null))
  return validateBscRelayQuote(await response.json(),i,Date.now(),{allowXLayerUsdcRefund:i.source==='bsc'&&i.destination==='xlayer'})
 }

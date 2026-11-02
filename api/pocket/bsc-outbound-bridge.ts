@@ -1,3 +1,4 @@
+import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import {sameBridgeDestination} from '../../src/pocket/lib/pocketBridgeDestination.js'
 import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
@@ -60,10 +61,10 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
     const purpose=cashBridgePurpose(req.body.purpose,req.body.destination);const asset=req.body.asset,amount=req.body.amount
     if(req.body.source!=='bsc'||!isBscBridgeDestination(req.body.destination)||req.body.destination==='arc'&&asset==='USDT'||!['USDC','USDT'].includes(asset)||typeof amount!=='string'||!/^\d{1,12}(\.\d{1,6})?$/.test(amount)||parseUnits(amount,18)<=0n)fail('Enter a valid bridge amount.',400)
     const units=String(parseUnits(amount,18)),balance=await runtime.balance(asset,w.walletAddress)
-    if(balance<=BigInt(units))fail('Insufficient '+asset+' to cover the amount and fee.',422)
+    if(balance<=BigInt(units))throw Object.assign(Error('Insufficient '+asset+' to cover the amount and fee.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance>0n?balance-1n:0n)})
     const route=await quoteBscRelay({asset,source:'bsc',destination:target,sender:w.walletAddress,recipient:w.destinationAddress,amountUnits:units},env.RELAY_API_KEY!,fetcher)
     const q:BscOutboundQuote={...purpose,version:1,id:randomUUID(),...w,source:'bsc',destination:target,asset,from:asset,amountUnits:units,refundOptions:route.refundOptions,minimumOutUnits:route.minimumUnits,receiveUnits:route.receiveUnits,reimbursementUnits:'1',totalInputUnits:String(BigInt(units)+1n),orderId:route.orderId as any,requestId:route.requestId as any,issuedAt:Date.now(),expiresAt:route.expiresAt}
-    for(let n=0;n<3;n++){const fee=await estimate(q,bscOutboundCalls(q));q.expiresAt=Math.min(q.expiresAt,fee.expiresAt);if(BigInt(fee.coverageFeeUnits)<=BigInt(q.reimbursementUnits))break;q.reimbursementUnits=fee.feeUnits;q.totalInputUnits=String(BigInt(units)+BigInt(fee.feeUnits));if(balance<BigInt(q.totalInputUnits))fail('Insufficient '+asset+' to cover the amount and fee.',422);if(n===2)fail('Network fee changed. Review the bridge again.')}
+    for(let n=0;n<3;n++){const fee=await estimate(q,bscOutboundCalls(q));q.expiresAt=Math.min(q.expiresAt,fee.expiresAt);if(BigInt(fee.coverageFeeUnits)<=BigInt(q.reimbursementUnits))break;q.reimbursementUnits=fee.feeUnits;q.totalInputUnits=String(BigInt(units)+BigInt(fee.feeUnits));if(balance<BigInt(q.totalInputUnits))throw Object.assign(Error('Insufficient '+asset+' to cover the amount and fee.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance>BigInt(fee.feeUnits)?balance-BigInt(fee.feeUnits):0n)});if(n===2)fail('Network fee changed. Review the bridge again.')}
     validateBscOutbound(q);return res.json({ok:true,quote:bscOutboundPreview(q),quoteToken:sealBscOutbound(q,seal),sufficientBalance:await runtime.balance(asset,w.walletAddress)>=BigInt(q.totalInputUnits)})
    }
    const q=openBscOutbound(String(req.body.quoteToken||''),userId,seal)
@@ -75,7 +76,7 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
    return res.json(result(await publish(await operations.status(q.id,w))))
   }catch(e){
    if(claimed){const op=await operations.read(claimed.q.id,claimed.q).catch(()=>null);if(op&&op.state!=='prepared')return res.status(202).json(result(op));if(op)return res.status(409).json({ok:false,code:'bridge_not_submitted',error:'Bridge was not submitted. Continue to review it.'});return res.status(503).json({ok:false,error:'Still confirming your bridge.'})}
-   const error=e as Error&{status?:number};return res.status(error.status||503).json({ok:false,error:error.status?error.message:actionMessage(req.body?.action)})
+   const error=e as Error&{status?:number};return res.status(error.status||503).json({ok:false,...(req.body?.action==='quote'?bridgeQuoteErrorFields(error):{}),error:error.status?error.message:actionMessage(req.body?.action)})
   }
  }
  async function reconcile(limit=20){const pending=Object.values((await read())?.operations||{}).filter(o=>['submitting','pending'].includes(o.state)||['completed','failed','refunded'].includes(o.state)&&o.publishedState!==o.state).slice(0,limit);let errors=0;for(const op of pending)try{await publish(await operations.status(op.quote.id,op.quote))}catch{errors++}return {checked:pending.length,errors}}

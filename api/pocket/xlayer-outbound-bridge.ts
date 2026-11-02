@@ -74,7 +74,7 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    if(!isPocketBridgeDestination(target)||target==='arc'&&input.asset==='USDT')invalid()
    const [,w]=await Promise.all([networks(target),d.destination(input.ownerId,target)]),amountUnits=parseUnits(input.amount,6).toString()
    const available=await d.client('xlayer').readContract({address:getAddress(stablecoinAddress('xlayer',input.asset)),abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[input.walletAddress]})
-   if(BigInt(amountUnits)>=available)throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422})
+   if(BigInt(amountUnits)>=available)throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(available>0n?available-1n:0n)})
    if(input.asset==='USDT'&&(LIFI_DESTINATIONS as readonly string[]).includes(target)){
     const lifi=await quoteLifiOutbound({destination:target as typeof LIFI_DESTINATIONS[number],owner:input.walletAddress,recipient:w.address as Hex,amountUnits},d.fetch)
     const binding={ownerId:input.ownerId,walletId:input.walletId,walletAddress:input.walletAddress,asset:input.asset,amountUnits,intentId:randomUUID()}

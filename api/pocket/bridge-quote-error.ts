@@ -18,8 +18,25 @@ export function lifiBridgeQuoteError(status:number,body:any,route:Route):never {
   const a=f?.action
   return f?.tool===route.bridge&&a?.fromChainId===route.sourceChainId&&a?.toChainId===route.destinationChainId&&same(a.fromToken?.address,route.sourceToken)&&same(a.toToken?.address,route.destinationToken)
  }) as any[]
- if(direct.some(f=>f.code==='FEES_HIGHER_THAN_AMOUNT'))throw Object.assign(Error('This amount is too small to cover the bridge fees. Enter a larger amount.'),{status:422})
+ if(direct.some(f=>f.code==='FEES_HIGHER_THAN_AMOUNT'))throw Object.assign(Error('This amount is too small to cover the bridge fees. Enter a larger amount.'),{status:422,code:'amount_too_low'})
  if(status===404&&body?.code===1002)throw Object.assign(Error('No bridge is available for this amount and network pair. Choose another amount or network.'),{status:422})
- if(status===429)throw Object.assign(Error('Bridge service is busy. Please try again shortly.'),{status:429})
- throw Object.assign(Error('Bridge service is temporarily unavailable. Please try again.'),{status:503})
+ if(status===429)throw Object.assign(Error('Bridge service is busy. Please try again shortly.'),{status:429,code:'rate_limited'})
+ throw Object.assign(Error('Bridge service is temporarily unavailable. Please try again.'),{status:503,code:'provider_unavailable'})
+}
+
+/** Preserve actionable quote metadata without exposing arbitrary provider errors. */
+export function bridgeQuoteErrorFields(reason:unknown){
+ const e=reason as {code?:unknown;maximumAmountUnits?:unknown;retryAfter?:unknown}
+ const fields:{code?:string;maximumAmountUnits?:string;retryAfter?:number}={}
+ if(typeof e?.maximumAmountUnits==='string'&&/^(0|[1-9]\d{0,77})$/.test(e.maximumAmountUnits)){fields.maximumAmountUnits=e.maximumAmountUnits;fields.code='insufficient_balance'}
+ if(typeof e?.code==='string'&&['insufficient_balance','amount_too_low','route_unavailable','rate_limited','provider_unavailable','quote_expired','max_quote_unavailable'].includes(e.code))fields.code=e.code
+ if(fields.code==='rate_limited'&&typeof e.retryAfter==='number'&&Number.isFinite(e.retryAfter))fields.retryAfter=Math.max(1,Math.min(300,Math.ceil(e.retryAfter)))
+ return fields
+}
+
+export function relayBridgeQuoteError(status:number,body:any):never{
+ const input=status===400||status===422
+ const code=input&&body?.errorCode==='AMOUNT_TOO_LOW'?'amount_too_low':input&&body?.errorCode==='NO_SWAP_ROUTES_FOUND'?'route_unavailable':status===429?'rate_limited':'provider_unavailable'
+ const message=code==='amount_too_low'?'This amount is below the route minimum. Try a larger amount.':code==='route_unavailable'?'No route is available for this token pair. Choose another token or network.':code==='rate_limited'?'Bridge service is busy. Please try again shortly.':'Bridge quotes are temporarily unavailable. Please try again.'
+ throw Object.assign(Error(message),{status:input&&code!=='provider_unavailable'?422:status===429?429:503,code})
 }

@@ -47,7 +47,7 @@ export async function quoteXLayerReimbursement(binding:XLayerFeeBinding,validate
  const source=structuredClone(validatedCalls)
  let fee='1'
  for(let pass=0;pass<4;pass++){
-  if(availableUnits!==undefined&&BigInt(binding.amountUnits)+(binding.merchantPaymentId?0n:BigInt(fee))>availableUnits)throw Object.assign(Error('Insufficient '+binding.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422})
+  if(availableUnits!==undefined&&BigInt(binding.amountUnits)+(binding.merchantPaymentId?0n:BigInt(fee))>availableUnits)throw Object.assign(Error('Insufficient '+binding.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(binding.merchantPaymentId?availableUnits:availableUnits!>BigInt(fee)?availableUnits!-BigInt(fee):0n)})
   const calls=withReimbursement(source,binding.asset,fee,binding)
   const result=await estimate({...binding,calls:structuredClone(calls)})
   const expiresAt=Math.min(providerExpiresAt,result.expiresAt,issuedAt+30000)

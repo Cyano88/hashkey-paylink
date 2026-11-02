@@ -1,3 +1,4 @@
+import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import {bindXPayFeeQuote} from './xpay.js'
 import {xLayerUsde,xLayerUsdg} from '../../src/pocket/lib/pocketXLayerPaymentAssets.js'
 import {xLayerFeeAssets,type XLayerFeeAsset,xLayerFeeScale} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
@@ -356,6 +357,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       const error = reason as Error & { status?: number }
       return res.status(reserved ? 502 : error.status || 503).json({ok:false,
         code:reserved?'sponsor_outcome_unknown':'pocket_sponsor_not_submitted',
+        ...(!reserved&&req.body?.action==='quote'&&req.body?.purpose==='bridge'?bridgeQuoteErrorFields(error):{}),
         error:reserved?'This transfer could not be confirmed. Check Activity before retrying.':error.status?error.message:req.body?.action==='quote'&&req.body?.purpose==='bridge'?'Could not refresh the bridge quote. Try again.':'Sponsored transfers are temporarily unavailable.',
       })
     }

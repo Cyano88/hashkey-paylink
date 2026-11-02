@@ -1,3 +1,4 @@
+import {relayBridgeQuoteError} from './bridge-quote-error.js'
 ﻿import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey,SystemProgram,TransactionInstruction} from '@solana/web3.js'
 import {SOLANA_TOKEN_PROGRAM_ID as TOKEN_PROGRAM_ID,SOLANA_ASSOCIATED_TOKEN_PROGRAM_ID as ASSOCIATED_TOKEN_PROGRAM_ID} from '../solana-token.js'
@@ -110,6 +111,6 @@ export function validateRelayStablecoinQuote(q:any,i:RelayStablecoinInput,now=Da
 export async function quoteRelayStablecoin(i:RelayStablecoinInput,apiKey:string,fetcher=fetch,policy:RelayStablecoinPolicy={}){
  requireThat(apiKey.trim().length>0,'provider API key required')
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(relayStablecoinRequest(i)),signal:AbortSignal.timeout(20000)})
- requireThat(response.ok,'quote unavailable')
+ if(!response.ok)relayBridgeQuoteError(response.status,await response.json().catch(()=>null))
  return validateRelayStablecoinQuote(await response.json(),i,Date.now(),policy)
 }

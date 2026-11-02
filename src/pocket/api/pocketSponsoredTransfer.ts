@@ -6,7 +6,7 @@ export async function sponsoredTransferRequest(body:unknown,getAccessToken:Depen
  const token=await getAccessToken();if(!token)throw Error('Sign in to Pocket again.')
  const response=await fetcher(pocketApiUrl('/api/pocket/xlayer/sponsorship'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(body),signal:AbortSignal.timeout(40000),cache:'no-store'})
  const result=await response.json().catch(()=>null)
- if(!response.ok||!result?.ok){if(result?.code==='pocket_sponsor_not_submitted'&&((body as {action?:string})?.action!=='status'||response.status===422))throw new SponsoredTransferNotSubmitted(typeof result.error==='string'?result.error:'Transfer was not sent.');throw Error('This transfer is being checked in Activity.')}
+ if(!response.ok||!result?.ok){if((body as {action?:string;purpose?:string})?.action==='quote'&&(body as {purpose?:string}).purpose==='bridge')throw Object.assign(new SponsoredTransferNotSubmitted(typeof result?.error==='string'?result.error:'Bridge quote is unavailable. Try again.'),{status:response.status,code:result?.code,maximumAmountUnits:result?.maximumAmountUnits});if(result?.code==='pocket_sponsor_not_submitted'&&((body as {action?:string})?.action!=='status'||response.status===422))throw new SponsoredTransferNotSubmitted(typeof result.error==='string'?result.error:'Transfer was not sent.');throw Error('This transfer is being checked in Activity.')}
  return result as {appId?:string;walletId?:string;hash?:Hex|null;accepted?:boolean}
 }
 export async function sendSponsoredTransfer(input:{owner:Address;to:Address;data:Hex;attemptId:string;earn?:{action:'approve'|'deposit'|'withdraw';symbol:string;amount:string}},deps:Dependencies):Promise<{hash:Hex}>{
