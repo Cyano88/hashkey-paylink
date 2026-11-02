@@ -17,9 +17,15 @@ $previousPushFlag = $env:VITE_POCKET_PUSH_ENABLED
 $env:VITE_POCKET_PUSH_ENABLED = 'true'
 Push-Location $repoRoot
 try {
+  Get-Command npm.cmd -ErrorAction Stop | Out-Null
+  $ErrorActionPreference = 'Continue'
   & 'npm.cmd' run build:pocket-mobile
+  $ErrorActionPreference = 'Stop'
   if ($LASTEXITCODE -ne 0) { throw "Pocket mobile web build failed with exit code $LASTEXITCODE." }
+  Get-Command npx.cmd -ErrorAction Stop | Out-Null
+  $ErrorActionPreference = 'Continue'
   & 'npx.cmd' cap sync android
+  $ErrorActionPreference = 'Stop'
   if ($LASTEXITCODE -ne 0) { throw "Capacitor Android sync failed with exit code $LASTEXITCODE." }
 } finally {
   Pop-Location
@@ -36,7 +42,10 @@ try {
   $env:POCKET_UPLOAD_KEY_PASSWORD = $password
   Push-Location (Join-Path $repoRoot 'android')
   try {
+    Get-Command '.\gradlew.bat' -ErrorAction Stop | Out-Null
+    $ErrorActionPreference = 'Continue'
     & '.\gradlew.bat' $Task
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw "Gradle $Task failed with exit code $LASTEXITCODE." }
   } finally {
     Pop-Location
