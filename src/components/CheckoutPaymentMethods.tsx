@@ -22,6 +22,7 @@ export default function CheckoutPaymentMethods({children,onStablecoins}:{childre
     {name:'Card',Icon:CreditCardIcon},
     {name:'Google Pay',src:'/brand/payments/google-pay.svg'},
     {name:'Apple Pay',src:'/brand/payments/apple-pay.svg'},
+    {name:'WalletConnect Pay',src:'/brand/payments/walletconnect-pay.svg'},
     {name:'Bank transfer',Icon:BuildingLibraryIcon},
    ]).map(({name,src,Icon})=><button key={name} type="button" disabled aria-label={`${name} — Coming soon`} className="flex min-h-16 w-full cursor-not-allowed items-center gap-3 px-4 py-3 text-left">
     <span aria-hidden="true" className={'flex h-10 w-14 shrink-0 items-center justify-center '+(src?'rounded-lg bg-white':'text-gray-500 dark:text-gray-400')}>
