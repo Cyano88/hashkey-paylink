@@ -138,6 +138,7 @@ function PocketMoveBankContent() {
   }, [direct.result?.intentId])
   const readRoutingSnapshot = useCallback(() => readCachedPocketBalance(balanceOwner(email)), [email])
   const bankLiquidity = usePocketPaymentLiquidityController({
+    owner: email,
     funding: direct.result?.intentId ? {kind:'bank-withdraw',id:direct.result.intentId} : undefined,
     bankPayout: true,
     readRoutingSnapshot,

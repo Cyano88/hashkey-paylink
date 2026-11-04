@@ -14,10 +14,11 @@ import {consumePocketPaymentApproval} from './payment-security.js'
 import {recoverBscUserOperation,findBscUserOperation} from './bsc-user-operation.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
 import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
+import {mutateBscOperationStore} from './bsc-operation-store.js'
 import {readBscDisplayBalances} from './bsc-display-balances.js'
 const key='pocket:bsc-payment-operations:v1'
 const unavailable=():never=>{throw Error('BNB Chain payments are temporarily unavailable.')}
-const dependencies={display:readBscDisplayBalances,env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,readCheckout:readBscCheckout,assertPayable:assertBscCheckoutPayable,settleCheckout:settleBscCheckout,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscPaymentFeeEstimator,settlement:readBscPaymentSettlement}
+const dependencies={display:readBscDisplayBalances,env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateBscOperationStore,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,readCheckout:readBscCheckout,assertPayable:assertBscCheckoutPayable,settleCheckout:settleBscCheckout,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscPaymentFeeEstimator,settlement:readBscPaymentSettlement}
 export function createBscPaymentService(overrides:Partial<typeof dependencies>={}){
  const d={...dependencies,...overrides}
  const env=d.env,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||'',quoteSecret=env.POCKET_SWAP_QUOTE_SECRET||''

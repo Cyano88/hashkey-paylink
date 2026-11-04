@@ -9,6 +9,7 @@ import {decodeFunctionData,getAddress,parseUnits,parseAbi,formatUnits} from 'vie
 import {verifiedPrivyUser,readCircleLink,circleLinkKey} from '../privy-circle-link.js'
 import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
+import {mutateBscOperationStore} from './bsc-operation-store.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {createBscRuntime,bscConfiguredFeePolicy} from './bsc-runtime.js'
 import {createBscBridgeFeeEstimator} from './bsc-bridge-fee-estimator.js'
@@ -30,7 +31,7 @@ export function createBscOutboundService(env:NodeJS.ProcessEnv=process.env,fetch
  const enabled=()=>env.POCKET_BSC_BRIDGE_ENABLED==='true'&&(env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED==='true'||env.POCKET_PRIVY_COMBINED_BILLING_ENABLED==='true')&&!!env.RELAY_API_KEY
  const estimate=createBscBridgeFeeEstimator({rpc:runtime.rpc,policy:bscConfiguredFeePolicy(env),prices:async asset=>{const p=await runtime.readPrices();return {bnb:p.BNB,stable:p[asset]}}})
  const read=()=>readDurableJson<BscBridgeOperationStore>(storeKey)
- const mutate=(fn:(s:BscBridgeOperationStore|undefined)=>BscBridgeOperationStore)=>mutateDurableJson(storeKey,fn)
+ const mutate=(fn:(s:BscBridgeOperationStore|undefined)=>BscBridgeOperationStore)=>mutateBscOperationStore(storeKey,fn)
  const headers={'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')}
  const transaction=async(id:string)=>{if(!/^[a-zA-Z0-9_-]{10,128}$/.test(id))fail('Bridge confirmation is still being verified.');const r=await fetcher('https://api.privy.io/v1/transactions/'+id,{headers,redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)fail('Bridge confirmation is still being verified.');return r.json()}
  const billing=createBscBridgeBillingGuard({now:Date.now,halted:()=>readDurableJson<BscBillingHalt>(haltKey),halt:v=>mutateDurableJson<BscBillingHalt>(haltKey,old=>old||v),transaction,prices:runtime.readPrices})

@@ -1,6 +1,7 @@
 import {readCircleKitTransaction} from './circle-bridge-transaction.js'
 import {createHash} from 'node:crypto'
-import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from '../render-durable-store.js'
+import {hasRenderDurableStore} from '../render-durable-store.js'
+import {readCircleKitActionStore,mutateCircleKitActionStore} from '../circle-pocket-action-journal.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {revalidateCrossBridgeWallets} from './cross-bridge-wallets.js'
 import {createCircleKitOperations,type CircleKitOperationStore} from './circle-bridge-operations.js'
@@ -8,14 +9,16 @@ import {openCircleKitReview,type CircleKitReview} from './circle-bridge-review.j
 
 type ProviderInput={chain:CircleKitReview['input']['source'];userToken:string;walletId:string;walletAddress:string;refId:string}
 type Runtime={durable():boolean;read(key:string):Promise<CircleKitOperationStore|undefined>;mutate(key:string,fn:(s:CircleKitOperationStore|undefined)=>CircleKitOperationStore):Promise<unknown>;approve:typeof consumePocketPaymentApproval;wallets:typeof revalidateCrossBridgeWallets;open:typeof openCircleKitReview;now():number;dispatch(input:ProviderInput&{callData:string;idempotencyKey:string}):Promise<{challengeId?:string}>;recover(input:ProviderInput):Promise<string|null>;transaction(input:ProviderInput&{challengeId:string;callData:string}):Promise<string|null>}
-const defaults:Runtime={durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,approve:consumePocketPaymentApproval,wallets:revalidateCrossBridgeWallets,open:openCircleKitReview,now:Date.now,
+const defaults:Runtime={durable:hasRenderDurableStore,read:readCircleKitActionStore,mutate:mutateCircleKitActionStore,approve:consumePocketPaymentApproval,wallets:revalidateCrossBridgeWallets,open:openCircleKitReview,now:Date.now,
  dispatch:async input=>(await import('../circle-solana-email.js')).createCircleGasStationEvmChallenge(input),
  recover:async input=>(await import('../circle-solana-email.js')).recoverCircleNativeSendChallenge(input),
  transaction:async input=>{const {circleMigrationRequest}=await import('../circle-solana-email.js');const blockchain={base:'BASE',arbitrum:'ARB',ethereum:'ETH',polygon:'MATIC',arc:'ARC'}[input.chain];return readCircleKitTransaction({...input,blockchain},path=>circleMigrationRequest(input.userToken,input.chain,path))}}
 const unavailable=():never=>{throw Object.assign(Error('Bridge recovery storage is unavailable.'),{status:503})}
 /** Server-only. ownerId must come from authenticated identity, not request JSON.
- * preflight MUST check current balance, exact-batch fee coverage and other active
- * wallet actions. No endpoint may mount this before that shared guard is wired. */
+ * preflight MUST check current balance, exact-batch fee coverage and wallet policy.
+ * Default storage atomically excludes journaled send/swap/bridge reservations.
+ * Older dispatch paths and destination settlement still need integration before
+ * any endpoint may expose this controller. */
 export function createCircleKitRuntime(ownerId:string,preflight:(quote:CircleKitReview)=>Promise<void>,overrides:Partial<Runtime>={}){
  if(!ownerId||ownerId.length>256||typeof preflight!=='function')throw Error('Authenticated bridge context is required.')
  const d={...defaults,...overrides},key='pocket:circle-kit-operations:v1:'+createHash('sha256').update(ownerId).digest('hex')

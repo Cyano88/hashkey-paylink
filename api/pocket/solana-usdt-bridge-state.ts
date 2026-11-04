@@ -104,7 +104,7 @@ export function createSolanaUsdtBridgeState(store:SolanaUsdtBridgeStore=durableS
    if(!r.signedTransaction||!r.signature)throw Error('Bridge has not been signed.')
    if(['source_confirmed','source_failed','completed','refunded'].includes(r.phase))return r
    const status=(await rpc.getSignatureStatuses([r.signature],{searchTransactionHistory:true})).value[0]
-   if(status&&['confirmed','finalized'].includes(status.confirmationStatus||'')){
+   if(status?.confirmationStatus==='finalized'){
     return store.update(id,current=>{
      const latest=owned(current,ownerId)
      if(['source_confirmed','source_failed','completed','refunded'].includes(latest.phase))return latest

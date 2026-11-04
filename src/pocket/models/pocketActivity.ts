@@ -43,6 +43,8 @@ export type PocketActivityRow = {
   activityLabel?: string
   direction?: 'in' | 'out'
   recipient?: string
+  destinationAsset?: string
+  receivedAmount?: string
   destinationTxHash?: string
   destination?: string
   bankName?: string

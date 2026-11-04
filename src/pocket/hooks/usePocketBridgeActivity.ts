@@ -1,4 +1,7 @@
+import {readSolanaBridgeReservation} from '../lib/pocketSolanaBridge'
 import {recoverCircleEvmBridgeChallenge} from '../../lib/circleEvmEmailWallet'
+import {readCircleEvmBridgeReservation} from '../../lib/circleEvmEmailWallet'
+import {applyPocketBridgeReservation} from '../lib/pocketBridgeReservation'
 import {activePocketEvmSession} from '../controllers/usePocketWalletController'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { readPendingPocketBridges, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
@@ -38,6 +41,21 @@ export default function usePocketBridgeActivity(input: {
       const token = await current.current.getAccessToken()
       if (current.current.owner !== owner) return
       if (!token) throw new Error('Sign in again to check this transfer.')
+      if(active.source==='solana'&&!active.reservationReleased){
+        const recovered=await readSolanaBridgeReservation(active.id,token)
+        if(current.current.owner!==owner)return
+        active=applyPocketBridgeReservation(active,recovered);savePocketBridgeTransfer(owner,active,localStorage)
+        if(active.progress==='failed')return
+      }
+      if(active.walletAddress&&active.source!=='solana'&&!active.reservationReleased){
+        const session=activePocketEvmSession(owner,active.source,active.walletAddress)??(interactive?await current.current.getEvmSession(active.source,active.walletAddress):null)
+        if(session){
+          const recovered=await readCircleEvmBridgeReservation(session,active.id,token)
+          if(current.current.owner!==owner)return
+          active=applyPocketBridgeReservation(active,recovered);savePocketBridgeTransfer(owner,active,localStorage)
+          if(active.progress==='failed')return
+        }else if(active.managedReservation)return
+      }
       if (active.walletAddress && active.source !== 'solana' && !active.txHash) {
         const session = activePocketEvmSession(owner, active.source, active.walletAddress) ?? await current.current.getEvmSession(active.source, active.walletAddress)
         if (!session) return
@@ -51,14 +69,19 @@ export default function usePocketBridgeActivity(input: {
         const challengeId=active.challengeId!
         const outcome = await readCircleEvmBridgeChallenge(session, challengeId)
         if (current.current.owner !== owner) return
-        if (outcome.failedWithoutTransaction || outcome.sourceFailed) {
+        if (!active.managedReservation&&(outcome.failedWithoutTransaction || outcome.sourceFailed)) {
           savePocketBridgeTransfer(owner, { ...active, progress: 'failed' }, localStorage)
           setMessages(value => ({ ...value, [record.id]: 'The source transfer did not complete. You can start a new bridge.' }))
           return
         }
         const result = outcome.txHash ? {txHash:outcome.txHash} : await reconcileCircleEvmEmailWithdraw({ session, challengeId, timeoutMs: 5_000 })
         if (current.current.owner !== owner) return
-        if (result.txHash) { active = { ...active, txHash: result.txHash, progress: 'submitted' }; savePocketBridgeTransfer(owner, active, localStorage) }
+        if(active.managedReservation){
+          const verified=await readCircleEvmBridgeReservation(session,active.id,token)
+          if(current.current.owner!==owner)return
+          active=applyPocketBridgeReservation(active,verified);savePocketBridgeTransfer(owner,active,localStorage)
+          if(active.progress==='failed')return
+        }else if (result.txHash) { active = { ...active, txHash: result.txHash, progress: 'submitted' }; savePocketBridgeTransfer(owner, active, localStorage) }
       }
       if (!active.txHash) {
         if (interactive) setMessages(value => ({ ...value, [record.id]: 'The submission result is not known yet. Check again or contact support before repeating this transfer.' }))
@@ -97,7 +120,7 @@ export default function usePocketBridgeActivity(input: {
       const records = readPocketBridgeTransfers(owner, localStorage)
       for (const record of records) {
         if (current.current.owner !== owner) break
-        if ((record.txHash || record.challengeId || record.walletAddress) && record.progress !== 'failed' && !(record.progress === 'completed' && record.historySynced)) await check(record, false)
+        if ((record.txHash || record.challengeId || record.walletAddress) && record.progress !== 'failed' && !(record.progress === 'completed' && record.historySynced && record.reservationReleased!==false)) await check(record, false)
       }
     } catch { /* reload reports corrupt local records without claiming failure. */ }
     finally { syncing.current = false; if (current.current.owner === owner) reload() }

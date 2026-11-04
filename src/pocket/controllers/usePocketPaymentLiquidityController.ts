@@ -4,7 +4,10 @@ import { cachedPocketDirectLiquidity } from '../lib/pocketDirectLiquidity'
 import type { PocketBalanceSnapshot } from '../lib/pocketBalanceCache'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatUnits, parseUnits } from 'viem'
-import { bridgeCircleEvmEmailWallet, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
+import { type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
+import {movePocketEvmFunding} from '../lib/pocketEvmFunding'
+import {readFundingAttempt,FUNDING_ATTEMPT_PENDING} from '../lib/pocketFundingAttempt'
+import {savePocketBridgeTransfer} from '../lib/pocketPendingBridge'
 import {
   selectPocketCheckoutRoute,
   POCKET_AUTO_FUNDING_NETWORKS,
@@ -13,7 +16,7 @@ import {
 } from '../../lib/pocketCheckoutRouting'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
 import { readPocketDestinationLiquidity, readPocketBankRoutingLiquidity } from '../api/pocketReadClient'
-import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
+import { movePocketSolanaFunding } from '../lib/pocketSolanaFunding'
 import type { CirclePocketWallet, CirclePocketWallets } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
 
@@ -101,6 +104,7 @@ async function inspectLiquidity(input: {
 }
 
 export default function usePocketPaymentLiquidityController(input: {
+  owner: string
   funding?: PocketFundingReference
   enabled: boolean
   bankPayout?: boolean
@@ -181,7 +185,9 @@ export default function usePocketPaymentLiquidityController(input: {
     try {
       const inspected = await inspect()
       const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null
+      const saved= input.funding ? readFundingAttempt(input.owner,fundingKey,localStorage) : undefined
       let currentRoute = inspected.route
+      if(saved)currentRoute={kind:'bridge',source:saved.source,destination:saved.destination,amountUnits:parseUnits(saved.amount,6),totalSourceUnits:parseUnits(saved.amount,6)}
       if ((checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') && checkpoint.txHash) {
         const checkpointAmountUnits = parseUnits(checkpoint.amount, 6)
         currentRoute = {
@@ -192,7 +198,7 @@ export default function usePocketPaymentLiquidityController(input: {
           totalSourceUnits: checkpointAmountUnits,
         }
       }
-      if(!checkpoint?.txHash && fundingRouteNeedsReview(route,currentRoute)){
+      if(!saved&&!checkpoint?.txHash && fundingRouteNeedsReview(route,currentRoute)){
         setRoute(currentRoute);setWallets(inspected.wallets)
         throw Error('Bridge fee or route changed. Review the updated total before paying.')
       }
@@ -214,7 +220,7 @@ export default function usePocketPaymentLiquidityController(input: {
         if (checkpoint?.phase === 'submitted') {
           await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash: checkpoint.txHash })
         } else if (checkpoint?.phase === 'started') {
-          await input.persistence?.update(inspected.accessToken, { phase: 'failed' })
+          throw Error(FUNDING_ATTEMPT_PENDING)
         }
         setStatus('ready')
         return destinationWallet
@@ -229,7 +235,7 @@ export default function usePocketPaymentLiquidityController(input: {
       let txHash = ''
       let complete = false
       if (activeCheckpoint?.phase === 'started' && !activeCheckpoint.txHash) {
-        await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
+        if(!saved)throw Error(FUNDING_ATTEMPT_PENDING)
         activeCheckpoint = null
       }
       if (activeCheckpoint && activeCheckpoint.phase !== 'failed') {
@@ -238,15 +244,14 @@ export default function usePocketPaymentLiquidityController(input: {
         }
         txHash = activeCheckpoint.txHash
       }
-      if (!txHash) {
+      if (!txHash && !saved) {
         let started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source, destination: currentRoute.destination, amount })
         if (started && !started.claimed && !started.txHash) {
-          await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
-          started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source, destination: currentRoute.destination, amount })
+          throw Error(FUNDING_ATTEMPT_PENDING)
         }
         if (started && !started.claimed) {
           if (started.source !== currentRoute.source || started.amount !== amount || !started.txHash) {
-            throw new Error('Payment timed out. No money was sent. Try again.')
+            throw new Error(FUNDING_ATTEMPT_PENDING)
           }
           txHash = started.txHash
           complete = started.phase === 'completed'
@@ -256,7 +261,9 @@ export default function usePocketPaymentLiquidityController(input: {
         setStatus('moving')
         try {
           txHash = currentRoute.source === 'solana'
-            ? await bridgeCircleSolanaWallet({
+            ? await movePocketSolanaFunding({
+                owner:input.owner,
+                fundingKey,
                 maxTotalUnits:currentRoute.kind==='bridge'?currentRoute.totalSourceUnits:undefined,
                 session: await input.getSolanaSession(sourceWallet.address),
                 destination: currentRoute.destination as 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon',
@@ -264,7 +271,9 @@ export default function usePocketPaymentLiquidityController(input: {
                 amount,
                 accessToken: inspected.accessToken,
               })
-            : await bridgeCircleEvmEmailWallet({
+            : await movePocketEvmFunding({
+                owner:input.owner,
+                fundingKey,
                 maxTotalUnits:currentRoute.kind==='bridge'?currentRoute.totalSourceUnits:undefined,
                 privyAccessToken: inspected.accessToken,
                 session: await input.getEvmSession(currentRoute.source, sourceWallet.address),
@@ -273,10 +282,8 @@ export default function usePocketPaymentLiquidityController(input: {
                 amount,
               })
         } catch (reason) {
-          const message = reason instanceof Error ? reason.message : ''
-          if (!/submitted and is being reconciled|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)) {
-            await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
-          }
+          // Missing responses are not evidence that no transfer was submitted.
+          if((reason as {fundingSourceFailed?:boolean})?.fundingSourceFailed)await input.persistence?.update(inspected.accessToken,{phase:'failed'}).catch(()=>null)
           throw reason
         }
         await input.persistence?.update(inspected.accessToken, { phase: 'submitted', txHash })
@@ -305,6 +312,8 @@ export default function usePocketPaymentLiquidityController(input: {
       }
       if (!complete) throw new Error('USDC move submitted. Pocket will continue automatically.')
       await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash })
+      const tracked=readFundingAttempt(input.owner,fundingKey,localStorage)
+      if(tracked)savePocketBridgeTransfer(input.owner,{...tracked,progress:'completed',destinationTxHash},localStorage)
       setFundingState({key:fundingKey,items:[{source:currentRoute.source,destination:currentRoute.destination,amount,txHash,destinationTxHash,status:'completed'}]})
       void recordPocketBridge({
         funding: input.funding,
@@ -328,7 +337,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setError(message)
       throw reason
     }
-  }, [amountUnits, fundingKey, input.funding?.kind, input.funding?.id, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect, route])
+  }, [amountUnits, fundingKey, input.owner, input.funding?.kind, input.funding?.id, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect, route])
 
   const prepareLiquidity = useCallback(async () => {
     const inspected = await inspect()

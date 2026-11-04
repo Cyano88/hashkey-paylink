@@ -1,8 +1,10 @@
 import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
+import {listDirectCctpPending,acknowledgeDirectCctpDelivery} from './direct-cctp-reservation.js'
+import {listSolanaCctpPending,acknowledgeSolanaCctpDelivery} from './solana-cctp-reservation.js'
 import {quoteCircleEvmBridge} from '../circle-solana-email.js'
 import {quotePocketSolanaCctpReimbursement} from './solana-cctp-relay.js'
 import { resolvePocketFundingPayment } from './payment-funding.js'
-import { verifyPocketBridgeRecord } from './bridge-proof.js'
+import { bridgeCompletionClaim,verifyPocketBridgeRecord } from './bridge-proof.js'
 import type { Request, Response } from 'express'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
@@ -41,16 +43,22 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
       const action = String(req.method === 'GET' ? req.query.action ?? 'status' : req.body?.action ?? 'quote')
       if (action === 'pending' && req.method === 'GET') {
         const actions = await dependencies.listActions(identity.userId, 500, 'wallet.bridge', true)
-        return res.json({ ok: true, pending: actions.filter(item => item.ownerId === identity.userId && item.action === 'wallet.bridge' && !item.metadata?.fundingParent && (item.status === 'started' || item.status === 'submitted')).map(item => ({
+        return res.json({ ok: true, pending: [...await listDirectCctpPending(identity.userId),...await listSolanaCctpPending(identity.userId),...actions.filter(item => item.ownerId === identity.userId && item.action === 'wallet.bridge' && !item.metadata?.fundingParent && (item.status === 'started' || item.status === 'submitted')).map(item => ({
           id: item.id, source: item.metadata?.source, destination: item.metadata?.destination,
           amount: item.metadata?.amount, txHash: item.metadata?.txHash, createdAt: item.createdAt, ...(item.metadata?.purpose==='cash'?{purpose:'cash'}:{}),
-        })) })
+        }))] })
       }
       if (action === 'status') {
         const source = network(req.query.source)
         const txHash = String(req.query.txHash ?? '').trim()
         if (!txHash || txHash.length > 128) throw Object.assign(new Error('A valid source transaction is required.'), { status: 400 })
         const bridge = await readCircleBridgeStatus(source, txHash, dependencies.fetcher)
+        if(isCircleBridgeComplete(bridge.status)){
+          const {destination,amount}=bridgeCompletionClaim(bridge.message)
+          const [from,to]=await Promise.all([dependencies.readLink(circleLinkKey(identity.userId,source,'payment')),dependencies.readLink(circleLinkKey(identity.userId,destination,'payment'))])
+          if(!from||!to)throw Object.assign(Error('Link both Pocket wallets before confirming a bridge.'),{status:403})
+          await dependencies.verifyRecord({source,destination,amount,txHash,sourceAddress:from.circleWalletAddress,destinationAddress:to.circleWalletAddress,destinationTxHash:bridge.destinationTxHash||''},dependencies.fetcher)
+        }
         return res.json({
           ok: true,
           status: bridge.status,
@@ -81,7 +89,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
           dependencies.readLink(circleLinkKey(identity.userId, destination, 'payment')),
         ])
         if (!sourceLink || !destinationLink) throw Object.assign(new Error('Link both Pocket wallets before recording a bridge.'), { status: 403 })
-        await dependencies.verifyRecord({ source, destination, sourceAddress: sourceLink.circleWalletAddress, destinationAddress: destinationLink.circleWalletAddress, amount, txHash }, dependencies.fetcher)
+        await dependencies.verifyRecord({ source, destination, sourceAddress: sourceLink.circleWalletAddress, destinationAddress: destinationLink.circleWalletAddress, amount, txHash, ...(complete?{destinationTxHash}:{}) }, dependencies.fetcher)
         const funding = await dependencies.resolveFunding(identity.userId, req.body?.funding)
         const record = await dependencies.record({
           ownerId: identity.userId,
@@ -106,11 +114,15 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
           metadata: { source, destination, paymentState: record.status === 'completed' ? 'confirmed' : 'submitted' },
           recordedAt: record.updatedAt,
         })
+        if(complete)await acknowledgeDirectCctpDelivery(identity.userId,source,txHash)
+        if(complete)await acknowledgeSolanaCctpDelivery(identity.userId,source,txHash)
         return res.json({ ok: true, id: record.id })
       }
       if (action !== 'quote') throw Object.assign(new Error('Unsupported bridge action.'), { status: 400 })
       const source = network(req.body?.source)
       const destination = network(req.body?.destination)
+      const purpose=req.body?.purpose
+      if(purpose!==undefined&&(purpose!=='cash'||destination!=='base'||req.body?.funding))throw Object.assign(new Error('Invalid Cash funding reference.'),{status:400})
       const transferUnits = parseUsdcAmount(String(req.body?.amount ?? ''))
       const [sourceLink, destinationLink] = await Promise.all([
         dependencies.readLink(circleLinkKey(identity.userId, source, 'payment')),
@@ -120,7 +132,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
       if (!destinationLink) throw Object.assign(new Error(`Open your ${destination} wallet before bridging.`), { status: 409 })
       if(source==='solana'){
         if(destination==='solana')throw Object.assign(Error('Choose a different destination.'),{status:400})
-        const q=await dependencies.solanaQuote(sourceLink.circleWalletAddress,{destination,destinationAddress:destinationLink.circleWalletAddress,amount:formatUsdcUnits(transferUnits)})
+        const q=await dependencies.solanaQuote(sourceLink.circleWalletAddress,{...(purpose==='cash'?{purpose:'cash' as const}:{}),destination,destinationAddress:destinationLink.circleWalletAddress,amount:formatUsdcUnits(transferUnits)})
         const fee=BigInt(q.networkFeeUnits)+BigInt(q.providerFeeUnits)
         return res.json({ok:true,quote:{source,destination,amount:q.amount,receive:q.amount,fee:formatUsdcUnits(fee),total:formatUsdcUnits(transferUnits+fee),destinationAddress:q.destinationAddress,expiresAt:q.expiresAt,quoteToken:q.quoteToken}})
       }

@@ -72,6 +72,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
     refreshBalances: wallets.refreshBalances,
   })
   const paymentLiquidity = usePocketPaymentLiquidityController({
+    owner: email,
     funding: bills.intent ? {kind:'bills',id:bills.intent.id} : undefined,
     enabled: authenticated && bills.status === 'ready' && bills.asset === 'USDC',
     // Bills use the same non-Ethereum funding sources as bank payouts.

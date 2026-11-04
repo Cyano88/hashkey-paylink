@@ -553,7 +553,7 @@ export async function sendCircleSolanaTransfer(params: {
 }
 
 export async function signCircleSolanaTransaction(params: {
-  bridge?: { totalAmount?: string; asset?: 'USDT'; bridgeId?: string; quoteToken?: string; destination: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'; destinationAddress: string; amount: string; accessToken: string }
+  bridge?: { idempotencyKey?:string; reservationVersion?:number; totalAmount?: string; asset?: 'USDT'; bridgeId?: string; quoteToken?: string; destination: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'; destinationAddress: string; amount: string; accessToken: string }
   session: SolanaEmailSession
   rawTransaction: string
   memo: string
@@ -569,7 +569,7 @@ export async function signCircleSolanaTransaction(params: {
   applyHashPayLinkCircleSolanaUi(sdk, params.bridge)
   const challenge = await circleSolanaApi<{ challengeId?: string }>({
     action: params.bridge ? 'signOwnWalletBridge' : 'signPayment',
-    ...(params.bridge ? { asset:params.bridge.asset, bridgeId:params.bridge.bridgeId, walletAddress:params.session.wallet.address, quoteToken:params.bridge.quoteToken, destination: params.bridge.destination, destinationAddress: params.bridge.destinationAddress, amount: params.bridge.amount } : {}),
+    ...(params.bridge ? { idempotencyKey:params.bridge.idempotencyKey, reservationVersion:params.bridge.reservationVersion, asset:params.bridge.asset, bridgeId:params.bridge.bridgeId, walletAddress:params.session.wallet.address, quoteToken:params.bridge.quoteToken, destination: params.bridge.destination, destinationAddress: params.bridge.destinationAddress, amount: params.bridge.amount } : {}),
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     rawTransaction: params.rawTransaction,

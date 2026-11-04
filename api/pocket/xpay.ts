@@ -27,7 +27,7 @@ type Store={merchants:Record<string,Merchant>;payments:Record<string,Payment>;ha
 const normalize=(s?:Store):Store=>({merchants:s?.merchants||{},payments:s?.payments||{},hashes:s?.hashes||{}})
 const read=async()=>normalize(await readDurableJson<Store>(KEY))
 const mutate=(fn:(s:Store)=>void)=>mutateDurableJson<Store>(KEY,current=>{const s=normalize(current);fn(s);return s})
-const fail=(message:string,status=400)=>{throw Object.assign(Error(message),{status})}
+function fail(message:string,status=400):never {throw Object.assign(Error(message),{status})}
 const supported=new Set([...checkoutStablecoins('xlayer'),...stockAssets].map(a=>a.address.toLowerCase()))
 const publicMerchant=({owner,createKey,...m}:Merchant)=>m
 const publicPayment=({receiptEmail,owner,merchantOwner,units,authorizedAt,authorizedBlock,scanBlock,blockHash,blockNumber,...p}:Payment)=>p

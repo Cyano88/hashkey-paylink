@@ -2,6 +2,9 @@ import type { PocketBridgeNetwork } from '../api/pocketBridgeClient'
 
 export type PocketBridgeProgress = 'submitted' | 'arriving' | 'completed' | 'failed' | 'needs_attention'
 export type PocketPendingBridge = {
+  fundingKey?: string
+  managedReservation?: boolean
+  reservationReleased?: boolean
   purpose?: 'cash'
   id: string
   source: PocketBridgeNetwork
@@ -21,7 +24,10 @@ const states = new Set(['submitted', 'arriving', 'completed', 'failed', 'needs_a
 export const POCKET_BRIDGES_UPDATED = 'pocket:bridges-updated'
 export function parsePocketPendingBridge(value: unknown): PocketPendingBridge {
   const item = value as PocketPendingBridge
+  if(item?.fundingKey!==undefined&&(typeof item.fundingKey!=='string'||!item.fundingKey||item.fundingKey.length>2048))throw new Error('Invalid funding reference.')
+  for(const key of ['managedReservation','reservationReleased'] as const){if(item?.[key]!==undefined&&typeof item[key]!=='boolean')throw new Error('Invalid bridge reservation state.')}
   if (!item || typeof item.id !== 'string' || !item.id || !networks.has(item.source) || !networks.has(item.destination) || item.source === item.destination || typeof item.amount !== 'string' || !/^\d+(\.\d{1,6})?$/.test(item.amount) || !Number.isFinite(item.createdAt) || (item.progress !== undefined && !states.has(item.progress))) throw new Error('Bridge details could not be read. Contact Pocket support before repeating this transfer.')
+  if(item.purpose!==undefined&&(item.purpose!=='cash'||item.destination!=='base'))throw new Error('Invalid Cash funding reference.')
   for (const key of ['txHash', 'challengeId', 'walletAddress', 'destinationTxHash'] as const) {
     if (item[key] !== undefined && (typeof item[key] !== 'string' || item[key]!.length > 256)) throw new Error('Bridge details are invalid.')
   }
@@ -60,8 +66,10 @@ export function savePocketBridgeTransfer(owner: string, value: PocketPendingBrid
   if (index < 0) records.push(next)
   else {
     const old = records[index]
-    const progress = old.progress === 'completed' || old.progress === 'failed' ? old.progress : next.progress ?? old.progress
-    records[index] = { ...old, ...next, id: old.id, progress: old.sourceConfirmed && progress === 'submitted' ? old.progress : progress }
+    const authoritativePending=next.managedReservation&&!next.reservationReleased&&!old.reservationReleased&&next.progress!=='failed'
+    const progress = old.progress === 'completed' || old.progress === 'failed'&&!authoritativePending ? old.progress : next.progress ?? old.progress
+    const reservationReleased=old.reservationReleased===true||next.reservationReleased===true?true:old.reservationReleased===false||next.reservationReleased===false?false:undefined
+    records[index] = { ...old, ...next, id: next.managedReservation?next.id:old.id, managedReservation:old.managedReservation||next.managedReservation,reservationReleased, progress: old.sourceConfirmed && progress === 'submitted' ? old.progress : progress }
   }
   storage.setItem(pocketBridgeStorageKey(owner).replace(':v1:', ':v2:'), JSON.stringify(records))
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(POCKET_BRIDGES_UPDATED))

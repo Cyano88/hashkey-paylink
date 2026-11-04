@@ -203,3 +203,89 @@ assert.throws(()=>openSolanaBridgeApproval(expired,{...expected,walletAddress:wa
 assert.doesNotThrow(()=>openSolanaBridgeApproval(expired,{...expected,walletAddress:wallet.publicKey.toBase58()},true))
 console.log('PASS: exact gas reimbursement, no service fee or reserve markup; signed quote and exact transaction integrity; completed signatures required.')
 
+// Exercise endpoint orchestration against the actual reservation engine/journal.
+await import('./pocket-shared-action-reservation-smoke.mjs')
+const journal=await import('../.codex-temp/shared-action-fixture.mjs')
+const {createSolanaCctpReservations}=await import('../api/pocket/solana-cctp-reservation.ts')
+const {randomUUID}=await import('node:crypto')
+const {validatePocketSolanaBridgeSigning}=await import('../.codex-temp/solana-cctp-fixture.mjs')
+const owner=randomUUID(),walletId=randomUUID(),id=randomUUID()
+let sends=0,proof=null,proofError=false
+const reservations=createSolanaCctpReservations({durable:()=>true,claim:journal.claimCirclePocketAction,broadcastClaim:journal.claimSolanaCctpBroadcast,find:journal.findCirclePocketAction,record:journal.recordCirclePocketAction,
+ dispatch:async()=>{sends++;throw Error('Lost relay response')},prove:async()=>{if(proofError)throw Error('RPC unavailable');return proof}})
+const deps={reservations,verifyUser:async req=>({userId:req.owner??owner}),readLink:async key=>key.includes('solana')?{privyUserId:owner,circleWalletId:walletId,circleWalletAddress:wallet.publicKey.toBase58(),chain:'solana',circleBlockchain:'SOL',purpose:'payment'}:{privyUserId:owner,circleWalletAddress:recipient,chain:'base',purpose:'payment'},
+ relay:async()=>{throw Error('Managed path bypassed reservations')},listPending:async()=>{const rows=await journal.listCirclePocketActions(owner,500,'reservation.solana-cctp',true);return rows.map(r=>({walletAddress:r.metadata.walletAddress,reservationReleased:false}))}}
+const prepHandler=createPocketSolanaCctpPrepareHandler(deps),submitHandler=createPocketSolanaCctpSubmitHandler(deps)
+const call=async(handler,body,extra={})=>{const res={statusCode:200,status(code){this.statusCode=code;return this},json(value){this.body=value;return this}};await handler({method:'POST',body,...extra},res);return res}
+const approvedNow={...approval,expiresAt:Date.now()+120000},quoteToken=sealSolanaBridgeApproval(approvedNow)
+const request={...expected,quoteToken,idempotencyKey:id,reservationVersion:1}
+const signed=Transaction.from(Buffer.from(approvedNow.transaction,'base64'));signed.partialSign(wallet)
+const signedRaw=signed.serialize().toString('base64')
+process.env.POCKET_SOLANA_CCTP_RESERVATIONS_ENABLED='true'
+assert.equal((await call(prepHandler,{...expected,quoteToken})).statusCode,400)
+assert.equal((await call(prepHandler,{...request,reservationVersion:0})).statusCode,409)
+assert.equal((await call(submitHandler,{...request,transaction:signedRaw,lastValidBlockHeight:approvedNow.lastValidBlockHeight})).statusCode,409,'submit requires prepare')
+const preparedManaged=await call(prepHandler,request);assert.equal(preparedManaged.statusCode,200,JSON.stringify(preparedManaged.body));assert.equal(preparedManaged.body.managed,true)
+const signParams={...request,reservationVersion:'1',walletId,rawTransaction:approvedNow.transaction}
+await validatePocketSolanaBridgeSigning({body:{}},signParams,deps)
+await assert.rejects(validatePocketSolanaBridgeSigning({body:{}},{...signParams,idempotencyKey:randomUUID()},deps),/binding/)
+const submission={...request,transaction:signedRaw,lastValidBlockHeight:approvedNow.lastValidBlockHeight}
+const responses=await Promise.all([call(submitHandler,submission),call(submitHandler,submission)])
+assert.equal(sends,1);for(const res of responses){assert.equal(res.statusCode,200);assert.equal(res.body.managed,true);assert.equal(res.body.reservationReleased,false)}
+await assert.rejects(validatePocketSolanaBridgeSigning({body:{}},signParams,deps),/already submitted/)
+delete process.env.POCKET_SOLANA_CCTP_RESERVATIONS_ENABLED
+await call(submitHandler,submission);assert.equal(sends,1,'rollback retains managed deduplication')
+assert.equal((await call(submitHandler,{...submission,idempotencyKey:undefined})).statusCode,409,'legacy cannot bypass pending reservation')
+const recover={action:'recover',idempotencyKey:id}
+proofError=true;const pending=await call(submitHandler,recover);assert.equal(pending.body.verificationPending,true);assert.equal(pending.body.txHash,responses[0].body.txHash)
+assert.equal((await call(submitHandler,recover,{owner:'foreign'})).statusCode,500)
+proofError=false;proof={outcome:'source_confirmed',txHash:responses[0].body.txHash,slot:1,blockHash:'fixture'}
+const done=await call(submitHandler,recover);assert.equal(done.body.status,'completed');assert.equal(done.body.reservationReleased,true);assert.equal(sends,1)
+assert.equal((await call(submitHandler,{action:'recover',idempotencyKey:randomUUID()})).body.managed,false)
+console.log('PASS managed Solana endpoints: version gate, prepare before signing/submit, atomic duplicate suppression, lost response, rollback, legacy bypass guard, owner binding, read-only recovery.')
+await build({entryPoints:['api/pocket/solana-cctp-reservation.ts'],outfile:'.codex-temp/solana-inventory-fixture.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'durable-fixture',setup(b){b.onResolve({filter:/render-durable-store\.js$/},a=>/circle-pocket-action-journal\.ts|solana-cctp-reservation\.ts/.test(a.importer)?{path:'store',namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:`const f=globalThis.sharedActionFixture;export const hasRenderDurableStore=f.ready,readDurableJson=f.read,mutateDurableJson=f.mutate;export const writeDurableJson=async()=>{throw Error('Unexpected fallback write')}`,loader:'js'}))}}]})
+const inventory=await import('../.codex-temp/solana-inventory-fixture.mjs')
+const listed=await inventory.listSolanaCctpPending(owner);assert.equal(listed.length,1);assert.equal(listed[0].id,id);assert.equal(listed[0].reservationReleased,true)
+assert.equal((await inventory.listSolanaCctpPending('foreign')).length,0)
+await inventory.acknowledgeSolanaCctpDelivery(owner,'base',done.body.txHash)
+assert.equal((await inventory.listSolanaCctpPending(owner)).length,1)
+await inventory.acknowledgeSolanaCctpDelivery(owner,'solana',done.body.txHash.toLowerCase())
+if(done.body.txHash!==done.body.txHash.toLowerCase())assert.equal((await inventory.listSolanaCctpPending(owner)).length,1,'Solana signatures are case sensitive')
+await inventory.acknowledgeSolanaCctpDelivery(owner,'solana',done.body.txHash)
+assert.equal((await inventory.listSolanaCctpPending(owner)).length,0)
+console.log('PASS Solana inventory: owner isolation, completed source remains discoverable until delivery acknowledgement, exact network and case-sensitive signature.')
+
+
+// Cash is a signed purpose on the ordinary owned Base destination.
+const cashApproval={...approvedNow,purpose:'cash',expiresAt:Date.now()+120000}
+const cashToken=sealSolanaBridgeApproval(cashApproval)
+assert.throws(()=>openSolanaBridgeApproval(cashToken,{...expected,walletAddress:wallet.publicKey.toBase58()}),/purpose changed/)
+assert.throws(()=>openSolanaBridgeApproval(quoteToken,{...expected,walletAddress:wallet.publicKey.toBase58(),purpose:'cash'}),/purpose changed/)
+assert.throws(()=>openSolanaBridgeApproval(sealSolanaBridgeApproval({...cashApproval,destination:'arbitrum'}),{...expected,destination:'arbitrum',walletAddress:wallet.publicKey.toBase58(),purpose:'cash'}),/purpose changed/)
+const cashId=randomUUID(),cashRequest={...request,idempotencyKey:cashId,purpose:'cash',quoteToken:cashToken}
+process.env.POCKET_SOLANA_CCTP_RESERVATIONS_ENABLED='true'
+assert.notEqual((await call(prepHandler,{...cashRequest,purpose:undefined})).statusCode,200)
+assert.equal((await call(prepHandler,{...cashRequest,destination:'arbitrum'})).statusCode,400)
+assert.equal((await call(prepHandler,cashRequest)).statusCode,200)
+await validatePocketSolanaBridgeSigning({body:{}},{...signParams,idempotencyKey:cashId,purpose:'cash',quoteToken:cashToken},deps)
+await assert.rejects(validatePocketSolanaBridgeSigning({body:{}},{...signParams,idempotencyKey:cashId,quoteToken:cashToken},deps),/purpose changed/)
+assert.notEqual((await call(submitHandler,{...submission,idempotencyKey:cashId,quoteToken:cashToken})).statusCode,200)
+proof=null
+assert.equal((await call(submitHandler,{...submission,...cashRequest})).statusCode,200)
+delete process.env.POCKET_SOLANA_CCTP_RESERVATIONS_ENABLED
+assert.equal((await call(submitHandler,{action:'recover',idempotencyKey:cashId})).body.managed,true)
+const cashInventory=await inventory.listSolanaCctpPending(owner)
+assert.equal(cashInventory.find(r=>r.id===cashId).purpose,'cash','Server-only recovery preserves Cash attribution')
+assert.equal(cashInventory.find(r=>r.id===cashId).destination,'base')
+console.log('PASS Cash Solana purpose: sealed quote binding, no adding/removing purpose after approval, Base-only validation, signing/submit consistency and rollback/server-only inventory recovery.')
+
+const {createPocketBridgeHandler}=await import('../api/pocket/bridge.ts')
+let quotedPurpose='unset',quoteCalls=0
+const quoteHandler=createPocketBridgeHandler({verifyUser:deps.verifyUser,readLink:deps.readLink,solanaQuote:async(address,route)=>{quoteCalls++;quotedPurpose=route.purpose;assert.equal(address,wallet.publicKey.toBase58());return {...cashApproval,...route,quoteToken:'fixture'}}})
+assert.equal((await call(quoteHandler,{action:'quote',source:'solana',destination:'base',amount:'1',purpose:'cash'})).statusCode,200)
+assert.equal(quotedPurpose,'cash')
+assert.equal((await call(quoteHandler,{action:'quote',source:'solana',destination:'arbitrum',amount:'1',purpose:'cash'})).statusCode,400)
+assert.equal(quoteCalls,1)
+assert.equal((await call(quoteHandler,{action:'quote',source:'solana',destination:'base',amount:'1'})).statusCode,200)
+assert.equal(quotedPurpose,undefined)
+console.log('PASS quote endpoint: Cash forwarded to sealed Solana quote, non-Base Cash rejected before quote construction, ordinary bridge compatibility retained.')

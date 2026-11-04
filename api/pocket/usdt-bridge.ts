@@ -1,5 +1,8 @@
+import {readBridgeSourceFailure,readBridgeSourceSuccess} from './bridge-source-failure.js'
+import {readEvmBridgeDelivery} from './bridge-evm-delivery.js'
 import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
+import {inboundBridgeRpcUrl} from './inbound-bridge-networks.js'
 import type {Request,Response} from 'express'
 import {lifiRevenueProven,lifiRevenueMetadata} from './lifi-revenue-evidence.js'
 import {quoteEvmSolanaUsdt,solanaUsdtDestinationEnabled,relayUsdtDepositMatches,readEvmSolanaUsdtDelivery} from './evm-solana-usdt-bridge.js'
@@ -19,7 +22,7 @@ import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 const ACTION='wallet.usdt-bridge'
 const chains={base,arbitrum,ethereum:mainnet,polygon}
 const BALANCE=parseAbi(['function balanceOf(address owner) view returns(uint256)'])
-const client=(network:UsdtBridgeNetwork)=>createPublicClient({chain:chains[network],transport:http(process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||undefined,{timeout:15000})})
+const client=(network:UsdtBridgeNetwork)=>createPublicClient({chain:chains[network],transport:http(inboundBridgeRpcUrl(network),{timeout:15000,retryCount:0})})
 const preview=(q:UsdtBridgeQuote)=>{const {callData,ownerId,...value}=q;return value}
 const metadata=(q:UsdtBridgeQuote,quoteToken:string)=>({...cashBridgePurpose(q.purpose,q.destination),...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),intentFingerprint:[q.walletAddress.toLowerCase(),q.source,q.destination,q.amountUnits].join(':'),quoteToken,assetSymbol:'USDT',source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:q.provider})
 
@@ -97,7 +100,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
 }
 
 // Shared by the authenticated status route and background reconciliation.
-const recoveryDefaults={claimAction:claimCirclePocketAction,findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,recoverChallenge:recoverCircleNativeSendChallenge,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
+const recoveryDefaults={sourceSuccess:readBridgeSourceSuccess,sourceFailure:readBridgeSourceFailure,evmDelivery:readEvmBridgeDelivery,claimAction:claimCirclePocketAction,findAction:findCirclePocketAction,recordAction:recordCirclePocketAction,appendLedger:appendPocketMoneyLedgerEvent,recoverChallenge:recoverCircleNativeSendChallenge,readChallenge:readCircleEvmChallenge,readActivity:evmActivity,client,fetch:globalThis.fetch,relayDelivery:readEvmSolanaUsdtDelivery}
 export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input:{txHash?:string;circleUserToken?:string;retireUnsubmitted?:boolean;cancelUnsigned?:boolean}={},overrides:Partial<typeof recoveryDefaults>={}){
   if(quoteToken.startsWith('solana:'))return recoverSolanaUsdtBridge(ownerId,quoteToken.slice(7))
   const deps={...recoveryDefaults,...overrides}
@@ -138,14 +141,23 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
       if(result.status==='failed'){
         const notSubmitted='notSubmitted' in result&&result.notSubmitted===true
         if(result.txHash&&!/^0x[0-9a-f]{64}$/i.test(result.txHash))throw Error('Invalid bridge reference.')
-        await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,...(result.txHash?{txHash:result.txHash}:{}),...(notSubmitted&&!result.txHash?{paymentState:'not_submitted'}:{})}})
-        return notSubmitted&&!result.txHash?{ok:true,status:'not_submitted',reason:'approval_expired'}:{ok:true,status:'failed',txHash:result.txHash}
+        if(notSubmitted&&!result.txHash&&!input.txHash){
+          await deps.recordAction({...existing,status:'failed',metadata:{...meta,paymentState:'not_submitted'}})
+          return {ok:true,status:'not_submitted',reason:'approval_expired'}
+        }
+        const candidate=result.txHash||input.txHash||''
+        if(candidate&&!/^0x[0-9a-f]{64}$/i.test(candidate))throw Error('Invalid bridge reference.')
+        await deps.recordAction({...existing,status:'submitted',metadata:{...meta,sourceFailureCandidate:'true',...(candidate?{txHash:candidate}:{})}})
+        if(!candidate)return {ok:true,status:'pending',challengeId:meta.challengeId}
+        if(await deps.sourceFailure(q,candidate)){
+          await deps.recordAction({...existing,status:'failed',metadata:{...meta,txHash:candidate,paymentState:'source_failed',sourceFailureVerified:'true'}})
+          return {ok:true,status:'failed',txHash:candidate}
+        }
       }
       txHash=result.txHash||''
       awaitingApproval=result.status==='awaiting_approval'
     }
     txHash=txHash||String(input.txHash||'')
-    if(!txHash&&awaitingApproval){if(input.cancelUnsigned){const saved=await deps.recordAction({...existing,status:'cancelled',metadata:{...meta,approvalCancelled:'true'}});return {ok:true,status:saved.metadata?.txHash?'pending':saved.status,txHash:saved.metadata?.txHash}}return {ok:true,status:'awaiting_approval',challengeId:meta.challengeId}}
     if(!txHash){
       const rows=await deps.readActivity(q.source,q.walletAddress,AbortSignal.timeout(8000)).catch(()=>[])
       const hashes=[...new Set(rows.filter(r=>r.assetSymbol==='USDT'&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
@@ -154,9 +166,19 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
         if(receipt&&(q.provider==='relay'?relayUsdtDepositMatches(q,receipt.logs):receipt.logs.some(log=>{if(!sameAddress(log.address,USDT_BRIDGE_ROUTER))return false;try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;return event.eventName==='LiFiTransferStarted'&&event.args.bridgeData.transactionId===q.transactionId}catch{return false}}))){txHash=hash;break}
       }
     }
+    // A stale approval response cannot hide an exact onchain source transaction.
+    // Look for that transaction before allowing cancellation or offering resume.
+    if(!txHash&&awaitingApproval){if(input.cancelUnsigned){const saved=await deps.recordAction({...existing,status:'cancelled',metadata:{...meta,approvalCancelled:'true'}});return {ok:true,status:saved.metadata?.txHash?'pending':saved.status,txHash:saved.metadata?.txHash}}return {ok:true,status:'awaiting_approval',challengeId:meta.challengeId}}
     if(!/^0x[0-9a-f]{64}$/i.test(txHash))return {ok:true,status:awaitingApproval?'awaiting_approval':'pending',challengeId:meta.challengeId,...(!input.circleUserToken&&meta.challengeId?{requiresWalletSession:true}:{}),...(statusUnavailable?{statusUnavailable:true}:{})}
-    const receipt=await deps.client(q.source).getTransactionReceipt({hash:txHash as Hex}).catch(()=>null)
+    let receipt=await deps.client(q.source).getTransactionReceipt({hash:txHash as Hex}).catch(()=>null)
     if(!receipt)return {ok:true,status:'pending',challengeId:meta.challengeId}
+    if(receipt.status==='reverted'||meta.sourceFailureCandidate==='true'){
+      if(await deps.sourceFailure(q,txHash)){
+        await deps.recordAction({...existing,status:'failed',metadata:{...meta,txHash,paymentState:'source_failed',sourceFailureVerified:'true'}})
+        return {ok:true,status:'failed',txHash}
+      }
+    }
+    receipt=await deps.sourceSuccess(q,txHash) as typeof receipt
     const debited=receipt.logs.reduce((sum,log)=>{
       if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.source].address))return sum
       try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.from,q.walletAddress)?BigInt(event.args.value):0n)-(sameAddress(event.args.to,q.walletAddress)?BigInt(event.args.value):0n)}catch{return sum}
@@ -198,17 +220,8 @@ export async function reconcileUsdtBridge(ownerId:string,quoteToken:string,input
     if(delivery.status!=='DONE'||delivery.substatus!=='COMPLETED'||!sameAddress(delivery.sending?.txHash,txHash)||Number(delivery.receiving?.chainId)!==POCKET_USDT_ASSETS[q.destination].chainId)return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const destinationTxHash=String(delivery.receiving?.txHash||'')
     if(!/^0x[0-9a-f]{64}$/i.test(destinationTxHash))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
-    const destinationReceipt=await deps.client(q.destination).getTransactionReceipt({hash:destinationTxHash as Hex}).catch(()=>null)
-    if(!destinationReceipt||!sameAddress(destinationReceipt.transactionHash,destinationTxHash)||destinationReceipt.logs.some(log=>log.removed))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
-    const destinationRpc=deps.client(q.destination)
-    if(await destinationRpc.getChainId()!==POCKET_USDT_ASSETS[q.destination].chainId)return {ok:true,status:'needs_attention',txHash,sourceConfirmed:true}
-    const destinationBlock=await destinationRpc.getBlock({blockNumber:destinationReceipt.blockNumber})
-    if(!sameAddress(destinationBlock.hash,destinationReceipt.blockHash))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
-    const received=destinationReceipt?.status==='success'?destinationReceipt.logs.reduce((sum,log)=>{
-      if(!sameAddress(log.address,POCKET_USDT_ASSETS[q.destination].address))return sum
-      try{const event=decodeEventLog({abi:USDT_TRANSFER_ABI,data:log.data,topics:log.topics}) as any;if(event.eventName!=='Transfer')return sum;return sum+(sameAddress(event.args.to,q.destinationAddress)?BigInt(event.args.value):0n)-(sameAddress(event.args.from,q.destinationAddress)?BigInt(event.args.value):0n)}catch{return sum}
-    },0n):0n
-    if(received<BigInt(q.minimumUnits))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
+    const received=await deps.evmDelivery(q.destination,'USDT',q.destinationAddress,destinationTxHash)
+    if(received===null||received<BigInt(q.minimumUnits))return {ok:true,status:'pending',txHash,sourceConfirmed:true}
     const completed=await deps.recordAction({ownerId:ownerId,idempotencyKey:journalKey,action:ACTION,status:'completed',resourceId:q.id,metadata:{...meta,txHash,destinationTxHash,sourceConfirmed:'true',paymentState:'completed',settledAmountUnits:String(received)}})
     await deps.appendLedger({eventKey:'usdt-bridge:'+q.id+':completed',ownerId:ownerId,executionId:completed.id,rail:'wallet_bridge',state:'completed',asset:'USDT',amount:q.amount,sourceNetwork:q.source,settlementNetwork:q.destination,resourceId:q.id,transactionHash:txHash,metadata:{...lifiRevenueMetadata(q.revenue,q.networkFeeUnits),destinationTxHash,provider:'across',settledAmountUnits:String(received),settledAmount:formatUnits(received,6)},recordedAt:completed.updatedAt})
     return {ok:true,status:'completed',txHash,destinationTxHash,amountOut:formatUnits(received,6),settlement:{network:q.destination,transactionHash:destinationTxHash,amountUnits:String(received)}}

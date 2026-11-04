@@ -213,7 +213,7 @@ async function syncOwnedRoute(identity: VerifiedLinkUser, intentId: string, depe
   const source = existing.metadata?.source
   const txHash = existing.metadata?.txHash || ''
   if ((source !== 'arbitrum' && source !== 'solana' && source !== 'arc' && source !== 'ethereum' && source !== 'polygon') || !txHash) return existing
-  const provider = await dependencies.readBridgeStatus(source, txHash).catch(() => null)
+  const provider = await dependencies.readBridgeStatus(source, txHash,undefined,{ownerId:identity.userId,destination:'base',amount:existing.metadata?.amount||''}).catch(() => null)
   if (!provider) return existing
   if (!isCircleBridgeComplete(provider.status)) return existing
   return dependencies.recordAction({
@@ -478,7 +478,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const txHash = text(req.body?.tx_hash, 128) || existing.metadata?.txHash || ''
         if (phase !== 'failed' && !txHash) return res.status(400).json({ ok: false, error: 'Bank payout routing transaction is required.' })
         if (phase === 'completed') {
-          const provider = await dependencies.readBridgeStatus(existing.metadata?.source as 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon', txHash)
+          const provider = await dependencies.readBridgeStatus(existing.metadata?.source as 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon', txHash,undefined,{ownerId:identity.userId,destination:'base',amount:existing.metadata?.amount||''})
           if (!isCircleBridgeComplete(provider.status)) {
             return res.status(409).json({ ok: false, error: 'Circle has not confirmed this bank payout route yet.' })
           }

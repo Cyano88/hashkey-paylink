@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto'
 import {verifiedPrivyUser} from '../privy-circle-link.js'
 import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
+import {mutateBscOperationStore} from './bsc-operation-store.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {createBscRuntime} from './bsc-runtime.js'
 import {createBscOperations,type BscOperation,type BscOperationStore} from './bsc-operations.js'
@@ -20,7 +21,7 @@ const storeKey='pocket:bsc-operations:v1',haltKey='pocket:bsc-billing-halt:v1'
 const billingKey=(wallet:string)=>'pocket:bsc-billing-snapshot:v1:'+createHash('sha256').update(wallet).digest('hex')
 const unavailable=():never=>{throw Error('BNB Chain swaps are temporarily unavailable.')}
 const defaults={sharedBilling:checkXLayerBillingCoverage,env:process.env,fetcher:fetch,now:Date.now,durable:hasRenderDurableStore,
- read:()=>readDurableJson<BscOperationStore>(storeKey),mutate:(fn:(s:BscOperationStore|undefined)=>BscOperationStore)=>mutateDurableJson(storeKey,fn),
+ read:()=>readDurableJson<BscOperationStore>(storeKey),mutate:(fn:(s:BscOperationStore|undefined)=>BscOperationStore)=>mutateBscOperationStore(storeKey,fn),
  halted:()=>readDurableJson<BscBillingHalt>(haltKey),halt:(v:BscBillingHalt)=>mutateDurableJson<BscBillingHalt>(haltKey,old=>old||v),
  readBilling:(wallet:string)=>readDurableJson<BscBillingSnapshot>(billingKey(wallet)),
  writeBilling:(wallet:string,value:BscBillingSnapshot)=>mutateDurableJson<BscBillingSnapshot>(billingKey(wallet),old=>old&&old.checkedAt>value.checkedAt?old:value),

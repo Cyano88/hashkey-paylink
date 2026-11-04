@@ -41,6 +41,8 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
       if(alias || sameOrder || sameBill){if(!old || candidate.ts<old.ts)old=candidate;rows.delete(key)}
     }
     if(old&&terminalBsc(old)&&durableBsc(row)&&!terminalBsc(row)){rows.set(rowKey(old),old);continue}
+    const finalStatuses=['completed','confirmed','success','successful','paid','failed','refunded','reversed']
+    if(old&&['wallet-withdrawal','wallet-transfer','wallet-swap','wallet-bridge'].includes(old.source||'')&&finalStatuses.includes(old.paycrestStatus||'')&&!finalStatuses.includes(row.paycrestStatus||'')){rows.set(rowKey(old),old);continue}
     if (row.fundingOnly && old && !old.fundingOnly) { rows.set(rowKey(old), {...old,paymentFunding:row.paymentFunding || old.paymentFunding}); continue }
     // The current source owns mutable fields, including removal of refund actions.
     const bank = String(row.source || '').replace(/_/g, '-').startsWith('bank-')

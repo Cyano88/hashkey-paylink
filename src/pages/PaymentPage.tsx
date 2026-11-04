@@ -79,7 +79,9 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
-import { bridgeCircleEvmEmailWallet, canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
+import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
+import {movePocketEvmFunding} from '../pocket/lib/pocketEvmFunding'
+import {movePocketSolanaFunding} from '../pocket/lib/pocketSolanaFunding'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
@@ -100,7 +102,6 @@ import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import { readPocketBankRoutingLiquidity, readPocketDestinationLiquidity } from '../pocket/api/pocketReadClient'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../pocket/api/pocketBridgeClient'
-import { bridgeCircleSolanaWallet } from '../pocket/lib/pocketSolanaBridge'
 import { selectPocketCheckoutRoute, type PocketCheckoutNetwork, type PocketCheckoutRoute } from '../lib/pocketCheckoutRouting'
 import type { CirclePocketWallets } from '../pocket/models/pocketWallet'
 import { POCKET_ORIGIN, POCKET_ROUTES } from '../pocket/lib/pocketRoutes'
@@ -2546,7 +2547,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (!accessToken) throw new Error('Sign in again to move and pay.')
       const amount = formatUnits(route.amountUnits, 6)
       const txHash = route.source === 'solana'
-        ? await bridgeCircleSolanaWallet({
+        ? await movePocketSolanaFunding({
+            owner:privyEmail,
+            fundingKey:(hostedCheckoutId||eventId)?'checkout:'+(hostedCheckoutId||eventId):'',
             maxTotalUnits:route.kind==='bridge'?route.totalSourceUnits:undefined,
             session: {
               userToken: credentials.userToken,
@@ -2558,7 +2561,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             amount,
             accessToken,
           })
-        : await bridgeCircleEvmEmailWallet({
+        : await movePocketEvmFunding({
+            owner:privyEmail,
+            fundingKey:(hostedCheckoutId||eventId)?'checkout:'+(hostedCheckoutId||eventId):'',
             maxTotalUnits:route.kind==='bridge'?route.totalSourceUnits:undefined,
             privyAccessToken: accessToken,
             session: {

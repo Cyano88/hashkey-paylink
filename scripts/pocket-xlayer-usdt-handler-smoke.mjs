@@ -1,3 +1,5 @@
+import {fixtureEvmDelivery} from './fixtures/evm-bridge-delivery.mjs'
+import {fixtureCircleSource} from './fixtures/bridge-circle-source.mjs'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeAbiParameters,encodeEventTopics,parseAbi,parseAbiParameters} from 'viem'
@@ -16,7 +18,7 @@ const log=(network,from,to,units)=>({address:stablecoinAddress(network,'USDT'),d
 function harness(){
  const records=new Map(),receipts=new Map();const ledgerEvents=[];let usdtEnabled=true;let sends=0,ledger=0,lost=false,identity=owner,changed=false,enabled=true,canonical=true,providerStatus='pending'
  const rpc=network=>({getChainId:async()=>network==='base'?8453:196,readContract:async()=>1000000000n,call:async()=>{},getBlock:async()=>({hash:canonical?blockHash:sourceHash}),getTransactionReceipt:async({hash})=>{if(!receipts.has(hash))throw Error('not found');return receipts.get(hash)}})
- const handler=createXLayerBridgeHandler({identity:async()=>({userId:identity}),wallets:async()=>({walletId,walletAddress:sender,destinationAddress:changed?sender:recipient}),now:()=>fixture.now,enabled:async()=>enabled,usdtEnabled:()=>usdtEnabled,apiKey:()=> 'synthetic',client:rpc,
+ const handler=createXLayerBridgeHandler({evmDelivery:fixtureEvmDelivery((n,h)=>receipts.get(h),()=>canonical),sourceSuccess:fixtureCircleSource((n,h)=>receipts.get(h)),identity:async()=>({userId:identity}),wallets:async()=>({walletId,walletAddress:sender,destinationAddress:changed?sender:recipient}),now:()=>fixture.now,enabled:async()=>enabled,usdtEnabled:()=>usdtEnabled,apiKey:()=> 'synthetic',client:rpc,
  quote:async input=>{assert.equal(input.sender,sender);assert.equal(input.recipient,recipient);return route},
  price:input=>quoteEvmBridgeFee(input,async()=> '0.000001',3000n*100000000n,fixture.now),
  find:async(_owner,key)=>records.get(key)||null,list:async()=>[...records.values()],

@@ -15,11 +15,20 @@ function quantity(value:unknown):bigint{
  if(typeof value!=='string'||!/^0x[0-9a-f]{1,64}$/i.test(value))return invalid()
  return BigInt(value)
 }
-/** Server-built calls only. Default batch execution reverts all calls on failure. */
-export function encodeXLayerSponsoredBatch(calls:XLayerCall[]):Hex{
- if(!Array.isArray(calls)||!calls.length||calls.length>12||calls.some(c=>!isAddress(c.to)||c.value!=='0x0'||!/^0x(?:[0-9a-f]{2})*$/i.test(c.data)))return invalid()
- const data=encodeAbiParameters([{type:'tuple[]',components:[{name:'target',type:'address'},{name:'value',type:'uint256'},{name:'callData',type:'bytes'}]}],[calls.map(c=>({target:c.to,value:0n,callData:c.data}))])
+export type PrivyValueCall={to:Hex;data:Hex;value:Hex}
+/** Explicit native-value encoding for server-validated plans. Kernel default
+ * execution is atomic; never substitute try-execute or drop call values. */
+export function encodePrivyValueBatch(calls:PrivyValueCall[]):Hex{
+ if(!Array.isArray(calls)||!calls.length||calls.length>12||calls.some(c=>!c||!isAddress(c.to)||!/^0x(?:0|[1-9a-f][0-9a-f]{0,63})$/i.test(c.value)||!/^0x(?:[0-9a-f]{2})*$/i.test(c.data)))return invalid()
+ const total=calls.reduce((sum,c)=>sum+BigInt(c.value),0n)
+ if(total>=2n**256n)return invalid()
+ const data=encodeAbiParameters([{type:'tuple[]',components:[{name:'target',type:'address'},{name:'value',type:'uint256'},{name:'callData',type:'bytes'}]}],[calls.map(c=>({target:c.to,value:BigInt(c.value),callData:c.data}))])
  return encodeFunctionData({abi:kernelAbi,functionName:'execute',args:[('0x01'+'00'.repeat(31)) as Hex,data]})
+}
+/** Preserve the existing zero-value boundary for all legacy callers. */
+export function encodeXLayerSponsoredBatch(calls:XLayerCall[]):Hex{
+ if(!Array.isArray(calls)||calls.some(c=>!c||c.value!=='0x0'))return invalid()
+ return encodePrivyValueBatch(calls)
 }
 /** Read-only simulation, not a Privy billing quote. No signing or broadcasting. */
 export async function estimateXLayerSponsoredBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:XLayerCall[]){
@@ -27,6 +36,13 @@ export async function estimateXLayerSponsoredBatchGas(rpc:XLayerCostRpc,wallet:H
 }
 /** Shared Privy Kernel simulation; each caller must supply its fixed network. */
 export async function estimatePrivySponsoredBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:XLayerCall[],chainId:56|196){
+ return estimatePrivyBatchCallDataGas(rpc,wallet,encodeXLayerSponsoredBatch(calls),chainId)
+}
+/** Native principal is supplied by the wallet, never by a balance override. */
+export async function estimatePrivyValueBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:PrivyValueCall[],chainId:56|196){
+ return estimatePrivyBatchCallDataGas(rpc,wallet,encodePrivyValueBatch(calls),chainId)
+}
+async function estimatePrivyBatchCallDataGas(rpc:XLayerCostRpc,wallet:Hex,callData:Hex,chainId:56|196){
  if(![56,196].includes(chainId)||!isAddress(wallet)||await rpc('eth_chainId',[])!=='0x'+chainId.toString(16))return invalid()
  const code=await rpc('eth_getCode',[wallet,'latest'])
  const requiresDelegation=code==='0x'
@@ -39,7 +55,6 @@ export async function estimatePrivySponsoredBatchGas(rpc:XLayerCostRpc,wallet:He
  }
  const nonce=await rpc('eth_call',[{to:XLAYER_ENTRY_POINT,data:encodeFunctionData({abi:entryPoint07Abi,functionName:'getNonce',args:[wallet,0n]})},'latest'])
  quantity(nonce)
- const callData=encodeXLayerSponsoredBatch(calls)
  const result=await rpc('eth_estimateUserOperationGas',[{sender:wallet,nonce,callData,callGasLimit:'0x0',verificationGasLimit:'0x0',preVerificationGas:'0x0',maxFeePerGas:'0x0',maxPriorityFeePerGas:'0x0',signature:stub},XLAYER_ENTRY_POINT,...(requiresDelegation?[{[wallet]:{code:'0xef0100'+kernel.slice(2)}}]:[])])
  const callGas=quantity(result?.callGasLimit),verificationGas=quantity(result?.verificationGasLimit),preVerificationGas=quantity(result?.preVerificationGas)
  if(callGas===0n||verificationGas===0n||preVerificationGas===0n||callGas+verificationGas+preVerificationGas>10000000n)return invalid()

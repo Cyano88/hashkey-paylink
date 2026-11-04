@@ -113,6 +113,7 @@ function PocketCircleSendPage() {
   }) : undefined, [requestId])
   const sameChainOnly = network === 'arc' || network === 'ethereum' || network === 'polygon'
   const requestLiquidity = usePocketPaymentLiquidityController({
+    owner: email,
     funding: requestId ? {kind:'request',id:requestId} : undefined,
     enabled: !sameChainOnly && Boolean(paymentRequest?.status === 'accepted' && resolved && !requestConfirmed && !paymentTxHash),
     amount: paymentRequest?.amount ?? '',

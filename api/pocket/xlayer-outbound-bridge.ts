@@ -1,6 +1,9 @@
+import {readSponsoredBridgeSource} from './bridge-sponsored-source.js'
+import {encodeXLayerSponsoredBatch} from './xlayer-sponsored-cost.js'
 import {validBridgeDestination,isPocketBridgeDestination,sameBridgeDestination} from '../../src/pocket/lib/pocketBridgeDestination.js'
 import {arcChain} from '../../src/lib/chains.js'
 import {readSolanaBridgeDelivery} from './bridge-solana-delivery.js'
+import {readEvmBridgeDelivery,readCanonicalEvmBridgeReceipt} from './bridge-evm-delivery.js'
 import {cashBridgePurpose} from '../../src/pocket/lib/pocketCashBridgePurpose.js'
 import {quoteLifiOutbound,lifiSourceProven,lifiDelivery} from './lifi-outbound-bridge.js'
 import {lifiOutboundCalls,LIFI_DESTINATIONS,type LifiOutboundPlan,type OutboundDestination} from '../../src/pocket/lib/pocketLifiOutbound.js'
@@ -13,7 +16,7 @@ import {base,xLayer,arbitrum,mainnet,polygon} from 'viem/chains'
 import {readCircleLink,circleLinkKey} from '../privy-circle-link.js'
 import {quoteRelayStablecoin,RELAY_STABLECOIN_CHAINS,stablecoinAddress,type RelayStablecoinRefund} from './xlayer-bridge-provider.js'
 import {quoteXLayerReimbursement,openXLayerReimbursement,sealXLayerReimbursement,refreshXLayerReimbursement,type XLayerFeeQuote,type XLayerFeeEstimator,type XLayerReimbursementPolicy} from './xlayer-reimbursement.js'
-import {evmStablecoinDelta,xlayerBridgeSourceProven,xlayerBridgeDeliveryCandidate,xlayerBridgeDeliveryProven} from './xlayer-bridge-evidence.js'
+import {xlayerBridgeSourceProven,xlayerBridgeDeliveryCandidate,xlayerBridgeDeliveryProven} from './xlayer-bridge-evidence.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
 export type XLayerOutboundQuote={purpose?:'cash';version:1;source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;destinationWalletId:string;destinationAddress:string;orderId:Hex;requestId:Hex;receiveUnits:string;minimumUnits:string;refundOptions:RelayStablecoinRefund[];conversion?:XLayerBridgeConversion;fee:XLayerFeeQuote}
@@ -49,23 +52,19 @@ export function openOutboundBridge(token:string,owner:string){
  const q=JSON.parse(Buffer.from(body,'base64url').toString()) as XLayerOutboundQuote;check(q,owner);return q
 }
 export function outboundBridgePreview(q:XLayerOutboundQuote){return {...(q.purpose?{purpose:q.purpose}:{}),id:q.fee.intentId,rail:'xlayer' as const,execution:'privy' as const,...(q.lifi?{lifi:q.lifi}:{}),...(q.conversion?{conversion:q.conversion,refundOptions:q.refundOptions}:{}),walletAddress:q.fee.walletAddress,orderId:q.orderId,source:q.source,destination:q.destination,asset:q.fee.asset,amount:formatUnits(BigInt(q.fee.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),networkFee:formatUnits(BigInt(q.fee.networkFeeUnits),6),fee:formatUnits(BigInt(q.fee.totalUnits)-BigInt(q.receiveUnits),6),total:formatUnits(BigInt(q.fee.totalUnits),6),expiresAt:q.fee.expiresAt,destinationAddress:q.destinationAddress}}
+import {inboundBridgeRpcUrl} from './inbound-bridge-networks.js'
 const chainMap={base,xlayer:xLayer,arbitrum,ethereum:mainnet,polygon,arc:arcChain}
 const client=(network:Exclude<OutboundDestination,'solana'>|'xlayer')=>{
- const url=process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||(network==='base'?process.env.PRIVATE_RPC_URL:network==='arbitrum'?process.env.PRIVATE_RPC_URL_ARB:undefined)
+ const url=inboundBridgeRpcUrl(network)
  const fallback=network==='ethereum'?'https://ethereum-rpc.publicnode.com':network==='polygon'?'https://polygon-bor-rpc.publicnode.com':undefined
  const transport=http(url||fallback,{timeout:15000,retryCount:0})({chain:chainMap[network]})
  return createPublicClient({chain:chainMap[network],transport:custom({request:({method,params}:any)=>transport.request({method,params:params??[]})},{retryCount:0})})
 }
 const destination=async(owner:string,network:OutboundDestination='base')=>{const w=await readCircleLink(circleLinkKey(owner,network,'payment'));if(!w)throw Object.assign(Error('Open your '+network+' wallet to continue.'),{status:409});if(!validBridgeDestination(network,w.circleWalletAddress))invalid();return {id:w.circleWalletId,address:network==='solana'?w.circleWalletAddress:getAddress(w.circleWalletAddress)}}
-const defaults={client,destination,route:quoteRelayStablecoin,convert:quoteXLayerBridgeSwap,fetch:globalThis.fetch,now:Date.now,solanaDelivery:readSolanaBridgeDelivery,apiKey:()=>process.env.RELAY_API_KEY||''}
+const defaults={sourceProof:readSponsoredBridgeSource,client,destination,route:quoteRelayStablecoin,convert:quoteXLayerBridgeSwap,fetch:globalThis.fetch,now:Date.now,solanaDelivery:readSolanaBridgeDelivery,evmDelivery:readEvmBridgeDelivery,deliveryReceipt:readCanonicalEvmBridgeReceipt,apiKey:()=>process.env.RELAY_API_KEY||''}
 export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  const networks=async(network:OutboundDestination='base')=>{const [sourceId,destinationId]=await Promise.all([d.client('xlayer').getChainId(),network==='solana'?Promise.resolve(null):d.client(network).getChainId()]);if(sourceId!==196||network!=='solana'&&destinationId!==chainMap[network].id)invalid()}
- const receipt=async(network:Exclude<OutboundDestination,'solana'>|'xlayer',txHash:Hex)=>{
-  const rpc=d.client(network);if(await rpc.getChainId()!==chainMap[network].id)invalid()
-  const r=await rpc.getTransactionReceipt({hash:txHash}).catch(()=>null);if(!r)return null
-  const block=await rpc.getBlock({blockNumber:r.blockNumber});return same(r.transactionHash,txHash)&&same(block.hash,r.blockHash)?r:null
- }
  return {
   async quote(input:{purpose?:'cash';ownerId:string;walletId:string;walletAddress:Hex;asset:'USDC'|'USDT';amount:string;destination?:OutboundDestination},estimate:XLayerFeeEstimator,pricing:XLayerReimbursementPolicy){
    if(!['USDC','USDT'].includes(input.asset)||!/^\d{1,12}(\.\d{1,6})?$/.test(input.amount)||parseUnits(input.amount,6)<=0n)invalid()
@@ -105,15 +104,14 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    if(!r.ok)return null
    const status=await r.json()
    if(status.originChainId!==196||!Array.isArray(status.inTxHashes)||status.inTxHashes.length!==1||!hash(status.inTxHashes[0]))return null
-   const candidate=status.inTxHashes[0] as Hex,source=await receipt('xlayer',candidate)
+   const candidate=status.inTxHashes[0] as Hex,proof=await d.sourceProof('xlayer',candidate,{owner:q.fee.walletAddress,callData:encodeXLayerSponsoredBatch(q.fee.calls)}),source=proof.receipt
    const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
-   return source&&xlayerBridgeSourceProven(binding,source,candidate)?candidate:null
+   return proof.outcome==='completed'&&xlayerBridgeSourceProven(binding,source,candidate)?candidate:null
   },
   async status(q:XLayerOutboundQuote,sourceHash:Hex){
-   const source=await receipt('xlayer',sourceHash)
-   if(!source)return {status:'pending' as const}
-   if(source.status==='reverted')return {status:'failed' as const}
-   if(q.lifi){if(!lifiSourceProven(q.lifi,q.fee.networkFeeUnits,source,sourceHash))return {status:'needs_attention' as const};return lifiDelivery(q.lifi,sourceHash,receipt,d.fetch)}
+   const {receipt:source,outcome}=await d.sourceProof('xlayer',sourceHash,{owner:q.fee.walletAddress,callData:encodeXLayerSponsoredBatch(q.fee.calls)})
+   if(outcome==='failed')return {status:'failed' as const}
+   if(q.lifi){if(!lifiSourceProven(q.lifi,q.fee.networkFeeUnits,source,sourceHash))return {status:'needs_attention' as const};return lifiDelivery(q.lifi,sourceHash,d.deliveryReceipt,d.fetch)}
    if(q.fee.asset!=='USDC'&&q.fee.asset!=='USDT')return {status:'needs_attention' as const}
    const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,refundOptions:q.refundOptions,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
    if(!xlayerBridgeSourceProven(binding,source,sourceHash))return {status:'needs_attention' as const}
@@ -124,9 +122,8 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    const candidate=xlayerBridgeDeliveryCandidate(binding,sourceHash,status,requests)
    if(candidate.status!=='verify_delivery')return candidate
    if(candidate.network!==q.destination&&candidate.network!=='xlayer')return {status:'needs_attention' as const}
-   const delivered=candidate.network==='solana'?null:await receipt(candidate.network as Exclude<OutboundDestination,'solana'>|'xlayer',candidate.hash as Hex)
-   if(candidate.network!=='solana'&&!delivered)return {status:'pending' as const,sourceConfirmed:true}
-   const delta=candidate.network==='solana'?await d.solanaDelivery(candidate.asset,candidate.recipient,candidate.hash):evmStablecoinDelta(delivered!,candidate.network,candidate.asset,candidate.recipient,candidate.hash)
+   const delta=candidate.network==='solana'?await d.solanaDelivery(candidate.asset,candidate.recipient,candidate.hash):await d.evmDelivery(candidate.network,candidate.asset,candidate.recipient,candidate.hash)
+   if(delta===null)return {status:'pending' as const,sourceConfirmed:true}
    if(!xlayerBridgeDeliveryProven(candidate,delta))return {status:'needs_attention' as const}
    return {status:candidate.outcome,destinationTxHash:candidate.hash,sourceConfirmed:true,...(candidate.outcome==='refunded'?{refundAsset:candidate.asset,refundNetwork:candidate.network,refundAmount:formatUnits(delta!,6)}:{cashReceivedAmount:formatUnits(delta!,6)})}
   },

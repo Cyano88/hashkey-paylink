@@ -1,3 +1,4 @@
+import {fixtureCircleSource} from './fixtures/bridge-circle-source.mjs'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {Keypair} from '@solana/web3.js'
@@ -18,7 +19,7 @@ try{
  await assert.rejects(()=>quoteEvmSolanaUsdt({...quoted,source:'polygon'}))
 }finally{Date.now=realNow}
 const wallet='0x'+'11'.repeat(20),hash='0x'+'22'.repeat(32),order='0x'+'33'.repeat(32),requestId='0x'+'44'.repeat(32),outHash='3'.repeat(88),recipient=Keypair.generate().publicKey.toBase58()
-const q={id:'relay-test',ownerId:'owner',walletId:'wallet',walletAddress:wallet,destinationAddress:recipient,source:'arbitrum',destination:'solana',provider:'relay',requestId,transactionId:order,amount:'1',amountUnits:'1000000',receive:'0.78',minimumReceive:'0.775',minimumUnits:'775000',fee:'0.223',networkFeeUnits:'3000',totalUnits:'1003000',total:'1.003',reimbursementTreasury:EVM_PLATFORM_TREASURY,expiresAt:Date.now()-1000,callData:'0x'}
+const q={id:'relay-test',ownerId:'owner',walletId:'wallet',walletAddress:wallet,destinationAddress:recipient,source:'arbitrum',destination:'solana',provider:'relay',requestId,transactionId:order,amount:'1',amountUnits:'1000000',receive:'0.78',minimumReceive:'0.775',minimumUnits:'775000',fee:'0.223',networkFeeUnits:'3000',totalUnits:'1003000',total:'1.003',reimbursementTreasury:EVM_PLATFORM_TREASURY,expiresAt:Date.now()-1000,callData:'0x12345678'}
 const deposit={address:RELAY_USDT_CHAINS.arbitrum.depository,topics:encodeEventTopics({abi:RELAY_DEPOSIT_EVENT,eventName:'RelayErc20Deposit'}),data:encodeAbiParameters(RELAY_DEPOSIT_EVENT[0].inputs,[wallet,POCKET_USDT_ASSETS.arbitrum.address,1000000n,order])}
 assert.equal(relayUsdtDepositMatches(q,[deposit]),true)
 for(const altered of [{...q,transactionId:hash},{...q,amountUnits:'2'},{...q,walletAddress:'0x'+'55'.repeat(20)}])assert.equal(relayUsdtDepositMatches(altered,[deposit]),false)
@@ -38,7 +39,7 @@ const transfer=(to,amount)=>({address:POCKET_USDT_ASSETS.arbitrum.address,topics
 const receipt={status:'success',blockNumber:1n,blockHash:hash,logs:[deposit,transfer(RELAY_USDT_CHAINS.arbitrum.depository,1000000n),transfer(EVM_PLATFORM_TREASURY,3000n)]}
 const token=sealUsdtBridgeQuote(q),initial={id:'record',status:'submitted',metadata:{quoteToken:token},updatedAt:Date.now()}
 let stored,ledger=[],deliveryStatus='completed'
-const recovery={findAction:async()=>stored,recordAction:async value=>(stored={...stored,...value}),appendLedger:async value=>ledger.push(value),readActivity:async()=>[{assetSymbol:'USDT',direction:'out',ts:Date.now(),txHash:hash}],client:()=>({getTransactionReceipt:async()=>receipt,getChainId:async()=>42161,getBlock:async()=>({hash})}),relayDelivery:async()=>({status:deliveryStatus,settlement:{network:'solana',transactionHash:outHash,amountUnits:'780000'}})}
+const recovery={sourceSuccess:fixtureCircleSource(()=>receipt),findAction:async()=>stored,recordAction:async value=>(stored={...stored,...value}),appendLedger:async value=>ledger.push(value),readActivity:async()=>[{assetSymbol:'USDT',direction:'out',ts:Date.now(),txHash:hash}],client:()=>({getTransactionReceipt:async()=>receipt,getChainId:async()=>42161,getBlock:async()=>({hash})}),relayDelivery:async()=>({status:deliveryStatus,settlement:{network:'solana',transactionHash:outHash,amountUnits:'780000'}})}
 stored=structuredClone(initial);assert.equal((await reconcileUsdtBridge('owner',token,{},recovery)).status,'completed');assert.equal(ledger[0].settlementNetwork,'solana');assert.equal(stored.metadata.provider,'relay')
 await reconcileUsdtBridge('owner',token,{},recovery);assert.equal(ledger.length,2)
 stored=structuredClone(initial);deliveryStatus='refunded';assert.equal((await reconcileUsdtBridge('owner',token,{txHash:hash},recovery)).status,'refunded');assert.equal(ledger.at(-1).state,'refunded')

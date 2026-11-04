@@ -14,7 +14,8 @@ export const circleKitCostReaders:Dependencies={now:Date.now,wallets:revalidateC
  estimate:async(q,userToken)=>(await import('../circle-solana-email.js')).estimateCircleOwnedEvmBatch({chain:q.input.source,userToken,walletId:q.wallets.source.walletId,walletAddress:q.wallets.source.address,callData:q.callData}),
 }
 /** Internal only: q must already have passed openCircleKitReview. Does not mutate
- * the approved batch or dispatch. The runtime still needs a shared action guard. */
+ * the approved batch or dispatch. The policy guard is an early check; the default
+ * runtime also reserves atomically against journaled actions before dispatch. */
 export function createCircleKitPreflight(userToken:string,guard:(q:CircleKitReview)=>Promise<void>,overrides:Partial<Dependencies>={}){
  const d={...circleKitCostReaders,...overrides}
  if(!userToken||userToken.length>8000||typeof guard!=='function')throw Error('Unlock Pocket to review this bridge.')

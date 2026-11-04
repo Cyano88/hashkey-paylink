@@ -13,9 +13,10 @@ import {consumePocketPaymentApproval} from './payment-security.js'
 import {recoverBscUserOperation,findBscUserOperation} from './bsc-user-operation.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
 import {recordCirclePocketAction} from '../circle-pocket-action-journal.js'
+import {mutateBscOperationStore} from './bsc-operation-store.js'
 const key='pocket:bsc-send-operations:v1'
 const unavailable=():never=>{throw Error('BNB Chain sends are temporarily unavailable.')}
-const dependencies={env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateDurableJson,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscSendFeeEstimator,settlement:readBscSendSettlement}
+const dependencies={env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateBscOperationStore,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscSendFeeEstimator,settlement:readBscSendSettlement}
 export function createBscSendService(overrides:Partial<typeof dependencies>={}){
  const d={...dependencies,...overrides}
  const env=d.env,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||'',quoteSecret=env.POCKET_SWAP_QUOTE_SECRET||''

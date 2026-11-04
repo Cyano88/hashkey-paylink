@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { activePocketEvmSession, activePocketSolanaSession, restorePocketSolanaSession, connectFreshEvmSession } from '../controllers/usePocketWalletController'
 import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
 import { refreshPocketWalletSnapshot } from './usePocketWallets'
-import { migrateLegacySends, readSendAttempts, updateSendAttempt } from '../lib/pocketSendAttempts'
+import { migrateLegacySends, readSendAttempts, updateSendAttempt, POCKET_SENDS_UPDATED } from '../lib/pocketSendAttempts'
 import { reconcileCircleEvmEmailWithdraw } from '../../lib/circleEvmEmailWallet'
 import { reconcileCircleSolanaTransfer } from '../../lib/circleSolanaEmailWallet'
 import { EVM_CLIENTS } from '../../lib/router'
@@ -25,7 +25,7 @@ export default function usePocketSendRecovery(input:{authenticated:boolean;email
     for(const r of records){
      if(!valid())return
      try{
-      let result:{state:'confirmed'|'submitted';txHash:string|null}|undefined
+      let result:{state:'confirmed'|'submitted';txHash:string|null;transactionId?:string}|undefined
       if(r.network!=='solana'){
        if(r.txHash){const receipt=await EVM_CLIENTS[r.network].getTransactionReceipt({hash:r.txHash as `0x${string}`});if(!valid())return;updateSendAttempt(owner,r.idempotencyKey,{state:receipt.status==='success'?'confirmed':'failed',error:receipt.status==='success'?'':'Transfer reverted.'});changed=true;continue}
        const session=activePocketEvmSession(owner,r.network,r.sourceAddress) ?? await connectFreshEvmSession(owner,r.network,r.sourceAddress,current.current.getAccessToken).catch(()=>null)
@@ -37,6 +37,11 @@ export default function usePocketSendRecovery(input:{authenticated:boolean;email
        if(session&&r.challengeId){const accessToken=await current.current.getAccessToken();if(!valid())return;result=await reconcileCircleSolanaTransfer({session,accessToken:accessToken||'',challengeId:r.challengeId,transactionId:r.transactionId,timeoutMs:2500})}
       }
       if(!valid())return
+      if(result){
+       const ids={...(result.transactionId?{transactionId:result.transactionId}:{}),...(result.txHash?{txHash:result.txHash}:{})}
+       if(r.transactionId&&ids.transactionId&&r.transactionId!==ids.transactionId||r.txHash&&ids.txHash&&r.txHash!==ids.txHash)throw Error('Transfer reference changed.')
+       if(ids.transactionId&&ids.transactionId!==r.transactionId||ids.txHash&&ids.txHash!==r.txHash){updateSendAttempt(owner,r.idempotencyKey,{...ids});changed=true}
+      }
       if(result?.state==='confirmed'&&result.txHash){updateSendAttempt(owner,r.idempotencyKey,{state:'confirmed',txHash:result.txHash});changed=true}
      }catch(e){if(!valid())return;if((e as {terminalFailure?:boolean})?.terminalFailure){if(r.network==='solana'){const hash=r.txHash||(r.challengeId.startsWith('relay:')?r.challengeId.slice(6):'');if(hash)clearConfirmedSolanaRelay(r.sourceAddress,hash)}updateSendAttempt(owner,r.idempotencyKey,{state:'failed',error:e instanceof Error?e.message:'Transfer failed.'});changed=true}}
     }
@@ -60,10 +65,10 @@ export default function usePocketSendRecovery(input:{authenticated:boolean;email
         if(['delivered','failed','refunded'].includes(next.state)){localStorage.removeItem(key);const pointer=key.split(':attempt:')[0];if(JSON.parse(localStorage.getItem(pointer)||'null')?.intentId===saved.intentId)localStorage.removeItem(pointer);changed=true}
       }catch{/* Keep the payment pending when its status service cannot answer. */}
     }
-    if(changed&&valid()){void refreshPocketWalletSnapshot({email:owner,getAccessToken:current.current.getAccessToken}).catch(()=>{});void prefetchPocketActivity({email:owner,getAccessToken:current.current.getAccessToken}).catch(()=>{})}
+    if(changed&&valid()){void refreshPocketWalletSnapshot({email:owner,getAccessToken:current.current.getAccessToken}).catch(()=>{});void prefetchPocketActivity({fresh:true,isCurrent:valid,email:owner,getAccessToken:current.current.getAccessToken}).catch(()=>{})}
    }catch{/* Keep saved attempts intact when storage/session/provider is unavailable. */}finally{reading=false}
   }
-  void check();const timer=window.setInterval(check,20_000);window.addEventListener('focus',check);window.addEventListener('online',check)
-  return()=>{cancelled=true;window.clearInterval(timer);window.removeEventListener('focus',check);window.removeEventListener('online',check)}
+  void check();const timer=window.setInterval(check,20_000);window.addEventListener(POCKET_SENDS_UPDATED,check);window.addEventListener('focus',check);window.addEventListener('online',check)
+  return()=>{cancelled=true;window.clearInterval(timer);window.removeEventListener(POCKET_SENDS_UPDATED,check);window.removeEventListener('focus',check);window.removeEventListener('online',check)}
  },[input.authenticated,input.email])
 }

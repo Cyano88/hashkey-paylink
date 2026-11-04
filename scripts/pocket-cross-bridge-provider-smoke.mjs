@@ -52,7 +52,7 @@ import {changeCrossBridgeNetwork,changeCrossBridgeAsset,reverseCrossBridgeSelect
 const selected={source:'base',destination:'polygon',from:'ETH',to:'USDT'}
 assert.deepEqual(changeCrossBridgeNetwork(selected,'destination','solana'),{...selected,destination:'solana'})
 assert.deepEqual(changeCrossBridgeNetwork(selected,'source','solana'),{...selected,source:'solana',from:'USDC'})
-assert.deepEqual(changeCrossBridgeNetwork(selected,'destination','arc'),{...selected,destination:'arc',to:'USDC'})
+assert.throws(()=>changeCrossBridgeNetwork(selected,'destination','arc'),e=>e.code==='bridge_network_not_enabled')
 assert.throws(()=>changeCrossBridgeNetwork(selected,'source','polygon'))
 assert.throws(()=>changeCrossBridgeAsset(selected,'to','POL'))
 assert.equal(crossBridgeSelectionKey(selected),'base:ETH:polygon:USDT')
@@ -72,3 +72,13 @@ for(const [status,errorCode,code,expected] of [[400,'NO_SWAP_ROUTES_FOUND','rout
  await assert.rejects(()=>quoteCrossBridgeRelay(native.i,'fixture-key',async()=>new Response(JSON.stringify({errorCode,message:'private-provider-detail'}),{status,headers:{'Retry-After':'900'}}),null),e=>e.status===expected&&e.code===code&&!e.message.includes('private-provider-detail')&&(status!==429||e.retryAfter===300))
 }
 console.log('PASS no-route and amount errors are non-retryable 422; provider errors sanitized; rate limit respected')
+
+for(const [source,destination] of [['arc','base'],['base','arc']]){
+ const {i}=fixture(source,destination,'USDC','USDC')
+ let fetched=false
+ await assert.rejects(()=>quoteCrossBridgeRelay(i,'fixture',async()=>{fetched=true;throw Error('Must not call provider')},null),e=>e.code==='bridge_network_not_enabled')
+ assert.equal(fetched,false)
+ assert.throws(()=>crossBridgeSelectionKey({source,destination,from:'USDC',to:'USDC'}),e=>e.code==='bridge_network_not_enabled')
+}
+assert.deepEqual(crossBridgeAssets('arc').map(a=>a.symbol),['USDC','EURC'])
+console.log('PASS Arc excluded from new selections and provider quotes before network calls; underlying USDC/EURC catalog retained.')

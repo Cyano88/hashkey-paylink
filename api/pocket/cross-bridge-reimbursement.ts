@@ -1,9 +1,10 @@
+import {encodePrivyValueBatch} from './xlayer-sponsored-cost.js'
 import {createHash} from 'node:crypto'
 import {encodeFunctionData,parseAbi,isAddress,type Hex} from 'viem'
 import {PublicKey,type TransactionInstruction} from '@solana/web3.js'
 import {createTransferCheckedInstruction,getAssociatedTokenAddress} from '../solana-token.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
-import {crossBridgePair,crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
+import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import type {validateCrossBridgeRelayQuote} from './cross-bridge-provider.js'
 import type {CrossBridgeWalletBinding} from './cross-bridge-wallets.js'
 
@@ -45,13 +46,15 @@ export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridg
  if(same(reimbursementRecipient,binding.source.address))fail()
  if(route.source==='solana'){try{if(new PublicKey(reimbursementRecipient).equals(PublicKey.default))fail()}catch{fail()}}else if(!isAddress(reimbursementRecipient)||/^0x0{40}$/i.test(reimbursementRecipient))fail()
  for(const side of [binding.source,binding.destination]){const refund=route.refundOptions.find(r=>r.network===side.network);if(!refund||(side.network==='solana'?refund.recipient!==side.address:refund.recipient.toLowerCase()!==side.address.toLowerCase()))fail()}
+ const sponsored=route.source==='bsc'||route.source==='xlayer'
+ if(binding.source.provider!==(sponsored?'privy':'circle'))fail('Bridge wallet execution provider changed.')
  const totalUnits=BigInt(route.amountUnits)+reimbursementUnits
  if(totalUnits>=(route.source==='solana'?2n**64n:2n**128n))fail()
  const fees=[{recipient:reimbursementRecipient,units:reimbursementUnits}]
  let plan:CrossBridgeChargedPlan
  if(route.execution.kind==='evm'){
   const calls=[...route.execution.calls,...fees.map(f=>tokenIn.native?{target:f.recipient as Hex,value:f.units,data:'0x' as Hex}:{target:tokenIn.address as Hex,value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[f.recipient as Hex,f.units]})})]
-  plan={kind:'evm',calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}
+  plan={kind:'evm',calls,callData:sponsored?encodePrivyValueBatch(calls.map(c=>({to:c.target,data:c.data,value:('0x'+c.value.toString(16)) as Hex}))):encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}
  }else{
   const owner=new PublicKey(binding.source.address),mint=new PublicKey(tokenIn.address),source=await getAssociatedTokenAddress(mint,owner,true)
   const transfers=await Promise.all(fees.map(async f=>createTransferCheckedInstruction(source,mint,await getAssociatedTokenAddress(mint,new PublicKey(f.recipient),true),owner,f.units,tokenIn.decimals)))
@@ -62,15 +65,20 @@ export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridg
  const planHash=createHash('sha256').update(JSON.stringify(plan,(_,v)=>typeof v==='bigint'?v.toString():v)).digest('hex')
  return {plan,totalUnits,planHash}
 }
-export type CrossBridgeCost={source:CrossBridgeNetwork;asset:string;planHash:string;nativeUnits:bigint;gasPrice:CrossBridgePrice;assetPrice:CrossBridgePrice;expiresAt:number}
+export type CrossBridgeCost={source:CrossBridgeNetwork;asset:string;planHash:string;nativeUnits:bigint;rentUnits:bigint;gasPrice:CrossBridgePrice;assetPrice:CrossBridgePrice;expiresAt:number}
 /** Estimate the complete provider deposit + reimbursement transaction; never append a second app fee. */
 export async function quoteCrossBridgeCharges(route:Route,binding:CrossBridgeWalletBinding,reimbursementRecipient:string,policy:CrossBridgeFeePolicy,deps:{estimate(plan:CrossBridgeChargedPlan,planHash:string):Promise<CrossBridgeCost>;balance():Promise<bigint>;now?():number}){
+ assertCrossBridgeRollout(route.source,route.destination)
  const now=deps.now||Date.now
  let fee=policy.minimumFeeUnits>0n?policy.minimumFeeUnits:1n
  for(let pass=0;pass<4;pass++){
   const built=await buildCrossBridgeChargedPlan(route,binding,fee,reimbursementRecipient),balance=await deps.balance()
   if(balance<built.totalUnits)throw Object.assign(Error('Insufficient '+route.tokenIn.symbol+' for the amount and fee.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance>fee?balance-fee:0n)})
-  const cost=await deps.estimate(built.plan,built.planHash),priced=priceCrossBridgeReimbursement(route.source,route.tokenIn.symbol,cost.nativeUnits,cost.gasPrice,cost.assetPrice,policy,now())
+  const cost=await deps.estimate(built.plan,built.planHash)
+  // Require explicit account-rent coverage, including zero for existing ATAs.
+  // A gas-only estimate must not silently omit a Solana account creation cost.
+  if(typeof cost.rentUnits!=='bigint'||cost.rentUnits<0n||cost.rentUnits>=2n**64n||route.source!=='solana'&&cost.rentUnits!==0n||typeof cost.nativeUnits!=='bigint'||cost.nativeUnits<=0n)fail()
+  const priced=priceCrossBridgeReimbursement(route.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy,now())
   if(cost.source!==route.source||cost.asset!==route.tokenIn.symbol||cost.planHash!==built.planHash||!Number.isSafeInteger(cost.expiresAt)||cost.expiresAt<=now())fail()
   const expiresAt=Math.min(route.expiresAt,cost.expiresAt,priced.expiresAt)
   if(expiresAt<=now())fail()

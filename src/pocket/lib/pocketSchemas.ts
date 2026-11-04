@@ -210,6 +210,8 @@ export type PocketActivityRow = {
   activityLabel?: string
   direction?: 'in' | 'out'
   recipient?: string
+  destinationAsset?: string
+  receivedAmount?: string
   destinationTxHash?: string
   destination?: string
   bankName?: string
@@ -651,6 +653,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.xpayCheckoutId, 40)
     && isOptionalBoundedString(value.feeAsset, 40)
     && isOptionalBoundedString(value.assetSymbol, 40)
+    && isOptionalBoundedString(value.destinationAsset, 40)
+    && isOptionalBoundedString(value.receivedAmount, 80)
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
     && (value.direction === undefined || value.direction === 'in' || value.direction === 'out')

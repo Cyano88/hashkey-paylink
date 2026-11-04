@@ -81,7 +81,7 @@ const routeCases = [
   ['/profile', { section: 'profile', view: 'details' }],
   ['/move/usdc?amount=5', { section: 'move', view: 'usdc' }],
   ['/move/bank', { section: 'move', view: 'bank' }],
-  ['/move/pos', { section: 'move', view: 'pos' }],
+  ['/move/pos', { section: 'home', view: 'xpay' }],
   ['/bills/airtime', { section: 'bills', view: 'airtime' }],
   ['/bills/data', { section: 'bills', view: 'data' }],
   ['/bills/tv', { section: 'bills', view: 'tv' }],

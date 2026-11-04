@@ -1,6 +1,6 @@
-import {crossBridgeAssets,crossBridgeNetwork,crossBridgePair,type CrossBridgeNetwork} from './pocketCrossBridgeAssets'
+import {assertCrossBridgeRollout,crossBridgeAssets,crossBridgeNetwork,crossBridgePair,type CrossBridgeNetwork} from './pocketCrossBridgeAssets'
 export type CrossBridgeSelection={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string}
-export function crossBridgeSelectionKey(s:CrossBridgeSelection){crossBridgePair(s.source,s.destination,s.from,s.to);return [s.source,s.from,s.destination,s.to].join(':')}
+export function crossBridgeSelectionKey(s:CrossBridgeSelection){assertCrossBridgeRollout(s.source,s.destination);crossBridgePair(s.source,s.destination,s.from,s.to);return [s.source,s.from,s.destination,s.to].join(':')}
 export function changeCrossBridgeNetwork(s:CrossBridgeSelection,side:'source'|'destination',value:CrossBridgeNetwork):CrossBridgeSelection{
  crossBridgeNetwork(value)
  if(value===s[side==='source'?'destination':'source'])throw Error('Choose different bridge networks.')

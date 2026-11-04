@@ -1,3 +1,4 @@
+import {pocketBridgeOperationAssets,pocketBridgeReceived,samePocketBridgeOperationRoute} from './pocketBridgeOperation'
 import type { PocketActivityRow } from './pocketSchemas'
 
 export const POCKET_OPERATIONS_UPDATED = 'pocket:operations-updated'
@@ -26,6 +27,7 @@ export function trackPocketOperation(owner: string, kind: PocketOperation['kind'
   const id = kind + ':' + pending.quote.id, key = prefix(owner) + id
   let old: PocketOperation | null = null
   try {old=JSON.parse(storage.getItem(key)||'null')}catch{/* Replace a damaged entry only with a valid operation. */}
+  if(kind==='bridge'&&old&&!samePocketBridgeOperationRoute(old.pending?.quote,pending.quote))return
   if (old && ['completed', 'failed', 'refunded'].includes(old.state)) return
   const record: PocketOperation = {id, owner: owner.trim().toLowerCase(), kind, state, createdAt: old?.createdAt || Date.now(), pending: {...old?.pending, ...pending}}
   if(old&&JSON.stringify(old)===JSON.stringify(record))return
@@ -47,10 +49,14 @@ export function mergePocketOperations(rows: PocketActivityRow[], records: Pocket
   for (const record of records) {
     const p = record.pending, q = p.quote, source = record.kind === 'bridge' ? 'wallet-bridge' : 'wallet-swap'
     const network = record.kind === 'bridge' ? q.source : 'arc'
+    let bridgeAssets:ReturnType<typeof pocketBridgeOperationAssets>|undefined
+    try{if(record.kind==='bridge')bridgeAssets=pocketBridgeOperationAssets(q)}catch{continue}
+    const received=record.kind==='bridge'?pocketBridgeReceived(p,record.state):undefined
     const index = result.findIndex(row => row.source === source && row.chain === network && (row.providerReference === q.id || (p.txHash && (network==='solana'?row.txHash===p.txHash:row.txHash?.toLowerCase()===p.txHash.toLowerCase()))))
-    const local: PocketActivityRow = {...(q.purpose==='cash'&&q.destination==='base'?{cashFunding:true,activityLabel:'Cash funding'}:{}),eventId: 'operation:' + record.id, providerReference: q.id, txHash: p.txHash || '', destinationTxHash:p.destinationTxHash, chain: network, payer: p.walletAddress || q.walletAddress || 'Pocket wallet', amount: q.amount, ...(record.state==='refunded'?{refundAsset:p.refundAsset,refundAmount:p.refundAmount,refundNetwork:p.refundNetwork,refundTxHash:p.refundTxHash}:{}), assetSymbol: record.kind === 'bridge' ? q.rail==='xlayer'?(q.asset==='USDT'?'USDT':'USDC'):'USDT' : q.tokenIn.symbol, ts: record.createdAt, source, direction: 'out', paycrestStatus: record.state, destination: q.destination || q.tokenOut?.symbol, memo: record.kind === 'bridge' ? 'Bridge' : 'Swap'}
+    const local: PocketActivityRow = {...(q.purpose==='cash'&&q.destination==='base'?{cashFunding:true,activityLabel:'Cash funding'}:{}),eventId: 'operation:' + record.id, providerReference: q.id, txHash: p.txHash || '', destinationTxHash:p.destinationTxHash, chain: network, payer: p.walletAddress || q.walletAddress || 'Pocket wallet', amount: q.amount, ...(bridgeAssets?{destinationAsset:bridgeAssets.destination,...(received?{receivedAmount:received}:{})}:{}), ...(record.state==='refunded'?{refundAsset:p.refundAsset,refundAmount:p.refundAmount,refundNetwork:p.refundNetwork,refundTxHash:p.refundTxHash}:{}), assetSymbol: record.kind === 'bridge' ? pocketBridgeOperationAssets(q).source : q.tokenIn.symbol, ts: record.createdAt, source, direction: 'out', paycrestStatus: record.state, destination: q.destination || q.tokenOut?.symbol, memo: record.kind === 'bridge' ? 'Bridge' : 'Swap'}
     if (index < 0) result.push(local)
-    else if (!['completed', 'failed', 'refunded'].includes(result[index].paycrestStatus || '')) result[index] = {...result[index], paycrestStatus: record.state}
+    else if (!['completed','confirmed','success','successful','paid','failed','refunded','reversed'].includes(result[index].paycrestStatus || '')) result[index] = {...result[index], paycrestStatus: record.state,...(received&&bridgeAssets?{receivedAmount:received,destinationAsset:bridgeAssets.destination,destinationTxHash:p.destinationTxHash||result[index].destinationTxHash}:{})}
+    else if(result[index].paycrestStatus==='completed'&&record.state==='completed'&&received&&bridgeAssets&&(!result[index].destinationAsset||result[index].destinationAsset===bridgeAssets.destination)&&(!result[index].receivedAmount||result[index].receivedAmount===received))result[index]={...result[index],receivedAmount:result[index].receivedAmount||received,destinationAsset:result[index].destinationAsset||bridgeAssets.destination,destinationTxHash:result[index].destinationTxHash||p.destinationTxHash}
   }
   return result.sort((a, b) => b.ts - a.ts)
 }

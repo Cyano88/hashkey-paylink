@@ -37,6 +37,10 @@ const restarted=createSolanaUsdtBridgeState(store,()=>now)
 timeout=false;await restarted.submit('owner',r.id,rpc)
 assert.equal(sendCalls,2);assert.equal((await state.read('owner',r.id)).phase,'submitted')
 chainStatus={err:null,confirmationStatus:'confirmed'}
+assert.equal((await restarted.submit('owner',r.id,rpc)).phase,'submitted','Confirmed success is not finalized source evidence')
+chainStatus={err:{InstructionError:[0,'Custom']},confirmationStatus:'confirmed'}
+assert.equal((await restarted.submit('owner',r.id,rpc)).phase,'submitted','Confirmed failure cannot release the reservation')
+chainStatus={err:null,confirmationStatus:'finalized'}
 const confirmed=await restarted.submit('owner',r.id,rpc)
 assert.equal(confirmed.phase,'source_confirmed','A source debit cannot mark destination delivery complete')
 await restarted.submit('owner',r.id,rpc);assert.equal(sendCalls,2)
@@ -59,7 +63,7 @@ now=1000
 const completedRace=await register();await state.authorize(authorize(completedRace),challenge);await state.saveSigned('owner',completedRace.id,signedRaw)
 const terminal=await state.submit('owner',completedRace.id,{...rpc,getSignatureStatuses:async()=>{
  await store.update(completedRace.id,current=>({...current,phase:'completed'}))
- return {value:[{err:null,confirmationStatus:'confirmed'}]}
+ return {value:[{err:null,confirmationStatus:'finalized'}]}
 }})
 assert.equal(terminal.phase,'completed')
 console.log('Solana USDT approval/recovery passed: ownership, message binding, challenge reuse/race, unknown approval, persisted signed bytes, restart recovery and expired blockhash. Source confirmation is not destination completion. No live requests.')

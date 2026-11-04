@@ -5,8 +5,8 @@ import { mergePocketActivityRows, mergePocketActivitySnapshot } from './pocketAc
 
 type Snapshot = PocketActivityReadResult & { savedAt: number; full: boolean }
 const snapshots = new Map<string, Snapshot>()
-const dirtyScopes = new Set<string>()
-export function markPocketActivityDirty(scope: string) { if (scope) dirtyScopes.add(activityScope(scope)) }
+const dirtyScopes = new Map<string,number>()
+export function markPocketActivityDirty(scope: string) { if(scope){const key=activityScope(scope);dirtyScopes.set(key,(dirtyScopes.get(key)||0)+1)} }
 const pending = new Map<string, { promise: Promise<void>; fresh: boolean }>()
 const listeners = new Map<string, Set<() => void>>()
 const prefix = 'pocket:activity:snapshot:v2:'
@@ -20,7 +20,7 @@ export function cachedPocketActivity(scope: string): Snapshot | undefined {
     if (isPocketActivityReadData(saved)) {
       const metadata = saved as unknown as { savedAt?: number; full?: boolean }
       const snapshot: Snapshot = { ...saved, payments: mergePocketActivityRows([], saved.payments), savedAt: Number(metadata.savedAt) || 0, full: metadata.full === true }
-      if (snapshot.payments.length !== saved.payments.length) dirtyScopes.add(scope)
+      if (snapshot.payments.length !== saved.payments.length) markPocketActivityDirty(scope)
       snapshots.set(scope, snapshot)
       return snapshot
     }
@@ -50,9 +50,10 @@ export async function refreshPocketActivity(scope: string, getAccessToken: () =>
   const active = pending.get(scope)
   if (active) {
     await active.promise
-    if ((fresh && !active.fresh) || (!recent && !cachedPocketActivity(scope)?.full)) return refreshPocketActivity(scope, getAccessToken, recent, isCurrent, fresh, observe)
+    if (dirtyScopes.has(scope) || (fresh && !active.fresh) || (!recent && !cachedPocketActivity(scope)?.full)) return refreshPocketActivity(scope, getAccessToken, recent, isCurrent, fresh, observe)
     return
   }
+  const dirtyVersion=dirtyScopes.get(scope)
   const work = (async () => {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -70,7 +71,7 @@ export async function refreshPocketActivity(scope: string, getAccessToken: () =>
           const snapshot: Snapshot = { ...mergePocketActivitySnapshot(previous, incoming), savedAt: Date.now(), full: !recent || Boolean(previous?.full) }
           if (snapshots.size >= 32 && !snapshots.has(scope)) snapshots.delete(snapshots.keys().next().value!)
           snapshots.set(scope, snapshot)
-          if (fresh) dirtyScopes.delete(scope)
+          if (fresh&&dirtyScopes.get(scope)===dirtyVersion) dirtyScopes.delete(scope)
           try { localStorage.setItem(prefix + encodeURIComponent(scope), JSON.stringify(snapshot)) } catch { /* Keep memory cache on a full device. */ }
           listeners.get(scope)?.forEach(notify => notify())
         })(),

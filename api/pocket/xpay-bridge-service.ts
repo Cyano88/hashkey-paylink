@@ -91,12 +91,14 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
      const receipt=await canonical(d.destination,8453,status.txHash as Hex);if(!receipt)return r
      const proof=validateXPayAttestation(r.message,r.plan)
      if(verifyXPayMintReceipt(r.plan,proof,receipt))return d.journal.complete(owner,id,status.txHash)
-     if(receipt.status==='reverted')return d.journal.markMintFailed(owner,id,r.mintKey!)
+     // Until exact finalized mint-call failure is established, keep this key.
+     // A reverted transaction hash alone must not authorize a replacement.
+     if(receipt.status==='reverted')return r
      fail('Base receipt does not match this bridge. Your payment needs review.')
     }
     // A provider failure label cannot override a broadcast: verify its receipt
     // first, and retain pending state while canonical evidence is unavailable.
-    else if(status.status==='failed')return d.journal.markMintFailed(owner,id,r.mintKey!)
+    else if(status.status==='failed')return r
    }
    return r
   },

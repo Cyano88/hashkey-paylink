@@ -1,3 +1,5 @@
+import {readBridgeSourceFailure,readBridgeSourceSuccess} from './bridge-source-failure.js'
+import {readEvmBridgeDelivery} from './bridge-evm-delivery.js'
 import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import solanaBridgeHandler,{recoverSolanaUsdtBridge,listPendingSolanaUsdtBridges} from './solana-usdt-bridge-api.js'
 import {inboundBridgeClient,inboundChains,isInboundEvmSource,type InboundEvmSource} from './inbound-bridge-networks.js'
@@ -31,7 +33,7 @@ async function enabled(owner:string){
  const linked=await wallets(owner).catch(()=>null)
  return !!linked
 }
-const defaults={identity:verifiedPrivyUser,wallets,client,quote:quoteBscRelay,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,recoverChallenge:recoverCircleNativeSendChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,usdtEnabled:()=>process.env.POCKET_BSC_BRIDGE_ENABLED==='true',apiKey:()=>process.env.RELAY_API_KEY||''}
+const defaults={sourceSuccess:readBridgeSourceSuccess,sourceFailure:readBridgeSourceFailure,evmDelivery:readEvmBridgeDelivery,identity:verifiedPrivyUser,wallets,client,quote:quoteBscRelay,price:quoteCircleEvmBatchRecovery,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,challenge:createCircleGasStationEvmChallenge,recoverChallenge:recoverCircleNativeSendChallenge,readChallenge:readCircleEvmChallenge,activity:evmActivity,ledger:appendPocketMoneyLedgerEvent,fetch:globalThis.fetch,now:Date.now,enabled,usdtEnabled:()=>process.env.POCKET_BSC_BRIDGE_ENABLED==='true',apiKey:()=>process.env.RELAY_API_KEY||''}
 const key=(q:BscInboundBridgeQuote)=>'pocket:bsc-inbound-bridge:'+q.id
 const binding=(q:BscInboundBridgeQuote)=>({...q,sender:q.walletAddress,recipient:q.destinationAddress})
 const metadata=(q:BscInboundBridgeQuote,quoteToken:string)=>({quoteToken,intentFingerprint:q.walletAddress.toLowerCase()+':'+q.source+':bsc',assetSymbol:q.asset,source:q.source,destination:q.destination,amount:q.amount,walletAddress:q.walletAddress,destinationAddress:q.destinationAddress,provider:'relay'})
@@ -69,27 +71,39 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
   let hash=meta.txHash||'',awaiting=false
   if(!hash&&meta.challengeId&&input.circleUserToken){
    const result=await d.readChallenge({chain:q.source,userToken:input.circleUserToken,walletId:q.walletId,walletAddress:q.walletAddress,challengeId:meta.challengeId})
-   hash=result.txHash||'';awaiting=result.status==='awaiting_approval'
-   if(result.status==='failed'&&!('notSubmitted' in result&&result.notSubmitted===true&&!hash)){
+   hash=result.txHash||input.txHash||'';awaiting=result.status==='awaiting_approval'
+   if(result.status==='failed'&&!('notSubmitted' in result&&result.notSubmitted===true&&!hash&&!input.txHash)){
     if(hash&&!/^0x[0-9a-f]{64}$/i.test(hash))throw Error('Invalid bridge transaction reference.')
-    await d.record({...existing,status:'failed',metadata:{...meta,...(hash?{txHash:hash}:{}),paymentState:'source_failed'}})
-    return {ok:true,status:'failed',txHash:hash||undefined}
+    await d.record({...existing,status:'submitted',metadata:{...meta,sourceFailureCandidate:'true',...(hash?{txHash:hash}:{})}})
+    if(!hash)return {ok:true,status:'pending',challengeId:meta.challengeId}
+    if(await d.sourceFailure(q,hash)){
+     await d.record({...existing,status:'failed',metadata:{...meta,txHash:hash,paymentState:'source_failed',sourceFailureVerified:'true'}})
+     return {ok:true,status:'failed',txHash:hash}
+    }
    }
-   if(result.status==='failed'&&!result.txHash&&'notSubmitted' in result&&result.notSubmitted===true){
+   if(result.status==='failed'&&!result.txHash&&'notSubmitted' in result&&result.notSubmitted===true&&!input.txHash){
     await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:'failed',resourceId:q.id,metadata:{...meta,paymentState:'not_submitted'}})
     return {ok:true,status:'not_submitted',reason:'approval_expired'}
    }
   }
   hash=hash||input.txHash||''
-  if(!hash&&awaiting){if(input.cancelUnsigned){const saved=await d.record({...existing,status:'cancelled',metadata:{...meta,approvalCancelled:'true'}});return {ok:true,status:saved.metadata?.txHash?'pending':saved.status,txHash:saved.metadata?.txHash}}return {ok:true,status:'awaiting_approval',challengeId:meta.challengeId}}
   if(!hash){
    const rows=await d.activity(q.source,q.walletAddress,AbortSignal.timeout(8000)).catch(()=>[])
    const candidates=[...new Set(rows.filter(r=>r.assetSymbol===q.asset&&r.direction==='out'&&r.ts>=q.expiresAt-120000).map(r=>r.txHash))].slice(0,8)
    for(const h of candidates){const r=await receipt(q.source,h);if(r&&bscBridgeSourceProven(binding(q),r,h)){hash=h;break}}
   }
+  // Onchain activity wins over stale approval status and cancellation.
+  if(!hash&&awaiting){if(input.cancelUnsigned){const saved=await d.record({...existing,status:'cancelled',metadata:{...meta,approvalCancelled:'true'}});return {ok:true,status:saved.metadata?.txHash?'pending':saved.status,txHash:saved.metadata?.txHash}}return {ok:true,status:'awaiting_approval',challengeId:meta.challengeId}}
   if(!hash)return {ok:true,status:awaiting?'awaiting_approval':'pending',challengeId:meta.challengeId}
-  const source=await receipt(q.source,hash)
+  let source=await receipt(q.source,hash)
   if(!source)return {ok:true,status:'pending',challengeId:meta.challengeId}
+  if(source.status==='reverted'||meta.sourceFailureCandidate==='true'){
+   if(await d.sourceFailure(q,hash)){
+    await d.record({...existing,status:'failed',metadata:{...meta,txHash:hash,paymentState:'source_failed',sourceFailureVerified:'true'}})
+    return {ok:true,status:'failed',txHash:hash}
+   }
+  }
+  source=await d.sourceSuccess(q,hash) as typeof source
   if(!bscBridgeSourceProven(binding(q),source,hash))return {ok:true,status:'needs_attention'}
   await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:'submitted',resourceId:q.id,metadata:{...meta,txHash:hash,sourceConfirmed:'true'}})
   const get=async(path:string)=>{if(!d.apiKey())throw Error('Bridge recovery is unavailable.');const r=await d.fetch('https://api.relay.link'+path,{headers:{'x-api-key':d.apiKey()},signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('Bridge status is unavailable.');return r.json()}
@@ -99,9 +113,8 @@ export function createBscInboundBridgeHandler(overrides:Partial<typeof defaults>
   const candidate=bscBridgeDeliveryCandidate(binding(q),hash,status,requests)
   if(candidate.status!=='verify_delivery')return {ok:true,...candidate,txHash:hash,sourceConfirmed:true}
   if(candidate.network!==q.source&&candidate.network!=='bsc')return {ok:true,status:'needs_attention',txHash:hash}
-  const destination=await receipt(candidate.network,candidate.hash)
-  if(!destination)return {ok:true,status:'pending',txHash:hash,sourceConfirmed:true}
-  const delta=evmStablecoinDelta(destination,candidate.network,candidate.asset,candidate.recipient,candidate.hash)
+  const delta=await d.evmDelivery(candidate.network,candidate.asset,candidate.recipient,candidate.hash)
+  if(delta===null)return {ok:true,status:'pending',txHash:hash,sourceConfirmed:true}
   if(!bscBridgeDeliveryProven(candidate,delta))return {ok:true,status:'needs_attention',txHash:hash,sourceConfirmed:true}
   await d.record({ownerId:owner,idempotencyKey:key(q),action:ACTION,status:candidate.outcome==='completed'?'completed':'failed',resourceId:q.id,metadata:{...meta,txHash:hash,sourceConfirmed:'true',destinationTxHash:candidate.hash,paymentState:candidate.outcome,...(candidate.outcome==='refunded'?{refundAsset:candidate.asset,refundTxHash:candidate.hash,refundNetwork:candidate.network,refundAmount:formatUnits(delta!,candidate.network==='bsc'?18:6)}:{})}})
   return reconcile(owner,q,token,input)

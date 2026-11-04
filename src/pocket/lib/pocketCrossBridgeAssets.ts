@@ -6,6 +6,12 @@ import {xLayerUsde,xLayerUsdg} from './pocketXLayerPaymentAssets'
 
 export const CROSS_BRIDGE_NETWORKS=['ethereum','base','arbitrum','polygon','solana','arc','bsc','xlayer'] as const
 export type CrossBridgeNetwork=typeof CROSS_BRIDGE_NETWORKS[number]
+// Rollout eligibility is separate from asset support and historical recovery.
+export const CROSS_BRIDGE_ROLLOUT_NETWORKS=CROSS_BRIDGE_NETWORKS.filter(n=>n!=='arc')
+export function assertCrossBridgeRollout(source:CrossBridgeNetwork,destination:CrossBridgeNetwork){
+ crossBridgeNetwork(source);crossBridgeNetwork(destination)
+ if(source==='arc'||destination==='arc')throw Object.assign(Error('This network is outside the current bridge rollout.'),{status:409,code:'bridge_network_not_enabled'})
+}
 export type CrossBridgeAsset={symbol:string;address:string;decimals:number;native:boolean}
 export const CROSS_BRIDGE_NATIVE_ADDRESS='0x0000000000000000000000000000000000000000'
 export function crossBridgeNetwork(value:unknown):CrossBridgeNetwork {

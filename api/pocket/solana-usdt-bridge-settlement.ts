@@ -1,7 +1,6 @@
-import {createPublicClient,decodeEventLog,formatUnits,http,parseAbi,type Hex} from 'viem'
-import {base,arbitrum} from 'viem/chains'
-import {Connection} from '@solana/web3.js'
-import {getRpc} from '../relay-solana.js'
+import {decodeEventLog,formatUnits,parseAbi} from 'viem'
+import {readFinalizedBridgeSource} from './circle-bridge-source-reader.js'
+import {readSolanaBridgeDelivery} from './bridge-solana-delivery.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 import {RELAY_USDT_CHAINS} from './usdt-relay-provider.js'
@@ -44,17 +43,15 @@ export type SettlementDependencies={
  received:(network:Network,hash:string,recipient:string)=>Promise<bigint|null>;
  ledger:typeof appendPocketMoneyLedgerEvent;
 }
-export async function chainReceived(network:Network,hash:string,recipient:string){
+export async function chainReceived(network:Network,hash:string,recipient:string,rpcOverride?:Parameters<typeof readFinalizedBridgeSource>[3]){
  if(network==='solana'){
-  const rpc=new Connection(getRpc(),'confirmed')
-  return solanaUsdtReceived(await rpc.getParsedTransaction(hash,{commitment:'confirmed',maxSupportedTransactionVersion:0}),recipient,hash)
+  return readSolanaBridgeDelivery('USDT',recipient,hash)
  }
- const rpc=createPublicClient({chain:{base,arbitrum}[network],transport:http(process.env['PRIVATE_RPC_URL_'+network.toUpperCase()]||undefined,{timeout:15000})})
- if(await rpc.getChainId()!==RELAY_USDT_CHAINS[network].id)throw Error('Settlement RPC network mismatch.')
- const receipt=await rpc.getTransactionReceipt({hash:hash as Hex})
- const block=await rpc.getBlock({blockNumber:receipt.blockNumber})
- if(!same(block.hash,receipt.blockHash))return null
- return evmUsdtReceived(receipt,network,recipient,hash)
+ // Reuse the canonical envelope: chain identity, finalized block membership,
+ // bound logs and fresh receipt/block rechecks. The caller binds this candidate
+ // to the saved Relay order before invoking the reader.
+ const proof=await readFinalizedBridgeSource(network,hash,async receipt=>({amount:evmUsdtReceived(receipt,network,recipient,hash)}),rpcOverride)
+ return proof.amount
 }
 async function writeLedger(r:SolanaUsdtBridgeRecord,deps:SettlementDependencies){
  if(!r.settlement||!['completed','refunded'].includes(r.phase))return

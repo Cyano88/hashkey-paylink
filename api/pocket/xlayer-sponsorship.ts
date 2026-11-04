@@ -1,3 +1,4 @@
+import {mutateCrossAwareXLayer} from './cross-bridge-reservation.js'
 import {bridgeQuoteErrorFields} from './bridge-quote-error.js'
 import {bindXPayFeeQuote} from './xpay.js'
 import {xLayerUsde,xLayerUsdg} from '../../src/pocket/lib/pocketXLayerPaymentAssets.js'
@@ -57,7 +58,7 @@ const configuration = (): Config => ({
   wallets: (process.env.POCKET_XLAYER_SPONSORSHIP_WALLETS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean),
 })
 const loadUser = (id: string, c: Config) => new PrivyClient(c.appId, c.secret).getUserById(id)
-const mutate = (fn: (current: Store | undefined) => Store) => mutateDurableJson<Store>('pocket:xlayer-sponsorship:v1', fn)
+const mutate = (fn: (current: Store | undefined) => Store) => mutateCrossAwareXLayer<Store>(fn)
 const read = () => readDurableJson<Store>('pocket:xlayer-sponsorship:v1')
 const fail = (message: string, status = 400) => Object.assign(new Error(message), { status })
 // Build stablecoin calls on the server. Client-supplied arbitrary batches never

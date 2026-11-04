@@ -195,7 +195,7 @@ async function reconcileBridges(dependencies: Dependencies, limit: number): Prom
       return { id: record.id, kind: 'wallet_bridge', result: 'review' as const, message: 'Bridge record is incomplete.' }
     }
     try {
-      const provider = await dependencies.readBridge(source, txHash)
+      const provider = await dependencies.readBridge(source, txHash,undefined,{ownerId:record.ownerId,destination,amount:record.metadata?.amount||''})
       if (!isCircleBridgeComplete(provider.status)) return { id: record.id, kind: 'wallet_bridge', result: 'unchanged' as const }
       const updated = await dependencies.recordAction({
         ownerId: record.ownerId, idempotencyKey: record.idempotencyKey, action: record.action, status: 'completed', resourceId: record.resourceId,
@@ -238,7 +238,7 @@ async function reconcileBankPayoutRoutes(dependencies: Dependencies, limit: numb
       return { id: record.id, kind: 'bank_payout_route', result: 'review' as const, message: 'Bank payout route is incomplete.' }
     }
     try {
-      const provider = await dependencies.readBridge(source, txHash)
+      const provider = await dependencies.readBridge(source, txHash,undefined,{ownerId:record.ownerId,destination:'base',amount:record.metadata?.amount||''})
       if (!isCircleBridgeComplete(provider.status)) {
         return { id: record.id, kind: 'bank_payout_route', result: 'unchanged' as const }
       }

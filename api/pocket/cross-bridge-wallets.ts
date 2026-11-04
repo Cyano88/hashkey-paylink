@@ -15,6 +15,17 @@ function address(network:CrossBridgeNetwork,value:unknown){
  if(typeof value!=='string')return fail()
  try{if(network==='solana'){const key=new PublicKey(value);if(key.toBase58()!==value||key.equals(PublicKey.default))return fail();return value}const result=getAddress(value);if(/^0x0{40}$/i.test(result))return fail();return result}catch{return fail()}
 }
+/** Deterministic wallet identity shared by signed reviews and live resolution. */
+export function crossBridgeWalletFingerprint(binding:Pick<CrossBridgeWalletBinding,'ownerId'|'source'|'destination'>){
+ if(!binding.ownerId||binding.source.network===binding.destination.network)fail()
+ const normalize=(w:CrossBridgeWallet)=>{
+  crossBridgeNetwork(w.network)
+  if(w.provider!==(['bsc','xlayer'].includes(w.network)?'privy':'circle')||typeof w.walletId!=='string'||!w.walletId.trim())fail()
+  const canonical=address(w.network,w.address)
+  return [w.network,w.provider,w.walletId,w.network==='solana'?canonical:canonical.toLowerCase()]
+ }
+ return createHash('sha256').update(JSON.stringify([binding.ownerId,normalize(binding.source),normalize(binding.destination)])).digest('hex')
+}
 /** ownerId must come from verifiedPrivyUser, never request JSON. Resolves payment wallets only. */
 export async function resolveCrossBridgeWallets(ownerId:string,source:CrossBridgeNetwork,destination:CrossBridgeNetwork,deps:CrossBridgeWalletDependencies=defaults):Promise<CrossBridgeWalletBinding>{
  crossBridgeNetwork(source);crossBridgeNetwork(destination)
@@ -35,8 +46,7 @@ export async function resolveCrossBridgeWallets(ownerId:string,source:CrossBridg
   return {network,provider:'circle',walletId:link.circleWalletId,address:address(network,link.circleWalletAddress)}
  }
  const [from,to]=await Promise.all([resolve(source),resolve(destination)])
- const normalize=(w:CrossBridgeWallet)=>[w.network,w.provider,w.walletId,w.network==='solana'?w.address:w.address.toLowerCase()]
- const fingerprint=createHash('sha256').update(JSON.stringify([ownerId,normalize(from),normalize(to)])).digest('hex')
+ const fingerprint=crossBridgeWalletFingerprint({ownerId,source:from,destination:to})
  return {ownerId,source:from,destination:to,fingerprint}
 }
 /** Re-read on prepare/resume; a quote cannot silently follow wallet replacement. */

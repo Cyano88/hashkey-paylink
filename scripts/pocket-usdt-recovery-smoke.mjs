@@ -1,3 +1,5 @@
+import {fixtureCircleSource} from './fixtures/bridge-circle-source.mjs'
+import {fixtureEvmDelivery} from './fixtures/evm-bridge-delivery.mjs'
 import assert from 'node:assert/strict'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
 import {encodeAbiParameters,encodeEventTopics,parseAbi} from 'viem'
@@ -11,7 +13,7 @@ process.env.POCKET_SWAP_QUOTE_SECRET='recovery-test-only-secret-longer-than-32-c
 const wallet='0x1111111111111111111111111111111111111111',recipient='0x2222222222222222222222222222222222222222'
 const tokenIn='0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',tokenOut='0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2'
 const txHash='0x'+'11'.repeat(32),destinationTxHash='0x'+'22'.repeat(32),transactionId='0x'+'33'.repeat(32)
-const q={id:'quote-one',ownerId:'owner',walletId:'wallet',walletAddress:wallet,destinationAddress:recipient,source:'arbitrum',destination:'base',amount:'1',amountUnits:'1000000',minimumUnits:'994438',receive:'0.994438',minimumReceive:'0.994438',fee:'0.005562',expiresAt:Date.now()-1000,transactionId,provider:'across',callData:'0x'}
+const q={id:'quote-one',ownerId:'owner',walletId:'wallet',walletAddress:wallet,destinationAddress:recipient,source:'arbitrum',destination:'base',amount:'1',amountUnits:'1000000',minimumUnits:'994438',receive:'0.994438',minimumReceive:'0.994438',fee:'0.005562',expiresAt:Date.now()-1000,transactionId,provider:'across',callData:'0x12345678'}
 const quoteToken=sealUsdtBridgeQuote(q)
 const transfer=(address,from,to,value)=>({address,topics:encodeEventTopics({abi:USDT_TRANSFER_ABI,eventName:'Transfer',args:{from,to}}),data:encodeAbiParameters([{type:'uint256'}],[value])})
 const bridge={transactionId,bridge:'across',integrator:'hashpaylink',referrer:wallet,sendingAssetId:tokenIn,receiver:recipient,minAmount:1000000n,destinationChainId:8453n,hasSourceSwaps:false,hasDestinationCall:false}
@@ -21,12 +23,12 @@ const sourceReceipt={status:'success',logs:[transfer(tokenIn,wallet,USDT_BRIDGE_
 const destinationReceipt={transactionHash:destinationTxHash,blockNumber:1n,blockHash:'0x'+'44'.repeat(32),status:'success',logs:[transfer(tokenOut,USDT_BRIDGE_ROUTER,recipient,994438n)]}
 const record={id:'record',ownerId:'owner',action:'wallet.usdt-bridge',status:'submitted',metadata:{quoteToken},updatedAt:Date.now()}
 let stored=record,ledger=[],writes=[]
-const deps={findAction:async()=>stored,recordAction:async input=>{writes.push(input);stored={...stored,...input};return stored},appendLedger:async input=>{ledger.push(input)},readActivity:async()=>[{assetSymbol:'USDT',direction:'out',ts:Date.now(),txHash}],client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:destinationReceipt}),fetch:async()=>({ok:true,json:async()=>({status:'DONE',substatus:'COMPLETED',sending:{txHash},receiving:{chainId:'8453',txHash:destinationTxHash}})})}
+const deps={sourceSuccess:fixtureCircleSource(()=>sourceReceipt),evmDelivery:fixtureEvmDelivery(()=>destinationReceipt),findAction:async()=>stored,recordAction:async input=>{writes.push(input);stored={...stored,...input};return stored},appendLedger:async input=>{ledger.push(input)},readActivity:async()=>[{assetSymbol:'USDT',direction:'out',ts:Date.now(),txHash}],client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:destinationReceipt}),fetch:async()=>({ok:true,json:async()=>({status:'DONE',substatus:'COMPLETED',sending:{txHash},receiving:{chainId:'8453',txHash:destinationTxHash}})})}
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},deps)).status,'completed','lost SDK hash must recover from exact onchain quote event')
 assert.equal(stored.metadata.settledAmountUnits,'994438');assert.equal(ledger[0].asset,'USDT');assert.equal(stored.metadata.destinationTxHash,destinationTxHash)
 const replay=await reconcileUsdtBridge('owner',quoteToken,{},deps);assert.equal(replay.amountOut,'0.994438');assert.equal(replay.settlement.amountUnits,'994438');assert.equal(ledger.length,2,'completed records retry idempotent ledger append')
 stored=record
-assert.equal((await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:{status:'success',logs:[transfer(tokenIn,USDT_BRIDGE_ROUTER,recipient,994438n)]}})})).status,'pending','wrong destination asset cannot complete bridge')
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,evmDelivery:fixtureEvmDelivery(()=>({...destinationReceipt,logs:[transfer(tokenIn,USDT_BRIDGE_ROUTER,recipient,994438n)]})),client:deps.client})).status,'pending','wrong destination asset cannot complete bridge')
 stored=record
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{}, {...deps,client:()=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>({status:'success',logs:[]})})})).status,'pending','unrelated wallet debit cannot recover quote')
 await assert.rejects(()=>reconcileUsdtBridge('other',quoteToken,{},deps))
@@ -52,7 +54,7 @@ const chargedToken=sealUsdtBridgeQuote(charged)
 for(const destination of [EVM_PLATFORM_TREASURY,recipient]){
  stored=record
  const fundedReceipt={...sourceReceipt,logs:[...sourceReceipt.logs,transfer(tokenIn,wallet,destination,3000n)]}
- const result=await reconcileUsdtBridge('owner',chargedToken,{txHash},{...deps,client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?fundedReceipt:destinationReceipt})})
+ const result=await reconcileUsdtBridge('owner',chargedToken,{txHash},{...deps,sourceSuccess:fixtureCircleSource(()=>fundedReceipt),client:network=>({getChainId:async()=>8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?fundedReceipt:destinationReceipt})})
  assert.equal(result.status,destination===EVM_PLATFORM_TREASURY?'completed':'needs_attention','exact reimbursement recipient is required')
 }
 stored=record
@@ -65,7 +67,22 @@ assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'ses
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},approvalDeps)).status,'pending','missing session must not imply approval is outstanding')
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readChallenge:async()=>{throw Error('provider unavailable')}})).status,'pending','provider outage must not authorize resume')
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readActivity:deps.readActivity})).status,'completed','onchain proof wins over stale pending approval')
+stored={...record,metadata:{...record.metadata,challengeId:'saved-challenge'}}
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session',cancelUnsigned:true},{...approvalDeps,readActivity:deps.readActivity})).status,'completed','cancellation cannot retire a transaction found onchain')
 console.log('PASS saved approval recovery, missing-session safety, provider outage and stale approval race')
+stored={...record,metadata:{...record.metadata,challengeId:'failed-provider'}}
+const uncertainDeps={...deps,readChallenge:async()=>({status:'failed'}),sourceFailure:async()=>{throw Error('No source proof')}}
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},uncertainDeps)).status,'pending')
+assert.equal(stored.status,'submitted')
+stored={...record,metadata:{...record.metadata,challengeId:'failed-provider'}}
+let failureFinalized=false,failureProofs=0
+const failureDeps={...deps,readChallenge:async()=>({status:'failed',txHash}),sourceFailure:async(q,h)=>{failureProofs++;assert.equal(h,txHash);assert.equal(q.walletAddress,wallet);if(!failureFinalized)throw Error('Finality pending');return true},client:()=>({getTransactionReceipt:async()=>({...sourceReceipt,status:'reverted'})})}
+await assert.rejects(()=>reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},failureDeps))
+assert.equal(stored.status,'submitted');assert.equal(stored.metadata.txHash,txHash)
+failureFinalized=true
+assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},failureDeps)).status,'failed')
+assert.equal(stored.metadata.sourceFailureVerified,'true');assert.equal(failureProofs,2)
+console.log('PASS USDT provider failure remains reserved and retains hash until verified source failure; replay needs no wallet session.')
 
 stored={...record,metadata:{...record.metadata,challengeId:'expired-challenge'}}
 const expired=await reconcileUsdtBridge('owner',quoteToken,{circleUserToken:'session'},{...approvalDeps,readChallenge:async()=>({status:'failed',notSubmitted:true})})
@@ -84,7 +101,13 @@ for(const [label,change,expected] of [
 ]){
  stored=structuredClone(record)
  const receipt=change(destinationReceipt)
- const result=await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({...deps.client(network),getTransactionReceipt:async()=>network==='arbitrum'?sourceReceipt:receipt})})
+ const proofDeps={...deps,evmDelivery:fixtureEvmDelivery(()=>receipt,()=>true,{blockHash:destinationReceipt.blockHash})}
+ if(['wrong receipt','removed log','reorg'].includes(label)){
+  const before=writes.length,beforeLedger=ledger.length
+  await assert.rejects(()=>reconcileUsdtBridge('owner',quoteToken,{txHash},proofDeps))
+  assert.ok(writes.slice(before).every(write=>write.status==='submitted'));assert.equal(ledger.length,beforeLedger);assert.equal(stored.status,'submitted');continue
+ }
+ const result=await reconcileUsdtBridge('owner',quoteToken,{txHash},proofDeps)
  assert.equal(result.status,expected,label)
  if(expected==='completed'){
   assert.equal(result.amountOut,'0.996');assert.equal(stored.metadata.settledAmountUnits,'996000')
@@ -93,7 +116,8 @@ for(const [label,change,expected] of [
  }else assert.equal(result.settlement,undefined,label+' cannot fund a conversion')
 }
 stored=structuredClone(record)
-assert.equal((await reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,client:network=>({...deps.client(network),getChainId:async()=>1})})).status,'needs_attention')
+await assert.rejects(()=>reconcileUsdtBridge('owner',quoteToken,{txHash},{...deps,evmDelivery:fixtureEvmDelivery(()=>destinationReceipt,()=>true,{chainId:1})}))
+assert.equal(stored.status,'submitted')
 stored={...record,status:'completed',metadata:{...record.metadata,destinationTxHash}}
 assert.equal((await reconcileUsdtBridge('owner',quoteToken,{},deps)).amountOut,undefined,'old completion never substitutes its quote for actual output')
 console.log('PASS Cash bridge handoff: exact net output, durable replay, canonical block/chain/hash, removed-log rejection and legacy unknown output.')
@@ -117,7 +141,7 @@ console.log('PASS expired pre-submit Cash draft retirement is atomic with a raci
  const source={status:'success',transactionHash:txHash,blockNumber:1n,blockHash:destinationReceipt.blockHash,logs:[transfer(tokenIn,wallet,USDT_BRIDGE_ROUTER,1000000n),startLog,transfer(tokenIn,USDT_BRIDGE_ROUTER,revenue.recipient,1000n),collected]}
  const signed=sealUsdtBridgeQuote({...q,revenue,networkFeeUnits:'0',totalUnits:'1000000'})
  const reset=()=>{stored={...record,status:'submitted',metadata:{quoteToken:signed}};ledger=[]}
- const dependencies={...deps,client:network=>({getChainId:async()=>network==='arbitrum'?42161:8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?source:destinationReceipt})}
+ const dependencies={...deps,sourceSuccess:fixtureCircleSource(()=>source),client:network=>({getChainId:async()=>network==='arbitrum'?42161:8453,getBlock:async()=>({hash:destinationReceipt.blockHash}),getTransactionReceipt:async()=>network==='arbitrum'?source:destinationReceipt})}
  reset();assert.equal((await reconcileUsdtBridge('owner',signed,{txHash},dependencies)).status,'completed')
  assert.equal(ledger[0].metadata.bridgeRevenueUnits,'1000');assert.equal(ledger[0].metadata.bridgeRevenueRecipient,revenue.recipient);assert.equal(ledger[0].metadata.gasReimbursementUnits,'0')
  reset();source.logs.pop();assert.equal((await reconcileUsdtBridge('owner',signed,{txHash},dependencies)).status,'needs_attention');assert.equal(ledger.length,0)

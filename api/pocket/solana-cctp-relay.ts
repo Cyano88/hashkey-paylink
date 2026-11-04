@@ -34,6 +34,7 @@ import {
   type VerifiedLinkUser,
 } from '../privy-circle-link.js'
 import { readCctpForwardQuote } from './cctp.js'
+import {createSolanaCctpReservations,solanaCctpState,listSolanaCctpPending,type SolanaCctpBinding} from './solana-cctp-reservation.js'
 
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const BRIDGE_KIT_PROGRAM = new PublicKey('DFaauJEjmiHkPs1JG89A4p95hDWi9m9SAEERY1LQJiC3')
@@ -46,7 +47,7 @@ const MAX_TRANSACTION_BYTES = 16_384
 const DESTINATION_DOMAINS = { arbitrum: 3, base: 6, arc: 26, ethereum: 0, polygon: 7 } as const
 
 type Destination = keyof typeof DESTINATION_DOMAINS
-type ExpectedBridge = { destination: Destination; destinationAddress: string; amount: string }
+type ExpectedBridge = { purpose?:'cash'; destination: Destination; destinationAddress: string; amount: string }
 type BuiltBridge = {
   instructions: TransactionInstruction[]
   messageSender: Keypair
@@ -57,6 +58,8 @@ type Dependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readLink(key: string): Promise<CircleLinkRecord | null>
   relay(req: Request, res: Response): Promise<void>
+  reservations?: ReturnType<typeof createSolanaCctpReservations>
+  listPending?: typeof listSolanaCctpPending
 }
 
 function fail(status: number, message: string) {
@@ -457,6 +460,7 @@ export async function validatePocketSolanaCctpSignedTransaction(input: {
 function parseExpected(body: unknown): ExpectedBridge & { quoteToken?: string; transaction?: string; lastValidBlockHeight?: number } {
   if (!body || typeof body !== 'object') throw fail(400, 'Solana CCTP bridge request is invalid.')
   const value = body as Record<string, unknown>
+  if(value.purpose!==undefined&&(value.purpose!=='cash'||value.destination!=='base'))throw fail(400,'Invalid Cash funding reference.')
   if (value.destination !== 'base' && value.destination !== 'arbitrum' && value.destination !== 'arc' && value.destination !== 'ethereum' && value.destination !== 'polygon') throw fail(400, 'Solana CCTP destination is invalid.')
   if (typeof value.destinationAddress !== 'string' || typeof value.amount !== 'string') {
     throw fail(400, 'Solana CCTP bridge request is invalid.')
@@ -465,6 +469,7 @@ function parseExpected(body: unknown): ExpectedBridge & { quoteToken?: string; t
   parseUsdcAmount(value.amount)
   return {
     ...(typeof value.quoteToken === 'string' ? {quoteToken:value.quoteToken} : {}),
+    ...(value.purpose==='cash'?{purpose:'cash' as const}:{}),
     destination: value.destination,
     destinationAddress: value.destinationAddress,
     amount: value.amount,
@@ -473,18 +478,52 @@ function parseExpected(body: unknown): ExpectedBridge & { quoteToken?: string; t
   }
 }
 
-async function linkedWallet(dependencies: Dependencies, req: Request, expected: ExpectedBridge) {
+async function linkedSource(dependencies: Dependencies, req: Request) {
   const identity = await dependencies.verifyUser(req)
   const link = await dependencies.readLink(circleLinkKey(identity.userId, 'solana', 'payment'))
   if (!link) throw fail(404, 'Link a Circle Solana wallet before bridging.')
   if (link.privyUserId !== identity.userId || link.chain !== 'solana' || link.circleBlockchain !== 'SOL' || (link.purpose ?? 'payment') !== 'payment') {
     throw fail(500, 'Stored Circle wallet link did not match the Solana payment wallet.')
   }
+  return {identity,link}
+}
+
+async function linkedWallet(dependencies: Dependencies, req: Request, expected: ExpectedBridge) {
+  const {identity,link}=await linkedSource(dependencies,req)
   const destination = await dependencies.readLink(circleLinkKey(identity.userId, expected.destination, 'payment'))
   if (!destination || destination.privyUserId !== identity.userId || destination.chain !== expected.destination || (destination.purpose ?? 'payment') !== 'payment' || destination.circleWalletAddress.toLowerCase() !== expected.destinationAddress.toLowerCase()) {
     throw fail(403, 'Bridge destination must be your linked Pocket wallet.')
   }
   return link.circleWalletAddress
+}
+
+function reservationService(dependencies:Dependencies,req:Request){
+ return dependencies.reservations??createSolanaCctpReservations({dispatch:async(transaction,lastValidBlockHeight)=>{
+  let status=200,payload:any
+  const response={status(code:number){status=code;return this},json(body:unknown){payload=body;return this}} as Response
+  await dependencies.relay({...req,body:{tx:transaction,lastValidBlockHeight}} as Request,response)
+  if(status>=400||payload?.ok!==true)throw Error('Bridge relay outcome is unresolved.')
+ }})
+}
+async function reservationBinding(dependencies:Dependencies,req:Request):Promise<SolanaCctpBinding>{
+ const {identity,link}=await linkedSource(dependencies,req)
+ const id=req.body?.idempotencyKey
+ if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))throw fail(400,'A saved bridge reference is required.')
+ return {ownerId:identity.userId,walletId:link.circleWalletId,walletAddress:link.circleWalletAddress,id}
+}
+async function managedReservation(dependencies:Dependencies,req:Request){
+ const enabled=process.env.POCKET_SOLANA_CCTP_RESERVATIONS_ENABLED==='true'
+ const legacy=async()=>{
+  const {identity,link}=await linkedSource(dependencies,req)
+  const pending=await (dependencies.listPending??listSolanaCctpPending)(identity.userId)
+  if(pending.some(row=>!row.reservationReleased&&row.walletAddress===link.circleWalletAddress))throw fail(409,'Your previous bridge is still being confirmed. Check Activity.')
+  return null
+ }
+ if(!enabled&&!req.body?.idempotencyKey)return legacy()
+ const binding=await reservationBinding(dependencies,req),service=reservationService(dependencies,req)
+ if(!enabled&&!await service.exists(binding))return legacy()
+ if(req.body?.reservationVersion!==1)throw fail(409,'Update Pocket before starting this bridge.')
+ return {binding,service}
 }
 
 function sendError(res: Response, error: unknown) {
@@ -507,6 +546,8 @@ export function createPocketSolanaCctpPrepareHandler(dependencies: Dependencies)
       const body = parseExpected(req.body)
       const walletAddress = await linkedWallet(dependencies, req, body)
       const prepared = openSolanaBridgeApproval(body.quoteToken||'',{walletAddress,...body})
+      const managed=await managedReservation(dependencies,req)
+      if(managed){const row=await managed.service.prepare(managed.binding,prepared);return res.json({ok:true,...prepared,...solanaCctpState(row)})}
       return res.json({ ok: true, ...prepared })
     } catch (error) {
       return sendError(res, error)
@@ -518,6 +559,13 @@ export function createPocketSolanaCctpSubmitHandler(dependencies: Dependencies) 
   return async function pocketSolanaCctpSubmitHandler(req: Request, res: Response) {
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
+      if(req.body?.action==='recover'){
+        const binding=await reservationBinding(dependencies,req),service=reservationService(dependencies,req)
+        if(!await service.exists(binding))return res.json({ok:true,managed:false})
+        await service.inspect(binding)
+        try{return res.json({ok:true,...solanaCctpState(await service.resume(binding))})}
+        catch{return res.json({ok:true,...solanaCctpState(await service.inspect(binding)),verificationPending:true})}
+      }
       const body = parseExpected(req.body)
       if (!body.transaction) throw fail(400, 'Solana CCTP signed transaction is required.')
       if (!Number.isSafeInteger(body.lastValidBlockHeight)) throw fail(400, 'Solana CCTP block height is required.')
@@ -525,6 +573,12 @@ export function createPocketSolanaCctpSubmitHandler(dependencies: Dependencies) 
       const approved=openSolanaBridgeApproval(body.quoteToken||'',{walletAddress,...body},true)
       if(body.lastValidBlockHeight!==approved.lastValidBlockHeight)throw fail(400,'Bridge block height changed.')
       assertSolanaBridgeMessage(decodeTransaction(body.transaction),approved,true)
+      const managed=await managedReservation(dependencies,req)
+      if(managed){
+        const saved=await managed.service.inspect(managed.binding)
+        if(saved.metadata?.approved!==JSON.stringify(approved))throw fail(409,'Bridge approval changed.')
+        return res.json({ok:true,...solanaCctpState(await managed.service.submit(managed.binding,body.transaction))})
+      }
       return dependencies.relay({
         ...req,
         body: { tx: body.transaction, lastValidBlockHeight: body.lastValidBlockHeight },
@@ -545,14 +599,20 @@ export const pocketSolanaCctpPrepareHandler = createPocketSolanaCctpPrepareHandl
 export const pocketSolanaCctpSubmitHandler = createPocketSolanaCctpSubmitHandler(dependencies)
 
 // Validate the exact own-wallet CCTP transaction before Circle asks for a signature.
-export async function validatePocketSolanaBridgeSigning(req: Request, params: Record<string, string>) {
+export async function validatePocketSolanaBridgeSigning(req: Request, params: Record<string, string>, deps:Dependencies=dependencies) {
   const expected = parseExpected(params)
-  const walletAddress = await linkedWallet(dependencies, req, expected)
-  const source = await dependencies.readLink(circleLinkKey((await dependencies.verifyUser(req)).userId, 'solana', 'payment'))
+  const walletAddress = await linkedWallet(deps, req, expected)
+  const source = await deps.readLink(circleLinkKey((await deps.verifyUser(req)).userId, 'solana', 'payment'))
   if (!source || source.circleWalletId !== params.walletId) throw fail(403, 'Reconnect your linked Pocket wallet.')
   const transaction = decodeTransaction(params.rawTransaction)
   const approved=openSolanaBridgeApproval(expected.quoteToken||'',{walletAddress,...expected})
   assertSolanaBridgeMessage(transaction,approved,false)
+  const managed=await managedReservation(deps,{...req,body:{...params,reservationVersion:Number(params.reservationVersion)}} as Request)
+  if(managed){
+    const row=await managed.service.inspect(managed.binding)
+    if(row.status!=='started'||row.metadata?.signedTransaction)throw fail(409,'This bridge is already submitted. Check Activity.')
+    if(row.metadata?.approved!==JSON.stringify(approved))throw fail(409,'Bridge approval changed.')
+  }
 }
 
 export async function quotePocketSolanaCctpReimbursement(walletAddress:string,expected:ExpectedBridge){

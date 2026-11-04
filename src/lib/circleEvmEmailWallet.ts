@@ -1192,6 +1192,7 @@ export async function readCircleEvmBridgeChallenge(session: CircleEvmEmailSessio
 
 export async function bridgeCircleEvmEmailWallet(params: {
   onBeforeChallenge?: () => void
+  onReservation?: (state: CircleEvmBridgeReservation) => void
   quoteToken?: string
   maxTotalUnits?: bigint
   privyAccessToken?: string
@@ -1210,6 +1211,7 @@ export async function bridgeCircleEvmEmailWallet(params: {
     quoteToken=fresh.quoteToken
   }
   if(!quoteToken)throw Error('Review a bridge quote before continuing.')
+  if(!params.idempotencyKey)throw Error('Save the bridge attempt before submitting.')
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
     amount: params.amount,
@@ -1226,6 +1228,7 @@ export async function bridgeCircleEvmEmailWallet(params: {
     transaction?: Record<string, unknown>
   }>({
     action: 'executeEvmBridge',
+    reservationVersion:'1',
     quoteToken,
     idempotencyKey: params.idempotencyKey,
     userToken: params.session.userToken,
@@ -1236,20 +1239,30 @@ export async function bridgeCircleEvmEmailWallet(params: {
     destinationAddress: params.destinationAddress,
     amountUnits: amountUnits.toString(),
   }, { privyAccessToken: params.privyAccessToken })
+  const managed=challenge as typeof challenge & {managed?:boolean;status?:string}
+  if(managed.managed)params.onReservation?.({managed:true,status:managed.status,challengeId:challenge.challengeId,reservationReleased:false})
   if (!challenge.challengeId) throw new Error('Circle did not return a bridge confirmation challenge.')
   params.onChallenge?.(challenge.challengeId)
+  const verifiedHash=async(hash:Hex)=>{
+    if(!managed.managed)return hash
+    if(!params.privyAccessToken)throw Error('Sign in again to recover this bridge.')
+    const state=await readCircleEvmBridgeReservation(params.session,params.idempotencyKey!,params.privyAccessToken)
+    if(state.managed&&state.txHash?.toLowerCase()===hash.toLowerCase())return state.txHash as Hex
+    throw Error('Your bridge is saved. Its transaction is still being verified in Activity.')
+  }
+  if(managed.managed&&['completed','failed','not_submitted','cancelled'].includes(managed.status||''))throw Error('This bridge attempt has ended. Check Activity before starting another.')
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
     'Circle bridge confirmation did not finish. If you approved it, review Activity in a moment.',
   )
   const txHash = findTxHash(result)
-  if (txHash) return txHash
+  if (txHash) return verifiedHash(txHash)
   const transactionId = findTransactionId(result) ?? findTransactionId(challenge) ?? await pollChallengeTransactionId(params.session, challenge.challengeId, 5_000)
     .catch(reason => { if (reason?.terminalFailure) throw reason; return null })
   if (transactionId) {
     const hash = await pollTransactionHash(params.session, transactionId, 5_000).catch(reason => { if (reason?.terminalFailure) throw reason; return null })
-    if (hash) return hash
+    if (hash) return verifiedHash(hash)
   }
   throw new Error('Your bridge status is being checked. You can follow it in Activity.')
 }
@@ -1673,4 +1686,10 @@ export async function approveCircleMigrationChallenge(session: CircleEvmEmailSes
 export async function recoverCircleEvmBridgeChallenge(session:CircleEvmEmailSession,idempotencyKey:string,privyAccessToken:string){
  const data=await circleWalletApi<{challengeId?:string}>({action:'recoverEvmBridge',userToken:session.userToken,walletId:session.wallet.id,walletAddress:session.wallet.address,chain:session.chain,idempotencyKey},{privyAccessToken})
  return data.challengeId
+}
+
+export type CircleEvmBridgeReservation={managed?:boolean;status?:string;challengeId?:string;txHash?:string;sourceOutcome?:string;reservationReleased?:boolean;verificationPending?:boolean}
+export async function readCircleEvmBridgeReservation(session:CircleEvmEmailSession,idempotencyKey:string,privyAccessToken:string){
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey))return {managed:false} as CircleEvmBridgeReservation
+ return circleWalletApi<CircleEvmBridgeReservation>({action:'recoverEvmBridge',userToken:session.userToken,walletId:session.wallet.id,walletAddress:session.wallet.address,chain:session.chain,idempotencyKey,reservationVersion:'1'},{privyAccessToken})
 }

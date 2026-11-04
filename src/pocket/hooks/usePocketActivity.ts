@@ -7,16 +7,17 @@ import {readSendAttempts,mergeSendActivity,POCKET_SENDS_UPDATED} from '../lib/po
 import { pocketActivityArchiveKey } from '../lib/pocketActivityArchive'
 import { isIncomingPosPayment } from '../lib/pocketPurchaseKind'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { activityScope, cachedPocketActivity, refreshPocketActivity, subscribePocketActivity } from '../lib/pocketActivityCache'
+import { activityScope, markPocketActivityDirty, cachedPocketActivity, refreshPocketActivity, subscribePocketActivity } from '../lib/pocketActivityCache'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 type PocketAccessTokenReader = () => Promise<string | null>
-export async function prefetchPocketActivity({ email, getAccessToken, recent = false, signal }: { email: string; getAccessToken: PocketAccessTokenReader; recent?: boolean; signal?: AbortSignal }) {
-  if (signal?.aborted) return
+export async function prefetchPocketActivity({ email, getAccessToken, recent = false, signal, fresh = false, isCurrent }: { email: string; getAccessToken: PocketAccessTokenReader; recent?: boolean; signal?: AbortSignal; fresh?: boolean; isCurrent?:()=>boolean }) {
+  if (signal?.aborted||isCurrent?.()===false) return
   const scope = activityScope(email)
   const cached = cachedPocketActivity(scope)
-  if (cached && Date.now() - cached.savedAt < 15_000 && (recent || cached.full)) return
-  return refreshPocketActivity(scope, getAccessToken, recent, () => !signal?.aborted)
+  if (!fresh && cached && Date.now() - cached.savedAt < 15_000 && (recent || cached.full)) return
+  if(fresh)markPocketActivityDirty(scope)
+  return refreshPocketActivity(scope, getAccessToken, recent, () => !signal?.aborted&&isCurrent?.()!==false, fresh)
 }
 
 export default function usePocketActivity({ authenticated, email, enabled, recent = false, getAccessToken }: {

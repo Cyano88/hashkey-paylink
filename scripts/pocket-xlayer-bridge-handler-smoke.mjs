@@ -1,3 +1,5 @@
+import {fixtureCircleSource} from './fixtures/bridge-circle-source.mjs'
+import {fixtureEvmDelivery} from './fixtures/evm-bridge-delivery.mjs'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeAbiParameters,encodeEventTopics,parseAbi,parseAbiParameters} from 'viem'
@@ -13,17 +15,17 @@ const sourceHash='0x'+'a'.repeat(64),destHash='0x'+'b'.repeat(64),blockHash='0x'
 const transfer=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const deposit=parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
 const log=(network,from,to,units)=>({address:stablecoinAddress(network,'USDC'),data:encodeAbiParameters(parseAbiParameters('uint256'),[units]),topics:encodeEventTopics({abi:transfer,eventName:'Transfer',args:{from,to}})})
-function harness(challengeResult={status:'awaiting_approval'}){
+function harness(challengeResult={status:'awaiting_approval'},sourceFailure=async()=>{throw Error('Unverified source')},activity=async()=>[],sourceSettings=()=>({})){
  const records=new Map(),receipts=new Map();let sends=0,ledger=0,lost=false,identity=owner,changed=false,enabled=true,canonical=true,providerStatus='pending'
  const chainIds={base:8453,xlayer:196}
  const rpc=network=>({getChainId:async()=>chainIds[network],readContract:async()=>1000000000n,call:async()=>{},getBlock:async()=>({hash:canonical?blockHash:sourceHash}),getTransactionReceipt:async({hash})=>{if(!receipts.has(hash))throw Error('not found');return receipts.get(hash)}})
- const handler=createXLayerBridgeHandler({identity:async()=>({userId:identity}),wallets:async()=>({walletId,walletAddress:sender,destinationAddress:changed?sender:recipient}),now:()=>fixture.now,enabled:async()=>enabled,apiKey:()=> 'synthetic',client:rpc,
+ const handler=createXLayerBridgeHandler({sourceSuccess:fixtureCircleSource((n,h)=>receipts.get(h),sourceSettings),sourceFailure,evmDelivery:fixtureEvmDelivery((n,h)=>receipts.get(h),()=>canonical),identity:async()=>({userId:identity}),wallets:async()=>({walletId,walletAddress:sender,destinationAddress:changed?sender:recipient}),now:()=>fixture.now,enabled:async()=>enabled,apiKey:()=> 'synthetic',client:rpc,
  quote:async input=>{assert.equal(input.sender,sender);assert.equal(input.recipient,recipient);return route},
  price:input=>quoteEvmBridgeFee(input,async()=> '0.000001',3000n*100000000n,fixture.now),
  find:async(_owner,key)=>records.get(key)||null,list:async()=>[...records.values()],
  claim:async input=>{if([...records.values()].some(r=>['started','submitted'].includes(r.status)))return {claimed:false};records.set(input.idempotencyKey,{...input,id:'journal',status:'started',createdAt:fixture.now,updatedAt:fixture.now});return {claimed:true}},
  record:async input=>{const r={...records.get(input.idempotencyKey),...input,updatedAt:fixture.now};records.set(input.idempotencyKey,r);return r},
- challenge:async()=>{sends++;if(lost)throw Error('lost response');return {challengeId:'challenge'}},recoverChallenge:async()=> 'recovered-challenge',readChallenge:async()=>challengeResult,activity:async()=>[],ledger:async()=>{ledger++},
+ challenge:async()=>{sends++;if(lost)throw Error('lost response');return {challengeId:'challenge'}},recoverChallenge:async()=> 'recovered-challenge',readChallenge:async()=>challengeResult,activity,ledger:async()=>{ledger++},
  fetch:async url=>({ok:true,json:async()=>url.includes('/intents/')?{status:providerStatus,originChainId:8453,destinationChainId:196,inTxHashes:[sourceHash],txHashes:[destHash]}:{requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},status:providerStatus,user:sender,recipient,data:{inTxs:[{txHash:sourceHash,chainId:8453,status:'success'}],outTxs:[{txHash:destHash,chainId:196,status:'success'}]}}]}})})
  const request=async(body,method='POST')=>{let code=200,result;await handler({method,body},{setHeader(){},status(value){code=value;return this},json(value){result=value;return this}});return {code,...result}}
  return {request,records,receipts,chainIds,get sends(){return sends},get ledger(){return ledger},set lost(v){lost=v},set identity(v){identity=v},set changed(v){changed=v},set enabled(v){enabled=v},set canonical(v){canonical=v},set providerStatus(v){providerStatus=v}}
@@ -58,6 +60,10 @@ assert.equal(h.ledger,0)
 h.receipts.set(destHash,{status:'success',transactionHash:destHash,blockNumber:2n,blockHash,logs:[log('xlayer',sender,recipient,BigInt(route.minimumUnits)-1n)]})
 assert.equal((await h.request(status)).status,'needs_attention','insufficient delivery must not complete')
 h.receipts.get(destHash).logs=[log('xlayer',sender,recipient,BigInt(route.receiveUnits))]
+h.receipts.get(destHash).finalityPending=true
+assert.notEqual((await h.request(status)).code,200);assert.equal(h.ledger,0);assert.equal(h.sends,1)
+assert.notEqual([...h.records.values()][0].status,'completed')
+delete h.receipts.get(destHash).finalityPending
 h.canonical=false;assert.equal((await h.request(status)).status,'pending');h.canonical=true
 h.enabled=false;assert.equal((await h.request(quoteBody)).code,409);assert.equal((await h.request(status)).status,'completed','disabled rollout still recovers existing bridge')
 assert.equal(h.sends,1);assert.equal(h.ledger,1)
@@ -80,8 +86,36 @@ assert.equal(cancelled.sends,1)
 console.log('PASS X Layer inbound cancellation persists, disappears from pending, and cannot recreate an approval.')
 
 const recoveredLost=await lost.request({...lostExecute,action:'status'});assert.equal(recoveredLost.status,'awaiting_approval');assert.equal(recoveredLost.challengeId,'recovered-challenge');assert.equal(lost.sends,1);
-for(const txHash of [undefined,sourceHash]){
- const failed=harness({status:'failed',txHash}),q=await failed.request(quoteBody);await failed.request({...execute,quoteToken:q.quoteToken});
- const status=await failed.request({...execute,action:'status',quoteToken:q.quoteToken});assert.equal(status.status,'failed');assert.equal(status.txHash,txHash);assert.equal(failed.sends,1);
+const unknown=harness({status:'failed'}),unknownQuote=await unknown.request(quoteBody)
+await unknown.request({...execute,quoteToken:unknownQuote.quoteToken})
+assert.equal((await unknown.request({...execute,action:'status',quoteToken:unknownQuote.quoteToken})).status,'pending')
+assert.equal([...unknown.records.values()][0].status,'submitted');assert.equal(unknown.sends,1)
+let finalized=false,proofCalls=0
+const failed=harness({status:'failed',txHash:sourceHash},async(q,h)=>{proofCalls++;assert.equal(h,sourceHash);assert.equal(q.walletAddress,sender);if(!finalized)throw Error('Finality pending');return true})
+const failedQuote=await failed.request(quoteBody);await failed.request({...execute,quoteToken:failedQuote.quoteToken})
+assert.notEqual((await failed.request({...execute,action:'status',quoteToken:failedQuote.quoteToken})).code,200)
+assert.equal([...failed.records.values()][0].status,'submitted');assert.equal([...failed.records.values()][0].metadata.txHash,sourceHash)
+failed.receipts.set(sourceHash,{...sourceReceipt,status:'reverted'});finalized=true
+assert.equal((await failed.request({action:'status',quoteToken:failedQuote.quoteToken})).status,'failed')
+assert.equal([...failed.records.values()][0].metadata.sourceFailureVerified,'true');assert.equal(proofCalls,2);assert.equal(failed.sends,1);assert.equal(failed.ledger,0)
+console.log('PASS provider failure cannot release a reservation; exact failure proof survives lost response and recovery without wallet session.')
+
+const stale=harness({status:'awaiting_approval'},undefined,async()=>[{assetSymbol:'USDC',direction:'out',ts:fixture.now,txHash:sourceHash}])
+const staleQuote=await stale.request(quoteBody)
+await stale.request({...execute,quoteToken:staleQuote.quoteToken})
+stale.receipts.set(sourceHash,sourceReceipt)
+const staleResult=await stale.request({action:'status',quoteToken:staleQuote.quoteToken,circleUserToken:'session',cancelUnsigned:true})
+assert.equal(staleResult.status,'pending');assert.equal(staleResult.sourceConfirmed,true)
+assert.equal([...stale.records.values()][0].metadata.txHash,sourceHash)
+assert.notEqual([...stale.records.values()][0].status,'cancelled');assert.equal(stale.sends,1)
+console.log('PASS exact onchain source beats stale approval cancellation without a second submission.')
+
+for(const fault of [{noTrace:true},{wrongCall:true},{failed:true},{unfinalized:true},{reorg:true}]){
+ const uncertain=harness(undefined,undefined,undefined,()=>fault),quote=await uncertain.request(quoteBody)
+ await uncertain.request({...execute,quoteToken:quote.quoteToken})
+ uncertain.receipts.set(sourceHash,sourceReceipt)
+ const result=await uncertain.request({action:'status',quoteToken:quote.quoteToken,txHash:sourceHash})
+ assert.notEqual(result.code,200,JSON.stringify(fault));assert.equal(uncertain.ledger,0);assert.equal(uncertain.sends,1)
+ assert.equal([...uncertain.records.values()][0].status,'submitted')
 }
-console.log('PASS lost approval response recovers same challenge; provider source failures terminate with retained transaction evidence');
+console.log('PASS uncertain source success cannot complete or release: missing trace, wrong call, inner failure, nonfinal block and reorg.')

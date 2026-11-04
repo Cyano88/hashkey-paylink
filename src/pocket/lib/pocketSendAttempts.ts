@@ -58,7 +58,7 @@ export function mergeSendActivity(rows:PocketActivityRow[],attempts:PocketSendAt
  rows=rows.map(row=>{
   const saved=row.txHash?terminal.get(matchKey(row.chain||'',row.txHash)):undefined
   // Local chain proof may advance an ordinary transfer, never bank/bill/request settlement.
-  if(saved&&row.source==='wallet-withdrawal'&&['pending','submitted','processing',''].includes(row.paycrestStatus||''))return {...row,paycrestStatus:saved.state==='confirmed'?'confirmed':'failed'}
+  if(saved&&['wallet-withdrawal','wallet-transfer'].includes(row.source||'')&&['pending','submitted','processing',''].includes(row.paycrestStatus||''))return {...row,paycrestStatus:saved.state==='confirmed'?'confirmed':'failed'}
   return row
  })
  const hashes=new Set(rows.filter(r=>r.txHash).map(r=>matchKey(r.chain||'',r.txHash)))

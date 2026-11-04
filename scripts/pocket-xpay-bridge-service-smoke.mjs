@@ -36,6 +36,11 @@ assert.equal((await service.mint('alice',r.id,'session')).challengeId,'challenge
 // Provider status may lag or contradict a broadcast. Missing canonical proof
 // must retain the same mint request, even when Circle reports failure.
 const originalReceipt=destClient.getTransactionReceipt
+const failedWithoutHash=createXPayBridgeService({destination:destClient,challengeStatus:async()=>({status:'failed'})})
+assert.equal((await failedWithoutHash.status('alice',r.id,'session')).state,'mint_submitted')
+destClient.getTransactionReceipt=async()=>({...await originalReceipt(),status:'reverted',logs:[]})
+const revertedUnproven=createXPayBridgeService({destination:destClient,challengeStatus:async()=>({status:'failed',txHash:mintHash})})
+assert.equal((await revertedUnproven.status('alice',r.id,'session')).state,'mint_submitted')
 destClient.getTransactionReceipt=async()=>{throw Object.assign(Error('not included'),{name:'TransactionReceiptNotFoundError'})}
 const failedWithHash=createXPayBridgeService({destination:destClient,challengeStatus:async()=>({status:'failed',txHash:mintHash})})
 assert.equal((await failedWithHash.status('alice',r.id,'session')).state,'mint_submitted')

@@ -1,3 +1,5 @@
+import {fixtureSponsoredSource} from './fixtures/bridge-sponsored-source.mjs'
+import {evmStablecoinDelta} from '../api/pocket/bsc-bridge-evidence.ts'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeAbiParameters,encodeEventTopics,parseAbi,decodeFunctionData,formatUnits} from 'viem'
@@ -18,7 +20,7 @@ const destinationReceipt={status:'success',transactionHash:outHash,blockHash,blo
 let state={destination:input.recipient,missingDelivery:false,reorg:false,wrongChain:false,quoteUnavailable:false,source:structuredClone(source),delivery:structuredClone(destinationReceipt)}
 const status={status:'success',originChainId:196,destinationChainId:8453,inTxHashes:[hash],txHashes:[outHash]}
 const requests={requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},status:'success',user:input.sender,recipient:input.recipient,data:{inTxs:[{txHash:hash,chainId:196,status:'success'}],outTxs:[{txHash:outHash,chainId:8453,status:'success'}]}}]}
-const outbound=createXLayerOutboundBridge({now:()=>now,apiKey:()=>'fixture',destination:async()=>({id:'circlebasewallet',address:state.destination}),route:async i=>{if(state.quoteUnavailable)throw Error('No direct route');assert.deepEqual({...i,sender:i.sender.toLowerCase()},{...input,sender:input.sender.toLowerCase()});return route},client:network=>({readContract:async()=>state.balance??1000000000n,getChainId:async()=>state.wrongChain?1:network==='xlayer'?196:8453,getTransactionReceipt:async({hash:h})=>{if(network==='base'&&state.missingDelivery)throw Error('not mined');return network==='xlayer'?state.source:state.delivery},getBlock:async()=>({hash:state.reorg?'0x'+'d'.repeat(64):blockHash})}),fetch:async url=>Response.json(url.includes('/intents/status')?status:requests)})
+const outbound=createXLayerOutboundBridge({sourceProof:fixtureSponsoredSource(()=>state.source,()=>({reorg:state.reorg,wrongChain:state.wrongChain})),evmDelivery:async(n,a,r,h)=>state.missingDelivery?null:evmStablecoinDelta(n==='xlayer'?state.source:state.delivery,n,a,r,h),now:()=>now,apiKey:()=>'fixture',destination:async()=>({id:'circlebasewallet',address:state.destination}),route:async i=>{if(state.quoteUnavailable)throw Error('No direct route');assert.deepEqual({...i,sender:i.sender.toLowerCase()},{...input,sender:input.sender.toLowerCase()});return route},client:network=>({readContract:async()=>state.balance??1000000000n,getChainId:async()=>state.wrongChain?1:network==='xlayer'?196:8453,getTransactionReceipt:async({hash:h})=>{if(network==='base'&&state.missingDelivery)throw Error('not mined');return network==='xlayer'?state.source:state.delivery},getBlock:async()=>({hash:state.reorg?'0x'+'d'.repeat(64):blockHash})}),fetch:async url=>Response.json(url.includes('/intents/status')?status:requests)})
 let estimates=0
 const estimate=async i=>{estimates++;assert.equal(i.calls.length,5);return {feeUnits:'100',expiresAt:now+25000,estimateId:'synthetic'}}
 const pricing={marginBps:2500,minimumFeeUnits:'0'}
@@ -44,9 +46,9 @@ state.destination=input.sender;await assert.rejects(()=>outbound.preflight(q,est
 state.wrongChain=true;await assert.rejects(()=>outbound.preflight(q,estimate));state.wrongChain=false
 assert.equal((await outbound.status(q,hash)).status,'completed')
 state.source.status='reverted';assert.equal((await outbound.status(q,hash)).status,'failed');state.source=structuredClone(source)
-state.source.transactionHash=outHash;assert.equal((await outbound.status(q,hash)).status,'pending');state.source=structuredClone(source)
+state.source.transactionHash=outHash;await assert.rejects(()=>outbound.status(q,hash));state.source=structuredClone(source)
 state.missingDelivery=true;assert.equal((await outbound.status(q,hash)).status,'pending');state.missingDelivery=false
-state.reorg=true;assert.equal((await outbound.status(q,hash)).status,'pending');state.reorg=false
+state.reorg=true;await assert.rejects(()=>outbound.status(q,hash));state.reorg=false
 state.source.logs.splice(1,1);assert.equal((await outbound.status(q,hash)).status,'needs_attention');state.source=structuredClone(source)
 state.delivery.logs=[];assert.equal((await outbound.status(q,hash)).status,'needs_attention');state.delivery=structuredClone(destinationReceipt)
 requests.requests[0].recipient=input.sender;assert.equal((await outbound.status(q,hash)).status,'needs_attention');requests.requests[0].recipient=input.recipient
@@ -95,7 +97,7 @@ console.log('PASS outbound Relay validation, finite approval/reset/deposit plus 
 assert.equal(await outbound.recoverSource(q),hash);
 status.originChainId=1;assert.equal(await outbound.recoverSource(q),null);status.originChainId=196;
 status.inTxHashes=[hash,outHash];assert.equal(await outbound.recoverSource(q),null);status.inTxHashes=[hash];
-state.reorg=true;assert.equal(await outbound.recoverSource(q),null);state.reorg=false;
+state.reorg=true;await assert.rejects(()=>outbound.recoverSource(q));state.reorg=false;
 state.source.logs.splice(1,1);assert.equal(await outbound.recoverSource(q),null);state.source=structuredClone(source);
 state.source.logs[2].data=encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'bytes32'}],[input.sender,stablecoinAddress('xlayer','USDC'),BigInt(input.amountUnits),'0x'+'f'.repeat(64)]);
 assert.equal(await outbound.recoverSource(q),null);state.source=structuredClone(source);

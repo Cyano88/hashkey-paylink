@@ -19,6 +19,8 @@ assert.throws(() => parseUsdcAmount('1.0000001'))
 
 const records = []
 const ledgerEvents = []
+// Candidate fields used by the status adapter; verifyRecord is mocked below.
+const statusMessage=Buffer.alloc(376);statusMessage.writeUInt32BE(5,8);statusMessage.writeBigUInt64BE(2000000n,240)
 const handler = createPocketBridgeHandler({
   verifyRecord: async () => {},
   verifyUser: async () => ({ userId: 'privy-bridge-user', email: 'bridge@example.com' }),
@@ -29,7 +31,7 @@ const handler = createPocketBridgeHandler({
   quote: async (_source, _destination, transferUnits) => ({ transferUnits, forwardFeeUnits: 200_000n, protocolFeeUnits: 1_000n, maxFeeUnits: 201_000n, totalUnits: transferUnits + 201_000n, finalityThreshold: 1000 }),
   record: async input => { records.push(input); return { id: 'bridge-action-1' } },
   appendLedger: async input => { ledgerEvents.push(input); return input },
-  fetcher: async () => new Response(JSON.stringify({ messages: [{ forwardState: 'CONFIRMED', forwardTxHash: '0xdestination' }] }), { status: 200 }),
+  fetcher: async () => new Response(JSON.stringify({ messages: [{ forwardState: 'CONFIRMED', forwardTxHash: '0xdestination',message:'0x'+statusMessage.toString('hex') }] }), { status: 200 }),
 })
 
 const quote = await request(handler, { body: { action: 'quote', source: 'base', destination: 'solana', amount: '2' } })

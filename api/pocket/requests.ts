@@ -184,7 +184,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         if (phase === 'completed') {
           const current = await deps.repository.readRoute(identity.userId, String(req.body?.id ?? ''))
           if (!current || !txHash || current.txHash !== txHash) return fail(res, 409, 'Pocket payment route is not ready to complete.')
-          const provider = await (deps.readBridgeStatus ?? readCircleBridgeStatus)(current.source, txHash)
+          const provider = await (deps.readBridgeStatus ?? readCircleBridgeStatus)(current.source, txHash,undefined,{ownerId:identity.userId,destination:current.destination,amount:current.amount})
           if (!isCircleBridgeComplete(provider.status)) return fail(res, 409, 'USDC is still moving. Pocket will continue after confirmed arrival.')
         }
         const route = await deps.repository.updateRoute(identity.userId, String(req.body?.id ?? ''), {

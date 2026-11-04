@@ -994,8 +994,10 @@ export default async function handler(req: Request, res: Response) {
       if(!['base','arbitrum','arc','ethereum','polygon'].includes(chain)||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey||''))return res.status(400).json({ok:false,error:'Invalid bridge recovery request.'})
       const identity=await verifiedPrivyUser(req),link=await findPaymentCircleLinkByWallet(walletId,walletAddress)
       if(!link||link.privyUserId!==identity.userId)return res.status(403).json({ok:false,error:'Reconnect your Pocket wallet.'})
+      const managed=await (await import('./pocket/direct-cctp-reservation.js')).recoverDirectCctpReservation({ownerId:identity.userId,source:chain,walletId,walletAddress,id:idempotencyKey},userToken)
+      if(managed)return res.json({ok:true,...managed})
       const challengeId=await recoverCircleNativeSendChallenge({chain:chain as CircleGasStationEvmChain,userToken,walletId,walletAddress,refId:'pocket:bridge:'+idempotencyKey})
-      return res.json({ok:true,challengeId})
+      return res.json({ok:true,managed:false,challengeId})
     }
     if (action === 'executeEvmBridge') {
       const { userToken, walletId, walletAddress, chain, destination, destinationAddress, amountUnits, idempotencyKey } = params
@@ -1019,6 +1021,19 @@ export default async function handler(req: Request, res: Response) {
       if(typeof balanceHex!=='string'||!/^0x[0-9a-f]{64}$/i.test(balanceHex))throw Error('Balance could not be verified.')
       if(BigInt(balanceHex)<BigInt(approved.totalUnits))return res.status(409).json({ok:false,error:'Insufficient USDC for the bridge and fee.'})
       const batchCallData=approved.callData
+      const directBinding={ownerId:identity.userId,source:chain,walletId,walletAddress,id:idempotencyKey}
+      const directAdapter=await import('./pocket/direct-cctp-reservation.js')
+      const existingManaged=idempotencyKey&&await directAdapter.hasDirectCctpReservation(directBinding)
+      if(process.env.POCKET_DIRECT_CCTP_RESERVATIONS_ENABLED==='true'||existingManaged){
+        if(params.reservationVersion!=='1'||!idempotencyKey)return res.status(409).json({ok:false,error:'Update Pocket before starting this bridge.'})
+        const {createDirectCctpReservations,directCctpState}=directAdapter
+        if(params.purpose!==undefined&&params.purpose!=='cash')return res.status(400).json({ok:false,error:'Invalid bridge purpose.'})
+        const saved=await createDirectCctpReservations().execute({ownerId:identity.userId,source:chain,walletId,walletAddress,id:idempotencyKey},approved,userToken,params.purpose as 'cash'|undefined)
+        return res.json({ok:true,...directCctpState(saved)})
+      }
+      // Rollback must not route around an outstanding managed reservation.
+      const pendingManaged=await directAdapter.listDirectCctpPending(identity.userId)
+      if(pendingManaged.some(row=>!row.reservationReleased&&row.source===chain&&row.walletAddress.toLowerCase()===walletAddress.toLowerCase()))return res.status(409).json({ok:false,error:'Your previous bridge is still being confirmed. Check Activity.'})
       const data = await createCircleGasStationEvmChallenge({
         userToken,
         walletId,

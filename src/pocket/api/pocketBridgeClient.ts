@@ -18,11 +18,11 @@ function message(data: any) {
   return data?.error?.message || data?.error || 'Bridge request failed.'
 }
 
-export async function readPocketBridgeQuote(input: { circleUserToken?: string; accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; fetcher?: typeof fetch }) {
+export async function readPocketBridgeQuote(input: { purpose?: 'cash'; circleUserToken?: string; accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; fetcher?: typeof fetch }) {
   const response = await (input.fetcher ?? fetch)(POCKET_API.bridge, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${input.accessToken}` },
-    body: JSON.stringify({ action: 'quote', circleUserToken: input.circleUserToken, source: input.source, destination: input.destination, amount: input.amount }),
+    body: JSON.stringify({ action: 'quote', purpose:input.purpose, circleUserToken: input.circleUserToken, source: input.source, destination: input.destination, amount: input.amount }),
   })
   const data = await response.json().catch(() => ({})) as { ok?: boolean; quote?: PocketBridgeQuote; error?: unknown }
   if (!response.ok || data.ok !== true || !data.quote) throw new Error(message(data))
@@ -37,11 +37,11 @@ export async function readPocketBridgeStatus(input: { accessToken: string; sourc
   return data
 }
 
-export async function recordPocketBridge(input: { funding?: PocketFundingReference; accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; txHash: string; status: 'submitted' | 'completed'; fetcher?: typeof fetch }) {
+export async function recordPocketBridge(input: { purpose?: 'cash'; funding?: PocketFundingReference; accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; txHash: string; status: 'submitted' | 'completed'; fetcher?: typeof fetch }) {
   const response = await (input.fetcher ?? fetch)(POCKET_API.bridge, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${input.accessToken}` },
-    body: JSON.stringify({ action: 'record', funding: input.funding, source: input.source, destination: input.destination, amount: input.amount, txHash: input.txHash, status: input.status }),
+    body: JSON.stringify({ action: 'record', purpose:input.purpose, funding: input.funding, source: input.source, destination: input.destination, amount: input.amount, txHash: input.txHash, status: input.status }),
   })
   const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: unknown }
   if (!response.ok || data.ok !== true) throw new Error(message(data))

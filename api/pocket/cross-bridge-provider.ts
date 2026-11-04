@@ -2,7 +2,7 @@ import {relayBridgeAppFee,relayBridgeAppFeeRequest,validateRelayBridgeAppFeeQuot
 import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey} from '@solana/web3.js'
 import {decodeFunctionData,encodeFunctionData,parseAbi,type Address,type Hex} from 'viem'
-import {crossBridgePair,crossBridgeAsset,CROSS_BRIDGE_NATIVE_ADDRESS,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
+import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,CROSS_BRIDGE_NATIVE_ADDRESS,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import {RELAY_BSC_CHAINS,bscRelaySolanaDeposit} from './bsc-bridge-provider.js'
 
 export type CrossBridgeInput={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string;sender:string;recipient:string;amountUnits:string}
@@ -91,6 +91,7 @@ export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.
  return {provider:'relay' as const,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
 }
 export async function quoteCrossBridgeRelay(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee()){
+ assertCrossBridgeRollout(i.source,i.destination)
  requireThat(apiKey.trim().length>0,'provider API key required')
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(crossBridgeRelayRequest(i,appFee)),signal:AbortSignal.timeout(20000)})
  if(!response.ok){

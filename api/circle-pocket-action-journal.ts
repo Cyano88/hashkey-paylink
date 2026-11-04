@@ -1,6 +1,8 @@
+import {assertNoCrossBridgeReservation} from './pocket/cross-bridge-reservation-guard.js'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
+import type { CircleKitOperationStore } from './pocket/circle-bridge-operations.js'
 import {
   hasRenderDurableStore,
   mutateDurableJson,
@@ -26,14 +28,28 @@ export type CirclePocketActionRecord = {
   updatedAt: number
 }
 
-type ActionStore = { actions: Record<string, CirclePocketActionRecord> }
+type ActionStore = { actions: Record<string, CirclePocketActionRecord>; circleKit?: Record<string, CircleKitOperationStore> }
+const walletActions = new Set(['reservation.direct-cctp','reservation.solana-cctp','wallet.native-send','wallet.native-swap','wallet.swap','wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge','wallet.bsc-send','wallet.bsc-swap','wallet.cash-conversion'])
+type WalletScope = { ownerId: string; network?: string; address?: string }
+const actionScope = (record: Pick<CirclePocketActionRecord,'ownerId'|'metadata'>): WalletScope => ({ownerId:record.ownerId,network:record.metadata?.network || record.metadata?.source,address:record.metadata?.walletAddress})
+const normalizeAddress = (address: string) => /^0x[0-9a-f]{40}$/i.test(address) ? address.toLowerCase() : address
+const sameWallet = (a: WalletScope,b: WalletScope) => a.ownerId===b.ownerId && (!a.network || !b.network || a.network===b.network) && (!a.address || !b.address || normalizeAddress(a.address)===normalizeAddress(b.address))
+const pending = (record: CirclePocketActionRecord) => walletActions.has(record.action) && ['started','submitted'].includes(record.status)
+const busy = (): never => {throw Object.assign(new Error('Another action from this wallet is still being confirmed. Check Activity before trying again.'),{status:409,code:'wallet_action_pending'})}
+function assertNoKitReservation(store: ActionStore, scope: WalletScope) {
+  assertNoCrossBridgeReservation(store,scope)
+  for (const bucket of Object.values(store.circleKit || {})) for (const op of Object.values(bucket.operations)) {
+    if (['cancelled','not_submitted'].includes(op.state) || (op.state==='prepared' && op.quote.expiresAt<=Date.now())) continue
+    if (sameWallet(scope,{ownerId:op.ownerId,network:op.quote.wallets.source.network,address:op.quote.wallets.source.address})) busy()
+  }
+}
 let mutationQueue: Promise<void> = Promise.resolve()
 
 async function readStore(): Promise<ActionStore> {
   if (hasRenderDurableStore()) {
     try {
       const durable = await readDurableJson<Partial<ActionStore>>(JOURNAL_STORE_KEY)
-      return { actions: durable?.actions ?? {} }
+      return { ...durable, actions: durable?.actions ?? {} }
     } catch {
       if (IS_RENDER) throw new Error('Durable Pocket action storage failed.')
     }
@@ -75,7 +91,7 @@ async function mutateActionStore<T>(fn: (store: ActionStore) => T | Promise<T>) 
   if (hasRenderDurableStore()) {
     let result!: T
     await mutateDurableJson<Partial<ActionStore>>(JOURNAL_STORE_KEY, async current => {
-      const store: ActionStore = { actions: current?.actions ?? {} }
+      const store: ActionStore = { ...current, actions: current?.actions ?? {} }
       result = await fn(store)
       return store
     })
@@ -104,6 +120,13 @@ export async function claimCirclePocketAction(input: {
       && record.action === input.action
     ))
     if (existing) return { record: existing, claimed: false }
+    if (walletActions.has(input.action)) {
+      const scope=actionScope(input)
+      assertNoKitReservation(store,scope)
+      // Same-action deduplication retains its existing route-specific rules.
+      // Cross-action claims share this transaction, not a preflight read.
+      if (Object.values(store.actions).some(record=>record.action!==input.action && pending(record) && sameWallet(scope,actionScope(record)))) busy()
+    }
     const rules = [...(input.dedupe ? [input.dedupe] : []), ...(input.dedupeAlso || [])]
     const conflict = Object.values(store.actions).find(record => (
       record.ownerId === input.ownerId
@@ -129,6 +152,49 @@ export async function claimCirclePocketAction(input: {
   })
 }
 
+/** Kit reservations and existing action claims use the SAME durable row lock.
+ * No provider calls belong in this synchronous mutation callback. */
+export async function mutateCircleKitActionStore(key: string, fn: (current: CircleKitOperationStore | undefined) => CircleKitOperationStore) {
+  if (!hasRenderDurableStore()) throw Object.assign(new Error('Bridge recovery storage is unavailable.'),{status:503})
+  return mutateActionStore(store=>{
+    const previous=store.circleKit?.[key]
+    const next=fn(structuredClone(previous))
+    for (const op of Object.values(next.operations)) {
+      const expected='pocket:circle-kit-operations:v1:'+crypto.createHash('sha256').update(op.ownerId).digest('hex')
+      if (key!==expected || op.quote.ownerId!==op.ownerId || op.quote.wallets.ownerId!==op.ownerId) throw new Error('Bridge owner mismatch.')
+      const old=previous?.operations[op.id]
+      if ((!old && op.state==='prepared') || (old?.state==='prepared' && op.state==='submitting')) {
+        const scope={ownerId:op.ownerId,network:op.quote.wallets.source.network,address:op.quote.wallets.source.address}
+        assertNoCrossBridgeReservation(store,scope)
+        if (Object.values(store.actions).some(record=>pending(record) && sameWallet(scope,actionScope(record)))) busy()
+      }
+    }
+    store.circleKit={...store.circleKit,[key]:next}
+    return structuredClone(next)
+  })
+}
+
+export async function readCircleKitActionStore(key: string): Promise<CircleKitOperationStore | undefined> {
+  if (!hasRenderDurableStore()) throw Object.assign(new Error('Bridge recovery storage is unavailable.'),{status:503})
+  // Earlier Kit code was unmounted. Never silently lose an old draft reservation.
+  const legacy=await readDurableJson<CircleKitOperationStore>(key)
+  if (legacy && Object.values(legacy.operations).some(op=>!['cancelled','not_submitted'].includes(op.state))) throw Object.assign(new Error('An earlier bridge reservation needs reconciliation.'),{status:409})
+  return structuredClone((await readStore()).circleKit?.[key])
+}
+
+/** One durable claim owns broadcast. Replays only read the saved transaction. */
+export async function claimSolanaCctpBroadcast(input:{ownerId:string;idempotencyKey:string;fingerprint:string;signedTransaction:string;txHash:string}){
+ return mutateActionStore(store=>{
+  const row=Object.values(store.actions).find(r=>r.ownerId===input.ownerId&&r.idempotencyKey===input.idempotencyKey&&r.action==='reservation.solana-cctp')
+  if(!row||row.metadata?.fingerprint!==input.fingerprint)throw Error('Saved Solana bridge approval changed.')
+  if(row.metadata.signedTransaction&&(row.metadata.signedTransaction!==input.signedTransaction||row.metadata.txHash!==input.txHash))throw Error('Solana bridge signature changed.')
+  if(row.metadata.signedTransaction||!['started','submitted'].includes(row.status))return {claimed:false,record:row}
+  row.metadata={...row.metadata,signedTransaction:input.signedTransaction,txHash:input.txHash}
+  row.status='submitted';row.updatedAt=Date.now()
+  return {claimed:true,record:row}
+ })
+}
+
 export async function recordCirclePocketAction(input: {
   ownerId: string
   idempotencyKey: string
@@ -143,6 +209,18 @@ export async function recordCirclePocketAction(input: {
       && record.idempotencyKey === input.idempotencyKey
       && record.action === input.action
     ))
+    if(['reservation.direct-cctp','reservation.solana-cctp'].includes(input.action)&&existing){
+      for(const field of ['approved','fingerprint','source','walletAddress','walletId','intentFingerprint','challengeId','txHash','signedTransaction']) {
+        if(existing.metadata?.[field]!==undefined && input.metadata?.[field]!==undefined && existing.metadata[field]!==input.metadata[field]) throw new Error('Bridge reservation evidence cannot change.')
+      }
+      if(['completed','failed'].includes(existing.status)){
+        if(existing.status==='completed'&&input.status==='completed'&&input.metadata?.deliveryRecorded==='true')existing.metadata={...existing.metadata,deliveryRecorded:'true'}
+        return existing
+      }
+      if(['cancelled','not_submitted'].includes(input.status)&&existing.metadata?.txHash)return existing
+      if(['cancelled','not_submitted'].includes(existing.status)&&['started','submitted'].includes(input.status)&&!input.metadata?.txHash)return existing
+      input.metadata={...existing.metadata,...input.metadata}
+    }
     if(input.action==='wallet.swap'&&existing){
       // Cancellation and status reads can race. Persisted transaction evidence wins.
       if(existing.status==='completed'||(existing.status==='failed'&&existing.metadata?.txHash))return existing
