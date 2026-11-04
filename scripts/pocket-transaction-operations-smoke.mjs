@@ -75,7 +75,7 @@ assert.equal(forbiddenRes.payload.error, 'Restricted.')
 const operationsSource = await readFile(new URL('../src/pages/OperationsWorkspacePage.tsx', import.meta.url), 'utf8')
 const appSource = await readFile(new URL('../src/surfaces/DeveloperApp.tsx', import.meta.url), 'utf8')
 const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
-assert.match(operationsSource, /section === 'transactions'/)
+assert.match(operationsSource, /params\.section\s*===\s*'transactions'\s*\?\s*<PocketTransactionOperationsPanel/)
 assert.match(appSource, /admin\/transactions/)
 assert.match(serverSource, /\/api\/admin\/pocket\/transactions/)
 
