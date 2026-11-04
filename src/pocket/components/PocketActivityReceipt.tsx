@@ -1,4 +1,4 @@
-﻿import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
+import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import {useLocation,useNavigate} from 'react-router-dom'
 import { pocketActivityAmount, pocketActivityVisibleStatus } from '../lib/pocketActivityPresentation'
@@ -25,7 +25,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
   const detailsRows: Array<[string, ReactNode]> = [
     ...(row.source==='wallet-bridge'&&['refunded','reversed'].includes(pocketActivityStatus(row))&&row.refundAsset?[["Original amount",row.amount+' '+(row.assetSymbol||'USDC')]] as Array<[string,ReactNode]>:[]),
     ...(row.source==='wallet-bridge'&&['refunded','reversed'].includes(pocketActivityStatus(row))&&row.refundAmount&&row.refundAsset?[["Refund received",row.refundAmount+' '+row.refundAsset],["Refund network",row.refundNetwork==='xlayer'?'X Layer':row.refundNetwork||''],...(row.refundTxHash?[["Refund transaction",row.refundTxHash]]:[])] as Array<[string,ReactNode]>:[]),
-    ...(row.source==='wallet-bridge'&&['completed','confirmed','successful','success'].includes(pocketActivityStatus(row))&&row.receivedAmount&&row.destinationAsset?[["Paid with",row.amount+' '+(row.assetSymbol||'USDC')],["Received",row.receivedAmount+' '+row.destinationAsset],...(row.destination?[["Destination network",row.destination]]:[]),...(row.destinationTxHash?[["Destination transaction",row.destinationTxHash]]:[])] as Array<[string,ReactNode]>:[]),
+    ...(['wallet-bridge','wallet-swap'].includes(row.source||'')&&['completed','confirmed','successful','success'].includes(pocketActivityStatus(row))&&row.receivedAmount&&row.destinationAsset?[["Paid with",row.amount+' '+(row.assetSymbol||'USDC')],["Received",row.receivedAmount+' '+row.destinationAsset],...(row.destination?[["Destination network",row.destination]]:[]),...(row.destinationTxHash?[["Destination transaction",row.destinationTxHash]]:[])] as Array<[string,ReactNode]>:[]),
     ['Status', <span className="capitalize">{status}</span>],
     ...(row.direction === 'in' && row.payer ? [['From', row.payer] as [string, ReactNode]] : []),
     ...(row.direction !== 'in' && row.recipient ? [['To', row.recipient] as [string, ReactNode]] : []),

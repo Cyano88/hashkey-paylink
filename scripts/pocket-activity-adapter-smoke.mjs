@@ -326,3 +326,15 @@ console.log('Circle Pocket activity adapter smoke tests passed, including owner-
 
 assert.equal(bankWithdrawActivityStatus({status:'failed',tx_hash:'0x'+'a'.repeat(64)}),'failed')
 assert.equal(bankWithdrawActivityStatus({status:'settled',tx_hash:'0x'+'a'.repeat(64)}),'successful')
+
+// Only verified settlement may populate the Received line, never a quote hint.
+for(const action of ['wallet.native-swap','wallet.swap']){
+ for(const status of ['submitted','completed','failed']){
+  const h=createPocketActivityHandler({verifyUser:async()=>({userId:'owner'}),readHistory:async()=>({payments:[]}),readActions:async()=>[{id:'swap-output',ownerId:'owner',idempotencyKey:'swap-output',action,status,createdAt:Date.now(),updatedAt:Date.now(),metadata:{network:'base',walletAddress:'0x'+'1'.repeat(40),assetSymbol:'USDC',tokenIn:'USDC',toAsset:'USDT',tokenOut:'USDT',amount:'1',amountOut:'0.98',expectedOut:'0.99',txHash:'0x'+'2'.repeat(64)}}]})
+  const res=await request(h);assert.equal(res.statusCode,200)
+  const row=res.body.payments.find(r=>r.source==='wallet-swap');assert.ok(row)
+  assert.equal(row.receivedAmount,status==='completed'?'0.98':undefined)
+  assert.equal(row.destinationAsset,status==='completed'?'USDT':undefined)
+ }
+}
+console.log('PASS swap receipts expose actual output only after verified completion, not pending quotes or failures.')
