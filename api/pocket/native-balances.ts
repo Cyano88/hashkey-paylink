@@ -1,4 +1,5 @@
 import {providerUsageFetch,circleUsageOperation} from './provider-usage.js'
+import {readDisplayNativeRpc} from './display-balance-rpc.js'
 import {circleLinkKey,type CircleLinkRecord} from '../privy-circle-link.js'
 import {createHmac} from 'node:crypto'
 import {okxCredentials} from './xstocks-swap-provider.js'
@@ -83,4 +84,6 @@ export function createNativeBalanceReader(read=fetchCircleNativeBalance,fetcher=
   }))
  }
 }
-export const readPocketNativeBalances=createNativeBalanceReader()
+export const readPocketNativeBalances=createNativeBalanceReader(async link=>{
+ try{return await fetchCircleNativeBalance(link)}catch{return readDisplayNativeRpc(link)}
+})

@@ -1,4 +1,4 @@
-import { createArcDisplayBalanceReader } from './arc-display-balances.js'
+import { readCircleTokenDisplay } from './circle-token-display.js'
 import type { Request, Response } from 'express'
 import { createPublicClient, formatUnits, getAddress, http, parseAbi, parseUnits, type Hex } from 'viem'
 import { arcChain } from '../../src/lib/chains.js'
@@ -9,9 +9,6 @@ import { type ArcSwapQuote, confirmedArcSwapAmount, openArcSwapQuote, quoteArcSw
 
 const TOKEN_ABI = parseAbi(['function balanceOf(address owner) view returns (uint256)'])
 const client = createPublicClient({ chain: arcChain, transport: http(process.env.PRIVATE_RPC_URL_ARC_MAINNET || 'https://rpc.mainnet.arc.io', { timeout: 15_000 }) })
-const readDisplayBalance = createArcDisplayBalanceReader({
-  read: (wallet, token) => client.readContract({ address: getAddress(token), abi: TOKEN_ABI, functionName: 'balanceOf', args: [getAddress(wallet)] }),
-})
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 export async function arcSwapQuotePreview(quote: ArcSwapQuote, readBalance: () => Promise<bigint> = () => client.readContract({ address: quote.tokenIn.address, abi: TOKEN_ABI, functionName: 'balanceOf', args: [quote.walletAddress] })) {
@@ -29,6 +26,7 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     const identity = await d.identity(req)
     const link = await d.readLink(circleLinkKey(identity.userId, 'arc'))
+    if(link&&(link.privyUserId!==identity.userId||link.chain!=='arc'||(link.purpose??'payment')!=='payment'))throw Error('Arc wallet binding changed.')
     if (req.method === 'GET') {
       const requested = typeof req.query.token === 'string' ? req.query.token.trim() : ''
       const tokens = requested ? [await readArcSwapToken(requested)] : (await readArcSwapTokens()).sort((a, b) => Number(same(b.address, '0x3600000000000000000000000000000000000000')) - Number(same(a.address, '0x3600000000000000000000000000000000000000')))
@@ -36,7 +34,7 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
         ? await Promise.all(tokens.map(async (token, index) => {
           if (index >= 50) return { ...token, balance: null, balanceStatus: 'unavailable' }
           try {
-            const balance = await readDisplayBalance(identity.userId, link.circleWalletAddress, token.address)
+            const balance = await readCircleTokenDisplay(link,token,()=>d.client.readContract({address:getAddress(token.address),abi:TOKEN_ABI,functionName:'balanceOf',args:[getAddress(link.circleWalletAddress)]}),req.query.refresh==='1')
             return { ...token, balance: formatUnits(balance, token.decimals), balanceStatus: 'ok' }
           } catch { return { ...token, balance: null, balanceStatus: 'unavailable' } }
         })) : tokens.map(token => ({ ...token, balance: null, balanceStatus: 'wallet_required' }))
@@ -56,7 +54,7 @@ export function createArcSwapHandler(overrides: Partial<{ identity: typeof verif
     const action = req.body?.action
     if (action === 'quote') {
       const quote = await quoteArcSwap({ ownerId: identity.userId, walletId: link.circleWalletId, walletAddress: getAddress(link.circleWalletAddress), tokenIn: String(req.body.tokenIn ?? ''), tokenOut: String(req.body.tokenOut ?? ''), amount: String(req.body.amount ?? '') })
-      return res.json(await arcSwapQuotePreview(quote))
+      return res.json(await arcSwapQuotePreview(quote,()=>readCircleTokenDisplay(link,quote.tokenIn,()=>d.client.readContract({address:quote.tokenIn.address,abi:TOKEN_ABI,functionName:'balanceOf',args:[quote.walletAddress]}))))
     }
     if (action !== 'execute' && action !== 'status' && action !== 'cancel') return res.status(400).json({ ok: false, error: 'Unsupported swap action.' })
     const quote = openArcSwapQuote(String(req.body.quoteToken ?? ''), identity.userId, action !== 'execute')

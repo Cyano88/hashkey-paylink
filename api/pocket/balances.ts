@@ -1,3 +1,4 @@
+import {readPocketEurcBalances} from './eurc-balances.js'
 import {readPocketNativeBalances} from './native-balances.js'
 import { supportsPocketUsdt } from '../../src/pocket/lib/pocketUsdtAssets.js'
 import { readCircleDisplayBalance } from './circle-display-balances.js'
@@ -132,6 +133,7 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
+      if(req.query?.assets === 'eurc') return res.json({ok:true,rows:await readPocketEurcBalances(identity.userId,dependencies.readLink,undefined,undefined,req.query.refresh==='1')})
       if(req.query?.assets === 'native') return res.json({ok:true,rows:await (dependencies.readNativeBalances??readPocketNativeBalances)(identity.userId,dependencies.readLink)})
       if (req.query?.routing === 'bank') {
         // Routing-only snapshot: never publish this partial set as a home total.
@@ -156,7 +158,9 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
         const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
         if (!link) return res.json({ok:true,network,balance:0,wallet:null})
         if (link.chain !== network || (link.purpose ?? 'payment') !== 'payment') return fail(503,'PROVIDER_UNAVAILABLE','Wallet network could not be verified.',true)
-        const balance = await dependencies.readBalance(network,link.circleWalletAddress,true)
+        const balance = dependencies.readDisplayBalance
+          ? (await dependencies.readDisplayBalance(link,()=>dependencies.readBalance(network,link.circleWalletAddress,true),req.query?.refresh==='1')).balance
+          : await dependencies.readBalance(network,link.circleWalletAddress,true)
         if (!Number.isFinite(balance) || balance < 0) return fail(503,'PROVIDER_UNAVAILABLE','Balance unavailable.',true)
         return res.json({ok:true,network,balance,wallet:{walletId:link.circleWalletId,address:link.circleWalletAddress,blockchain:link.circleBlockchain,updatedAt:link.updatedAt}})
       }

@@ -1,5 +1,6 @@
 import { POCKET_USDT_ASSETS, supportsPocketUsdt } from '../../src/pocket/lib/pocketUsdtAssets.js'
 import type { CircleLinkRecord } from '../privy-circle-link.js'
+import {readDisplayUsdtRpc} from './display-balance-rpc.js'
 export const circleBalanceTokens = {
  base:['BASE','0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'],arbitrum:['ARB','0xaf88d065e77c8cC2239327C5EDb3A432268e5831'],ethereum:['ETH','0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],polygon:['MATIC','0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'],solana:['SOL','EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'],arc:['ARC','0x3600000000000000000000000000000000000000'],
 } as const
@@ -40,4 +41,9 @@ export function createCircleDisplayBalanceReader(provider:(link:CircleLinkRecord
   try{current.result=await current.pending;return current.result}finally{current.pending=undefined;if(entries.size>500)for(const[k,v]of entries)if(k!==key&&!v.pending){entries.delete(k);break}}
  }
 }
-export const readCircleDisplayBalance=createCircleDisplayBalanceReader(fetchCircleStablecoinBalances,Date.now,false)
+const readPrimaryDisplayBalance=createCircleDisplayBalanceReader(fetchCircleStablecoinBalances,Date.now,false)
+export async function readCircleDisplayBalance(link:CircleLinkRecord,fallback:()=>Promise<number>,fresh=false){
+ const result=await readPrimaryDisplayBalance(link,fallback,fresh)
+ if(result.usdt!==undefined||!supportsPocketUsdt(link.chain))return result
+ try{return {...result,usdt:await readDisplayUsdtRpc(link)}}catch{return result}
+}
