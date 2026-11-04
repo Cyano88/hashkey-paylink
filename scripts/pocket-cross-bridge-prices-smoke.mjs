@@ -17,5 +17,11 @@ for(const mutate of [rows=>rows.pop(),rows=>rows.push(rows[0]),rows=>rows[0].cha
  await assert.rejects(()=>readCrossBridgePrices('base','USDC',{now:()=>now,credentials,fetcher:async(url,init)=>{const rows=JSON.parse(init.body).map(row=>({...row,price:'1.0',time:String(now)}));mutate(rows);return {ok:true,json:async()=>({code:'0',data:rows})}}}))
 }
 await assert.rejects(()=>readCrossBridgePrices('arc','USDC',{credentials}))
+// Live OKX prices carry more than 30 fractional digits; preserve conservative
+// integer rounding without rejecting valid provider precision.
+const precise=await readCrossBridgePrices('base','USDC',{now:()=>now,credentials,fetcher:async(url,init)=>({ok:true,json:async()=>({code:'0',data:JSON.parse(init.body).map(row=>({...row,time:String(now),price:'0.9998466920823136210628920754652084'}))})})})
+assert.equal(precise.gasPrice.scaled8,99984670n)
+assert.equal(precise.assetPrice.scaled8,99984669n)
+await assert.rejects(()=>readCrossBridgePrices('base','USDC',{now:()=>now,credentials,fetcher:async(url,init)=>({ok:true,json:async()=>({code:'0',data:JSON.parse(init.body).map(row=>({...row,time:String(now),price:'1.'+'1'.repeat(65)}))})})}))
 await assert.rejects(()=>readCrossBridgePrices('base','USDC',{credentials:{}}))
 console.log(`PASS fresh, identity-bound prices for ${count} source assets; adverse decimal rounding, native deduplication, missing/duplicate/wrong-chain/stale/future/malformed/zero data rejected. HTTP fixtures only.`)

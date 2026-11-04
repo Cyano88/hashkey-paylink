@@ -7,7 +7,7 @@ const fail=():never=>{throw Object.assign(Error('Fresh bridge fee pricing is una
 /** Round gas upward and reimbursement-asset price downward. Never use floating
  * point conversion, stablecoin pegs, receipt time as price time or stale fallback. */
 function scaled(value:unknown,up:boolean){
- if(typeof value!=='string'||! /^(0|[1-9]\d{0,11})(?:\.\d{1,30})?$/.test(value))return fail()
+ if(typeof value!=='string'||! /^(0|[1-9]\d{0,11})(?:\.\d{1,64})?$/.test(value))return fail()
  const [whole,fraction='']=value.split('.'),tail=fraction.slice(8)
  const result=BigInt(whole)*100000000n+BigInt((fraction.slice(0,8)).padEnd(8,'0'))+(up&&/[1-9]/.test(tail)?1n:0n)
  if(result<=0n||result>10n**20n)return fail()
