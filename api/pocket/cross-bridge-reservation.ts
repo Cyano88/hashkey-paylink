@@ -3,7 +3,7 @@ import {withDurablePostgresTransaction,readDurableJson} from '../render-durable-
 export const crossBridgeJournalKey=()=> (process.env.CIRCLE_POCKET_ACTION_STORE_KEY??'hashpaylink:circle-pocket-actions').trim()
 export const CROSS_BRIDGE_BSC_KEYS=['pocket:bsc-bridge-operations:v1','pocket:bsc-operations:v1','pocket:bsc-payment-operations:v1','pocket:bsc-send-operations:v1'] as const
 export const XLAYER_RESERVATION_KEY='pocket:xlayer-sponsorship:v1'
-import {assertNoCrossBridgeReservation,crossBridgeReservationTerminal as terminal,type CrossBridgeReservation,type CrossBridgeJournal as Journal} from './cross-bridge-reservation-guard.js'
+import {walletReservationActions,assertNoCrossBridgeReservation,crossBridgeReservationTerminal as terminal,type CrossBridgeReservation,type CrossBridgeJournal as Journal} from './cross-bridge-reservation-guard.js'
 export {assertNoCrossBridgeReservation,type CrossBridgeReservation} from './cross-bridge-reservation-guard.js'
 const same=(network:string,a:string,b:string)=>network==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
 const invalid=():never=>{throw Object.assign(Error('Bridge reservation storage needs reconciliation.'),{status:503})}
@@ -47,7 +47,7 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
    if(!before&&next.state!=='prepared')invalid()
    const scope={network:next.source,address:next.walletAddress,ownerId:next.ownerId}
    assertNoCrossBridgeReservation(journal,scope,now(),id)
-   for(const r of Object.values(journal.actions??{}))if(['started','submitted'].includes(r.status)&&r.ownerId===next.ownerId&&(!r.metadata?.source&&!r.metadata?.network||(r.metadata.source||r.metadata.network)===next.source)&&(!r.metadata?.walletAddress||same(next.source,r.metadata.walletAddress,next.walletAddress)))busy()
+   for(const r of Object.values(journal.actions??{}))if(walletReservationActions.has(r.action)&&['started','submitted'].includes(r.status)&&r.ownerId===next.ownerId&&(!r.metadata?.source&&!r.metadata?.network||(r.metadata.source||r.metadata.network)===next.source)&&(!r.metadata?.walletAddress||same(next.source,r.metadata.walletAddress,next.walletAddress)))busy()
    for(const bucket of Object.values(journal.circleKit??{}))for(const op of Object.values(bucket.operations??{}) as any[]){
     if(['cancelled','not_submitted'].includes(op.state)||op.state==='prepared'&&op.quote.expiresAt<=now())continue
     const wallet=op.quote.wallets.source

@@ -1,3 +1,4 @@
+export const walletReservationActions = new Set(['reservation.direct-cctp','reservation.solana-cctp','wallet.native-send','wallet.native-swap','wallet.swap','wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge','wallet.bsc-send','wallet.bsc-swap','wallet.cash-conversion'])
 export type CrossBridgeReservation={id:string;ownerId:string;source:string;walletAddress:string;fingerprint:string;expiresAt:number;state:string;sourceHash?:string;challengeId?:string;transactionId?:string;userOperationHash?:string;[key:string]:unknown}
 export type CrossBridgeJournal={actions?:Record<string,any>;circleKit?:Record<string,any>;crossBridge?:Record<string,CrossBridgeReservation>;[key:string]:unknown}
 export const crossBridgeReservationTerminal=(s:string)=>['completed','refunded','source_failed','cancelled','not_submitted'].includes(s)

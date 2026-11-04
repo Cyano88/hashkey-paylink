@@ -31,4 +31,13 @@ db=new Map([[keys[0],{actions:{a:{ownerId:'owner',action:'wallet.native-send',st
 await assert.rejects(()=>reserve('cross','base'),e=>e.code==='wallet_action_pending')
 db=new Map([[keys[0],{actions:{},circleKit:{old:{operations:{a:{state:'pending',quote:{wallets:{source:{network:'base',address:wallet}},expiresAt:0}}}}}}]])
 await assert.rejects(()=>reserve('cross','base'),e=>e.code==='wallet_action_pending')
+// Unresolved historical marketplace purchases are not wallet reservations.
+const legacy={ownerId:'owner',action:'marketplace.service.purchase',status:'submitted',metadata:{network:'base',paymentState:'needs_review'}}
+db=new Map([[keys[0],{actions:{legacy}}]])
+await reserve('cross','base')
+assert.deepEqual(db.get(keys[0]).actions.legacy,legacy)
+for(const action of ['wallet.native-send','wallet.native-swap','wallet.bridge','reservation.direct-cctp']){
+ db=new Map([[keys[0],{actions:{pending:{ownerId:'owner',action,status:'submitted',metadata:{network:'base'}}}}]])
+ await assert.rejects(()=>reserve('cross','base'),e=>e.code==='wallet_action_pending')
+}
 console.log('PASS shared cross-asset locks: one winner against BSC/X Layer dispatch, existing unresolved operations block, recovery allowed, source-chain isolation, unknown outcomes never expire, rollback and terminal immutability. Serialized transaction fixture, not live DB contention.')

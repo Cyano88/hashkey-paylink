@@ -1,4 +1,4 @@
-import {assertNoCrossBridgeReservation} from './pocket/cross-bridge-reservation-guard.js'
+import {assertNoCrossBridgeReservation,walletReservationActions as walletActions} from './pocket/cross-bridge-reservation-guard.js'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
@@ -29,7 +29,6 @@ export type CirclePocketActionRecord = {
 }
 
 type ActionStore = { actions: Record<string, CirclePocketActionRecord>; circleKit?: Record<string, CircleKitOperationStore> }
-const walletActions = new Set(['reservation.direct-cctp','reservation.solana-cctp','wallet.native-send','wallet.native-swap','wallet.swap','wallet.bridge','wallet.usdt-bridge','wallet.xlayer-bridge','wallet.bsc-bridge','wallet.bsc-send','wallet.bsc-swap','wallet.cash-conversion'])
 type WalletScope = { ownerId: string; network?: string; address?: string }
 const actionScope = (record: Pick<CirclePocketActionRecord,'ownerId'|'metadata'>): WalletScope => ({ownerId:record.ownerId,network:record.metadata?.network || record.metadata?.source,address:record.metadata?.walletAddress})
 const normalizeAddress = (address: string) => /^0x[0-9a-f]{40}$/i.test(address) ? address.toLowerCase() : address
