@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs'
 import {getOrderId} from '@relay-protocol/settlement-sdk'
 import {encodeFunctionData,decodeFunctionData,parseAbi} from 'viem'
 import {CROSS_BRIDGE_NETWORKS,crossBridgeAssets,crossBridgePair} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
-import {crossBridgeRelayRequest,validateCrossBridgeRelayQuote,crossBridgeDepositAbi,quoteCrossBridgeRelay} from '../api/pocket/cross-bridge-provider.ts'
+import {crossBridgeRelayRequest,validateCrossBridgeRelayQuote,crossBridgeDepositAbi,quoteCrossBridgeRelay,fetchCrossBridgeRelayReview} from '../api/pocket/cross-bridge-provider.ts'
 import {RELAY_BSC_CHAINS,bscRelaySolanaDeposit} from '../api/pocket/bsc-bridge-provider.ts'
 import {fixture,now,evm,sol} from './fixtures/cross-bridge.mjs'
 let routes=0
@@ -52,7 +52,7 @@ import {changeCrossBridgeNetwork,changeCrossBridgeAsset,reverseCrossBridgeSelect
 const selected={source:'base',destination:'polygon',from:'ETH',to:'USDT'}
 assert.deepEqual(changeCrossBridgeNetwork(selected,'destination','solana'),{...selected,destination:'solana'})
 assert.deepEqual(changeCrossBridgeNetwork(selected,'source','solana'),{...selected,source:'solana',from:'USDC'})
-assert.throws(()=>changeCrossBridgeNetwork(selected,'destination','arc'),e=>e.code==='bridge_network_not_enabled')
+assert.deepEqual(changeCrossBridgeNetwork(selected,'destination','arc'),{...selected,destination:'arc',to:'USDC'})
 assert.throws(()=>changeCrossBridgeNetwork(selected,'source','polygon'))
 assert.throws(()=>changeCrossBridgeAsset(selected,'to','POL'))
 assert.equal(crossBridgeSelectionKey(selected),'base:ETH:polygon:USDT')
@@ -74,11 +74,11 @@ for(const [status,errorCode,code,expected] of [[400,'NO_SWAP_ROUTES_FOUND','rout
 console.log('PASS no-route and amount errors are non-retryable 422; provider errors sanitized; rate limit respected')
 
 for(const [source,destination] of [['arc','base'],['base','arc']]){
- const {i}=fixture(source,destination,'USDC','USDC')
+ const {i,q}=fixture(source,destination,'USDC','USDC')
  let fetched=false
- await assert.rejects(()=>quoteCrossBridgeRelay(i,'fixture',async()=>{fetched=true;throw Error('Must not call provider')},null),e=>e.code==='bridge_network_not_enabled')
- assert.equal(fetched,false)
- assert.throws(()=>crossBridgeSelectionKey({source,destination,from:'USDC',to:'USDC'}),e=>e.code==='bridge_network_not_enabled')
+ const {route}=await fetchCrossBridgeRelayReview(i,'fixture',async()=>{fetched=true;return new Response(JSON.stringify(q))},null,()=>now)
+ assert.equal(fetched,true);assert.equal(route.source,source)
+ assert.equal(crossBridgeSelectionKey({source,destination,from:'USDC',to:'USDC'}),source+':USDC:'+destination+':USDC')
 }
 assert.deepEqual(crossBridgeAssets('arc').map(a=>a.symbol),['USDC','EURC'])
-console.log('PASS Arc excluded from new selections and provider quotes before network calls; underlying USDC/EURC catalog retained.')
+console.log('PASS Arc selection and direct provider validation in both directions.')

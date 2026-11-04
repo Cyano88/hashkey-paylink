@@ -33,6 +33,7 @@ export function crossBridgeDeliveryCandidate(p:CrossBridgeSettlementPlan,sourceH
   // A source-asset refund cannot exceed the approved source deposit. A
   // different refund asset has no valid 1:1 source-amount comparison.
   if(network===q.source&&token.symbol===q.tokenIn.symbol&&BigInt(refund.amount)>BigInt(q.amountUnits))return null
+  if(network===q.source&&q.conversion&&token.symbol===q.conversion.bridgeToken.symbol&&BigInt(refund.amount)>BigInt(q.conversion.minimumUnits))return null
  }else if(status.destinationChainId!==RELAY_BSC_CHAINS[q.destination].id)return null
  const canonicalToken=crossBridgeAsset(network,token.symbol)
  if(!same(network,canonicalToken.address,token.address)||canonicalToken.decimals!==token.decimals||canonicalToken.native!==token.native)return null

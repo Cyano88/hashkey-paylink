@@ -1,3 +1,4 @@
+import {validateEurcConversion,type EurcConversion} from './cross-bridge-eurc-conversion.js'
 import {relayBridgeAppFee,relayBridgeAppFeeRequest,validateRelayBridgeAppFeeQuote,type RelayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey} from '@solana/web3.js'
@@ -26,7 +27,7 @@ export function crossBridgeRelayRequest(i:CrossBridgeInput,appFee?:RelayBridgeAp
  return {user:i.sender,recipient:i.recipient,originChainId:RELAY_BSC_CHAINS[i.source].id,destinationChainId:RELAY_BSC_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:relayBridgeAppFeeRequest(appFee)}
 }
 /** No signing or broadcasting. Keep this separate from the existing same-asset adapters. */
-export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null){
+function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null){
  const {tokenIn,tokenOut}=checkInput(i),source=RELAY_BSC_CHAINS[i.source],destination=RELAY_BSC_CHAINS[i.destination],amount=BigInt(i.amountUnits)
  const protocol=q?.protocol?.v2,order=protocol?.orderData as Order
  requireThat(protocol?.hubType==='onchain'&&order?.version==='v1'&&order.inputs?.length===1&&order.output?.payments?.length===1&&order.output.calls?.length===0&&order.fees?.length===0,'unsupported order')
@@ -89,6 +90,15 @@ export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.
   execution={kind:'evm' as const,calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}
  }
  return {provider:'relay' as const,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
+}
+export type CrossBridgeRoute=ReturnType<typeof validateDirectCrossBridgeRelayQuote>&{conversion?:ReturnType<typeof validateEurcConversion>}
+export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null):CrossBridgeRoute {
+ if(q?.kind!=='eurc-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
+ const conversion=validateEurcConversion(q.swap as EurcConversion,i,now)
+ const bridge=validateDirectCrossBridgeRelayQuote(q.bridge,{...i,from:'USDC',amountUnits:conversion.minimumUnits},now,appFee)
+ if(bridge.execution.kind!=='evm')throw Error('Invalid EURC bridge execution.')
+ const calls=[...conversion.calls,...bridge.execution.calls]
+ return {...bridge,tokenIn:crossBridgeAsset(i.source,'EURC'),amountUnits:i.amountUnits,expiresAt:Math.min(bridge.expiresAt,conversion.expiresAt),conversion,execution:{kind:'evm',calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}}
 }
 export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee(),now=Date.now){
  assertCrossBridgeRollout(i.source,i.destination)

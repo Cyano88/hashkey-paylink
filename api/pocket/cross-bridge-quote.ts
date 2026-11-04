@@ -1,3 +1,4 @@
+import {quoteEurcConversion,validateEurcConversion} from './cross-bridge-eurc-conversion.js'
 import {Connection} from '@solana/web3.js'
 import {parseAbi,parseUnits,type Hex} from 'viem'
 import {getRpc,loadRelayer} from '../relay-solana.js'
@@ -7,7 +8,7 @@ import {crossBridgeConfiguredPolicy} from './cross-bridge-policy.js'
 import {createCrossBridgePrivyCost} from './cross-bridge-privy-cost.js'
 import {createCrossBridgeSolanaCost} from './cross-bridge-solana-transaction.js'
 import {resolveCrossBridgeWallets,revalidateCrossBridgeWallets,type CrossBridgeWalletBinding} from './cross-bridge-wallets.js'
-import {fetchCrossBridgeRelayReview,type CrossBridgeInput} from './cross-bridge-provider.js'
+import {fetchCrossBridgeRelayReview,validateCrossBridgeRelayQuote,type CrossBridgeInput} from './cross-bridge-provider.js'
 import {createCrossBridgeReview,type openCrossBridgeReview} from './cross-bridge-review.js'
 import {quoteCrossBridgeCharges,priceCrossBridgeReimbursement,crossBridgeReimbursementRecipient,type CrossBridgeChargedPlan,type CrossBridgeCost} from './cross-bridge-reimbursement.js'
 import {relayBridgeAppFee} from './relay-bridge-app-fee.js'
@@ -16,7 +17,6 @@ import {quoteBridgeMaximum} from './bridge-max-quote.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string,userToken:string,env:NodeJS.ProcessEnv=process.env){
  const source=wallets.source.network,token=crossBridgeAsset(source,asset)
- if(source==='arc')throw Error('Arc is outside this bridge rollout.')
  if(source==='solana')return createCrossBridgeSolanaCost(wallets,asset,new Connection(getRpc(),'confirmed'),loadRelayer().publicKey)
  const client=inboundBridgeClient(source,env),balance=async()=>{if(await client.getChainId()!==inboundChains[source].id)throw Error('Bridge network changed.');return token.native?client.getBalance({address:wallets.source.address as Hex}):client.readContract({address:token.address as Hex,abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[wallets.source.address as Hex]})}
  if(source==='bsc'||source==='xlayer')return {balance,estimate:createCrossBridgePrivyCost(wallets,asset,{env})}
@@ -29,11 +29,18 @@ export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string
  }}
 }
 export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'|'recipient'>&{ownerId:string;circleUserToken?:string;maximum?:boolean},env:NodeJS.ProcessEnv=process.env){
+ if(input.from==='EURC'&&env.POCKET_CROSS_EURC_ENABLED==='false')throw Object.assign(Error('Combined EURC bridges are not enabled yet.'),{status:409,code:'eurc_bridge_not_enabled'})
  assertCrossBridgeRollout(input.source,input.destination)
  const wallets=await resolveCrossBridgeWallets(input.ownerId,input.source,input.destination),readers=crossBridgeReaders(wallets,input.from,input.circleUserToken||'',env)
  const quote=async(amountUnits:bigint)=>{
   const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address}
-  const appFee=relayBridgeAppFee(env),provider=await fetchCrossBridgeRelayReview(request,env.RELAY_API_KEY||'',fetch,appFee),prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
+  const appFee=relayBridgeAppFee(env)
+  const conversion=input.from==='EURC'?await quoteEurcConversion(request,wallets,input.circleUserToken||''):null
+  const converted=conversion?validateEurcConversion(conversion,request,Date.now()):null
+  const direct=await fetchCrossBridgeRelayReview(converted?{...request,from:'USDC',amountUnits:converted.minimumUnits}:request,env.RELAY_API_KEY||'',fetch,appFee)
+  const providerQuote=conversion?{kind:'eurc-conversion',swap:conversion,bridge:direct.providerQuote}:direct.providerQuote
+  const provider={...direct,providerQuote,route:validateCrossBridgeRelayQuote(providerQuote,request,Date.now(),appFee)}
+  const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)
   await revalidateCrossBridgeWallets(wallets)
   const result=await createCrossBridgeReview({wallets,input:request,providerQuote:provider.providerQuote,appFee,...charged,expiresAt:Math.min(charged.expiresAt,provider.requestedAt+30000)})

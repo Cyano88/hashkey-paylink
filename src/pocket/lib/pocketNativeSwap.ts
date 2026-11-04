@@ -1,3 +1,4 @@
+import {POCKET_EURC} from './pocketEurc'
 ﻿import {CHAIN_META} from '../../lib/chains'
 import {POCKET_USDT_ASSETS} from './pocketUsdtAssets'
 import {pocketNativeOnNetwork} from './pocketNativeAssets'
@@ -13,7 +14,7 @@ export function nativeSwapAssets(network:NativeSwapNetwork):NativeSwapAsset[]{
  const native=pocketNativeOnNetwork(network)!
  return [{symbol:native.symbol,address:network==='solana'?'11111111111111111111111111111111':'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',decimals:native.decimals,native:true},
  {symbol:'USDC',address:CHAIN_META[network].tokenAddress,decimals:6,native:false},
- {symbol:'USDT',address:POCKET_USDT_ASSETS[network].address,decimals:6,native:false}]
+ {symbol:'USDT',address:POCKET_USDT_ASSETS[network].address,decimals:6,native:false},...(network==='base'?[POCKET_EURC.base]:[])]
 }
 export function nativeSwapPair(network:NativeSwapNetwork,from:string,to:string){
  const assets=nativeSwapAssets(network),tokenIn=assets.find(a=>a.symbol===from),tokenOut=assets.find(a=>a.symbol===to)

@@ -6,7 +6,7 @@ import {createCrossBridgeOperations,type CrossBridgeOperationDependencies} from 
 import {readCircleKitTransaction,circleKitApprovalNotSubmitted} from './circle-bridge-transaction.js'
 
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
-type Chain='ethereum'|'base'|'arbitrum'|'polygon'
+type Chain='ethereum'|'base'|'arbitrum'|'polygon'|'arc'
 type Binding={chain:Chain;userToken:string;walletId:string;walletAddress:string;refId:string}
 type Dependencies={
  durable():boolean;now():number;open:typeof openCrossBridgeReview;
@@ -22,7 +22,7 @@ const defaults:Dependencies={durable:hasRenderDurableStore,now:Date.now,open:ope
  dispatch:async input=>(await import('../circle-solana-email.js')).createCircleGasStationEvmChallenge(input),
  recover:async input=>(await import('../circle-solana-email.js')).recoverCircleNativeSendChallenge(input),
  notSubmitted:async input=>{const {circleMigrationRequest}=await import('../circle-solana-email.js');return circleKitApprovalNotSubmitted(input.challengeId,path=>circleMigrationRequest(input.userToken,input.chain,path))},
- transaction:async input=>{const {circleMigrationRequest}=await import('../circle-solana-email.js');return readCircleKitTransaction({...input,blockchain:{ethereum:'ETH',base:'BASE',arbitrum:'ARB',polygon:'MATIC'}[input.chain]},path=>circleMigrationRequest(input.userToken,input.chain,path))},
+ transaction:async input=>{const {circleMigrationRequest}=await import('../circle-solana-email.js');return readCircleKitTransaction({...input,blockchain:{ethereum:'ETH',base:'BASE',arbitrum:'ARB',polygon:'MATIC',arc:'ARC'}[input.chain]},path=>circleMigrationRequest(input.userToken,input.chain,path))},
 }
 /** Request-scoped Circle authorization is never stored. Status only looks up the
  * original challenge/transaction; it cannot dispatch or open another approval.
@@ -35,7 +35,7 @@ export function createCrossBridgeCircleRuntime(ownerId:string,userToken:string,p
  const binding=(r:Review):Binding=>{
   const q=r.quote,source=q.input.source
   if(q.ownerId!==ownerId||q.wallets.ownerId!==ownerId)throw Object.assign(Error('Bridge owner mismatch.'),{status:403})
-  if(!(['ethereum','base','arbitrum','polygon'] as string[]).includes(source)||q.wallets.source.provider!=='circle'||r.charged.plan.kind!=='evm')throw Error('This bridge requires a different wallet provider.')
+  if(!(['ethereum','base','arbitrum','polygon','arc'] as string[]).includes(source)||q.wallets.source.provider!=='circle'||r.charged.plan.kind!=='evm')throw Error('This bridge requires a different wallet provider.')
   return {chain:source as Chain,userToken,walletId:q.wallets.source.walletId,walletAddress:q.wallets.source.address,refId:'pocket:cross-bridge:'+q.id}
  }
  const service=createCrossBridgeOperations({store:d.store,now:d.now,

@@ -14,9 +14,11 @@ function scaled(value:unknown,up:boolean){
  return result
 }
 export async function readCrossBridgePrices(network:CrossBridgeNetwork,asset:string,options:{fetcher?:typeof fetch;now?:()=>number;credentials?:ReturnType<typeof okxCredentials>}={}):Promise<{gasPrice:CrossBridgePrice;assetPrice:CrossBridgePrice}>{
- if(network==='arc')return fail()
- const token=crossBridgeAsset(network,asset),chainIndex=network==='solana'?'501':String(RELAY_BSC_CHAINS[network].id)
- const native=network==='solana'?'11111111111111111111111111111111':'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+ // Circle-issued Arc USDC/EURC share the same denomination as their Base assets.
+ // Use fresh, timestamped market prices, never a fixed dollar peg.
+ const pricingNetwork=network==='arc'?'base':network
+ const token=crossBridgeAsset(pricingNetwork,asset),chainIndex=pricingNetwork==='solana'?'501':String(RELAY_BSC_CHAINS[pricingNetwork].id)
+ const native=network==='arc'?crossBridgeAsset('base','USDC').address:network==='solana'?'11111111111111111111111111111111':'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
  const address=token.native?native:token.address,addresses=[...new Set([native,address])]
  const now=options.now??Date.now,credentials=options.credentials??okxCredentials(),fetcher=options.fetcher??fetch
  if(!credentials.key||!credentials.secret||!credentials.passphrase)return fail()

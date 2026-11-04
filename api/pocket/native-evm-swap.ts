@@ -60,7 +60,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    }
    if(action==='quote'){
     const pair=nativeSwapPair(network,req.body.from,req.body.to)
-    const rate=pair.tokenIn.native?undefined:await d.rate(network==='polygon'?'polygon':'ethereum',undefined,d.now,pair.tokenIn.symbol as 'USDC'|'USDT')
+    const rate=pair.tokenIn.native||pair.tokenIn.symbol==='EURC'?undefined:await d.rate(network==='polygon'?'polygon':'ethereum',undefined,d.now,pair.tokenIn.symbol as 'USDC'|'USDT')
     const quote=await d.quote({ownerId,walletId,walletAddress,network,from:req.body.from,to:req.body.to,amount:req.body.amount},estimate,undefined,d.now,preflight,rate)
     return res.json({ok:true,quote:nativeSwapReview(quote),quoteToken:sealNativeEvmSwap(quote),sufficientBalance:await preflight(quote)})
    }

@@ -33,10 +33,6 @@ for(const network of CROSS_BRIDGE_NETWORKS){
  }else {assert.equal(built.plan.instructions.length,2);assert.equal(built.plan.instructions[1].data.readBigUInt64LE(1),123n)}
  let estimates=0
  const deps={now:()=>now,balance:async()=>BigInt(i.amountUnits)*100n,estimate:async(plan,planHash)=>{estimates++;return{source:network,asset:token.symbol,planHash,nativeUnits:10000n,rentUnits:0n,gasPrice:price(),assetPrice:price(),expiresAt:now+30000}}}
- if(network==='arc'){
-  await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,deps),e=>e.code==='bridge_network_not_enabled')
-  assert.equal(estimates,0);continue
- }
  const fees=await quoteCrossBridgeCharges(route,binding,recipient,{...policy,marginBps:1000},deps)
  assert.equal(fees.totalUnits,BigInt(i.amountUnits)+fees.reimbursementUnits);assert.ok(estimates<=2);assert.equal(fees.walletFingerprint,binding.fingerprint)
  for(const rentUnits of [undefined,-1n,...(network==='solana'?[]:[1n])])await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,estimate:async(plan,hash)=>({...await deps.estimate(plan,hash),rentUnits})}))
@@ -47,4 +43,4 @@ for(const network of CROSS_BRIDGE_NETWORKS){
  await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,balance:async()=>BigInt(i.amountUnits)}),e=>e.status===422)
  await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,estimate:async()=>({...await deps.estimate(null,'wrong')})}))
 }
-console.log('PASS reimbursement pricing for '+cases+' network/assets; exact Arc/Solana/BNB decimals, EURC value, BNB policy parity, stale-price/cap rejection, atomic fee plans, explicit Solana rent, affordability and estimate binding; Arc quote excluded from rollout. Fixtures only.')
+console.log('PASS reimbursement pricing for '+cases+' network/assets; exact Arc/Solana/BNB decimals, EURC value, BNB policy parity, stale-price/cap rejection, atomic fee plans, explicit Solana rent, affordability and estimate binding; Arc included. Fixtures only.')

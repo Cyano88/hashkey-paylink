@@ -1,0 +1,815 @@
+{
+  "input": {
+    "source": "arc",
+    "destination": "base",
+    "from": "EURC",
+    "to": "EURC",
+    "sender": "0x1111111111111111111111111111111111111111",
+    "recipient": "0x1111111111111111111111111111111111111111",
+    "amountUnits": "10000000"
+  },
+  "envelope": {
+    "kind": "eurc-conversion",
+    "swap": {
+      "provider": "arc-lifi",
+      "response": {
+        "type": "lifi",
+        "id": "eb8ec538-f95a-4037-bd50-86f14e2dfe1e:0",
+        "tool": "fly",
+        "toolDetails": {
+          "key": "fly",
+          "name": "Fly",
+          "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/exchanges/fly.svg"
+        },
+        "action": {
+          "fromToken": {
+            "address": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+            "chainId": 5042,
+            "symbol": "EURC",
+            "decimals": 6,
+            "name": "Eurc",
+            "coinKey": "EURC",
+            "logoURI": "https://static.debank.com/image/eth_token/logo_url/0x1abaea1f7c830bd89acc67ec4af516284b1bc33c/790d0c3a6da87111b66255c0d57108fa.png",
+            "priceUSD": "1.1229314516",
+            "tags": [
+              "stablecoin"
+            ],
+            "verificationStatus": "verified",
+            "verificationStatusBreakdown": [
+              {
+                "provider": "hypernative",
+                "result": "verified",
+                "providerResult": "accept"
+              }
+            ]
+          },
+          "fromAmount": "10000000",
+          "toToken": {
+            "address": "0x3600000000000000000000000000000000000000",
+            "chainId": 5042,
+            "symbol": "USDC",
+            "decimals": 6,
+            "name": "USDC",
+            "coinKey": "USDC",
+            "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+            "priceUSD": "1.0009008107296566",
+            "tags": [
+              "stablecoin"
+            ],
+            "verificationStatus": "verified",
+            "verificationStatusBreakdown": [
+              {
+                "provider": "hypernative",
+                "result": "verified",
+                "providerResult": "accept"
+              }
+            ]
+          },
+          "fromChainId": 5042,
+          "toChainId": 5042,
+          "slippage": 0.005,
+          "fromAddress": "0x1111111111111111111111111111111111111111",
+          "toAddress": "0x1111111111111111111111111111111111111111"
+        },
+        "estimate": {
+          "tool": "fly",
+          "approvalAddress": "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+          "toAmountMin": "11143305",
+          "toAmount": "11199302",
+          "fromAmount": "10000000",
+          "feeCosts": [
+            {
+              "name": "LIFI Fixed Fee",
+              "description": "Fixed LIFI fee, independent of any other fee",
+              "token": {
+                "address": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+                "chainId": 5042,
+                "symbol": "EURC",
+                "decimals": 6,
+                "name": "Eurc",
+                "coinKey": "EURC",
+                "logoURI": "https://static.debank.com/image/eth_token/logo_url/0x1abaea1f7c830bd89acc67ec4af516284b1bc33c/790d0c3a6da87111b66255c0d57108fa.png",
+                "priceUSD": "1.1229314516",
+                "tags": [
+                  "stablecoin"
+                ],
+                "verificationStatus": "verified",
+                "verificationStatusBreakdown": [
+                  {
+                    "provider": "hypernative",
+                    "result": "verified",
+                    "providerResult": "accept"
+                  }
+                ]
+              },
+              "amount": "25000",
+              "amountUSD": "0.0281",
+              "percentage": "0.0025",
+              "included": true,
+              "feeSplit": {
+                "lifiFee": "25000",
+                "integratorFee": "0",
+                "recipients": [
+                  {
+                    "name": "lifi",
+                    "type": "FIXED",
+                    "fee": "25000"
+                  }
+                ]
+              }
+            }
+          ],
+          "gasCosts": [
+            {
+              "type": "SEND",
+              "price": "20001000000",
+              "estimate": "408867",
+              "limit": "531527",
+              "amount": "8177748867000000",
+              "amountUSD": "0.0082",
+              "token": {
+                "address": "0x0000000000000000000000000000000000000000",
+                "chainId": 5042,
+                "symbol": "USDC",
+                "decimals": 18,
+                "name": "USDC",
+                "coinKey": "USDC",
+                "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                "priceUSD": "1.0009008107296566",
+                "tags": [
+                  "stablecoin"
+                ],
+                "verificationStatus": "verified",
+                "verificationStatusBreakdown": [
+                  {
+                    "provider": "hypernative",
+                    "result": "verified",
+                    "providerResult": "accept"
+                  }
+                ]
+              }
+            }
+          ],
+          "executionDuration": 0,
+          "fromAmountUSD": "11.2293",
+          "toAmountUSD": "11.2094"
+        },
+        "includedSteps": [
+          {
+            "id": "c21ef2ed-3537-49e1-a533-32b220e75ab0",
+            "type": "protocol",
+            "action": {
+              "fromChainId": 5042,
+              "fromAmount": "10000000",
+              "fromToken": {
+                "address": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+                "chainId": 5042,
+                "symbol": "EURC",
+                "decimals": 6,
+                "name": "Eurc",
+                "coinKey": "EURC",
+                "logoURI": "https://static.debank.com/image/eth_token/logo_url/0x1abaea1f7c830bd89acc67ec4af516284b1bc33c/790d0c3a6da87111b66255c0d57108fa.png",
+                "priceUSD": "1.1229314516",
+                "tags": [
+                  "stablecoin"
+                ],
+                "verificationStatus": "verified",
+                "verificationStatusBreakdown": [
+                  {
+                    "provider": "hypernative",
+                    "result": "verified",
+                    "providerResult": "accept"
+                  }
+                ]
+              },
+              "toChainId": 5042,
+              "toToken": {
+                "address": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+                "chainId": 5042,
+                "symbol": "EURC",
+                "decimals": 6,
+                "name": "Eurc",
+                "coinKey": "EURC",
+                "logoURI": "https://static.debank.com/image/eth_token/logo_url/0x1abaea1f7c830bd89acc67ec4af516284b1bc33c/790d0c3a6da87111b66255c0d57108fa.png",
+                "priceUSD": "1.1229314516",
+                "tags": [
+                  "stablecoin"
+                ],
+                "verificationStatus": "verified",
+                "verificationStatusBreakdown": [
+                  {
+                    "provider": "hypernative",
+                    "result": "verified",
+                    "providerResult": "accept"
+                  }
+                ]
+              },
+              "slippage": 0.005,
+              "fromAddress": "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+              "toAddress": "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+              "integratorId": "hashpaylink"
+            },
+            "estimate": {
+              "fromAmount": "10000000",
+              "toAmount": "9975000",
+              "toAmountMin": "9975000",
+              "tool": "feeCollection",
+              "approvalAddress": "0x906A51f3d8dF12B7030D5299D1098dd89fFe830b",
+              "gasCosts": [
+                {
+                  "type": "SEND",
+                  "price": "20001000000",
+                  "estimate": "130000",
+                  "limit": "169000",
+                  "amount": "2600130000000000",
+                  "amountUSD": "0.0026",
+                  "token": {
+                    "address": "0x0000000000000000000000000000000000000000",
+                    "chainId": 5042,
+                    "symbol": "USDC",
+                    "decimals": 18,
+                    "name": "USDC",
+                    "coinKey": "USDC",
+                    "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                    "priceUSD": "1.0009008107296566",
+                    "tags": [
+                      "stablecoin"
+                    ],
+                    "verificationStatus": "verified",
+                    "verificationStatusBreakdown": [
+                      {
+                        "provider": "hypernative",
+                        "result": "verified",
+                        "providerResult": "accept"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "feeCosts": [
+                {
+                  "name": "LIFI Fixed Fee",
+                  "description": "Fixed LIFI fee, independent of any other fee",
+                  "token": {
+                    "address": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+                    "chainId": 5042,
+                    "symbol": "EURC",
+                    "decimals": 6,
+                    "name": "Eurc",
+                    "coinKey": "EURC",
+                    "logoURI": "https://static.debank.com/image/eth_token/logo_url/0x1abaea1f7c830bd89acc67ec4af516284b1bc33c/790d0c3a6da87111b66255c0d57108fa.png",
+                    "priceUSD": "1.1229314516",
+                    "tags": [
+                      "stablecoin"
+                    ],
+                    "verificationStatus": "verified",
+                    "verificationStatusBreakdown": [
+                      {
+                        "provider": "hypernative",
+                        "result": "verified",
+                        "providerResult": "accept"
+                      }
+                    ]
+                  },
+                  "amount": "25000",
+                  "amountUSD": "0.0281",
+                  "percentage": "0.0025",
+                  "included": true,
+                  "feeSplit": {
+                    "lifiFee": "25000",
+                    "integratorFee": "0",
+                    "recipients": [
+                      {
+                        "name": "lifi",
+                        "type": "FIXED",
+                        "fee": "25000"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "executionDuration": 0
+            },
+            "tool": "feeCollection",
+            "toolDetails": {
+              "key": "feeCollection",
+              "name": "Integrator Fee",
+              "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/protocols/feeCollection.svg"
+            }
+          },
+          {
+            "id": "77d858c2-3fd1-4497-844f-7b89d19d1886",
+            "type": "swap",
+            "action": {
+              "fromChainId": 5042,
+              "fromAmount": "9975000",
+              "fromToken": {
+                "address": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+                "chainId": 5042,
+                "symbol": "EURC",
+                "decimals": 6,
+                "name": "Eurc",
+                "coinKey": "EURC",
+                "logoURI": "https://static.debank.com/image/eth_token/logo_url/0x1abaea1f7c830bd89acc67ec4af516284b1bc33c/790d0c3a6da87111b66255c0d57108fa.png",
+                "priceUSD": "1.1229314516",
+                "tags": [
+                  "stablecoin"
+                ],
+                "verificationStatus": "verified",
+                "verificationStatusBreakdown": [
+                  {
+                    "provider": "hypernative",
+                    "result": "verified",
+                    "providerResult": "accept"
+                  }
+                ]
+              },
+              "toChainId": 5042,
+              "toToken": {
+                "address": "0x3600000000000000000000000000000000000000",
+                "chainId": 5042,
+                "symbol": "USDC",
+                "decimals": 6,
+                "name": "USDC",
+                "coinKey": "USDC",
+                "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                "priceUSD": "1.0009008107296566",
+                "tags": [
+                  "stablecoin"
+                ],
+                "verificationStatus": "verified",
+                "verificationStatusBreakdown": [
+                  {
+                    "provider": "hypernative",
+                    "result": "verified",
+                    "providerResult": "accept"
+                  }
+                ]
+              },
+              "slippage": 0.005,
+              "fromAddress": "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+              "toAddress": "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+              "integratorId": "hashpaylink"
+            },
+            "estimate": {
+              "tool": "fly",
+              "fromAmount": "9975000",
+              "toAmount": "11199302",
+              "toAmountMin": "11143305",
+              "approvalAddress": "0x20f6ee51340adeed01a59b0e65cb3703f3dc860c",
+              "executionDuration": 0,
+              "feeCosts": [],
+              "gasCosts": [
+                {
+                  "type": "SEND",
+                  "price": "20001000000",
+                  "estimate": "153181",
+                  "limit": "199135",
+                  "amount": "3063773181000000",
+                  "amountUSD": "0.0031",
+                  "token": {
+                    "address": "0x0000000000000000000000000000000000000000",
+                    "chainId": 5042,
+                    "symbol": "USDC",
+                    "decimals": 18,
+                    "name": "USDC",
+                    "coinKey": "USDC",
+                    "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                    "priceUSD": "1.0009008107296566",
+                    "tags": [
+                      "stablecoin"
+                    ],
+                    "verificationStatus": "verified",
+                    "verificationStatusBreakdown": [
+                      {
+                        "provider": "hypernative",
+                        "result": "verified",
+                        "providerResult": "accept"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "tool": "fly",
+            "toolDetails": {
+              "key": "fly",
+              "name": "Fly",
+              "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/exchanges/fly.svg"
+            }
+          }
+        ],
+        "integrator": "hashpaylink",
+        "stepSimulation": {
+          "status": "success",
+          "gasSource": "simulation"
+        },
+        "transactionRequest": {
+          "value": "0x0",
+          "to": "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+          "data": "0x5fd9ae2efc0b1f6790dfe69b8d5a53dc6f49482cfa5ccc99237183b1acb817d2de63915200000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000011111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000aa08890000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000000b686173687061796c696e6b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002a30783030303030303030303030303030303030303030303030303030303030303030303030303030303000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000906a51f3d8df12b7030d5299d1098dd89ffe830b000000000000000000000000906a51f3d8df12b7030d5299d1098dd89ffe830b000000000000000000000000bef5f6d51cb62b58e6a8f77868681825c6fe21c1000000000000000000000000bef5f6d51cb62b58e6a8f77868681825c6fe21c1000000000000000000000000000000000000000000000000000000000098968000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000a4332d746b000000000000000000000000bef5f6d51cb62b58e6a8f77868681825c6fe21c100000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000001000000000000000000000000c06ebbefd94032b85424d51906e2a335efae264b00000000000000000000000000000000000000000000000000000000000061a80000000000000000000000000000000000000000000000000000000000000000000000000000000020f6ee51340adeed01a59b0e65cb3703f3dc860c00000000000000000000000020f6ee51340adeed01a59b0e65cb3703f3dc860c000000000000000000000000bef5f6d51cb62b58e6a8f77868681825c6fe21c1000000000000000000000000360000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009834d800000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024446ec278a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000001e301bd0080a4072583658fae592a3506a42431cb6316a8d40bbef5f6d51cb62b58e6a8f77868681825c6fe21c1360000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009834d8e00114e80119e8011dcbb971801f592a557aab426787c9b7d88080d35fd08d944dc3ca50dba5c17481f001210081f6aae4886d02ea79692c6901991c8f0a462c575c485e353bd87ff4c6ba4e48489765f7ce9c46fb7713784530fe9243e7414b2b4fac584cd17fcff88d1dd7c41b00e06aebb53ee8aa0889e8aae346f02710128acb08f800e89834d8000000000000000000000000fffd8963efd1fc6a506488495d951d5263988d2500000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000014bef5f6d51cb62b58e6a8f77868681825c6fe21c1000000000000000000000000010123060301270e0129012904012d0080e7cc1483850f515e407bc3c5a4ac7f11b9618cf800070a0000000000000000000000000000000000000000000000000000000000000301d20500000200700200700705006000004001ad01be01be07002001f301f9000006002001f901fc000003000001fc02030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "from": "0x1111111111111111111111111111111111111111",
+          "chainId": 5042,
+          "gasPrice": "0x4a8270a40",
+          "gasLimit": "0x81c47"
+        },
+        "transactionId": "0xfc0b1f6790dfe69b8d5a53dc6f49482cfa5ccc99237183b1acb817d2de639152",
+        "recommendedSlippage": null
+      },
+      "issuedAt": 1793831950697,
+      "expiresAt": 1793831995697
+    },
+    "bridge": {
+      "requestId": "0x179383195518fa5bde54eb05759922f85770bc806de3b54ae7f4470f9a55e9fc",
+      "steps": [
+        {
+          "id": "approve",
+          "action": "Confirm transaction in your wallet",
+          "description": "Sign an approval for USDC",
+          "kind": "transaction",
+          "items": [
+            {
+              "status": "incomplete",
+              "data": {
+                "from": "0x1111111111111111111111111111111111111111",
+                "to": "0x3600000000000000000000000000000000000000",
+                "data": "0x095ea7b30000000000000000000000004cd00e387622c35bddb9b4c962c136462338bc310000000000000000000000000000000000000000000000000000000000aa0889",
+                "value": "0",
+                "chainId": 5042,
+                "gas": "73113",
+                "maxFeePerGas": "22001000000",
+                "maxPriorityFeePerGas": "1000000"
+              }
+            }
+          ],
+          "requestId": "0x179383195518fa5bde54eb05759922f85770bc806de3b54ae7f4470f9a55e9fc"
+        },
+        {
+          "id": "deposit",
+          "action": "Confirm transaction in your wallet",
+          "description": "Depositing funds to the relayer to execute the swap for EURC",
+          "kind": "transaction",
+          "items": [
+            {
+              "status": "incomplete",
+              "data": {
+                "from": "0x1111111111111111111111111111111111111111",
+                "to": "0x4cD00E387622C35bDDB9b4c962C136462338BC31",
+                "data": "0xe8017952000000000000000000000000111111111111111111111111111111111111111100000000000000000000000036000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000aa08897e6e2ec84d7c256daa35da9f4579c3bdc3795eabbf43f53d992e33cb3fdd0f28",
+                "value": "0",
+                "chainId": 5042,
+                "gas": "78419",
+                "maxFeePerGas": "22001000000",
+                "maxPriorityFeePerGas": "1000000"
+              },
+              "check": {
+                "endpoint": "/intents/status/v3?requestId=0x179383195518fa5bde54eb05759922f85770bc806de3b54ae7f4470f9a55e9fc",
+                "method": "GET"
+              }
+            }
+          ],
+          "requestId": "0x179383195518fa5bde54eb05759922f85770bc806de3b54ae7f4470f9a55e9fc",
+          "depositAddress": ""
+        }
+      ],
+      "fees": {
+        "gas": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x0000000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin (Gas Currency)",
+            "decimals": 18,
+            "metadata": {}
+          },
+          "amount": "1725296419000000",
+          "amountFormatted": "0.001725296419",
+          "amountUsd": "0.001725",
+          "minimumAmount": "1725296419000000"
+        },
+        "relayer": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "56414",
+          "amountFormatted": "0.056414",
+          "amountUsd": "0.056407",
+          "minimumAmount": "56414"
+        },
+        "relayerGas": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "14127",
+          "amountFormatted": "0.014127",
+          "amountUsd": "0.014125",
+          "minimumAmount": "14127"
+        },
+        "relayerService": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "42287",
+          "amountFormatted": "0.042287",
+          "amountUsd": "0.042282",
+          "minimumAmount": "42287"
+        },
+        "app": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "0",
+          "amountFormatted": "0.0",
+          "amountUsd": "0",
+          "minimumAmount": "0"
+        },
+        "subsidized": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "0",
+          "amountFormatted": "0.0",
+          "amountUsd": "0",
+          "minimumAmount": "0"
+        }
+      },
+      "details": {
+        "operation": "swap",
+        "sender": "0x1111111111111111111111111111111111111111",
+        "recipient": "0x1111111111111111111111111111111111111111",
+        "currencyIn": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "11143305",
+          "amountFormatted": "11.143305",
+          "amountUsd": "11.141868",
+          "minimumAmount": "11143305"
+        },
+        "currencyOut": {
+          "currency": {
+            "chainId": 8453,
+            "address": "0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42",
+            "symbol": "EURC",
+            "name": "EURC",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://coin-images.coingecko.com/coins/images/26045/large/euro.png?1696525125",
+              "verified": true
+            }
+          },
+          "amount": "9871361",
+          "amountFormatted": "9.871361",
+          "amountUsd": "11.084838",
+          "minimumAmount": "9822991"
+        },
+        "refundCurrency": {
+          "currency": {
+            "chainId": 5042,
+            "address": "0x3600000000000000000000000000000000000000",
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "decimals": 6,
+            "metadata": {
+              "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+              "verified": true
+            }
+          },
+          "amount": "11143305",
+          "amountFormatted": "11.143305",
+          "amountUsd": "11.141868",
+          "minimumAmount": "11143305"
+        },
+        "totalImpact": {
+          "usd": "-0.057030",
+          "percent": "-0.51"
+        },
+        "swapImpact": {
+          "usd": "-0.000623",
+          "percent": "-0.01"
+        },
+        "expandedPriceImpact": {
+          "swap": {
+            "usd": "-0.006193"
+          },
+          "execution": {
+            "usd": "-0.034125"
+          },
+          "relay": {
+            "usd": "-0.016712"
+          },
+          "app": {
+            "usd": "0"
+          },
+          "sponsored": {
+            "usd": "0"
+          }
+        },
+        "rate": "0.8858557672073052",
+        "slippageTolerance": {
+          "total": "49",
+          "origin": {
+            "usd": "0.000000",
+            "value": "0",
+            "percent": "0.00"
+          },
+          "destination": {
+            "usd": "0.054316",
+            "value": "48370",
+            "percent": "0.49"
+          }
+        },
+        "timeEstimate": 2,
+        "userBalance": "0",
+        "isFixedRate": false,
+        "route": {
+          "origin": {
+            "inputCurrency": {
+              "currency": {
+                "chainId": 5042,
+                "address": "0x3600000000000000000000000000000000000000",
+                "symbol": "USDC",
+                "name": "USD Coin",
+                "decimals": 6,
+                "metadata": {
+                  "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+                  "verified": true
+                }
+              },
+              "amount": "11143305",
+              "amountFormatted": "11.143305",
+              "amountUsd": "11.141868",
+              "minimumAmount": "11143305"
+            },
+            "outputCurrency": {
+              "currency": {
+                "chainId": 5042,
+                "address": "0x3600000000000000000000000000000000000000",
+                "symbol": "USDC",
+                "name": "USD Coin",
+                "decimals": 6,
+                "metadata": {
+                  "logoURI": "https://assets.relay.link/icons/currencies/usdc.png",
+                  "verified": true
+                }
+              },
+              "amount": "11143305",
+              "amountFormatted": "11.143305",
+              "amountUsd": "11.141868",
+              "minimumAmount": "11143305"
+            },
+            "router": "relay"
+          },
+          "destination": {
+            "inputCurrency": {
+              "currency": {
+                "chainId": 8453,
+                "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "symbol": "USDC",
+                "name": "USD Coin",
+                "decimals": 6,
+                "metadata": {
+                  "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+                  "verified": true
+                }
+              },
+              "amount": "11086891",
+              "amountFormatted": "11.086891",
+              "amountUsd": "11.085228",
+              "minimumAmount": "11086891"
+            },
+            "outputCurrency": {
+              "currency": {
+                "chainId": 8453,
+                "address": "0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42",
+                "symbol": "EURC",
+                "name": "EURC",
+                "decimals": 6,
+                "metadata": {
+                  "logoURI": "https://coin-images.coingecko.com/coins/images/26045/large/euro.png?1696525125",
+                  "verified": true
+                }
+              },
+              "amount": "9871361",
+              "amountFormatted": "9.871361",
+              "amountUsd": "11.084838",
+              "minimumAmount": "9822991"
+            },
+            "router": "kyberswap"
+          }
+        }
+      },
+      "protocol": {
+        "v2": {
+          "orderId": "0x7e6e2ec84d7c256daa35da9f4579c3bdc3795eabbf43f53d992e33cb3fdd0f28",
+          "hubType": "onchain",
+          "orderData": {
+            "version": "v1",
+            "solverChainId": "base",
+            "solver": "0xf70da97812cb96acdf810712aa562db8dfa3dbef",
+            "salt": "0x10c6f12cb26468e0eba9b819e03a4e1598d69541243aa3d6c2f2f155ceb0dcee",
+            "inputs": [
+              {
+                "payment": {
+                  "chainId": "arc",
+                  "currency": "0x3600000000000000000000000000000000000000",
+                  "amount": "11143305",
+                  "weight": "1"
+                },
+                "refunds": [
+                  {
+                    "chainId": "arc",
+                    "recipient": "0x1111111111111111111111111111111111111111",
+                    "currency": "0x3600000000000000000000000000000000000000",
+                    "minimumAmount": "0",
+                    "deadline": 1794436755,
+                    "extraData": "0x0000000000000000000000000729e2a4716d9f7dd17858d5d504426d228697f7"
+                  },
+                  {
+                    "chainId": "base",
+                    "recipient": "0x1111111111111111111111111111111111111111",
+                    "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                    "minimumAmount": "0",
+                    "deadline": 1794436755,
+                    "extraData": "0x0000000000000000000000000729e2a4716d9f7dd17858d5d504426d228697f7"
+                  }
+                ]
+              }
+            ],
+            "output": {
+              "chainId": "base",
+              "payments": [
+                {
+                  "recipient": "0x1111111111111111111111111111111111111111",
+                  "currency": "0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42",
+                  "minimumAmount": "9822991",
+                  "expectedAmount": "9871361"
+                }
+              ],
+              "calls": [],
+              "deadline": 1794436755,
+              "extraData": "0x0000000000000000000000000729e2a4716d9f7dd17858d5d504426d228697f7"
+            },
+            "fees": []
+          },
+          "orderSignature": "0x545ce91dd566f5c0d50735cf10a14560502092c2f64900d06a0cee1767b10f096819655240d6adc7289a01c6dac8b7eecaa00bc50a525c2bfcc088117d4431881b",
+          "paymentDetails": {
+            "chainId": "arc",
+            "depository": "0x4cD00E387622C35bDDB9b4c962C136462338BC31",
+            "currency": "0x3600000000000000000000000000000000000000",
+            "amount": "11143305"
+          }
+        }
+      }
+    }
+  },
+  "now": 1793831955021
+}

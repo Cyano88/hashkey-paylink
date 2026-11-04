@@ -9,7 +9,7 @@ import {proveCrossBridgeCircleSource,readCrossBridgeCircleSourceState} from '../
 import {RELAY_BSC_CHAINS} from '../api/pocket/bsc-bridge-provider.ts'
 const secret='cross-circle-source-fixture'.repeat(3),treasury='0x3333333333333333333333333333333333333333',hash='0x'+'1'.repeat(64)
 const abi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
-for(const [source,asset] of [['base','ETH'],['base','USDC'],['ethereum','USDT'],['arbitrum','ETH'],['polygon','USDC']]){
+for(const [source,asset] of [['base','ETH'],['base','USDC'],['ethereum','USDT'],['arbitrum','ETH'],['polygon','USDC'],['arc','USDC']]){
  const {q,i}=fixture(source,source==='base'?'polygon':'base',asset,'USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
  const wallets={ownerId:'owner',source:{network:source,provider:'circle',walletId:'source',address:i.sender},destination:{network:i.destination,provider:'circle',walletId:'dest',address:i.recipient}}
  wallets.fingerprint=crossBridgeWalletFingerprint(wallets)

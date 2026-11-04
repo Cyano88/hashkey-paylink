@@ -8,7 +8,7 @@ import {crossBridgeWalletFingerprint} from '../api/pocket/cross-bridge-wallets.t
 import {createCrossBridgeReview,openCrossBridgeReview} from '../api/pocket/cross-bridge-review.ts'
 import {createCrossBridgeCircleRuntime} from '../api/pocket/cross-bridge-circle-runtime.ts'
 const secret='circle-cross-runtime-fixture-secret'.repeat(2),challengeId='11111111-1111-4111-8111-111111111111',sourceHash='0x'+'1'.repeat(64)
-for(const source of ['ethereum','base','arbitrum','polygon']){
+for(const source of ['ethereum','base','arbitrum','polygon','arc']){
  const {q,i}=fixture(source,source==='base'?'polygon':'base','USDC','USDT')
  const wallets={ownerId:'owner',source:{network:source,provider:'circle',walletId:'source',address:i.sender},destination:{network:i.destination,provider:'circle',walletId:'destination',address:i.recipient}}
  wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
@@ -45,4 +45,4 @@ for(const source of ['ethereum','base','arbitrum','polygon']){
  assert.equal((await reconcile('owner',reviewed.quote.id)).state,'completed');assert.equal(events.length,1);assert.equal(events[0].asset,'USDT');assert.equal(events[0].metadata.destinationTxHash,destinationHash);assert.equal(providerCalls,4);assert.equal(sends,1)
  durable=false;assert.throws(()=>runtime().read(reviewed.quote.id),/unavailable/)
 }
-console.log('PASS Circle runtime: four source networks, exact fee-inclusive batch, durable claim before one dispatch, lost-response recovery after expiry, stable references, no repeated approval/dispatch, owner isolation, wallet change and storage guards. Mocked provider; no money moved.')
+console.log('PASS Circle runtime: five source networks, exact fee-inclusive batch, durable claim before one dispatch, lost-response recovery after expiry, stable references, no repeated approval/dispatch, owner isolation, wallet change and storage guards. Mocked provider; no money moved.')

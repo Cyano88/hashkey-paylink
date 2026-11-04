@@ -54,7 +54,8 @@ export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Da
  if(JSON.stringify(positiveSlippageFee)!==JSON.stringify(q.positiveSlippageFee)||q.callData!==nativeSwapBatch(q)||BigInt(q.tx.value)+BigInt(q.feeUnits)>=2n**256n)fail()
  return q
 }
-export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now,affordable?:(quote:NativeEvmSwapQuote)=>Promise<boolean>){
+/** Validated swap route seed. Its provisional fee is not an estimate or an execution authorization. */
+export async function prepareNativeEvmSwapRoute(binding:NativeEvmSwapBinding,read:typeof okxGet=okxGet,now:()=>number=Date.now){
  if(!Object.hasOwn(nativeEvmNetworks,binding.network)||!isAddress(binding.walletAddress))fail()
  const issuedAt=now(),{tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to),units=nativeSwapUnits(binding.amount,tokenIn.decimals)
  const data=await read('swap',{chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
@@ -64,7 +65,10 @@ export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(
  if(!data?.tx)fail()
  const q:NativeEvmSwapQuote={...binding,amount:preview.amount,inputUsdPrice:preview.inputUsdPrice,outputUsdPrice:preview.outputUsdPrice,version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:'1',callData:'0x',issuedAt,expiresAt:issuedAt+45000}
  try{q.positiveSlippageFee=readStockSwapFee({tx:q.tx,expectedOut:preview.expectedOut,decimalsOut:tokenOut.decimals},swapAbi)}catch{throw Object.assign(Error('This swap route is not supported yet. Try another pair.'),{status:422})}
- q.callData=nativeSwapBatch(q);validateNativeEvmSwap(q,false,now())
+ q.callData=nativeSwapBatch(q);return validateNativeEvmSwap(q,false,now())
+}
+export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now,affordable?:(quote:NativeEvmSwapQuote)=>Promise<boolean>){
+ const q=await prepareNativeEvmSwapRoute(binding,read,now),{tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to)
  const checkBalance=async()=>{if(affordable&&!await affordable(q))throw Object.assign(Error(`Insufficient ${tokenIn.symbol} for this swap${tokenIn.native?' and network fee':''}.`),{status:409})}
  await checkBalance()
  for(let pass=0;pass<4;pass++){
@@ -83,7 +87,7 @@ export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(
  * Legacy v1 quotes remain readable for pending operations and receipt recovery. */
 export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now,affordable?:(quote:NativeEvmSwapQuote)=>Promise<boolean>,rateScaled8?:bigint){
  const {tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to)
- if(tokenIn.native)return quoteNativeEvmSwap(binding,estimate,read,now,affordable)
+ if(tokenIn.native||tokenIn.symbol==='EURC')return quoteNativeEvmSwap(binding,estimate,read,now,affordable)
  if(!rateScaled8||rateScaled8<=0n||rateScaled8>10n**15n)throw Object.assign(Error('Network fee pricing is unavailable. Try again.'),{status:503})
  const total=nativeSwapUnits(binding.amount,tokenIn.decimals),issuedAt=now(),id=randomUUID(),spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
  let nativeCap=1n
