@@ -9,7 +9,6 @@ import { cn } from '../../lib/utils'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
-import PocketMarketplacePanel from '../components/PocketMarketplacePanel'
 import PocketSelect from '../components/PocketSelect'
 import usePocketX402Controller from '../controllers/usePocketX402Controller'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -237,13 +236,6 @@ export default function PocketX402Page() {
               )}
             </div>
             {x402.error && !x402.activationOpen && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-950/20 dark:text-red-300">{x402.error}</p>}
-            <PocketMarketplacePanel
-              connected={connected}
-              network={x402.network}
-              gatewayBalance={x402.snapshot?.gatewayBalance}
-              getAccessToken={getAccessToken}
-              onUseBase={() => x402.selectNetwork('base')}
-            />
           </div>
         )}
       </div>

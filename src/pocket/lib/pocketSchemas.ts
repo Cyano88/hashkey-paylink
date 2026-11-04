@@ -476,7 +476,6 @@ export const POCKET_API = {
   x402: pocketApiUrl('/api/pocket/x402'),
   x402Connect: pocketApiUrl('/api/pocket/x402/connect'),
   x402Activate: pocketApiUrl('/api/pocket/x402/activate'),
-  marketplace: pocketApiUrl('/api/pocket/marketplace'),
   agentAsk: pocketApiUrl('/api/pocket/agent/ask'),
   agentConfirm: pocketApiUrl('/api/pocket/agent/confirm'),
 } as const
