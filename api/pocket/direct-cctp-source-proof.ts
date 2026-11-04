@@ -25,7 +25,7 @@ export async function proveDirectCctpSource(q:EvmBridgeFeeQuote,receipt:CircleKi
  const approved=decodeFunctionData({abi,data:q.callData})
  if(approved.functionName!=='executeBatch')fail()
  const expected=(approved.args as unknown as [Array<{target:Hex;value:bigint;data:Hex}>])[0],calls:NativeCallTrace[]=[]
- const collect=(node:NativeCallTrace,depth=0)=>{if(depth>100||node.error||node.revertReason)fail();for(const child of node.calls||[]){if(child.type==='CALL'&&same(child.from,q.walletAddress))calls.push(child);collect(child,depth+1)}}
+ const collect=(node:NativeCallTrace,depth=0)=>{if(node.type==='STATICCALL')return;if(depth>100||node.error||node.revertReason)fail();for(const child of node.calls||[]){if(child.type==='CALL'&&same(child.from,q.walletAddress))calls.push(child);collect(child,depth+1)}}
  collect(matches[0].node)
  if(calls.length!==expected.length)fail()
  for(let i=0;i<calls.length;i++)if(!same(calls[i].to,expected[i].target)||!same(calls[i].input,expected[i].data)||BigInt(calls[i].value||'0')!==expected[i].value)fail()

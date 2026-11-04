@@ -20,6 +20,11 @@ for(const [source,asset] of [['base','ETH'],['base','USDC'],['ethereum','USDT'],
  const receipt={status:'success',transactionHash:hash,logs:route.tokenIn.native?[]:[log(RELAY_BSC_CHAINS[source].depository,BigInt(i.amountUnits)),log(treasury,123n)]}
  const trace={type:'CALL',to:i.sender,input:charged.plan.callData,calls:charged.plan.calls.map(c=>({type:'CALL',from:i.sender,to:c.target,input:c.data,value:'0x'+c.value.toString(16)}))}
  assert.equal(proveCrossBridgeCircleSource(review,hash,receipt,trace).sourceConfirmed,true)
+ const probes=structuredClone(trace)
+ probes.calls.unshift({type:'STATICCALL',from:i.sender,to:route.tokenIn.address,input:'0x01ffc9a7',error:'execution reverted',calls:[{type:'DELEGATECALL',error:'execution reverted'}]})
+ assert.equal(proveCrossBridgeCircleSource(review,hash,receipt,probes).sourceConfirmed,true)
+ const failedCall=structuredClone(probes);failedCall.calls[0].type='CALL'
+ assert.throws(()=>proveCrossBridgeCircleSource(review,hash,receipt,failedCall))
  const blockHash='0x'+'b'.repeat(64)
  let failedTrace={...trace,error:'execution reverted'}
  const rpc=async({method})=>{

@@ -29,6 +29,9 @@ for(const source of CIRCLE_KIT_EVM_SOURCES)for(const destination of Object.keys(
  const receipt={status:'success',transactionHash:hash,logs:[transfer(zeroAddress,1000200n),transfer(EVM_PLATFORM_TREASURY,300n),{address:'0x81D40F21F12A8F0E3252Bccb954D722d4c464B64',topics:encodeEventTopics({abi,eventName:'MessageSent'}),data:encodeAbiParameters([{type:'bytes'}],['0x'+bytes.toString('hex')])}]}
  const trace={type:'CALL',to:wallet,input:q.callData,calls:calls.map(c=>({type:'CALL',from:wallet,to:c.target,input:c.data,value:'0x0'}))}
  assert.equal((await proveDirectCctpSource(q,receipt,trace)).outcome,'source_confirmed')
+ const probes=structuredClone(trace);probes.calls.unshift({type:'STATICCALL',error:'execution reverted',calls:[{type:'DELEGATECALL',error:'execution reverted'}]})
+ assert.equal((await proveDirectCctpSource(q,receipt,probes)).outcome,'source_confirmed')
+ probes.calls[0].type='CALL';await assert.rejects(()=>proveDirectCctpSource(q,receipt,probes))
  for(const alter of [r=>r.logs.pop(),r=>r.logs.push(r.logs[2]),r=>r.logs[0]=transfer(zeroAddress,1000000n),r=>r.logs[1]=transfer(recipient,300n)]){const bad=structuredClone(receipt);alter(bad);await assert.rejects(()=>proveDirectCctpSource(q,bad,trace))}
  await assert.rejects(()=>proveDirectCctpSource(q,receipt,{...trace,to:recipient}))
  await assert.rejects(()=>proveDirectCctpSource(q,receipt,{calls:[trace,trace]}))

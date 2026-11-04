@@ -25,6 +25,9 @@ export function proveCrossBridgeCircleSource(review:Review,hash:string,receipt:C
  walk(trace);if(matches.length!==1)pending()
  const outgoing:NativeCallTrace[]=[]
  const collect=(node:NativeCallTrace,depth=0)=>{
+  // STATICCALL descendants cannot change state or emit transfer logs. Circle's
+  // supportsInterface probes legitimately revert for ordinary ERC20 contracts.
+  if(node.type==='STATICCALL')return
   if(depth>100||node.error||node.revertReason)pending()
   for(const child of node.calls||[]){
    if(same(child.from,wallet)&&child.type==='CALL')outgoing.push(child)

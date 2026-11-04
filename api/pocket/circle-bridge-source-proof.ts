@@ -25,7 +25,7 @@ export async function proveCircleKitSource(expected:CircleKitSourceExpectation,r
  }
  visit(trace);if(matches.length!==1)fail()
  const calls:NativeCallTrace[]=[]
- const collect=(node:NativeCallTrace,depth=0)=>{if(depth>100||node.error||node.revertReason)fail();for(const c of node.calls||[]){if(same(c.from,walletAddress)&&c.type==='CALL')calls.push(c);collect(c,depth+1)}}
+ const collect=(node:NativeCallTrace,depth=0)=>{if(node.type==='STATICCALL')return;if(depth>100||node.error||node.revertReason)fail();for(const c of node.calls||[]){if(same(c.from,walletAddress)&&c.type==='CALL')calls.push(c);collect(c,depth+1)}}
  collect(matches[0])
  if(calls.length!==batch.calls.length)fail()
  for(let n=0;n<calls.length;n++){const actual=calls[n],approved=batch.calls[n];if(!same(actual.to,approved.target)||!same(actual.input,approved.data)||BigInt(actual.value||'0')!==approved.value)fail()}
