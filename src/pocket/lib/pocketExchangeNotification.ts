@@ -22,6 +22,10 @@ export function pocketExchangeNotification(row:PocketActivityRow){
   return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),title:refunded?'Cash funding refunded':failed?'Cash funding failed':'Added to cash balance',body:refunded?'Your cash top-up was refunded. Open for details.':failed?'Your cash top-up was not completed. Open for details.':quantity(received!,'USD')+' added to your cash balance.',path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
  }
  let title=kind+' successful',body=swap?`Your swap on ${network} completed.`:`${paid} bridged from ${network} to ${destination}.`
+ if(!swap&&!failed&&!refunded&&row.destinationAsset){
+  if(!valid(row.receivedAmount)||!row.destinationTxHash)return null
+  body=`${paid} bridged from ${network} to ${quantity(row.receivedAmount!,row.destinationAsset)} on ${destination}.`
+ }
  if(swap&&!failed&&!refunded){
   const legs=(row.contextLabel||'').match(/^(\d+(?:\.\d+)?) ([A-Za-z0-9]+) (?:to|\u2192) (\d+(?:\.\d+)?) ([A-Za-z0-9]+)$/)
   if(legs&&Number(legs[1])===Number(row.amount)&&legs[2]===row.assetSymbol&&valid(legs[3]))body=`${paid} swapped for ${quantity(legs[3],legs[4])} on ${network}.`

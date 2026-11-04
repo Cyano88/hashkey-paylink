@@ -33,3 +33,9 @@ for(const chain of ['arc','arbitrum','ethereum','polygon','solana','bsc','xlayer
 const conversion={...cashRow,eventId:'pocket-cash-conversion:final',source:'wallet-swap',chain:'base',destination:'Cash balance',assetSymbol:'USDT',amount:'1',contextLabel:'1 USDT to 0.99 USDC'}
 assert.equal(notice(conversion).body,'0.99 USD added to your cash balance.')
 console.log('PASS Cash pushes: verified received amount, silent USDT intermediate legs, final conversion, refunds, cancellations and ordinary bridge isolation')
+
+const cross={eventId:'cross',source:'wallet-bridge',chain:'base',destination:'arbitrum',assetSymbol:'USDC',destinationAsset:'USDT',amount:'0.2',receivedAmount:'0.177184',destinationTxHash:'delivery',txHash:'source',paycrestStatus:'completed',ts:1};
+assert.equal(notice(cross).body,'0.2 USDC bridged from Base to 0.177184 USDT on Arbitrum.');
+assert.equal(notice({...cross,paycrestStatus:'processing'}),null);
+assert.equal(notice({...cross,receivedAmount:undefined}),null);
+assert.equal(notice({...cross,destinationTxHash:undefined}),null);

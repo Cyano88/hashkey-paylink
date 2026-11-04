@@ -111,6 +111,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       // Chain reads and reconciliation can finish after the first journal read.
       // Re-read before delivering any generic money movement notifications.
       const currentActions = await dependencies.listActions(ownerId, 500)
+      notificationContext = await dependencies.readContext(ownerId)
       for (const hash of actionHashes(currentActions)) ignoredHashes.add(hash)
       const cutoff = dependencies.now() - lookbackMs
       // Provider records own payment wording. Suppress the debit, fee logs,
@@ -192,7 +193,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       const confirmed = rows.filter(row => {
         if (!isConfirmedMoney(row) || !row.txHash) return false
         // Allow durable purchase registration to catch up with chain indexing.
-        const disposition=exchangeTransferDisposition(row,currentActions)
+        const disposition=exchangeTransferDisposition(row,currentActions,notificationContext)
         if(disposition==='suppress')return false
         if(disposition==='defer'||dependencies.now()-row.ts<30_000){waiting.push(row);return false}
         if (ignoredHashes.has(row.txHash.toLowerCase()) || matchingAcceptedRequest(row)) return false

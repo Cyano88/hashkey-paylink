@@ -1,3 +1,4 @@
+import type {PocketActivityRow} from '../../src/pocket/models/pocketActivity.js'
 import {providerRpcFetch} from './provider-usage.js'
 import {readXLayerNativeCandidates,verifyXLayerNativeCandidates,NATIVE_REPLAY_BLOCKS,type NativeDiscoveryState} from './xlayer-native-discovery.js'
 import {enrichWebPaymentNotices} from './web-payment-notices.js'
@@ -129,17 +130,19 @@ export async function runStockNotifications(overrides:Partial<typeof stockScanDe
   }
  }
 }
-export async function deliverStockNotices(overrides:Partial<{configured:typeof pocketPushConfigured;listOwners:typeof listPocketPushOwners;read:typeof readStockNotices;send:typeof sendPocketPush;mutate:typeof mutateStockNotices;listActions:typeof listCirclePocketActions}>={}){
- const d={configured:pocketPushConfigured,listOwners:listPocketPushOwners,read:readStockNotices,send:sendPocketPush,mutate:mutateStockNotices,listActions:listCirclePocketActions,...overrides}
+export async function deliverStockNotices(overrides:Partial<{configured:typeof pocketPushConfigured;listOwners:typeof listPocketPushOwners;read:typeof readStockNotices;send:typeof sendPocketPush;mutate:typeof mutateStockNotices;listActions:typeof listCirclePocketActions;readContext:(owner:string)=>Promise<PocketActivityRow[]>}>={}){
+ const d={configured:pocketPushConfigured,listOwners:listPocketPushOwners,read:readStockNotices,send:sendPocketPush,mutate:mutateStockNotices,listActions:listCirclePocketActions,readContext:async(owner:string)=>(await import('./cross-bridge-activity.js')).readCrossBridgeActivity(owner),...overrides}
  if(!d.configured())return
  const pushOwners=new Set(await d.listOwners())
  const snapshot=await d.read()
  const pending=Object.values(snapshot.notices).filter(n=>!n.delivered&&!n.pushSuppressed&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
  const actions=new Map<string,Awaited<ReturnType<typeof listCirclePocketActions>>>()
+ const contexts=new Map<string,PocketActivityRow[]>()
  for(const n of pending){
   if(n.transfer&&!n.trade&&!n.earn){
    if(!actions.has(n.owner))actions.set(n.owner,await d.listActions(n.owner,500))
-   const disposition=exchangeTransferDisposition({txHash:n.hash,chain:'xlayer',assetSymbol:n.transfer.symbol,direction:n.transfer.direction,ts:n.at},actions.get(n.owner)!)
+   if(!contexts.has(n.owner))contexts.set(n.owner,await d.readContext(n.owner))
+   const disposition=exchangeTransferDisposition({txHash:n.hash,chain:'xlayer',assetSymbol:n.transfer.symbol,direction:n.transfer.direction,ts:n.at},actions.get(n.owner)!,contexts.get(n.owner)!)
    if(disposition==='suppress'){await d.mutate(s=>{if(s.notices[n.id])s.notices[n.id].pushSuppressed=true});continue}
    if(disposition==='defer'||Date.now()-n.at<30_000)continue
   }

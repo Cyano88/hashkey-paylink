@@ -23,10 +23,18 @@ for(const action of ['wallet.swap','wallet.native-swap','wallet.bsc-swap','walle
 }
 const s=normalizeStockNotices();const n={id:'transfer',owner:'owner',title:'USDC received',body:'1 USDC received on X Layer.',at:now-31_000,hash,transfer:{symbol:'USDC',direction:'in',token:'0x1',amount:'1',from:'router',to:'wallet'}};s.notices[n.id]=n
 let records=[{action:'wallet.xlayer-bridge',status:'submitted',createdAt:now-60_000,metadata:{source:'base',destination:'xlayer',txHash:source}}],sent=[]
-const deps={configured:()=>true,listOwners:async()=>['owner'],read:async()=>s,listActions:async()=>records,mutate:async fn=>{fn(s);return s},send:async(...args)=>{sent.push(args);return true}}
+const deps={readContext:async()=>[],configured:()=>true,listOwners:async()=>['owner'],read:async()=>s,listActions:async()=>records,mutate:async fn=>{fn(s);return s},send:async(...args)=>{sent.push(args);return true}}
 await deliverStockNotices(deps);assert.equal(sent.length,0);assert(!n.delivered&&!n.pushSuppressed)
 records=[{...records[0],status:'completed',metadata:{...records[0].metadata,destinationTxHash:hash}}]
 await deliverStockNotices(deps);assert.equal(sent.length,0);assert(n.pushSuppressed)
 s.notices.external={...n,id:'external',hash:'0x'+'c'.repeat(64),pushSuppressed:false}
 await deliverStockNotices(deps);assert.equal(sent.length,1)
 console.log('PASS swap/cash pending classification, cancellation, network/asset isolation and X Layer durable defer/suppress/external delivery.')
+
+const context={eventId:'cross',source:'wallet-bridge',chain:'base',destination:'arbitrum',assetSymbol:'USDC',destinationAsset:'USDT',amount:'0.2',paycrestStatus:'processing',txHash:source,ts:now-60000};
+const arrival={txHash:hash,chain:'arbitrum',assetSymbol:'USDT',direction:'in',ts:now-31000};
+assert.equal(classify(arrival,[],[context]),'defer');
+assert.equal(classify({...arrival,assetSymbol:'ETH'},[],[context]),'allow');
+assert.equal(classify(arrival,[],[{...context,paycrestStatus:'completed',destinationTxHash:hash}]),'suppress');
+assert.equal(classify({...arrival,txHash:source,chain:'base',direction:'out',assetSymbol:'USDC'},[],[context]),'suppress');
+console.log('PASS cross-asset context binds source debit and destination token before settlement hash is known.')

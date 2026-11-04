@@ -161,3 +161,12 @@ queued=[row({txHash:oldHash,direction:'in',payer:'0xexternal',ts:now-3600000})]
 await runPocketMoneyPushWorker({...eventDeps,listActions:async()=>[{action:'wallet.bridge',status:'completed',createdAt:now-86400000,updatedAt:now-86340000,metadata:{source:'polygon',destination:'base',assetSymbol:'USDC'}}]})
 assert.equal(attempts,3);assert.equal(queued.length,0,'old completed bridge releases durable external deposit')
 console.log('PASS old completed bridges cannot indefinitely hold new external event pushes')
+
+// Cross routes live in their own journal, not legacy action rows.
+let crossContext={eventId:'pocket-cross-bridge:test',source:'wallet-bridge',chain:'base',destination:'arbitrum',assetSymbol:'USDC',destinationAsset:'USDT',amount:'0.2',paycrestStatus:'processing',txHash:sourceHash,ts:now-60000};
+let crossHeld=[];const crossPushes=[];
+const crossDeps={...eventDeps,readEventPushes:async()=>[],readActivity:async()=>[row({txHash:mintHash,chain:'arbitrum',assetSymbol:'USDT',amount:'0.177184',direction:'in'})],readContext:async()=>[crossContext],readDeferred:async()=>crossHeld,saveDeferred:async(owner,rows)=>{crossHeld=rows},sendPush:async(owner,id,n)=>{crossPushes.push(n);return true}};
+await runPocketMoneyPushWorker(crossDeps);assert.equal(crossPushes.length,0);assert.equal(crossHeld.length,1);
+crossContext={...crossContext,paycrestStatus:'completed',receivedAmount:'0.177184',destinationTxHash:mintHash,statusUpdatedAt:now};
+await runPocketMoneyPushWorker(crossDeps);assert.equal(crossPushes.length,1);assert.equal(crossHeld.length,0);assert.equal(crossPushes[0].title,'Bridge successful');assert.match(crossPushes[0].body,/0.177184 USDT on Arbitrum/);
+console.log('PASS cross-journal arrival deferred and replaced by one verified bridge completion notification.');
