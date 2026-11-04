@@ -46,6 +46,11 @@ h=harness();await h.service.prepare(review.quoteToken,'owner','approval');await 
 h=harness();await h.service.prepare(review.quoteToken,'owner','approval');h.time(now+30000);await assert.rejects(()=>h.service.submit('owner',id,'ephemeral'));assert.equal(h.counts()[0],0)
 console.log('PASS '+reviews.length+' JSON-safe signed reviews including rebuilt Solana instructions; tamper/owner/expiry checks; shared-journal atomic submit, timeout/restart recovery, immutable references, cancellation, no stored credentials and no duplicate dispatch. Transaction fixture, no live payment.')
 
+// A stored challenge is not a source transaction. Only an exact provider-bound
+// terminal approval with no transaction correlations may close the unsigned work.
+h=harness();const challenge='11111111-1111-4111-8111-111111111111',approvalService=createCrossBridgeOperations({...h.deps,dispatch:async()=>({challengeId:challenge})});await approvalService.prepare(review.quoteToken,'owner','approval');await approvalService.submit('owner',id,'ephemeral');h.result({challengeId:'22222222-2222-4222-8222-222222222222',approvalNotSubmitted:true});await assert.rejects(()=>approvalService.status('owner',id));h.result({challengeId:challenge,approvalNotSubmitted:true});assert.equal((await approvalService.status('owner',id)).state,'not_submitted');assert.equal((await approvalService.submit('owner',id,'ephemeral')).state,'not_submitted');
+console.log('PASS exact cancelled/expired challenge closes unsigned work without a new approval or dispatch');
+
 // Settlement must mutate the same JSON operation and repair ledger writes after restart.
 const {createCrossBridgeJournalSettlement}=await import('../api/pocket/cross-bridge-journal-settlement.ts')
 const {RELAY_BSC_CHAINS}=await import('../api/pocket/bsc-bridge-provider.ts')

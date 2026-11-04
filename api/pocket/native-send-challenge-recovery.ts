@@ -15,3 +15,7 @@ export async function findNativeSendChallenge(binding:NativeChallengeBinding,rea
  if(found.size>1)throw Error('More than one wallet confirmation matches this transfer.')
  return [...found][0]||null
 }
+
+export function validNativeSendReference(chain:string,refId:string){
+ return /^pocket:(?:bridge|cross-bridge|xlayer-bridge|bsc-inbound-bridge|usdt-bridge):[0-9a-f-]{36}$/i.test(refId)||/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(refId)||(chain==='base'&&/^pocket:cash-conversion:[0-9a-f-]{36}$/i.test(refId))
+}

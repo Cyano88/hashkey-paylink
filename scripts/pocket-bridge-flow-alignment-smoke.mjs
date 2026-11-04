@@ -24,10 +24,12 @@ assert.throws(()=>crossBridgeSelectionKey({source:'arc',destination:'base',from:
 const storage=new Storage();let count=0
 for(const source of CROSS_BRIDGE_ROLLOUT_NETWORKS)for(const destination of CROSS_BRIDGE_ROLLOUT_NETWORKS)if(source!==destination)for(const from of crossBridgeAssets(source))for(const to of crossBridgeAssets(destination)){
  const id=String(count++),selectionKey=crossBridgeSelectionKey({source,destination,from:from.symbol,to:to.symbol})
- const quote={id,rail:'cross',selectionKey,source,destination,asset:from.symbol,destinationAsset:to.symbol,tokenIn:from,tokenOut:to,amount:'1',receive:'999'}
+ const quote={id,rail:'cross',execution:['bsc','xlayer'].includes(source)?'privy':'circle',selectionKey,source,destination,asset:from.symbol,destinationAsset:to.symbol,tokenIn:from,tokenOut:to,amount:'1',receive:'999'}
  const pending={quote,quoteToken:'saved-'+id,txHash:'source-'+id,amountOut:'0.123456',destinationTxHash:'destination-'+id}
  trackPocketOperation('owner','bridge',pending,'completed',storage)
- assert.throws(()=>route(quote),/adapter/,'Unmounted routes cannot leak to legacy endpoints')
+ assert.deepEqual(route(quote),{kind:'api',path:'/api/pocket/cross-bridge'})
+ assert.throws(()=>route({...quote,selectionKey:'changed'}),/identity/)
+ assert.throws(()=>route({...quote,execution:'unknown'}),/identity/)
 }
 const rows=mergePocketOperations([],readPocketOperations('owner',storage));assert.equal(rows.length,count)
 for(const row of rows){const q=readPocketOperations('owner',storage).find(r=>r.pending.quote.id===row.providerReference).pending.quote;assert.equal(row.assetSymbol,q.asset);assert.equal(row.destinationAsset,q.destinationAsset);assert.equal(row.receivedAmount,'0.123456');assert.notEqual(row.receivedAmount,q.receive)}

@@ -24,7 +24,7 @@ export function normalizeEsimCatalog(rows: Json[], locations: Json[] = []): Pock
     // numeric coverage suffixes; keep distinct combinations such as Europe & Morocco.
     const name = region ? String(rawName).replace(/\s*\(\d+\+?\s*(?:areas?|countries)\)/gi, '').trim() : rawName
     const id = region ? 'region:'+name.toLowerCase() : codes[0]
-    const group = groups.get(id) || { id, name, countryCode: region ? '' : codes[0], region, plans: [] }
+    const group: PocketEsimDestination = groups.get(id) || { id, name, countryCode: region ? '' : codes[0], region, plans: [] }
     if (group.plans.some(plan => plan.id === row.packageCode)) continue
     const gb = row.volume / 1073741824
     const data = gb >= 1 ? `${Number(gb.toFixed(2))} GB` : `${Number((row.volume / 1048576).toFixed(2))} MB`

@@ -36,7 +36,12 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
   const journal=await lockBridgeJournal(client),before=journal.crossBridge?.[id],next=fn(structuredClone(before))
   if(next.id!==id||!next.ownerId||!next.walletAddress||!next.source||!Number.isFinite(next.expiresAt)||!next.fingerprint)invalid()
   if(before&&(before.ownerId!==next.ownerId||before.fingerprint!==next.fingerprint||before.source!==next.source||before.walletAddress!==next.walletAddress))invalid()
-  if(before&&terminal(before.state)&&JSON.stringify(before)!==JSON.stringify(next))invalid()
+  if(before&&terminal(before.state)&&JSON.stringify(before)!==JSON.stringify(next)){
+   // Terminal payment evidence stays immutable. Only the first successful
+   // publication acknowledgement may be added after the ledger write.
+   const {ledgerPublishedAt,...proof}=next
+   if(!['completed','refunded'].includes(before.state)||before.ledgerPublishedAt!==undefined||!Number.isSafeInteger(ledgerPublishedAt)||Number(ledgerPublishedAt)<=0||JSON.stringify(before)!==JSON.stringify(proof))invalid()
+  }
   const reserve=!before||before.state==='prepared'&&next.state==='submitting'
   if(reserve){
    if(!before&&next.state!=='prepared')invalid()

@@ -1,3 +1,4 @@
+import {crossBridgeCollectedCoverage} from './cross-bridge-coverage.js'
 import {providerRpcFetch} from './provider-usage.js'
 import {createBillingReceiptReader} from './xlayer-billing-receipts.js'
 import {bscSendCoverage} from './bsc-send-coverage.js'
@@ -113,9 +114,10 @@ export async function checkXLayerBillingCoverage(wallet?:string,options?:{reuseR
    const ops=Object.values(store?.operations||{})
    const payments=Object.values((await readDurableJson<BscPaymentOperationStore>('pocket:bsc-payment-operations:v1'))?.operations||{})
    const sends=Object.values((await readDurableJson<BscSendOperationStore>('pocket:bsc-send-operations:v1'))?.operations||{})
-   if(!ops.length&&!payments.length&&!sends.length)return []
+   const cross=await crossBridgeCollectedCoverage(wallet)
+   if(!ops.length&&!payments.length&&!sends.length)return cross
    const runtime=createBscRuntime(),context={now:Date.now(),rpc:runtime.rpc,prices:runtime.readPrices}
-   return [...await bscCollectedCoverage(ops,context,wallet),...await bscPaymentCoverage(payments,context,wallet),...await bscSendCoverage(sends,context,wallet)]
+   return [...cross,...await bscCollectedCoverage(ops,context,wallet),...await bscPaymentCoverage(payments,context,wallet),...await bscSendCoverage(sends,context,wallet)]
   }}:{}),
   ...(env.POCKET_PRIVY_COMBINED_BILLING_ENABLED!=='true'&&env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED==='true'?{transactionSpend:async(records:Attempt[])=>{
    const sent=records.filter(r=>r.hash||!(r.providerFailure?.status===400&&r.providerFailure.code==='transaction_broadcast_failure'))

@@ -1,4 +1,5 @@
 import {merchantFeeTotal} from '../../src/lib/merchantPaymentFees.js'
+import {readCrossBridgeActivity} from './cross-bridge-activity.js'
 import {readPocketCheckoutActivity} from './checkout-activity.js'
 import {readBscWalletActivity} from './bsc-wallet-activity.js'
 import {bscSwapActivity} from '../../src/pocket/lib/pocketBscActivity.js'
@@ -54,6 +55,7 @@ type PocketActivityHandlerDependencies = {
   readClosedBankPayouts?(ownerId: string, options?: PocketActivityReadOptions): Promise<PaymentExecutionIntent[]>
   readWalletAddresses?(ownerId: string, options?: PocketActivityReadOptions): Promise<string[]>
   readActions?(ownerId: string, options?: PocketActivityReadOptions): Promise<CirclePocketActionRecord[]>
+  readCrossBridges?(ownerId: string): Promise<PocketActivityRow[]>
 }
 
 type PocketActivityReadOptions = { recent: boolean; limit: number }
@@ -249,6 +251,12 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     memo: value.memo,
     amount: value.amount,
     ...(value.assetSymbol !== undefined ? {assetSymbol:value.assetSymbol} : {}),
+    ...(value.destinationAsset !== undefined ? {destinationAsset:value.destinationAsset} : {}),
+    ...(value.receivedAmount !== undefined ? {receivedAmount:value.receivedAmount} : {}),
+    ...(value.destinationTxHash !== undefined ? {destinationTxHash:value.destinationTxHash} : {}),
+    ...(value.refundAsset !== undefined ? {refundAsset:value.refundAsset} : {}),
+    ...(value.refundAmount !== undefined ? {refundAmount:value.refundAmount} : {}),
+    ...(value.refundNetwork !== undefined ? {refundNetwork:value.refundNetwork} : {}),
     ...(value.serviceFeeAmount !== undefined ? { serviceFeeAmount: value.serviceFeeAmount } : {}),
     ...(value.serviceFeeAsset !== undefined ? { serviceFeeAsset: value.serviceFeeAsset } : {}),
     ...(value.feeAsset !== undefined ? { feeAsset: value.feeAsset } : {}),
@@ -290,7 +298,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
 }
 
 async function readActivitySnapshot(dependencies: PocketActivityHandlerDependencies, identity: VerifiedLinkUser, options: PocketActivityReadOptions) {
-  const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents, closedBankPayoutIntents] = await Promise.all([
+  const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents, closedBankPayoutIntents, crossBridges] = await Promise.all([
     dependencies.readHistory(identity.userId, options),
     dependencies.readCollections?.(identity.userId, options) ?? Promise.resolve([]),
     dependencies.readWalletHistory?.(identity.userId, options) ?? Promise.resolve([]),
@@ -298,6 +306,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
     dependencies.readWalletAddresses?.(identity.userId, options) ?? Promise.resolve([]),
     dependencies.readBills?.(identity.userId, options) ?? Promise.resolve([]),
     dependencies.readClosedBankPayouts?.(identity.userId, options) ?? Promise.resolve([]),
+    dependencies.readCrossBridges?.(identity.userId) ?? Promise.resolve([]),
   ])
   const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
   const [collectionPaymentRecords, externalPaymentIntents, posPurchaseRecords] = await Promise.all([
@@ -339,7 +348,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
   })
   const posPurchases=posPurchaseRecords.map(sanitizedActivityRow).map(row=>({...row,source:'purchase',direction:'out' as const,settlementType:'pos_payment',activityLabel:'XPay payment',recipient:row.contextLabel||'Merchant',receiptId:paymentReceiptId(row.eventId,row.txHash),receiptUrl:'/receipt/'+paymentReceiptId(row.eventId,row.txHash)}))
   const contextualTxHashes = new Set([...externalPayments,...posPurchases].map(row => row.chain + ":" + row.txHash.toLowerCase()))
-  const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+  const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...crossBridges, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
     .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.chain + ":" + row.txHash.toLowerCase()))
     .filter((row, index, rows) => rows.findIndex(candidate => candidate.chain === row.chain && candidate.txHash === row.txHash && (Boolean(row.txHash) || candidate.eventId === row.eventId) && (
       candidate.source === row.source && (!['wallet-deposit','wallet-withdrawal'].includes(row.source || '') || candidate.eventId === row.eventId) || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
@@ -397,6 +406,7 @@ const activityDependencies: PocketActivityHandlerDependencies = {
     limit: options?.recent ? 8 : 100,
   }),
   readActions: (ownerId, options) => listCirclePocketActions(ownerId, options?.recent ? 20 : 500),
+  readCrossBridges: readCrossBridgeActivity,
   readWalletAddresses: readPocketPurchaseWalletAddresses,
   readPosPurchases: listRegisteredPosPurchases,
   readExternalPayments: async walletAddresses => {

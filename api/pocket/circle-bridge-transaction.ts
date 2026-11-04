@@ -1,4 +1,12 @@
 /** Read-only Circle reference binding. Provider status never proves settlement. */
+export async function circleKitApprovalNotSubmitted(challengeId:string,read:(path:string)=>Promise<Record<string,unknown>>):Promise<boolean>{
+ if(!/^[0-9a-f-]{36}$/i.test(challengeId))throw Error('Invalid wallet confirmation reference.')
+ const {challenge}=await read('/v1/w3s/user/challenges/'+encodeURIComponent(challengeId)) as {challenge?:Record<string,unknown>}
+ if(!challenge)return false
+ if(challenge.id!==challengeId)throw Error('Wallet confirmation reference changed.')
+ if(!Array.isArray(challenge.correlationIds)||challenge.correlationIds.length!==0)return false
+ return ['FAILED','EXPIRED','CANCELLED','CANCELED'].includes(String(challenge.status??challenge.state??'').toUpperCase())
+}
 export async function readCircleKitTransaction(binding:{challengeId:string;walletId:string;walletAddress:string;blockchain:string;refId:string;callData:string},read:(path:string)=>Promise<Record<string,unknown>>):Promise<string|null>{
  if(!/^[0-9a-f-]{36}$/i.test(binding.challengeId))throw Error('Invalid wallet confirmation reference.')
  const {challenge}=await read('/v1/w3s/user/challenges/'+encodeURIComponent(binding.challengeId)) as {challenge?:Record<string,unknown>}

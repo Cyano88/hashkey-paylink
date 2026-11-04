@@ -60,7 +60,7 @@ export type PocketActivityRow = {
   billReference?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
-  refundAsset?: 'USDC' | 'USDT'
+  refundAsset?: string
   refundAmount?: string
   refundNetwork?: string
   receiptId?: string

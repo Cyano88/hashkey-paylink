@@ -45,6 +45,9 @@ export function createCrossBridgeJournalSettlement(d:CrossBridgeJournalSettlemen
    },
   })
   await reconcile(owner,id)
+  // Mark publication only after the idempotent ledger write succeeds. A process
+  // interruption between terminal proof and publication remains worker-repairable.
+  await store.mutate(id,op=>{view(op);return ['completed','refunded'].includes(op!.state)&&!op!.ledgerPublishedAt?{...op!,ledgerPublishedAt:d.now()}:op!})
   const result=await store.read(id);view(result);return result!
  }
 }

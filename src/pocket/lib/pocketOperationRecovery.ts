@@ -4,7 +4,7 @@ import type { PocketActivityRow } from './pocketSchemas'
 export const POCKET_OPERATIONS_UPDATED = 'pocket:operations-updated'
 export type PocketOperation = {
   id: string; owner: string; kind: 'bridge' | 'swap'; createdAt: number;
-  state: 'awaiting_approval' | 'processing' | 'completed' | 'failed' | 'refunded' | 'needs_review';
+  state: 'awaiting_approval' | 'processing' | 'completed' | 'failed' | 'refunded' | 'needs_review' | 'cancelled' | 'not_submitted';
   // Provider quote and identifiers are retained, never wallet authentication.
   pending: any;
 }
@@ -29,6 +29,7 @@ export function trackPocketOperation(owner: string, kind: PocketOperation['kind'
   try {old=JSON.parse(storage.getItem(key)||'null')}catch{/* Replace a damaged entry only with a valid operation. */}
   if(kind==='bridge'&&old&&!samePocketBridgeOperationRoute(old.pending?.quote,pending.quote))return
   if (old && ['completed', 'failed', 'refunded'].includes(old.state)) return
+  if(old&&['cancelled','not_submitted'].includes(old.state)&&!pending.txHash)return
   const record: PocketOperation = {id, owner: owner.trim().toLowerCase(), kind, state, createdAt: old?.createdAt || Date.now(), pending: {...old?.pending, ...pending}}
   if(old&&JSON.stringify(old)===JSON.stringify(record))return
   storage.setItem(key, JSON.stringify(record))
@@ -47,6 +48,7 @@ export function migratePocketOperations(owner: string) {
 export function mergePocketOperations(rows: PocketActivityRow[], records: PocketOperation[]): PocketActivityRow[] {
   const result = [...rows]
   for (const record of records) {
+    if(['cancelled','not_submitted'].includes(record.state)&&!record.pending.txHash)continue
     const p = record.pending, q = p.quote, source = record.kind === 'bridge' ? 'wallet-bridge' : 'wallet-swap'
     const network = record.kind === 'bridge' ? q.source : 'arc'
     let bridgeAssets:ReturnType<typeof pocketBridgeOperationAssets>|undefined

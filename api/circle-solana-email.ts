@@ -1,3 +1,4 @@
+import {validNativeSendReference} from './pocket/native-send-challenge-recovery.js'
 import {assertMerchantFeeBinding,rememberMerchantFeeQuote} from './merchant-checkout-fees.js'
 import {providerUsageFetch,circleUsageOperation} from './pocket/provider-usage.js'
 import {quoteEvmBridgeFee,sealEvmBridgeFee,openEvmBridgeFee} from './pocket/evm-bridge-reimbursement.js'
@@ -1433,7 +1434,7 @@ export async function createCircleNativeSolanaChallenge(input:{userToken:string;
 
 /** Recover only a unique server-issued transfer reference, without creating another challenge. */
 export async function recoverCircleNativeSendChallenge(input:{chain:CircleGasStationEvmChain;userToken:string;walletId:string;walletAddress:string;refId:string}) {
-  const validReference=/^pocket:(?:bridge|xlayer-bridge|bsc-inbound-bridge|usdt-bridge):[0-9a-f-]{36}$/i.test(input.refId)||/^pocket:native-(?:send|swap):[0-9a-f-]{36}$/i.test(input.refId)||(input.chain==='base'&&/^pocket:cash-conversion:[0-9a-f-]{36}$/i.test(input.refId))
+  const validReference=validNativeSendReference(input.chain,input.refId)
   if(!input.userToken||input.userToken.length>8000||!validReference)throw Error('Invalid transfer recovery request.')
   const owned=await readCircleUserWallet(input.userToken,input.chain,input.walletId)
   requireCircleGasStationEvmWallet({...input,wallets:owned?[owned]:[]})

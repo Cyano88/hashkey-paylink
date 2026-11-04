@@ -1,6 +1,12 @@
+import {crossBridgeSelectionKey} from './pocketCrossBridgeSelection'
 /** One dispatch decision for background checks, explicit retry and cancellation.
  * Unmounted/new routes must never fall through to a legacy payment endpoint. */
 export function pocketBridgeRecoveryRoute(q:any):{kind:'api';path:string}|{kind:'sponsored'} {
+ if(q?.rail==='cross'){
+  const key=crossBridgeSelectionKey({source:q.source,destination:q.destination,from:q.asset,to:q.destinationAsset})
+  if(q.selectionKey!==key||q.execution!==(['bsc','xlayer'].includes(q.source)?'privy':'circle'))throw Error('Bridge route identity changed.')
+  return {kind:'api',path:'/api/pocket/cross-bridge'}
+ }
  if(!q||q.selectionKey||q.tokenIn||q.tokenOut||q.destinationAsset&&q.destinationAsset!==q.asset)throw Error('This bridge route needs a compatible status adapter. Its saved transfer is retained.')
  if(q.asset&&!['USDC','USDT'].includes(q.asset))throw Error('This asset requires its matching bridge adapter.')
  if(q.rail==='bsc')return {kind:'api',path:q.source==='bsc'?'/api/pocket/bsc-outbound-bridge':'/api/pocket/bsc-inbound-bridge'}

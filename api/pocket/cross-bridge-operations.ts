@@ -6,7 +6,7 @@ import {crossBridgeHash} from './cross-bridge-evidence.js'
 
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export type CrossBridgeOperation=CrossBridgeReservation&{quoteToken:string;createdAt:number;updatedAt:number}
-export type CrossBridgeObservation={sourceHash?:string;challengeId?:string;transactionId?:string;userOperationHash?:string;definitelyNotSubmitted?:boolean}
+export type CrossBridgeObservation={sourceHash?:string;challengeId?:string;transactionId?:string;userOperationHash?:string;definitelyNotSubmitted?:boolean;approvalNotSubmitted?:boolean}
 type Store=Pick<typeof crossBridgeReservationStore,'read'|'mutate'>
 export type CrossBridgeOperationDependencies={
  store?:Store;now():number;
@@ -41,6 +41,10 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
    if(crossBridgeReservationTerminal(r.state))return r
    if(!['submitting','pending','submitted','source_confirmed'].includes(r.state))fail()
    if(result.sourceHash!==undefined&&!crossBridgeHash(r.source as Review['route']['source'],result.sourceHash))fail()
+   if(result.approvalNotSubmitted){
+    if(result.approvalNotSubmitted!==true||!result.challengeId||r.challengeId&&r.challengeId!==result.challengeId||r.sourceHash||r.transactionId||r.userOperationHash||result.sourceHash||result.transactionId||result.userOperationHash||!['submitting','pending'].includes(r.state))fail('Bridge submission is still being verified.')
+    return {...r,challengeId:result.challengeId,state:'not_submitted',updatedAt:d.now()}
+   }
    if(result.definitelyNotSubmitted){
     if(hasReference(result)||hasReference(r)||r.state!=='submitting')fail('Bridge submission is still being verified.')
     return {...r,state:'not_submitted',updatedAt:d.now()}

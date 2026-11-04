@@ -90,14 +90,21 @@ export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.
  }
  return {provider:'relay' as const,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
 }
-export async function quoteCrossBridgeRelay(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee()){
+export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee(),now=Date.now){
  assertCrossBridgeRollout(i.source,i.destination)
  requireThat(apiKey.trim().length>0,'provider API key required')
+ const requestedAt=now()
  const response=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(crossBridgeRelayRequest(i,appFee)),signal:AbortSignal.timeout(20000)})
  if(!response.ok){
   const failure=await response.json().catch(()=>null),inputError=[400,422].includes(response.status)
   const tooSmall=inputError&&failure?.errorCode==='AMOUNT_TOO_LOW',noRoute=inputError&&failure?.errorCode==='NO_SWAP_ROUTES_FOUND'
   throw Object.assign(Error(tooSmall?'Amount too small.':noRoute?'No route is available for this token pair. Try another token or network.':response.status===429?'Bridge service is busy. Try again shortly.':'This bridge route is currently unavailable.'),{status:tooSmall||noRoute?422:response.status===429?429:503,code:tooSmall?'amount_too_low':noRoute?'route_unavailable':response.status===429?'rate_limited':'provider_unavailable',retryAfter:response.status===429?Math.max(1,Math.min(300,Number(response.headers.get('Retry-After'))||60)):undefined})
  }
- return validateCrossBridgeRelayQuote(await response.json(),i,Date.now(),appFee)
+ const providerQuote=await response.json(),route=validateCrossBridgeRelayQuote(providerQuote,i,requestedAt,appFee)
+ if(route.expiresAt<=now())throw Error('Bridge quote expired. Review again.')
+ return {providerQuote,route,requestedAt}
+}
+
+export async function quoteCrossBridgeRelay(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee()){
+ return (await fetchCrossBridgeRelayReview(i,apiKey,fetcher,appFee)).route
 }

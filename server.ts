@@ -104,6 +104,8 @@ import pocketGiftsHandler from './api/pocket/gifts/index.js'
 import pocketNotificationsHandler from './api/pocket/notifications.js'
 import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
+import pocketCrossBridgeHandler from './api/pocket/cross-bridge-api.js'
+import {drainCrossBridges} from './api/pocket/cross-bridge-worker.js'
 import pocketXPayBankHandler from './api/pocket/xpay-bank.js'
 import pocketUnifiedXPayHandler from './api/pocket/unified-xpay.js'
 import pocketXPayHandler, { drainXPayPayments } from './api/pocket/xpay.js'
@@ -406,6 +408,7 @@ app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            exchangeLimiter, pocketBridgeHandler)
+app.all('/api/pocket/cross-bridge', exchangeLimiter, pocketCrossBridgeHandler)
 app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
 app.post('/api/pocket/xpay/bank', (req,res,next)=>(['list','status'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketXPayBankHandler)
 app.all('/api/pocket/xpay', (req,res,next)=>(req.method==='GET'||['mine','history'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketUnifiedXPayHandler)
@@ -620,11 +623,13 @@ pocketGiftTimer.unref()
 const pocketEsimTimer = setInterval(() => { void drainPocketEsimOrders().catch(() => console.warn('[pocket-esim] reconciliation deferred')) }, 30_000)
 pocketEsimTimer.unref()
 const pocketReconciliationTimer = setInterval(() => {
+  void drainCrossBridges().catch(() => console.warn('[cross-bridge] recovery deferred'))
   void drainPocketReconciliation().catch(error => {
     console.error('[pocket-reconciliation] scheduled run failed:', error instanceof Error ? error.message : String(error))
   })
 }, Math.max(30_000, Number(process.env.POCKET_RECONCILIATION_INTERVAL_MS ?? 60_000)))
 pocketReconciliationTimer.unref()
+void drainCrossBridges().catch(() => console.warn('[cross-bridge] startup recovery deferred'))
 void drainPocketReconciliation().catch(error => {
   console.error('[pocket-reconciliation] startup run failed:', error instanceof Error ? error.message : String(error))
 })
