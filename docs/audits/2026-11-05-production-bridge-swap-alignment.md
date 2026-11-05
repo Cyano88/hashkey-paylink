@@ -63,3 +63,18 @@ User asked whether token values should be smaller. Recommendation: reduce primar
 
 The native fix built successfully and was installed without clearing data as pocket-empty-destination-fiat-20261105.apk (SHA256 722D43F2AE73A5E4116F7089EEADFAE1F025A0F46924D7BE823BC108113577C2). All 1,868 packaged web assets matched dist. Source snapshot: native-release/empty-destination-fiat-source-20261105.zip in the native checkout. At 14:15 Africa/Lagos, the same Arc EURC ? Base EURC quote visibly showed the previously missing incoming estimate, approximately 0.31 USD. Home remained 10.32 USD after installation. No new funds were sent. A transient local ADB daemon restart interrupted navigation; connection recovered and the route was reselected before verifying the fix.
 At 14:16 the installed review sheet also showed the incoming approximately 0.31 USD line, plus paid-with, fee and total fiat values. The review was closed without proceeding.
+
+## Final UI/UX audit
+
+Scope: exchange amount legibility, token/network controls, sheet focus and dismissal, loading stability, light/dark rendering, fiat consistency and receipt presentation. Existing functional route/recovery results above remain separate from these UI checks.
+
+Found and corrected in the native checkout:
+- Long native decimal values could scroll horizontally inside a readonly amount input. Shared Swap/Bridge amount typography is now approximately 10–13% smaller for ordinary values, with width-aware fitting for long values. Exceptionally long values receive a slightly narrower column gap. Input state, token precision, transaction amounts and existing display rounding rules are unchanged.
+- Value rows keep a fixed line height so amount fitting does not move the action button.
+- Bottom-sheet Close now has a 44px square target, matching the other exchange controls; icon size and dismissal rules are unchanged.
+
+Verification: actual bundled font and brand assets; 320/360/426px light/dark layouts; a full one-wei ETH value without clipping or precision change; no page overflow; stable action position; focus stays within the sheet and returns to the selector after Escape. Broader four-width/two-theme bridge layout, fiat readiness/receipt stability, USD/NGN/UGX selector valuation, receipt clarity and draft cancellation tests passed. One older selector fixture still expected the retired Unavailable label; it now checks the existing accessible updating state and confirms that unknown is not shown as zero. These checks are not a full assistive-technology or formal accessibility certification.
+
+Installed final native build: pocket-final-ui-ux-20261105.apk, SHA256 5FA4427CE2B8120275AE97392737638C9D095B2989B983DFE3B55B600972944A. All 1,868 packaged web assets matched dist; targeted TypeScript and Android release build passed. Installed on the authorized Pixel without clearing data. Source snapshot: native-release/final-ui-ux-source-20261105.zip in the native checkout. No public store rollout.
+
+At 14:35-14:40 Africa/Lagos, the installed Pixel showed the reduced amount typography, correct Arbitrum ETH selector balance, and muted fiat estimates. Live Arbitrum ETH to USDC Swap reached review with received amount, network fee and total. Live Arbitrum USDT to Base USDT Bridge reached review after refreshing its quote: 0.497134 USDT input, approximately 0.48 USDT received, 0.03 USDT fee and 0.53 USDT total at display precision. Both review sheets showed fiat equivalents and network identity. The enlarged Close control dismissed the review. No new payment was confirmed or signed. Live quote/review checks do not establish funded settlement on every route; Arc swap pricing remains the open policy decision described above.
