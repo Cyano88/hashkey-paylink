@@ -23,7 +23,11 @@ export function priceCrossBridgeReimbursement(network:CrossBridgeNetwork,asset:s
  const scale=10n**BigInt(tokenIn.decimals)
  const networkFee=ceil(nativeUnits*gasPrice.scaled8*scale*BigInt(10000+policy.providerBps),10n**BigInt(gas.decimals)*assetPrice.scaled8*10000n)
  const allowance=ceil(policy.providerAllowanceUsdMicros*100n*scale,assetPrice.scaled8)
- const floor=networkFee+allowance>policy.minimumFeeUnits?networkFee+allowance:policy.minimumFeeUnits
+ // The minimum is a quote-time charge, not a provider liability. Repricing
+ // that minimum during confirmation can reject a fully covered fee after a
+ // one-unit exchange-rate movement. Still require the full current gas and
+ // provider allowance; never increase the user's signed charge here.
+ const floor=networkFee+allowance
  const buffered=ceil((networkFee+allowance)*BigInt(10000+policy.marginBps),10000n)
  const fee=buffered>policy.minimumFeeUnits?buffered:policy.minimumFeeUnits
  if(fee<=0n||fee>policy.maximumFeeUnits)fail()
