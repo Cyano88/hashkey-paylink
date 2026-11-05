@@ -1,4 +1,5 @@
 import {providerUsageFetch,circleUsageOperation} from './provider-usage.js'
+import {readDisplaySettlement,assertDisplaySnapshotCurrent} from './display-balance-settlement.js'
 import {readDisplayNativeRpc} from './display-balance-rpc.js'
 import {circleLinkKey,type CircleLinkRecord} from '../privy-circle-link.js'
 import {createHmac} from 'node:crypto'
@@ -10,13 +11,14 @@ const chains={ethereum:'ETH',base:'BASE',arbitrum:'ARB',polygon:'MATIC',solana:'
 const priceAssets=[{symbol:'ETH',chainIndex:'1',tokenContractAddress:'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'},{symbol:'POL',chainIndex:'137',tokenContractAddress:'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'},{symbol:'SOL',chainIndex:'501',tokenContractAddress:'11111111111111111111111111111111'}] as const
 
 /** Provider display reads only. Never feeds a payment quote or changes RPC use. */
-export async function fetchCircleNativeBalance(link:CircleLinkRecord,fetcher=fetch) {
+export async function fetchCircleNativeBalance(link:CircleLinkRecord,fetcher=fetch,settlement=readDisplaySettlement) {
  const asset=pocketNativeOnNetwork(link.chain),chain=chains[link.chain as keyof typeof chains]
  const key=process.env.CIRCLE_API_KEY
  if(!asset||!chain||!key||key.startsWith('TEST_')||link.circleBlockchain!==chain)throw Error('Native balance unavailable.')
  const signal=AbortSignal.timeout(8000)
  const request=async(path:string)=>{const r=await providerUsageFetch({feature:'balance-display',network:link.chain,operation:circleUsageOperation(path)},fetcher)('https://api.circle.com'+path,{headers:{Authorization:'Bearer '+key},signal,redirect:'error'});if(!r.ok)throw Error('Native balance unavailable.');return {body:await r.json(),next:/;\s*rel="next"/.test(r.headers.get('link')||'')}}
  const path='/v1/w3s/wallets/'+encodeURIComponent(link.circleWalletId)
+ const settledAt=await settlement(link,{native:true,symbol:asset.symbol})
  // Fetch identity and first balance page together; publish only after both validate.
  const [{body:{data:{wallet}={}}},firstPage]=await Promise.all([request(path),request(path+'/balances?'+new URLSearchParams({includeAll:'true',pageSize:'50'}))])
  const same=(a:string,b:string)=>link.chain==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
@@ -32,9 +34,10 @@ export async function fetchCircleNativeBalance(link:CircleLinkRecord,fetcher=fet
    const token=row.token
    if(found!==undefined||token.blockchain!==chain||token.decimals!==asset.decimals||!([asset.symbol,...(asset.symbol==='POL'?['MATIC']:[])] as string[]).includes(token.symbol)||typeof row.amount!=='string'||!new RegExp('^\\d{1,78}(?:\\.\\d{1,'+asset.decimals+'})?$').test(row.amount))throw Error('Invalid native balance.')
    found=Number(row.amount)
+   assertDisplaySnapshotCurrent(row.updateDate,settledAt)
    if(!Number.isFinite(found)||found<0)throw Error('Invalid native amount.')
   }
-  if(!next)return found??0
+  if(!next){if(found===undefined)assertDisplaySnapshotCurrent(undefined,settledAt);return found??0}
   const last=rows.at(-1)?.token?.id
   if(typeof last!=='string'||seen.has(last))throw Error('Incomplete native balance.')
   seen.add(last);cursor=last

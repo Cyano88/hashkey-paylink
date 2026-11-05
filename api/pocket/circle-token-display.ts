@@ -1,11 +1,12 @@
 import {parseUnits} from 'viem'
+import {readDisplaySettlement,assertDisplaySnapshotCurrent} from './display-balance-settlement.js'
 import type {CircleLinkRecord} from '../privy-circle-link.js'
 import {providerUsageFetch,circleUsageOperation} from './provider-usage.js'
 
 const chains={base:'BASE',arbitrum:'ARB',ethereum:'ETH',polygon:'MATIC',solana:'SOL',arc:'ARC'} as const
 export type DisplayToken={address:string;decimals:number}
 /** Display only. Identity, network, token and precision must all match before publishing. */
-export async function fetchCircleTokenUnits(link:CircleLinkRecord,token:DisplayToken,fetcher=fetch):Promise<bigint>{
+export async function fetchCircleTokenUnits(link:CircleLinkRecord,token:DisplayToken,fetcher=fetch,settlement=readDisplaySettlement):Promise<bigint>{
  const chain=chains[link.chain],key=process.env.CIRCLE_API_KEY
  if(!chain||!key||key.startsWith('TEST_')||link.circleBlockchain!==chain||!Number.isInteger(token.decimals)||token.decimals<0||token.decimals>36)throw Error('Circle balance configuration unavailable.')
  const same=(a:unknown,b:string)=>typeof a==='string'&&(link.chain==='solana'?a===b:a.toLowerCase()===b.toLowerCase())
@@ -18,9 +19,11 @@ export async function fetchCircleTokenUnits(link:CircleLinkRecord,token:DisplayT
  const [{wallet},{tokenBalances:rows}]=await Promise.all([request(path),request(path+'/balances?'+new URLSearchParams({includeAll:'true',tokenAddress:token.address,pageSize:'50'}))])
  if(!wallet||wallet.id!==link.circleWalletId||wallet.blockchain!==chain||!same(wallet.address,link.circleWalletAddress))throw Error('Circle wallet binding changed.')
  if(!Array.isArray(rows)||rows.length>1)throw Error('Incomplete Circle token balance.')
- if(!rows.length)return 0n
+ const settledAt=await settlement(link,token)
+ if(!rows.length){assertDisplaySnapshotCurrent(undefined,settledAt);return 0n}
  const row=rows[0],t=row.token
  if(!t||t.blockchain!==chain||!same(t.tokenAddress,token.address)||t.decimals!==token.decimals||t.isNative===true||typeof row.amount!=='string'||!new RegExp('^\\d{1,78}(?:\\.\\d{1,'+Math.max(1,token.decimals)+'})?$').test(row.amount)||(row.amount.split('.')[1]?.length||0)>token.decimals)throw Error('Invalid Circle token balance.')
+ assertDisplaySnapshotCurrent(row.updateDate,settledAt)
  const units=parseUnits(row.amount,token.decimals);if(units>=2n**256n)throw Error('Invalid Circle amount.');return units
 }
 

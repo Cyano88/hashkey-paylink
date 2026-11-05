@@ -1,6 +1,7 @@
 import { POCKET_USDT_ASSETS, supportsPocketUsdt } from '../../src/pocket/lib/pocketUsdtAssets.js'
 import type { CircleLinkRecord } from '../privy-circle-link.js'
 import {readDisplayUsdtRpc} from './display-balance-rpc.js'
+import {readDisplaySettlement,assertDisplaySnapshotCurrent} from './display-balance-settlement.js'
 export const circleBalanceTokens = {
  base:['BASE','0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'],arbitrum:['ARB','0xaf88d065e77c8cC2239327C5EDb3A432268e5831'],ethereum:['ETH','0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],polygon:['MATIC','0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'],solana:['SOL','EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'],arc:['ARC','0x3600000000000000000000000000000000000000'],
 } as const
@@ -16,9 +17,11 @@ async function fetchCircleBalances(link:CircleLinkRecord,fetcher:typeof fetch,in
  const readToken=async(token:string)=>{
   const {data,next}=await request(path+'/balances?'+new URLSearchParams({includeAll:'true',tokenAddress:token,pageSize:'50'}))
   if(next||!Array.isArray(data.tokenBalances)||data.tokenBalances.length>1)throw Error('Incomplete Circle balance.')
-  if(!data.tokenBalances.length)return 0
+  const settledAt=await readDisplaySettlement(link,{address:token})
+  if(!data.tokenBalances.length){assertDisplaySnapshotCurrent(undefined,settledAt);return 0}
   const row=data.tokenBalances[0],t=row.token
   if(!t||t.blockchain!==chain||typeof t.tokenAddress!=='string'||!same(t.tokenAddress,token,solana)||t.decimals!==6||t.isNative===true||typeof row.amount!=='string'||!/^\d{1,78}(?:\.\d{1,6})?$/.test(row.amount))throw Error('Invalid Circle token balance.')
+  assertDisplaySnapshotCurrent(row.updateDate,settledAt)
   const balance=Number(row.amount);if(!Number.isFinite(balance)||balance<0)throw Error('Invalid Circle amount.');return balance
  }
  const [{data:{wallet}},balance,usdt]=await Promise.all([request(path),readToken(token),includeUsdt&&supportsPocketUsdt(link.chain)?readToken(POCKET_USDT_ASSETS[link.chain].address).catch(()=>undefined):undefined])
