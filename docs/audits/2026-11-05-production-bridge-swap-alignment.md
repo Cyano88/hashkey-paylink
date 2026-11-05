@@ -185,3 +185,9 @@ At approximately 19:35-19:38 Lagos, Pixel Base USDC -> Arbitrum USDT Max showed 
 - Shared and native swap recovery now retain 4s recent / 8s older status cadence instead of backing off to 30s; throttles remain enforced. Backend independent proof concurrency passed all settlement, operations, recovery-audit and delivery regressions. Native typecheck and Android build passed.
 - Direct read-only public RPC check confirmed both receipts status 0x1. Base finality reached its destination receipt; Arbitrum finalized height was 0x1f1699c0 while the source receipt is at 0x1f1699f4. This is a real finality wait, not an artificial UI timer. Existing accounting finality requirements were not weakened.
 - One approved live payment only. No additional swap/bridge was sent for the final label/polling build. Existing approved operation continues background reconciliation; final ledger state must be checked separately from successful delivery.
+
+### Final live completion verified
+- At 2026-11-05 20:07:28.071 UTC, operation 58e0c1b9-e2bc-4d30-bf23-699072dee121 became completed with finalized settlement amount 906387 source units of Base USDC (0.906387 USDC). Ledger publication confirmed at 20:07:30.080 UTC (ledgerPublishedAt 1793909250080).
+- Both source and destination receipts have successful status and finalized heights beyond their inclusion blocks. Exactly one matching operation remains; no repeated dispatch/debit.
+- Pixel Home removed Processing; opening the same receipt shows Completed, Paid with 0.93 USDT, Received 0.91 USDC and Fee 0.04 USDT using accepted display precision. Screenshot: output/bridge-swap-audit-20261105/balance-exchange-live-completed-receipt.png in the native checkout.
+- This closes the observed finality/reconciliation check. The earlier pending-finality notes above are chronological evidence, not the current status. Other routes were validated with fixtures, not additional live payments.
