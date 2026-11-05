@@ -33,6 +33,8 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
   balance=0n;await assert.rejects(()=>combined(review),e=>e.code==='insufficient_balance');balance=10n**35n;
   time+=2001;await combined(review);assert.equal(estimates,2,'reuse ends after 2s');time=now;
  }
+
+ await assert.rejects(()=>quoteCrossBridgeCharges(route,wallets,crossBridgeReimbursementRecipient(source,env),policy,{...readers,balance:async()=>BigInt(i.amountUnits),estimate:async()=>{throw Error('RPC simulation reverted: insufficient balance')},now:()=>time}),e=>e.code==='insufficient_balance'&&typeof e.maximumAmountUnits==='string','Max must receive affordability hint even when concurrent gas simulation rejects first')
  const before=JSON.stringify(review.quote)
  let guards=0
  const preflight=crossBridgePreflight('request-only',async()=>{guards++},env,{now:()=>time,revalidate:async()=>{},readers:()=>readers})
