@@ -11,3 +11,5 @@ The coverage field now contains current network cost plus provider markup/allowa
 Validation: 26 asset/network reimbursement cases, 13 Circle quote/preflight cases and scoped TypeScript passed. Added regressions prove a minimum-only price move leaves an existing covered charge acceptable, new quotes still apply the new minimum, and an actual cost increase still rejects inadequate coverage. No transaction or wallet authorization was submitted by the agent.
 
 Runtime commit 963ff277d83a13530debec97700a464683bb9bc7; Render deploy dep-dbm26l61egvs73b3uo20. Backend-only correction; installed Pixel APK remains pocket-bridge-expiry-20261105.apk.
+
+Live verification: deploy reported live and health returned HTTP 200. The same saved batch was re-estimated with the deployed code in 2,011ms: signed fee 10,009 micro-USDT; newly converted quote minimum 10,010; actual required coverage 2,685. The signed fee therefore covers the current provider cost despite minimum-price drift. Cost validity remaining was 27,797ms. This was read-only; the expired historical quote remains cancelled and was not submitted. A new quote and user confirmation are still required.
