@@ -65,7 +65,7 @@ export function createStockSwapHandler(overrides: Partial<{identity:typeof verif
     return res.status(400).json({ ok: false, error: 'Unsupported stock swap action.' })
   } catch (reason) {
     const error = reason as Error & { status?: number }
-    const safeMessage = /^(X Layer (?:fee estimation is unavailable|sponsorship is paused|billing coverage is unavailable)|Swap fee service is temporarily unavailable)/.test(error.message || '') ? error.message : error.name || 'Error'
+    const safeMessage = error.message==='Network fees are high. Try this route again shortly.'?error.message:/^(X Layer (?:fee estimation is unavailable|sponsorship is paused|billing coverage is unavailable)|Swap fee service is temporarily unavailable)/.test(error.message || '') ? error.message : error.name || 'Error'
     console.warn('[pocket-stock-swap]', {stage, status:error.status || 503, reason:safeMessage})
     return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Stock quotes are temporarily unavailable. Please try again.' })
   }

@@ -20,3 +20,17 @@ assert.ok(!called.includes('eth_getBalance'))
 await assert.rejects(()=>estimatePrivySponsoredBatchGas(rpc,wallet,calls,196))
 await assert.rejects(()=>estimatePrivySponsoredBatchGas(rpc,wallet,calls,1))
 console.log('PASS BSC 18-decimal gas conversion, depeg handling, fee cap/floor, stale price rejection and chain-bound Privy batch estimation')
+
+const {priceBscSponsorship:priceBridge}=await import('../api/pocket/bsc-bridge-fee-estimator.ts');
+for(const price of [priceBscSponsorship,priceBridge]){
+ assert.throws(()=>price(10n**18n,bnb,stable,policy,now),e=>e.code==='pocket_fee_limit'&&e.feeCheck.network==='bsc');
+ assert.throws(()=>price(1n,{...bnb,observedAt:now-30000},stable,policy,now),e=>e.code!=='pocket_fee_limit');
+}
+console.log('PASS BNB swap and bridge fee-limit reporting stays distinct from stale prices');
+
+const {bscConfiguredFeePolicy}=await import('../api/pocket/bsc-runtime.ts');
+const settings={POCKET_XLAYER_FEE_POLICY:'observed_cost',POCKET_XLAYER_OBSERVED_COST_USD_MICROS:'285',POCKET_XLAYER_FEE_MARGIN_BPS:'2500',POCKET_XLAYER_MIN_FEE_UNITS:'10000',POCKET_XLAYER_MAX_FEE_UNITS:'100000'};
+assert.equal(bscConfiguredFeePolicy(settings).maximumFeeUnits,100000000000000000n);
+assert.equal(bscConfiguredFeePolicy({...settings,POCKET_BSC_MAX_FEE_UNITS:'250000'}).maximumFeeUnits,250000000000000000n);
+assert.equal(settings.POCKET_XLAYER_MAX_FEE_UNITS,'100000');
+console.log('PASS BNB optional ceiling uses 18 decimals without changing X Layer');

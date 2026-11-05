@@ -17,7 +17,7 @@ for(const {input,instructions} of fixtures){
  assert.throws(()=>inspect(input,[heap,heap,...own],policy))
  const badHeap={...heap,data:Buffer.from([1,1,0,1,0]).toString('base64')};assert.throws(()=>inspect(input,[badHeap,...own],policy))
  assert.throws(()=>inspect(input,own,{...policy,tokenAccountRentLamports:'1855570'}))
- assert.throws(()=>inspect(input,own,{...policy,maximumPriorityFeeLamports:'0'}))
+ assert.throws(()=>inspect(input,own,{...policy,maximumPriorityFeeLamports:'0'}),e=>e.code==='pocket_fee_limit'&&e.feeCheck.network==='solana')
  const transfer=own.find(i=>i.programId==='11111111111111111111111111111111')
  const create=own.find(i=>Buffer.from(i.data,'base64').subarray(0,8).toString('hex')==='93f17b64f484ae76')
  for(const target of [transfer,create]){

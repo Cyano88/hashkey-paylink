@@ -1,3 +1,4 @@
+import {pocketFeeLimitError} from './fee-limit-error.js'
 import {xLayerFeeAssets,xLayerFeeScale,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
 import {createHash} from 'node:crypto'
 import {encodeFunctionData,parseAbi,toHex,type Hex} from 'viem'
@@ -64,7 +65,8 @@ export function createXLayerFeeEstimator(d:{rpc:XLayerCostRpc;prices(addresses:s
   const fullUsdMicros=ceil(networkUsdMicros*BigInt(10000+policy.providerBps),10000n)+policy.providerFixedUsdMicros+(policy.observedCostUsdMicros??0n)
   const scale=xLayerFeeScale(input.asset)
   const feeUnits=ceil(fullUsdMicros*100000000n*scale,BigInt(stable8))
-  if(priceXLayerReimbursement(feeUnits,policy.pricing.marginBps,BigInt(policy.pricing.minimumFeeUnits)*scale)>policy.maxFeeUnits*scale)unavailable()
+  const quotedFee=priceXLayerReimbursement(feeUnits,policy.pricing.marginBps,BigInt(policy.pricing.minimumFeeUnits)*scale)
+  if(quotedFee>policy.maxFeeUnits*scale)throw pocketFeeLimitError('xlayer',quotedFee,policy.maxFeeUnits*scale)
   const expiresAt=Math.min(started+30000,okb.fetchedAt+30000,stable.fetchedAt+30000,blockTime+30000)
   if(expiresAt<=now())unavailable()
   const estimateId=createHash('sha256').update(JSON.stringify({input,blockHash:block.hash,gas:String(totalGas),gasPrice:String(price),l1:String(l1),okb8,stable8,providerBps:policy.providerBps,providerFixedUsdMicros:String(policy.providerFixedUsdMicros),observedCostUsdMicros:String(policy.observedCostUsdMicros??''),expiresAt})).digest('hex')

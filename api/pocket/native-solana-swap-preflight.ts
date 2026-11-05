@@ -1,3 +1,4 @@
+import {pocketFeeLimitError} from './fee-limit-error.js'
 import {createPublicKey,verify} from 'node:crypto'
 import {PublicKey,TransactionInstruction,TransactionMessage,VersionedTransaction,type Connection} from '@solana/web3.js'
 import {inspectNativeSolanaSwapEnvelope} from './native-solana-swap-envelope.js'
@@ -33,7 +34,8 @@ export async function preflightNativeSolanaSwap(input:Input,instructions:SolanaS
  let message=compile(1n)
  if(message.header.numRequiredSignatures!==(sponsorship?2:1)||message.staticAccountKeys[0].toBase58()!==(sponsorship?.sponsor||input.wallet)||sponsorship&&message.staticAccountKeys[1].toBase58()!==input.wallet)fail()
  const fee=(await rpc.getFeeForMessage(message,'confirmed')).value
- if(!positive(fee)||BigInt(fee)>BigInt(policy.maximumNetworkFeeLamports)||BigInt(fee)<BigInt(inspected.priorityFeeLamports))fail()
+ if(!positive(fee)||BigInt(fee)<BigInt(inspected.priorityFeeLamports))fail()
+ if(BigInt(fee!)>BigInt(policy.maximumNetworkFeeLamports))throw pocketFeeLimitError('solana',BigInt(fee!),BigInt(policy.maximumNetworkFeeLamports))
  if(sponsorship&&BigInt(input.minimumOutUnits)<=BigInt(fee!))throw Object.assign(Error('Swap amount is too small to cover the network fee.'),{status:409})
  if(sponsorship)message=compile(BigInt(fee!))
  const transaction=new VersionedTransaction(message),raw=transaction.serialize();if(raw.length>1232)fail()

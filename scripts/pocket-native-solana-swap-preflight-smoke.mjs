@@ -12,6 +12,7 @@ for(const {input,instructions} of fixtures){
  let snapshotKeys=[]
  const rpc={getGenesisHash:async()=> '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',getMinimumBalanceForRentExemption:async()=>1855569,getAddressLookupTable:async()=>({value:table}),getLatestBlockhash:async()=>({blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:1000}),getFeeForMessage:async()=>({value:100000}),getMultipleAccountsInfoAndContext:async keys=>{snapshotKeys=keys;return {context:{slot:100},value:keys.map(()=>null)}},simulateTransaction:async(tx,config)=>{assert.equal(config.replaceRecentBlockhash,false);assert.equal(config.minContextSlot,100);assert.deepEqual(config.accounts.addresses,snapshotKeys.map(k=>k.toBase58()));return {context:{slot:101},value:{err:null,unitsConsumed:300000,accounts:snapshotKeys.map(()=>null)}}}}
  const run=overrides=>preflightNativeSolanaSwap(input,own,[table.key.toBase58()],policy,{...rpc,...overrides})
+ await assert.rejects(()=>run({getFeeForMessage:async()=>({value:200001})}),e=>e.code==='pocket_fee_limit'&&e.feeCheck.network==='solana');
  const result=await run({});assert.equal(result.executionAvailable,false);assert.equal(result.requiresEffectValidation,true);assert.equal(result.networkFeeLamports,'100000')
  const repeated=await preflightNativeSolanaSwap(input,own,[table.key.toBase58()],policy,{...rpc,getLatestBlockhash:async()=>{throw Error('Must keep reviewed blockhash')}},result)
  assert.equal(repeated.transaction,result.transaction)

@@ -29,7 +29,7 @@ export function bridgeQuoteErrorFields(reason:unknown){
  const e=reason as {code?:unknown;maximumAmountUnits?:unknown;retryAfter?:unknown}
  const fields:{code?:string;maximumAmountUnits?:string;retryAfter?:number}={}
  if(typeof e?.maximumAmountUnits==='string'&&/^(0|[1-9]\d{0,77})$/.test(e.maximumAmountUnits)){fields.maximumAmountUnits=e.maximumAmountUnits;fields.code='insufficient_balance'}
- if(typeof e?.code==='string'&&['insufficient_balance','amount_too_low','route_unavailable','rate_limited','provider_unavailable','quote_expired','max_quote_unavailable'].includes(e.code))fields.code=e.code
+ if(typeof e?.code==='string'&&['insufficient_balance','amount_too_low','route_unavailable','rate_limited','provider_unavailable','quote_expired','max_quote_unavailable','pocket_fee_limit'].includes(e.code))fields.code=e.code
  if(fields.code==='rate_limited'&&typeof e.retryAfter==='number'&&Number.isFinite(e.retryAfter))fields.retryAfter=Math.max(1,Math.min(300,Math.ceil(e.retryAfter)))
  return fields
 }

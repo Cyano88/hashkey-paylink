@@ -31,7 +31,7 @@ const freshAccount=fixture();freshAccount.state.code='0x';assert.equal((await cr
 for(const edit of [s=>s.chain='0x7a0',s=>s.priceAge=30000,s=>s.blockAge=31000,s=>s.stable=0,s=>s.stable=NaN,s=>s.code='0x6000',s=>s.gasPrice='bad',s=>s.clock=now+31000]){
  f=fixture();edit(f.state);await assert.rejects(()=>createXLayerFeeEstimator({...f,policy})(input))
 }
-f=fixture();await assert.rejects(()=>createXLayerFeeEstimator({...f,policy:{...policy,maxFeeUnits:100n}})(input))
+f=fixture();await assert.rejects(()=>createXLayerFeeEstimator({...f,policy:{...policy,maxFeeUnits:100n}})(input),e=>e.code==='pocket_fee_limit'&&e.feeCheck.network==='xlayer')
 assert.throws(()=>createXLayerFeeEstimator({...f,policy:{...policy,providerBps:NaN}}))
 const env={POCKET_XLAYER_REIMBURSEMENT_ENABLED:'true',PRIVATE_RPC_URL_XLAYER:'https://rpc.example.invalid',POCKET_XLAYER_PROVIDER_FEE_BPS:'1000',POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS:'1000',POCKET_XLAYER_FEE_MARGIN_BPS:'2500',POCKET_XLAYER_MIN_FEE_UNITS:'0',POCKET_XLAYER_MAX_FEE_UNITS:'1000000'}
 assert.ok(configuredXLayerReimbursement(env))

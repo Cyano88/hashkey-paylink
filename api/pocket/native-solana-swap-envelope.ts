@@ -1,3 +1,4 @@
+import {pocketFeeLimitError} from './fee-limit-error.js'
 import {PublicKey} from '@solana/web3.js'
 import {inspectNativeSolanaSwap,SOLANA_SWAP_ROUTER,type SolanaSwapInstruction} from './native-solana-swap-inspection.js'
 
@@ -59,6 +60,6 @@ export function inspectNativeSolanaSwapEnvelope(input:Input,instructions:SolanaS
  }
  if(!swap||!limit||price===undefined||nativeInput!==closed)fail()
  const priority=(BigInt(limit)*price+999999n)/1000000n
- if(priority>BigInt(policy.maximumPriorityFeeLamports))fail()
+ if(priority>BigInt(policy.maximumPriorityFeeLamports))throw pocketFeeLimitError('solana',priority,BigInt(policy.maximumPriorityFeeLamports))
  return {...swap,executionAvailable:false as const,temporaryRentLamports:rent.toString(),maximumAdditionalAccountRentLamports:(rent*BigInt(ataCount)).toString(),priorityFeeLamports:priority.toString(),requiresSimulation:true as const}
 }

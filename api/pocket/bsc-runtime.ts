@@ -17,7 +17,7 @@ export function bscConfiguredFeePolicy(env:NodeJS.ProcessEnv=process.env):BscFee
  if(!['observed_cost','provider_terms'].includes(mode))return unavailable()
  return {providerBps:mode==='observed_cost'?0:Number(integer('POCKET_XLAYER_PROVIDER_FEE_BPS')),
   providerAllowanceUsdMicros:integer(mode==='observed_cost'?'POCKET_XLAYER_OBSERVED_COST_USD_MICROS':'POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS'),
-  marginBps:Number(integer('POCKET_XLAYER_FEE_MARGIN_BPS')),minimumFeeUnits:integer('POCKET_XLAYER_MIN_FEE_UNITS')*10n**12n,maximumFeeUnits:integer('POCKET_XLAYER_MAX_FEE_UNITS')*10n**12n}
+  marginBps:Number(integer('POCKET_XLAYER_FEE_MARGIN_BPS')),minimumFeeUnits:integer('POCKET_XLAYER_MIN_FEE_UNITS')*10n**12n,maximumFeeUnits:integer(env.POCKET_BSC_MAX_FEE_UNITS!==undefined?'POCKET_BSC_MAX_FEE_UNITS':'POCKET_XLAYER_MAX_FEE_UNITS')*10n**12n}
 }
 function scaledPrice(value:unknown,up:boolean){
  if(typeof value!=='string'||!/^(0|[1-9]\d{0,12})(?:\.\d{1,80})?$/.test(value))return unavailable()

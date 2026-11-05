@@ -63,3 +63,12 @@ assert.equal(priced.feeUnits,1452867426706068831n);
 assert(priced.feeUnits<polygonLimit.maximumFeeUnits);
 assert.equal(crossBridgeConfiguredPolicy('polygon','POL',livePrice,limits).maximumFeeUnits,oldLimit.maximumFeeUnits,'No override preserves existing fee ceiling');
 console.log('PASS captured Polygon fee: explicit limit error, optional isolated ceiling, same gas reserve, unchanged other networks');
+
+for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(source)){
+ const key='POCKET_CROSS_BRIDGE_'+source.toUpperCase()+'_MAX_FEE_USD_MICROS';
+ const basePolicy=crossBridgeConfiguredPolicy(source,asset.symbol,livePrice,limits);
+ const isolated=crossBridgeConfiguredPolicy(source,asset.symbol,livePrice,{...limits,[key]:'250000'});
+ assert(isolated.maximumFeeUnits>basePolicy.maximumFeeUnits);
+ for(const other of CROSS_BRIDGE_NETWORKS){if(other===source)continue;const otherAsset=crossBridgeAssets(other)[0].symbol;assert.deepEqual(crossBridgeConfiguredPolicy(other,otherAsset,livePrice,limits),crossBridgeConfiguredPolicy(other,otherAsset,livePrice,{...limits,[key]:'250000'}))}
+}
+console.log('PASS all 26 source/assets: independent network ceilings with unchanged defaults and other networks');

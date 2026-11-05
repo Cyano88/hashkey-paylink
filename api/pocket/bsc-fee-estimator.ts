@@ -1,3 +1,4 @@
+import {pocketFeeLimitError} from './fee-limit-error.js'
 import {type Hex} from 'viem'
 import {bscPaymentCalls,type BscPaymentQuote} from '../../src/pocket/lib/pocketBscPayment.js'
 import {estimatePrivySponsoredBatchGas, type XLayerCostRpc} from './xlayer-sponsored-cost.js'
@@ -23,7 +24,8 @@ export function priceBscSponsorship(networkWei: bigint, bnb: BscFeePrice, stable
  const allowanceStable = ceil(policy.providerAllowanceUsdMicros * 10n ** 20n, stable.scaled8)
  const buffered = ceil((networkStable + allowanceStable) * BigInt(10000 + policy.marginBps), 10000n)
  const fee = buffered > policy.minimumFeeUnits ? buffered : policy.minimumFeeUnits
- if (fee > policy.maximumFeeUnits || fee <= 0n) fail()
+ if(fee<=0n)fail()
+ if(fee>policy.maximumFeeUnits)throw pocketFeeLimitError('bsc',fee,policy.maximumFeeUnits)
  return fee
 }
 export function createBscFeeEstimator(d: {rpc: XLayerCostRpc; prices(asset: 'USDC' | 'USDT'): Promise<{bnb: BscFeePrice; stable: BscFeePrice}>; policy: BscFeePolicy; now?(): number}) {
