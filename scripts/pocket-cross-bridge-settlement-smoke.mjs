@@ -43,7 +43,7 @@ let h=harness();await assert.rejects(()=>h.run('other','operation'));assert.equa
 h.source='pending';assert.equal((await h.run('owner','operation')).state,'submitted');assert.equal(h.providerCalls,1);assert(h.row.delivery);assert.equal(h.row.settlement,undefined);assert.equal(h.events.size,0)
 h=harness();h.source='pending';h.received=null;await h.run('owner','operation');assert.equal(h.row.delivery,undefined);assert.equal(h.events.size,0)
 h=harness();h.source='pending';h.f.status.status='failure';await h.run('owner','operation');assert.equal(h.row.delivery,undefined)
-h=harness();h.source='failed';assert.equal((await h.run('owner','operation')).state,'source_failed');assert.equal(h.providerCalls,0);assert.equal(h.events.size,0)
+h=harness();h.source='failed';assert.equal((await h.run('owner','operation')).state,'source_failed');assert.equal(h.providerCalls,1);assert.equal(h.events.size,0)
 h=harness();h.f.status.status='failure';assert.equal((await h.run('owner','operation')).state,'source_confirmed');assert.equal(h.events.size,0)
 h=harness();h.received=null;assert.equal((await h.run('owner','operation')).state,'source_confirmed')
 h=harness();h.ledgerFailures=1;await assert.rejects(()=>h.run('owner','operation'),/Ledger/);assert.equal(h.row.state,'completed');assert.equal(h.events.size,0);await h.run('owner','operation');assert.equal(h.events.size,1);assert.equal(h.sourceCalls,1)
@@ -74,3 +74,13 @@ for(const source of CROSS_BRIDGE_ROLLOUT_NETWORKS)for(const destination of CROSS
  await missing.run('owner','operation');assert.equal(missing.row.delivery,undefined);assert.equal(missing.row.state,'submitted');directions++
 }
 console.log('PASS '+directions+' directed network pairs including Arc and Solana: delivery before pending/throwing source proof, no provider-only success, eventual completion, idempotent publication.')
+
+// Deferred source proof cannot serialize otherwise independent destination work.
+{
+ const f=data(),row={id:'parallel',ownerId:'owner',plan:f.plan,sourceHash:hash('base'),state:'submitted',updatedAt:now};let saved=row,releaseSource,releaseDelivery,sourceStarted=false,destinationStarted=false,events=0;
+ const sourceGate=new Promise(resolve=>releaseSource=resolve),deliveryGate=new Promise(resolve=>releaseDelivery=resolve);
+ const run=createCrossBridgeSettlement({now:()=>now,read:async()=>saved,mutate:async(id,fn)=>(saved=fn(saved)),source:async()=>{sourceStarted=true;await sourceGate;return 'confirmed'},provider:async()=>f,received:async()=>{destinationStarted=true;await deliveryGate;return BigInt(f.plan.route.receiveUnits)},ledger:async()=>{events++}});
+ const work=run('owner','parallel');await new Promise(resolve=>setImmediate(resolve));assert(sourceStarted);assert(destinationStarted,'Destination proof starts before source proof resolves');assert.equal(events,0);
+ releaseDelivery();await new Promise(resolve=>setImmediate(resolve));assert.equal(saved.state,'submitted');assert.equal(events,0,'Destination evidence alone never completes ledger');releaseSource();await work;assert.equal(saved.state,'completed');assert.equal(events,1);
+}
+console.log('PASS independent source/destination proof concurrency without earlier settlement or duplicate ledger writes')

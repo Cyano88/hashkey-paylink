@@ -35,8 +35,23 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
   if(terminal(r.state))return publish(r)
   // Delivery and source finality are independent. A source reader outage must
   // never promote settlement, but need not hide independently proven delivery.
-  let source:'pending'|'confirmed'|'failed'='pending'
-  try{source=await d.source(structuredClone(r))}catch{/* Keep the reservation pending. */}
+  const sourceRead=d.source(structuredClone(r)).catch(()=>'pending' as const)
+  // Independent chain/provider reads run together; source finality latency
+  // must not be added to destination receipt latency. Both results are still
+  // required before terminal settlement, and source failure takes precedence.
+  const deliveryRead=(async()=>{
+   const provider=await d.provider(structuredClone(r))
+   const candidate=crossBridgeDeliveryCandidate(r.plan,r.sourceHash,provider.status,provider.requests)
+   if(!candidate)return null
+   let received:bigint|null=null,observed:bigint|null=null
+   try{received=await (d.received??readCrossBridgeDelivery)(structuredClone(candidate))}catch{/* Observation may still explain progress. */}
+   if(!crossBridgeDeliveryProven(candidate,received)){
+    try{observed=await (d.observed??observeCrossBridgeDelivery)(structuredClone(candidate))}catch{/* No claim without chain evidence. */}
+   }
+   return {candidate,received,observed}
+  })()
+  const [sourceResult,deliveryResult]=await Promise.allSettled([sourceRead,deliveryRead])
+  const source=sourceResult.status==='fulfilled'?sourceResult.value:'pending'
   if(!['pending','confirmed','failed'].includes(source))return fail()
   const advance=async(update:(current:CrossBridgeSettlementRecord)=>CrossBridgeSettlementRecord)=>d.mutate(id,current=>{
    const row=owned(current,owner,id)
@@ -47,13 +62,10 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
   if(source==='failed')return publish(await advance(row=>({...row,state:'source_failed',updatedAt:d.now()})))
   const saved=source==='confirmed'?await advance(row=>({...row,state:'source_confirmed',updatedAt:d.now()})):r
   if(terminal(saved.state))return publish(saved)
-  const provider=await d.provider(structuredClone(r)),candidate=crossBridgeDeliveryCandidate(r.plan,r.sourceHash,provider.status,provider.requests)
-  if(!candidate)return r.observedDelivery?advance(row=>({...row,observedDelivery:null,updatedAt:d.now()})):saved
-  let received:bigint|null=null
-  try{received=await (d.received??readCrossBridgeDelivery)(structuredClone(candidate))}catch{/* Non-final receipt observation may still explain progress. */}
+  if(deliveryResult.status==='rejected')throw deliveryResult.reason
+  if(!deliveryResult.value)return r.observedDelivery?advance(row=>({...row,observedDelivery:null,updatedAt:d.now()})):saved
+  const {candidate,received,observed}=deliveryResult.value
   if(!crossBridgeDeliveryProven(candidate,received)){
-   let observed:bigint|null=null
-   try{observed=await (d.observed??observeCrossBridgeDelivery)(structuredClone(candidate))}catch{/* No presentation claim without current chain evidence. */}
    const observation=candidate.outcome==='completed'&&crossBridgeDeliveryProven(candidate,observed)?{...candidate,amountUnits:String(observed),observedAt:d.now()}:null
    if(observation||r.observedDelivery)return advance(row=>({...row,observedDelivery:observation,updatedAt:d.now()}))
    return saved
