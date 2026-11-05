@@ -88,9 +88,9 @@ export async function quoteCrossBridgeCharges(route:Route,binding:CrossBridgeWal
  const now=deps.now||Date.now
  let fee=policy.minimumFeeUnits>0n?policy.minimumFeeUnits:1n
  for(let pass=0;pass<4;pass++){
-  const built=await buildCrossBridgeChargedPlan(route,binding,fee,reimbursementRecipient),balance=await deps.balance()
+  const built=await buildCrossBridgeChargedPlan(route,binding,fee,reimbursementRecipient)
+  const [balance,cost]=await Promise.all([deps.balance(),deps.estimate(built.plan,built.planHash)])
   if(balance<built.totalUnits)throw Object.assign(Error('Insufficient '+route.tokenIn.symbol+' for the amount and fee.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance>fee?balance-fee:0n)})
-  const cost=await deps.estimate(built.plan,built.planHash)
   // Require explicit account-rent coverage, including zero for existing ATAs.
   // A gas-only estimate must not silently omit a Solana account creation cost.
   if(typeof cost.rentUnits!=='bigint'||cost.rentUnits<0n||cost.rentUnits>=2n**64n||route.source!=='solana'&&cost.rentUnits!==0n||typeof cost.nativeUnits!=='bigint'||cost.nativeUnits<=0n)fail()

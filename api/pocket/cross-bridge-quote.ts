@@ -55,12 +55,19 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  return (await quote(BigInt(input.amountUnits))).quote
 }
 const preflightDefaults={now:Date.now,readers:crossBridgeReaders,revalidate:revalidateCrossBridgeWallets}
-export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Promise<void>,env:NodeJS.ProcessEnv=process.env,overrides:Partial<typeof preflightDefaults>={}){const d={...preflightDefaults,...overrides};return async(review:Review)=>{
+export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Promise<void>,env:NodeJS.ProcessEnv=process.env,overrides:Partial<typeof preflightDefaults>={},reuseEstimateMs=0){const d={...preflightDefaults,...overrides};let recent:{id:string;planHash:string;at:number;cost:CrossBridgeCost}|undefined;return async(review:Review)=>{
  const {quote:q,route,charged}=review
  const fresh=()=>{if(q.expiresAt<=d.now())throw Error('Bridge quote expired. Review again.')};fresh();assertCrossBridgeRollout(q.input.source,q.input.destination)
  if(q.reimbursementRecipient!==crossBridgeReimbursementRecipient(q.input.source,env)||JSON.stringify(q.appFee)!==JSON.stringify(relayBridgeAppFee(env)))throw Error('Bridge fee policy changed.')
- await d.revalidate(q.wallets);await guard(review)
- const readers=d.readers(q.wallets,q.input.from,userToken,env),[balance,cost]=await Promise.all([readers.balance(),readers.estimate(charged.plan,charged.planHash)])
+ await Promise.all([d.revalidate(q.wallets),guard(review)])
+ const readers=d.readers(q.wallets,q.input.from,userToken,env)
+ // Only a combined, request-scoped Circle prepare/submit can reuse its own
+ // identical estimate. Ownership, balance, policy and expiry are still checked.
+ const estimate=async()=>{
+  if(reuseEstimateMs>0&&recent?.id===q.id&&recent.planHash===charged.planHash&&d.now()-recent.at<Math.min(reuseEstimateMs,2000)&&recent.cost.expiresAt>d.now())return recent.cost
+  const cost=await readers.estimate(charged.plan,charged.planHash);recent={id:q.id,planHash:charged.planHash,at:d.now(),cost};return cost
+ }
+ const [balance,cost]=await Promise.all([readers.balance(),estimate()])
  if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  fresh()
  if(cost.expiresAt<=d.now())throw Object.assign(Error('Bridge cost expired. Review again.'),{status:409,code:'bridge_review_invalid'})

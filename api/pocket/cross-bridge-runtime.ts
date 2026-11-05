@@ -54,8 +54,8 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
  for(const op of ops.filter(o=>o.state!=='source_failed')){const saved=await openCrossBridgeReview(op.quoteToken,q.ownerId,{recovery:true}),prices=await readCrossBridgePrices(saved.quote.input.source,saved.quote.input.from);coverage+=BigInt(saved.quote.reimbursementUnits)*prices.assetPrice.scaled8*95n/(10n**BigInt(saved.route.tokenIn.decimals)*100n*100n)}
  if(billed>coverage){await mutateDurableJson(haltKey,old=>old||{at:Date.now(),billedUsdMicros:String(billed),coverageUsdMicros:String(coverage)});throw Error('Bridge sponsorship is paused for fee reconciliation.')}
 }
-export function crossBridgeRuntime(review:Review,userToken:string){
- const owner=review.quote.ownerId,preflight=crossBridgePreflight(userToken,crossBridgePolicyGuard)
+export function crossBridgeRuntime(review:Review,userToken:string,options:{reuseEstimateMs?:number}={}){
+ const owner=review.quote.ownerId,preflight=crossBridgePreflight(userToken,crossBridgePolicyGuard,process.env,{},options.reuseEstimateMs)
  if(review.quote.input.source==='solana')return createCrossBridgeSolanaRuntime(owner,userToken,preflight)
  if(review.quote.wallets.source.provider==='privy')return createCrossBridgePrivyRuntime(owner,preflight)
  return createCrossBridgeCircleRuntime(owner,userToken,preflight)

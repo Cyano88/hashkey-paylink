@@ -25,6 +25,14 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
  const charged=await quoteCrossBridgeCharges(route,wallets,crossBridgeReimbursementRecipient(source,env),policy,{...readers,now:()=>time})
  assert.equal(charged.expiresAt,route.expiresAt,'15-second-old price must not shorten a freshly verified executable route')
  const saved=await createCrossBridgeReview({wallets,input:i,providerQuote:q,appFee:null,...charged},{secret,now:time}),review=await openCrossBridgeReview(saved.quoteToken,'fixture',{secret,now:time})
+
+ // Combined Circle preparation reuses only this request's exact estimate for 2s.
+ if(source==='arc'&&asset.symbol==='EURC'){
+  let estimates=0,balances=0;const combined=crossBridgePreflight('request-only',async()=>{},env,{now:()=>time,revalidate:async()=>{},readers:()=>({...readers,balance:async()=>{balances++;return balance},estimate:async(...args)=>{estimates++;return readers.estimate(...args)}})},2000)
+  await combined(review);await combined(review);assert.equal(estimates,1);assert.equal(balances,2,'balance is always rechecked');
+  balance=0n;await assert.rejects(()=>combined(review),e=>e.code==='insufficient_balance');balance=10n**35n;
+  time+=2001;await combined(review);assert.equal(estimates,2,'reuse ends after 2s');time=now;
+ }
  const before=JSON.stringify(review.quote)
  let guards=0
  const preflight=crossBridgePreflight('request-only',async()=>{guards++},env,{now:()=>time,revalidate:async()=>{},readers:()=>readers})

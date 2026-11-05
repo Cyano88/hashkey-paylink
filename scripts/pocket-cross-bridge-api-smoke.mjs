@@ -26,3 +26,10 @@ await privyWorker();assert.equal(reads,1);assert.equal(settlements,3)
 const repairWorker=createCrossBridgeWorker({durable:()=>true,list:async()=>[{...op,state:'completed'},{...op,state:'completed',ledgerPublishedAt:1}],open:async()=>({quote:{input:{source:'base'},wallets:{source:{provider:'circle'}}}}),reconcile:async()=>{settlements++}})
 await repairWorker();assert.equal(settlements,4,'Terminal proof without published ledger is repaired after restart')
 console.log('PASS API rollout gate, owner binding, unsigned cancellation, signed retention, disabled-route recovery, and worker failure isolation. No provider dispatch.')
+
+// Circle prepares and creates its confirmation in one authenticated request.
+enabled=true;op=undefined;const before=submitted;
+assert.equal((await call('prepare',{dispatch:true,circleUserToken:'fixture'})).data.status,'pending');assert.equal(submitted,before+1);
+review.quote.wallets.source.provider='privy';op=undefined;
+assert.equal((await call('prepare',{dispatch:true})).code,409);assert.equal(submitted,before+1,'Privy must supply its own signed authorization');
+console.log('PASS combined Circle preparation, retained PIN gate/runtime path, and Privy bypass rejection')

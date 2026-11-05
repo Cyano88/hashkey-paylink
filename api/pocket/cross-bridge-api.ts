@@ -15,6 +15,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  return async(req:Request,res:Response)=>{
   res.setHeader('Cache-Control','private, no-store')
+  const startedAt=Date.now()
   try{
    if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Method not allowed.'})
    const {userId:owner}=await d.identity(req)
@@ -35,7 +36,11 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    if(existing&&(existing.ownerId!==owner||existing.quoteToken!==token))throw Error('Bridge owner or review changed.')
    const userToken=typeof b.circleUserToken==='string'?b.circleUserToken:''
    if(action==='prepare'){
-    const approval=req.headers['x-pocket-payment-approval'],runtime=d.runtime(review,userToken),op=await runtime.prepare(token,typeof approval==='string'?approval:'')
+    const combined=b.dispatch===true
+    if(combined&&review.quote.wallets.source.provider!=='circle')throw Error('This bridge requires wallet authorization.')
+    const approval=req.headers['x-pocket-payment-approval'],runtime=d.runtime(review,userToken,combined?{reuseEstimateMs:2000}:{})
+    let op=await runtime.prepare(token,typeof approval==='string'?approval:'')
+    if(combined&&op.state==='prepared')op=await runtime.submit(id,'')
     return res.json({...await d.response(op),...('request' in runtime&&op.state==='prepared'?{request:await runtime.request(id)}:{})})
    }
    if(!existing)return res.json({ok:true,status:'not_submitted'})
@@ -64,7 +69,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    }
    if(op.sourceHash){try{op=await d.reconcile(owner,id) as CrossBridgeOperation}catch{/* Keep the journaled state while proof is unavailable. */}}
    return res.json(await d.response(op))
-  }catch(error){const e=error as Error&{status?:number;code?:string;maximumAmountUnits?:string;feeCheck?:unknown};if(['cross_bridge_fee_changed','cross_bridge_fee_unavailable','pocket_fee_limit'].includes(e.code||'')&&e.feeCheck)console.warn('pocket_bridge_fee_recheck',JSON.stringify({action:req.body?.action,check:e.feeCheck}));return res.status(e.status&&e.status>=400&&e.status<=599?e.status:409).json({ok:false,error:e.message||'Bridge is temporarily unavailable.',...(e.code?{code:e.code}:{}),...(e.maximumAmountUnits?{maximumAmountUnits:e.maximumAmountUnits}:{})})}
+  }catch(error){const e=error as Error&{status?:number;code?:string;maximumAmountUnits?:string;feeCheck?:unknown};if(['cross_bridge_fee_changed','cross_bridge_fee_unavailable','pocket_fee_limit'].includes(e.code||'')&&e.feeCheck)console.warn('pocket_bridge_fee_recheck',JSON.stringify({action:req.body?.action,check:e.feeCheck}));return res.status(e.status&&e.status>=400&&e.status<=599?e.status:409).json({ok:false,error:e.message||'Bridge is temporarily unavailable.',...(e.code?{code:e.code}:{}),...(e.maximumAmountUnits?{maximumAmountUnits:e.maximumAmountUnits}:{})})}finally{if(['quote','prepare','submit'].includes(req.body?.action))console.info('pocket_bridge_timing',JSON.stringify({action:req.body.action,combined:req.body.dispatch===true,durationMs:Date.now()-startedAt}))}
  }
 }
 export default createCrossBridgeHandler()
