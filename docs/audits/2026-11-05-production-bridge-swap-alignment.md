@@ -33,3 +33,9 @@ Passed production-adapter native-delivery fixtures for Ethereum/Base/Arbitrum/Po
 New freshness regression covers the observed native discrepancy, cached fallback, provider catch-up, absent rows, owner/network/wallet/token isolation and token refunds. Existing native, Circle token and USDT display regressions are retained.
 
 Open policy: the older Arc swap path has no explicit reimbursement transfer or configured platform fee. A pricing decision is pending between bridge-style cost reimbursement plus 0.1% platform fee and continued sponsorship. This audit does not silently introduce new charges or claim all swap fee policies are aligned. Testing does not establish universal absence of flicker or funded execution across every pair.
+
+## Deployment confirmation
+
+Freshness fix commit 7511a87d29a6c0195ca3f472760d887eb190ac93 deployed as dep-dbm7dmc9v7es7393fcc0, live at 2026-11-05T12:35:40Z. Post-startup health returned HTTP 200. A lightweight production read through the deployed settlement freshness module returned verifiedAt 1793880007968 and rejected Circle's unchanged 09:24:09Z ETH snapshot (staleSnapshotFallsBack: true). The dedicated display-reader TypeScript check passed as well as the broader cross-bridge check.
+
+Pocket left the foreground before the deployment completed. The post-deployment numeric Home total was therefore not visually reverified; device taps stopped to avoid interacting with another app. The earlier cross-asset review and installed BNB receipt checks remain valid. Arc swap pricing remains pending user decision.
