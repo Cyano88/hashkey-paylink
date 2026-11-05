@@ -77,7 +77,8 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     const estimated=await estimate(quote.callData)
     const nativeRequired=quote.version===2?(nativeAmountUnits(estimated)*105n+99n)/100n:nativeAmountUnits(estimated)
     const feeInsufficient=quote.version===2&&nativeFeeToUsdcUnits(formatUnits(nativeRequired,18),await d.rate(network==='polygon'?'polygon':'ethereum',undefined,d.now,quote.from as 'USDC'|'USDT'))>BigInt(quote.stableFeeUnits!)
-    if(nativeRequired>BigInt(quote.feeUnits)||feeInsufficient||quote.expiresAt<=d.now())return res.status(409).json({ok:false,error:'Network fees changed. Review the updated estimate.'})
+    if(quote.expiresAt<=d.now())return res.status(409).json({ok:false,code:'swap_quote_expired',error:'Swap quote expired. Review the updated amount.'})
+    if(nativeRequired>BigInt(quote.feeUnits)||feeInsufficient)return res.status(409).json({ok:false,error:'Network fees changed. Review the updated estimate.'})
     const review=nativeSwapReview(quote)
     const metadata={feeAmount:review.fee,feeAsset:review.feeAsset,quoteToken:token,network,walletAddress,amount:quote.amount,assetSymbol:quote.from,toAsset:quote.to,intentFingerprint:network+':'+walletId}
     const claim=await d.claim({ownerId,idempotencyKey:key,action:actionName,metadata,dedupe:{metadataKey:'intentFingerprint',metadataValue:metadata.intentFingerprint,statuses:['started','submitted']}})

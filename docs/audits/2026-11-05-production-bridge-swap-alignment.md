@@ -120,3 +120,28 @@ After the user handed over the phone, completed Home/Swap/Earn navigation. Home 
 The walkthrough caught a periodic APY refresh clearing a previously displayed rate. Removed that clearing and suppressed failure copy when a previous rate exists. Added pocket-earn-rate-continuity-smoke.mjs: actual Earn page retains 3.70% through a clock-driven periodic pending read and rejected read. Passed this browser check, TypeScript, and rebuilt Android release.
 
 Final replacement APK (same filename) SHA256: 6D90327FFDCC1C1D7596AFB121D75A9951E24308C76F5376DC0E186CF341864E. All 1869 assets matched; signature verified; Pixel install succeeded and app reopened. This supersedes the earlier APK hash above. Updated source archive includes PocketEarnPage and the rate continuity test. No funded actions or backend deployment.
+
+## Exchange flow and Max update (2026-11-05 evening)
+
+Native checkout: C:\Users\USER\pocket-play-update-20261101.
+Installed Pixel APK: native-release/pocket-exchange-flow-parity-20261105.apk.
+SHA256: 83DE74546B35E978254A9054EDD1B344A8770A368A2C470DBEFC9130B273291E.
+All 1869 packaged web assets verified against dist; Android build, signing verification and adb install succeeded. Backend code unchanged (7511a87d29a6c0195ca3f472760d887eb190ac93).
+
+Bridge presentation follows the existing bank handoff distinction: Bridging CTA until verified handoff or completion; shared result sheet; Done removes the active form and leaves durable Activity recovery. A transaction hash alone does not authorize the handoff result. Handoff does not mutate journal settlement status. Submitted legacy bridge records no longer restore themselves into a fresh form; unsigned approvals remain recoverable. Native and Arc swap dismissal retains recovery journals while clearing form state.
+
+Confirmation headline remains destination token amount with muted fiat equivalent; Paid with is the source asset. Result summary uses source asset. Pixel inspection showed 0.94 USDC / approximately 0.94 USD and Paid with 0.97 USDT for Arbitrum USDT to Base USDC. No assistant confirmation, signing or transfer performed.
+
+Max: source and destination amount feedback during fee-adjusted calculation; source fills with the final amount. Cross-bridge duplicate debounce request suppressed while quoting. Manual edits invalidate pending Max. Shared source input remains mounted to preserve keyboard/manual cancellation. Legacy bridge and swap layouts receive maximum-calculation feedback.
+
+Passed: focused TypeScript; bridge lifecycle 56 directed network pairs; sheet evidence matrix 56 pairs; 14 cross-asset review cases; cross-bridge panel flows Base, BNB, X Layer, Solana USDC and SOL, Polygon, Arc; swap presets eight networks at 320/426 widths and late-Max manual override; seven legacy bridge Max rails; six native-swap cancel networks; seven cash-funding source networks. These are fixture checks, not live transfers on every route.
+
+Live existing ETH to USDC operation df3df9a8-e437-4af1-b7c8-5688f633a375 is now completed with verified Base settlement 1397421 units (1.397421 USDC). Source proof and fee evidence were validated separately; no status override performed.
+
+Remaining test-harness limitations: older native delayed-recovery fixture cannot bundle because its wallet mocks omit exports; old Arc cancellation/reopen scenarios assume the superseded restoration flow. Arc cancel/success/failure/unknown-dismiss scenarios passed, but full legacy Arc harness has not passed. Do not represent those suites or a full live financial matrix as verified. Pixel was actively being used; observed Max loading then final source amount and populated confirmation, without changing the user's selected route or submitting it.
+
+## Quote feedback and usable review time
+
+Native: cross-bridge fee-rejection notices are consumed by one replacement quote, cleared during fresh requests, and shown only if amount/receive/fee/total changed. Native EVM/Solana swap rejection refresh similarly clears stale text and compares the returned amounts before prompting review. Routine quote expiry still blocks execution.
+Backend: stable-input native EVM quote issuance now starts at the latest executable route request, not approval lookup and discarded calibration routes. The signed 45-second bound, router deadline, approved debit, reimbursement and fee caps remain intact. Expiry during native execution preflight now returns swap_quote_expired rather than incorrectly reporting network fees changed. Cross-bridge preflight checks expiry before interpreting fresh costs as a changed fee.
+Validation passed: focused backend/native TypeScript, eight stable-input reimbursement routes including slow-request clock assertions (33 seconds left after the final route request and fee estimate), native API expiry-during-estimate rejection with no claim/challenge, existing four-network fee-buffer matrix, 13 Circle bridge quote/preflight cases, and 26 reimbursement asset cases. Browser fixtures passed seven cross-bridge adapter cases plus changed/unchanged replacement notice checks; five native swap networks passed fresh-review and unchanged-rejection notice cases. No assistant-funded transfer. Final deployment and Pixel verification recorded separately below.

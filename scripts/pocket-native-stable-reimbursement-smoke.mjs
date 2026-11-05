@@ -18,6 +18,12 @@ for(const network of ['ethereum','base','arbitrum','polygon'])for(const stable o
  let estimates=0
  const q=await quoteReimbursedNativeEvmSwap(f.binding,async()=>{estimates++;return '0.00001'},provider,()=>f.now,async q=>BigInt(q.totalInputUnits)<=1000000n,rate)
  assert.equal(q.version,2);assert.equal(q.amount,'1');assert.equal(BigInt(q.amountUnits)+BigInt(q.stableFeeUnits),1000000n);assert.equal(estimates,2);assert.equal(calls.filter(x=>x==='swap').length,2,'bounded two executable routes, no idle refresh');assert.equal(calls.filter(x=>x==='approve-transaction').length,1)
+ let delayedClock=f.now,latestRouteStarted=0
+ const delayedProvider=async(path,args)=>{if(path==='swap')latestRouteStarted=delayedClock;delayedClock+=6000;return provider(path,args)}
+ const delayed=await quoteReimbursedNativeEvmSwap(f.binding,async()=>{delayedClock+=6000;return '0.00001'},delayedProvider,()=>delayedClock,undefined,rate)
+ assert.equal(delayed.issuedAt,latestRouteStarted,'discarded route and approval latency must not age the final route')
+ assert.equal(delayed.expiresAt-delayedClock,33000,'final route keeps its own 45-second bound, less actual request/estimate latency')
+ assert.throws(()=>validateNativeEvmSwap(delayed,false,delayed.expiresAt),'expiry remains enforced')
  const review=nativeSwapReview(q);assert.equal(review.feeAsset,stable);assert.equal(review.feeFromOutput,false);assert.equal(review.feeIncludedInInput,true);assert.equal(review.expectedOut,formatUnits(BigInt(q.expectedOutUnits),18));assert.equal(review.minimumOut,formatUnits(BigInt(q.minimumOutUnits),18))
  const batch=nativeSwapCalls(q);assert(batch.every(c=>c.value===0n),'no native reimbursement or native balance needed');const fee=decodeFunctionData({abi:transferAbi,data:batch.at(-1).data});assert.equal(fee.args[0],EVM_PLATFORM_TREASURY);assert.equal(fee.args[1],BigInt(q.stableFeeUnits));assert.equal(batch.at(-1).target.toLowerCase(),f.response.routerResult.fromToken.tokenContractAddress.toLowerCase())
  const outgoing=batch.map(c=>({type:'CALL',from:wallet,to:c.target,input:c.data,value:'0x0'}));outgoing[2].calls=[{type:'CALL',from:q.tx.to,to:wallet,input:'0x',value:'0x'+BigInt(q.expectedOutUnits).toString(16)}];outgoing.at(-1).logs=[{address:batch.at(-1).target,topics:encodeEventTopics({abi:transferAbi,eventName:'Transfer',args:{from:wallet,to:EVM_PLATFORM_TREASURY}}),data:encodeAbiParameters([{type:'uint256'}],[BigInt(q.stableFeeUnits)])}]

@@ -89,7 +89,7 @@ export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,
  const {tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to)
  if(tokenIn.native||tokenIn.symbol==='EURC')return quoteNativeEvmSwap(binding,estimate,read,now,affordable)
  if(!rateScaled8||rateScaled8<=0n||rateScaled8>10n**15n)throw Object.assign(Error('Network fee pricing is unavailable. Try again.'),{status:503})
- const total=nativeSwapUnits(binding.amount,tokenIn.decimals),issuedAt=now(),id=randomUUID(),spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
+ const total=nativeSwapUnits(binding.amount,tokenIn.decimals),id=randomUUID(),spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
  let nativeCap=1n
  const approval=await read('approve-transaction',{chainIndex:String(nativeEvmNetworks[binding.network].id),tokenContractAddress:tokenIn.address,approveAmount:String(total)})
  if(!sameSwapAddress(approval?.dexContractAddress,spender))fail()
@@ -97,6 +97,9 @@ export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,
   const stableFee=nativeFeeToUsdcUnits(formatUnits(nativeCap,18),rateScaled8)
   if(stableFee>=total)throw Object.assign(Error('This amount is too small to cover the network fee.'),{status:409})
   const units=total-stableFee,amount=formatUnits(units,tokenIn.decimals)
+  // Each iteration fetches a new executable route; age it from that request,
+  // not from approval lookup or an earlier discarded fee-calibration route.
+  const issuedAt=now()
   const data=await read('swap',{...(binding.network==='ethereum'?{directRoute:'true'}:{}),chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
   const preview=await quoteNativeSwap({...binding,amount},async()=>data?.routerResult,now)
   if(!data?.tx)fail()

@@ -70,6 +70,7 @@ export function createCrossBridgeCirclePreflight(userToken:string,policy:CrossBr
   await d.revalidate(q.wallets);await guard(review)
   const r=readers(q.wallets,q.input.from,userToken,d),[balance,cost]=await Promise.all([r.balance(),r.estimate(charged.plan,charged.planHash)])
   if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
+  fresh()
   const priced=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits,cost.gasPrice,cost.assetPrice,policy,d.now()),reserved=BigInt(q.reimbursementUnits)
   if(!crossBridgeFeeCovered(q.input.source,route.tokenIn.symbol,reserved,priced.coverageFeeUnits,cost.assetPrice)||reserved>policy.maximumFeeUnits)throw Object.assign(Error('Bridge fee changed. Review a new quote.'),{status:409,code:'cross_bridge_fee_changed'})
   fresh()
