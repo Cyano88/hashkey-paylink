@@ -98,3 +98,17 @@ Removed the whole-document visibility gate and timer. Receipt details now render
 The bank/regular receipt regression now deliberately keeps document.fonts.ready unresolved and delays images by two seconds, and verifies that receipt text is visible in the mount mutation callback. It passed for bank and regular transfers; existing fiat-layout stability, narrow/Pixel exchange receipt readability and targeted TypeScript also passed.
 
 Installed pocket-receipt-immediate-20261105.apk, SHA256 5CE984B46D93C8893B1210C9556B3B70BEC73433DFD086A53630FF52F50DE6FC; all 1,868 web assets verified against dist, Android build passed, no data cleared. Source snapshot: native-release/receipt-immediate-source-20261105.zip. After the user reopened Pocket, bank and incoming wallet receipts were visually checked. A recorded reopening of the existing NGN 2,100 bank receipt showed the details together in the first sampled receipt frame, without a Preparing receipt phase. No transfer or external share was made. No public store rollout.
+
+## Balance display continuity and indexed yield - November 5
+
+Installed native-only update: keep the same owner/network/asset last-known balance visible without any Last known label, as explicitly requested. Removed timed Refresh balance fallback; retry appears only on settled failure with no displayable value. Complete totals retain a previous complete value, not a partial sum. Confirmed zero replaces the retained value. Transaction, Max, review and execution freshness checks remain separate.
+
+Yield details now use the shared OKX-first X Layer snapshot (including receipt tokens) for initial balances. Fresh Aave position checks remain when starting deposit/withdrawal and at review/execution; protocol market checks and RPC fallback remain. Stocks already use the shared indexed display path. No backend deployment or funded transaction was performed.
+
+Passed targeted refresh/yield, retained-value scope/zero, Earn sheet/browser, indexed-provider, stock-outage, stock-valuation, bridge layout and selector fiat regression checks, plus TypeScript and Android release build. The obsolete stock-balance-browser harness could not bundle its old whole-Home mocks and was not counted as passing.
+
+APK: pocket-balance-display-20261105.apk
+SHA256: 2C0EAAD944C95721BC4FA75DEEA9EA11DD1E381A2E690AE4E775E406ABFF9BFD
+All 1869 dist assets matched the signed APK. ADB install -r succeeded on Pixel 5A160DLCH006VM. Captured installed Bridge and Stocks screens showed numeric balances without a Last known label. Cold Home capture still showed initial total loading; no complete post-install Home/Earn refresh-cycle claim is made. Concurrent manual phone navigation prevented a deterministic remaining screen walkthrough; automated taps were stopped. No new payments.
+
+Native evidence: native-release/balance-display-20261105.json and balance-display-source-20261105.zip in pocket-play-update-20261101. Screenshot filenames balance-home.png and balance-swap.png actually captured Bridge and Stocks respectively because of concurrent navigation; interpret their image contents, not filenames.
