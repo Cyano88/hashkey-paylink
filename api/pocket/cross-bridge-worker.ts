@@ -14,10 +14,10 @@ export function createCrossBridgeWorker(overrides:Partial<typeof defaults>={}){
   const rows=(await d.list()).filter(o=>['submitting','pending','submitted','source_confirmed'].includes(o.state)||['completed','refunded'].includes(o.state)&&!o.ledgerPublishedAt).sort((a,b)=>Number(a.updatedAt)-Number(b.updatedAt))
   const batch=Array.from({length:Math.min(rows.length,50)},(_,i)=>rows[(cursor+i)%rows.length])
   cursor=rows.length?(cursor+batch.length)%rows.length:0
-  for(const row of batch){
+  const recover=async(row:(typeof batch)[number])=>{
    try{
     let op=row
-    if(typeof op.quoteToken!=='string')continue
+    if(typeof op.quoteToken!=='string')return
     const r=await d.open(op.quoteToken,op.ownerId,{recovery:true})
     if(r.quote.input.source==='solana'){
      const runtime=d.runtime(r,'')
@@ -27,6 +27,7 @@ export function createCrossBridgeWorker(overrides:Partial<typeof defaults>={}){
     if(op.sourceHash)await d.reconcile(op.ownerId,op.id)
    }catch{/* A missing proof remains pending and must not stop other recoveries. */}
   }
+  await Promise.all(Array.from({length:Math.min(3,batch.length)},async()=>{while(batch.length){const row=batch.shift();if(row)await recover(row)}}))
  }
  return ()=>running??(running=run().finally(()=>{running=undefined}))
 }

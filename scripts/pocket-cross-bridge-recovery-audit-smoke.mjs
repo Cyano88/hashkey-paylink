@@ -21,3 +21,8 @@ await worker();assert.equal(visited.size,50);await worker();assert.equal(visited
 let recovered=0,settled=0
 await createCrossBridgeWorker({durable:()=>true,list:async()=>[{...original}],open:async()=>review,recoverCircle:async op=>{recovered++;return {...op,sourceHash:hash}},reconcile:async()=>{settled++}})();assert.equal(recovered,1);assert.equal(settled,1)
 console.log('PASS app-independent Circle hash recovery, strict provider identity, mandatory source proof, mutation races, worker wiring, and fairness beyond50 pending operations. No dispatch.')
+let releaseSlow;const slow=new Promise(resolve=>releaseSlow=resolve),started=[],finished=[];let active=0,peak=0;
+const concurrent=createCrossBridgeWorker({durable:()=>true,list:async()=>rows.slice(0,8),open:async()=>review,reconcile:async(_,id)=>{started.push(id);active++;peak=Math.max(peak,active);if(id==='0')await slow;finished.push(id);active--}});
+const draining=concurrent();const again=concurrent();assert.equal(draining,again,'overlapping drains share one run');
+await new Promise(resolve=>setTimeout(resolve,20));assert.equal(finished.length,7,'one blocked chain must not block seven independent recoveries');assert.equal(peak<=3,true,'bounded provider concurrency');releaseSlow();await draining;assert.equal(started.length,8);assert.equal(new Set(started).size,8);
+console.log('PASS bounded concurrent recovery: slow chain isolation, max three in flight, single drain and no duplicate operation');
