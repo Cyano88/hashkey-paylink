@@ -43,3 +43,23 @@ Pocket left the foreground before the deployment completed. The post-deployment 
 ## Pixel recheck after user reopened Pocket
 
 At approximately 13:53–13:55 Africa/Lagos on 2026-11-05, Home visibly showed total 10.32 USD. Arbitrum Swap showed available 0.000640459 ETH and network total approximately 2.65 USD. Bridge's Arbitrum token sheet showed the same 0.000640459 ETH, approximately 1.53 USD, alongside 0.13 USDC and 0.99 USDT. This closes the post-deployment visual balance check above. No unavailable label was present in these checked views. No transaction was submitted. Screenshots remain local under output/bridge-swap-audit-20261105 in the native checkout.
+
+## Second audit pass (13:56 onward, Africa/Lagos)
+
+Live Pixel checks reached review for SOL on Solana ? BNB on BNB Chain (0.007611242 SOL input, approximately 0.000975426 BNB received, 0.000660241 SOL reimbursement at that quote), Arbitrum ETH ? USDC swap, and Arc USDC ? EURC swap. Arc EURC ? USDC also returned a live quote after token reversal without changing the network. Arc EURC ? Base EURC returned a quote and reached review. No confirm/approval/signing action was taken.
+
+Found a remaining visual defect on Arc EURC ? Base EURC: the incoming fiat estimate disappeared when destination EURC holdings were zero, although a valid EURC valuation existed on Arc. PocketSwapPage divided only the destination holding value by its quantity. The native correction uses a known, healthy same-asset holding valuation from another supported network when the selected network has no positive holding. It does not infer EURC = USD, copy another asset's price, add RPC calls, or change execution amounts. It also covers ETH held on another supported network. If no healthy same-asset valuation exists, the estimate remains unknown.
+
+Passed regression suites in this pass:
+- Six-network swap cancellation matrix: unsigned drafts clear; signed/ambiguous operations remain recoverable; no dispatch.
+- Fourteen cross-asset bridge review cases; eight-network stale selection and expired quote handling; 96 asset/network resolutions.
+- Native selector balances on five networks; bridge draft lifecycle at 320/426px; bridge selector layout at four widths in both themes; clean exchange receipts at narrow/Pixel widths.
+- App-independent cross-bridge recovery, provider identity and source-proof enforcement, mutation races, fairness beyond 50 operations and max-three recovery concurrency; six CCTP source workers and ambiguous-status rejection.
+- New empty-destination EURC/ETH fiat regression, local FX, expired FX, asset isolation and unavailable holdings; existing swap fiat regressions; targeted native TypeScript.
+
+The Render error-level log query during the initial live test window returned no entries. This is a bounded log check, not proof that all provider requests or every route always succeed. Fixtures remain distinct from funded live transfers.
+
+User asked whether token values should be smaller. Recommendation: reduce primary amount typography by approximately 10–15%, preserving a smaller muted fiat line and clear review totals. No typography change was made in this audit.
+
+The native fix built successfully and was installed without clearing data as pocket-empty-destination-fiat-20261105.apk (SHA256 722D43F2AE73A5E4116F7089EEADFAE1F025A0F46924D7BE823BC108113577C2). All 1,868 packaged web assets matched dist. Source snapshot: native-release/empty-destination-fiat-source-20261105.zip in the native checkout. At 14:15 Africa/Lagos, the same Arc EURC ? Base EURC quote visibly showed the previously missing incoming estimate, approximately 0.31 USD. Home remained 10.32 USD after installation. No new funds were sent. A transient local ADB daemon restart interrupted navigation; connection recovered and the route was reselected before verifying the fix.
+At 14:16 the installed review sheet also showed the incoming approximately 0.31 USD line, plus paid-with, fee and total fiat values. The review was closed without proceeding.
