@@ -41,3 +41,18 @@ for(const action of ['wallet.native-send','wallet.native-swap','wallet.bridge','
  await assert.rejects(()=>reserve('cross','base'),e=>e.code==='wallet_action_pending')
 }
 console.log('PASS shared cross-asset locks: one winner against BSC/X Layer dispatch, existing unresolved operations block, recovery allowed, source-chain isolation, unknown outcomes never expire, rollback and terminal immutability. Serialized transaction fixture, not live DB contention.')
+
+// Historical sends/swaps without a bridge journal entry can finish on chain.
+const legacyRecord={wallet,owner:'owner',hash:'0x'+'a'.repeat(64),transactionId:'old-send'};
+for(const proven of [false,true]){
+ db=new Map([[XLAYER_RESERVATION_KEY,{requests:{old:legacyRecord}}]]);
+ const verified=createCrossBridgeReservationStore(transaction,()=>1000,async()=>undefined,async()=>proven);
+ const action=verified.mutate('new',()=>row('new','xlayer'));
+ if(proven)await action;else await assert.rejects(action,e=>e.code==='wallet_action_pending');
+ assert.deepEqual(db.get(XLAYER_RESERVATION_KEY).requests.old,legacyRecord,'Execution-lock check never changes payment evidence');
+}
+db=new Map([[XLAYER_RESERVATION_KEY,{requests:{old:{...legacyRecord,bridgeQuoteToken:'unresolved'}}}]]);
+const verified=createCrossBridgeReservationStore(transaction,()=>1000,async()=>undefined,async()=>true);
+await assert.rejects(()=>verified.mutate('new',()=>row('new','xlayer')),e=>e.code==='wallet_action_pending');
+console.log('PASS legacy finality releases only proven non-bridge execution locks; unknown and pending bridge records still block');
+

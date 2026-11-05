@@ -1,3 +1,4 @@
+import {xlayerReservationFinalized} from './xlayer-reservation-finality.js'
 import type {PoolClient} from 'pg'
 import {withDurablePostgresTransaction,readDurableJson} from '../render-durable-store.js'
 export const crossBridgeJournalKey=()=> (process.env.CIRCLE_POCKET_ACTION_STORE_KEY??'hashpaylink:circle-pocket-actions').trim()
@@ -30,7 +31,7 @@ export function createCrossAwareXLayerMutator(transaction=withDurablePostgresTra
 export const mutateCrossAwareXLayer=createCrossAwareXLayerMutator()
 /** The new lifecycle is embedded in the existing action journal. No copied
  * reservation store. Lock order: journal, four BSC rows, X Layer requests. */
-export function createCrossBridgeReservationStore(transaction=withDurablePostgresTransaction,now=Date.now,readJournal=()=>readDurableJson<Journal>(crossBridgeJournalKey())){return {
+export function createCrossBridgeReservationStore(transaction=withDurablePostgresTransaction,now=Date.now,readJournal=()=>readDurableJson<Journal>(crossBridgeJournalKey()),legacyFinalized=xlayerReservationFinalized){return {
  read:async(id:string)=>structuredClone((await readJournal())?.crossBridge?.[id]),
  mutate:async(id:string,fn:(r:CrossBridgeReservation|undefined)=>CrossBridgeReservation)=>transaction(async client=>{
   const journal=await lockBridgeJournal(client),before=journal.crossBridge?.[id],next=fn(structuredClone(before))
@@ -64,11 +65,14 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
   }
   await client.query("insert into render_durable_kv (store_key,value,updated_at) values ($1,'null'::jsonb,now()) on conflict (store_key) do nothing",[XLAYER_RESERVATION_KEY])
   const rows=await client.query('select value from render_durable_kv where store_key=$1 for update',[XLAYER_RESERVATION_KEY])
-  if(reserve&&next.source==='xlayer')for(const [requestId,r] of Object.entries(rows.rows[0]?.value?.requests??{}) as [string,any][]){
+  const legacyRows=Object.entries(rows.rows[0]?.value?.requests??{}) as [string,any][]
+  const finalizedLegacy=new Set<string>()
+  if(reserve&&next.source==='xlayer')await Promise.all(legacyRows.filter(([,r])=>same('xlayer',r.wallet,next.walletAddress)&&!r.bridgeQuoteToken&&r.hash).map(async([id,r])=>{if(await legacyFinalized(r))finalizedLegacy.add(id)}))
+  if(reserve&&next.source==='xlayer')for(const [requestId,r] of legacyRows){
    if(!same('xlayer',r.wallet,next.walletAddress))continue
    const notSent=!r.hash&&!r.transactionId&&!r.userOperationHash&&r.providerFailure?.status===400&&r.providerFailure?.code==='transaction_broadcast_failure'
    const settled=Object.values(journal.actions??{}).some(a=>a.resourceId===requestId&&a.ownerId===r.owner&&a.metadata?.source==='xlayer'&&a.metadata?.execution==='privy'&&['completed','failed'].includes(a.status))
-   if(!notSent&&!settled)busy()
+   if(!notSent&&!settled&&!finalizedLegacy.has(requestId))busy()
   }
   journal.crossBridge={...journal.crossBridge,[id]:next}
   await client.query('update render_durable_kv set value=$2::jsonb,updated_at=now() where store_key=$1',[crossBridgeJournalKey(),JSON.stringify(journal)])
