@@ -11,7 +11,7 @@ const handler=createCrossBridgeHandler({identity:async()=>({userId:identity}),du
 async function call(action,extra={}){let code=200,data;await handler({method:'POST',body:{action,quoteToken:token,...extra},headers:{}},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this}});return {code,data}}
 assert.equal((await call('nonsense')).code,400)
 enabled=false;assert.equal((await call('prepare')).code,409);enabled=true
-await call('prepare');assert.equal((await call('status')).data.status,'cancelled');assert.equal(submitted,0)
+await call('prepare');assert.equal((await call('status')).data.status,'prepared');assert.equal(op.state,'prepared','Status must not cancel a bridge awaiting submission');assert.equal(submitted,0)
 await call('prepare');await call('submit');assert.equal(submitted,1)
 assert.equal((await call('cancel')).data.status,'cancelled');assert.equal(signed,0)
 await call('prepare');await call('submit');await call('signed',{signedTransaction:'signed-by-owner'});assert.equal(signed,1);assert.equal(reconciled,1)

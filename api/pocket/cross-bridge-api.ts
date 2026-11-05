@@ -41,7 +41,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    if(!existing)return res.json({ok:true,status:'not_submitted'})
    let op=existing as CrossBridgeOperation
    if(action==='cancel'&&!op.sourceHash&&review.quote.wallets.source.provider==='circle'&&review.quote.input.source!=='solana'&&userToken)op=await d.runtime(review,userToken).status(id)
-   if(action==='cancel'||action==='status'&&op.state==='prepared'){
+   if(action==='cancel'){
     const cancelled=await d.store.mutate(id,current=>{
      if(!current||current.ownerId!==owner||current.quoteToken!==token)throw Error('Bridge identity changed.')
      const unsigned=current.state==='prepared'||review.quote.input.source==='solana'&&['submitting','pending'].includes(current.state)&&!current.signedTransaction&&!current.sourceHash
