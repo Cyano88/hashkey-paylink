@@ -1,3 +1,4 @@
+import {solanaBridgeNativeAccount,solanaBridgeLamports,prepareNativeSolanaBridge} from './cross-bridge-solana-native.js'
 import {Connection,Keypair,PublicKey,Transaction,VersionedTransaction,type AccountInfo} from '@solana/web3.js'
 import {getAssociatedTokenAddress,SOLANA_TOKEN_PROGRAM_ID} from '../solana-token.js'
 import {checkSolanaRelayerBalance} from './solana-relayer-fees.js'
@@ -17,20 +18,27 @@ export function crossBridgeSolanaTokenAmount(info:AccountInfo<Buffer>|null,mint:
 export function createCrossBridgeSolanaCost(wallets:CrossBridgeWalletBinding,asset:string,connection:Connection,sponsor:PublicKey,options:{prices?:typeof readCrossBridgePrices;now?:()=>number}={}){
  const token=crossBridgeAsset('solana',asset),owner=new PublicKey(wallets.source.address),mint=new PublicKey(token.address),now=options.now??Date.now
  if(wallets.source.network!=='solana'||wallets.source.provider!=='circle'||owner.equals(sponsor))return fail()
- const balance=async()=>crossBridgeSolanaTokenAmount(await connection.getAccountInfo(await getAssociatedTokenAddress(mint,owner,true),'confirmed'),mint,owner)
+ const balance=async()=>token.native?await connection.getAccountInfo(owner,'confirmed').then(a=>a?solanaBridgeNativeAccount(a):0n):crossBridgeSolanaTokenAmount(await connection.getAccountInfo(await getAssociatedTokenAddress(mint,owner,true),'confirmed'),mint,owner)
  const estimate=async(plan:CrossBridgeChargedPlan,planHash:string):Promise<CrossBridgeCost>=>{
   if(plan.kind!=='solana'||plan.instructions.length!==2||await connection.getGenesisHash()!==CROSS_BRIDGE_SOLANA_GENESIS)return fail()
   const deposit=plan.instructions[0],reimbursement=plan.instructions[1],start=now()
   // Existing ATAs only: never hide provider/treasury setup rent in user SOL.
+  let rentUnits=0n
+  if(token.native){
+   const accounts=await connection.getMultipleAccountsInfo([owner,deposit.keys[3].pubkey,reimbursement.keys[1].pubkey],'confirmed')
+   solanaBridgeNativeAccount(accounts[0]);solanaBridgeNativeAccount(accounts[1])
+   if(accounts[2])solanaBridgeNativeAccount(accounts[2]);else rentUnits=solanaBridgeLamports(await connection.getMinimumBalanceForRentExemption(0))
+  }else{
   const [source,vault,fee]=await connection.getMultipleAccountsInfo([deposit.keys[5].pubkey,deposit.keys[6].pubkey,reimbursement.keys[2].pubkey],'confirmed')
   crossBridgeSolanaTokenAmount(source,mint,owner);crossBridgeSolanaTokenAmount(vault,mint,deposit.keys[3].pubkey);crossBridgeSolanaTokenAmount(fee,mint)
+  }
   const block=await connection.getLatestBlockhash('confirmed'),tx=new Transaction({recentBlockhash:block.blockhash,feePayer:sponsor}).add(...plan.instructions)
   const [value,prices]=await Promise.all([connection.getFeeForMessage(tx.compileMessage(),'confirmed'),(options.prices??readCrossBridgePrices)('solana',asset,{now})])
   if(value.value===null||!Number.isSafeInteger(value.value)||value.value<=0)return fail()
   await checkSolanaRelayerBalance(connection,sponsor,BigInt(value.value)+100000n)
   const expiresAt=Math.min(start+30000,prices.gasPrice.observedAt+30000,prices.assetPrice.observedAt+30000)
   if(expiresAt<=now())return fail()
-  return {source:'solana',asset,planHash,nativeUnits:BigInt(value.value),rentUnits:0n,...prices,expiresAt}
+  return {source:'solana',asset,planHash,nativeUnits:BigInt(value.value),rentUnits,...prices,expiresAt}
  }
  return {balance,estimate}
 }
@@ -42,6 +50,7 @@ export async function prepareCrossBridgeSolanaTransaction(review:Review,connecti
  await (options.running??assertSolanaSponsorshipRunning)()
  const owner=new PublicKey(q.input.sender),mint=new PublicKey(route.tokenIn.address)
  if(owner.equals(relayer.publicKey))return fail()
+ if(route.tokenIn.native)return prepareNativeSolanaBridge(review,connection,relayer,now)
  const addresses=[owner,plan.instructions[0].keys[5].pubkey,plan.instructions[0].keys[6].pubkey,plan.instructions[1].keys[2].pubkey]
  const before=await connection.getMultipleAccountsInfo(addresses,'confirmed')
  if(!before[0]||!Number.isSafeInteger(before[0].lamports))return fail()

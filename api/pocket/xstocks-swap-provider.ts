@@ -42,7 +42,10 @@ export async function quoteStockSwap(input: { owner: Address; tokenIn: string; t
 export async function quoteXLayerBridgeSwap(input: {owner: Address; amount: string}) {
   return quoteSwap({...input,tokenIn:stockUsdt.address,tokenOut:stockUsdc.address}, true)
 }
-async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: string; amount: string}, bridge: boolean) {
+export async function quoteXLayerConversionSwap(input: {owner:Address;tokenIn:string;tokenOut:string;amount:string}) {
+  return quoteSwap(input,false,true)
+}
+async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: string; amount: string}, bridge: boolean, privateRpc=false) {
   if (!okxConfigured()) fail('Stock trading is awaiting provider activation.', 503)
   const assets = bridge ? [stockUsdt, stockUsdc] : swapAssets
   const tokenIn = assets.find(a => sameStockAddress(a.address, input.tokenIn))
@@ -50,8 +53,8 @@ async function quoteSwap(input: {owner: Address; tokenIn: string; tokenOut: stri
   if (!tokenIn || !tokenOut || sameStockAddress(tokenIn.address, tokenOut.address)) fail('Choose two different supported assets.')
   if(!bridge&&![tokenIn,tokenOut].every(a=>['USDC','USDT','USDe','USDG'].includes(a.symbol))&&[tokenIn,tokenOut].some(a=>a.symbol==='USDT')&&![tokenIn,tokenOut].some(a=>a.address==='native')&&!(tokenIn.symbol==='USDT'&&stockAssets.some(a=>sameStockAddress(a.address,tokenOut.address))))fail('Choose a supported stock or OKB for this swap.')
   if (input.amount.length > 80) fail('Invalid amount.')
-  const client = bridge ? createPublicClient({chain:xLayer,transport:http(process.env.PRIVATE_RPC_URL_XLAYER,{timeout:15000,retryCount:0})}) : stockClient
-  if(bridge){if(!process.env.PRIVATE_RPC_URL_XLAYER||await client.getChainId()!==196)fail('X Layer connection could not be verified.',503)}
+  const client = bridge||privateRpc ? createPublicClient({chain:xLayer,transport:http(process.env.PRIVATE_RPC_URL_XLAYER,{timeout:15000,retryCount:0})}) : stockClient
+  if(bridge||privateRpc){if(!process.env.PRIVATE_RPC_URL_XLAYER||await client.getChainId()!==196)fail('X Layer connection could not be verified.',503)}
   else await assertStockChain()
   const [decimalsIn, decimalsOut] = await Promise.all([tokenIn, tokenOut].map(a => a.address === 'native' ? Promise.resolve(18) : client.readContract({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'decimals' })))
   const units = stockAmountUnits(input.amount, decimalsIn)

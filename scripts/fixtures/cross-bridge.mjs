@@ -1,3 +1,4 @@
+import {crossBridgeSolanaNativeDeposit} from '../../api/pocket/cross-bridge-solana-native.ts'
 import {readFileSync} from 'node:fs'
 import {getOrderId} from '@relay-protocol/settlement-sdk'
 import {encodeFunctionData} from 'viem'
@@ -17,14 +18,14 @@ function fixture(source,destination,from,to,alternateRefund=false,senderOverride
  const receive=10n**BigInt(tokenOut.decimals)*2n,minimum=receive*9951n/10000n
  order.inputs[0].payment={chainId:protocolChain(source),currency:tokenIn.address,amount:i.amountUnits,weight:'1'}
  order.output.chainId=protocolChain(destination);order.output.payments=[{recipient:i.recipient,currency:tokenOut.address,expectedAmount:String(receive),minimumAmount:String(minimum)}]
- const refundToken=alternateRefund?crossBridgeAssets(destination).find(t=>t.symbol==='USDC'):tokenOut
+ const refundToken=alternateRefund?crossBridgeAssets(destination).find(t=>t.symbol===(alternateRefund===true?'USDC':alternateRefund)):tokenOut
  order.inputs[0].refunds=[{...order.inputs[0].refunds[0],chainId:protocolChain(source),recipient:i.sender,currency:tokenIn.address,deadline:order.output.deadline},{...order.inputs[0].refunds[1],chainId:protocolChain(destination),recipient:i.recipient,currency:refundToken.address,deadline:order.output.deadline}]
  const orderId=getOrderId(order,vmTypes);q.protocol.v2.orderId=orderId;q.protocol.v2.paymentDetails={chainId:protocolChain(source),depository:RELAY_BSC_CHAINS[source].depository,currency:tokenIn.address,amount:i.amountUnits}
  q.details.currencyIn={amount:i.amountUnits,currency:{chainId:RELAY_BSC_CHAINS[source].id,address:tokenIn.address,decimals:tokenIn.decimals}}
  q.details.currencyOut={amount:String(receive),currency:{chainId:RELAY_BSC_CHAINS[destination].id,address:tokenOut.address,decimals:tokenOut.decimals}}
  const step=structuredClone(q.steps.find(s=>s.id==='deposit'));step.depositAddress=''
  if(source==='solana'){
-  const ix=bscRelaySolanaDeposit(i.sender,BigInt(i.amountUnits),orderId,from)
+  const ix=from==='SOL'?crossBridgeSolanaNativeDeposit(i.sender,BigInt(i.amountUnits),orderId):bscRelaySolanaDeposit(i.sender,BigInt(i.amountUnits),orderId,from)
   step.items[0].data={instructions:[{programId:ix.programId.toBase58(),data:ix.data.toString('hex'),keys:ix.keys.map(k=>({pubkey:k.pubkey.toBase58(),isSigner:k.isSigner,isWritable:k.isWritable}))}]}
  }else step.items[0].data={from:i.sender,to:RELAY_BSC_CHAINS[source].depository,value:tokenIn.native?i.amountUnits:'0',chainId:RELAY_BSC_CHAINS[source].id,data:encodeFunctionData({abi:crossBridgeDepositAbi,functionName:tokenIn.native?'depositNative':'depositErc20',args:tokenIn.native?[i.sender,orderId]:[i.sender,tokenIn.address,BigInt(i.amountUnits),orderId]})}
  q.steps=[step]

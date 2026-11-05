@@ -10,9 +10,9 @@ const transfer=parseAbi(['event Transfer(address indexed from,address indexed to
 export async function readCrossBridgeDelivery(c:CrossBridgeDeliveryCandidate,options:Parameters<typeof readCanonicalEvmBridgeReceipt>[2]={}){
  const token=crossBridgeAsset(c.network,c.token.symbol),same=sameCrossBridgeAddress
  if(!same(c.network,token.address,c.token.address)||token.decimals!==c.token.decimals||token.native!==c.token.native)throw Error('Bridge settlement asset changed.')
- if(token.native)return readNativeBridgeDelivery(c.network as NativeBridgeNetwork,c.hash,c.recipient,options)
+ if(token.native&&c.network!=='solana')return readNativeBridgeDelivery(c.network as NativeBridgeNetwork,c.hash,c.recipient,options)
  if(c.network==='solana'){
-  if(token.symbol!=='USDC'&&token.symbol!=='USDT')return null
+  if(token.symbol!=='SOL'&&token.symbol!=='USDC'&&token.symbol!=='USDT')return null
   return readSolanaBridgeDelivery(token.symbol,c.recipient,c.hash)
  }
  const receipt=await readCanonicalEvmBridgeReceipt(c.network,c.hash,options)

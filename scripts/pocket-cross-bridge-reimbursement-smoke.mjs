@@ -30,7 +30,7 @@ for(const network of CROSS_BRIDGE_NETWORKS){
  if(built.plan.kind==='evm'){
   assert.equal(built.plan.calls.length,route.execution.calls.length+1,'one reimbursement; no second platform fee');const fee=built.plan.calls.at(-1)
   if(token.native){assert.equal(fee.value,123n);assert.equal(fee.data,'0x');assert.equal(fee.target,recipient)}else{const decoded=decodeFunctionData({abi:transferAbi,data:fee.data});assert.equal(decoded.args[0].toLowerCase(),recipient.toLowerCase());assert.equal(decoded.args[1],123n);assert.equal(fee.value,0n)}
- }else {assert.equal(built.plan.instructions.length,2);assert.equal(built.plan.instructions[1].data.readBigUInt64LE(1),123n)}
+ }else {assert.equal(built.plan.instructions.length,2);assert.equal(built.plan.instructions[1].data.readBigUInt64LE(token.native?4:1),123n)}
  let estimates=0
  const deps={now:()=>now,balance:async()=>BigInt(i.amountUnits)*100n,estimate:async(plan,planHash)=>{estimates++;return{source:network,asset:token.symbol,planHash,nativeUnits:10000n,rentUnits:0n,gasPrice:price(),assetPrice:price(),expiresAt:now+30000}}}
  const fees=await quoteCrossBridgeCharges(route,binding,recipient,{...policy,marginBps:1000},deps)
@@ -38,7 +38,7 @@ for(const network of CROSS_BRIDGE_NETWORKS){
  for(const rentUnits of [undefined,-1n,...(network==='solana'?[]:[1n])])await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,estimate:async(plan,hash)=>({...await deps.estimate(plan,hash),rentUnits})}))
  if(network==='solana'){
   const rent=await quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,estimate:async(plan,hash)=>({...await deps.estimate(plan,hash),rentUnits:2039280n})})
-  assert.equal(rent.reimbursementUnits,2050n,'Gas plus account rent must both be reimbursed in source token units')
+  assert.equal(rent.reimbursementUnits,token.native?2049280n:2050n,'Gas plus account rent must both be reimbursed in source token units')
  }
  await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,balance:async()=>BigInt(i.amountUnits)}),e=>e.status===422)
  await assert.rejects(()=>quoteCrossBridgeCharges(route,binding,recipient,policy,{...deps,estimate:async()=>({...await deps.estimate(null,'wrong')})}))

@@ -1,3 +1,5 @@
+import {needsNativeBridgeConversion,quoteNativeBridgeConversion,validateNativeBridgeConversion} from './cross-bridge-evm-conversion.js'
+import {quoteXLayerConversion,validateXLayerConversion} from './cross-bridge-xlayer-conversion.js'
 import {quoteEurcConversion,validateEurcConversion} from './cross-bridge-eurc-conversion.js'
 import {Connection} from '@solana/web3.js'
 import {parseAbi,parseUnits,type Hex} from 'viem'
@@ -35,10 +37,12 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  const quote=async(amountUnits:bigint)=>{
   const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address}
   const appFee=relayBridgeAppFee(env)
-  const conversion=input.from==='EURC'?await quoteEurcConversion(request,wallets,input.circleUserToken||''):null
-  const converted=conversion?validateEurcConversion(conversion,request,Date.now()):null
+  const native=needsNativeBridgeConversion(request)
+  const xlayer=input.source==='xlayer'&&input.from!=='USDC'
+  const conversion=native?await quoteNativeBridgeConversion(request,wallets):xlayer?await quoteXLayerConversion(request):input.from==='EURC'?await quoteEurcConversion(request,wallets,input.circleUserToken||''):null
+  const converted=conversion?(native?validateNativeBridgeConversion(conversion as any,request,Date.now()):xlayer?validateXLayerConversion(conversion as any,request,Date.now()):validateEurcConversion(conversion as any,request,Date.now())):null
   const direct=await fetchCrossBridgeRelayReview(converted?{...request,from:'USDC',amountUnits:converted.minimumUnits}:request,env.RELAY_API_KEY||'',fetch,appFee)
-  const providerQuote=conversion?{kind:'eurc-conversion',swap:conversion,bridge:direct.providerQuote}:direct.providerQuote
+  const providerQuote=conversion?{kind:native?'evm-conversion':xlayer?'xlayer-conversion':'eurc-conversion',swap:conversion,bridge:direct.providerQuote}:direct.providerQuote
   const provider={...direct,providerQuote,route:validateCrossBridgeRelayQuote(providerQuote,request,Date.now(),appFee)}
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)

@@ -56,13 +56,16 @@ export function proveCrossBridgeCircleSource(review:Review,hash:string,receipt:C
    // debit as well as the exact full call tree already checked above.
    const debit=movements.reduce((sum,m)=>sum+(same(m.from,wallet)?m.value:0n)-(same(m.to,wallet)?m.value:0n),0n)
    if(debit!==BigInt(route.amountUnits))pending()
-   const deposits=receipt.logs.flatMap(log=>{if(log.removed)pending();if(!same(log.address,route.conversion!.bridgeToken.address))return [];try{return [decodeEventLog({abi:transfer,eventName:'Transfer',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true}).args]}catch{return []}}).filter(m=>same(m.from,wallet)&&same(m.to,RELAY_BSC_CHAINS[route.source].depository))
-   if(deposits.length!==1||deposits[0].value!==BigInt(route.conversion.minimumUnits))pending()
+
   }else{
   const expected=[{to:RELAY_BSC_CHAINS[route.source].depository,value:BigInt(route.amountUnits)},{to:q.reimbursementRecipient,value:BigInt(q.reimbursementUnits)}]
   if(movements.length!==expected.length)pending()
   for(const item of expected){const index=movements.findIndex(m=>same(m.from,wallet)&&same(m.to,item.to)&&m.value===item.value);if(index<0)pending();movements.splice(index,1)}
   }
+ }
+ if(route.conversion){
+   const deposits=receipt.logs.flatMap(log=>{if(log.removed)pending();if(!same(log.address,route.conversion!.bridgeToken.address))return [];try{return [decodeEventLog({abi:transfer,eventName:'Transfer',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true}).args]}catch{return []}}).filter(m=>same(m.from,wallet)&&same(m.to,RELAY_BSC_CHAINS[route.source].depository))
+   if(deposits.length!==1||deposits[0].value!==BigInt(route.conversion.minimumUnits))pending()
  }
  return {sourceConfirmed:true as const,txHash:hash,totalUnits:q.totalUnits,reimbursementUnits:q.reimbursementUnits,planHash:q.planHash}
 }

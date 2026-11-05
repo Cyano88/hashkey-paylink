@@ -1,3 +1,4 @@
+import {solanaBridgeLamports} from './cross-bridge-solana-native.js'
 import {Connection,PublicKey,Transaction} from '@solana/web3.js'
 import bs58 from 'bs58'
 import {getRpc} from '../relay-solana.js'
@@ -28,7 +29,21 @@ export async function readCrossBridgeSolanaSource(review:Review,hash:string,prep
  if(await rpc.getGenesisHash()!==CROSS_BRIDGE_SOLANA_GENESIS||!again||JSON.stringify(again)!==JSON.stringify(receipt)||!includes(blockAgain)||blockAgain!.blockhash!==block!.blockhash)return fail()
  if(receipt.meta.err)return 'failed' as const
  const keys=receipt.transaction.message.getAccountKeys(),owner=review.quote.input.sender,ownerIndex=Array.from({length:keys.length},(_,i)=>keys.get(i)?.toBase58()).indexOf(owner)
- if(ownerIndex<0||receipt.meta.preBalances[ownerIndex]!==receipt.meta.postBalances[ownerIndex])return fail()
+ if(ownerIndex<0)return fail()
+ if(review.route.tokenIn.native){
+  const vault=plan.instructions[0].keys[3].pubkey.toBase58(),fee=review.quote.reimbursementRecipient,payer=tx.feePayer!.toBase58()
+  if(new Set([owner,vault,fee]).size!==3||payer===owner||payer===vault)return fail()
+  const cost=solanaBridgeLamports(receipt.meta.fee)
+  if(cost<=0n)return fail()
+  for(const address of new Set([owner,vault,fee,payer])){
+   const index=Array.from({length:keys.length},(_,i)=>keys.get(i)?.toBase58()).indexOf(address)
+   if(index<0)return fail()
+   const expected=(address===owner?-review.charged.totalUnits:0n)+(address===vault?BigInt(review.quote.input.amountUnits):0n)+(address===fee?BigInt(review.quote.reimbursementUnits):0n)-(address===payer?cost:0n)
+   if(solanaBridgeLamports(receipt.meta.postBalances[index])-solanaBridgeLamports(receipt.meta.preBalances[index])!==expected)return fail()
+  }
+  return 'confirmed' as const
+ }
+ if(receipt.meta.preBalances[ownerIndex]!==receipt.meta.postBalances[ownerIndex])return fail()
  const expected=[{address:plan.instructions[0].keys[5].pubkey.toBase58(),owner,delta:-review.charged.totalUnits},{address:plan.instructions[0].keys[6].pubkey.toBase58(),owner:plan.instructions[0].keys[3].pubkey.toBase58(),delta:BigInt(review.quote.input.amountUnits)},{address:plan.instructions[1].keys[2].pubkey.toBase58(),owner:review.quote.reimbursementRecipient,delta:BigInt(review.quote.reimbursementUnits)}]
  for(const item of expected){
   const amount=(rows:typeof receipt.meta.preTokenBalances)=>{

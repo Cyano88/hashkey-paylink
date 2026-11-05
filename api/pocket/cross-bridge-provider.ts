@@ -1,9 +1,12 @@
+import {crossBridgeSolanaNativeDeposit} from './cross-bridge-solana-native.js'
+import {validateNativeBridgeConversion} from './cross-bridge-evm-conversion.js'
+import {validateXLayerConversion} from './cross-bridge-xlayer-conversion.js'
 import {validateEurcConversion,type EurcConversion} from './cross-bridge-eurc-conversion.js'
 import {relayBridgeAppFee,relayBridgeAppFeeRequest,validateRelayBridgeAppFeeQuote,type RelayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey} from '@solana/web3.js'
 import {decodeFunctionData,encodeFunctionData,parseAbi,type Address,type Hex} from 'viem'
-import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,CROSS_BRIDGE_NATIVE_ADDRESS,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
+import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,crossBridgeAssets,CROSS_BRIDGE_NATIVE_ADDRESS,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import {RELAY_BSC_CHAINS,bscRelaySolanaDeposit} from './bsc-bridge-provider.js'
 
 export type CrossBridgeInput={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string;sender:string;recipient:string;amountUnits:string}
@@ -19,12 +22,12 @@ const positiveUnits=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,38
 function checkInput(i:CrossBridgeInput){
  const tokens=crossBridgePair(i.source,i.destination,i.from,i.to)
  requireThat(positiveUnits(i.amountUnits)&&(i.source!=='solana'||BigInt(i.amountUnits)<2n**64n),'invalid amount')
- for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(typeof address==='string'&&(network==='solana'?new PublicKey(address).toBase58()===address:/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address)),'invalid wallet')
+ for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(typeof address==='string'&&(network==='solana'?new PublicKey(address).toBase58()===address&&!new PublicKey(address).equals(PublicKey.default):/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address)),'invalid wallet')
  return tokens
 }
 export function crossBridgeRelayRequest(i:CrossBridgeInput,appFee?:RelayBridgeAppFee|null){
  const {tokenIn,tokenOut}=checkInput(i)
- return {user:i.sender,recipient:i.recipient,originChainId:RELAY_BSC_CHAINS[i.source].id,destinationChainId:RELAY_BSC_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:relayBridgeAppFeeRequest(appFee)}
+ return {user:i.sender,recipient:i.recipient,refundTo:i.sender,originChainId:RELAY_BSC_CHAINS[i.source].id,destinationChainId:RELAY_BSC_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:relayBridgeAppFeeRequest(appFee)}
 }
 /** No signing or broadcasting. Keep this separate from the existing same-asset adapters. */
 function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null){
@@ -46,7 +49,7 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
  const refundOptions:CrossBridgeRefund[]=refunds.map(r=>{
   const origin=r.chainId===protocolChain(i.source),network=origin?i.source:i.destination
   requireThat(origin||r.chainId===protocolChain(i.destination),'unexpected refund chain')
-  const candidates=origin?[tokenIn]:[tokenOut,crossBridgeAsset(network,'USDC')]
+  const candidates=origin?[tokenIn]:crossBridgeAssets(network)
   const token=candidates.find(t=>same(network,r.currency,t.address))
   requireThat(token&&same(network,r.recipient,origin?i.sender:i.recipient)&&r.minimumAmount==='0'&&r.deadline===order.output.deadline,'refund mismatch')
   return {network,asset:token!.symbol,address:token!.address,decimals:token!.decimals,recipient:origin?i.sender:i.recipient}
@@ -62,8 +65,8 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
  requireThat(deposit.items[0].check?.method==='GET'&&deposit.items[0].check?.endpoint==='/intents/status/v3?requestId='+requestId,'unexpected recovery endpoint')
  let execution
  if(i.source==='solana'){
-  requireThat(q.steps.length===1&&(i.from==='USDC'||i.from==='USDT'),'unsupported Solana deposit')
-  const expected=bscRelaySolanaDeposit(i.sender,amount,orderId,i.from as 'USDC'|'USDT'),data=deposit.items[0].data,ix=data?.instructions?.[0]
+  requireThat(q.steps.length===1&&(i.from==='SOL'||i.from==='USDC'||i.from==='USDT'),'unsupported Solana deposit')
+  const expected=i.from==='SOL'?crossBridgeSolanaNativeDeposit(i.sender,amount,orderId):bscRelaySolanaDeposit(i.sender,amount,orderId,i.from as 'USDC'|'USDT'),data=deposit.items[0].data,ix=data?.instructions?.[0]
   requireThat(data?.instructions?.length===1&&ix?.programId===expected.programId.toBase58()&&ix.data===expected.data.toString('hex')&&ix.keys?.length===expected.keys.length,'Solana deposit mismatch')
   expected.keys.forEach((k,n)=>requireThat(ix.keys[n].pubkey===k.pubkey.toBase58()&&ix.keys[n].isSigner===k.isSigner&&ix.keys[n].isWritable===k.isWritable,'Solana account mismatch'))
   execution={kind:'solana' as const,instruction:expected}
@@ -93,12 +96,12 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
 }
 export type CrossBridgeRoute=ReturnType<typeof validateDirectCrossBridgeRelayQuote>&{conversion?:ReturnType<typeof validateEurcConversion>}
 export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null):CrossBridgeRoute {
- if(q?.kind!=='eurc-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
- const conversion=validateEurcConversion(q.swap as EurcConversion,i,now)
+ if(q?.kind!=='eurc-conversion'&&q?.kind!=='xlayer-conversion'&&q?.kind!=='evm-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
+ const conversion=q.kind==='evm-conversion'?validateNativeBridgeConversion(q.swap,i,now):q.kind==='xlayer-conversion'?validateXLayerConversion(q.swap,i,now):validateEurcConversion(q.swap as EurcConversion,i,now)
  const bridge=validateDirectCrossBridgeRelayQuote(q.bridge,{...i,from:'USDC',amountUnits:conversion.minimumUnits},now,appFee)
- if(bridge.execution.kind!=='evm')throw Error('Invalid EURC bridge execution.')
+ if(bridge.execution.kind!=='evm')throw Error('Invalid converted bridge execution.')
  const calls=[...conversion.calls,...bridge.execution.calls]
- return {...bridge,tokenIn:crossBridgeAsset(i.source,'EURC'),amountUnits:i.amountUnits,expiresAt:Math.min(bridge.expiresAt,conversion.expiresAt),conversion,execution:{kind:'evm',calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}}
+ return {...bridge,tokenIn:crossBridgeAsset(i.source,i.from),amountUnits:i.amountUnits,expiresAt:Math.min(bridge.expiresAt,conversion.expiresAt),conversion,execution:{kind:'evm',calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}}
 }
 export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:string,fetcher=fetch,appFee:RelayBridgeAppFee|null=relayBridgeAppFee(),now=Date.now){
  assertCrossBridgeRollout(i.source,i.destination)

@@ -21,9 +21,20 @@ export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOper
    let e;try{e=decodeEventLog({abi:transfer,eventName:'Transfer',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true})}catch{continue}
    if(same(e.args.from,q.input.sender)||same(e.args.to,q.input.sender))movements.push(e.args)
   }
+  if(route.conversion){
+   const feeIndex=movements.findIndex(m=>same(m.from,q.input.sender)&&same(m.to,q.reimbursementRecipient)&&m.value===BigInt(q.reimbursementUnits))
+   if(feeIndex<0)pending();movements.splice(feeIndex,1)
+   const debit=movements.reduce((sum,m)=>sum+(same(m.from,q.input.sender)?m.value:0n)-(same(m.to,q.input.sender)?m.value:0n),0n)
+   if(debit!==BigInt(route.amountUnits))pending()
+  }else{
   const expected=[{to:RELAY_BSC_CHAINS[source].depository,value:BigInt(route.amountUnits)},{to:q.reimbursementRecipient,value:BigInt(q.reimbursementUnits)}]
   if(movements.length!==expected.length)pending()
   for(const item of expected){const index=movements.findIndex(m=>same(m.from,q.input.sender)&&same(m.to,item.to)&&m.value===item.value);if(index<0)pending();movements.splice(index,1)}
+  }
+ }
+ if(route.conversion){
+  const deposits=receipt.logs.flatMap(log=>{if(log.removed)pending();if(!same(log.address,route.conversion!.bridgeToken.address))return [];try{return [decodeEventLog({abi:transfer,eventName:'Transfer',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true}).args]}catch{return []}}).filter(m=>same(m.from,q.input.sender)&&same(m.to,RELAY_BSC_CHAINS[source].depository))
+  if(deposits.length!==1||deposits[0].value!==BigInt(route.conversion.minimumUnits))pending()
  }
  return 'confirmed' as const
 }

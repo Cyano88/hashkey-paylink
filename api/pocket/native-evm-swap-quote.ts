@@ -58,7 +58,7 @@ export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Da
 export async function prepareNativeEvmSwapRoute(binding:NativeEvmSwapBinding,read:typeof okxGet=okxGet,now:()=>number=Date.now){
  if(!Object.hasOwn(nativeEvmNetworks,binding.network)||!isAddress(binding.walletAddress))fail()
  const issuedAt=now(),{tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to),units=nativeSwapUnits(binding.amount,tokenIn.decimals)
- const data=await read('swap',{chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
+ const data=await read('swap',{...(binding.network==='ethereum'?{directRoute:'true'}:{}),chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
  const preview=await quoteNativeSwap(binding,async()=>data?.routerResult,now)
  const spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
  if(!tokenIn.native){const approval=await read('approve-transaction',{chainIndex:String(nativeEvmNetworks[binding.network].id),tokenContractAddress:tokenIn.address,approveAmount:String(units)});if(!sameSwapAddress(approval?.dexContractAddress,spender))fail()}
@@ -97,7 +97,7 @@ export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,
   const stableFee=nativeFeeToUsdcUnits(formatUnits(nativeCap,18),rateScaled8)
   if(stableFee>=total)throw Object.assign(Error('This amount is too small to cover the network fee.'),{status:409})
   const units=total-stableFee,amount=formatUnits(units,tokenIn.decimals)
-  const data=await read('swap',{chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
+  const data=await read('swap',{...(binding.network==='ethereum'?{directRoute:'true'}:{}),chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
   const preview=await quoteNativeSwap({...binding,amount},async()=>data?.routerResult,now)
   if(!data?.tx)fail()
   const q:NativeEvmSwapQuote={...binding,amount:formatUnits(total,6),version:2,id,totalInputUnits:String(total),stableFeeUnits:String(stableFee),rateScaled8:String(rateScaled8),amountUnits:String(units),inputUsdPrice:preview.inputUsdPrice,outputUsdPrice:preview.outputUsdPrice,expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:String(nativeCap),callData:'0x',issuedAt,expiresAt:issuedAt+45000}

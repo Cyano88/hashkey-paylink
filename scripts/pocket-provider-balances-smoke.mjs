@@ -2,7 +2,7 @@ import {POCKET_EARN_DISPLAY_TOKENS} from '../src/pocket/lib/pocketEarnDisplayAss
 import assert from 'node:assert/strict'
 import {fetchCircleDisplayBalance,createCircleDisplayBalanceReader,circleBalanceTokens} from '../api/pocket/circle-display-balances.ts'
 import {fetchOkxDisplayBalances,parseOkxBalanceRows,exactBalanceUnits,createStockDisplayReader} from '../api/pocket/okx-display-balances.ts'
-import {stockUsdc,stockUsdt,stockAssets} from '../src/pocket/lib/pocketXStocksWallet.ts'
+import {stockUsdc,stockUsdt,stockUsde,stockUsdg,stockAssets} from '../src/pocket/lib/pocketXStocksWallet.ts'
 import {createStockBalanceCache} from '../src/pocket/lib/pocketStockBalanceCache.ts'
 const owner='0x1111111111111111111111111111111111111111',other='0x2222222222222222222222222222222222222222'
 process.env.CIRCLE_API_KEY='LIVE_API:fixture';process.env.OKX_DEX_API_KEY='fixture';process.env.OKX_DEX_SECRET_KEY='fixture';process.env.OKX_DEX_PASSPHRASE='fixture'
@@ -36,7 +36,7 @@ assert.throws(()=>parseOkxBalanceRows(envelope([row('','NaN')]),owner))
 assert.equal(parseOkxBalanceRows([],owner,true).size,0);assert.throws(()=>parseOkxBalanceRows([],owner))
 assert.equal(exactBalanceUnits('1.230000000',6),1230000n);assert.throws(()=>exactBalanceUnits('1.0000001',6))
 let calls=[],omit=false
-const okxFetch=async(url,init)=>{calls.push({url,init});assert.ok(init.headers['OK-ACCESS-SIGN']);const rows=init.method==='GET'?[row('','0.1')]:omit?[]:[row(stockUsdc.address.toLowerCase(),'2.5'),row(stockUsdt.address.toLowerCase(),'3.25'),row(POCKET_EARN_DISPLAY_TOKENS[0],'1.000001'),row(POCKET_EARN_DISPLAY_TOKENS[1],'2.5')];return new Response(JSON.stringify({code:'0',data:envelope(rows)}))}
+const okxFetch=async(url,init)=>{calls.push({url,init});assert.ok(init.headers['OK-ACCESS-SIGN']);const rows=init.method==='GET'?[row('','0.1')]:omit?[]:[row(stockUsdc.address.toLowerCase(),'2.5'),row(stockUsdt.address.toLowerCase(),'3.25'),row(stockUsde.address.toLowerCase(),'0'),row(stockUsdg.address.toLowerCase(),'0'),row(POCKET_EARN_DISPLAY_TOKENS[0],'1.000001'),row(POCKET_EARN_DISPLAY_TOKENS[1],'2.5')];return new Response(JSON.stringify({code:'0',data:envelope(rows)}))}
 const snapshot=await fetchOkxDisplayBalances(owner,undefined,undefined,okxFetch);assert.deepEqual(snapshot.earn,{usdc:1000001n,usdt:2500000n});assert.equal(snapshot.cash,2500000n);assert.equal(snapshot.usdt,3250000n);assert.equal(snapshot.gas,100000000000000000n);assert.equal(snapshot.blockHash,null);assert.equal(snapshot.source,'okx');assert.equal(calls.length,2)
 omit=true;await assert.rejects(fetchOkxDisplayBalances(owner,undefined,undefined,okxFetch))
 let providerCalls=0,rpcCalls=0,broken=false
@@ -52,8 +52,8 @@ let displayCalls=0,directCalls=0
 const handler=createPocketBalancesHandler({verifyUser:async()=>({userId:'fixture'}),readLink:async k=>k==='fixture:base'?link:null,readBalance:async()=>{directCalls++;return 11},readDisplayBalance:async(_l,fallback,fresh)=>{displayCalls++;return {balance:fresh?await fallback():10,observedAt:123,source:fresh?'rpc':'circle'}}})
 async function route(query){let body,status=200;await handler({method:'GET',query},{setHeader(){},status(s){status=s;return this},json(v){body=v;return this}});assert.equal(status,200);return body}
 assert.equal((await route({})).rows.find(r=>r.key==='base').observedAt,123);assert.equal(directCalls,0)
-await route({routing:'bank'});await route({network:'base'});assert.equal(directCalls,2);assert.equal(displayCalls,1)
-await route({refresh:'1'});assert.equal(directCalls,3)
+await route({routing:'bank'});await route({network:'base'});assert.equal(directCalls,1);assert.equal(displayCalls,2)
+await route({refresh:'1'});assert.equal(directCalls,2)
 
 const {readRemoteStockBalances}=await import('../src/pocket/api/pocketStockBalanceClient.ts')
 const {readStockDisplayCache,saveStockDisplayCache}=await import('../src/pocket/lib/pocketStockDisplayCache.ts')

@@ -2,7 +2,7 @@ import {inboundBridgeClient,inboundChains} from './inbound-bridge-networks.js'
 import {readBridgeProofEvmRpc} from '../evm-read.js'
 import {readFinalizedBridgeReceipt} from './circle-bridge-source-reader.js'
 import type {NativeCallTrace} from './native-send-quote.js'
-export type NativeBridgeNetwork='ethereum'|'base'|'arbitrum'|'bsc'|'xlayer'
+export type NativeBridgeNetwork='ethereum'|'base'|'arbitrum'|'polygon'|'bsc'|'xlayer'
 const pending=():never=>{throw Object.assign(Error('Native bridge delivery is still being verified.'),{status:409,code:'bridge_native_delivery_pending'})}
 const same=(a:unknown,b:unknown)=>typeof a==='string'&&typeof b==='string'&&a.toLowerCase()===b.toLowerCase()
 const address=(a:unknown):a is string=>typeof a==='string'&&/^0x[0-9a-f]{40}$/i.test(a)
@@ -28,9 +28,9 @@ export function nativeBridgeTraceDelta(trace:NativeCallTrace,recipient:string){
 /** The provider hash must first match the saved delivery/refund plan. Gas-paying
  * recipient transactions remain unresolved; no guessed gas or balance delta. */
 export async function readNativeBridgeDelivery(network:NativeBridgeNetwork,hash:string,recipient:string,options:{env?:NodeJS.ProcessEnv;rpc?:Parameters<typeof readFinalizedBridgeReceipt>[3]}={}){
- if(!['ethereum','base','arbitrum','bsc','xlayer'].includes(network)||!address(recipient))pending()
+ if(!['ethereum','base','arbitrum','polygon','bsc','xlayer'].includes(network)||!address(recipient))pending()
  const client=!options.rpc&&(network==='bsc'||network==='xlayer')?inboundBridgeClient(network,options.env):undefined
- const raw=options.rpc??(client?async(request:{method:string;params:unknown[]})=>client.request(request as Parameters<typeof client.request>[0]):async({method,params}:{method:string;params:unknown[]})=>readBridgeProofEvmRpc(network as 'base'|'arbitrum'|'ethereum',method,params))
+ const raw=options.rpc??(client?async(request:{method:string;params:unknown[]})=>client.request(request as Parameters<typeof client.request>[0]):async({method,params}:{method:string;params:unknown[]})=>readBridgeProofEvmRpc(network as 'base'|'arbitrum'|'ethereum'|'polygon',method,params))
  const rpc:NonNullable<typeof options.rpc>=async request=>{try{return await raw(request)}catch{throw Object.assign(Error('Native bridge RPC evidence is unavailable.'),{status:503,code:'bridge_native_rpc_unavailable'})}}
  const proof=await readFinalizedBridgeReceipt(network,hash,async(_receipt,context)=>{
   const transaction=async()=>{

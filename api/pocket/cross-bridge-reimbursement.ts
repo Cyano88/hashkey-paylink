@@ -1,7 +1,7 @@
 import {encodePrivyValueBatch} from './xlayer-sponsored-cost.js'
 import {createHash} from 'node:crypto'
 import {encodeFunctionData,parseAbi,isAddress,type Hex} from 'viem'
-import {PublicKey,type TransactionInstruction} from '@solana/web3.js'
+import {PublicKey,SystemProgram,type TransactionInstruction} from '@solana/web3.js'
 import {createTransferCheckedInstruction,getAssociatedTokenAddress} from '../solana-token.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
@@ -57,7 +57,7 @@ export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridg
   plan={kind:'evm',calls,callData:sponsored?encodePrivyValueBatch(calls.map(c=>({to:c.target,data:c.data,value:('0x'+c.value.toString(16)) as Hex}))):encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}
  }else{
   const owner=new PublicKey(binding.source.address),mint=new PublicKey(tokenIn.address),source=await getAssociatedTokenAddress(mint,owner,true)
-  const transfers=await Promise.all(fees.map(async f=>createTransferCheckedInstruction(source,mint,await getAssociatedTokenAddress(mint,new PublicKey(f.recipient),true),owner,f.units,tokenIn.decimals)))
+  const transfers=tokenIn.native?fees.map(f=>SystemProgram.transfer({fromPubkey:owner,toPubkey:new PublicKey(f.recipient),lamports:f.units})):await Promise.all(fees.map(async f=>createTransferCheckedInstruction(source,mint,await getAssociatedTokenAddress(mint,new PublicKey(f.recipient),true),owner,f.units,tokenIn.decimals)))
   // Fee ATAs must be pre-provisioned or included in the exact relayer estimate;
   // no unchecked account setup or reserve cost may be appended after approval.
   plan={kind:'solana',instructions:[route.execution.instruction,...transfers]}

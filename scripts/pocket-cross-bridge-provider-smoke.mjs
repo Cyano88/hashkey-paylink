@@ -11,16 +11,16 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const destination of CROSS_BRIDGE_
  for(const from of crossBridgeAssets(source))for(const to of crossBridgeAssets(destination)){
   const {q,i}=fixture(source,destination,from.symbol,to.symbol),result=validateCrossBridgeRelayQuote(q,i,now),request=crossBridgeRelayRequest(i)
   assert.equal(result.tokenIn.decimals,from.decimals);assert.equal(result.tokenOut.decimals,to.decimals)
-  assert.equal(request.destinationCurrency,to.address);assert.equal(result.execution.kind,source==='solana'?'solana':'evm')
+  assert.equal(request.refundTo,i.sender);assert.equal(request.destinationCurrency,to.address);assert.equal(result.execution.kind,source==='solana'?'solana':'evm')
   if(result.execution.kind==='evm'){assert.equal(result.execution.calls.length,from.native?1:4);assert.equal(result.execution.calls.find(c=>c.target===RELAY_BSC_CHAINS[source].depository).value,from.native?BigInt(i.amountUnits):0n)}
   routes++
  }
 }
-for(const network of CROSS_BRIDGE_NETWORKS)for(const symbol of ['SOL','POL','WSOL','WPOL'])assert.throws(()=>crossBridgePair(network,network==='base'?'polygon':'base',symbol,'USDC'))
+for(const network of CROSS_BRIDGE_NETWORKS)for(const symbol of ['SOL','POL','WSOL','WPOL'])if(!crossBridgeAssets(network).some(a=>a.symbol===symbol))assert.throws(()=>crossBridgePair(network,network==='base'?'polygon':'base',symbol,'USDC'))
 for(const network of ['polygon','solana'])for(const symbol of ['USDC','USDT'])assert.doesNotThrow(()=>crossBridgePair('base',network,'ETH',symbol))
 assert.throws(()=>crossBridgePair('base','base','ETH','USDC'))
 assert.throws(()=>crossBridgePair('base','arc','USDC','USDT'))
-assert.throws(()=>crossBridgePair('base','solana','ETH','SOL'))
+assert.doesNotThrow(()=>crossBridgePair('base','solana','ETH','SOL'))
 for(const [source,destination,from,to] of [['base','polygon','ETH','USDT'],['bsc','xlayer','USDC','USDG'],['solana','base','USDT','ETH']]){
  const {q,i}=fixture(source,destination,from,to,true)
  const result=validateCrossBridgeRelayQuote(q,i,now)
@@ -47,14 +47,14 @@ for(const asset of ['USDC','USDT'])for(const direction of ['in','out']){
  const i={source:direction==='in'?'base':'bsc',destination:direction==='in'?'bsc':'base',from:asset,to:asset,sender:evm,recipient:evm,amountUnits:direction==='in'?'10000000':'10000000000000000000'}
  assert.equal(validateCrossBridgeRelayQuote(q,i,q.protocol.v2.orderData.output.deadline*1000-7*86400000).execution.kind,'evm')
 }
-console.log(`PASS ${routes} eligible cross-network asset pairs; native SOL/POL rejected; ETH -> Polygon/Solana stables allowed; native values, decimals, refunds, slippage, order hashes and tampered plans checked. Fixtures only; no execution.`)
+console.log(`PASS ${routes} eligible cross-network asset pairs; native SOL/POL included, wrapped aliases rejected; ETH -> Polygon/Solana stables allowed; native values, decimals, refunds, slippage, order hashes and tampered plans checked. Fixtures only; no execution.`)
 import {changeCrossBridgeNetwork,changeCrossBridgeAsset,reverseCrossBridgeSelection,crossBridgeSelectionKey} from '../src/pocket/lib/pocketCrossBridgeSelection.ts'
 const selected={source:'base',destination:'polygon',from:'ETH',to:'USDT'}
 assert.deepEqual(changeCrossBridgeNetwork(selected,'destination','solana'),{...selected,destination:'solana'})
 assert.deepEqual(changeCrossBridgeNetwork(selected,'source','solana'),{...selected,source:'solana',from:'USDC'})
 assert.deepEqual(changeCrossBridgeNetwork(selected,'destination','arc'),{...selected,destination:'arc',to:'USDC'})
 assert.throws(()=>changeCrossBridgeNetwork(selected,'source','polygon'))
-assert.throws(()=>changeCrossBridgeAsset(selected,'to','POL'))
+assert.equal(changeCrossBridgeAsset(selected,'to','POL').to,'POL')
 assert.equal(crossBridgeSelectionKey(selected),'base:ETH:polygon:USDT')
 assert.deepEqual(reverseCrossBridgeSelection(reverseCrossBridgeSelection(selected)),selected)
 console.log('PASS independent network/token selection, unsupported-token fallback, same-network rejection and reversible route identity')
@@ -82,3 +82,6 @@ for(const [source,destination] of [['arc','base'],['base','arc']]){
 }
 assert.deepEqual(crossBridgeAssets('arc').map(a=>a.symbol),['USDC','EURC'])
 console.log('PASS Arc selection and direct provider validation in both directions.')
+
+for(const refund of ['ETH','USDT']){const {q,i}=fixture('ethereum','base','ETH','EURC',refund);assert.equal(validateCrossBridgeRelayQuote(q,i,now).refundOptions[1].asset,refund)}
+console.log('PASS supported alternate destination refunds remain wallet and order bound; explicit source refund recipient')

@@ -29,7 +29,8 @@ export function crossBridgeAssets(network:CrossBridgeNetwork):CrossBridgeAsset[]
  const stablecoins:CrossBridgeAsset[]=[{symbol:'USDC',address:CHAIN_META[network].tokenAddress,decimals:6,native:false}]
  if(network!=='arc')stablecoins.push({symbol:'USDT',...POCKET_USDT_ASSETS[network],native:false})
  if(network==='base'||network==='arc')stablecoins.push({...POCKET_EURC[network]})
- // Native SOL and POL are excluded, not their networks. Arc uses ERC-20 USDC here.
+ if(network==='solana')return [{symbol:'SOL',address:'11111111111111111111111111111111',decimals:9,native:true},...stablecoins]
+ if(network==='polygon')return [{symbol:'POL',address:CROSS_BRIDGE_NATIVE_ADDRESS,decimals:18,native:true},...stablecoins]
  return ['ethereum','base','arbitrum'].includes(network)?[{symbol:'ETH',address:CROSS_BRIDGE_NATIVE_ADDRESS,decimals:18,native:true},...stablecoins]:stablecoins
 }
 export function crossBridgeAsset(network:CrossBridgeNetwork,symbol:string):CrossBridgeAsset {
