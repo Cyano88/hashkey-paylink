@@ -4,9 +4,17 @@ import {Keypair} from '@solana/web3.js'
 import {fixture,now} from './fixtures/cross-bridge.mjs'
 import {CROSS_BRIDGE_NETWORKS,crossBridgeAssets} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
 import {validateCrossBridgeRelayQuote} from '../api/pocket/cross-bridge-provider.ts'
-import {priceCrossBridgeReimbursement,buildCrossBridgeChargedPlan,quoteCrossBridgeCharges} from '../api/pocket/cross-bridge-reimbursement.ts'
+import {priceCrossBridgeReimbursement,crossBridgeFeeCovered,buildCrossBridgeChargedPlan,quoteCrossBridgeCharges} from '../api/pocket/cross-bridge-reimbursement.ts'
 import {priceBscSponsorship} from '../api/pocket/bsc-bridge-fee-estimator.ts'
 const policy={providerBps:0,providerAllowanceUsdMicros:0n,marginBps:0,minimumFeeUnits:0n,maximumFeeUnits:10n**25n},price=(scaled8=100000000n)=>({scaled8,observedAt:now})
+assert(crossBridgeFeeCovered('arbitrum','USDT',31431n,31462n,price()),'bounded rounding does not raise the approved 31431-unit debit')
+assert(!crossBridgeFeeCovered('arbitrum','USDT',31431n,31463n,price()),'larger cost changes still require a new review')
+assert(crossBridgeFeeCovered('base','USDC',1000000n,1000100n,price()))
+assert(!crossBridgeFeeCovered('base','USDC',1000000n,1000101n,price()),'absolute USD cap applies')
+assert(!crossBridgeFeeCovered('solana','USDC',1000000n,1000001n,price()),'rent retains strict coverage')
+assert(!crossBridgeFeeCovered('bsc','USDT',10n**18n,10n**18n+1n,price()),'sponsored billing retains strict coverage')
+assert(crossBridgeFeeCovered('base','ETH',10n**15n,10n**15n+50000000000n,price(200000000000n)))
+assert(!crossBridgeFeeCovered('base','ETH',10n**15n,10n**15n+50000000001n,price(200000000000n)),'native asset cap is price converted')
 // Same $1 gas and asset price: exactly one native coin of gas -> one input coin.
 let cases=0
 for(const network of CROSS_BRIDGE_NETWORKS)for(const token of crossBridgeAssets(network)){

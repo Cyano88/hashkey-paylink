@@ -12,7 +12,7 @@ import {createCrossBridgeSolanaCost} from './cross-bridge-solana-transaction.js'
 import {resolveCrossBridgeWallets,revalidateCrossBridgeWallets,type CrossBridgeWalletBinding} from './cross-bridge-wallets.js'
 import {fetchCrossBridgeRelayReview,validateCrossBridgeRelayQuote,type CrossBridgeInput} from './cross-bridge-provider.js'
 import {createCrossBridgeReview,type openCrossBridgeReview} from './cross-bridge-review.js'
-import {quoteCrossBridgeCharges,priceCrossBridgeReimbursement,crossBridgeReimbursementRecipient,type CrossBridgeChargedPlan,type CrossBridgeCost} from './cross-bridge-reimbursement.js'
+import {quoteCrossBridgeCharges,crossBridgeFeeCovered,priceCrossBridgeReimbursement,crossBridgeReimbursementRecipient,type CrossBridgeChargedPlan,type CrossBridgeCost} from './cross-bridge-reimbursement.js'
 import {relayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {crossBridgeAsset,assertCrossBridgeRollout} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import {quoteBridgeMaximum} from './bridge-max-quote.js'
@@ -62,6 +62,6 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
  const readers=crossBridgeReaders(q.wallets,q.input.from,userToken,env),[balance,cost]=await Promise.all([readers.balance(),readers.estimate(charged.plan,charged.planHash)])
  if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  const policy=crossBridgeConfiguredPolicy(q.input.source,q.input.from,cost.assetPrice,env),price=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy)
- if(cost.expiresAt<=Date.now()||BigInt(q.reimbursementUnits)<price.coverageFeeUnits||BigInt(q.reimbursementUnits)>policy.maximumFeeUnits)throw Error('Bridge fee changed. Review again.')
+ if(cost.expiresAt<=Date.now()||!crossBridgeFeeCovered(q.input.source,route.tokenIn.symbol,BigInt(q.reimbursementUnits),price.coverageFeeUnits,cost.assetPrice)||BigInt(q.reimbursementUnits)>policy.maximumFeeUnits)throw Object.assign(Error('Bridge fee changed. Review again.'),{status:409,code:'cross_bridge_fee_changed'})
  fresh()
 }}

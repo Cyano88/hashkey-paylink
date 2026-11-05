@@ -4,7 +4,7 @@ import {inboundBridgeClient,inboundChains} from './inbound-bridge-networks.js'
 import {readCrossBridgePrices} from './cross-bridge-prices.js'
 import {fetchCrossBridgeRelayReview,type CrossBridgeInput} from './cross-bridge-provider.js'
 import {resolveCrossBridgeWallets,revalidateCrossBridgeWallets,type CrossBridgeWalletBinding} from './cross-bridge-wallets.js'
-import {quoteCrossBridgeCharges,priceCrossBridgeReimbursement,crossBridgeReimbursementRecipient,type CrossBridgeChargedPlan,type CrossBridgeCost,type CrossBridgeFeePolicy} from './cross-bridge-reimbursement.js'
+import {quoteCrossBridgeCharges,crossBridgeFeeCovered,priceCrossBridgeReimbursement,crossBridgeReimbursementRecipient,type CrossBridgeChargedPlan,type CrossBridgeCost,type CrossBridgeFeePolicy} from './cross-bridge-reimbursement.js'
 import {createCrossBridgeReview,type openCrossBridgeReview} from './cross-bridge-review.js'
 import {relayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {assertCrossBridgeRollout,crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
@@ -71,7 +71,7 @@ export function createCrossBridgeCirclePreflight(userToken:string,policy:CrossBr
   const r=readers(q.wallets,q.input.from,userToken,d),[balance,cost]=await Promise.all([r.balance(),r.estimate(charged.plan,charged.planHash)])
   if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
   const priced=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits,cost.gasPrice,cost.assetPrice,policy,d.now()),reserved=BigInt(q.reimbursementUnits)
-  if(reserved<priced.coverageFeeUnits||reserved>policy.maximumFeeUnits)fail('Bridge fee changed. Review a new quote.')
+  if(!crossBridgeFeeCovered(q.input.source,route.tokenIn.symbol,reserved,priced.coverageFeeUnits,cost.assetPrice)||reserved>policy.maximumFeeUnits)throw Object.assign(Error('Bridge fee changed. Review a new quote.'),{status:409,code:'cross_bridge_fee_changed'})
   fresh()
  }
 }

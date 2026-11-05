@@ -12,6 +12,16 @@ type Route=ReturnType<typeof validateCrossBridgeRelayQuote>
 export type CrossBridgeFeePolicy={providerBps:number;providerAllowanceUsdMicros:bigint;marginBps:number;minimumFeeUnits:bigint;maximumFeeUnits:bigint}
 export type CrossBridgePrice={scaled8:bigint;observedAt:number}
 export const crossBridgeGas:Record<CrossBridgeNetwork,{symbol:string;decimals:number}>={ethereum:{symbol:'ETH',decimals:18},base:{symbol:'ETH',decimals:18},arbitrum:{symbol:'ETH',decimals:18},polygon:{symbol:'POL',decimals:18},arc:{symbol:'USDC',decimals:18},bsc:{symbol:'BNB',decimals:18},xlayer:{symbol:'OKB',decimals:18},solana:{symbol:'SOL',decimals:9}}
+/** Match the existing Circle bridge's 0.1% / $0.0001 rounding allowance.
+ * The platform absorbs this bounded difference; the approved debit never rises.
+ * Sponsored billing and Solana rent retain strict coverage. */
+export function crossBridgeFeeCovered(network:CrossBridgeNetwork,asset:string,reserved:bigint,required:bigint,assetPrice:CrossBridgePrice){
+ if(reserved<=0n||required<=0n||assetPrice.scaled8<=0n)return false
+ if(network==='bsc'||network==='xlayer'||network==='solana')return required<=reserved
+ const cap=100n*100n*10n**BigInt(crossBridgeAsset(network,asset).decimals)/assetPrice.scaled8
+ const tolerance=reserved/1000n<cap?reserved/1000n:cap
+ return required<=reserved+tolerance
+}
 const fail=(message='Bridge fees are unavailable. Review this route again.'):never=>{throw Object.assign(Error(message),{status:409})}
 const ceil=(a:bigint,b:bigint)=>(a+b-1n)/b
 /** Source-denominated reimbursement. No destination prices or assumed stablecoin pegs. */
