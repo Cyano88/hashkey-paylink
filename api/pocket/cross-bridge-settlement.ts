@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto'
 import {formatUnits} from 'viem'
 import {crossBridgeDeliveryCandidate,crossBridgeDeliveryProven,crossBridgeHash,type CrossBridgeSettlementPlan,type CrossBridgeDeliveryCandidate} from './cross-bridge-evidence.js'
 import type {PocketMoneyLedgerInput} from './money-ledger.js'
-export type CrossBridgeSettlementRecord={id:string;ownerId:string;plan:CrossBridgeSettlementPlan;sourceHash:string;state:'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';updatedAt:number;settlement?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number}}
+export type CrossBridgeSettlementRecord={id:string;ownerId:string;plan:CrossBridgeSettlementPlan;sourceHash:string;state:'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';updatedAt:number;delivery?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number};settlement?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number}}
 export type CrossBridgeSettlementDependencies={
  read(id:string):Promise<CrossBridgeSettlementRecord|undefined>;
  // Must share the transactional operation/reservation store, not a second copy.
@@ -32,9 +32,11 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
  return async function reconcile(owner:string,id:string){
   const r=structuredClone(owned(await d.read(id),owner,id)),identity=fingerprint(r)
   if(terminal(r.state))return publish(r)
-  const source=await d.source(structuredClone(r))
-  if(source==='pending')return r
-  if(source!=='confirmed'&&source!=='failed')return fail()
+  // Delivery and source finality are independent. A source reader outage must
+  // never promote settlement, but need not hide independently proven delivery.
+  let source:'pending'|'confirmed'|'failed'='pending'
+  try{source=await d.source(structuredClone(r))}catch{/* Keep the reservation pending. */}
+  if(!['pending','confirmed','failed'].includes(source))return fail()
   const advance=async(update:(current:CrossBridgeSettlementRecord)=>CrossBridgeSettlementRecord)=>d.mutate(id,current=>{
    const row=owned(current,owner,id)
    if(fingerprint(row)!==identity)return fail()
@@ -42,13 +44,18 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
    return update(row)
   })
   if(source==='failed')return publish(await advance(row=>({...row,state:'source_failed',updatedAt:d.now()})))
-  const saved=await advance(row=>({...row,state:'source_confirmed',updatedAt:d.now()}))
+  const saved=source==='confirmed'?await advance(row=>({...row,state:'source_confirmed',updatedAt:d.now()})):r
   if(terminal(saved.state))return publish(saved)
   const provider=await d.provider(structuredClone(r)),candidate=crossBridgeDeliveryCandidate(r.plan,r.sourceHash,provider.status,provider.requests)
   if(!candidate)return saved
   const received=await (d.received??readCrossBridgeDelivery)(structuredClone(candidate))
   if(!crossBridgeDeliveryProven(candidate,received))return saved
   const verifiedAt=d.now()
+  if(source!=='confirmed'){
+   // Presentation evidence only: no terminal state, released reservation, or ledger.
+   if(candidate.outcome!=='completed')return saved
+   return advance(row=>({...row,delivery:{...candidate,amountUnits:String(received),verifiedAt},updatedAt:verifiedAt}))
+  }
   return publish(await advance(row=>({...row,state:candidate.outcome,settlement:{...candidate,amountUnits:String(received),verifiedAt},updatedAt:verifiedAt})))
  }
 }

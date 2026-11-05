@@ -28,11 +28,13 @@ refund.request.data.refundCurrencyData.currency.decimals=18;assert.equal(crossBr
 function harness(){
  const f=data(),initial={id:'operation',ownerId:'owner',plan:f.plan,sourceHash:hash('base'),state:'submitted',updatedAt:now}
  let row=structuredClone(initial),source='confirmed',received=BigInt(f.plan.route.receiveUnits),ledgerFailures=0,sourceCalls=0,providerCalls=0,beforeRead
- const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;return source},provider:async()=>{providerCalls++;return f},received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
+ const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;if(source instanceof Error)throw source;return source},provider:async()=>{providerCalls++;return f},received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
  return {f,initial,events,run:createCrossBridgeSettlement(d),get row(){return row},set row(v){row=v},set source(v){source=v},set received(v){received=v},set ledgerFailures(v){ledgerFailures=v},set beforeRead(v){beforeRead=v},get providerCalls(){return providerCalls},get sourceCalls(){return sourceCalls}}
 }
 let h=harness();await assert.rejects(()=>h.run('other','operation'));assert.equal(h.sourceCalls,0)
-h.source='pending';assert.equal((await h.run('owner','operation')).state,'submitted');assert.equal(h.providerCalls,0)
+h.source='pending';assert.equal((await h.run('owner','operation')).state,'submitted');assert.equal(h.providerCalls,1);assert(h.row.delivery);assert.equal(h.row.settlement,undefined);assert.equal(h.events.size,0)
+h=harness();h.source='pending';h.received=null;await h.run('owner','operation');assert.equal(h.row.delivery,undefined);assert.equal(h.events.size,0)
+h=harness();h.source='pending';h.f.status.status='failure';await h.run('owner','operation');assert.equal(h.row.delivery,undefined)
 h=harness();h.source='failed';assert.equal((await h.run('owner','operation')).state,'source_failed');assert.equal(h.providerCalls,0);assert.equal(h.events.size,0)
 h=harness();h.f.status.status='failure';assert.equal((await h.run('owner','operation')).state,'source_confirmed');assert.equal(h.events.size,0)
 h=harness();h.received=null;assert.equal((await h.run('owner','operation')).state,'source_confirmed')
@@ -48,3 +50,5 @@ h.f.request.data.outTxs[0].chainId=8453;h.received=500000000000000000n
 assert.equal((await h.run('owner','operation')).state,'refunded');assert.equal([...h.events.values()][0].asset,'ETH');assert.equal([...h.events.values()][0].amount,'0.5')
 await h.run('owner','operation');assert.equal(h.events.size,1);assert.equal(h.sourceCalls,1)
 console.log('PASS coordinator exact source-asset refund and terminal refund ledger replay without a second source verification.')
+
+h=harness();h.source=Error('Finality pending');await h.run('owner','operation');assert(h.row.delivery);assert.equal(h.row.state,'submitted');assert.equal(h.events.size,0);h.source='confirmed';await h.run('owner','operation');assert.equal(h.row.state,'completed');assert.equal(h.events.size,1);console.log('PASS verified delivery during unavailable source proof remains nonterminal and later settles once.')
