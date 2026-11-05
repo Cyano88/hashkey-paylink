@@ -22,13 +22,13 @@ export function crossBridgeFeeCovered(network:CrossBridgeNetwork,asset:string,re
  const tolerance=reserved/1000n<cap?reserved/1000n:cap
  return required<=reserved+tolerance
 }
-const fail=(message='Bridge fees are unavailable. Review this route again.'):never=>{throw Object.assign(Error(message),{status:409})}
+const fail=(message='Bridge fees are unavailable. Review this route again.',reason='invalid_fee_plan',details:Record<string,string|number>={}):never=>{throw Object.assign(Error(message),{status:409,code:'cross_bridge_fee_unavailable',feeCheck:{reason,...details}})}
 const ceil=(a:bigint,b:bigint)=>(a+b-1n)/b
 /** Source-denominated reimbursement. No destination prices or assumed stablecoin pegs. */
 export function priceCrossBridgeReimbursement(network:CrossBridgeNetwork,asset:string,nativeUnits:bigint,gasPrice:CrossBridgePrice,assetPrice:CrossBridgePrice,policy:CrossBridgeFeePolicy,now=Date.now()){
  const gas=crossBridgeGas[network]
  const tokenIn=crossBridgeAsset(network,asset)
- for(const price of [gasPrice,assetPrice])if(typeof price.scaled8!=='bigint'||price.scaled8<=0n||price.scaled8>10n**20n||!Number.isSafeInteger(price.observedAt)||price.observedAt>now+5000||price.observedAt+30000<=now)fail()
+ for(const price of [gasPrice,assetPrice])if(typeof price.scaled8!=='bigint'||price.scaled8<=0n||price.scaled8>10n**20n||!Number.isSafeInteger(price.observedAt)||price.observedAt>now+5000||price.observedAt+30000<=now)fail(undefined,'stale_fee_price',{network,asset,ageMs:now-price.observedAt})
  if(nativeUnits<=0n||nativeUnits>=2n**128n||![policy.providerBps,policy.marginBps].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=10000)||policy.providerAllowanceUsdMicros<0n||policy.minimumFeeUnits<0n||policy.maximumFeeUnits<=0n||policy.maximumFeeUnits>=2n**128n||policy.minimumFeeUnits>policy.maximumFeeUnits)fail()
  const scale=10n**BigInt(tokenIn.decimals)
  const networkFee=ceil(nativeUnits*gasPrice.scaled8*scale*BigInt(10000+policy.providerBps),10n**BigInt(gas.decimals)*assetPrice.scaled8*10000n)
@@ -40,7 +40,7 @@ export function priceCrossBridgeReimbursement(network:CrossBridgeNetwork,asset:s
  const floor=networkFee+allowance
  const buffered=ceil((networkFee+allowance)*BigInt(10000+policy.marginBps),10000n)
  const fee=buffered>policy.minimumFeeUnits?buffered:policy.minimumFeeUnits
- if(fee<=0n||fee>policy.maximumFeeUnits)fail()
+ if(fee<=0n||fee>policy.maximumFeeUnits)fail(undefined,'fee_limit',{network,asset,feeUnits:String(fee),maximumUnits:String(policy.maximumFeeUnits),nativeUnits:String(nativeUnits)})
  return {feeUnits:fee,coverageFeeUnits:floor,expiresAt:Math.min(gasPrice.observedAt,assetPrice.observedAt)+30000}
 }
 const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
@@ -98,7 +98,7 @@ export async function quoteCrossBridgeCharges(route:Route,binding:CrossBridgeWal
   // It is not the executable route deadline: aging a review from a market
   // snapshot can leave less time than the review-opening freshness window.
   const expiresAt=route.expiresAt
-  if(expiresAt<=now())fail()
+  if(expiresAt<=now())fail('Bridge quote expired. Review this route again.','route_expired',{source:route.source,asset:route.tokenIn.symbol,expiredByMs:now()-expiresAt})
   // Recheck the coverage floor against the existing reserve, not a fresh margin.
   if((pass===0?priced.feeUnits:priced.coverageFeeUnits)<=fee)return {...built,reimbursementUnits:fee,reimbursementRecipient,sourceAsset:route.tokenIn.symbol,sourceDecimals:route.tokenIn.decimals,expiresAt,walletFingerprint:binding.fingerprint}
   fee=priced.feeUnits

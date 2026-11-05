@@ -64,7 +64,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    }
    if(op.sourceHash){try{op=await d.reconcile(owner,id) as CrossBridgeOperation}catch{/* Keep the journaled state while proof is unavailable. */}}
    return res.json(await d.response(op))
-  }catch(error){const e=error as Error&{status?:number;code?:string;maximumAmountUnits?:string;feeCheck?:unknown};if(e.code==='cross_bridge_fee_changed'&&e.feeCheck)console.warn('pocket_bridge_fee_recheck',JSON.stringify({action:req.body?.action,check:e.feeCheck}));return res.status(e.status&&e.status>=400&&e.status<=599?e.status:409).json({ok:false,error:e.message||'Bridge is temporarily unavailable.',...(e.code?{code:e.code}:{}),...(e.maximumAmountUnits?{maximumAmountUnits:e.maximumAmountUnits}:{})})}
+  }catch(error){const e=error as Error&{status?:number;code?:string;maximumAmountUnits?:string;feeCheck?:unknown};if(['cross_bridge_fee_changed','cross_bridge_fee_unavailable'].includes(e.code||'')&&e.feeCheck)console.warn('pocket_bridge_fee_recheck',JSON.stringify({action:req.body?.action,check:e.feeCheck}));return res.status(e.status&&e.status>=400&&e.status<=599?e.status:409).json({ok:false,error:e.message||'Bridge is temporarily unavailable.',...(e.code?{code:e.code}:{}),...(e.maximumAmountUnits?{maximumAmountUnits:e.maximumAmountUnits}:{})})}
  }
 }
 export default createCrossBridgeHandler()
