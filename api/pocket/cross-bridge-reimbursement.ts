@@ -94,7 +94,10 @@ export async function quoteCrossBridgeCharges(route:Route,binding:CrossBridgeWal
   if(typeof cost.rentUnits!=='bigint'||cost.rentUnits<0n||cost.rentUnits>=2n**64n||route.source!=='solana'&&cost.rentUnits!==0n||typeof cost.nativeUnits!=='bigint'||cost.nativeUnits<=0n)fail()
   const priced=priceCrossBridgeReimbursement(route.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy,now())
   if(cost.source!==route.source||cost.asset!==route.tokenIn.symbol||cost.planHash!==built.planHash||!Number.isSafeInteger(cost.expiresAt)||cost.expiresAt<=now())fail()
-  const expiresAt=Math.min(route.expiresAt,cost.expiresAt,priced.expiresAt)
+  // Price/estimate freshness is verified above and again at both preflights.
+  // It is not the executable route deadline: aging a review from a market
+  // snapshot can leave less time than the review-opening freshness window.
+  const expiresAt=route.expiresAt
   if(expiresAt<=now())fail()
   // Recheck the coverage floor against the existing reserve, not a fresh margin.
   if((pass===0?priced.feeUnits:priced.coverageFeeUnits)<=fee)return {...built,reimbursementUnits:fee,reimbursementRecipient,sourceAsset:route.tokenIn.symbol,sourceDecimals:route.tokenIn.decimals,expiresAt,walletFingerprint:binding.fingerprint}

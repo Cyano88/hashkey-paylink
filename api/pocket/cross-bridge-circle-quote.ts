@@ -55,7 +55,7 @@ export async function quoteOwnedCrossBridgeCircle(input:{ownerId:string;userToke
  const reimbursementRecipient=crossBridgeReimbursementRecipient(input.source,env)
  const charged=await quoteCrossBridgeCharges(provider.route,wallets,reimbursementRecipient,policy,{...readers(wallets,input.from,input.userToken,d),now:d.now})
  await d.revalidate(wallets)
- return createCrossBridgeReview({wallets,input:providerInput,providerQuote:provider.providerQuote,appFee,...charged,expiresAt:Math.min(charged.expiresAt,provider.requestedAt+30000)},{now:d.now(),secret:env.POCKET_SWAP_QUOTE_SECRET})
+ return createCrossBridgeReview({wallets,input:providerInput,providerQuote:provider.providerQuote,appFee,...charged,expiresAt:Math.min(charged.expiresAt,provider.requestedAt+45000)},{now:d.now(),secret:env.POCKET_SWAP_QUOTE_SECRET})
 }
 /** Re-estimate the identical signed plan immediately before reservation/dispatch.
  * Fee changes cause a fresh review, never a silent higher debit. */

@@ -1,5 +1,6 @@
 import {crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import type {CrossBridgeFeePolicy,CrossBridgePrice} from './cross-bridge-reimbursement.js'
+import {POCKET_NATIVE_FEE_ALLOWANCE_BPS,POCKET_CIRCLE_GAS_STATION_FEE_BPS} from './native-fee-policy.js'
 /** Explicit USD fee limits; convert to the input token using its verified price.
  * Never reuse a six-decimal stablecoin limit as native or 18-decimal units. */
 export function crossBridgeConfiguredPolicy(network:CrossBridgeNetwork,asset:string,price:CrossBridgePrice,env:NodeJS.ProcessEnv=process.env):CrossBridgeFeePolicy{
@@ -9,5 +10,9 @@ export function crossBridgeConfiguredPolicy(network:CrossBridgeNetwork,asset:str
  const units=(usd:bigint,ceil:boolean)=>(usd*100n*scale+(ceil?price.scaled8-1n:0n))/price.scaled8
  const mode=env.POCKET_XLAYER_FEE_POLICY||'provider_terms'
  if(sponsored&&!['observed_cost','provider_terms'].includes(mode))throw Error('Bridge fee policy is unavailable.')
- return {providerBps:sponsored&&mode==='provider_terms'?Number(integer('POCKET_XLAYER_PROVIDER_FEE_BPS')):0,providerAllowanceUsdMicros:sponsored?integer(mode==='observed_cost'?'POCKET_XLAYER_OBSERVED_COST_USD_MICROS':'POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS'):0n,marginBps:sponsored?Number(integer('POCKET_XLAYER_FEE_MARGIN_BPS')):0,minimumFeeUnits:units(min,true),maximumFeeUnits:units(max,false)}
+ // Circle EVM bridges need the same reviewed gas reserve as native swaps.
+ // Requiring an unbuffered estimate to stay identical across review, PIN and
+ // two preflights otherwise turns ordinary gas movement into a reprice loop.
+ // Sponsored billing keeps its configured policy; Solana rent is unchanged.
+ return {providerBps:sponsored?(mode==='provider_terms'?Number(integer('POCKET_XLAYER_PROVIDER_FEE_BPS')):0):network==='solana'?0:POCKET_CIRCLE_GAS_STATION_FEE_BPS,providerAllowanceUsdMicros:sponsored?integer(mode==='observed_cost'?'POCKET_XLAYER_OBSERVED_COST_USD_MICROS':'POCKET_XLAYER_PROVIDER_FIXED_USD_MICROS'):0n,marginBps:sponsored?Number(integer('POCKET_XLAYER_FEE_MARGIN_BPS')):network==='solana'?0:POCKET_NATIVE_FEE_ALLOWANCE_BPS,minimumFeeUnits:units(min,true),maximumFeeUnits:units(max,false)}
 }

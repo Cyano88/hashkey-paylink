@@ -29,7 +29,7 @@ for(const source of ['ethereum','base','arbitrum','polygon'])for(const asset of 
  fee='1';await assert.rejects(()=>preflight(review),/fee changed/)
  fee='0.000001';balance=BigInt(i.amountUnits);await assert.rejects(()=>preflight(review),e=>e.code==='insufficient_balance')
  await assert.rejects(()=>quoteOwnedCrossBridgeCircle(input,policy,d,env),e=>e.code==='insufficient_balance')
- balance=10n**30n;time=now+30000;await assert.rejects(()=>preflight(review),/expired/)
+ balance=10n**30n;time=now+45000;await assert.rejects(()=>preflight(review),/expired/)
  time=now;await assert.rejects(()=>createCrossBridgeCirclePreflight('request-token',policy,async()=>{},d,{...env,POCKET_BRIDGE_REVENUE_BPS:'1'})(review),/policy changed/)
  const rows=new Map();let dispatches=0
  const runtime=createOwnedCrossBridgeCircleRuntime({ownerId:'owner',userToken:'request-token'},policy,async()=>{},d,{
@@ -41,7 +41,7 @@ for(const source of ['ethereum','base','arbitrum','polygon'])for(const asset of 
  fee='1';await assert.rejects(()=>runtime.submit(saved.quote.id),/fee changed/);assert.equal(dispatches,0);assert.equal(rows.get(saved.quote.id).state,'prepared')
  fee='0.000001';await runtime.submit(saved.quote.id);assert.equal(dispatches,1);assert.equal(rows.get(saved.quote.id).state,'pending')
  await runtime.submit(saved.quote.id);assert.equal(dispatches,1)
- const slow={...d,provider:async(...args)=>{const result=await d.provider(...args);time+=31000;return result}}
+ const slow={...d,provider:async(...args)=>{const result=await d.provider(...args);time+=46000;return result}}
  await assert.rejects(()=>quoteOwnedCrossBridgeCircle(input,policy,slow,env));count++
 }
 console.log(`PASS ${count} Circle source-asset quote/preflight flows: exact final charged batch, provider-start expiry, bound wallets, no stored auth, fresh balance/price/fee recheck, fee increase and policy changes require review. Fixtures; no transactions.`)

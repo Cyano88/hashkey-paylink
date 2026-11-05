@@ -43,27 +43,28 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
   const converted=conversion?(native?validateNativeBridgeConversion(conversion as any,request,Date.now()):xlayer?validateXLayerConversion(conversion as any,request,Date.now()):validateEurcConversion(conversion as any,request,Date.now())):null
   const direct=await fetchCrossBridgeRelayReview(converted?{...request,from:'USDC',amountUnits:converted.minimumUnits}:request,env.RELAY_API_KEY||'',fetch,appFee)
   const providerQuote=conversion?{kind:native?'evm-conversion':xlayer?'xlayer-conversion':'eurc-conversion',swap:conversion,bridge:direct.providerQuote}:direct.providerQuote
-  const provider={...direct,providerQuote,route:validateCrossBridgeRelayQuote(providerQuote,request,Date.now(),appFee)}
+  const provider={...direct,providerQuote,route:validateCrossBridgeRelayQuote(providerQuote,request,direct.requestedAt,appFee)}
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)
   await revalidateCrossBridgeWallets(wallets)
-  const result=await createCrossBridgeReview({wallets,input:request,providerQuote:provider.providerQuote,appFee,...charged,expiresAt:Math.min(charged.expiresAt,provider.requestedAt+30000)})
+  const result=await createCrossBridgeReview({wallets,input:request,providerQuote:provider.providerQuote,appFee,...charged,expiresAt:Math.min(charged.expiresAt,provider.requestedAt+45000)})
   return {quote:result,amountUnits,totalUnits:charged.totalUnits,expiresAt:result.quote.expiresAt}
  }
  if(input.maximum)return (await quoteBridgeMaximum({balanceUnits:await readers.balance(),quote})).quote
  if(!/^[1-9]\d{0,38}$/.test(input.amountUnits))throw Error('Enter a valid bridge amount.')
  return (await quote(BigInt(input.amountUnits))).quote
 }
-export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Promise<void>,env:NodeJS.ProcessEnv=process.env){return async(review:Review)=>{
+const preflightDefaults={now:Date.now,readers:crossBridgeReaders,revalidate:revalidateCrossBridgeWallets}
+export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Promise<void>,env:NodeJS.ProcessEnv=process.env,overrides:Partial<typeof preflightDefaults>={}){const d={...preflightDefaults,...overrides};return async(review:Review)=>{
  const {quote:q,route,charged}=review
- const fresh=()=>{if(q.expiresAt<=Date.now())throw Error('Bridge quote expired. Review again.')};fresh();assertCrossBridgeRollout(q.input.source,q.input.destination)
+ const fresh=()=>{if(q.expiresAt<=d.now())throw Error('Bridge quote expired. Review again.')};fresh();assertCrossBridgeRollout(q.input.source,q.input.destination)
  if(q.reimbursementRecipient!==crossBridgeReimbursementRecipient(q.input.source,env)||JSON.stringify(q.appFee)!==JSON.stringify(relayBridgeAppFee(env)))throw Error('Bridge fee policy changed.')
- await revalidateCrossBridgeWallets(q.wallets);await guard(review)
- const readers=crossBridgeReaders(q.wallets,q.input.from,userToken,env),[balance,cost]=await Promise.all([readers.balance(),readers.estimate(charged.plan,charged.planHash)])
+ await d.revalidate(q.wallets);await guard(review)
+ const readers=d.readers(q.wallets,q.input.from,userToken,env),[balance,cost]=await Promise.all([readers.balance(),readers.estimate(charged.plan,charged.planHash)])
  if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  fresh()
- if(cost.expiresAt<=Date.now())throw Object.assign(Error('Bridge cost expired. Review again.'),{status:409,code:'bridge_review_invalid'})
- const policy=crossBridgeConfiguredPolicy(q.input.source,q.input.from,cost.assetPrice,env),price=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy)
- if(!crossBridgeFeeCovered(q.input.source,route.tokenIn.symbol,BigInt(q.reimbursementUnits),price.coverageFeeUnits,cost.assetPrice)||BigInt(q.reimbursementUnits)>policy.maximumFeeUnits)throw Object.assign(Error('Bridge fee changed. Review again.'),{status:409,code:'cross_bridge_fee_changed'})
+ if(cost.expiresAt<=d.now())throw Object.assign(Error('Bridge cost expired. Review again.'),{status:409,code:'bridge_review_invalid'})
+ const policy=crossBridgeConfiguredPolicy(q.input.source,q.input.from,cost.assetPrice,env),price=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy,d.now())
+ if(!crossBridgeFeeCovered(q.input.source,route.tokenIn.symbol,BigInt(q.reimbursementUnits),price.coverageFeeUnits,cost.assetPrice)||BigInt(q.reimbursementUnits)>policy.maximumFeeUnits)throw Object.assign(Error('Bridge fee changed. Review again.'),{status:409,code:'cross_bridge_fee_changed',feeCheck:{source:q.input.source,asset:q.input.from,reservedUnits:q.reimbursementUnits,requiredUnits:String(price.coverageFeeUnits),maximumUnits:String(policy.maximumFeeUnits),quoteAgeMs:d.now()-q.issuedAt,remainingMs:q.expiresAt-d.now()}})
  fresh()
 }}

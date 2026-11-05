@@ -22,7 +22,7 @@ export async function openCrossBridgeReview(token:string,owner:string,options:{r
  const expected=mac(body,options.secret??process.env.POCKET_SWAP_QUOTE_SECRET??''),actual=Buffer.from(signature,'base64url')
  if(actual.length!==expected.length||!timingSafeEqual(actual,expected))fail()
  let q:CrossBridgeReview;try{q=JSON.parse(Buffer.from(body,'base64url').toString())}catch{return fail()}
- if(!q||q.version!==1||q.ownerId!==owner||q.wallets?.ownerId!==owner||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q.id)||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=q.issuedAt||q.expiresAt-q.issuedAt>30000||!options.recovery&&q.expiresAt<=now)fail()
+ if(!q||q.version!==1||q.ownerId!==owner||q.wallets?.ownerId!==owner||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q.id)||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=q.issuedAt||q.expiresAt-q.issuedAt>45000||!options.recovery&&q.expiresAt<=now)fail()
  if(q.wallets.fingerprint!==crossBridgeWalletFingerprint(q.wallets)||q.wallets.source.network!==q.input?.source||q.wallets.destination.network!==q.input.destination||!same(q.input.source,q.input.sender,q.wallets.source.address)||!same(q.input.destination,q.input.recipient,q.wallets.destination.address))fail()
  if(!options.recovery)assertCrossBridgeRollout(q.input.source,q.input.destination)
  const route=validateCrossBridgeRelayQuote(q.providerQuote,q.input,q.issuedAt,q.appFee)
@@ -34,7 +34,7 @@ export async function openCrossBridgeReview(token:string,owner:string,options:{r
  * binding and priced charges. This function neither estimates nor dispatches. */
 export async function createCrossBridgeReview(input:{wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:bigint;reimbursementRecipient:string;planHash:string;totalUnits:bigint;expiresAt:number},options:{now?:number;secret?:string}={}){
  const issuedAt=options.now??Date.now()
- const q:CrossBridgeReview=JSON.parse(JSON.stringify({version:1,id:randomUUID(),ownerId:input.wallets.ownerId,wallets:input.wallets,input:input.input,providerQuote:input.providerQuote,appFee:input.appFee,reimbursementUnits:String(input.reimbursementUnits),reimbursementRecipient:input.reimbursementRecipient,planHash:input.planHash,totalUnits:String(input.totalUnits),issuedAt,expiresAt:Math.min(input.expiresAt,issuedAt+30000)}))
+ const q:CrossBridgeReview=JSON.parse(JSON.stringify({version:1,id:randomUUID(),ownerId:input.wallets.ownerId,wallets:input.wallets,input:input.input,providerQuote:input.providerQuote,appFee:input.appFee,reimbursementUnits:String(input.reimbursementUnits),reimbursementRecipient:input.reimbursementRecipient,planHash:input.planHash,totalUnits:String(input.totalUnits),issuedAt,expiresAt:Math.min(input.expiresAt,issuedAt+45000)}))
  const token=sealCrossBridgeReview(q,options.secret)
  await openCrossBridgeReview(token,q.ownerId,options)
  return {quote:q,quoteToken:token}

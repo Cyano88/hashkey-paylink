@@ -110,7 +110,7 @@ export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,
   const estimated=nativeAmountUnits(await estimate(q.callData))
   // Retain the quoted 50% gas buffer, including room for sponsorship overhead.
   if(estimated*105n<=nativeCap*100n)return validateNativeEvmSwap(q,false,now())
-  nativeCap=(estimated*15000n+9999n)/10000n
+  nativeCap=bufferedNativeFee(formatUnits(estimated,18))
  }
  throw Object.assign(Error('Network fees changed. Review the updated amount.'),{status:409})
 }

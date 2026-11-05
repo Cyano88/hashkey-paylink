@@ -1,3 +1,4 @@
+import {POCKET_NATIVE_FEE_ALLOWANCE_BPS} from './native-fee-policy.js'
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto'
 import {encodeFunctionData,parseAbi,parseUnits,formatUnits,isAddress,getAddress,type Hex} from 'viem'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
@@ -11,7 +12,7 @@ export function nativeAmountUnits(amount:string){if(typeof amount!=='string'||! 
 function validateBinding(b:NativeSendBinding){if(!Object.hasOwn(nativeEvmNetworks,b.network)||!b.ownerId||!b.walletId||!isAddress(b.walletAddress)||!isAddress(b.recipient)||/^0x0{40}$/i.test(b.recipient)||b.recipient.toLowerCase()===b.walletAddress.toLowerCase())fail();nativeAmountUnits(b.amount)}
 export function nativeSendCallData(b:NativeSendBinding,fee:bigint){validateBinding(b);if(fee<=0n)fail();return encodeFunctionData({abi,functionName:'executeBatch',args:[[{target:getAddress(b.recipient),value:nativeAmountUnits(b.amount),data:'0x'},{target:EVM_PLATFORM_TREASURY,value:fee,data:'0x'}]]})}
 // Native units throughout: no USD peg assumptions, float rounding or price-service dependency.
-export function bufferedNativeFee(estimate:string){return (nativeAmountUnits(estimate)*15000n+9999n)/10000n}
+export function bufferedNativeFee(estimate:string){return (nativeAmountUnits(estimate)*BigInt(10000+POCKET_NATIVE_FEE_ALLOWANCE_BPS)+9999n)/10000n}
 export async function quoteNativeSend(binding:NativeSendBinding,estimate:(data:Hex)=>Promise<string>,now=Date.now()):Promise<NativeSendQuote>{
  validateBinding(binding);let fee=1n
  for(let pass=0;pass<4;pass++){
