@@ -40,7 +40,12 @@ export async function readFinalizedBridgeSource<T>(source:CircleKitSourceExpecta
 export async function readFinalizedBridgeReceipt<T>(source:keyof typeof inboundChains,transactionHash:string,prove:(receipt:CircleKitSourceReceipt,context:{blockHash:string;blockNumber:bigint;index:bigint})=>Promise<T>,rpcOverride?:Rpc,allowReverted=false){
  return readFinalizedEnvelope(source,transactionHash,(receipt,_trace,context)=>prove(receipt,context),rpcOverride,allowReverted,false)
 }
-async function readFinalizedEnvelope<T>(source:keyof typeof inboundChains,transactionHash:string,prove:(receipt:CircleKitSourceReceipt,trace:NativeCallTrace,context:{blockHash:string;blockNumber:bigint;index:bigint})=>Promise<T>,rpcOverride:Rpc|undefined,allowReverted:boolean,needsTrace:boolean){
+/** Non-final observation for progress only. Never use this as settlement proof. */
+export async function readObservedBridgeReceipt(source:keyof typeof inboundChains,transactionHash:string,rpcOverride?:Rpc){
+ const result=await readFinalizedEnvelope(source,transactionHash,async(receipt)=>({receipt}),rpcOverride,false,false,false)
+ return {receipt:result.receipt,source:result.source,blockHash:result.blockHash,blockNumber:result.blockNumber}
+}
+async function readFinalizedEnvelope<T>(source:keyof typeof inboundChains,transactionHash:string,prove:(receipt:CircleKitSourceReceipt,trace:NativeCallTrace,context:{blockHash:string;blockNumber:bigint;index:bigint})=>Promise<T>,rpcOverride:Rpc|undefined,allowReverted:boolean,needsTrace:boolean,requireFinality=true){
  const txHash=hash(transactionHash)
  if(!Object.hasOwn(inboundChains,source)||(source==='bsc'||source==='xlayer')&&(!rpcOverride||needsTrace))pending()
  const rpc=rpcOverride??(({method,params})=>readBridgeProofEvmRpc(source as CircleKitSourceExpectation['batch']['source'],method,params))
@@ -51,7 +56,7 @@ async function readFinalizedEnvelope<T>(source:keyof typeof inboundChains,transa
  if(quantity(await call('eth_chainId',[]))!==chainId)pending()
  const r=receipt(await call('eth_getTransactionReceipt',[txHash]),txHash,allowReverted)
  const height='0x'+r.blockNumber.toString(16)
- const [canonical,finalized]=await Promise.all([call('eth_getBlockByNumber',[height,false]).then(block),call('eth_getBlockByNumber',['finalized',false]).then(block)])
+ const [canonical,finalized]=await Promise.all([call('eth_getBlockByNumber',[height,false]).then(block),call('eth_getBlockByNumber',[requireFinality?'finalized':height,false]).then(block)])
  const included=(b:ReturnType<typeof block>)=>{if(b.number!==r.blockNumber||b.hash!==r.blockHash||!Array.isArray(b.raw.transactions)||r.index>=BigInt(b.raw.transactions.length)||hash(b.raw.transactions[Number(r.index)])!==txHash)pending()}
  included(canonical)
  if(finalized.number<r.blockNumber||(finalized.number===r.blockNumber&&finalized.hash!==r.blockHash))pending()
@@ -60,7 +65,7 @@ async function readFinalizedEnvelope<T>(source:keyof typeof inboundChains,transa
  // A reorg/provider inconsistency during a slow trace must not be certified.
  const [chainAfter,receiptAfter,blockAfter,anchorAfter,finalAfter]=await Promise.all([
   call('eth_chainId',[]),call('eth_getTransactionReceipt',[txHash]),call('eth_getBlockByNumber',[height,false]).then(block),
-  call('eth_getBlockByNumber',['0x'+finalized.number.toString(16),false]).then(block),call('eth_getBlockByNumber',['finalized',false]).then(block),
+  call('eth_getBlockByNumber',['0x'+finalized.number.toString(16),false]).then(block),call('eth_getBlockByNumber',[requireFinality?'finalized':height,false]).then(block),
  ])
  if(quantity(chainAfter)!==chainId||receipt(receiptAfter,txHash,allowReverted).fingerprint!==r.fingerprint)pending()
  included(blockAfter)

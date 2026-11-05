@@ -1,9 +1,9 @@
-import {readCrossBridgeDelivery} from './cross-bridge-delivery.js'
+import {readCrossBridgeDelivery,observeCrossBridgeDelivery} from './cross-bridge-delivery.js'
 import {createHash} from 'node:crypto'
 import {formatUnits} from 'viem'
 import {crossBridgeDeliveryCandidate,crossBridgeDeliveryProven,crossBridgeHash,type CrossBridgeSettlementPlan,type CrossBridgeDeliveryCandidate} from './cross-bridge-evidence.js'
 import type {PocketMoneyLedgerInput} from './money-ledger.js'
-export type CrossBridgeSettlementRecord={id:string;ownerId:string;plan:CrossBridgeSettlementPlan;sourceHash:string;state:'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';updatedAt:number;delivery?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number};settlement?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number}}
+export type CrossBridgeSettlementRecord={id:string;ownerId:string;plan:CrossBridgeSettlementPlan;sourceHash:string;state:'submitted'|'source_confirmed'|'source_failed'|'completed'|'refunded';updatedAt:number;observedDelivery?:CrossBridgeDeliveryCandidate&{amountUnits:string;observedAt:number}|null;delivery?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number};settlement?:CrossBridgeDeliveryCandidate&{amountUnits:string;verifiedAt:number}}
 export type CrossBridgeSettlementDependencies={
  read(id:string):Promise<CrossBridgeSettlementRecord|undefined>;
  // Must share the transactional operation/reservation store, not a second copy.
@@ -13,6 +13,7 @@ export type CrossBridgeSettlementDependencies={
  source(r:CrossBridgeSettlementRecord):Promise<'pending'|'confirmed'|'failed'>;
  provider(r:CrossBridgeSettlementRecord):Promise<{status:unknown;requests:unknown}>;
  received?(c:CrossBridgeDeliveryCandidate):Promise<bigint|null>;
+ observed?(c:CrossBridgeDeliveryCandidate):Promise<bigint|null>;
  ledger(event:PocketMoneyLedgerInput):Promise<unknown>;now():number;
 }
 const terminal=(s:string)=>['source_failed','completed','refunded'].includes(s)
@@ -47,9 +48,16 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
   const saved=source==='confirmed'?await advance(row=>({...row,state:'source_confirmed',updatedAt:d.now()})):r
   if(terminal(saved.state))return publish(saved)
   const provider=await d.provider(structuredClone(r)),candidate=crossBridgeDeliveryCandidate(r.plan,r.sourceHash,provider.status,provider.requests)
-  if(!candidate)return saved
-  const received=await (d.received??readCrossBridgeDelivery)(structuredClone(candidate))
-  if(!crossBridgeDeliveryProven(candidate,received))return saved
+  if(!candidate)return r.observedDelivery?advance(row=>({...row,observedDelivery:null,updatedAt:d.now()})):saved
+  let received:bigint|null=null
+  try{received=await (d.received??readCrossBridgeDelivery)(structuredClone(candidate))}catch{/* Non-final receipt observation may still explain progress. */}
+  if(!crossBridgeDeliveryProven(candidate,received)){
+   let observed:bigint|null=null
+   try{observed=await (d.observed??observeCrossBridgeDelivery)(structuredClone(candidate))}catch{/* No presentation claim without current chain evidence. */}
+   const observation=candidate.outcome==='completed'&&crossBridgeDeliveryProven(candidate,observed)?{...candidate,amountUnits:String(observed),observedAt:d.now()}:null
+   if(observation||r.observedDelivery)return advance(row=>({...row,observedDelivery:observation,updatedAt:d.now()}))
+   return saved
+  }
   const verifiedAt=d.now()
   if(source!=='confirmed'){
    // Presentation evidence only: no terminal state, released reservation, or ledger.

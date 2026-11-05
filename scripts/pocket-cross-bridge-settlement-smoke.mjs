@@ -27,11 +27,19 @@ assert(candidate);assert.equal(candidate.token.symbol,'USDC');assert(crossBridge
 refund.request.data.refundCurrencyData.currency.decimals=18;assert.equal(crossBridgeDeliveryCandidate(refund.plan,hash('bsc'),refund.status,refund.requests),null)
 function harness(...route){
  const f=data(...route),initial={id:'operation',ownerId:'owner',plan:f.plan,sourceHash:hash(f.plan.route.source),state:'submitted',updatedAt:now}
- let row=structuredClone(initial),source='confirmed',received=BigInt(f.plan.route.receiveUnits),ledgerFailures=0,sourceCalls=0,providerCalls=0,beforeRead
- const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;if(source instanceof Error)throw source;return source},provider:async()=>{providerCalls++;return f},received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
- return {f,initial,events,run:createCrossBridgeSettlement(d),get row(){return row},set row(v){row=v},set source(v){source=v},set received(v){received=v},set ledgerFailures(v){ledgerFailures=v},set beforeRead(v){beforeRead=v},get providerCalls(){return providerCalls},get sourceCalls(){return sourceCalls}}
+ let row=structuredClone(initial),source='confirmed',received=BigInt(f.plan.route.receiveUnits),observed=null,ledgerFailures=0,sourceCalls=0,providerCalls=0,beforeRead
+ const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;if(source instanceof Error)throw source;return source},provider:async()=>{providerCalls++;return f},observed:async()=>observed,received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
+ return {f,initial,events,run:createCrossBridgeSettlement(d),get row(){return row},set row(v){row=v},set source(v){source=v},set received(v){received=v},set observed(v){observed=v},set ledgerFailures(v){ledgerFailures=v},set beforeRead(v){beforeRead=v},get providerCalls(){return providerCalls},get sourceCalls(){return sourceCalls}}
 }
 let h=harness();await assert.rejects(()=>h.run('other','operation'));assert.equal(h.sourceCalls,0)
+{
+ const o=harness();o.source='pending';o.received=null;o.observed=BigInt(o.f.plan.route.receiveUnits)
+ await o.run('owner','operation');assert(o.row.observedDelivery);assert.equal(o.row.state,'submitted');assert.equal(o.row.delivery,undefined);assert.equal(o.row.settlement,undefined);assert.equal(o.events.size,0)
+ o.observed=null;await o.run('owner','operation');assert.equal(o.row.observedDelivery,null);assert.equal(o.events.size,0)
+ o.observed=BigInt(o.f.plan.route.minimumUnits)-1n
+ await o.run('owner','operation');assert.equal(o.row.observedDelivery,null)
+ o.source='confirmed';o.received=BigInt(o.f.plan.route.receiveUnits);await o.run('owner','operation');assert.equal(o.row.state,'completed');assert.equal(o.events.size,1)
+}
 h.source='pending';assert.equal((await h.run('owner','operation')).state,'submitted');assert.equal(h.providerCalls,1);assert(h.row.delivery);assert.equal(h.row.settlement,undefined);assert.equal(h.events.size,0)
 h=harness();h.source='pending';h.received=null;await h.run('owner','operation');assert.equal(h.row.delivery,undefined);assert.equal(h.events.size,0)
 h=harness();h.source='pending';h.f.status.status='failure';await h.run('owner','operation');assert.equal(h.row.delivery,undefined)

@@ -29,17 +29,17 @@ export function createCrossBridgeJournalSettlement(d:CrossBridgeJournalSettlemen
   if(!states.includes(first.state)||!first.sourceHash)return first
   function view(op:CrossBridgeReservation|undefined):CrossBridgeSettlementRecord{
    if(!op||op.id!==id||op.ownerId!==owner||op.quoteToken!==token||op.fingerprint!==hash(token)||op.sourceHash!==first!.sourceHash||op.source!==first!.source||op.walletAddress!==first!.walletAddress||op.expiresAt!==q.expiresAt||!states.includes(op.state)||!Number.isSafeInteger(op.updatedAt))fail()
-   return {id,ownerId:owner,sourceHash:op.sourceHash!,state:op.state as CrossBridgeSettlementRecord['state'],updatedAt:op.updatedAt as number,plan:{route:review.route,sender:q.input.sender,recipient:q.input.recipient},...(op.delivery?{delivery:op.delivery as CrossBridgeSettlementRecord['delivery']}:{}),...(op.settlement?{settlement:op.settlement as CrossBridgeSettlementRecord['settlement']}:{})}
+   return {id,ownerId:owner,sourceHash:op.sourceHash!,state:op.state as CrossBridgeSettlementRecord['state'],updatedAt:op.updatedAt as number,plan:{route:review.route,sender:q.input.sender,recipient:q.input.recipient},...(op.observedDelivery?{observedDelivery:op.observedDelivery as CrossBridgeSettlementRecord['observedDelivery']}:{}),...(op.delivery?{delivery:op.delivery as CrossBridgeSettlementRecord['delivery']}:{}),...(op.settlement?{settlement:op.settlement as CrossBridgeSettlementRecord['settlement']}:{})}
   }
   const reconcile=createCrossBridgeSettlement({
-   now:d.now,provider:d.provider,received:d.received,ledger:d.ledger,
+   now:d.now,provider:d.provider,received:d.received,observed:d.observed,ledger:d.ledger,
    source:r=>d.source(r,review),
    read:async()=>view(await store.read(id)),
    mutate:async(_,update)=>{
     const result=await store.mutate(id,op=>{
      const current=view(op),next=update(current)
      if(identity(next)!==identity(current)||!states.includes(next.state)||!Number.isSafeInteger(next.updatedAt))fail()
-     return {...op!,state:next.state,updatedAt:next.updatedAt,...(next.delivery?{delivery:JSON.parse(JSON.stringify(next.delivery))}:{}),...(next.settlement?{settlement:JSON.parse(JSON.stringify(next.settlement))}:{})}
+     return {...op!,state:next.state,updatedAt:next.updatedAt,...(Object.hasOwn(next,'observedDelivery')?{observedDelivery:next.observedDelivery??null}:{}),...(next.delivery?{delivery:JSON.parse(JSON.stringify(next.delivery))}:{}),...(next.settlement?{settlement:JSON.parse(JSON.stringify(next.settlement))}:{})}
     })
     return view(result)
    },
