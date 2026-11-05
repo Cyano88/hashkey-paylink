@@ -23,7 +23,7 @@ for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source
  const rpc=async(method,params)=>{
   if(method==='eth_chainId')return source==='bsc'?'0x38':'0xc4'
   if(method==='eth_getCode')return '0xef0100'+kernel.slice(2)
-  if(method==='eth_call'){if(params[0].to==='0x420000000000000000000000000000000000000F'){l1++;return '0x123'}return '0x0'}
+  if(method==='eth_call'){if(params[0].to==='0x420000000000000000000000000000000000000F'){l1++;return '0x'+'123'.padStart(64,'0')}return '0x0'}
   if(method==='eth_estimateUserOperationGas'){assert.equal(params[0].callData,charged.plan.callData);return {callGasLimit:'0x10000',verificationGasLimit:'0x10000',preVerificationGas:'0x10000'}}
   if(method==='rundler_getUserOperationGasPrice')return {blockNumber:'0x10',suggested:{maxFeePerGas:'0x2'}}
   if(method==='eth_gasPrice')return '0x1'
@@ -32,6 +32,11 @@ for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source
  }
  const cost=await createCrossBridgePrivyCost(wallets,asset.symbol,{rpc,now:()=>time,prices:async()=>({gasPrice:{scaled8:100000000n,observedAt:now},assetPrice:{scaled8:100000000n,observedAt:now}})})(charged.plan,charged.planHash)
  assert.equal(cost.planHash,charged.planHash);assert.equal(cost.rentUnits,0n);assert.equal(l1,source==='xlayer'?1:0)
+ if(source==='xlayer')for(const result of ['0x'+'0'.repeat(64),'0x0','0x','0x'+'0'.repeat(66)]){
+  const checked=createCrossBridgePrivyCost(wallets,asset.symbol,{rpc:async(method,params)=>method==='eth_call'&&params[0].to==='0x420000000000000000000000000000000000000F'?result:rpc(method,params),now:()=>time,prices:async()=>({gasPrice:{scaled8:100000000n,observedAt:now},assetPrice:{scaled8:100000000n,observedAt:now}})})(charged.plan,charged.planHash)
+  if(result.length===66)assert.equal((await checked).nativeUnits,cost.nativeUnits-0x123n);else await assert.rejects(checked)
+ }
+
  const review=await openCrossBridgeReview(saved.quoteToken,'owner',{secret,now}),blockHash='0x'+'b'.repeat(64),userOpHash='0x'+'c'.repeat(64)
  const op={sender:i.sender,nonce:0n,initCode:'0x',callData:charged.plan.callData,accountGasLimits:'0x'+'0'.repeat(64),preVerificationGas:0n,gasFees:'0x'+'0'.repeat(64),paymasterAndData:'0x',signature:'0x'}
  const txInput=encodeFunctionData({abi:entryPoint07Abi,functionName:'handleOps',args:[[op],i.sender]})

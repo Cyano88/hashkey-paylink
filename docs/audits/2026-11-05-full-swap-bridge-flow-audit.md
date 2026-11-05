@@ -21,3 +21,9 @@ Final backend regression: 36 scripts passed; scoped TypeScript passed. Additiona
 Signed device artifact: pocket-bridge-expanded-pixel-20261105.apk.
 SHA256: 9E92941620632DE3C12A331D6CEFD28E7D53F42E6E34B8FD7BA868D8D7443B97.
 Deployment and installation evidence is recorded separately after release. No funded bridge or swap was signed during this audit. Synthetic proof tests are not real settlements. Tokenized stocks and yield-position tokens are not included in this 586-pair bridge coverage.
+
+## Device verification and follow-up
+
+Backend 59cf39d0f deployed live as dep-dblssa95efls73an09ag; expanded APK installed preserving login. Home showed 10.61 USD. SOL to BNB reached authenticated review for 0.001 SOL with fee 0.000660241 SOL and displayed total 0.00166024 SOL; no confirmation or signing. Current native treasury rent was verified by RPC as 650240 lamports. Deployed read-only quotes passed SOL/BNB both directions, POL/BNB and X Layer USDT/Base USDT.
+
+The X Layer device review exposed an existing fee decoder mismatch: getL1FeeUpperBound returns an ABI-padded uint256, including all-zero responses, while the estimator used strict JSON-RPC quantity parsing. The follow-up uses an exact 32-byte ABI decoder only for this contract response, retaining canonical quantity validation elsewhere. Regression covers padded zero/nonzero fees and rejects truncated/oversized responses.

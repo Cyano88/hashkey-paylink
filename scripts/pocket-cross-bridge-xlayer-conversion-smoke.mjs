@@ -27,7 +27,7 @@ for(const symbol of ['USDT','USDe','USDG','OKB']){
  const rpc=async(method,params)=>{
   if(method==='eth_chainId')return source==='bsc'?'0x38':'0xc4'
   if(method==='eth_getCode')return '0xef0100'+kernel.slice(2)
-  if(method==='eth_call'){if(params[0].to==='0x420000000000000000000000000000000000000F'){l1++;return '0x123'}return '0x0'}
+  if(method==='eth_call'){if(params[0].to==='0x420000000000000000000000000000000000000F'){l1++;return '0x'+'123'.padStart(64,'0')}return '0x0'}
   if(method==='eth_estimateUserOperationGas'){assert.equal(params[0].callData,charged.plan.callData);return {callGasLimit:'0x10000',verificationGasLimit:'0x10000',preVerificationGas:'0x10000'}}
   if(method==='rundler_getUserOperationGasPrice')return {blockNumber:'0x10',suggested:{maxFeePerGas:'0x2'}}
   if(method==='eth_gasPrice')return '0x1'
