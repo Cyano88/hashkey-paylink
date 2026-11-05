@@ -112,3 +112,11 @@ SHA256: 2C0EAAD944C95721BC4FA75DEEA9EA11DD1E381A2E690AE4E775E406ABFF9BFD
 All 1869 dist assets matched the signed APK. ADB install -r succeeded on Pixel 5A160DLCH006VM. Captured installed Bridge and Stocks screens showed numeric balances without a Last known label. Cold Home capture still showed initial total loading; no complete post-install Home/Earn refresh-cycle claim is made. Concurrent manual phone navigation prevented a deterministic remaining screen walkthrough; automated taps were stopped. No new payments.
 
 Native evidence: native-release/balance-display-20261105.json and balance-display-source-20261105.zip in pocket-play-update-20261101. Screenshot filenames balance-home.png and balance-swap.png actually captured Bridge and Stocks respectively because of concurrent navigation; interpret their image contents, not filenames.
+
+### Follow-up Pixel walkthrough and final APY correction
+
+After the user handed over the phone, completed Home/Swap/Earn navigation. Home showed 10.08 USD and retained it on return. Base Swap showed 0.00000809497 ETH; its asset sheet showed ETH, USDC, USDT and EURC with muted USD values and no refresh prompt or Last known label. USDC Earn displayed sub-cent earning and available balances; USDT0 displayed 0.00 earning and 2.02 available. Reopened USDC retained balance presentation. Earned-so-far is a separately fetched metric and initially shimmered before resolving.
+
+The walkthrough caught a periodic APY refresh clearing a previously displayed rate. Removed that clearing and suppressed failure copy when a previous rate exists. Added pocket-earn-rate-continuity-smoke.mjs: actual Earn page retains 3.70% through a clock-driven periodic pending read and rejected read. Passed this browser check, TypeScript, and rebuilt Android release.
+
+Final replacement APK (same filename) SHA256: 6D90327FFDCC1C1D7596AFB121D75A9951E24308C76F5376DC0E186CF341864E. All 1869 assets matched; signature verified; Pixel install succeeded and app reopened. This supersedes the earlier APK hash above. Updated source archive includes PocketEarnPage and the rate continuity test. No funded actions or backend deployment.
