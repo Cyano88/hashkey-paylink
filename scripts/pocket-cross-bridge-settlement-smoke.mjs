@@ -25,8 +25,8 @@ refund.request.data.refundCurrencyData={amount:'90000000000000000000',currency:{
 let candidate=crossBridgeDeliveryCandidate(refund.plan,hash('bsc'),refund.status,refund.requests)
 assert(candidate);assert.equal(candidate.token.symbol,'USDC');assert(crossBridgeDeliveryProven(candidate,90000000000000000000n));assert(!crossBridgeDeliveryProven(candidate,90000000000000000001n))
 refund.request.data.refundCurrencyData.currency.decimals=18;assert.equal(crossBridgeDeliveryCandidate(refund.plan,hash('bsc'),refund.status,refund.requests),null)
-function harness(){
- const f=data(),initial={id:'operation',ownerId:'owner',plan:f.plan,sourceHash:hash('base'),state:'submitted',updatedAt:now}
+function harness(...route){
+ const f=data(...route),initial={id:'operation',ownerId:'owner',plan:f.plan,sourceHash:hash(f.plan.route.source),state:'submitted',updatedAt:now}
  let row=structuredClone(initial),source='confirmed',received=BigInt(f.plan.route.receiveUnits),ledgerFailures=0,sourceCalls=0,providerCalls=0,beforeRead
  const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;if(source instanceof Error)throw source;return source},provider:async()=>{providerCalls++;return f},received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
  return {f,initial,events,run:createCrossBridgeSettlement(d),get row(){return row},set row(v){row=v},set source(v){source=v},set received(v){received=v},set ledgerFailures(v){ledgerFailures=v},set beforeRead(v){beforeRead=v},get providerCalls(){return providerCalls},get sourceCalls(){return sourceCalls}}
@@ -52,3 +52,17 @@ await h.run('owner','operation');assert.equal(h.events.size,1);assert.equal(h.so
 console.log('PASS coordinator exact source-asset refund and terminal refund ledger replay without a second source verification.')
 
 h=harness();h.source=Error('Finality pending');await h.run('owner','operation');assert(h.row.delivery);assert.equal(h.row.state,'submitted');assert.equal(h.events.size,0);h.source='confirmed';await h.run('owner','operation');assert.equal(h.row.state,'completed');assert.equal(h.events.size,1);console.log('PASS verified delivery during unavailable source proof remains nonterminal and later settles once.')
+
+let directions=0
+for(const source of CROSS_BRIDGE_ROLLOUT_NETWORKS)for(const destination of CROSS_BRIDGE_ROLLOUT_NETWORKS){
+ if(source===destination)continue
+ for(const pendingSource of ['pending',Error('Source finality not ready')]){
+  const h=harness(source,destination,'USDC','USDC');h.source=pendingSource
+  await h.run('owner','operation');assert.equal(h.row.state,'submitted');assert(h.row.delivery);assert.equal(h.events.size,0)
+  h.source='confirmed';await h.run('owner','operation');assert.equal(h.row.state,'completed');assert.equal(h.events.size,1)
+  await h.run('owner','operation');assert.equal(h.events.size,1)
+ }
+ const missing=harness(source,destination,'USDC','USDC');missing.source='pending';missing.received=null
+ await missing.run('owner','operation');assert.equal(missing.row.delivery,undefined);assert.equal(missing.row.state,'submitted');directions++
+}
+console.log('PASS '+directions+' directed network pairs including Arc and Solana: delivery before pending/throwing source proof, no provider-only success, eventual completion, idempotent publication.')
