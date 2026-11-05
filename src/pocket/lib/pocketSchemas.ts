@@ -204,6 +204,7 @@ export type PocketActivityRow = {
   settlementType?: string
   fiatCurrency?: 'NGN' | 'UGX'
   amountNgn?: string
+  bridgeSettlementPending?: boolean
   handoffVerified?: boolean
   bankSettlementStatus?: string
   paycrestStatus?: string
@@ -650,6 +651,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && (value.merchantNetAmount === undefined || typeof value.merchantNetAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.merchantNetAmount))
     && (value.merchantFees === undefined || isMerchantFeeRecord(value.merchantFees))
     && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.feeAmount))
+    && (value.bridgeSettlementPending === undefined || typeof value.bridgeSettlementPending === 'boolean')
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)
     && isOptionalBoundedString(value.xpayCheckoutId, 40)

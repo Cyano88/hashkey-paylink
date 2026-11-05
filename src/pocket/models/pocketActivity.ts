@@ -37,6 +37,7 @@ export type PocketActivityRow = {
   settlementType?: string
   fiatCurrency?: 'NGN' | 'UGX'
   amountNgn?: string
+  bridgeSettlementPending?: boolean
   handoffVerified?: boolean
   bankSettlementStatus?: string
   paycrestStatus?: string
