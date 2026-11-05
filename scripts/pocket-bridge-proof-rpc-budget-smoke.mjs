@@ -13,7 +13,8 @@ try{
   await read(network,'eth_getTransactionReceipt',[tx(1)]);await read(network,'eth_getTransactionReceipt',[tx(1)])
   await read(network,'eth_getBlockByNumber',['finalized',false]);await read(network,'eth_getBlockByNumber',['finalized',false])
   await read(network,'debug_traceTransaction',trace)
-  assert.equal(calls.length,7,'proof rereads must reach RPC, without display cache or redundant identity reads')
+  await read(network,'eth_getTransactionByHash',[tx(1)]);await read(network,'eth_getTransactionByHash',[tx(1)])
+  assert.equal(calls.length,9,'proof rereads must reach RPC, without display cache or redundant identity reads')
   assert.ok(calls.every(c=>c.url===process.env[key]),'reuse established endpoint variable for '+network)
  }
  assert.throws(()=>validateRead('debug_traceTransaction',trace),e=>e.code===-32601)

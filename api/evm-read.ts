@@ -121,7 +121,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
       if(params.length!==2||!hash(params[0])||!record(params[1])||!only(params[1],['tracer'])||params[1].tracer!=='callTracer')throw new ReadRpcError(-32602,'Unsupported bridge trace parameters.','scope')
       validated={method,params}
     }else{
-      if(options.bridgeProof&&(!['eth_chainId','eth_getTransactionReceipt','eth_getBlockByNumber'].includes(method)||(method==='eth_getBlockByNumber'&&(params[1]!==false||(params[0]!=='finalized'&&!quantity(params[0]))))))throw new ReadRpcError(-32601,'Unsupported bridge proof read.','scope')
+      if(options.bridgeProof&&(!['eth_chainId','eth_getTransactionReceipt','eth_getTransactionByHash','eth_getBlockByNumber'].includes(method)||(method==='eth_getBlockByNumber'&&(params[1]!==false||(params[0]!=='finalized'&&!quantity(params[0]))))))throw new ReadRpcError(-32601,'Unsupported bridge proof read.','scope')
       validated = validateRead(method, params)
     }
     const config = NETWORKS[network]
