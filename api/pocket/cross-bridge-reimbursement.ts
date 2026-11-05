@@ -40,7 +40,7 @@ export function priceCrossBridgeReimbursement(network:CrossBridgeNetwork,asset:s
  const floor=networkFee+allowance
  const buffered=ceil((networkFee+allowance)*BigInt(10000+policy.marginBps),10000n)
  const fee=buffered>policy.minimumFeeUnits?buffered:policy.minimumFeeUnits
- if(fee<=0n||fee>policy.maximumFeeUnits)fail(undefined,'fee_limit',{network,asset,feeUnits:String(fee),maximumUnits:String(policy.maximumFeeUnits),nativeUnits:String(nativeUnits)})
+ if(fee<=0n||fee>policy.maximumFeeUnits)fail('Network fees are high. Try this route again shortly.','fee_limit',{network,asset,feeUnits:String(fee),maximumUnits:String(policy.maximumFeeUnits),nativeUnits:String(nativeUnits)})
  return {feeUnits:fee,coverageFeeUnits:floor,expiresAt:Math.min(gasPrice.observedAt,assetPrice.observedAt)+30000}
 }
 const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])

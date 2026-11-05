@@ -6,7 +6,7 @@ import {POCKET_NATIVE_FEE_ALLOWANCE_BPS,POCKET_CIRCLE_GAS_STATION_FEE_BPS} from 
 export function crossBridgeConfiguredPolicy(network:CrossBridgeNetwork,asset:string,price:CrossBridgePrice,env:NodeJS.ProcessEnv=process.env):CrossBridgeFeePolicy{
  const integer=(name:string)=>{const value=env[name];if(typeof value!=='string'||! /^(0|[1-9]\d{0,12})$/.test(value))throw Error('Bridge fee policy is not configured.');return BigInt(value)}
  if(price.scaled8<=0n)throw Error('Bridge fee price is unavailable.')
- const sponsored=network==='bsc'||network==='xlayer',scale=10n**BigInt(crossBridgeAsset(network,asset).decimals),min=integer('POCKET_CROSS_BRIDGE_MIN_FEE_USD_MICROS'),max=integer('POCKET_CROSS_BRIDGE_MAX_FEE_USD_MICROS')
+ const sponsored=network==='bsc'||network==='xlayer',scale=10n**BigInt(crossBridgeAsset(network,asset).decimals),min=integer('POCKET_CROSS_BRIDGE_MIN_FEE_USD_MICROS'),max=integer(network==='polygon'&&env.POCKET_CROSS_BRIDGE_POLYGON_MAX_FEE_USD_MICROS!==undefined?'POCKET_CROSS_BRIDGE_POLYGON_MAX_FEE_USD_MICROS':'POCKET_CROSS_BRIDGE_MAX_FEE_USD_MICROS')
  const units=(usd:bigint,ceil:boolean)=>(usd*100n*scale+(ceil?price.scaled8-1n:0n))/price.scaled8
  const mode=env.POCKET_XLAYER_FEE_POLICY||'provider_terms'
  if(sponsored&&!['observed_cost','provider_terms'].includes(mode))throw Error('Bridge fee policy is unavailable.')

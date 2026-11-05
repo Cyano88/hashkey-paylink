@@ -37,7 +37,7 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
   time=now+32000;await preflight(review)
  }
  assert.equal(JSON.stringify(review.quote),before,'No fee, calldata, amount or expiry mutation after review')
- gas=10n**24n;await assert.rejects(()=>preflight(review),e=>e.code==='cross_bridge_fee_changed'||/fees are unavailable/.test(e.message))
+ gas=10n**24n;await assert.rejects(()=>preflight(review),e=>e.code==='cross_bridge_fee_changed'||/fees are unavailable|Network fees are high/.test(e.message))
  gas=1000000n;priceAge=30000;await assert.rejects(()=>preflight(review),/expired/)
  priceAge=0;balance=0n;await assert.rejects(()=>preflight(review),e=>e.code==='insufficient_balance');balance=10n**35n
  time=now+44000;delay=2000;await assert.rejects(()=>preflight(review),/expired/)
@@ -47,3 +47,19 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
  assert(guards>=4);cases++
 }
 console.log('PASS '+cases+' source/assets: production preflight, Circle allowance parity, 45s route-bound review, old price snapshot, repeated fee jitter, immutable approved debit, fee cap, stale price, balance loss, expiry during preflight, recovery-only expiry')
+
+// Live Polygon regression: reserve exceeded the global $0.10 ceiling.
+const livePrice={scaled8:9417047n,observedAt:now};
+const limits={...env,POCKET_CROSS_BRIDGE_MAX_FEE_USD_MICROS:'100000'};
+const oldLimit=crossBridgeConfiguredPolicy('polygon','POL',livePrice,limits);
+const polygonLimits={...limits,POCKET_CROSS_BRIDGE_POLYGON_MAX_FEE_USD_MICROS:'250000'};
+const polygonLimit=crossBridgeConfiguredPolicy('polygon','POL',livePrice,polygonLimits);
+assert(polygonLimit.maximumFeeUnits>oldLimit.maximumFeeUnits);
+assert.deepEqual(crossBridgeConfiguredPolicy('base','ETH',livePrice,limits),crossBridgeConfiguredPolicy('base','ETH',livePrice,polygonLimits));
+const {priceCrossBridgeReimbursement}=await import('../api/pocket/cross-bridge-reimbursement.ts');
+assert.throws(()=>priceCrossBridgeReimbursement('polygon','POL',922455509019726241n,livePrice,livePrice,oldLimit,now),e=>e.feeCheck?.reason==='fee_limit'&&e.message==='Network fees are high. Try this route again shortly.');
+const priced=priceCrossBridgeReimbursement('polygon','POL',922455509019726241n,livePrice,livePrice,polygonLimit,now);
+assert.equal(priced.feeUnits,1452867426706068831n);
+assert(priced.feeUnits<polygonLimit.maximumFeeUnits);
+assert.equal(crossBridgeConfiguredPolicy('polygon','POL',livePrice,limits).maximumFeeUnits,oldLimit.maximumFeeUnits,'No override preserves existing fee ceiling');
+console.log('PASS captured Polygon fee: explicit limit error, optional isolated ceiling, same gas reserve, unchanged other networks');
