@@ -39,3 +39,7 @@ Open policy: the older Arc swap path has no explicit reimbursement transfer or c
 Freshness fix commit 7511a87d29a6c0195ca3f472760d887eb190ac93 deployed as dep-dbm7dmc9v7es7393fcc0, live at 2026-11-05T12:35:40Z. Post-startup health returned HTTP 200. A lightweight production read through the deployed settlement freshness module returned verifiedAt 1793880007968 and rejected Circle's unchanged 09:24:09Z ETH snapshot (staleSnapshotFallsBack: true). The dedicated display-reader TypeScript check passed as well as the broader cross-bridge check.
 
 Pocket left the foreground before the deployment completed. The post-deployment numeric Home total was therefore not visually reverified; device taps stopped to avoid interacting with another app. The earlier cross-asset review and installed BNB receipt checks remain valid. Arc swap pricing remains pending user decision.
+
+## Pixel recheck after user reopened Pocket
+
+At approximately 13:53–13:55 Africa/Lagos on 2026-11-05, Home visibly showed total 10.32 USD. Arbitrum Swap showed available 0.000640459 ETH and network total approximately 2.65 USD. Bridge's Arbitrum token sheet showed the same 0.000640459 ETH, approximately 1.53 USD, alongside 0.13 USDC and 0.99 USDT. This closes the post-deployment visual balance check above. No unavailable label was present in these checked views. No transaction was submitted. Screenshots remain local under output/bridge-swap-audit-20261105 in the native checkout.
