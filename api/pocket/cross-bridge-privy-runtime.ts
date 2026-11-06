@@ -27,12 +27,21 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
  const service=createCrossBridgeOperations({store:o.store,now,open,approve:o.approve??((owner,approval)=>consumePocketPaymentApproval(approval,owner,now())),
   preflight:async r=>{await wallets(r.quote.wallets);await preflight(r)},
   dispatch:async(r,op,authorization)=>{
-   await wallets(r.quote.wallets)
-   const request=crossBridgePrivyRequest(r,appId)
-   if(op.id!==r.quote.id)return fail()
+   // The reservation is already submitting, but no provider request exists yet.
+   // Failure or expiry in these local checks must not become an unknown send.
+   let request:ReturnType<typeof crossBridgePrivyRequest>
+   try{
+    await wallets(r.quote.wallets)
+    request=crossBridgePrivyRequest(r,appId)
+    if(op.id!==r.quote.id)return fail()
+    if(r.quote.expiresAt<=now()+5000)return {definitelyNotSubmitted:true}
+   }catch{return {definitelyNotSubmitted:true}}
    const response=await fetcher(request.url,{method:'POST',headers:{...request.headers,...headers,'content-type':'application/json','privy-authorization-signature':authorization},body:JSON.stringify(request.body),redirect:'error',signal:AbortSignal.timeout(30000)})
    const body=await response.json(),data=body?.data
-   if(!response.ok){if(response.status===400&&body?.code==='transaction_broadcast_failure'&&!data?.hash&&!data?.transaction_id&&!data?.user_operation_hash)return {definitelyNotSubmitted:true};return null}
+   if(!response.ok)console.warn('pocket_bridge_privy_response',JSON.stringify({id:op.id,source:r.quote.input.source,status:response.status,code:typeof body?.code==='string'&&/^[a-zA-Z0-9_]{1,80}$/.test(body.code)?body.code:'unknown',hasReference:!!(data?.hash||data?.transaction_id||data?.user_operation_hash)}))
+   // Only the response to this first dispatch can establish rejection. Status
+   // recovery never replays an expired request to infer its earlier outcome.
+   if(!response.ok){if((response.status===400&&body?.code==='transaction_broadcast_failure'||response.status>=400&&response.status<500&&body?.code==='request_expired')&&!data?.hash&&!data?.transaction_id&&!data?.user_operation_hash)return {definitelyNotSubmitted:true};return null}
    if(data?.caip2!==request.body.caip2)return fail()
    return {...(hash(data.hash)?{sourceHash:data.hash}:{}),...(providerId(data.transaction_id)?{transactionId:data.transaction_id}:{}),...(hash(data.user_operation_hash)?{userOperationHash:data.user_operation_hash}:{})}
   },
