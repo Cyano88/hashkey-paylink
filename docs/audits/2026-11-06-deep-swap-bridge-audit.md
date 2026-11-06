@@ -57,3 +57,13 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Original full debit remains reserved in both retry quote affordability and fresh execution balance checks. For this incident, intended test is BNB USDC -> Arbitrum USDC, principal <= 0.20 USDC and total <= 0.30 USDC; original reserve 0.094350214389091603 USDC.
 - Verification passed: manual-retry scope/caps/expiry/concurrent winner/consumption/original preservation; existing reservation and coverage suites; shared billing suite; Privy runtime/API; 26 source/assets preflight plus combined-balance boundary; focused backend TypeScript.
 - Deployment and activation are separate: code alone grants no exception. No transaction sent by these tests.
+
+## Live manual retry outcome
+
+- Backend 76393bb919e471a423b4bee95cf8ec7d90cc36ee deployed as dep-dbmmo96gekts73dv2fm0; Render live and health HTTP 200. Grant activated transactionally at 06:02:49 UTC, expiring 06:32:49 UTC; exact original preserved.
+- Pixel test principal 0.20 USDC BNB -> Arbitrum USDC. User approval proceeded on phone. Agent captured Preparing bridge, Bridging, Bridge successful, then Completed receipt. No additional Circle confirmation appeared on the Privy route.
+- New operation e8650992-0216-4075-8f88-370f621a78ec; total 0.228886399514781593 USDC; source reimbursement 0.028886399514781593 USDC; observed output 0.176329 USDC, minimum 0.175465 USDC. Pixel accepted rounding: paid 0.20, received 0.18, fee 0.03.
+- Privy transaction c7e39211-0baa-4937-8807-14229c07e1b0 returned HTTP 200, confirmed, eip155:56, sponsored true, gas credits charged USD 0.01115. Source hash 0xa8943b02009d6b0e446c0f6e70a9e11d9f050b9ed28f4d2a244e937232d0079e; destination hash 0x07b5f5f2e7da5cd65fcc6007d9eb5ac18b1b8bcee480277b19db17444d65543d.
+- Grant bound to the new operation and consumed at 1793945039678. Original 3dd3ff26-5413-48a3-95be-a1f4e007e178 remains submitting with no hash; no falsified terminal status.
+- Latest durable retry state source_confirmed with observed destination delivery. UI success/Completed receipt follows existing verified handoff presentation; destination finality and ledger publication continue in background, not claimed completed yet.
+- Live timings: quote 2161 ms, prepare 7885 ms, submit 16483 ms. These remain measured latency evidence for continued audit, not an instant-execution claim.
