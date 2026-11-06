@@ -27,3 +27,12 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Source finality remains an independent settlement requirement. Destination delivery can already inform the shared visible outcome while journal finalization continues.
 - No new payment was initiated during this audit. No all-chain live-completion claim.
 - Deployment and additional native swap/selector browser verification are recorded separately once observed.
+
+## Deployment and final live verification
+
+- Backend f4044a02af5b5cbd0a94b9778f8522fd44bee8f1 deployed as dep-dbmmajmi0phs73c9b55g; Render live at 05:32:41 UTC; health recovered to HTTP 200 after restart.
+- Pixel amount-screen recheck displays the previous-bridge blocker before confirmation/PIN. First live rejected quote completed server-side in 176 ms. No new payment initiated.
+- Base -> BNB b13fc5e5-b681-4e7f-b55c-66c7d8e09263 advanced automatically to completed; ledgerPublishedAt 1793943019176. Old BNB 3dd3ff26-5413-48a3-95be-a1f4e007e178 remains submitting, Relay waiting.
+- Additional native browser checks passed: actual swap terminal Activity before success on all five Circle networks, and USDT selector/holdings/reversal/quote identity on those networks.
+- Display-read audit: usePocketBscBalances shares its owner-scoped cache and bsc-account endpoint; production bsc-account uses readBscDisplayBalances (OKX first, bounded cache, RPC fallback). Fresh execution balance reads are separate. No direct RPC balance calls found in the inspected client balance hooks.
+
