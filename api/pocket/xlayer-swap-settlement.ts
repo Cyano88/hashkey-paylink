@@ -3,7 +3,7 @@ import {sponsoredSwapOperationProof} from './sponsored-swap-operation-proof.js'
 import {stockClient} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {stockTradeProof,nativeTradeLegs} from './stock-trade-notifications.js'
 import {XLAYER_ENTRY_POINT} from './xlayer-sponsored-cost.js'
-export type SponsoredSwapEvidence={callData:Hex;owner:string;input:string;output?:string;inputUnits:string;minimumOutUnits:string;feeUnits:string}
+export type SponsoredSwapEvidence={callData:Hex;owner:string;input:string;output?:string;inputUnits:string;minimumOutUnits:string;feeUnits:string;feeAsset?:string}
 const transfers=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const same=(a:string|undefined|null,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 export async function readSponsoredSwapOutcome(hash:Hex,e:SponsoredSwapEvidence,client=stockClient):Promise<'completed'|'failed'|'pending'>{
@@ -13,7 +13,7 @@ export async function readSponsoredSwapOutcome(hash:Hex,e:SponsoredSwapEvidence,
  const block=await client.getBlock({blockNumber:r.blockNumber});if(!same(block.hash,r.blockHash))throw Error('Swap block changed')
  if(sponsoredSwapOperationProof(tx,r,e)==='failed')return 'failed'
  const proof=stockTradeProof(tx,r)
- if(!proof||proof.owner!==e.owner.toLowerCase()||proof.input!==e.input.toLowerCase()||proof.inputUnits!==e.inputUnits||proof.feeUnits!==e.feeUnits)throw Error('Swap effects unavailable')
+ if(!proof||proof.owner!==e.owner.toLowerCase()||proof.input!==e.input.toLowerCase()||proof.inputUnits!==e.inputUnits||proof.feeUnits!==e.feeUnits||(proof.feeAsset||proof.input).toLowerCase()!==(e.feeAsset||e.input).toLowerCase())throw Error('Swap effects unavailable')
  const output=e.output||'native' // Existing durable attempts predate token-output sponsorship.
  if(!same(proof.output,output))throw Error('Swap output changed')
  if(output==='native'){
@@ -21,9 +21,9 @@ export async function readSponsoredSwapOutcome(hash:Hex,e:SponsoredSwapEvidence,
   if(native.length!==1||BigInt(native[0].units)<BigInt(e.minimumOutUnits))throw Error('Swap output unavailable')
  }else{
   const received=parseEventLogs({abi:transfers,logs:r.logs.filter(l=>same(l.address,output))}).reduce((n,l)=>n+(same(l.args.to,e.owner)?l.args.value:0n)-(same(l.args.from,e.owner)?l.args.value:0n),0n)
-  if(received<=0n||received<BigInt(e.minimumOutUnits))throw Error('Swap output unavailable')
+  if(received<=0n||received<BigInt(e.minimumOutUnits)-((e.feeAsset||e.input).toLowerCase()===output.toLowerCase()?BigInt(e.feeUnits):0n))throw Error('Swap output unavailable')
  }
  const spent=parseEventLogs({abi:transfers,logs:r.logs.filter(l=>same(l.address,e.input))}).reduce((n,l)=>n+(same(l.args.from,e.owner)?l.args.value:0n)-(same(l.args.to,e.owner)?l.args.value:0n),0n)
- if(spent!==BigInt(proof.spentUnits||e.inputUnits)+BigInt(e.feeUnits))throw Error('Swap debit unavailable')
+ if(spent!==BigInt(proof.spentUnits||e.inputUnits)+((e.feeAsset||e.input).toLowerCase()===e.input.toLowerCase()?BigInt(e.feeUnits):0n))throw Error('Swap debit unavailable')
  return 'completed'
 }

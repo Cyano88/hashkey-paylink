@@ -6,10 +6,10 @@ import {OKX_XLAYER_ROUTER,OKX_NATIVE,readStockServiceFee,OKX_STOCK_FEE_RECIPIENT
 import {stockAssets,stockUsdc,stockUsdt,stockUsde,stockUsdg} from '../../src/pocket/lib/pocketXStocksWallet.js'
 import {formatPocketAssetAmount} from '../../src/pocket/lib/pocketAmountDisplay.js'
 import type {ConfirmedStockTransfer,StockNoticeStore} from './xstocks-notifications-store.js'
-export type StockTradeProof={hash:string;owner:string;origin?:string;input:string;output:string;inputUnits?:string;spentUnits?:string;serviceFeeUnits?:string;feeUnits?:string}
+export type StockTradeProof={hash:string;owner:string;origin?:string;input:string;output:string;inputUnits?:string;spentUnits?:string;serviceFeeUnits?:string;feeUnits?:string;feeAsset?:string}
 export function stockTradeProof(tx:{hash:string;from:string;to:string|null;input:Hex},receipt:{status:string;logs?:readonly any[]}):StockTradeProof|undefined {
  const sponsored=sponsoredSwapTradeCall(tx,receipt)
- if(sponsored){const proof=stockTradeProof(sponsored.tx,receipt);return proof&&proof.input===sponsored.input&&(proof.output==='native'||[stockUsdc,stockUsdt,stockUsde,stockUsdg].some(a=>a.address.toLowerCase()===proof.output)||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&BigInt(sponsored.inputUnits)>=BigInt(proof.inputUnits||'0')&&BigInt(sponsored.inputUnits)-BigInt(proof.inputUnits||'0')<=(proof.serviceFeeUnits?2n:0n)?{...proof,origin:tx.from.toLowerCase(),inputUnits:sponsored.inputUnits,feeUnits:sponsored.feeUnits}:undefined}
+ if(sponsored){const proof=stockTradeProof(sponsored.tx,receipt);return proof&&proof.input===sponsored.input&&(sponsored.feeAsset===proof.input||sponsored.feeAsset===proof.output)&&(proof.output==='native'||[stockUsdc,stockUsdt,stockUsde,stockUsdg].some(a=>a.address.toLowerCase()===proof.output)||stockAssets.some(a=>a.address.toLowerCase()===proof.output))&&BigInt(sponsored.inputUnits)>=BigInt(proof.inputUnits||'0')&&BigInt(sponsored.inputUnits)-BigInt(proof.inputUnits||'0')<=(proof.serviceFeeUnits?2n:0n)?{...proof,origin:tx.from.toLowerCase(),inputUnits:sponsored.inputUnits,feeUnits:sponsored.feeUnits,feeAsset:sponsored.feeAsset}:undefined}
  if(receipt.status!=='success'||tx.to?.toLowerCase()!==OKX_XLAYER_ROUTER.toLowerCase())return
  try {
   const decoded=decodeFunctionData({abi:routerAbi as Abi,data:tx.input})
@@ -35,7 +35,7 @@ export function recordStockTradeNotices(s:StockNoticeStore,transfers:ConfirmedSt
  for(const proof of proofs){
   const legs=[...new Map(transfers.filter(t=>t.hash.toLowerCase()===proof.hash&&!t.earn).map(t=>[t.id,t])).values()]
   const net=(token:string)=>legs.filter(t=>t.token.toLowerCase()===token).reduce((n,t)=>n+(t.to.toLowerCase()===proof.owner?BigInt(t.units):0n)-(t.from.toLowerCase()===proof.owner?BigInt(t.units):0n),0n)
-  const fee=BigInt(proof.feeUnits||'0'),spent=-net(proof.input)-fee,received=net(proof.output)
+  const fee=BigInt(proof.feeUnits||'0'),spent=-net(proof.input)-((proof.feeAsset||proof.input)===proof.input?fee:0n),received=net(proof.output)
   if(proof.feeUnits&&spent!==BigInt(proof.spentUnits||proof.inputUnits||'0'))continue
   const input=legs.find(t=>t.token.toLowerCase()===proof.input),output=legs.find(t=>t.token.toLowerCase()===proof.output)
   if(!input||!output||spent<=0n||received<=0n||proof.input===proof.output)continue
@@ -49,7 +49,7 @@ export function recordStockTradeNotices(s:StockNoticeStore,transfers:ConfirmedSt
    if(wallet.address.toLowerCase()!==proof.owner||input.at<wallet.since)continue
    const id=owner+':trade:'+proof.hash
    const prior=Object.values(s.notices).filter(n=>n.owner===owner&&n.hash?.toLowerCase()===proof.hash&&n.transfer)
-   if(!s.notices[id])s.notices[id]={id,owner,hash:proof.hash,at:input.at,title,body,delivered:prior.some(n=>n.delivered),trade:{action,...(proof.serviceFeeUnits?{serviceFeeAmount:formatUnits(BigInt(proof.serviceFeeUnits),input.decimals)}:{}),...(proof.feeUnits?{feeAmount:formatUnits(fee,input.decimals)}:{}),input:{symbol:input.symbol,amount:formatUnits(spent,input.decimals)},output:{symbol:output.symbol,amount:formatUnits(received,output.decimals)}}}
+   if(!s.notices[id])s.notices[id]={id,owner,hash:proof.hash,at:input.at,title,body,delivered:prior.some(n=>n.delivered),trade:{action,...(proof.serviceFeeUnits?{serviceFeeAmount:formatUnits(BigInt(proof.serviceFeeUnits),input.decimals)}:{}),...(proof.feeUnits?{feeAmount:formatUnits(fee,(proof.feeAsset||proof.input)===proof.input?input.decimals:output.decimals),feeAsset:(proof.feeAsset||proof.input)===proof.input?input.symbol:output.symbol}:{}),input:{symbol:input.symbol,amount:formatUnits(spent,input.decimals)},output:{symbol:output.symbol,amount:formatUnits(received,output.decimals)}}}
    prior.forEach(n=>{n.pushSuppressed=true})
   }
  }

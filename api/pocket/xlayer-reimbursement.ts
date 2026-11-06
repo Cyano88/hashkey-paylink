@@ -5,7 +5,7 @@ import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 import {priceXLayerReimbursement} from './xlayer-sponsored-cost.js'
 
 export type XLayerCall={to:Hex;data:Hex;value:'0x0'}
-export type XLayerFeeBinding={merchantPaymentId?:string;ownerId:string;walletId:string;walletAddress:Hex;asset:XLayerFeeAsset;amountUnits:string;intentId:string}
+export type XLayerFeeBinding={feeFromOutput?:true;merchantPaymentId?:string;ownerId:string;walletId:string;walletAddress:Hex;asset:XLayerFeeAsset;amountUnits:string;intentId:string}
 export type XLayerReimbursementPolicy={marginBps:number;minimumFeeUnits:string}
 export type XLayerFeeQuote=XLayerFeeBinding&{version:2;chainId:196;calls:XLayerCall[];networkFeeUnits:string;totalUnits:string;issuedAt:number;expiresAt:number;estimateId:string;pricing:XLayerReimbursementPolicy}
 // An adapter must quote the entire sponsored operation, including managed-service
@@ -23,6 +23,7 @@ function pricedFee(cost:string,policy:XLayerReimbursementPolicy){
  return fee
 }
 function validateBinding(b:XLayerFeeBinding){
+ if(b.feeFromOutput!==undefined&&(b.feeFromOutput!==true||b.merchantPaymentId))invalid()
  if(!b.ownerId||!b.walletId||!b.intentId||!isAddress(b.walletAddress)||/^0x0{40}$/i.test(b.walletAddress)||b.walletAddress.toLowerCase()===EVM_PLATFORM_TREASURY.toLowerCase()||!Object.hasOwn(xLayerFeeAssets,b.asset)||!units(b.amountUnits))invalid()
 }
 function validateCalls(calls:XLayerCall[]){
@@ -47,6 +48,7 @@ export async function quoteXLayerReimbursement(binding:XLayerFeeBinding,validate
  const source=structuredClone(validatedCalls)
  let fee='1'
  for(let pass=0;pass<4;pass++){
+  if(binding.feeFromOutput&&BigInt(fee)>=BigInt(binding.amountUnits))throw Object.assign(Error('Sale proceeds do not cover the network fee. Increase the sale amount.'),{status:422})
   if(availableUnits!==undefined&&BigInt(binding.amountUnits)+(binding.merchantPaymentId?0n:BigInt(fee))>availableUnits)throw Object.assign(Error('Insufficient '+binding.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(binding.merchantPaymentId?availableUnits:availableUnits!>BigInt(fee)?availableUnits!-BigInt(fee):0n)})
   const calls=withReimbursement(source,binding.asset,fee,binding)
   const result=await estimate({...binding,calls:structuredClone(calls)})
@@ -54,7 +56,8 @@ export async function quoteXLayerReimbursement(binding:XLayerFeeBinding,validate
   if(!units(result.feeUnits)||!result.estimateId||result.estimateId.length>256||!Number.isSafeInteger(expiresAt)||expiresAt<=now())invalid()
   const requiredFee=pricedFee(result.feeUnits,policy)
   if(BigInt(requiredFee)<=BigInt(fee)){
-   const totalUnits=(BigInt(binding.amountUnits)+(binding.merchantPaymentId?0n:BigInt(fee))).toString()
+   const totalUnits=(BigInt(binding.amountUnits)+(binding.feeFromOutput?-BigInt(fee):binding.merchantPaymentId?0n:BigInt(fee))).toString()
+   if(binding.feeFromOutput&&BigInt(totalUnits)<=0n)throw Object.assign(Error('Sale proceeds do not cover the network fee. Increase the sale amount.'),{status:422})
    if(!units(totalUnits))invalid()
    return {...binding,version:2,chainId:196,calls,networkFeeUnits:fee,totalUnits,issuedAt,expiresAt,estimateId:result.estimateId,pricing:policy}
   }
@@ -78,15 +81,15 @@ export function openXLayerReimbursement(token:string,binding:XLayerFeeBinding,va
  if(extra||actual.length!==expected.length||!timingSafeEqual(actual,expected))invalid()
  const q=JSON.parse(Buffer.from(payload,'base64url').toString()) as XLayerFeeQuote
  for(const field of Object.keys(binding) as (keyof XLayerFeeBinding)[])if(q[field]!==binding[field])invalid()
- if(q.version!==2||q.chainId!==196||!units(q.networkFeeUnits)||!units(q.totalUnits)||BigInt(q.totalUnits)!==BigInt(q.amountUnits)+(binding.merchantPaymentId?0n:BigInt(q.networkFeeUnits))||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=now||q.expiresAt<=q.issuedAt||q.expiresAt-q.issuedAt>30000||!q.estimateId)invalid()
+ if(q.version!==2||q.chainId!==196||!units(q.networkFeeUnits)||!units(q.totalUnits)||BigInt(q.totalUnits)!==BigInt(q.amountUnits)+(binding.feeFromOutput?-BigInt(q.networkFeeUnits):binding.merchantPaymentId?0n:BigInt(q.networkFeeUnits))||!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=now||q.expiresAt<=q.issuedAt||q.expiresAt-q.issuedAt>30000||!q.estimateId)invalid()
  if(BigInt(q.networkFeeUnits)<BigInt(pricedFee('1',q.pricing)))invalid()
  if(JSON.stringify(q.calls)!==JSON.stringify(withReimbursement(validatedCalls,q.asset,q.networkFeeUnits,binding)))invalid()
  return q
 }
 
 export async function refreshXLayerReimbursement(approved:XLayerFeeQuote,validatedCalls:XLayerCall[],estimate:XLayerFeeEstimator,now:()=>number=Date.now){
- const {ownerId,walletId,walletAddress,asset,amountUnits,intentId,merchantPaymentId}=approved
- const binding={ownerId,walletId,walletAddress,asset,amountUnits,intentId,...(merchantPaymentId?{merchantPaymentId}:{})}
+ const {ownerId,walletId,walletAddress,asset,amountUnits,intentId,merchantPaymentId,feeFromOutput}=approved
+ const binding={ownerId,walletId,walletAddress,asset,amountUnits,intentId,...(merchantPaymentId?{merchantPaymentId}:{}),...(feeFromOutput?{feeFromOutput}:{})}
  // Validate approved batch before refreshing. This is server-internal, not a
  // substitute for verifying an incoming quote token at the API boundary.
  openXLayerReimbursement(sealXLayerReimbursement(approved),binding,validatedCalls,now())
@@ -97,3 +100,4 @@ export async function refreshXLayerReimbursement(approved:XLayerFeeQuote,validat
  if(BigInt(pricedFee(result.feeUnits,approved.pricing))>BigInt(approved.networkFeeUnits))throw Error('Network fee increased. Review the updated transfer.')
  return structuredClone(approved)
 }
+
