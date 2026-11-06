@@ -34,3 +34,19 @@ console.log('PASS stock P&L: average cost, partial sale, duplicate legs, tiny sh
 assert.equal(historicalClose([['60000','1','2','1','1.5','10','15','15','1']],70000,9),1.5)
 
 const closed=buildStockBasis([buy('unknown','1',1),{...sale,at:2},buy('fresh','1',3)],[asset],{fresh:'50'});assert.equal(closed[asset.address].costUsd,'50','Fully disposed shares do not poison the cost of a later position')
+
+const oldGift={id:'oldGift',hash:'oldGift',at:1,transfer:{token:asset.address,symbol:asset.symbol,amount:'0.002790876589432059',direction:'in'}}
+const oldSale={id:'oldSale',hash:'oldSale',at:2,trade:{input:{symbol:asset.symbol,amount:'0.002790876589432058'},output:{symbol:'USDC',amount:'0.9'}}}
+const freshBuy=buy('apple','0.003380057895702465',3)
+const mixed=buildStockBasis([oldGift,oldSale,freshBuy],[asset],{apple:'1.16853'})
+assert.equal(mixed[asset.address].quantity,'0.003380057895702466')
+assert.equal(mixed[asset.address].costUsd,null)
+assert.equal(mixed[asset.address].knownQuantity,'0.003380057895702465')
+assert.equal(mixed[asset.address].knownCostUsd,'1.16853')
+const tracked=stockUnrealizedPnl({complete:true,holdings:[{asset,units:3380057895702466n,decimals:18}]},{wallet,positions:mixed},{[asset.address]:{usd:350}})
+assert.equal(tracked.partial,true);assert.ok(Math.abs(tracked.usd-(0.003380057895702465*350-1.16853))<1e-12)
+const gift2={...oldGift,transfer:{...oldGift.transfer,amount:'2'}}
+const halfSale={...oldSale,at:4,trade:{...oldSale.trade,input:{symbol:asset.symbol,amount:'2'}}}
+const half=buildStockBasis([gift2,buy('known','2',3),halfSale],[asset],{known:'100'})[asset.address]
+assert.deepEqual(half,{quantity:'2',costUsd:null,knownQuantity:'1',knownCostUsd:'50'},'Mixed partial sales release tracked quantity and cost proportionally')
+console.log('PASS unknown dust excluded from tracked purchase return and proportional mixed sales')

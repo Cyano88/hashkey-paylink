@@ -72,6 +72,6 @@ export async function underlyingStockPositions(positions:StockBasis['positions']
  const abi=parseAbi(['function getUnderlyingAmountByShares(uint256) view returns(uint256)'])
  const decimals=await Promise.all(tokens.map(stockNoticeAsset))
  const result=await stockNoticeClient.multicall({contracts:tokens.map((token,i)=>({address:token as Address,abi,functionName:'getUnderlyingAmountByShares' as const,args:[parseUnits(positions[token].quantity,decimals[i].decimals)] as const}))})
- result.forEach((r,i)=>{const p=positions[tokens[i]];if(r.status==='success')p.quantity=formatUnits(r.result,decimals[i].decimals);else p.costUsd=null})
+ result.forEach((r,i)=>{const p=positions[tokens[i]];if(r.status==='success'){const previous=parseUnits(p.quantity,36);p.quantity=formatUnits(r.result,decimals[i].decimals);if(p.knownQuantity!==undefined)p.knownQuantity=formatUnits(previous?parseUnits(p.quantity,36)*parseUnits(p.knownQuantity,36)/previous:0n,36)}else{p.costUsd=null;delete p.knownQuantity;delete p.knownCostUsd}})
  return positions
 }
