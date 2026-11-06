@@ -73,3 +73,11 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Verified duplicate wallet binding revalidation in each provider wrapper and the shared preflight. Production now delegates that check to shared preflight once per invocation, across Circle, Privy and Solana. This removes one sequential lookup from preparation and one from submission. Standalone runtimes retain their default check; dispatch/recovery checks remain unchanged. No wallet state is cached across requests.
 - Added 26 source/asset regression cases for delegated/default validation and changed-wallet rejection before reservation. Privy tests exercise final dispatch wallet failure and imminent expiry with both configurations. Circle runtime, Solana runtime and focused backend TypeScript also checked.
 - This removes verified redundant work; end-to-end latency improvement still requires a subsequent approved live transaction. No additional payment or manual override was initiated.
+
+## Deployment, settlement and cancellation check
+
+- Latency correction 12ebf300cbe17dafe3e2223b0c0e855cfd76f63b is live on Render dep-dbmn2b6gekts73dvnv2g (finished 06:23:28 UTC); health HTTP 200.
+- Retry e8650992-0216-4075-8f88-370f621a78ec is now durably completed with verified Arbitrum delivery and ledgerPublishedAt 1793946213276. Old attempt remains submitting without provider identifiers.
+- Owner requested removing the old BNB block, then redirected to an on-chain cancellation before any release code or journal mutation. No administrative release was implemented or activated.
+- Read-only Privy wallet transaction query returned HTTP 200 but did not identify the old attempt or its nonce. This index also omits the known successful outgoing retry, so absence cannot prove the old attempt was never submitted.
+- Official Privy replacement documentation requires the original nonce (https://docs.privy.io/recipes/speeding-up-transactions); wallet_sendCalls request schema does not document a nonce override. No verified cancellation target is currently available. No replacement, self-transfer, replay or key export was performed. Provider-side identification remains needed before attempting cancellation.
