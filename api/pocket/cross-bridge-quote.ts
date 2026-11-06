@@ -16,6 +16,7 @@ import {quoteCrossBridgeCharges,crossBridgeFeeCovered,priceCrossBridgeReimbursem
 import {relayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {crossBridgeAsset,assertCrossBridgeRollout} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import {quoteBridgeMaximum} from './bridge-max-quote.js'
+import {assertCrossBridgeCoverageReady} from './cross-bridge-coverage.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string,userToken:string,env:NodeJS.ProcessEnv=process.env){
  const source=wallets.source.network,token=crossBridgeAsset(source,asset)
@@ -34,6 +35,7 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  if(input.from==='EURC'&&env.POCKET_CROSS_EURC_ENABLED==='false')throw Object.assign(Error('Combined EURC bridges are not enabled yet.'),{status:409,code:'eurc_bridge_not_enabled'})
  assertCrossBridgeRollout(input.source,input.destination)
  const wallets=await resolveCrossBridgeWallets(input.ownerId,input.source,input.destination),readers=crossBridgeReaders(wallets,input.from,input.circleUserToken||'',env)
+ if(wallets.source.provider==='privy')await assertCrossBridgeCoverageReady(wallets.source.address)
  const quote=async(amountUnits:bigint)=>{
   const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address}
   const appFee=relayBridgeAppFee(env)

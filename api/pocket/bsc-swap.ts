@@ -81,7 +81,7 @@ export function createBscSwapHandler(d:Dependencies){
    if((error as any)?.status===401)return res.status(401).json({ok:false,error:'Sign in again to continue.'})
    // Never leak provider diagnostics, RPC credentials or wallet SDK payloads.
    const message=error instanceof Error?error.message:''
-   const safe=message==='Network fees are high. Try this route again shortly.'||/^(Insufficient (BNB|USDC|USDT)(\.| for the swap and network fee\.)|The amount is too small to cover the network fee\.|Confirm with your PIN or fingerprint\.|Your previous swap is still being confirmed\.|Swap confirmation is still being verified\.|Network fee changed\. Review the swap again\.|Swap fees are still being verified\.|BNB Chain sponsorship is paused for a fee review\.)$/.test(message)
+   const safe=message==='Your previous bridge is still being confirmed. Check Activity.'||message==='Network fees are high. Try this route again shortly.'||/^(Insufficient (BNB|USDC|USDT)(\.| for the swap and network fee\.)|The amount is too small to cover the network fee\.|Confirm with your PIN or fingerprint\.|Your previous swap is still being confirmed\.|Swap confirmation is still being verified\.|Network fee changed\. Review the swap again\.|Swap fees are still being verified\.|BNB Chain sponsorship is paused for a fee review\.)$/.test(message)
    return res.status(409).json({ok:false,error:safe?message:'Could not update this swap. Try again.'})
   }
  }
