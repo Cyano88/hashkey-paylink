@@ -36,3 +36,14 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Additional native browser checks passed: actual swap terminal Activity before success on all five Circle networks, and USDT selector/holdings/reversal/quote identity on those networks.
 - Display-read audit: usePocketBscBalances shares its owner-scoped cache and bsc-account endpoint; production bsc-account uses readBscDisplayBalances (OKX first, bounded cache, RPC fallback). Fresh execution balance reads are separate. No direct RPC balance calls found in the inspected client balance hooks.
 
+
+## Privy cause investigation, read-only
+
+- Inspected authenticated Privy fee sponsorship dashboard without opening API-key controls or modifying settings. Gas sponsorship enabled; BNB Smart Chain and X Layer selected; displayed credits remaining $24.69. Client sponsorship disabled, consistent with the server-authenticated dispatch. Privy swap-provider-fee sponsorship disabled; this app's cross bridge calls Relay directly, so that toggle is not its execution path.
+- Server-side GET wallet returned HTTP 200 in 310 ms, exact saved ID/address binding, active Ethereum wallet, owner present, zero wallet policy IDs and zero additional signers. This verifies current read access and wallet configuration, not the original authorization signature.
+- BNB RPC read-only chain check and USDC balance check returned HTTP 200 in 53/30 ms. Correct chain and current balance covering original total. These are current checks, not historical balance proof.
+- No records existed for shared X Layer, BNB swap or BNB cross-bridge sponsorship halt keys. Current blocker is the unknown earlier submission, not a persisted cost-overrun halt.
+- Historical timing logs: prepare 11165 ms, submit 11703 ms. Saved quote lifetime 43930 ms, only 786 ms remaining at submitting reservation. The subsequent wallet lookup adds latency before the provider HTTP request. Original provider response was not logged by that revision, so request_expired remains the leading supported hypothesis, not a confirmed rejection.
+- Privy public status history showed no reported incident at the attempt time; recent Nov 3 webhook/action incident had resolved before this Nov 5 attempt. Absence of a public incident does not rule out an individual request failure.
+- Official current request-expiry documentation confirms rejection if the received deadline is in the past. Official wallet_sendCalls response schema matches our expected data.transaction_id and data.caip2 shape.
+- No credentials, authorization signatures or raw provider errors were printed. Credential values stayed inside the server process. No transaction submitted or replayed, no historical status changed.
