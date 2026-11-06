@@ -1,4 +1,5 @@
 import {readDurableJson} from '../render-durable-store.js'
+import {crossBridgeReservationReleased} from './cross-bridge-release.js'
 import {crossBridgeJournalKey} from './cross-bridge-reservation.js'
 import type {CrossBridgeJournal} from './cross-bridge-reservation-guard.js'
 import {openCrossBridgeReview} from './cross-bridge-review.js'
@@ -11,7 +12,7 @@ import type {Hex} from 'viem'
 const defaults={read:()=>readDurableJson<CrossBridgeJournal>(crossBridgeJournalKey()),now:Date.now,open:openCrossBridgeReview,source:readCrossBridgePrivySource,prices:readCrossBridgePrices}
 const unresolved=():never=>{throw Object.assign(Error('Your previous bridge is still being confirmed. Check Activity.'),{status:409,code:'previous_bridge_pending'})}
 function coverageRecords(journal:CrossBridgeJournal|undefined,now:number,wallet?:string){
- return Object.values(journal?.crossBridge??{}).filter(r=>['bsc','xlayer'].includes(r.source)&&Number(r.createdAt)>=now-28*86400000&&(!wallet||r.walletAddress.toLowerCase()===wallet.toLowerCase())&&!['prepared','cancelled','not_submitted'].includes(r.state))
+ return Object.values(journal?.crossBridge??{}).filter(r=>['bsc','xlayer'].includes(r.source)&&Number(r.createdAt)>=now-28*86400000&&(!wallet||r.walletAddress.toLowerCase()===wallet.toLowerCase())&&!['prepared','cancelled','not_submitted'].includes(r.state)&&!crossBridgeReservationReleased(journal,r,now))
 }
 /** Cheap early check before requesting a new paid route. Execution still runs
  * the full billing/proof guard; this read never authorizes a transaction. */

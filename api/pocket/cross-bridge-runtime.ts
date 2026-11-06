@@ -1,5 +1,6 @@
 import {formatUnits,type Hex} from 'viem'
 import {readManualBridgeRetry,retryScope} from './cross-bridge-manual-retry.js'
+import {crossBridgeReservationReleased} from './cross-bridge-release.js'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {crossBridgeJournalKey,crossBridgeReservationStore} from './cross-bridge-reservation.js'
 import type {CrossBridgeJournal} from './cross-bridge-reservation-guard.js'
@@ -18,7 +19,7 @@ import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
 import {crossBridgeSelectionKey} from '../../src/pocket/lib/pocketCrossBridgeSelection.js'
 import type {CrossBridgeOperation} from './cross-bridge-operations.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
-export async function listCrossBridgeOperations(owner:string){const journal=await readDurableJson<CrossBridgeJournal>(crossBridgeJournalKey());return Object.values(journal?.crossBridge??{}).filter(r=>r.ownerId===owner&&typeof r.quoteToken==='string').sort((a,b)=>Number(b.updatedAt)-Number(a.updatedAt)) as CrossBridgeOperation[]}
+export async function listCrossBridgeOperations(owner:string,blockingOnly=false){const journal=await readDurableJson<CrossBridgeJournal>(crossBridgeJournalKey());return Object.values(journal?.crossBridge??{}).filter(r=>r.ownerId===owner&&typeof r.quoteToken==='string'&&(!blockingOnly||!crossBridgeReservationReleased(journal,r))).sort((a,b)=>Number(b.updatedAt)-Number(a.updatedAt)) as CrossBridgeOperation[]}
 export function crossBridgePreview(r:Review){const q=r.quote,i=q.input,route=r.route;return {...(route.conversion?{conversion:{from:i.from,via:'USDC' as const}}:{}),id:q.id,rail:'cross',execution:q.wallets.source.provider,selectionKey:crossBridgeSelectionKey(i),source:i.source,destination:i.destination,asset:i.from,destinationAsset:i.to,walletAddress:i.sender,destinationAddress:i.recipient,amount:formatUnits(BigInt(i.amountUnits),route.tokenIn.decimals),receive:formatUnits(BigInt(route.receiveUnits),route.tokenOut.decimals),minimumReceive:formatUnits(BigInt(route.minimumUnits),route.tokenOut.decimals),fee:formatUnits(BigInt(q.reimbursementUnits),route.tokenIn.decimals),total:formatUnits(BigInt(q.totalUnits),route.tokenIn.decimals),expiresAt:q.expiresAt}}
 export type CrossBridgeResponse={ok:boolean;quote:ReturnType<typeof crossBridgePreview>;quoteToken:string;status:string;deliveryObserved?:boolean;deliveryConfirmed?:boolean;challengeId?:string;txHash?:string;destinationTxHash?:string;amountOut?:string;refundAsset?:string;refundAmount?:string;refundNetwork?:string;refundTxHash?:string}
 export async function crossBridgeResponse(op:CrossBridgeOperation):Promise<CrossBridgeResponse>{
@@ -47,7 +48,7 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
  await checkXLayerBillingCoverage(q.wallets.source.address,{manualCrossBridgeException:manual?.originalId})
  const haltKey='pocket:cross-bridge-billing-halt:v1:'+source
  if(await readDurableJson(haltKey))throw Error('Bridge sponsorship is paused for fee reconciliation.')
- const ops=(await listCrossBridgeOperations(q.ownerId)).filter(o=>o.id!==q.id&&o.id!==manual?.originalId&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.createdAt>=Date.now()-28*86400000&&!['prepared','cancelled','not_submitted'].includes(o.state))
+ const ops=(await listCrossBridgeOperations(q.ownerId,true)).filter(o=>o.id!==q.id&&o.id!==manual?.originalId&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.createdAt>=Date.now()-28*86400000&&!['prepared','cancelled','not_submitted'].includes(o.state))
  if(!ops.length)return
  if(ops.some(o=>!['completed','refunded','source_failed'].includes(o.state)||!o.transactionId||!o.sourceHash))throw Error('Previous bridge billing is still being verified.')
  const appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||''

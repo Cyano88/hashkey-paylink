@@ -81,3 +81,10 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Owner requested removing the old BNB block, then redirected to an on-chain cancellation before any release code or journal mutation. No administrative release was implemented or activated.
 - Read-only Privy wallet transaction query returned HTTP 200 but did not identify the old attempt or its nonce. This index also omits the known successful outgoing retry, so absence cannot prove the old attempt was never submitted.
 - Official Privy replacement documentation requires the original nonce (https://docs.privy.io/recipes/speeding-up-transactions); wallet_sendCalls request schema does not document a nonce override. No verified cancellation target is currently available. No replacement, self-transfer, replay or key export was performed. Provider-side identification remains needed before attempting cancellation.
+
+## Owner-authorized BNB incident release
+
+- Owner renewed removal instruction after cancellation proved unidentifiable: "if so remove". Scope is removal of the old BNB spending block, not cancellation, deletion, success or failure fabrication.
+- Added operator-only crossBridgeReleases journal records bound to operation ID, owner, BNB wallet, expired quote fingerprint and approval time. No public release endpoint. Other reservations remain blocking. Any provider reference, changed state or explicit revocation disables the exception automatically.
+- Shared wallet reservation, early bridge readiness, fee coverage and route policy all recognize the same validated release. Unknown fees receive no invented credit; normal combined invoice comparison and billing halts remain active. Recovery and ordinary operation listing retain the original record.
+- Tested exact and invalid grants, revocation, other pending actions, discovered references, immutable evidence, existing reservation/coverage and focused TypeScript. Deployment alone does not activate a release.
