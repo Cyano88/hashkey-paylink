@@ -29,6 +29,23 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
  assert.equal(charged.expiresAt,route.expiresAt,'15-second-old price must not shorten a freshly verified executable route')
  const saved=await createCrossBridgeReview({wallets,input:i,providerQuote:q,appFee:null,...charged},{secret,now:time}),review=await openCrossBridgeReview(saved.quoteToken,'fixture',{secret,now:time})
 
+ // Slow historical billing must overlap fresh reads, never bypass ownership
+ // or allow the preflight to resolve before the billing decision.
+ {
+  let releaseWallet,releasePolicy,enteredEstimate,completed=false,readsStarted=0
+  const walletGate=new Promise(resolve=>{releaseWallet=resolve}),policyGate=new Promise(resolve=>{releasePolicy=resolve}),estimateStarted=new Promise(resolve=>{enteredEstimate=resolve})
+  const concurrent=crossBridgePreflight('request-only',async()=>policyGate,env,{now:()=>time,revalidate:async()=>walletGate,readers:()=>({...readers,balance:async()=>{readsStarted++;return balance},estimate:async(...args)=>{readsStarted++;enteredEstimate();return readers.estimate(...args)}})})
+  const check=concurrent(review).then(()=>{completed=true})
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(readsStarted,0,'ownership must precede balance/simulation')
+  releaseWallet();let deadline
+  try{await Promise.race([estimateStarted,new Promise((_,reject)=>{deadline=setTimeout(()=>reject(Error('billing serialized fresh reads')),1500)})]);assert(!completed,'billing must complete before preflight passes')}
+  finally{clearTimeout(deadline);releasePolicy()}
+  await check;assert(completed);assert.equal(readsStarted,2)
+  await assert.rejects(()=>crossBridgePreflight('request-only',async()=>{throw Error('billing blocked')},env,{now:()=>time,revalidate:async()=>{},readers:()=>readers})(review),/billing blocked/)
+  let forbiddenReads=0
+  await assert.rejects(()=>crossBridgePreflight('request-only',async()=>{},env,{now:()=>time,revalidate:async()=>{throw Error('wallet changed')},readers:()=>{forbiddenReads++;return readers}})(review),/wallet changed/)
+  assert.equal(forbiddenReads,0)
+ }
  // Integrated runtimes delegate to the real shared preflight exactly once.
  // Standalone callers retain their own wallet check. A changed wallet must
  // still stop preparation before any reservation or provider dispatch.

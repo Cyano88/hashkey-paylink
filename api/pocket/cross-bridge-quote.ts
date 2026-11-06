@@ -64,7 +64,10 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
  const {quote:q,route,charged}=review
  const fresh=()=>{if(q.expiresAt<=d.now())throw Error('Bridge quote expired. Review again.')};fresh();assertCrossBridgeRollout(q.input.source,q.input.destination)
  if(q.reimbursementRecipient!==crossBridgeReimbursementRecipient(q.input.source,env)||JSON.stringify(q.appFee)!==JSON.stringify(relayBridgeAppFee(env)))throw Error('Bridge fee policy changed.')
- await Promise.all([d.revalidate(q.wallets),guard(review)])
+ const durations:Record<string,number>={},started=Date.now()
+ const measured=async<T>(stage:string,read:()=>Promise<T>)=>{const start=Date.now();try{return await read()}finally{durations[stage]=Date.now()-start}}
+ const freshReads=async()=>{
+ await measured('walletMs',()=>d.revalidate(q.wallets))
  const readers=d.readers(q.wallets,q.input.from,userToken,env)
  // Only a combined, request-scoped Circle prepare/submit can reuse its own
  // identical estimate. Ownership, balance, policy and expiry are still checked.
@@ -72,7 +75,13 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
   if(reuseEstimateMs>0&&recent?.id===q.id&&recent.planHash===charged.planHash&&d.now()-recent.at<Math.min(reuseEstimateMs,2000)&&recent.cost.expiresAt>d.now())return recent.cost
   const cost=await readers.estimate(charged.plan,charged.planHash);recent={id:q.id,planHash:charged.planHash,at:d.now(),cost};return cost
  }
- const [balance,cost]=await Promise.all([readers.balance(),estimate()])
+ return Promise.all([measured('balanceMs',()=>readers.balance()),measured('estimateMs',estimate)])
+ }
+ // Billing and simulation are independent read/check paths. Verify wallet
+ // ownership before balance/simulation, and require BOTH paths before reserve
+ // or dispatch. Slow historical billing must not serialize the current reads.
+ const [,[balance,cost]]=await Promise.all([measured('policyMs',()=>guard(review)),freshReads()])
+ if(env.NODE_ENV==='production')console.info('pocket_bridge_preflight_timing',JSON.stringify({id:q.id,source:q.input.source,...durations,totalMs:Date.now()-started}))
  const manual=q.wallets.source.provider==='privy'?await d.manualRetry(retryScope(q)):undefined
  if(balance<charged.totalUnits+(manual?.reservedUnits??0n))throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  fresh()
