@@ -114,6 +114,7 @@ import pocketStockNotificationsHandler from './api/pocket/xstocks-notifications.
 import { drainStockNotifications } from './api/pocket/xstocks-notifications-store.js'
 import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
 import pocketStockPricesHandler from './api/pocket/xstocks-prices.js'
+import pocketStockHistoryHandler from './api/pocket/xstocks-history.js'
 import pocketStockSwapHandler from './api/pocket/xstocks-swap.js'
 import pocketXLayerSponsorshipHandler from './api/pocket/xlayer-sponsorship.js'
 import pocketArcSwapHandler from './api/pocket/arc-swap.js'
@@ -417,6 +418,7 @@ app.all('/api/pocket/earn/earnings', readLimiter, pocketEarnEarningsHandler)
 app.all('/api/pocket/xstocks/notifications', (req,res,next) => (req.method === 'GET' ? readLimiter : strictLimiter)(req,res,next), pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
 app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
+app.get('/api/pocket/xstocks/history', readLimiter, pocketStockHistoryHandler)
 app.all('/api/pocket/xstocks/swap', exchangeLimiter, pocketStockSwapHandler)
 app.post('/api/pocket/xlayer/sponsorship', exchangeLimiter, pocketXLayerSponsorshipHandler)
 app.all('/api/pocket/arc-swap',          exchangeLimiter, pocketArcSwapHandler)
