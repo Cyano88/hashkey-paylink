@@ -101,7 +101,7 @@ export function createXLayerBillingGuard(d:{
 // detected shortfall; it is not a hard provider spend cap or zero-loss promise.
 let receiptEndpoint:string|undefined
 let sharedReceiptReader=createBillingReceiptReader()
-export async function checkXLayerBillingCoverage(wallet?:string,options?:{reuseReceipts?:boolean}){
+export async function checkXLayerBillingCoverage(wallet?:string,options?:{reuseReceipts?:boolean;manualCrossBridgeException?:string}){
  if(process.env.POCKET_XLAYER_FEE_POLICY!=='observed_cost')return
  const env=process.env,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID,secret=env.PRIVY_APP_SECRET,url=env.PRIVATE_RPC_URL_XLAYER
  if(!appId||!secret||!url)return unavailable()
@@ -114,7 +114,7 @@ export async function checkXLayerBillingCoverage(wallet?:string,options?:{reuseR
    const ops=Object.values(store?.operations||{})
    const payments=Object.values((await readDurableJson<BscPaymentOperationStore>('pocket:bsc-payment-operations:v1'))?.operations||{})
    const sends=Object.values((await readDurableJson<BscSendOperationStore>('pocket:bsc-send-operations:v1'))?.operations||{})
-   const cross=await crossBridgeCollectedCoverage(wallet)
+   const cross=await crossBridgeCollectedCoverage(wallet,{},options?.manualCrossBridgeException)
    if(!ops.length&&!payments.length&&!sends.length)return cross
    const runtime=createBscRuntime(),context={now:Date.now(),rpc:runtime.rpc,prices:runtime.readPrices}
    return [...cross,...await bscCollectedCoverage(ops,context,wallet),...await bscPaymentCoverage(payments,context,wallet),...await bscSendCoverage(sends,context,wallet)]

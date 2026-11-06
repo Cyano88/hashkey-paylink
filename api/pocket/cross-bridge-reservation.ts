@@ -1,4 +1,5 @@
 import {xlayerReservationFinalized} from './xlayer-reservation-finality.js'
+import {bindManualBridgeRetry} from './cross-bridge-manual-retry.js'
 import type {PoolClient} from 'pg'
 import {withDurablePostgresTransaction,readDurableJson} from '../render-durable-store.js'
 export const crossBridgeJournalKey=()=> (process.env.CIRCLE_POCKET_ACTION_STORE_KEY??'hashpaylink:circle-pocket-actions').trim()
@@ -47,7 +48,8 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
   if(reserve){
    if(!before&&next.state!=='prepared')invalid()
    const scope={network:next.source,address:next.walletAddress,ownerId:next.ownerId}
-   assertNoCrossBridgeReservation(journal,scope,now(),id)
+   const manualException=bindManualBridgeRetry(journal,next,now())
+   assertNoCrossBridgeReservation(journal,scope,now(),id,manualException)
    for(const r of Object.values(journal.actions??{}))if(walletReservationActions.has(r.action)&&['started','submitted'].includes(r.status)&&r.ownerId===next.ownerId&&(!r.metadata?.source&&!r.metadata?.network||(r.metadata.source||r.metadata.network)===next.source)&&(!r.metadata?.walletAddress||same(next.source,r.metadata.walletAddress,next.walletAddress)))busy()
    for(const bucket of Object.values(journal.circleKit??{}))for(const op of Object.values(bucket.operations??{}) as any[]){
     if(['cancelled','not_submitted'].includes(op.state)||op.state==='prepared'&&op.quote.expiresAt<=now())continue

@@ -17,6 +17,7 @@ import {relayBridgeAppFee} from './relay-bridge-app-fee.js'
 import {crossBridgeAsset,assertCrossBridgeRollout} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import {quoteBridgeMaximum} from './bridge-max-quote.js'
 import {assertCrossBridgeCoverageReady} from './cross-bridge-coverage.js'
+import {readManualBridgeRetry,retryScope} from './cross-bridge-manual-retry.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string,userToken:string,env:NodeJS.ProcessEnv=process.env){
  const source=wallets.source.network,token=crossBridgeAsset(source,asset)
@@ -35,7 +36,9 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  if(input.from==='EURC'&&env.POCKET_CROSS_EURC_ENABLED==='false')throw Object.assign(Error('Combined EURC bridges are not enabled yet.'),{status:409,code:'eurc_bridge_not_enabled'})
  assertCrossBridgeRollout(input.source,input.destination)
  const wallets=await resolveCrossBridgeWallets(input.ownerId,input.source,input.destination),readers=crossBridgeReaders(wallets,input.from,input.circleUserToken||'',env)
- if(wallets.source.provider==='privy')await assertCrossBridgeCoverageReady(wallets.source.address)
+ const manual=wallets.source.provider==='privy'?await readManualBridgeRetry({ownerId:input.ownerId,source:input.source,walletAddress:wallets.source.address,from:input.from,destination:input.destination,to:input.to,...(!input.maximum?{amountUnits:input.amountUnits}:{})}):undefined
+ if(wallets.source.provider==='privy')await assertCrossBridgeCoverageReady(wallets.source.address,{},manual?.originalId)
+ if(manual){const balance=readers.balance;readers.balance=async()=>{const units=await balance();return units> manual.reservedUnits?units-manual.reservedUnits:0n}}
  const quote=async(amountUnits:bigint)=>{
   const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address}
   const appFee=relayBridgeAppFee(env)
@@ -56,7 +59,7 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  if(!/^[1-9]\d{0,38}$/.test(input.amountUnits))throw Error('Enter a valid bridge amount.')
  return (await quote(BigInt(input.amountUnits))).quote
 }
-const preflightDefaults={now:Date.now,readers:crossBridgeReaders,revalidate:revalidateCrossBridgeWallets}
+const preflightDefaults={now:Date.now,readers:crossBridgeReaders,revalidate:revalidateCrossBridgeWallets,manualRetry:readManualBridgeRetry}
 export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Promise<void>,env:NodeJS.ProcessEnv=process.env,overrides:Partial<typeof preflightDefaults>={},reuseEstimateMs=0){const d={...preflightDefaults,...overrides};let recent:{id:string;planHash:string;at:number;cost:CrossBridgeCost}|undefined;return async(review:Review)=>{
  const {quote:q,route,charged}=review
  const fresh=()=>{if(q.expiresAt<=d.now())throw Error('Bridge quote expired. Review again.')};fresh();assertCrossBridgeRollout(q.input.source,q.input.destination)
@@ -70,7 +73,8 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
   const cost=await readers.estimate(charged.plan,charged.planHash);recent={id:q.id,planHash:charged.planHash,at:d.now(),cost};return cost
  }
  const [balance,cost]=await Promise.all([readers.balance(),estimate()])
- if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
+ const manual=q.wallets.source.provider==='privy'?await d.manualRetry(retryScope(q)):undefined
+ if(balance<charged.totalUnits+(manual?.reservedUnits??0n))throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  fresh()
  if(cost.expiresAt<=d.now())throw Object.assign(Error('Bridge cost expired. Review again.'),{status:409,code:'bridge_review_invalid'})
  const policy=crossBridgeConfiguredPolicy(q.input.source,q.input.from,cost.assetPrice,env),price=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy,d.now())

@@ -47,3 +47,13 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Privy public status history showed no reported incident at the attempt time; recent Nov 3 webhook/action incident had resolved before this Nov 5 attempt. Absence of a public incident does not rule out an individual request failure.
 - Official current request-expiry documentation confirms rejection if the received deadline is in the past. Official wallet_sendCalls response schema matches our expected data.transaction_id and data.caip2 shape.
 - No credentials, authorization signatures or raw provider errors were printed. Credential values stayed inside the server process. No transaction submitted or replayed, no historical status changed.
+
+## Explicitly authorized bounded manual retry
+
+- User requested clearing the blocker and retrying. After being told that original execution remains unknown and both payments could execute, user explicitly accepted the manual override. Preserve the original operation as submitting; do not invent cancellation or failure.
+- Added operator-only journal grants with owner, source wallet, exact source/destination/assets, principal/total caps, and expiry of at most one hour. No public endpoint creates these grants.
+- Grant binds to one prepared operation under the existing journal transaction, and is consumed on its submitting reservation. Other callers retain the original execution lock. An expired/cancelled unsigned preparation may be replaced; a consumed grant cannot authorize a different operation.
+- The specific original operation is excluded only from this retry's billing evidence prerequisite. Existing invoice comparison, other unresolved operations, ownership, fee ceilings, PIN/signature, expiry, and shared locks remain enforced.
+- Original full debit remains reserved in both retry quote affordability and fresh execution balance checks. For this incident, intended test is BNB USDC -> Arbitrum USDC, principal <= 0.20 USDC and total <= 0.30 USDC; original reserve 0.094350214389091603 USDC.
+- Verification passed: manual-retry scope/caps/expiry/concurrent winner/consumption/original preservation; existing reservation and coverage suites; shared billing suite; Privy runtime/API; 26 source/assets preflight plus combined-balance boundary; focused backend TypeScript.
+- Deployment and activation are separate: code alone grants no exception. No transaction sent by these tests.

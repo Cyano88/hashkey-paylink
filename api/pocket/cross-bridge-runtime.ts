@@ -1,4 +1,5 @@
 import {formatUnits,type Hex} from 'viem'
+import {readManualBridgeRetry,retryScope} from './cross-bridge-manual-retry.js'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {crossBridgeJournalKey,crossBridgeReservationStore} from './cross-bridge-reservation.js'
 import type {CrossBridgeJournal} from './cross-bridge-reservation-guard.js'
@@ -42,10 +43,11 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
  if(!crossBridgeEnabled(q.ownerId,env))throw Error('This bridge is not enabled for this account.')
  if(q.wallets.source.provider!=='privy')return
  if(env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED!=='true'&&env.POCKET_PRIVY_COMBINED_BILLING_ENABLED!=='true')throw Error('Bridge sponsorship billing is unavailable.')
- await checkXLayerBillingCoverage(q.wallets.source.address)
+ const manual=await readManualBridgeRetry(retryScope(q))
+ await checkXLayerBillingCoverage(q.wallets.source.address,{manualCrossBridgeException:manual?.originalId})
  const haltKey='pocket:cross-bridge-billing-halt:v1:'+source
  if(await readDurableJson(haltKey))throw Error('Bridge sponsorship is paused for fee reconciliation.')
- const ops=(await listCrossBridgeOperations(q.ownerId)).filter(o=>o.id!==q.id&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.createdAt>=Date.now()-28*86400000&&!['prepared','cancelled','not_submitted'].includes(o.state))
+ const ops=(await listCrossBridgeOperations(q.ownerId)).filter(o=>o.id!==q.id&&o.id!==manual?.originalId&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.createdAt>=Date.now()-28*86400000&&!['prepared','cancelled','not_submitted'].includes(o.state))
  if(!ops.length)return
  if(ops.some(o=>!['completed','refunded','source_failed'].includes(o.state)||!o.transactionId||!o.sourceHash))throw Error('Previous bridge billing is still being verified.')
  const appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||''

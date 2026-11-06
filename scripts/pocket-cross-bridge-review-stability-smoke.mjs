@@ -35,6 +35,12 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
  }
 
  await assert.rejects(()=>quoteCrossBridgeCharges(route,wallets,crossBridgeReimbursementRecipient(source,env),policy,{...readers,balance:async()=>BigInt(i.amountUnits),estimate:async()=>{throw Error('RPC simulation reverted: insufficient balance')},now:()=>time}),e=>e.code==='insufficient_balance'&&typeof e.maximumAmountUnits==='string','Max must receive affordability hint even when concurrent gas simulation rejects first')
+ if(source==='bsc'&&asset.symbol==='USDC'){
+  const reserved=94350214389091603n;
+  const retry=crossBridgePreflight('request-only',async()=>{},env,{now:()=>time,revalidate:async()=>{},readers:()=>readers,manualRetry:async()=>({originalId:'old',reservedUnits:reserved,grant:{}})})
+  balance=charged.totalUnits+reserved-1n;await assert.rejects(()=>retry(review),e=>e.code==='insufficient_balance','manual retry must leave the original full debit reserved')
+  balance=charged.totalUnits+reserved;await retry(review);balance=10n**35n
+ }
  const before=JSON.stringify(review.quote)
  let guards=0
  const preflight=crossBridgePreflight('request-only',async()=>{guards++},env,{now:()=>time,revalidate:async()=>{},readers:()=>readers})
