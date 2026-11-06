@@ -9,6 +9,7 @@ type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 type Chain='ethereum'|'base'|'arbitrum'|'polygon'|'arc'
 type Binding={chain:Chain;userToken:string;walletId:string;walletAddress:string;refId:string}
 type Dependencies={
+ preflightRevalidatesWallets?:boolean;
  durable():boolean;now():number;open:typeof openCrossBridgeReview;
  wallets:typeof revalidateCrossBridgeWallets;approve:typeof consumePocketPaymentApproval;
  store?:CrossBridgeOperationDependencies['store'];
@@ -41,7 +42,7 @@ export function createCrossBridgeCircleRuntime(ownerId:string,userToken:string,p
  const service=createCrossBridgeOperations({store:d.store,now:d.now,
   open:async(token,owner,recovery)=>{ready();if(owner!==ownerId)throw Error('Bridge owner mismatch.');const r=await d.open(token,owner,{recovery,now:d.now()});binding(r);return r},
   approve:(owner,approval)=>d.approve(approval,owner,d.now()),
-  preflight:async r=>{binding(r);await d.wallets(r.quote.wallets);await preflight(r)},
+  preflight:async r=>{binding(r);if(!d.preflightRevalidatesWallets)await d.wallets(r.quote.wallets);await preflight(r)},
   dispatch:async(r,op,authorization)=>{
    if(authorization!==userToken||op.id!==r.quote.id)throw Error('Bridge authorization changed.')
    await d.wallets(r.quote.wallets)

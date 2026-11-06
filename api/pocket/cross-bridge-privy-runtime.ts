@@ -17,7 +17,7 @@ export function crossBridgePrivyRequest(r:Review,appId:string){
  if(source!=='bsc'&&source!=='xlayer'||q.wallets.source.provider!=='privy'||plan.kind!=='evm'||!providerId(q.wallets.source.walletId)||! /^[a-zA-Z0-9]{1,128}$/.test(appId))return fail()
  return {version:1 as const,method:'POST' as const,url:'https://api.privy.io/v1/wallets/'+q.wallets.source.walletId+'/rpc',headers:{'privy-app-id':appId,'privy-idempotency-key':q.id,'privy-request-expiry':String(q.expiresAt)},body:{chain_type:'ethereum',method:'wallet_sendCalls',caip2:'eip155:'+inboundChains[source].id,sponsor:true,params:{calls:plan.calls.map(c=>({to:c.target,data:c.data,value:'0x'+c.value.toString(16)}))}}}
 }
-export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review)=>Promise<void>,options:{env?:NodeJS.ProcessEnv;fetcher?:typeof fetch;overrides?:Partial<CrossBridgeOperationDependencies>&{durable?:()=>boolean;wallets?:typeof revalidateCrossBridgeWallets;source?:typeof readCrossBridgePrivySource}}={}){
+export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review)=>Promise<void>,options:{preflightRevalidatesWallets?:boolean;env?:NodeJS.ProcessEnv;fetcher?:typeof fetch;overrides?:Partial<CrossBridgeOperationDependencies>&{durable?:()=>boolean;wallets?:typeof revalidateCrossBridgeWallets;source?:typeof readCrossBridgePrivySource}}={}){
  const env=options.env??process.env,fetcher=options.fetcher??fetch,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||'',o=options.overrides??{}
  if(!ownerId||ownerId.length>256||!appId||!secret||typeof preflight!=='function')throw Error('Authenticated sponsored bridge context is required.')
  const ready=()=>{if(!(o.durable??hasRenderDurableStore)())throw Error('Bridge recovery storage is unavailable.')}
@@ -25,7 +25,7 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
  const headers={'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')}
  const open=async(token:string,owner:string,recovery:boolean)=>{ready();if(owner!==ownerId)return fail();const r=await (o.open??((t,id,recover)=>openCrossBridgeReview(t,id,{recovery:recover,now:now()})))(token,owner,recovery);crossBridgePrivyRequest(r,appId);return r}
  const service=createCrossBridgeOperations({store:o.store,now,open,approve:o.approve??((owner,approval)=>consumePocketPaymentApproval(approval,owner,now())),
-  preflight:async r=>{await wallets(r.quote.wallets);await preflight(r)},
+  preflight:async r=>{if(!options.preflightRevalidatesWallets)await wallets(r.quote.wallets);await preflight(r)},
   dispatch:async(r,op,authorization)=>{
    // The reservation is already submitting, but no provider request exists yet.
    // Failure or expiry in these local checks must not become an unknown send.

@@ -4,6 +4,9 @@ import {fixture,now} from './fixtures/cross-bridge.mjs'
 import {CROSS_BRIDGE_NETWORKS,crossBridgeAssets} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
 import {crossBridgeConfiguredPolicy} from '../api/pocket/cross-bridge-policy.ts'
 import {crossBridgePreflight} from '../api/pocket/cross-bridge-quote.ts'
+import {createCrossBridgeCircleRuntime} from '../api/pocket/cross-bridge-circle-runtime.ts'
+import {createCrossBridgePrivyRuntime} from '../api/pocket/cross-bridge-privy-runtime.ts'
+import {createCrossBridgeSolanaRuntime} from '../api/pocket/cross-bridge-solana-runtime.ts'
 import {quoteCrossBridgeCharges,crossBridgeReimbursementRecipient} from '../api/pocket/cross-bridge-reimbursement.ts'
 import {createCrossBridgeReview,openCrossBridgeReview} from '../api/pocket/cross-bridge-review.ts'
 import {validateCrossBridgeRelayQuote} from '../api/pocket/cross-bridge-provider.ts'
@@ -15,7 +18,7 @@ const env={POCKET_SWAP_QUOTE_SECRET:secret,POCKET_CROSS_BRIDGE_MIN_FEE_USD_MICRO
 let cases=0
 for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(source)){
  const destination=source==='base'?'polygon':'base',{q,i}=fixture(source,destination,asset.symbol,'USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
- const wallets={ownerId:'fixture',source:{network:source,provider:['bsc','xlayer'].includes(source)?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:'circle',walletId:'destination',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
+ const wallets={ownerId:'fixture',source:{network:source,provider:['bsc','xlayer'].includes(source)?'privy':'circle',walletId:'sourcewalletfixture',address:i.sender},destination:{network:destination,provider:'circle',walletId:'destination',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
  let time=now,gas=1000000n,priceAge=15000,delay=0,balance=10n**35n
  const price=()=>({scaled8:100000000n,observedAt:time-priceAge})
  const policy=crossBridgeConfiguredPolicy(source,asset.symbol,price(),env)
@@ -25,6 +28,23 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
  const charged=await quoteCrossBridgeCharges(route,wallets,crossBridgeReimbursementRecipient(source,env),policy,{...readers,now:()=>time})
  assert.equal(charged.expiresAt,route.expiresAt,'15-second-old price must not shorten a freshly verified executable route')
  const saved=await createCrossBridgeReview({wallets,input:i,providerQuote:q,appFee:null,...charged},{secret,now:time}),review=await openCrossBridgeReview(saved.quoteToken,'fixture',{secret,now:time})
+
+ // Integrated runtimes delegate to the real shared preflight exactly once.
+ // Standalone callers retain their own wallet check. A changed wallet must
+ // still stop preparation before any reservation or provider dispatch.
+ for(const delegated of [false,true])for(const changed of [false,true]){
+  let validations=0,wrapperChecks=0;const rows=new Map()
+  const validate=async()=>{validations++;if(changed)throw Error('wallet changed')}
+  const shared=crossBridgePreflight('request-only',async()=>{},env,{now:()=>time,revalidate:validate,readers:()=>readers})
+  const deps={preflightRevalidatesWallets:delegated,now:()=>time,durable:()=>true,approve:async()=>true,
+   wallets:async()=>{wrapperChecks++;await validate()},
+   open:async()=>review,
+   store:{read:async id=>structuredClone(rows.get(id)),mutate:async(id,fn)=>{const next=fn(structuredClone(rows.get(id)));rows.set(id,next);return structuredClone(next)}},
+   prepare:async()=>{throw Error('fixture reached transaction preparation')}}
+  const runtime=source==='solana'?createCrossBridgeSolanaRuntime('fixture','request-only',shared,deps):wallets.source.provider==='privy'?createCrossBridgePrivyRuntime('fixture',shared,{preflightRevalidatesWallets:delegated,env:{PRIVY_APP_ID:'fixtureapp',PRIVY_APP_SECRET:'fixture-secret'},overrides:deps}):createCrossBridgeCircleRuntime('fixture','request-only',shared,deps)
+  if(changed){await assert.rejects(()=>runtime.prepare(saved.quoteToken,'pin'),/wallet changed/);assert.equal(rows.size,0)}
+  else {if(source==='solana')await assert.rejects(()=>runtime.prepare(saved.quoteToken,'pin'),/fixture reached transaction preparation/);else await runtime.prepare(saved.quoteToken,'pin');assert.equal(validations,delegated?1:2);assert.equal(wrapperChecks,delegated?0:1)}
+ }
 
  // Combined Circle preparation reuses only this request's exact estimate for 2s.
  if(source==='arc'&&asset.symbol==='EURC'){

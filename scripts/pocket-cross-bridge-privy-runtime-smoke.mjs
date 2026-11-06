@@ -68,9 +68,10 @@ for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source
  time+=90000;assert.equal((await runtime().status(saved.quote.id)).sourceHash,sourceHash);assert.equal(proofs,1)
  await runtime().submit(saved.quote.id,'ephemeral-signature');assert.equal(sends,1);assert.equal((await runtime().cancel(saved.quote.id)).state,'submitted');assert(!JSON.stringify([...rows]).includes('ephemeral-signature'))
  await assert.rejects(()=>createCrossBridgePrivyRuntime('other',async()=>{},opts).read(saved.quote.id))
- for(const failure of ['wallet','expiry']){
+ for(const delegated of [false,true])for(const failure of ['wallet','expiry']){
   rows=new Map();time=now;let reads=0;const before=sends
-  const guarded=createCrossBridgePrivyRuntime('owner',async()=>{},{...opts,overrides:{...opts.overrides,wallets:async()=>{if(++reads===3){if(failure==='wallet')throw Error('lookup unavailable');time=saved.quote.expiresAt-4000}}}})
+  const validate=async()=>{if(++reads===3){if(failure==='wallet')throw Error('lookup unavailable');time=saved.quote.expiresAt-4000}}
+  const guarded=createCrossBridgePrivyRuntime('owner',delegated?validate:async()=>{},{...opts,preflightRevalidatesWallets:delegated,overrides:{...opts.overrides,wallets:validate}})
   await guarded.prepare(saved.quoteToken,'pin')
   assert.equal((await guarded.submit(saved.quote.id,'ephemeral-signature')).state,'not_submitted',failure+' before HTTP is proven unsent')
   assert.equal(sends,before,'no provider dispatch after '+failure)

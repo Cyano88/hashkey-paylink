@@ -58,7 +58,10 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
 }
 export function crossBridgeRuntime(review:Review,userToken:string,options:{reuseEstimateMs?:number}={}){
  const owner=review.quote.ownerId,preflight=crossBridgePreflight(userToken,crossBridgePolicyGuard,process.env,{},options.reuseEstimateMs)
- if(review.quote.input.source==='solana')return createCrossBridgeSolanaRuntime(owner,userToken,preflight)
- if(review.quote.wallets.source.provider==='privy')return createCrossBridgePrivyRuntime(owner,preflight)
- return createCrossBridgeCircleRuntime(owner,userToken,preflight)
+ // This shared preflight freshly validates both wallets on every invocation.
+ // Avoid a second sequential lookup in the wrapper; dispatch checks remain.
+ const validation={preflightRevalidatesWallets:true}
+ if(review.quote.input.source==='solana')return createCrossBridgeSolanaRuntime(owner,userToken,preflight,validation)
+ if(review.quote.wallets.source.provider==='privy')return createCrossBridgePrivyRuntime(owner,preflight,validation)
+ return createCrossBridgeCircleRuntime(owner,userToken,preflight,validation)
 }

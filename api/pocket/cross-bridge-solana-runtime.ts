@@ -17,12 +17,12 @@ const defaults={now:Date.now,durable:hasRenderDurableStore,store:crossBridgeRese
 }
 /** Raw Circle signing never broadcasts. Fully signed bytes are durably recorded
  * before broadcast; retries may only rebroadcast those identical bytes. */
-export function createCrossBridgeSolanaRuntime(ownerId:string,userToken:string,preflight:(r:Review)=>Promise<void>,overrides:Partial<Omit<typeof defaults,'store'>>&{store?:CrossBridgeOperationDependencies['store']}={}){
+export function createCrossBridgeSolanaRuntime(ownerId:string,userToken:string,preflight:(r:Review)=>Promise<void>,overrides:Partial<Omit<typeof defaults,'store'>>&{store?:CrossBridgeOperationDependencies['store'];preflightRevalidatesWallets?:boolean}={}){
  if(!ownerId||ownerId.length>256||userToken.length>8000||typeof preflight!=='function')return fail()
  const d={...defaults,...overrides},store=d.store!
  const ready=()=>{if(!d.durable())throw Error('Bridge recovery storage is unavailable.')}
  const open=async(token:string,owner:string,recovery:boolean)=>{ready();if(owner!==ownerId)return fail();const r=await d.open(token,owner,{recovery,now:d.now()});if(r.quote.input.source!=='solana'||r.quote.wallets.source.provider!=='circle'||r.charged.plan.kind!=='solana')return fail();return r}
- const service=createCrossBridgeOperations({store,now:d.now,open,approve:(owner,approval)=>d.approve(approval,owner,d.now()),preflight:async r=>{await d.wallets(r.quote.wallets);await preflight(r)},
+ const service=createCrossBridgeOperations({store,now:d.now,open,approve:(owner,approval)=>d.approve(approval,owner,d.now()),preflight:async r=>{if(!d.preflightRevalidatesWallets)await d.wallets(r.quote.wallets);await preflight(r)},
   dispatch:async(r,op,authorization)=>{
    if(authorization!==userToken||typeof op.solanaTransaction!=='string')return fail()
    validateCrossBridgeSolanaTransaction(r,op.solanaTransaction,op.solanaTransaction,false)

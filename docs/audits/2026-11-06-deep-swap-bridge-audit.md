@@ -67,3 +67,9 @@ An initial suspected pending-proof-to-zero-coverage issue was not reachable: the
 - Grant bound to the new operation and consumed at 1793945039678. Original 3dd3ff26-5413-48a3-95be-a1f4e007e178 remains submitting with no hash; no falsified terminal status.
 - Latest durable retry state source_confirmed with observed destination delivery. UI success/Completed receipt follows existing verified handoff presentation; destination finality and ledger publication continue in background, not claimed completed yet.
 - Live timings: quote 2161 ms, prepare 7885 ms, submit 16483 ms. These remain measured latency evidence for continued audit, not an instant-execution claim.
+
+## Follow-up latency correction
+
+- Verified duplicate wallet binding revalidation in each provider wrapper and the shared preflight. Production now delegates that check to shared preflight once per invocation, across Circle, Privy and Solana. This removes one sequential lookup from preparation and one from submission. Standalone runtimes retain their default check; dispatch/recovery checks remain unchanged. No wallet state is cached across requests.
+- Added 26 source/asset regression cases for delegated/default validation and changed-wallet rejection before reservation. Privy tests exercise final dispatch wallet failure and imminent expiry with both configurations. Circle runtime, Solana runtime and focused backend TypeScript also checked.
+- This removes verified redundant work; end-to-end latency improvement still requires a subsequent approved live transaction. No additional payment or manual override was initiated.
