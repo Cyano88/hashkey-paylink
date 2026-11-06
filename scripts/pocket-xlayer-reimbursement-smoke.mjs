@@ -36,8 +36,9 @@ for(const [asset,token] of [['USDC','0xb6ceceab302e2e4948951ee7843fc24e92933061'
  await assert.rejects(()=>quoteXLayerReimbursement(binding,calls,now+60000,async input=>({feeUnits:(decodeFunctionData({abi,data:input.calls.at(-1).data}).args[1]+1n).toString(),expiresAt:now+20000,estimateId:'rising'}),pricing,()=>now),/estimate changed/)
  await assert.rejects(()=>quoteXLayerReimbursement(binding,calls,now+60000,estimate,undefined,()=>now))
  for(const result of [{feeUnits:'1',expiresAt:now,estimateId:'expired'},{feeUnits:'1',expiresAt:now+20000,estimateId:''},{feeUnits:'bad',expiresAt:now+20000,estimateId:'bad'}])await assert.rejects(()=>refreshXLayerReimbursement(q,calls,async()=>result,()=>now))
+ const beforeFloor=count
  const floored=await quoteXLayerReimbursement(binding,calls,now+60000,estimate,{...pricing,minimumFeeUnits:'500'},()=>now)
- assert.equal(floored.networkFeeUnits,'500')
+ assert.equal(floored.networkFeeUnits,'500');assert.equal(count-beforeFloor,1,'fee-floor batch needs only one estimate')
 }
 console.log('PASS USDC/USDT full-batch reimbursement, exact treasury/total binding, owner and intent isolation, expiry, missing estimate and unstable fee rejection. This suite uses a synthetic estimator; no funds moved.')
 

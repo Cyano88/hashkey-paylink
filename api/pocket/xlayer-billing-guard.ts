@@ -20,6 +20,10 @@ export type XLayerCoverage={walletId:string;asset:XLayerFeeAsset;feeUnits:string
 type Attempt={wallet:string;at:number;hash?:string;transactionId?:string;coverage?:XLayerCoverage;providerFailure?:{status:number;code?:string}}
 type Halt={haltedAt:number;reason:'billed_cost_exceeds_coverage';billedUsdMicros:string;coverageUsdMicros:string}
 const key='pocket:xlayer-billing-halt:v1'
+/** Quote availability only; never authorizes spending. Full billing proof stays at submission. */
+export async function assertXLayerSponsorshipAvailable(){
+ if(await readDurableJson<Halt>(key))throw Object.assign(Error('X Layer sponsorship is paused for a fee review.'),{status:503})
+}
 const tokens=Object.fromEntries(Object.entries(xLayerFeeAssets).map(([asset,token])=>[asset,token.address])) as Record<XLayerFeeAsset,string>
 const abi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const unavailable=()=>{throw Object.assign(Error('X Layer sponsorship cost verification is temporarily unavailable.'),{status:503})}

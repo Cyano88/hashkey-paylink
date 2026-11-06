@@ -46,9 +46,9 @@ export async function quoteXLayerReimbursement(binding:XLayerFeeBinding,validate
  const issuedAt=now()
  if(!Number.isSafeInteger(providerExpiresAt)||providerExpiresAt<=issuedAt)invalid()
  const source=structuredClone(validatedCalls)
- let fee='1'
+ let fee=BigInt(policy.minimumFeeUnits)>0n?policy.minimumFeeUnits:'1'
  for(let pass=0;pass<4;pass++){
-  if(binding.feeFromOutput&&BigInt(fee)>=BigInt(binding.amountUnits))throw Object.assign(Error('Sale proceeds do not cover the network fee. Increase the sale amount.'),{status:422})
+  if(binding.feeFromOutput&&BigInt(fee)>=BigInt(binding.amountUnits))throw Object.assign(Error('This amount is too small to cover the network fee.'),{status:422})
   if(availableUnits!==undefined&&BigInt(binding.amountUnits)+(binding.merchantPaymentId?0n:BigInt(fee))>availableUnits)throw Object.assign(Error('Insufficient '+binding.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(binding.merchantPaymentId?availableUnits:availableUnits!>BigInt(fee)?availableUnits!-BigInt(fee):0n)})
   const calls=withReimbursement(source,binding.asset,fee,binding)
   const result=await estimate({...binding,calls:structuredClone(calls)})
@@ -57,7 +57,7 @@ export async function quoteXLayerReimbursement(binding:XLayerFeeBinding,validate
   const requiredFee=pricedFee(result.feeUnits,policy)
   if(BigInt(requiredFee)<=BigInt(fee)){
    const totalUnits=(BigInt(binding.amountUnits)+(binding.feeFromOutput?-BigInt(fee):binding.merchantPaymentId?0n:BigInt(fee))).toString()
-   if(binding.feeFromOutput&&BigInt(totalUnits)<=0n)throw Object.assign(Error('Sale proceeds do not cover the network fee. Increase the sale amount.'),{status:422})
+   if(binding.feeFromOutput&&BigInt(totalUnits)<=0n)throw Object.assign(Error('This amount is too small to cover the network fee.'),{status:422})
    if(!units(totalUnits))invalid()
    return {...binding,version:2,chainId:196,calls,networkFeeUnits:fee,totalUnits,issuedAt,expiresAt,estimateId:result.estimateId,pricing:policy}
   }
@@ -100,4 +100,3 @@ export async function refreshXLayerReimbursement(approved:XLayerFeeQuote,validat
  if(BigInt(pricedFee(result.feeUnits,approved.pricing))>BigInt(approved.networkFeeUnits))throw Error('Network fee increased. Review the updated transfer.')
  return structuredClone(approved)
 }
-
