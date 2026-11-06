@@ -169,6 +169,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
   const handler = async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store')
     let reserved = false
+    let stage = 'identity'
     try {
       if (req.method !== 'POST') throw fail('Method not allowed.', 405)
       const identity = await d.identity(req)
@@ -176,6 +177,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (!c.appId || !c.secret || !d.durable()) throw fail('Sponsored transfers are not available yet.', 503)
       const wallet = String(req.body?.wallet || '').toLowerCase()
       if (!isAddress(wallet)) throw fail('Invalid Pocket wallet.', 400)
+      stage = 'wallet_ownership'
       const user = await d.user(identity.userId, c)
       const linked = user.linkedAccounts.filter(a => a.type === 'wallet' && a.walletClientType === 'privy' && a.chainType === 'ethereum' && a.address.toLowerCase() === wallet)
       const embedded = linked[0] as { id?: string } | undefined
@@ -233,6 +235,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       let approved:XLayerFeeQuote|undefined
       let validated:ReturnType<typeof validateSponsoredRequest>|{id:string;canonical:ReturnType<typeof makeSponsoredBatchRequest>;wallet:string;token:string;units:bigint}
       if(req.body?.purpose==='swap'){
+        stage = 'swap_fee_verification'
         if(!d.reimbursement)throw fail('Swap fee service is temporarily unavailable.',503)
         const {q,fee}=await verifySponsoredSwap({routeToken:req.body.routeToken,feeToken:req.body.feeToken,ownerId:identity.userId,walletId:embedded.id,wallet},d.reimbursement.estimate,reserved)
         const canonical=makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:fee.intentId,expiresAt:fee.expiresAt,calls:fee.calls})
@@ -281,9 +284,11 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         const expectedPolicy=policy?{...policy,minimumFeeUnits:(BigInt(policy.minimumFeeUnits)*xLayerFeeScale(approved.asset)).toString()}:undefined
         if(!isDeepStrictEqual(approved.pricing,expectedPolicy))throw fail('Transfer fee policy changed. Review the transfer again.',422)
       }
+      stage = 'billing_coverage'
       if(!reserved)await d.billingGuard(wallet)
       if(!reserved&&Number(canonical.headers['privy-request-expiry'])<=d.now())throw fail('Payment approval expired. Review the transfer again.',422)
       let existing: Record | undefined
+      stage = 'reservation'
       await d.mutate(current => {
         const store = current || { requests:{} }
         existing = store.requests[id]
@@ -303,6 +308,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       if (existing && notBroadcast(existing)) return rejected(res)
       if (existing) return res.status(409).json({ok:false,error:'This transfer is already being checked. View Activity before retrying.',code:'sponsor_outcome_unknown'})
       if(req.body?.purpose==='bridge')await journalOutbound(identity.userId,req.body.bridgeQuoteToken,null,'pending')
+      stage = 'provider_submission'
       const upstream = await d.fetch(canonical.url, {
         method:'POST', redirect:'error', signal:AbortSignal.timeout(30_000),
         headers:{...canonical.headers,'Content-Type':'application/json','Authorization':'Basic '+Buffer.from(`${c.appId}:${c.secret}`).toString('base64'),'privy-authorization-signature':signature},
@@ -356,6 +362,13 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
       return res.json({ok:true,hash})
     } catch (reason) {
       const error = reason as Error & { status?: number }
+      const reviewFee = !reserved && req.body?.purpose==='swap' && [
+        'X Layer fee quote changed or expired. Review the transfer again.',
+        'Network fee increased. Review the updated transfer.',
+      ].includes(error.message)
+      // Never log signed requests, tokens, provider bodies, or RPC URLs.
+      console.warn('[pocket-xlayer-sponsorship]', {stage,reserved,status:reviewFee?409:error.status||503,reason:reviewFee?'fee_review_required':error.message==='X Layer fee estimation is unavailable. Review the transfer again.'?'fee_estimate_unavailable':'request_failed'})
+      if(reviewFee)return res.status(409).json({ok:false,code:'pocket_sponsor_not_submitted',error:'Network fee changed or expired. Review the trade again.'})
       return res.status(reserved ? 502 : error.status || 503).json({ok:false,
         code:reserved?'sponsor_outcome_unknown':'pocket_sponsor_not_submitted',
         ...(!reserved&&req.body?.action==='quote'&&req.body?.purpose==='bridge'?bridgeQuoteErrorFields(error):{}),
