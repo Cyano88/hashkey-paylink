@@ -715,6 +715,8 @@ const cashPolicy={...nairaDependencies.policy(),nairaSettlement:{...nairaDepende
 const cashHandler=createHostedCheckoutsHandler({...nairaDependencies,cashPayer,policy:()=>cashPolicy,createId:()=> 'chk_cashbound12345',prepareNaira:async(p,...args)=>{assert.equal(p.nairaSettlement.refundAddress,cashPayer.address);return {...await nairaDependencies.prepareNaira(p,...args),validUntil:new Date(now.getTime()+1800000).toISOString()}}})
 const cashMade=await request(cashHandler,'POST',{body:nairaBody,headers:{...nairaHeaders,'idempotency-key':'cash:order:00000001'}})
 assert.equal(cashMade.statusCode,201,JSON.stringify(cashMade.body))
+assert.equal(cashMade.body.paymentMethod,'cash_balance')
+const cashStatus=await request(cashHandler,'GET',{query:{id:cashMade.body.checkoutId,purpose:'status'},headers:nairaHeaders});assert.equal(cashStatus.body.paymentMethod,'cash_balance')
 const cashLookup=await request(cashHandler,'GET',{query:{id:cashMade.body.checkoutId}})
 assert.equal(cashLookup.statusCode,200,JSON.stringify(cashLookup.body));assert.equal(cashLookup.body.checkout.paymentMethod,'cash_balance');assert.equal(cashLookup.body.checkout.network,'base');assert.equal(cashLookup.body.checkout.asset,'USDC');assert.ok(!JSON.stringify(cashLookup.body).includes(cashPayer.owner))
 nairaStore.checkouts[cashMade.body.checkoutId].cashPayer.address='0x'+'4'.repeat(40)

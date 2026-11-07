@@ -332,7 +332,7 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
       <Detail label="Owner" value={project.ownerEmail || 'Email unavailable'} />
       <Detail label="Profile type" value={project.accountType==='individual'?'Personal':'Business'} />
       <Detail label={project.accountType==='individual'?'Country of residence':'Country of registration'} value={project.profileCountry?builderCountryName(project.profileCountry):'Not supplied'} />
-      {project.settlementMode==='ngn'&&<><Detail label="Checkout payment methods" value="Pocket cash balance � Base USDC"/><Detail label="Cash refunds" value="Authenticated payer Base wallet"/></>}
+      {project.settlementMode==='ngn'&&<><Detail label="Checkout payment methods" value="Pocket cash balance / Base USDC"/><Detail label="Cash refunds" value="Authenticated payer Base wallet"/></>}
       <Detail label="Receives" value={project.settlementMode === 'ugx' ? 'UGX · Mobile money' : project.settlementMode === 'ngn' ? 'NGN · Bank account' : 'Stablecoins · Wallet'} />
     </div>
 

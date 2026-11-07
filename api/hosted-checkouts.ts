@@ -577,6 +577,7 @@ export async function markHostedCheckoutPaid(input: {
     let updated: CheckoutStore = { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
     if (newlyPaid) updated = enqueueWebhook(updated, record.partnerId, payment.status === 'paid' ? 'payment.confirmed' : 'payment.processing', {
       checkoutId: record.id,
+      paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
       status: payment.status,
       network: payment.network ?? record.network,
       amount: payment.amount,
@@ -710,6 +711,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     let updated: CheckoutStore = { ...safe, checkouts: { ...safe.checkouts, [record.id]: result } }
     if (newlyDelivered) updated = enqueueWebhook(updated, record.partnerId, 'payment.confirmed', {
       checkoutId: record.id,
+      paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
       status: 'paid',
       pricing:record.pricing,
       settlementCurrency: record.settlement ? developerSettlementCurrency(record.settlement.mode) : undefined,
@@ -720,6 +722,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     }, dependencies.now())
     if (newlyFailed) updated = enqueueWebhook(updated, record.partnerId, 'payment.failed', {
       checkoutId: record.id,
+      paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
       status: 'failed',
       pricing:record.pricing,
       settlementCurrency: record.settlement ? developerSettlementCurrency(record.settlement.mode) : undefined,
@@ -1016,6 +1019,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         return res.json({
           ok: true,
           checkoutId: record.id,
+      paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
           checkoutMode: hostedCheckoutMode(record),
           agenticType: record.agenticType,
           paymentAttempt: hostedCheckoutPaymentAttempt(record),
@@ -1208,6 +1212,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         ok: true,
         replayed: true,
         checkoutId: existingRecord.id,
+        paymentMethod:existingRecord.cashPayer?'cash_balance':'stablecoins',
         amount: existingRecord.amount,
         ...(existingRecord.pricing?{pricing:existingRecord.pricing}:{}),
         settlementMode: existingRecord.settlement?.mode ?? 'usdc',
@@ -1302,6 +1307,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
       return enqueueWebhook(updated, record.partnerId, 'checkout.created', {
         checkoutId: record.id,
+      paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
         status: 'pending',
         checkoutMode: hostedCheckoutMode(record),
         agenticType: record.agenticType,
@@ -1322,6 +1328,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       ok: true,
       replayed,
       checkoutId: record.id,
+      paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
       checkoutMode: hostedCheckoutMode(record),
       amount: record.amount,
       ...(record.pricing?{pricing:record.pricing}:{}),
