@@ -7,6 +7,7 @@ import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import hostedStockCheckoutsHandler, { isStockCheckoutId,createHostedStockCheckoutsHandler } from './hosted-stock-checkouts.js'
 import {createCheckoutSelectionHandler,isCheckoutSelection} from './checkout-selection.js'
+import {checkoutSelectionChildPolicy} from './checkout-selection-policy.js'
 import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
@@ -966,7 +967,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           return {checkoutId:child.id,checkoutUrl:hostedCheckoutUiUrl(child)}
         }
         const choice=record.choice!
-        const selectedPolicy={...policy,merchantName:record.merchantName,brandImageUrl:record.brandImageUrl,checkoutDefaultNetwork:undefined,paymentOptions:policy.paymentOptions.filter(o=>o.network===choice.network),defaultNetwork:choice.network as HostedCheckoutNetwork}
+        const selectedPolicy=checkoutSelectionChildPolicy(policy,record)
         const options={policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
         const handler=choice.network==='bsc'?createHostedBscCheckoutsHandler(options):choice.network==='xlayer'?createHostedStockCheckoutsHandler(options):createHostedCheckoutsHandler({...dependencies,...options})
         const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,...(record.currency?{currency:record.currency}:{}),title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}

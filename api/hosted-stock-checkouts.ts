@@ -1,3 +1,4 @@
+import {checkoutRailEnabled} from './checkout-rail-rollout.js'
 import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
 import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
@@ -35,7 +36,7 @@ const clean = (value: unknown, max: number) => String(value ?? '').trim().slice(
 const defaults = {
   quotePricing:quoteCheckoutPricing,
   expiryLimit: () => Number.POSITIVE_INFINITY,
-  enabled: (projectId:string) => process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_ENABLED === 'true' && (process.env.HASHPAYLINK_XSTOCKS_CHECKOUT_PROJECTS||'').split(',').map(s=>s.trim()).includes(projectId),
+  enabled: (projectId:string) => checkoutRailEnabled('xlayer',projectId),
   secret: () => process.env.HOSTED_CHECKOUT_SIGNING_SECRET || '',
   hasStore: hasRenderDurableStore,
   read: async () => normalized(await readDurableJson<Store>(KEY)),

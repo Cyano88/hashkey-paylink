@@ -1,4 +1,5 @@
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
+import {checkoutFeeReviewChanged} from '../lib/checkoutFeeReview'
 import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
 import useCheckoutReceipt from '../lib/useCheckoutReceipt'
 import {CheckoutExpired} from '../components/CheckoutExpiry'
@@ -3048,7 +3049,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         if (!pocketScan && isHostedCheckout) {
           const fresh = await readCirclePaymentFeeQuote({checkoutId:feeCheckoutId,asset:checkoutAsset,session,recipient:paymentRecipient,amount:paymentAmount,feeMode:checkoutFeeMode,feeBps:hashPaylinkFeeBps,payoutIntentId})
           setCircleFeeQuote(fresh)
-          if (fresh.quote.totalUnits !== candidate.quote.totalUnits || fresh.quote.recipientUnits !== candidate.quote.recipientUnits) {
+          if (checkoutFeeReviewChanged(candidate.quote, fresh.quote, merchantPaidFees)) {
             resetCircleSmartWalletPending()
             setCirclePasskeyError('Payment details updated. Review the total and confirm again.')
             return
@@ -4137,7 +4138,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard onChoose={()=>navigate('/pay/c/'+hostedCheckoutId+'?'+new URLSearchParams({attempt:hostedAttemptId,choose:'1'}))} pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
       amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={false}

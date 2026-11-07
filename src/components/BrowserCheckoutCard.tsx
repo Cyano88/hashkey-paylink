@@ -13,9 +13,9 @@ import {QRCodeSVG} from 'qrcode.react'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
 
-type Props={pricing?:CheckoutPricing;feeAsset?:string;totalAdditionalFee?:string;needsFunding?:boolean;expiresAt?:string;returnUrl?:string;quoteLoading?:boolean;brandImageUrl?:string;fundingHint?:string;asset?:string;signOut?:()=>Promise<void>;nameInput?:{value:string;onChange:(value:string)=>void};amountInput?:{value:string;currency:string;onChange:(value:string)=>void};id:string;attempt:string;merchant:string;title:string;amount:string;fiat:boolean;authenticated:boolean;email:string;network:string;networks:Array<{value:string;label:string}>;onNetwork:(value:string)=>void;walletReady:boolean;address:string;balance:string|null;shortfall:string|null;total:string|null;fee:string|null;busy:boolean;blocked:boolean;error:string;prepare:()=>Promise<void>;refresh:()=>Promise<unknown>;pay:()=>Promise<void>}
+type Props={onChoose?:()=>void;pricing?:CheckoutPricing;feeAsset?:string;totalAdditionalFee?:string;needsFunding?:boolean;expiresAt?:string;returnUrl?:string;quoteLoading?:boolean;brandImageUrl?:string;fundingHint?:string;asset?:string;signOut?:()=>Promise<void>;nameInput?:{value:string;onChange:(value:string)=>void};amountInput?:{value:string;currency:string;onChange:(value:string)=>void};id:string;attempt:string;merchant:string;title:string;amount:string;fiat:boolean;authenticated:boolean;email:string;network:string;networks:Array<{value:string;label:string}>;onNetwork:(value:string)=>void;walletReady:boolean;address:string;balance:string|null;shortfall:string|null;total:string|null;fee:string|null;busy:boolean;blocked:boolean;error:string;prepare:()=>Promise<void>;refresh:()=>Promise<unknown>;pay:()=>Promise<void>}
 export default function BrowserCheckoutCard(p:Props){
- const {getAccessToken}=usePrivy()
+ const {getAccessToken,ready}=usePrivy()
  const asset=p.asset||'USDC'
  const reset=readCheckoutPinReset(window.location.pathname+window.location.search)
  const seconds=useCheckoutExpiry(p.expiresAt)
@@ -36,7 +36,7 @@ export default function BrowserCheckoutCard(p:Props){
  return <main className="mx-auto w-full max-w-md py-6 text-gray-950 dark:text-white"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114] sm:p-8">
   <CheckoutMerchant name={p.merchant} logo={p.brandImageUrl}/><h1 className="mt-3 text-center text-3xl font-semibold tracking-tight">{checkoutPriceLabel(p.pricing,p.amount)}</h1>{p.pricing&&<p className="mt-2 text-center text-sm text-gray-500">Payment: {p.amount}</p>}{p.title&&<p className="mt-2 text-center text-sm text-gray-500">{p.title}</p>}
   <CheckoutCountdown seconds={seconds}/>
-  {!p.authenticated?<div className="mt-8"><PocketEmailLogin context="checkout" resetEmail={reset?.email}/></div>:<>
+  {ready===false?<div role="status" aria-label="Restoring your session" className="mt-8 h-24 animate-pulse rounded-2xl bg-gray-100"/>:!p.authenticated?<div className="mt-8"><PocketEmailLogin context="checkout" resetEmail={reset?.email}/></div>:<>
    <div className="mt-6 flex items-center justify-between gap-3"><p className="min-w-0 break-all text-xs text-gray-500">{p.email}</p>{p.signOut&&<button disabled={busy} onClick={()=>void run(p.signOut!)} className="shrink-0 py-2 text-xs font-medium">Change account</button>}</div>
    {p.amountInput&&<label className="mt-5 block text-sm">Amount ({p.amountInput.currency})<input aria-label="Payment amount" inputMode="decimal" value={p.amountInput.value} disabled={busy} onChange={e=>{if(/^\d*(?:\.\d{0,6})?$/.test(e.target.value))p.amountInput!.onChange(e.target.value)}} className="mt-2 min-h-12 w-full rounded-xl border border-gray-200 bg-transparent px-3 dark:border-white/10"/></label>}
    {p.nameInput&&<label className="mt-5 block text-sm">Your name<input autoComplete="name" value={p.nameInput.value} disabled={busy} onChange={e=>p.nameInput!.onChange(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-gray-200 bg-transparent px-3 dark:border-white/10"/></label>}
@@ -51,6 +51,6 @@ export default function BrowserCheckoutCard(p:Props){
    <button disabled={busy||p.blocked||(!verificationLevel&&!funding&&!canFund&&Boolean(p.quoteLoading))} onClick={()=>void run(async()=>{if(verificationLevel){setVerifying(true);return}if(!p.walletReady){await p.prepare();return}if(funding){setFunding(false);return}if(canFund){setFunding(true);return}if(needsRefresh){await p.refresh();return}await prepareCheckoutReceiptContact({checkoutId:p.id,network:p.network,payer:p.address,getAccessToken});await p.pay()})} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950">{busy?'Please wait…':verificationLevel?'Verify identity':verificationLevel?'Verify identity':!p.walletReady?'Continue':funding?'Return to payment':canFund?'Add funds':needsRefresh?'Continue':'Pay securely'}</button>
    {p.walletReady&&!busy&&<button onClick={()=>void run(p.refresh)} className="mt-2 min-h-11 w-full text-xs text-gray-500">Update balance</button>}
   </>}
-  <a href={handoff.browser.replace('browser=1','choose=1')} className="mt-5 block py-2 text-center text-xs text-gray-500">Other ways to continue</a>
+  <a onClick={event=>{if(p.onChoose){event.preventDefault();if(!busy)p.onChoose()}}} href={handoff.browser.replace('browser=1','choose=1')} className="mt-5 block py-2 text-center text-xs text-gray-500">Other ways to continue</a>
  </section><CheckoutFooter/></main>
 }

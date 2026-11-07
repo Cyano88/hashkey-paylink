@@ -1,7 +1,12 @@
 import { preparePocketWalletNetworks } from '../lib/pocketWalletBootstrap'
 import { balanceOwner, readCachedPocketBalance, replacePocketBalanceWallets } from '../lib/pocketBalanceCache'
-import { useCallback, useRef, useState } from 'react'
-import { PRIVY_AUTH_ENABLED } from '../../lib/authMode'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
+import { Capacitor } from '@capacitor/core'
+import {isAddress} from 'viem'
+import { PRIVY_AUTH_ENABLED, PRIVY_APP_ID } from '../../lib/authMode'
+import {restoreCheckoutCircleSession,saveCheckoutCircleSession} from '../../lib/checkoutCircleSession'
+import {prepareBrowserWalletSession} from '../../lib/prepareBrowserWalletSession'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
@@ -381,6 +386,10 @@ export default function usePocketWalletController({
   const [evmSession, setEvmSession] = useState<CircleEvmEmailSession | null>(null)
   const evmSessionRef = useRef<CircleEvmEmailSession | null>(null)
   const [solanaSession, setSolanaSession] = useState<PocketSolanaEmailSession | null>(null)
+  const {user}=usePrivy()
+  const ownerKey=authenticated&&user?.id?user.id+':'+email:''
+  const activeOwner=useRef(ownerKey);activeOwner.current=ownerKey
+  useEffect(()=>{activeOwner.current=ownerKey;return()=>{activeOwner.current=''}},[ownerKey])
 
   const ensureWallet = useCallback(async (
     network: PocketNetwork,
@@ -421,8 +430,19 @@ export default function usePocketWalletController({
     }
     const pending = sharedPendingEvmSessions.get(key)
     if (pending) return pending
-    const request = connectFreshEvmSession(email, network, walletAddress, getAccessToken)
+    const request = (async()=>{
+      if(!Capacitor.isNativePlatform()&&user?.id){
+        const token=await getAccessToken()
+        if(!token)throw new PocketWalletSessionRecoveryRequiredError('Sign in again to reconnect your wallet.')
+        const linked=await readPocketWallet({accessToken:token,network})
+        if(!linked||!isAddress(linked.wallet.address)||linked.wallet.address.toLowerCase()!==walletAddress.toLowerCase())throw new PocketWalletSessionRecoveryRequiredError('Your wallet could not be verified.')
+        const restored=await restoreCheckoutCircleSession({userId:user.id,email,walletAppId:PRIVY_APP_ID||''},token,network,{...linked.wallet,address:linked.wallet.address},()=>!!ownerKey&&activeOwner.current===ownerKey)
+        if(restored)return restored
+      }
+      return connectFreshEvmSession(email, network, walletAddress, getAccessToken)
+    })()
       .then(session => {
+        if(!ownerKey||activeOwner.current!==ownerKey)throw Error('Your account changed. Sign in again.')
         evmSessionRef.current = session
         setEvmSession(session)
         cacheEvmSession(email, session)
@@ -431,7 +451,18 @@ export default function usePocketWalletController({
       .finally(() => sharedPendingEvmSessions.delete(key))
     sharedPendingEvmSessions.set(key, request)
     return request
-  }, [email, evmSession, getAccessToken])
+  }, [email, evmSession, getAccessToken, user?.id, ownerKey])
+
+  const reconnectEvmSession=useCallback(async(network:Exclude<PocketNetwork,'solana'>,wallet:CirclePocketWallet)=>{
+    const active=()=>!!ownerKey&&activeOwner.current===ownerKey
+    if(!active())throw Error('Sign in again to reconnect your wallet.')
+    const restored=await prepareBrowserWalletSession({chain:network,email,wallet,getAccessToken,active,restore:()=>getEvmSession(network,wallet.address,{allowSharedSession:false})})
+    if(!active())throw Error('Your account changed. Sign in again.')
+    await savePocketSecureWalletSession(email,restored)
+    if(!active())throw Error('Your account changed. Sign in again.')
+    if(user?.id&&!Capacitor.isNativePlatform())saveCheckoutCircleSession({userId:user.id,email,walletAppId:PRIVY_APP_ID||''},restored)
+    cacheEvmSession(email,restored);evmSessionRef.current=restored;setEvmSession(restored)
+  },[email,getAccessToken,getEvmSession,ownerKey,user?.id])
 
   const getSolanaSession = useCallback(async (walletAddress: string) => {
     if (solanaSession?.wallet.address === walletAddress) return solanaSession
@@ -447,5 +478,5 @@ export default function usePocketWalletController({
     return session
   }, [email, solanaSession])
 
-  return { ensureWallet, getEvmSession, getSolanaSession }
+  return { ensureWallet, getEvmSession, getSolanaSession, reconnectEvmSession }
 }

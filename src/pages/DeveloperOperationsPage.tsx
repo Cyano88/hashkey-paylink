@@ -41,6 +41,10 @@ type ArcPilotPolicy = {
   reason?: string
 }
 type Project = {
+  bscCheckout?:{recipient:string;assets:string[]}
+  bscCheckoutActivated?:boolean
+  xlayerCheckout?:{recipient:string;assets:string[]}
+  xlayerCheckoutActivated?:boolean
   accountType?: 'individual' | 'business'
   profileCountry?: string
   productionAccess?: boolean
@@ -356,6 +360,8 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
             <RouteRow label="Verified bank" value={`${project.bankName || 'Missing'} · ${project.bankAccountName || 'Account unavailable'} · ••••${project.bankAccountLast4 || '----'}`} />
             <RouteRow label="Base refund" value={project.refundAddress || 'Missing'} />
           </>}
+        {project.settlementMode==='usdc'&&project.bscCheckout&&<><RouteRow label="BNB Chain" value={project.bscCheckout.recipient||'Missing'}/><RouteRow label="BNB checkout activation" value={project.bscCheckoutActivated?'Activated':'Pending activation'}/></>}
+        {project.settlementMode==='usdc'&&project.xlayerCheckout&&<><RouteRow label="X Layer" value={project.xlayerCheckout.recipient||'Missing'}/><RouteRow label="X Layer checkout activation" value={project.xlayerCheckoutActivated?'Activated':'Pending activation'}/></>}
       </div>
     </section>
 

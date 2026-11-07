@@ -6,6 +6,7 @@ import {createDeveloperSandboxHandler} from './developer-sandbox.js'
 import{normalizeReceiptEmailSettings,defaultReceiptEmailSettings,type ReceiptEmailSettings}from'../src/lib/receiptEmailSettings.js'
 import {developerReceivingWallets} from './developer-receiving-wallets.js'
 import {normalizeBscCheckoutConfig,type BscCheckoutConfig} from '../src/lib/bscCheckoutConfig.js'
+import {checkoutRailEnabled} from './checkout-rail-rollout.js'
 import {acceptedCheckoutAssets,normalizeCheckoutAcceptance,type CheckoutAcceptance} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import {manageAppRemoval} from './developer-app-removal.js'
@@ -443,6 +444,8 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     acceptedAssets: project.acceptedAssets,
     checkoutDefaultNetwork: project.checkoutDefaultNetwork,
     bscCheckout: project.bscCheckout,
+    bscCheckoutActivated: checkoutRailEnabled('bsc',project.id),
+    xlayerCheckoutActivated: checkoutRailEnabled('xlayer',project.id),
     xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,

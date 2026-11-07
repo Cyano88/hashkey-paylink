@@ -55,6 +55,7 @@ type Project = {
   acceptedAssets?: CheckoutAcceptance
   checkoutDefaultNetwork?: 'xlayer'|'bsc'
   bscCheckout?:BscCheckoutConfig
+  bscCheckoutActivated?:boolean
   xlayerCheckout?: XLayerCheckoutConfig
   id: string
   name: string
@@ -603,7 +604,7 @@ function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, set
     {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
     {draft.checkoutMode === 'human' && draft.capabilities.includes('hosted_checkout') && <XLayerCheckoutSettings defaultRecipient={receivingWallets.xlayer} business={draft.accountType!=='individual'} value={draft.xlayerCheckout} onChange={xlayerCheckout => setDraft({ ...draft, xlayerCheckout,...(!xlayerCheckout&&draft.checkoutDefaultNetwork==='xlayer'?{checkoutDefaultNetwork:undefined}:{}) })} />}
 
-{draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&<BscCheckoutSettings defaultRecipient={receivingWallets.bsc} business={draft.accountType!=='individual'} value={draft.bscCheckout} onChange={bscCheckout=>setDraft({...draft,bscCheckout,...(!bscCheckout&&draft.checkoutDefaultNetwork==='bsc'?{checkoutDefaultNetwork:undefined}:{})})}/>}
+{draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')&&<BscCheckoutSettings activated={draft.bscCheckoutActivated} defaultRecipient={receivingWallets.bsc} business={draft.accountType!=='individual'} value={draft.bscCheckout} onChange={bscCheckout=>setDraft({...draft,bscCheckout,...(!bscCheckout&&draft.checkoutDefaultNetwork==='bsc'?{checkoutDefaultNetwork:undefined}:{})})}/>}
 {routingRequired && <Field label="Default network" className="mt-4"><PocketSelect showNetworkBalances={false} value={draft.checkoutDefaultNetwork==='bsc'&&draft.bscCheckout?'bsc':draft.checkoutDefaultNetwork === 'xlayer' && draft.xlayerCheckout ? 'xlayer' : draft.defaultNetwork} options={[...draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) })),...(draft.xlayerCheckout?[{value:'xlayer',label:'X Layer'}]:[]),...(draft.bscCheckout?[{value:'bsc',label:'BNB Chain'}]:[])].sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.value as typeof CHECKOUT_NETWORK_ORDER[number])-CHECKOUT_NETWORK_ORDER.indexOf(b.value as typeof CHECKOUT_NETWORK_ORDER[number]))} onChange={value => setDraft({ ...draft, checkoutDefaultNetwork:value==='xlayer'?'xlayer':value==='bsc'?'bsc':undefined,...(!['xlayer','bsc'].includes(value)?{defaultNetwork:value as Network}:{}) })} ariaLabel="Default payment network" /></Field>}
 
     {localSettlement && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
