@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import {createCheckoutSelectionHandler,claimCheckoutSelectionPayment,checkoutSelectionNavigation} from '../api/checkout-selection.ts'
 import {checkoutStablecoins} from '../src/lib/checkoutStablecoins.ts'
 let store={sessions:{},keys:{}},now=Date.now(),calls=0,fail=false,hold
+// PostgreSQL JSONB may reorder object keys. Signatures must survive that round trip.
+const persisted=value=>Array.isArray(value)?value.map(persisted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort((a,b)=>b.localeCompare(a)).map(key=>[key,persisted(value[key])])):value
 const recipient='0x'+'1'.repeat(40)
 const policy={partnerId:'dev_test',ownerId:'owner',environment:'live',checkoutMode:'human',settlementMode:'usdc',projectManaged:true,capabilities:['hosted_checkout'],merchantName:'Test',allowedOrigins:['https://store.test'],defaultNetwork:'base',paymentOptions:[{network:'base',recipient},{network:'arbitrum',recipient}],bscCheckout:{recipient,assets:checkoutStablecoins('bsc').map(t=>t.address.toLowerCase())},xlayerCheckout:{recipient,assets:checkoutStablecoins('xlayer').map(t=>t.address.toLowerCase())}}
-const d={ready:()=>true,secret:()=> 's'.repeat(32),now:()=>now,read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)},policy:async()=>policy,currentPolicy:async()=>policy,enabled:()=>true}
+const d={ready:()=>true,secret:()=> 's'.repeat(32),now:()=>now,read:async()=>structuredClone(store),mutate:async fn=>{store=persisted(fn(structuredClone(store)));return structuredClone(store)},policy:async()=>policy,currentPolicy:async()=>policy,enabled:()=>true}
 const children=new Map()
 const handler=createCheckoutSelectionHandler(async(p,r)=>{
  calls++;if(hold)await hold;if(fail)throw Error('Provider timeout')
