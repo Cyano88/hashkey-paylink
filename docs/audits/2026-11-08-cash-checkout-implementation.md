@@ -28,3 +28,14 @@ Passed: web TypeScript; web source build; native source guard, source build and 
 Browser CLI review: separate Cash method; no cash network selector; original NGN price and exact debit; Base USDC personal top-up; returning to review after five balance refreshes did not call payment.
 
 Live acceptance and the final native build are recorded below when complete. No funded cash payment or actual provider refund has been executed by these fixture checks.
+
+## Live acceptance
+
+- Production code: 1091e2b36ffb5f70edffcb247362e09acf30aded, Render deployment dep-dbnr64s9v7es73dhm3d0 verified live. Includes cash method metadata in authenticated status and signed webhook event payloads.
+- Lunchroom parent chks_867c8bcb1b3a44de8d37a766 retained child chk_999320aa54544abab549 across web, native, restart and return.
+- Live reviewed order: NGN 2053.13, exact debit 1.500004 USDC, quoted rate 1368.75 NGN/USDC. Existing cash 1.388963 USDC was insufficient.
+- Server read verified signed child, parent/child owner and address equality, Base USDC, and provider refund_address matching the bound payer wallet. Provider order initiated; no payment recorded.
+- Pixel exposed a stale automatic-funding wait after disabling route discovery. Fixed both discovery and waiting-state gates for hosted checkout in both source trees. Rebuilt and repeated: Add funds now opens a fixed Base USDC personal-wallet QR/address. Return to payment preserves the review; no bridge, conversion or payment was initiated.
+- Cold-start checkout handoff and selected-child recovery were exercised without another provider order.
+- Native cash review omits the merchant-net payout row: the payer sees order price, exact debit, cash balance and rate rather than a temporary gross fallback while bank details load.
+- Final scope remains NGN-priced local bank checkout. Actual funded payment, merchant bank delivery, and provider refund execution have not been exercised in this acceptance run. No claim of live money-movement success is made.
