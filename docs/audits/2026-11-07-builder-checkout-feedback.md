@@ -23,4 +23,9 @@ Reviewed the four WhatsApp screenshots in Documents dated 7 November, alongside 
 
 No funded payment was signed or broadcast during these checks. This is not evidence of a completed live checkout payment. Existing expired checkout records remain expired; the builder needs a fresh checkout for new network options. Same-asset Circle switching is supported before payment locks the network; changing an already-selected checkout across Circle and BNB/XLayer is not implemented by this patch. The intermittent Continue failure was not independently reproduced as a network outage; session recovery addresses the observed recovery gap without claiming to eliminate external network failures.
 
-Release completion requires the targeted BNB activation, source deployment, live commit/health verification, and a builder retest with a fresh order.
+## Live verification
+
+- Render deployment `dep-dbnie715efls73be8f4g` is live at `a267e26c667a87b5291ee0b5564183f2154c7ffb`.
+- The existing BNB project allowlist was preserved and the ready builder project was added. A read-only check inside the deployed service resolved its current policy and confirmed BNB enabled with both USDC and USDT.
+- Public health checks passed on app.hashpaylink.com and hashpaylink.com, including healthy database state and zero unresolved/stale Pocket jobs. The first request during startup returned 502; subsequent checks passed after startup completed.
+- The deployed frontend entry asset returned HTTP 200. A builder retest with a fresh order and a funded payment remains outstanding; automated fixtures and healthy service status do not establish payment completion.
