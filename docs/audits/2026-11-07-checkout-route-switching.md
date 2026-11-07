@@ -21,4 +21,10 @@ Route tests cover Circle/BNB/X Layer in both directions, reused child IDs, stale
 
 Existing selection, Circle/BNB/X Layer adapters, checkout card, merchant-fee proof, BNB service/operation, X Layer fee, return-flow and Circle idempotency regressions were run. Fee-test fixtures explicitly assert the shared claim and reject stale signing evidence. No funded live transaction was signed or broadcast by these tests.
 
-Deployment evidence will be recorded after final source build, scoped TypeScript checking and live service verification.
+## Release evidence
+
+- Source build and scoped TypeScript checks passed. Route signatures use sorted arrays so PostgreSQL JSONB object-key ordering cannot invalidate them; the regression fixture reorders keys on every persistence round trip.
+- Render deployment `dep-dbnjukou01pc73cvm68g` is live at `0c809814daff421bcc1e27a1284c35455f7b67c8`. Earlier candidate deployments were canceled before release to incorporate the single-selector and canonical-signature corrections.
+- The route-switch regression also passed using the deployed source on Render with isolated synthetic storage and no provider transactions.
+- Health checks passed on both app.hashpaylink.com and hashpaylink.com. The deployed entry `index-DWFEy5X8.js` is served publicly; `BrowserCheckoutCard-CgBTrcB8.js` returns HTTP 200 and includes Change payment network.
+- The new selection-navigation endpoint responds successfully for a historical checkout with no switchable parent, preserving legacy behavior. A funded builder retest remains outstanding and requires a fresh checkout.
