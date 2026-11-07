@@ -1,0 +1,25 @@
+# Circle cross-bridge approval recovery - 2026-11-07
+
+## Observed incident
+
+Pixel showed SOL on Solana -> USDT on Base, with the confirmation sheet stuck at Bridging. Read-only durable-journal inspection found operation 84f87c16-df32-4cd5-8bde-cf216e9d0706 in pending state, with a challenge reference and prepared Solana transaction, but no signed transaction or source hash. This is evidence of no server broadcast through this route. No quote token, credential, signing material or user account identifiers were printed. No transaction retried, cancelled or submitted during diagnosis.
+
+The exact provider/SDK reason the original Circle UI did not appear is not recoverable from the available logs. Do not claim a provider outage or successful approval. The confirmed application bugs are: initial error handling turns unsigned pending challenges into processing; generic recovery preserves that mapping; and cross-bridge retry only checks status instead of reopening the saved Circle challenge. Progress then reports Bridging despite no signature.
+
+## Changes
+
+- Classify an unsigned Solana cross-bridge challenge as awaiting approval during normal recovery. For EVM Circle, do so after a recorded approval failure, without inferring that a missing hash alone proves no submission.
+- Initial Circle approval errors retain the recoverable approval/review state instead of hiding it as processing.
+- Explicit retry checks the saved operation before doing anything. It reopens only its existing Circle challenge, persists signed Solana bytes before relay, and never prepares/submits a second bridge. Account-change checks remain before/after signing.
+- An explicit retry of an expired unsigned Solana quote requests atomic cancellation of the unsigned reservation. No automatic replacement, signing or transaction is performed. Already signed bytes are replayed through the existing idempotent relay path only.
+- Awaiting approval uses Confirm bridge, not Bridging. Corrected the SOL type passed to the existing Solana approval adapter.
+
+## Verification
+
+Focused TypeScript and source guard passed. Recovery fixture covers Solana, Base, Arc, Ethereum, Arbitrum and Polygon; checks exact saved challenge, one signature, signature persistence before relay, expiry, account isolation and no duplicate dispatch. Existing panel/browser regressions passed all nine source/asset scenarios including BNB and X Layer. Added failed-SDK-opening browser scenario verifies that an unsigned Circle failure presents an enabled confirmation action rather than Bridging; Solana USDC and SOL both passed. No backend changes required; server journal evidence remains authoritative.
+
+Live reopening of Circle still requires the user's approval interaction. Existing unsigned reservation was not silently removed. The fix does not claim to eliminate all provider iframe failures; it makes them recoverable and prevents false submission progress.
+
+Final verification: all nine updated browser source/asset scenarios passed, including the failed-opening checks for each Circle case. Focused typecheck and native source guard passed. EVM approval-completed/no-hash recovery now supplies the Circle session to status and is covered by a regression assertion; newly returned signature/approval evidence cannot be reclassified as awaiting approval.
+
+Built and installed pocket-circle-bridge-approval-20261107.apk on Pixel 5A160DLCH006VM. SHA256 1AABDFE6DCAD9DC89E39EA2E33CD516378CBB5A23715338C34E0B819E69D878D. All 1870 packaged web assets match dist. Source archive contains 47 files. Live launch, Home, Swap and Bridge navigation verified after installation. No live approval, retry, cancellation or transaction performed. App restart opened the normal empty bridge form; the old operation sheet was not live-reopened, so its post-install recovery presentation remains fixture-verified only. Backend remains 1e28e0f77; no server deployment required.
