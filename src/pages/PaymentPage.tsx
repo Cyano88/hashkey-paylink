@@ -3450,7 +3450,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketSlowConfirmation=usePocketSlowConfirmation(Boolean(pocketScan&&(isConfirming||txHash||circleEvmAcceptedPending)),String(txHash||eventId||'scan'),60_000,isWalletPending||pocketMovePayBusy)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
-  const pocketMovePayExpected = !(!pocketScan && isHostedCheckout) && privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
+  const pocketMovePayExpected = !isHostedCheckout && privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
   const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const browserPaymentFlow = !pocketScan && !isBankSendPayment

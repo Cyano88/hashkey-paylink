@@ -33,6 +33,6 @@ export default function CheckoutAssetChoice({checkout,returnUrl,mode='web',cash=
   </fieldset>}
   {choice?.unavailableReason&&<p role="status" className="mt-5 text-center text-sm text-gray-500">{choice.unavailableReason}</p>}
   {error&&<p role="alert" className="mt-5 text-center text-sm text-gray-500">{error}</p>}
-  <button disabled={busy||!choice||!!choice.unavailableReason||cash&&(!ready||!authenticated)} onClick={()=>void proceed()} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy?'Preparing checkout…':'Continue'}</button>
+  {(!cash||ready&&authenticated)&&<button disabled={busy||!choice||!!choice.unavailableReason||cash&&(!ready||!authenticated)} onClick={()=>void proceed()} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy?'Preparing checkout…':'Continue'}</button>}
  </section><CheckoutFooter/></div>
 }
