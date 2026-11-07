@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';
+import {collapsePocketAssetMoves} from '../src/pocket/lib/pocketAssetMoveActivity.ts';
+const networks=['base','arbitrum','ethereum','polygon','arc','solana','bsc','xlayer'];let count=0;
+for(const source of networks)for(const destination of networks){if(source===destination)continue;const bridge={eventId:'bridge',source:'wallet-bridge',chain:source,txHash:'source-proof',destination,destinationTxHash:'destination-proof',assetSymbol:'SOL',destinationAsset:'USDC',paycrestStatus:'completed'};const incoming={eventId:'receive',source:'wallet-deposit',chain:destination,txHash:'destination-proof',assetSymbol:'USDC',direction:'in'};const other={...incoming,eventId:'unrelated',txHash:'another-proof'};const rows=collapsePocketAssetMoves([incoming,bridge,other]);assert.deepEqual(rows,[bridge,other]);count++}console.log('PASS '+count+' directed bridge pairs: exact destination receive grouped under bridge; unrelated deposit retained');
