@@ -1,3 +1,4 @@
+import {assertCashCheckoutPayer} from './checkout-cash-policy.js'
 import {merchantFeeTotal,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {verifyMerchantCheckoutTransfer,verifyPosMerchantTransfer} from './merchant-checkout-fees.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
@@ -497,6 +498,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     if (hostedCheckoutMode(checkout) !== 'human') {
       throw paymentError('This checkout only accepts agentic payment.', 409)
     }
+    assertCashCheckoutPayer(checkout,chain,checkout.asset||'USDC',payer)
     assetSymbol = checkout.asset || 'USDC'
     hostedCheckoutIdForReceipt = checkout.id
     brandName = checkout.merchantName

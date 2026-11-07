@@ -7,7 +7,7 @@ import {CHECKOUT_NETWORK_ORDER,checkoutStablecoins} from '../src/lib/checkoutSta
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const options=CHECKOUT_NETWORK_ORDER.flatMap(n=>checkoutStablecoins(n).filter(a=>a.currency==='USD').map(a=>({network:n,asset:a.symbol})))
 const checkout={id:'chks_'+'a'.repeat(24),amount:'1.5',merchantName:'Lunchroom',title:'Lunchroom order',expiresAt:new Date(Date.now()+15*60000).toISOString(),defaultNetwork:'base',options}
-const bundle=await build({stdin:{contents:`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,Routes,Route,useLocation}from'react-router-dom';import Choice from'./src/components/CheckoutAssetChoice';function Paid(){return <h1>Review payment</h1>}createRoot(document.getElementById('root')).render(<MemoryRouter><Routes><Route path="/" element={<Choice checkout={window.testCheckout||${JSON.stringify(checkout)}} returnUrl="https://store.test"/>}/><Route path="/pay/c/:id" element={<Paid/>}/></Routes></MemoryRouter>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic'})
+const bundle=await build({stdin:{contents:`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,Routes,Route,useLocation}from'react-router-dom';import Choice from'./src/components/CheckoutAssetChoice';function Paid(){return <h1>Review payment</h1>}createRoot(document.getElementById('root')).render(<MemoryRouter><Routes><Route path="/" element={<Choice checkout={window.testCheckout||${JSON.stringify(checkout)}} returnUrl="https://store.test"/>}/><Route path="/pay/c/:id" element={<Paid/>}/></Routes></MemoryRouter>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',plugins:[{name:'auth-fixture',setup(b){b.onResolve({filter:/^@privy-io\/react-auth$/},()=>({path:'auth',namespace:'fixture'}));b.onResolve({filter:/PocketEmailLogin$/},()=>({path:'login',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({loader:'js',contents:a.path==='auth'?"export const usePrivy=()=>({ready:true,authenticated:true,getAccessToken:async()=> 'fixture-token'});":"export default function Login(){return null}"}))}}]})
 const browser=await chromium.launch({channel:'chrome',headless:true})
 try {
  for(const width of [390,1280]){
@@ -40,13 +40,10 @@ try {
    return r.fulfill({contentType:'text/html',body:'<meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><div id="root"></div><script>window.testCheckout='+JSON.stringify(local)+';</script><script>'+bundle.outputFiles[0].text.replaceAll('</script','<\\/script')+'</script>'})
   })
   await page.goto('https://checkout.test/');await page.getByLabel('Payment network').waitFor()
-  assert.equal(await page.getByLabel('Payment network').inputValue(),'polygon','Never silently replace the configured network with Base')
-  for(const network of CHECKOUT_NETWORK_ORDER){await page.getByLabel('Payment network').selectOption(network);for(const o of local.options.filter(o=>o.network===network)){
-   await page.getByLabel('Payment asset').selectOption(o.asset)
-   assert.equal(await page.getByRole('button',{name:'Continue',exact:true}).isDisabled(),!!o.unavailableReason)
-   if(o.unavailableReason)await page.getByRole('status').filter({hasText:/cannot fund NGN/}).waitFor()
-   assert.match(await page.getByRole('heading',{level:1}).innerText(),/2,046.38/)
-  }}
+  assert.equal(await page.getByLabel('Payment network').inputValue(),'base')
+  assert.deepEqual(await page.getByLabel('Payment network').locator('option').allTextContents(),['Base'])
+  assert.deepEqual(await page.getByLabel('Payment asset').locator('option').allTextContents(),['USDC'])
+  assert.match(await page.getByRole('heading',{level:1}).innerText(),/2,046.38/)
   assert.equal(writes.length,0)
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   await page.screenshot({path:'output/playwright/ngn-payer-choices-'+width+'.png',fullPage:true})
@@ -57,4 +54,4 @@ try {
 }finally{await browser.close()}
 console.log('PASS desktop/mobile browser: every stablecoin/network, exact review amount, no write before Continue, one server selection and verified handoff.')
 
-console.log('PASS NGN payer choices on mobile/desktop: saved default retained; every configured choice visible; clear unavailable reason; no silent switch or provider request; explicit supported choice continues.')
+console.log('PASS NGN payer choices on mobile/desktop: only executable routes displayed; NGN order price retained; no provider request until explicit Continue.')

@@ -2,7 +2,7 @@ import type {ReactNode} from 'react'
 import {CircleStackIcon, CreditCardIcon, BuildingLibraryIcon, CheckIcon, ChevronRightIcon} from '@heroicons/react/24/outline'
 
 /** Presentation only: upcoming rails cannot select a route or initiate payment. */
-export default function CheckoutPaymentMethods({children,onStablecoins}:{children?:ReactNode;onStablecoins?:()=>void}) {
+export default function CheckoutPaymentMethods({children,onStablecoins,onCash}:{children?:ReactNode;onStablecoins?:()=>void;onCash?:()=>void}) {
  return <section aria-label="Payment methods" className="space-y-3">
   {!onStablecoins&&<div className="overflow-hidden rounded-2xl border border-gray-950 dark:border-white/60">
    <div className="flex min-h-16 items-center gap-3 px-4 py-3">
@@ -18,6 +18,7 @@ export default function CheckoutPaymentMethods({children,onStablecoins}:{childre
     <span className="min-w-0 flex-1 text-sm font-semibold">Stablecoins</span>
     <ChevronRightIcon aria-hidden="true" className="h-5 w-5 shrink-0"/>
    </button>}
+   {onCash&&<button type="button" onClick={onCash} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5"><span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><BuildingLibraryIcon className="h-7 w-7"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Cash balance</span><span className="mt-0.5 block text-xs text-gray-500">Pay from Pocket</span></span><ChevronRightIcon aria-hidden="true" className="h-5 w-5"/></button>}
    {([
     {name:'Card',Icon:CreditCardIcon},
     {name:'Google Pay',src:'/brand/payments/google-pay.svg'},

@@ -1,3 +1,4 @@
+import {assertCashCheckoutPayer} from './checkout-cash-policy.js'
 import {formatUnits,parseUnits} from 'viem'
 import {mutateDurableJson,readDurableJson} from './render-durable-store.js'
 import {readVerifiedHostedCheckoutRecord,hostedCheckoutPaymentOption,type CheckoutRecord} from './hosted-checkouts.js'
@@ -7,7 +8,7 @@ import {verifySolanaUsdcTransfer} from './solana-usdc-transfer-verify.js'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.js'
 import type {MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 const KEY='hashpaylink:merchant-checkout-fee-proofs:v1'
-type FeeContext=Pick<CheckoutRecord,'id'|'feePayer'|'asset'|'amount'|'flexible'|'createdAt'|'expiresAt'|'network'|'recipient'|'paymentOptions'>
+type FeeContext=Pick<CheckoutRecord,'cashPayer'|'id'|'feePayer'|'asset'|'amount'|'flexible'|'createdAt'|'expiresAt'|'network'|'recipient'|'paymentOptions'>
 type Store={quotes:Record<string,{token:string;quote:PaymentFeeQuote}>}
 const equal=(a:string,b:string,chain:string)=>chain==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
 export async function assertMerchantFeeBinding(binding:PaymentFeeBinding){
@@ -20,6 +21,7 @@ export async function assertMerchantFeeBinding(binding:PaymentFeeBinding){
   return
  }
  const c=await readVerifiedHostedCheckoutRecord(binding.checkoutId)
+ if(c)assertCashCheckoutPayer(c,binding.chain,binding.asset||'USDC',binding.walletAddress)
  const option=c&&hostedCheckoutPaymentOption(c,binding.chain)
  if(!c||c.checkoutMode!=='human'||!option||c.payment||!equal(option.recipient,binding.recipient,binding.chain)||(!c.flexible&&parseUnits(c.amount,6)!==BigInt(binding.amountUnits))||(c.asset||'USDC')!==(binding.asset||'USDC')||binding.mode!==(c.feePayer==='merchant'?'net':'gross'))throw Error('Checkout payment details changed. Reopen checkout.')
 }
@@ -35,6 +37,7 @@ export async function rememberMerchantFeeQuote(token:string,quote:PaymentFeeQuot
  })
 }
 export async function verifyMerchantCheckoutTransfer(c:FeeContext,input:{txHash:string;payer:string;network:string}){
+ assertCashCheckoutPayer(c,input.network,c.asset||'USDC',input.payer)
  const option=hostedCheckoutPaymentOption(c,input.network)
  if(c.feePayer!=='merchant'||!option)throw Error('Merchant fee policy is unavailable.')
  const stored=Object.values((await readDurableJson<Store>(KEY))?.quotes||{}).filter(({quote:q})=>q.checkoutId===c.id&&q.chain===input.network&&equal(q.walletAddress,input.payer,input.network))

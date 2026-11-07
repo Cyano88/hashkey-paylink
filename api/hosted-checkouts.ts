@@ -7,6 +7,7 @@ import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
 import hostedStockCheckoutsHandler, { isStockCheckoutId,createHostedStockCheckoutsHandler } from './hosted-stock-checkouts.js'
 import {createCheckoutSelectionHandler,isCheckoutSelection} from './checkout-selection.js'
+import type {CheckoutCashPayer} from './checkout-cash.js'
 import {checkoutSelectionChildPolicy} from './checkout-selection-policy.js'
 import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
@@ -96,6 +97,7 @@ type HostedCheckoutSettlement = {
   accountName: string
 }
 export type CheckoutRecord = {
+  cashPayer?:CheckoutCashPayer
   feePayer?:'merchant'
   pricing?:CheckoutPricing
   environment?: 'live'
@@ -146,6 +148,7 @@ export type HostedCheckoutWebhookEvent = {
 type CheckoutStore = { checkouts: Record<string, CheckoutRecord>; idempotency: Record<string, string>; outbox?: HostedCheckoutWebhookEvent[] }
 
 type Dependencies = {
+  cashPayer?:CheckoutCashPayer
   quotePricing?:typeof quoteCheckoutPricing
   expiryLimit?: () => number
   hasStore: () => boolean
@@ -313,6 +316,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
     record.expiresAt,
     record.requestHash,
   ]
+  if(record.cashPayer)fields.push(['cashPayer',record.cashPayer.owner,record.cashPayer.address])
   if(record.feePayer)fields.push(['feePayer',record.feePayer])
   if(record.pricing)fields.push(['pricing',checkoutPricingFields(record.pricing)])
   if(record.asset !== undefined) fields.push(['asset',record.asset])
@@ -969,7 +973,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         }
         const choice=record.choice!
         const selectedPolicy=checkoutSelectionChildPolicy(policy,record)
-        const options={policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
+        const options={cashPayer:record.cashPayer,policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
         const handler=choice.network==='bsc'?createHostedBscCheckoutsHandler(options):choice.network==='xlayer'?createHostedStockCheckoutsHandler(options):createHostedCheckoutsHandler({...dependencies,...options})
         const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,...(record.currency?{currency:record.currency}:{}),title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}
         return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id+(record.switchable?':'+choice.network+':'+choice.asset:'')},body,query:{}})
@@ -1037,6 +1041,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         ok: true,
           checkout: {
             id: record.id,
+            paymentMethod:record.cashPayer?'cash_balance':'stablecoins',
             feePayer:record.feePayer,
             checkoutMode: hostedCheckoutMode(record),
             agenticType: record.agenticType,
@@ -1223,6 +1228,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     let replayed = false
     let idempotencyConflict = false
     const now = dependencies.now()
+    if(dependencies.cashPayer&&(!isNairaProject||asset!=='USDC'||checkoutMode!=='human'||(policy as DeveloperCheckoutPolicy).nairaSettlement?.refundAddress.toLowerCase()!==dependencies.cashPayer.address.toLowerCase()))throw Error('Cash checkout routing is invalid.')
     const nairaOrder = isNairaProject
       ? await dependencies.prepareNaira(policy as DeveloperCheckoutPolicy, createdId, amount,undefined,pricing)
       : null
@@ -1248,6 +1254,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       const hostedExpiry = Math.min(now.getTime() + expiresInMinutes * 60_000,dependencies.expiryLimit?.()??Infinity)
       const providerExpiry = nairaOrder?.validUntil ? Date.parse(nairaOrder.validUntil) : Number.POSITIVE_INFINITY
       const unsigned: Omit<CheckoutRecord, 'integrity'> = {
+        ...(dependencies.cashPayer?{cashPayer:dependencies.cashPayer}:{}),
         id: createdId,
         environment: 'live',
         ...(pricing?{pricing}:{}),

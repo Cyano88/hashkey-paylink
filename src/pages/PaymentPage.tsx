@@ -595,6 +595,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
   const [expiredBrand,setExpiredBrand]=useState<{name?:string;logo?:string}>({})
   const [hostedMerchantPaidFees,setMerchantPaidFees]=useState(false)
+  const [hostedCash,setHostedCash]=useState(false)
   const [hostedPricing,setHostedPricing]=useState<CheckoutPricing>()
   const [hostedExpiresAt,setHostedExpiresAt]=useState<string|undefined>()
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
@@ -684,7 +685,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   useEffect(() => {
     if (!isHostedCheckout) return
     let cancelled = false
-    setHostedPricing(undefined)
+    setHostedPricing(undefined);setHostedCash(false)
     setHostedIntentStatus('checking')
     setHostedIntentError('')
     void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&purpose=return`, { cache: 'no-store', signal: AbortSignal.timeout(15000) })
@@ -695,7 +696,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           returnUrl?: string
           merchantName?:string
           brandImageUrl?:string
-          checkout?: { feePayer?:'merchant'; pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
+          checkout?: { paymentMethod?:string; feePayer?:'merchant'; pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
           error?: string
         } | undefined
         if(!cancelled&&response.status===410){if(body?.returnUrl)setHostedReturnUrl(body.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
@@ -715,7 +716,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         }
         if (!cancelled) {
           setHostedReturnUrl(body.returnUrl || '')
-          setMerchantPaidFees(body.checkout?.feePayer==='merchant');setHostedExpiresAt(body.checkout?.expiresAt);setHostedPricing(body.checkout?.pricing)
+          setHostedCash(body.checkout?.paymentMethod==='cash_balance');setMerchantPaidFees(body.checkout?.feePayer==='merchant');setHostedExpiresAt(body.checkout?.expiresAt);setHostedPricing(body.checkout?.pricing)
           setHostedIntentStatus('verified')
           const attempt = body.checkout?.paymentAttempt
           if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc' || attempt?.network === 'ethereum' || attempt?.network === 'polygon' || attempt?.network === 'solana') {
@@ -1320,7 +1321,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const circleSolanaWalletChecking = !!circleSolanaSession && circleRequiredUnits > 0n && circleSolanaBalance === null && !circleSolanaBalanceError
 
   useEffect(() => {
-    if (checkoutAsset !== 'USDC' || (!pocketScan && isHostedCheckout) || !privyAuthenticated || !smartCheckoutOwnsWalletCta || chain === 'arc' || circleRequiredUnits <= 0n) {
+    if (checkoutAsset !== 'USDC' || isHostedCheckout || !privyAuthenticated || !smartCheckoutOwnsWalletCta || chain === 'arc' || circleRequiredUnits <= 0n) {
       setPocketCheckoutRoute(null)
       setPocketCheckoutWallets({})
       setPocketCheckoutRouting(false)
@@ -4141,7 +4142,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     return <BrowserCheckoutCard onChoose={()=>navigate('/pay/c/'+hostedCheckoutId+'?'+new URLSearchParams({attempt:hostedAttemptId,choose:'1'}))} pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
-      amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={false}
+      amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={hostedCash}
       authenticated={privyAuthenticated} email={privyEmail} signOut={logout} network={chain} networks={availableChains.map(value=>({value,label:value==='arc'?'Arc':CHAIN_META[value].label}))}
       onNetwork={value=>{if(availableChains.includes(value as typeof chain))setChain(value as typeof chain)}}
       walletReady={walletReady} address={walletReady?(solanaCheckout?circleSolanaSession!.wallet.address:circleEvmEmailSession!.wallet.address):''} balance={balance===null?null:formatUnits(balance,6)} shortfall={shortfall}
