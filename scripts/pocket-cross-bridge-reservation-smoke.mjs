@@ -56,3 +56,14 @@ const verified=createCrossBridgeReservationStore(transaction,()=>1000,async()=>u
 await assert.rejects(()=>verified.mutate('new',()=>row('new','xlayer')),e=>e.code==='wallet_action_pending');
 console.log('PASS legacy finality releases only proven non-bridge execution locks; unknown and pending bridge records still block');
 
+// New requests atomically retire only expired, unsigned raw-Solana preparations.
+const oldSol={...row('old','solana'),state:'pending',expiresAt:999,solanaTransaction:'unsigned-fixture',challengeId:'challenge'};
+for(const patch of [{}, {signedTransaction:'signed'}, {sourceHash:'hash'}, {transactionId:'provider-id'}, {userOperationHash:'provider-hash'}, {expiresAt:1001}, {state:'submitted'}, {solanaTransaction:undefined}]){
+ const old={...oldSol,...patch};db=new Map([[keys[0],{crossBridge:{old}}]]);
+ if(Object.keys(patch).length)await assert.rejects(()=>reserve('new','solana'),e=>e.code==='wallet_action_pending');
+ else {await reserve('new','solana');assert.equal(db.get(keys[0]).crossBridge.old.state,'cancelled');await assert.rejects(()=>cross.mutate('old',r=>({...r,state:'submitted',signedTransaction:'late'})));}
+}
+db=new Map([[keys[0],{crossBridge:{old:oldSol},actions:{block:{ownerId:'owner',action:'wallet.native-send',status:'submitted',metadata:{source:'solana'}}}}]]);
+await assert.rejects(()=>reserve('new','solana'));assert.equal(db.get(keys[0]).crossBridge.old.state,'pending','failed replacement rolls back retirement');
+for(const source of ['base','arc','ethereum','arbitrum','polygon']){db=new Map([[keys[0],{crossBridge:{old:{...oldSol,source}}}]]);await assert.rejects(()=>reserve('new',source),e=>e.code==='wallet_action_pending');}
+console.log('PASS expired unsigned Solana replacement; signed, submitted, unexpired and EVM protected; terminal late write rejected; rollback atomic');

@@ -48,6 +48,17 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
   if(reserve){
    if(!before&&next.state!=='prepared')invalid()
    const scope={network:next.source,address:next.walletAddress,ownerId:next.ownerId}
+   // Circle Solana signs raw bytes; only our signed relay can broadcast them.
+   // Retire expired unsigned attempts atomically with a new reservation. A late
+   // signature then sees a terminal record and cannot race the replacement.
+   if(!before&&next.source==='solana')for(const [oldId,old] of Object.entries(journal.crossBridge??{})){
+    if(oldId!==id&&old.ownerId===next.ownerId&&old.source==='solana'&&old.walletAddress===next.walletAddress
+     &&['prepared','submitting','pending'].includes(old.state)&&Number.isFinite(old.expiresAt)&&old.expiresAt<=now()
+     &&typeof old.solanaTransaction==='string'&&old.solanaTransaction.length>0
+     &&!old.signedTransaction&&!old.sourceHash&&!old.transactionId&&!old.userOperationHash){
+     journal.crossBridge![oldId]={...old,state:'cancelled',updatedAt:now()}
+    }
+   }
    const manualException=bindManualBridgeRetry(journal,next,now())
    assertNoCrossBridgeReservation(journal,scope,now(),id,manualException)
    for(const r of Object.values(journal.actions??{}))if(walletReservationActions.has(r.action)&&['started','submitted'].includes(r.status)&&r.ownerId===next.ownerId&&(!r.metadata?.source&&!r.metadata?.network||(r.metadata.source||r.metadata.network)===next.source)&&(!r.metadata?.walletAddress||same(next.source,r.metadata.walletAddress,next.walletAddress)))busy()
