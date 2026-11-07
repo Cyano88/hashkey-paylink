@@ -31,7 +31,9 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
   return r
  }
  return async function reconcile(owner:string,id:string){
-  const r=structuredClone(owned(await d.read(id),owner,id)),identity=fingerprint(r)
+  // Fingerprint the original validated plan before cloning. Solana PublicKey
+  // objects serialize canonically, but structuredClone strips their prototype.
+  const original=owned(await d.read(id),owner,id),identity=fingerprint(original),r=structuredClone(original)
   if(terminal(r.state))return publish(r)
   // Delivery and source finality are independent. A source reader outage must
   // never promote settlement, but need not hide independently proven delivery.

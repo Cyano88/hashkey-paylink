@@ -84,3 +84,13 @@ console.log('PASS '+directions+' directed network pairs including Arc and Solana
  releaseDelivery();await new Promise(resolve=>setImmediate(resolve));assert.equal(saved.state,'submitted');assert.equal(events,0,'Destination evidence alone never completes ledger');releaseSource();await work;assert.equal(saved.state,'completed');assert.equal(events,1);
 }
 console.log('PASS independent source/destination proof concurrency without earlier settlement or duplicate ledger writes')
+// Production reconstructs TransactionInstruction/PublicKey objects on each read.
+// The older harness cloned them before reconciliation and masked prototype loss.
+for(const asset of ['SOL','USDC','USDT']){
+ const f=data('solana','arbitrum',asset,'USDC');
+ assert.notEqual(JSON.stringify(f.plan,(_,v)=>typeof v==='bigint'?v.toString():v),JSON.stringify(structuredClone(f.plan),(_,v)=>typeof v==='bigint'?v.toString():v),'real Solana plan exhibits prototype-dependent serialization');
+ let row={id:'solana-real-plan',ownerId:'owner',sourceHash:hash('solana'),plan:f.plan,state:'submitted',updatedAt:now},events=0;
+ const run=createCrossBridgeSettlement({now:()=>now,read:async()=>({...row,plan:f.plan}),mutate:async(_,fn)=>(row=fn({...row,plan:f.plan})),source:async()=> 'confirmed',provider:async()=>({status:f.status,requests:f.requests}),received:async()=>BigInt(f.plan.route.receiveUnits),ledger:async()=>{events++}});
+ assert.equal((await run('owner',row.id)).state,'completed');assert.equal(events,1);
+}
+console.log('PASS real reconstructed Solana SOL/USDC/USDT plans settle without clone-induced fingerprint mismatch');
