@@ -19,7 +19,7 @@ assert.equal((await request('POST',{asset:'USDT',network:'arc'},{id,action:'sele
 assert.equal(count,0)
 const chosen=await request('POST',{asset:'USDe',network:'xlayer'},{id,action:'select-payment'})
 assert.equal(chosen.code,200,JSON.stringify(chosen));assert.match(chosen.data.selectedCheckoutUrl,/chk_1234567890/)
-assert.equal((await request('POST',{asset:'USDT',network:'base'},{id,action:'select-payment'})).data.selectedCheckoutId,'chk_1234567890','Reopen the existing attempt; never create a second payment')
+assert.equal((await request('POST',{asset:'USDT',network:'base'},{id,action:'select-payment'})).code,409,'A stale tab cannot change the selected route without its current child reference')
 assert.equal(count,1)
 const second=await request('POST',body,{},'selection-test-key-002');now+=16*60000
 assert.equal((await request('GET',{}, {id:second.data.checkoutId})).code,410)

@@ -955,6 +955,7 @@ async function invokeCheckoutHandler(handler:(req:Request,res:Response)=>unknown
 
 export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
+    if(req.method==='GET'&&req.query?.purpose==='selection'){const {checkoutSelectionNavigation}=await import('./checkout-selection.js');return res.json({ok:true,selection:await checkoutSelectionNavigation(String(req.query.id||''))})}
     if(isCheckoutSelection(req.query?.id)||req.body?.paymentSelection==='stablecoins') {
       if(verifiedProviderRouting.has(req))return res.status(400).json({ok:false,error:'Account funding uses its fixed USDC checkout.'})
       try {assertLiveDeveloperRequest(req)}catch(error){return res.status(403).json({ok:false,error:(error as Error).message})}
@@ -971,7 +972,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         const options={policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
         const handler=choice.network==='bsc'?createHostedBscCheckoutsHandler(options):choice.network==='xlayer'?createHostedStockCheckoutsHandler(options):createHostedCheckoutsHandler({...dependencies,...options})
         const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,...(record.currency?{currency:record.currency}:{}),title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}
-        return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id},body,query:{}})
+        return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id+(record.switchable?':'+choice.network+':'+choice.asset:'')},body,query:{}})
       })
       if(req.method==='GET'&&req.query?.purpose==='status') {
         const result=await invokeCheckoutHandler(selection,req).catch(error=>({ok:false,error:(error as Error).message}))

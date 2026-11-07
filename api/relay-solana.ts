@@ -314,7 +314,8 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
         res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
       }
-      if(accepted.mode==='net'){gasRecoveryRaw=BigInt(accepted.networkFeeUnits);await rememberMerchantFeeQuote(feeQuoteToken!,accepted)}
+      await rememberMerchantFeeQuote(feeQuoteToken!,accepted)
+      if(accepted.mode==='net'){gasRecoveryRaw=BigInt(accepted.networkFeeUnits)}
       // Gross legacy quotes retain their existing reimbursement behavior.
     }
     const treasuryRaw = feeRaw + gasRecoveryRaw

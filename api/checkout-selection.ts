@@ -10,11 +10,11 @@ import {CHECKOUT_NETWORK_ORDER,checkoutStablecoins} from '../src/lib/checkoutSta
 const KEY='hashpaylink:checkout-selections:v1'
 export const isCheckoutSelection=(id:unknown):id is string=>typeof id==='string'&&/^chks_[a-f0-9]{24}$/.test(id)
 type Option={network:string;asset:string;recipient:string;unavailableReason?:string}
-type Selection={preparing?:boolean;settlementMode?:'ngn';currency?:'NGN';defaultNetwork:string;id:string;projectId:string;amount:string;title:string;merchantName:string;brandImageUrl?:string;returnUrl:string;expiresAt:string;options:Option[];requestHash:string;choice?:Option;checkoutId?:string;checkoutUrl?:string;integrity:string}
+type Selection={switchable?:true;routes?:Record<string,{checkoutId:string;checkoutUrl:string}>;selecting?:string;paymentLock?:string;preparing?:boolean;settlementMode?:'ngn';currency?:'NGN';defaultNetwork:string;id:string;projectId:string;amount:string;title:string;merchantName:string;brandImageUrl?:string;returnUrl:string;expiresAt:string;options:Option[];requestHash:string;choice?:Option;checkoutId?:string;checkoutUrl?:string;integrity:string}
 type Store={sessions:Record<string,Selection>;keys:Record<string,string>}
 type Child=(policy:DeveloperCheckoutPolicy,record:Selection,recoverOnly?:boolean)=>Promise<{checkoutId:string;checkoutUrl:string}>
 const defaults={ready:hasRenderDurableStore,secret:()=>process.env.HOSTED_CHECKOUT_SIGNING_SECRET||'',now:Date.now,read:async()=>await readDurableJson<Store>(KEY)||{sessions:{},keys:{}},mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(KEY,s=>fn(s||{sessions:{},keys:{}})),policy:resolveDeveloperApiKeyPolicy,currentPolicy:resolveCheckoutSelectionPolicy,enabled:(network:string,id:string)=>network!=='bsc'&&network!=='xlayer'||checkoutRailEnabled(network as 'bsc'|'xlayer',id)}
-function sign(r:Selection,secret:string){return createHmac('sha256',secret).update(JSON.stringify([r.id,r.defaultNetwork,r.projectId,r.amount,r.title,r.merchantName,r.brandImageUrl||'',r.returnUrl,r.expiresAt,r.options.map(o=>[o.network,o.asset,o.recipient]),r.requestHash,r.choice?[r.choice.network,r.choice.asset,r.choice.recipient]:null,r.checkoutId||'',r.checkoutUrl||'',...(r.currency?[r.currency]:[]),...(r.settlementMode?[r.settlementMode,r.options.map(o=>o.unavailableReason||''),!!r.preparing]:[])])).digest('hex')}
+function sign(r:Selection,secret:string){return createHmac('sha256',secret).update(JSON.stringify([r.id,r.defaultNetwork,r.projectId,r.amount,r.title,r.merchantName,r.brandImageUrl||'',r.returnUrl,r.expiresAt,r.options.map(o=>[o.network,o.asset,o.recipient]),r.requestHash,r.choice?[r.choice.network,r.choice.asset,r.choice.recipient]:null,r.checkoutId||'',r.checkoutUrl||'',...(r.switchable?[true,r.routes||{},r.selecting||'',r.paymentLock||'']:[]),...(r.currency?[r.currency]:[]),...(r.settlementMode?[r.settlementMode,r.options.map(o=>o.unavailableReason||''),!!r.preparing]:[])])).digest('hex')}
 function valid(r:Selection|undefined,secret:string):r is Selection{return !!r&&secret.length>=32&&/^[a-f0-9]{64}$/.test(r.integrity)&&timingSafeEqual(Buffer.from(r.integrity,'hex'),Buffer.from(sign(r,secret),'hex'))}
 function options(p:DeveloperCheckoutPolicy,enabled:typeof defaults.enabled):Option[]{
  const list=p.settlementMode==='ngn' ? (p.payerOptions||p.paymentOptions.flatMap(o=>acceptedCheckoutAssets(o.network,p.acceptedAssets).map(asset=>({network:o.network,asset})))).map(o=>({...o,recipient:p.nairaSettlement!.refundAddress})) as Option[] : p.paymentOptions.flatMap(o=>acceptedCheckoutAssets(o.network,p.acceptedAssets).map(asset=>({...o,asset}))) as Option[]
@@ -22,8 +22,27 @@ function options(p:DeveloperCheckoutPolicy,enabled:typeof defaults.enabled):Opti
  if(p.settlementMode==='ngn')for(const o of list)if(o.network!=='base'||o.asset!=='USDC')o.unavailableReason='This asset cannot fund NGN settlement yet. Choose another payment option.'
  return list.filter(o=>p.settlementMode==='ngn'||!requiresNgnPricing(p)||['USDC','USDT'].includes(o.asset)).sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.network as any)-CHECKOUT_NETWORK_ORDER.indexOf(b.network as any))
 }
-function publicRecord(r:Selection){return {ok:true,settlementMode:r.settlementMode||'usdc',checkoutId:r.id,checkoutUrl:'/pay/c/'+r.id,returnUrl:r.returnUrl,checkout:{id:r.id,selectionCheckout:true,currency:r.currency,defaultNetwork:r.defaultNetwork,amount:r.amount,merchantName:r.merchantName,brandImageUrl:r.brandImageUrl,title:r.title,expiresAt:r.expiresAt,status:'pending',settlementMode:r.settlementMode||'usdc',options:r.options.map(({network,asset,unavailableReason})=>({network,asset,...(unavailableReason?{unavailableReason}:{})})),selected:r.choice?{network:r.choice.network,asset:r.choice.asset}:undefined},...(r.checkoutUrl?{selectedCheckoutUrl:r.checkoutUrl,selectedCheckoutId:r.checkoutId}:{})}}
-export async function checkoutSelectionForChild(childId:string){if(!defaults.ready())return undefined;return Object.values((await defaults.read()).sessions).find(r=>r.checkoutId===childId&&valid(r,defaults.secret()))?.id}
+function publicRecord(r:Selection){return {ok:true,settlementMode:r.settlementMode||'usdc',checkoutId:r.id,checkoutUrl:'/pay/c/'+r.id,returnUrl:r.returnUrl,checkout:{id:r.id,selectionCheckout:true,currency:r.currency,defaultNetwork:r.defaultNetwork,amount:r.amount,merchantName:r.merchantName,brandImageUrl:r.brandImageUrl,title:r.title,expiresAt:r.expiresAt,status:'pending',settlementMode:r.settlementMode||'usdc',options:r.options.map(({network,asset,unavailableReason})=>({network,asset,...(unavailableReason?{unavailableReason}:{})})),selected:r.choice?{network:r.choice.network,asset:r.choice.asset}:undefined,canChange:!!r.switchable&&!r.paymentLock,preparingOption:r.selecting?r.options.find(o=>o.network+':'+o.asset===r.selecting)&&{network:r.selecting.split(':')[0],asset:r.selecting.split(':')[1]}:undefined,selectedCheckoutId:r.checkoutId},...(r.checkoutUrl?{selectedCheckoutUrl:r.checkoutUrl,selectedCheckoutId:r.checkoutId}:{})}}
+function containsChild(r:Selection,id:string){return r.checkoutId===id||Object.values(r.routes||{}).some(route=>route.checkoutId===id)}
+export async function checkoutSelectionForChild(childId:string){if(!defaults.ready())return undefined;return Object.values((await defaults.read()).sessions).find(r=>containsChild(r,childId)&&valid(r,defaults.secret()))?.id}
+export async function checkoutSelectionNavigation(childId:string,d=defaults){
+ if(!d.ready())return null
+ const r=Object.values((await d.read()).sessions).find(r=>containsChild(r,childId)&&valid(r,d.secret()))
+ return r?.switchable?{id:r.id,canChange:!r.paymentLock&&Date.parse(r.expiresAt)>d.now()}:null
+}
+/** Shared atomic route lock, acquired before any provider signing/broadcast. Never
+ * release on a timeout: the provider may already have accepted the payment. */
+export async function claimCheckoutSelectionPayment(childId:string|undefined,d=defaults){
+ if(!childId||!/^chk(?:b|x)?_/.test(childId)||!d.ready())return
+ const candidate=Object.values((await d.read()).sessions).find(r=>containsChild(r,childId)&&valid(r,d.secret()))
+ if(!candidate?.switchable)return
+ await d.mutate(s=>{
+  const r=s.sessions[candidate.id]
+  if(!valid(r,d.secret())||r.checkoutId!==childId||r.selecting||(r.paymentLock&&r.paymentLock!==childId)||Date.parse(r.expiresAt)<=d.now())throw Error('Payment option changed. Reopen checkout to continue.')
+  r.paymentLock=childId;r.integrity=sign(r,d.secret());return s
+ })
+}
+
 export function createCheckoutSelectionHandler(child:Child,overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  return async(req:Request,res:Response)=>{
@@ -44,10 +63,41 @@ export function createCheckoutSelectionHandler(child:Child,overrides:Partial<typ
     const p=await d.currentPolicy(r.projectId)
     if(!p||p.checkoutMode!=='human'||!['usdc','ngn'].includes(p.settlementMode)||!p.capabilities.includes('hosted_checkout'))throw Error('This checkout is not accepting payments.')
     if(p.settlementMode!==(r.settlementMode||'usdc'))throw Error('Merchant settlement changed. Return to the store for a new checkout.')
-    if(r.checkoutUrl)return res.json(publicRecord(r))
+    if(r.checkoutUrl&&!r.switchable)return res.json(publicRecord(r))
     const chosen=r.options.find(o=>o.network===req.body?.network&&o.asset===req.body?.asset)
     if(!chosen||!options(r.currency?p:{...p,profileCountry:undefined},d.enabled).some(o=>o.network===chosen.network&&o.asset===chosen.asset&&o.recipient===chosen.recipient))throw Error('This payment option is no longer available. Return to the store.')
     if(chosen.unavailableReason)throw Error(chosen.unavailableReason)
+    if(r.switchable){
+      const routeKey=chosen.network+':'+chosen.asset
+      let reused=false
+      await d.mutate(s=>{
+        const current=s.sessions[id]
+        if(!valid(current,d.secret())||Date.parse(current.expiresAt)<=d.now())throw Error('Checkout expired.')
+        if(current.paymentLock){if(current.choice?.network===chosen.network&&current.choice.asset===chosen.asset){reused=true;return s}throw Error('Payment is already being confirmed. Continue with the current payment.')}
+        if(current.selecting&&current.selecting!==routeKey)throw Error('Another payment option is being prepared. Try again.')
+        if(!current.selecting&&current.checkoutId&&current.choice?.network===chosen.network&&current.choice.asset===chosen.asset){reused=true;return s}
+        if(current.checkoutId!==req.body?.expectedCheckoutId)throw Error('Payment option changed in another tab. Reopen checkout.')
+        const cached=current.routes?.[routeKey]
+        if(cached){current.choice=chosen;current.checkoutId=cached.checkoutId;current.checkoutUrl=cached.checkoutUrl;reused=true}
+        else current.selecting=routeKey
+        current.integrity=sign(current,d.secret());return s
+      })
+      if(reused)return res.json(publicRecord((await d.read()).sessions[id]))
+      const reserved=(await d.read()).sessions[id]
+      let made:Awaited<ReturnType<Child>>
+      try{made=await child(r.currency?p:{...p,profileCountry:undefined},{...reserved,choice:chosen})}
+      catch(error){await d.mutate(s=>{const current=s.sessions[id];if(valid(current,d.secret())&&current.selecting===routeKey){delete current.selecting;current.integrity=sign(current,d.secret())}return s});throw error}
+      if(!/^chk(?:b|x)?_[a-zA-Z0-9]{8,40}$/.test(made.checkoutId)||!made.checkoutUrl.startsWith('/pay/c/'+made.checkoutId))throw Error('Checkout could not be verified.')
+      await d.mutate(s=>{
+        const current=s.sessions[id]
+        if(!valid(current,d.secret()))throw Error('Checkout conflict.')
+        // Same-route retries recover the same idempotent child after a lost response.
+        if(current.routes?.[routeKey]?.checkoutId===made.checkoutId&&current.checkoutId===made.checkoutId)return s
+        if(current.selecting!==routeKey||current.paymentLock)throw Error('Checkout conflict.')
+        current.routes??={};current.routes[routeKey]=made;current.choice=chosen;current.checkoutId=made.checkoutId;current.checkoutUrl=made.checkoutUrl;delete current.selecting;current.integrity=sign(current,d.secret());return s
+      })
+      return res.json(publicRecord((await d.read()).sessions[id]))
+    }
     let recoverOnly=false
     await d.mutate(s=>{const current=s.sessions[id];if(!valid(current,d.secret())||Date.parse(current.expiresAt)<=d.now())throw Error('Checkout expired.');if(current.choice&&(current.choice.network!==chosen.network||current.choice.asset!==chosen.asset))throw Error('This checkout already has a payment option. Reopen it to continue.');if(current.settlementMode==='ngn'){recoverOnly=!!current.preparing;current.preparing=true}current.choice=chosen;current.integrity=sign(current,d.secret());return s})
     r=(await d.read()).sessions[id]
@@ -73,7 +123,7 @@ export function createCheckoutSelectionHandler(child:Child,overrides:Partial<typ
    if(!/^[a-zA-Z0-9:_-]{16,128}$/.test(key))throw Error('A valid Idempotency-Key header is required.')
    const hash=createHash('sha256').update(JSON.stringify([amount,title,returnUrl,minutes,...(ngnPrice?['NGN']:[])])).digest('hex'),scope=p.partnerId+':'+key
    let result:Selection|undefined
-   await d.mutate(s=>{const existing=s.sessions[s.keys[scope]];if(existing){if(!valid(existing,d.secret())||existing.requestHash!==hash)throw Error('Idempotency key conflict.');result=existing;return s}validateCheckoutCurrency(p,req.body?.currency,amount);if(Object.keys(s.sessions).length>=20000)throw Error('Checkout capacity reached.');const available=options(p,d.enabled).filter(o=>!!o.unavailableReason||!ngnPrice||['USDC','USDT'].includes(o.asset));if(!available.length)throw Error('No payment options are available.');const r:Selection={...(p.settlementMode==='ngn'?{settlementMode:'ngn' as const}:{}),...(ngnPrice?{currency:'NGN' as const}:{}),defaultNetwork:p.checkoutDefaultNetwork||p.payerDefaultNetwork||p.defaultNetwork,id:'chks_'+randomUUID().replace(/-/g,'').slice(0,24),projectId:p.partnerId,amount,title,merchantName:p.merchantName,brandImageUrl:p.brandImageUrl,returnUrl,expiresAt:new Date(d.now()+minutes*60000).toISOString(),options:available,requestHash:hash,integrity:''};r.integrity=sign(r,d.secret());s.sessions[r.id]=r;s.keys[scope]=r.id;result=r;return s})
+   await d.mutate(s=>{const existing=s.sessions[s.keys[scope]];if(existing){if(!valid(existing,d.secret())||existing.requestHash!==hash)throw Error('Idempotency key conflict.');result=existing;return s}validateCheckoutCurrency(p,req.body?.currency,amount);if(Object.keys(s.sessions).length>=20000)throw Error('Checkout capacity reached.');const available=options(p,d.enabled).filter(o=>!!o.unavailableReason||!ngnPrice||['USDC','USDT'].includes(o.asset));if(!available.length)throw Error('No payment options are available.');const r:Selection={...(p.settlementMode==='usdc'?{switchable:true as const,routes:{}}:{}),...(p.settlementMode==='ngn'?{settlementMode:'ngn' as const}:{}),...(ngnPrice?{currency:'NGN' as const}:{}),defaultNetwork:p.checkoutDefaultNetwork||p.payerDefaultNetwork||p.defaultNetwork,id:'chks_'+randomUUID().replace(/-/g,'').slice(0,24),projectId:p.partnerId,amount,title,merchantName:p.merchantName,brandImageUrl:p.brandImageUrl,returnUrl,expiresAt:new Date(d.now()+minutes*60000).toISOString(),options:available,requestHash:hash,integrity:''};r.integrity=sign(r,d.secret());s.sessions[r.id]=r;s.keys[scope]=r.id;result=r;return s})
    return res.status(201).json(publicRecord(result!))
   }catch(e){return res.status(409).json({ok:false,error:e instanceof Error?e.message:'Checkout could not be prepared.'})}
  }

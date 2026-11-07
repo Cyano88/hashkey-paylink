@@ -166,6 +166,7 @@ export default async function handler(req:Request,res:Response){
    if(p.checkoutId){const merchant=s.merchants[p.merchantId];await assertUnifiedXPayDestination(p.checkoutId,p.merchantId,String(merchant?.updatedAt))}
    const head=await stockNoticeClient.getBlock();if(Date.now()-Number(head.timestamp)*1000>60000)fail('X Layer unavailable.',503)
    const virtual=await checkoutMerchant(p.merchantId)
+   if(isStockCheckoutId(p.merchantId))await (await import('../checkout-selection.js')).claimCheckoutSelectionPayment(p.merchantId)
    const updated=await mutate(s=>{const p=s.payments[id],m=s.merchants[p.merchantId]||virtual;if(p.status!=='ready'||p.expiresAt<=Date.now())fail('This payment needs a new review or is already submitted.',409);if(!m||m.deletedAt||!m.tokens.includes(p.token)||m.wallet.toLowerCase()!==p.recipient.toLowerCase())fail('Merchant settings changed. Review again.',409);if(Object.values(s.payments).some(other=>other.id!==id&&other.owner===owner&&other.status==='submitted'))fail('An earlier payment needs confirmation.',409);if(isStockCheckoutId(p.merchantId)&&Object.values(s.payments).some(other=>other.id!==id&&other.merchantId===p.merchantId&&['submitted','paid'].includes(other.status)))fail('This checkout already has a payment in progress.',409);p.status='submitted';p.authorizedBlock=String(head.number);p.authorizedAt=Date.now();p.updatedAt=Date.now()})
    return res.json({ok:true,payment:publicPayment(updated.payments[id])})
   }

@@ -25,6 +25,7 @@ export async function assertMerchantFeeBinding(binding:PaymentFeeBinding){
 }
 /** Save authenticated quote evidence before signing. Recovery does not depend on a browser session. */
 export async function rememberMerchantFeeQuote(token:string,quote:PaymentFeeQuote){
+ await (await import('./checkout-selection.js')).claimCheckoutSelectionPayment(quote.checkoutId)
  if(!quote.checkoutId||quote.mode!=='net'||quote.exemption!=='none')return
  await mutateDurableJson<Store>(KEY,current=>{
   const store=current||{quotes:{}}

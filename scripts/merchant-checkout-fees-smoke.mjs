@@ -8,6 +8,7 @@ const binding={checkoutId:checkout.id,purpose:'payment',asset:'USDC',chain:'base
 const signed=createPaymentFeeQuote(binding,10000n,false,now)
 globalThis.fixture={checkout,store:{quotes:{}},calls:[],failTreasury:false}
 const mocks={
+ './checkout-selection.js':`export const claimCheckoutSelectionPayment=async id=>{if(fixture.rejectClaim)throw Error('Payment option changed');fixture.claimed=id}`,
  './ng-pos.js':`export const readPosCryptoFeeContext=async()=>({recipient:fixture.checkout.recipient,createdAt:fixture.checkout.createdAt})`,
  './hosted-checkouts.js':`export const readVerifiedHostedCheckoutRecord=async()=>fixture.checkout;export const hostedCheckoutPaymentOption=(c,n)=>n===c.network?{recipient:c.recipient}:undefined`,
  './render-durable-store.js':`export const readDurableJson=async()=>fixture.store;export const mutateDurableJson=async(k,f)=>{fixture.store=f(fixture.store);return fixture.store}`,
@@ -21,6 +22,8 @@ for(const patch of [{purpose:'wallet-send'},{mode:'gross'},{recipient:payer},{am
 const input={txHash:'0x'+'a'.repeat(64),payer,network:'base'}
 await assert.rejects(()=>verifyMerchantCheckoutTransfer(checkout,input))
 await rememberMerchantFeeQuote(signed.token,signed.quote)
+assert.equal(fixture.claimed,checkout.id,'Signing evidence first claims the shared checkout route')
+fixture.rejectClaim=true;await assert.rejects(()=>rememberMerchantFeeQuote(signed.token,signed.quote),/Payment option changed/);fixture.rejectClaim=false
 const result=await verifyMerchantCheckoutTransfer(checkout,input)
 assert.equal(result.amount,'1');assert.deepEqual(result.fees,{payer:'merchant',platformFee:'0.0025',networkFee:'0.01',netAmount:'0.9875'})
 assert.equal(fixture.calls.length,2);assert(fixture.calls.every(x=>x.exactAmount&&x.txHash===input.txHash&&x.payer===payer&&x.notAfter===checkout.expiresAt))

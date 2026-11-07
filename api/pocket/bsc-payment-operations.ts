@@ -14,6 +14,7 @@ type Dependencies={
  mutate(fn:(store:BscPaymentOperationStore|undefined)=>BscPaymentOperationStore):Promise<unknown>;
  approve(ownerId:string,approval:string):Promise<boolean>;
  preflight(q:BscPaymentQuote):Promise<void>;
+ claimCheckout?(q:BscPaymentQuote):Promise<void>;
  send(request:ReturnType<typeof bscPaymentRequest>,authorization:string):Promise<{ok:boolean;status:number;body:any}>;
  transaction(id:string):Promise<any>;
  userOperation?(hash:Hex,wallet:string):Promise<Hex|null>;
@@ -40,6 +41,7 @@ export function createBscPaymentOperations(d:Dependencies){
   if(existing){bound(existing,q);if(existing.fingerprint!==fingerprint)fail();return structuredClone(existing)}
   await d.preflight(q)
   if(!await d.approve(q.ownerId,approval))fail('Confirm with your PIN or fingerprint.')
+  await d.claimCheckout?.(q)
   await d.mutate(current=>{
    validateBscPayment(q,d.now())
    const store=current||{operations:{}}
@@ -72,6 +74,7 @@ export function createBscPaymentOperations(d:Dependencies){
   if(typeof authorization!=='string'||!authorization.trim()||authorization.length>20000)fail('Confirm the payment in your wallet.')
   validateBscPayment(before.quote,d.now())
   await d.preflight(before.quote)
+  await d.claimCheckout?.(before.quote)
   const request=bscPaymentRequest(before.quote,d.appId,d.now())
   const recoveryBlock=d.blockNumber?await d.blockNumber():undefined
   if(d.blockNumber&&(typeof recoveryBlock!=='string'||!/^0x[0-9a-f]+$/i.test(recoveryBlock)))fail('Payment confirmation is still being verified.')

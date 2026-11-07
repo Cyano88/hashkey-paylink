@@ -3,7 +3,7 @@ import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { CheckoutFooter, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import BrowserPaymentResult from '../components/BrowserPaymentResult'
 import CheckoutChoice from '../components/CheckoutChoice'
@@ -23,7 +23,8 @@ type HostedCheckoutLookup = {
 }
 
 export default function HostedCheckoutEntry() {
-  const navigate = useNavigate()
+  const navigate = useNavigate(), location=useLocation()
+  const changePayment=new URLSearchParams(location.search).get('change')==='1'
   const { checkoutId = '' } = useParams()
   const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
   const [error, setError] = useState('')
@@ -45,7 +46,7 @@ export default function HostedCheckoutEntry() {
         if(cancelled)return false
         if(!cancelled&&response.status===410){setExpiredReturn(body?.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
         if(response.ok&&body?.ok&&(body.checkout as any)?.selectionCheckout&&body.checkout?.id===checkoutId&&/^chks_[a-f0-9]{24}$/.test(checkoutId)){
-          if(!cancelled){if(body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl+(body.selectedCheckoutUrl.includes('?')?'&':'?')+(new URLSearchParams(location.search).get('browser')==='1'?'browser=1':new URLSearchParams(location.search).get('pocketFallback')==='1'?'pocketFallback=1':new URLSearchParams(location.search).get('mode')==='pocket'?'pocket=1':''),{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
+          if(!cancelled){if(!(changePayment&&(body.checkout as unknown as CheckoutSelectionView).canChange)&&body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl+(body.selectedCheckoutUrl.includes('?')?'&':'?')+(new URLSearchParams(location.search).get('browser')==='1'?'browser=1':new URLSearchParams(location.search).get('pocketFallback')==='1'?'pocketFallback=1':new URLSearchParams(location.search).get('mode')==='pocket'?'pocket=1':''),{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
           return false
         }
         if(response.ok&&body?.ok&&body.checkout?.bscCheckout&&body.checkout.id===checkoutId&&/^chkb_[a-f0-9]{24}$/.test(checkoutId)){
@@ -70,7 +71,7 @@ export default function HostedCheckoutEntry() {
       if (!cancelled) setError(timedOut ? 'Checkout took too long to respond. Please reopen the link.' : cause instanceof Error ? cause.message : 'This checkout could not be opened.')
     })
     return () => { cancelled = true; stop() }
-  }, [attemptId, checkoutId, navigate, browser])
+  }, [attemptId, checkoutId, navigate, browser,changePayment])
 
   if(error&&/expired/i.test(error))return <CheckoutExpired merchant={expiredBrand.name||checkout?.checkout?.merchantName||stock?.checkout?.merchantName} brandImageUrl={expiredBrand.logo||checkout?.checkout?.brandImageUrl||stock?.checkout?.brandImageUrl} returnUrl={expiredReturn||checkout?.returnUrl||stock?.returnUrl}/>
   if(selection){const mode=new URLSearchParams(location.search).get('mode');return browser||mode==='pocket'?<CheckoutAssetChoice key={checkoutId} {...selection} mode={mode==='pocket'?'pocket':'web'}/>:<div className="py-6"><CheckoutChoice id={checkoutId} merchant={selection.checkout.merchantName} brandImageUrl={selection.checkout.brandImageUrl} title={selection.checkout.title} expiresAt={selection.checkout.expiresAt} returnUrl={selection.returnUrl} amount={checkoutPriceLabel(selection.checkout.currency?{currency:selection.checkout.currency,amount:selection.checkout.amount}:undefined,selection.checkout.amount+' '+(selection.checkout.options[0]?.asset||''))} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1')}/></div>}

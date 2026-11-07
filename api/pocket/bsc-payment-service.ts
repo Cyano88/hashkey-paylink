@@ -49,6 +49,7 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
   if(BigInt(fee.coverageFeeUnits)>BigInt(q.reimbursementUnits))throw Error('Fees changed. Review the payment again.')
   if(await runtime.balance(q.asset,q.walletAddress)<bscPaymentAmounts(q).total)throw Error('Insufficient '+q.asset+'.')
  },
+ claimCheckout:async q=>(await import('../checkout-selection.js')).claimCheckoutSelectionPayment(q.checkoutId),
  send:async(request,authorization)=>{const r=await d.fetcher(request.url,{method:'POST',headers:{...request.headers,...headers,'Content-Type':'application/json','privy-authorization-signature':authorization},body:JSON.stringify(request.body),redirect:'error',signal:AbortSignal.timeout(30000)});return {ok:r.ok,status:r.status,body:await r.json()}},
  settle:(q,hash,op)=>d.settlement(q,hash,runtime.rpc,op)})
  async function publish(op:BscPaymentOperation){
