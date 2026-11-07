@@ -5,6 +5,7 @@ Stablecoin-selection orders can change between Circle, BNB Chain and X Layer bef
 ## Order and payment safety
 
 - New USDC-settlement selection records carry signed route metadata. Each asset/network choice gets a stable idempotency key and child checkout; returning to a route reuses that child. Parent amount, recipient snapshot, expiry and merchant acceptance remain authoritative.
+- Switchable Circle children keep their selected network. The parent selector owns all route changes, preventing a saved child from independently locking to a different Circle network than the parent choice.
 - A shared durable parent lock is acquired before Circle signing, after BNB approval and before returning its signing request, and before X Layer authorization. Stale child quotes cannot claim the order after switching. The BNB submit path checks the lock again.
 - Concurrent switches compare the current child reference. An in-flight child creation reserves its route; signing and competing routes cannot pass that reservation. Lost responses can resume the same idempotent child. Failed creation clears the reservation; reload exposes the reserved choice for recovery.
 - Submitted or potentially signed payments never unlock merely because a quote or provider request timed out. Normal payment reconciliation and authenticated fulfillment remain unchanged.

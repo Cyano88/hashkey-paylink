@@ -5,6 +5,7 @@ const policy={partnerId:'fixture',settlementMode:'usdc',defaultNetwork:'base',pa
 const record={merchantName:'Fixture',choice:{network:'base',asset:'USDT'},options:policy.paymentOptions.filter(o=>o.network!=='arc').map(o=>({...o,asset:'USDT'}))}
 assert.deepEqual(checkoutSelectionChildPolicy(policy,record).paymentOptions.map(o=>o.network),['base','arbitrum','solana','ethereum','polygon'])
 assert.equal(checkoutSelectionChildPolicy(policy,record).defaultNetwork,'base')
+assert.deepEqual(checkoutSelectionChildPolicy(policy,{...record,switchable:true}).paymentOptions.map(o=>o.network),['base'],'Switchable orders use the parent selector; cached children cannot independently move to another network')
 assert.equal(checkoutSelectionChildPolicy({...policy,paymentOptions:policy.paymentOptions.map(o=>o.network==='arbitrum'?{...o,recipient:'0x'+'2'.repeat(40)}:o)},record).paymentOptions.some(o=>o.network==='arbitrum'),false,'changed recipient is not silently accepted')
 assert.equal(checkoutSelectionChildPolicy({...policy,acceptedAssets:{base:['USDT'],arbitrum:['USDC']}},record).paymentOptions.some(o=>o.network==='arbitrum'),false,'merchant asset removal is respected')
 assert.deepEqual(checkoutSelectionChildPolicy({...policy,settlementMode:'ngn'},record).paymentOptions.map(o=>o.network),['base'],'local settlement remains on its provider-bound route')
