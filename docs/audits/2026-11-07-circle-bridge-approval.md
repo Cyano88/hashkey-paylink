@@ -23,3 +23,13 @@ Live reopening of Circle still requires the user's approval interaction. Existin
 Final verification: all nine updated browser source/asset scenarios passed, including the failed-opening checks for each Circle case. Focused typecheck and native source guard passed. EVM approval-completed/no-hash recovery now supplies the Circle session to status and is covered by a regression assertion; newly returned signature/approval evidence cannot be reclassified as awaiting approval.
 
 Built and installed pocket-circle-bridge-approval-20261107.apk on Pixel 5A160DLCH006VM. SHA256 1AABDFE6DCAD9DC89E39EA2E33CD516378CBB5A23715338C34E0B819E69D878D. All 1870 packaged web assets match dist. Source archive contains 47 files. Live launch, Home, Swap and Bridge navigation verified after installation. No live approval, retry, cancellation or transaction performed. App restart opened the normal empty bridge form; the old operation sheet was not live-reopened, so its post-install recovery presentation remains fixture-verified only. Backend remains 1e28e0f77; no server deployment required.
+
+## Second consistency check
+
+Pixel at 10:47 showed a different route, SOL to Arbitrum, in Bridge not sent state. This screen alone does not identify the underlying SDK/provider error. Read-only journal lookup still found the original SOL pending reservation unsigned and without source hash.
+
+Found and fixed a further error branch: when Circle approval throws and the subsequent status request also fails, preserve the original approval error and transition to awaiting approval (known challenge) or needs review (unknown challenge), preserving signed/submitted evidence. Never dispatch again in this catch. Previously this branch silently left the original preparing/processing state. Owner check is retained before saving.
+
+Expanded panel browser scenarios to simulate both a successful status lookup and an aborted status lookup after failed Circle opening for Ethereum, Arbitrum, Base, Solana USDC, Solana SOL, Polygon POL and Arc EURC. All nine source/asset scenarios passed, including unchanged Privy BNB/X Layer regressions. Shared recovery suite, focused TypeScript, source guard, approval opening timeout, overlay/surface and installed SDK session replacement/handshake tests passed. These SDK tests use fixture authentication and do not constitute a live approval on each chain.
+
+Second build installed successfully on Pixel: pocket-circle-bridge-recheck-20261107.apk, SHA256 AF1787EB8C477C9E800B9285553E1CE0EDDA37770C1378EDB60B902A7C585659; all 1870 packaged web assets verified, 47-file source archive saved. No backend change/deployment and no live transaction during recheck.
