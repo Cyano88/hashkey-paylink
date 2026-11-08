@@ -23,7 +23,7 @@ assert.equal((await readCheckoutReceipt('v1.signed.alias',readers)).receiptId,id
 assert.equal(await readCheckoutReceipt('v1.signed.alias',{...readers,registered:async()=>({source:'hosted-checkout',merchantId:id,chain:'polygon',txHash:'0xabc'})}),undefined)
 assert.equal(await readCheckoutReceipt('v1.signed.alias',{...readers,checkout:async()=>({...base,network:'solana',payment:{...base.payment,txHash:'AbC'}}),registered:async()=>({source:'hosted-checkout',merchantId:id,chain:'solana',txHash:'abc'})}),undefined)
 let store={contacts:{}},owned=true,record={...base,payment:undefined},email='verified@example.test'
-const handler=createCheckoutReceiptContactHandler({identity:async()=>({userId:'owner',email}),checkout:async()=>record,settings:async()=>settings,owns:async()=>owned,now:()=>time,mutate:async fn=>{store=fn(store);return store}})
+const handler=createCheckoutReceiptContactHandler({kyc:async()=>({level:'basic'}),identity:async()=>({userId:'owner',email}),checkout:async()=>record,settings:async()=>settings,owns:async()=>owned,now:()=>time,mutate:async fn=>{store=fn(store);return store}})
 async function post(patch={}){const res={statusCode:200,setHeader(){},status(n){this.statusCode=n;return this},json(body){this.body=body;return this}};await handler({method:'POST',body:{checkoutId:id,network:'base',payer:'0xPayer',email:'attacker@example.test',...patch}},res);return res}
 assert.equal((await post()).statusCode,200);assert.equal(Object.values(store.contacts)[0].email,email)
 email='changed@example.test';await post();assert.equal(Object.values(store.contacts)[0].email,'verified@example.test')

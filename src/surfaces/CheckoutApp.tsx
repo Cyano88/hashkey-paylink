@@ -28,7 +28,7 @@ function CheckoutHome() {
 }
 function PocketCheckoutFallback() {
   const {checkoutId=''}=useParams(),location=useLocation()
-  try{return <Navigate replace to={checkoutHandoff(checkoutId,new URLSearchParams(location.search).get('attempt')||'').fallback}/>}
+  try{return <Navigate replace to={checkoutHandoff(checkoutId,new URLSearchParams(location.search).get('attempt')||'',new URLSearchParams(location.search).get('method')==='cash_balance').fallback}/>}
   catch{return <CheckoutHome/>}
 }
 export default function CheckoutApp() {

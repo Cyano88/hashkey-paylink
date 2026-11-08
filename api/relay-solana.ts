@@ -314,6 +314,12 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
         res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
       }
+      if(checkoutId?.startsWith('chk_')){
+        const {verifiedPrivyUser,readCircleLink,circleLinkKey}=await import('./privy-circle-link.js')
+        const identity=await verifiedPrivyUser(req),link=await readCircleLink(circleLinkKey(identity.userId,'solana','payment'))
+        if(!link||link.privyUserId!==identity.userId||link.circleWalletAddress!==fromPubkey.toBase58())throw Object.assign(Error('Use your verified Pocket payment wallet.'),{status:403})
+        await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(identity.userId,{id:checkoutId,network:'solana',asset,amount,recipient:to!,payer:from!},false)
+      }
       await rememberMerchantFeeQuote(feeQuoteToken!,accepted)
       if(accepted.mode==='net'){gasRecoveryRaw=BigInt(accepted.networkFeeUnits)}
       // Gross legacy quotes retain their existing reimbursement behavior.

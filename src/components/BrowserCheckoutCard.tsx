@@ -53,7 +53,7 @@ export default function BrowserCheckoutCard(p:Props){
    <button disabled={busy||p.blocked||(!verificationLevel&&!funding&&!canFund&&Boolean(p.quoteLoading))} onClick={()=>void run(async()=>{if(verificationLevel){setVerifying(true);return}if(!p.walletReady){await p.prepare();return}if(funding){setFunding(false);return}if(canFund){setFunding(true);return}if(needsRefresh){await p.refresh();return}await prepareCheckoutReceiptContact({checkoutId:p.id,network:p.network,payer:p.address,getAccessToken});await p.pay()})} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-45 dark:bg-white dark:text-gray-950">{busy?'Please wait…':verificationLevel?'Verify identity':verificationLevel?'Verify identity':!p.walletReady?'Continue':funding?'Return to payment':canFund?'Add funds':needsRefresh?'Continue':'Pay securely'}</button>
    {p.walletReady&&!busy&&<button onClick={()=>void run(p.refresh)} className="mt-2 min-h-11 w-full text-xs text-gray-500">Update balance</button>}
   </>}
-  <CheckoutPaymentChange id={p.id} busy={busy}/>
+  {!p.fiat&&<CheckoutPaymentChange id={p.id} busy={busy}/>}
   <a onClick={event=>{if(p.onChoose){event.preventDefault();if(!busy)p.onChoose()}}} href={handoff.browser.replace('browser=1','choose=1')} className="mt-5 block py-2 text-center text-xs text-gray-500">Other ways to continue</a>
  </section><CheckoutFooter/></main>
 }

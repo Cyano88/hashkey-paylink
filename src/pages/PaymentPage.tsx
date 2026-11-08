@@ -2479,7 +2479,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       const feeQuoteToken = approvedSolanaQuoteToken()
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(feeCheckoutId?{Authorization:'Bearer '+await getAccessToken()}: {}) },
         body:    JSON.stringify({
           from: session.wallet.address,
           to: resolvedSolana,
@@ -2504,7 +2504,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       setIsSolanaConfirming(true)
       const relayRes = await fetch('/api/solana-relay', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(feeCheckoutId?{Authorization:'Bearer '+await getAccessToken()}: {}) },
         body:    JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
       })
       const relayData = await readApiJson<{ ok: boolean; txHash?: string; error?: string }>(relayRes, 'Solana relay')
@@ -2631,7 +2631,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       const feeQuoteToken = approvedSolanaQuoteToken()
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(feeCheckoutId?{Authorization:'Bearer '+await getAccessToken()}: {}) },
         body:    JSON.stringify({
           from: solanaWalletAddr,
           to: resolvedSolana,
@@ -2659,7 +2659,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
 
       const relayRes = await fetch('/api/solana-relay', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(feeCheckoutId?{Authorization:'Bearer '+await getAccessToken()}: {}) },
         body:    JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
       })
       const relayData = await readApiJson<{ ok: boolean; txHash?: string; error?: string }>(relayRes, 'Solana relay')

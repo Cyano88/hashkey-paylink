@@ -30,7 +30,7 @@ export async function checkoutSelectionForChild(childId:string){if(!defaults.rea
 export async function checkoutSelectionNavigation(childId:string,d=defaults){
  if(!d.ready())return null
  const r=Object.values((await d.read()).sessions).find(r=>containsChild(r,childId)&&valid(r,d.secret()))
- return r?.switchable?{id:r.id,canChange:!r.paymentLock&&Date.parse(r.expiresAt)>d.now()}:null
+ return r?.switchable?{id:r.id,canChange:!r.paymentLock&&!r.cashPayer&&Date.parse(r.expiresAt)>d.now()}:null
 }
 /** Shared atomic route lock, acquired before any provider signing/broadcast. Never
  * release on a timeout: the provider may already have accepted the payment. */

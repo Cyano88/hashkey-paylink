@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import {build} from 'esbuild'
+import {checkoutTestCss} from './checkout-test-css.mjs'
 import {mkdir,readFile,readdir} from 'node:fs/promises'
 const {chromium}=await import('file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const bundle=await build({stdin:{contents:`import React,{useState}from'react';import{createRoot}from'react-dom/client';import Card from'./src/components/BrowserCheckoutCard';function App(){const[ready,setReady]=useState(false);window.sends=0;return <Card id="chk_test123456" attempt="pat_test123456" merchant="Lunchroom" title="Test order" amount="1.50 USDC" authenticated email="payer@example.com" fiat={false} network="base" networks={[{value:'base',label:'Base'}]} onNetwork={()=>{}} walletReady={ready} address="0x1111111111111111111111111111111111111111" balance="10" shortfall={null} total={ready?'1.50':null} fee={ready?'0':null} busy={false} blocked={false} error="" prepare={async()=>{if(!window.allowed)throw Object.assign(Error('Complete Basic verification to use bank transfers.'),{code:'KYC_BASIC_REQUIRED'});setReady(true)}} refresh={async()=>{}} pay={async()=>{window.sends++}}/>}createRoot(document.getElementById('root')).render(<App/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',plugins:[{name:'fx-fixture',setup(b){b.onLoad({filter:/[\\/]usePocketLimitDisplay\.ts$/},()=>({contents:"export default function(){return{usdc:()=> '36 USDC',secondary:()=>null}}"}))}},{name:'auth-fixture',setup(b){b.onResolve({filter:/^@privy-io\/react-auth$/},()=>({path:'auth',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:"export const useCreateWallet=()=>({createWallet:async()=>null});export const usePrivy=()=>({getAccessToken:async()=>'fixture',user:{id:'payer'}})"}));b.onLoad({filter:/[\\/]PocketEmailLogin\.tsx$/},()=>({contents:'export default function Login(){return null}',loader:'tsx'}))}}]})
 const browser=await chromium.launch({channel:'chrome',headless:true})
-const assets='output/checkout-error-build/assets',cssFile=(await readdir(assets)).find(f=>/^index.*\.css$/.test(f)),css=await readFile(assets+'/'+cssFile,'utf8')
+const css=await checkoutTestCss()
 try{for(const width of [390,1280]){
  let level='none',environment='production',statusReads=0
  const page=await browser.newPage({viewport:{width,height:950}}),errors=[]

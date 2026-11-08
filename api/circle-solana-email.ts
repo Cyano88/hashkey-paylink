@@ -387,7 +387,7 @@ function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, reci
   if (treasuryUnits > 0n) calls.push({ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [EVM_TREASURY as `0x${string}`, treasuryUnits] }) })
   return encodeFunctionData({ abi: SMART_WALLET_BATCH_ABI, functionName: 'executeBatch', args: [calls] })
 }
-async function verifiedPayoutExemption(params: Record<string, string>, checkOnly = true) {
+async function verifiedPayoutExemption(params: Record<string, string>, checkOnly = true, checkCapacity = true) {
   if (String(params.feeBps ?? '') !== '0') return false
   if (baseStablecoin(params.asset) !== 'USDC') throw Object.assign(new Error('This payout exemption is only valid for USDC.'), {status:400})
   if (!params.payoutIntentId || params.chain !== 'base') throw Object.assign(new Error('A verified payout is required for a fee exemption.'), { status: 400 })
@@ -405,7 +405,7 @@ async function verifiedPayoutExemption(params: Record<string, string>, checkOnly
     const link=await findPaymentCircleLinkByWallet(params.walletId,params.walletAddress)
     if(!link?.privyUserId)throw Object.assign(Error('Sign in to continue.'),{status:401})
     const {checkCheckoutBuyerAllowance}=await import('./checkout-buyer-allowance.js')
-    await checkCheckoutBuyerAllowance(link.privyUserId,order,checkOnly)
+    await checkCheckoutBuyerAllowance(link.privyUserId,order,checkOnly,checkCapacity)
   }else if(['bank-withdraw','bank-receive','ngpos'].includes(order.source||'')){
     const link=await findPaymentCircleLinkByWallet(params.walletId,params.walletAddress)
     if(!link?.privyUserId)throw Object.assign(Error('Sign in to continue.'),{status:401})
@@ -913,11 +913,17 @@ export default async function handler(req: Request, res: Response) {
       let quote
       try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { checkoutId:params.checkoutId, purpose, asset, chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
       catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
-      if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' })
+      if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },true,false)
       const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: paymentToken(chain, asset), data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` })
       await assertMerchantFeeBinding(quote)
+      if(quote.checkoutId?.startsWith('chk_')&&quote.exemption!=='verified-payout'){
+        const owned=await readCircleUserWallet(userToken,chain, walletId)
+        const link=await findPaymentCircleLinkByWallet(walletId,walletAddress)
+        if(!owned?.address||owned.address.toLowerCase()!==walletAddress.toLowerCase()||!link?.privyUserId)throw Object.assign(Error('Use your verified Pocket payment wallet.'),{status:403})
+        await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(link.privyUserId,{id:quote.checkoutId,network:chain,asset,amount:formatUnits(BigInt(quote.amountUnits),6),recipient,payer:walletAddress},false)
+      }
       await rememberMerchantFeeQuote(params.feeQuoteToken,quote)
       const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits), asset)
 

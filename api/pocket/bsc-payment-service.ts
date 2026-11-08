@@ -18,7 +18,8 @@ import {mutateBscOperationStore} from './bsc-operation-store.js'
 import {readBscDisplayBalances} from './bsc-display-balances.js'
 const key='pocket:bsc-payment-operations:v1'
 const unavailable=():never=>{throw Error('BNB Chain payments are temporarily unavailable.')}
-const dependencies={display:readBscDisplayBalances,env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateBscOperationStore,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,readCheckout:readBscCheckout,assertPayable:assertBscCheckoutPayable,settleCheckout:settleBscCheckout,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscPaymentFeeEstimator,settlement:readBscPaymentSettlement}
+import {checkCheckoutWalletAllowance} from '../checkout-wallet-allowance.js'
+const dependencies={allowance:checkCheckoutWalletAllowance,display:readBscDisplayBalances,env:process.env,fetcher:fetch,durable:hasRenderDurableStore,read:readDurableJson,mutate:mutateBscOperationStore,identity:verifiedPrivyUser,wallet:readBscWallet,runtime:createBscRuntime,readCheckout:readBscCheckout,assertPayable:assertBscCheckoutPayable,settleCheckout:settleBscCheckout,approval:consumePocketPaymentApproval,billing:checkXLayerBillingCoverage,journal:recordCirclePocketAction,estimate:createBscPaymentFeeEstimator,settlement:readBscPaymentSettlement}
 export function createBscPaymentService(overrides:Partial<typeof dependencies>={}){
  const d={...dependencies,...overrides}
  const env=d.env,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||'',quoteSecret=env.POCKET_SWAP_QUOTE_SECRET||''
@@ -49,7 +50,7 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
   if(BigInt(fee.coverageFeeUnits)>BigInt(q.reimbursementUnits))throw Error('Fees changed. Review the payment again.')
   if(await runtime.balance(q.asset,q.walletAddress)<bscPaymentAmounts(q).total)throw Error('Insufficient '+q.asset+'.')
  },
- claimCheckout:async q=>(await import('../checkout-selection.js')).claimCheckoutSelectionPayment(q.checkoutId),
+ claimCheckout:async q=>{await d.allowance(q.ownerId,{id:q.checkoutId,network:'bsc',asset:q.asset,amount:formatUnits(BigInt(q.amountUnits),18),recipient:q.recipient,payer:q.walletAddress},false);await (await import('../checkout-selection.js')).claimCheckoutSelectionPayment(q.checkoutId)},
  send:async(request,authorization)=>{const r=await d.fetcher(request.url,{method:'POST',headers:{...request.headers,...headers,'Content-Type':'application/json','privy-authorization-signature':authorization},body:JSON.stringify(request.body),redirect:'error',signal:AbortSignal.timeout(30000)});return {ok:r.ok,status:r.status,body:await r.json()}},
  settle:(q,hash,op)=>d.settlement(q,hash,runtime.rpc,op)})
  async function publish(op:BscPaymentOperation){

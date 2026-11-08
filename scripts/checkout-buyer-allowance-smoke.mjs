@@ -10,7 +10,7 @@ assert.match(checkoutPaymentExecutionKey('wallet',one),/^[0-9a-f]{8}-[0-9a-f]{4}
 await allowance(buyer,one,true);assert.equal(mutations,0,'Preview does not consume allowance')
 await allowance(buyer,one,false);await allowance(buyer,one,false)
 assert.equal(ledgers.get(checkoutBuyerLedgerKey(buyer)).charges.length,1,'Retry counts once')
-await assert.rejects(allowance(buyer,order('two','2000','merchant2'),false),e=>e.code==='CHECKOUT_DAILY_LIMIT')
+await assert.rejects(allowance(buyer,order('two','2000.000001','merchant2'),false),e=>e.code==='CHECKOUT_DAILY_LIMIT')
 await allowance('another-buyer',order('three','5000'),false)
 await assert.rejects(allowance(buyer,{...one,amount_usdc:'5001'},false),e=>e.code==='CHECKOUT_LIMIT_BINDING')
 await assert.rejects(allowance('small',order('too-big','6992.000001')),e=>e.code==='CHECKOUT_TRANSFER_LIMIT')

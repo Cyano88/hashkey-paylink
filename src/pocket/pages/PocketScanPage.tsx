@@ -34,7 +34,7 @@ export default function PocketScanPage() {
    if(response.ok&&data.ok&&data.checkout?.selectionCheckout&&data.checkout.id===code.id&&/^chks_[a-f0-9]{24}$/.test(code.id)){
     if(controller.signal.aborted)return
     if(data.selectedCheckoutUrl){if(!isSelectedCheckoutPath(data.selectedCheckoutUrl))throw Error('Checkout could not be verified.');openSelected(data.selectedCheckoutUrl)}
-    else if(Array.isArray(data.checkout.options)&&(data.checkout.options.length||data.checkout.paymentMethods?.includes('cash_balance')))setSelection(data.checkout)
+    else if(Array.isArray(data.checkout.options)&&(data.checkout.options.length||data.checkout.paymentMethods?.includes('cash_balance')))setSelection({...data.checkout,...(new URL(code.url).searchParams.get('method')==='cash_balance'&&data.checkout.paymentMethods?.includes('cash_balance')?{paymentMethod:'cash_balance'}:{})})
     else throw Error('This checkout has no payment choices available.')
     return
    }

@@ -18,7 +18,8 @@ async function owns(owner:string,network:string,payer:string){
  const link=await readCircleLink(circleLinkKey(owner,network,'payment'))
  return Boolean(link&&link.privyUserId===owner&&link.chain===network&&(network==='solana'?link.circleWalletAddress===payer:link.circleWalletAddress.toLowerCase()===payer.toLowerCase()))
 }
-const defaults={identity:verifiedPrivyUser,checkout:readReceiptCheckout,settings:readDeveloperReceiptSettings,owns,now:Date.now,
+import {requirePocketBasicKyc} from './pocket/kyc-level.js'
+const defaults={kyc:requirePocketBasicKyc,identity:verifiedPrivyUser,checkout:readReceiptCheckout,settings:readDeveloperReceiptSettings,owns,now:Date.now,
  mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(RECEIPT_CONTACT_KEY,s=>fn(s||{contacts:{}}))}
 export function createCheckoutReceiptContactHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
@@ -30,6 +31,7 @@ export function createCheckoutReceiptContactHandler(overrides:Partial<typeof def
    if(!/^chk[xb]?_[a-zA-Z0-9]{8,40}$/.test(id)||payer.length>100) return res.status(400).json({ok:false,error:'Invalid checkout receipt details.'})
    const checkout=await d.checkout(id)
    if(!checkout||checkout.checkoutMode==='agentic')return res.status(404).json({ok:false,error:'Checkout not found.'})
+   await d.kyc(identity.userId)
    const settings=await d.settings(checkout.partnerId)
    if(!settings||!identity.email)return res.json({ok:true,enabled:false})
    // Never attach a new recipient to an already-paid or expired checkout.
@@ -45,7 +47,7 @@ export function createCheckoutReceiptContactHandler(overrides:Partial<typeof def
     return s
    })
    return res.json({ok:true,enabled:true})
-  }catch(error){const status=(error as {status?:number}).status||503;return res.status(status).json({ok:false,error:status<500?(error as Error).message:'Receipt setup is temporarily unavailable. Try again.'})}
+  }catch(error){const status=(error as {status?:number}).status||503;return res.status(status).json({ok:false,...((error as {code?:string}).code?.startsWith('KYC_')?{code:(error as {code?:string}).code}:{}),error:status<500?(error as Error).message:'Receipt setup is temporarily unavailable. Try again.'})}
  }
 }
 export default createCheckoutReceiptContactHandler()

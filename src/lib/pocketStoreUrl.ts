@@ -4,7 +4,7 @@ export function pocketStoreUrl(value: unknown): string {
   try {
     const url = new URL(value)
     if (url.origin !== 'https://play.google.com' || url.username || url.password) return ''
-    if ((url.pathname === '/store/apps/details' && url.searchParams.get('id') === 'com.hashpaylink.pocket') || url.pathname === '/apps/testing/com.hashpaylink.pocket') return url.href
+    if ((url.pathname === '/store/apps/details' && url.searchParams.get('id') === 'com.hashpaylink.pocket') || url.pathname === '/apps/testing/com.hashpaylink.pocket' || url.pathname === '/apps/internaltest/4701069716962238662') return url.href
   } catch {}
   return ''
 }
