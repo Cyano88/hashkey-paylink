@@ -26,3 +26,9 @@ No live funds sent. Live deployment and Pixel observations will be appended afte
 ## Workspaces
 Web: C:/Users/USER/hashpaylink-recovery-release-20261104.
 Native: C:/Users/USER/pocket-play-update-20261101; targeted edits only, distinct source lineage.
+
+## Deployment and final acceptance
+Render deployment dep-dbo45ebrjlhs73ac8r60 is live at 06d4339163c2a1a1db0c3dfd7f9aebac5e21ca27. Final web build and inline verification regression passed. Cash entry regression passed outside sandbox after dependency directory access was denied inside it.
+Live Lunchroom checkout exposed Stablecoins and Cash balance. Fresh cash fallback showed Get Pocket with the exact authorized Android test URL, explicit Pay on web, and no change-network action. Public checkout config returned the same download URL.
+Final native source guard, build, Capacitor sync, Gradle and adb install -r passed. Pixel first reached the review screen during deployment restart and showed temporarily unavailable. Subsequent observation showed another app in foreground, so final native cash review remains unverified. No live payment was sent; no Play release was published.
+
