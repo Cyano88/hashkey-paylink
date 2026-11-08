@@ -680,7 +680,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [bankSendStatus, setBankSendStatus] = useState<'idle' | 'waiting' | 'pending' | 'settled' | 'expired' | 'refunding' | 'error'>('idle')
   const [bankSendQuote, setBankSendQuote] = useState<BankSendQuote | null>(null)
   const [bankSendQuoteBusy, setBankSendQuoteBusy] = useState(false)
-  const requiresAttendeeName = !isHostedLocalSettlement && (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
+  const requiresAttendeeName = !isHostedCheckout && (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
   useEffect(() => {
     if (!isHostedCheckout) return
