@@ -26,7 +26,7 @@ export default function PocketHostedCheckoutChoice({checkout,onSelected,onClose,
   catch(e){if(!controller.signal.aborted)setError((e as Error).message||'Payment could not be prepared.')}
   finally{if(!controller.signal.aborted){lock.current=false;setBusy(false)}}
  }
- return <PocketBottomSheet title={methods?'Payment methods':cash?'Cash balance':'Stablecoins'} layer={initialMethods?95:85} onClose={onClose} onBack={methods?(onBack||(()=>setMethods(false))):initialMethods?()=>setMethods(true):undefined} showCloseButton dismissOnBackdrop={false} dismissible={!busy}>
+ return <PocketBottomSheet quietBackdrop title={methods?'Payment methods':cash?'Cash balance':'Stablecoins'} layer={initialMethods?95:85} onClose={onClose} onBack={methods?(onBack||(()=>setMethods(false))):initialMethods?()=>setMethods(true):undefined} showCloseButton dismissOnBackdrop={false} dismissible={!busy}>
   <h2 className="mb-3 text-center text-base font-semibold">{methods?'Payment methods':checkout.merchantName}</h2>
   {!methods&&<><p className="text-center text-2xl font-semibold">{checkoutPriceLabel(checkout.currency?{currency:checkout.currency,amount:checkout.amount}:undefined,checkout.amount+' '+(choice?.asset||''))}</p><CheckoutCountdown seconds={seconds}/></>}
   {expired?<p role="alert" className="my-5 text-center text-sm text-gray-500">Payment session expired. Start a new checkout.</p>:methods?<CheckoutPaymentMethods stablecoinsEnabled={checkout.paymentMethods?.includes('stablecoins')!==false&&available.length>0} onStablecoins={()=>{setCash(false);setMethods(false);setError('')}} onCash={checkout.paymentMethods?.includes('cash_balance')?()=>{setCash(true);setMethods(false);setError('')}:undefined}/>:<>

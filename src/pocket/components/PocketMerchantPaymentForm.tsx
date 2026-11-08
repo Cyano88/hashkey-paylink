@@ -30,7 +30,7 @@ export default function PocketMerchantPaymentForm({checkoutId,merchant,paymentAm
  useEffect(()=>{if(prepared&&ready&&!preparing){setReview(true)}},[prepared,ready,preparing])
  const valid=/^\d+(?:\.\d{1,6})?$/.test(fields.amount)&&Number(fields.amount)>0&&(!fields.requiresName||!!fields.name.trim())
  const message=localError||error
- return <PocketBottomSheet title={review?'Confirm payment':'Pay '+merchant} showCloseButton dismissOnBackdrop={false} dismissible={!disabled} onClose={onClose} onBack={review?()=>{setReview(false);setPrepared(false)}:undefined}>
+ return <PocketBottomSheet quietBackdrop title={review?'Confirm payment':'Pay '+merchant} showCloseButton dismissOnBackdrop={false} dismissible={!disabled} onClose={onClose} onBack={review?()=>{setReview(false);setPrepared(false)}:undefined}>
   {review?<PocketConfirmationDetails amount={paymentAmount} rows={rows}/>:<><h2 className="mb-5 text-center text-base font-semibold">{merchant}</h2><PocketCheckoutFields {...fields}/></>}
   {message&&!funding.asset&&<p role="alert" className="mt-4 text-center text-xs text-gray-500">{message}</p>}
   <div className="mt-5"><PocketFundingAction {...funding} locked={disabled||funding.locked}>

@@ -1,3 +1,4 @@
+import PocketCheckoutLoadingSheet from '../components/PocketCheckoutLoadingSheet'
 import PocketHostedCheckoutChoice from '../components/PocketHostedCheckoutChoice'
 import {isSelectedCheckoutPath,type CheckoutSelectionView} from '../../lib/checkoutSelection'
 import type {BscCheckoutView} from '../../pages/BscCheckoutPage'
@@ -9,7 +10,8 @@ import { xStockPath } from '../lib/pocketRail'
 import { parsePocketScanCode } from '../lib/pocketScanCode'
 import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 const BscCheckout=lazy(()=>import('../../pages/BscCheckoutPage'))
-const PaymentPage=lazy(()=>import('../../pages/PaymentPage'))
+const loadPayment=()=>import('../../pages/PaymentPage')
+const PaymentPage=lazy(loadPayment)
 export default function PocketScanPage() {
  const navigate=useNavigate(),location=useLocation()
  const scanState={xpayOrigin:new URLSearchParams(location.search).get('rail')==='xstocks'?'xstocks':xpayOrigin(location.state),...(location.state?.xpayReturnTo?{xpayReturnTo:location.state.xpayReturnTo}:{})}
@@ -99,8 +101,8 @@ export default function PocketScanPage() {
  const back=()=>{stop();abort.current?.abort();if(location.state?.xpayReturnTo){navigate(location.state.xpayReturnTo,{replace:true,state:location.state});return}navigate(new URLSearchParams(location.search).get('rail')==='xstocks'?xStockPath('home'):POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
  return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white'>
   <div className='mx-auto w-full max-w-[462px]'>
-   <header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout||bsc||selection?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>
-   {selection?<><p className="mt-6 text-center text-sm text-gray-500">Review your payment options.</p><PocketHostedCheckoutChoice key={selection.id} checkout={selection} onSelected={openSelected} onClose={back}/></>:bsc?<Suspense fallback={<div role="status" aria-label="Opening payment" className="h-96 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><BscCheckout securityManaged checkout={bsc.checkout} returnUrl={bsc.returnUrl}/></Suspense>:checkout?<section aria-label='Payment review'><Suspense fallback={<p role='status'>Opening payment review...</p>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back,native:true,merchantName:checkout.merchant}}/></Suspense></section>:<>
+   {!reviewing&&!checkout&&!bsc&&!selection&&<header className='mb-5 flex h-12 items-center justify-between'><button type='button' aria-label='Back to Pocket' onClick={back} className='flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-white/10'><ArrowLeft className='h-5 w-5'/></button><h1 className='text-sm font-black'>{checkout||bsc||selection?'Review payment':'Scan to pay'}</h1><span className='w-11'/></header>}
+   {selection?<PocketHostedCheckoutChoice key={selection.id} checkout={selection} onSelected={openSelected} onClose={back}/>:bsc?<Suspense fallback={<PocketCheckoutLoadingSheet onClose={back}/>}><BscCheckout securityManaged checkout={bsc.checkout} returnUrl={bsc.returnUrl}/></Suspense>:checkout?<Suspense fallback={<PocketCheckoutLoadingSheet onClose={back}/>}><PaymentPage key={checkout.params} pocketScan={{params:checkout.params,onBack:back,native:true,merchantName:checkout.merchant}}/></Suspense>:reviewing?<PocketCheckoutLoadingSheet onClose={back} error={error} onRetry={incomingCode?()=>void open(incomingCode):undefined}/>:<>
     <p className='mb-4 text-center text-sm text-gray-500'>Scan a Hash PayLink merchant or checkout QR.</p>
     <div className='relative aspect-square overflow-hidden rounded-[26px] bg-gray-950'><video ref={video} muted playsInline aria-label='QR camera preview' className='h-full w-full object-cover'/><div aria-hidden='true' className='pointer-events-none absolute inset-12 rounded-2xl border-2 border-white/70'/>{!camera&&<p className='absolute inset-x-4 top-1/2 text-center text-sm text-white/70'>Point your camera at a merchant QR.</p>}</div>
     {busy?<p role='status' className='mt-4 text-center text-sm'>Verifying checkout...</p>:<button type='button' onClick={()=>camera?stop():void start()} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950'>{camera?'Stop camera':'Open camera'}</button>}
