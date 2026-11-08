@@ -45,8 +45,13 @@ async function refreshFoodOrder(d:typeof defaults,order:Order){
  const amountMatches=order.orderPrice?priceMatches&&pricing.paymentAsset===(status.asset||status.checkout?.asset)&&/^\d+(?:\.\d{1,18})?$/.test(paidAmount)&&parseUnits(paidAmount,18)===parseUnits(expectedSettlement==='usdc'?pricing.paymentAmount:(order.checkoutId.startsWith('chks_')?status.amount:order.payableAmount)||'0',18):status.payment?.amount===(order.checkoutId.startsWith('chks_')&&order.settlementMode!=='usdc'?status.amount:order.payableAmount||order.amount)
  if(status.status==='paid'&&priceMatches&&(!order.checkoutId.startsWith('chks_')||['USDC','USDT','USDe','USDG'].includes(status.asset))&&(order.rail==='circle'?status.settlementMode===expectedSettlement&&amountMatches:status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){
   if(order.checkoutId.startsWith('chks_')&&['USDC','USDT','USDe','USDG'].includes(status.asset))order.asset=status.asset
-  if(typeof status.payment?.receiptId==='string'&&/^[a-zA-Z0-9_.-]{8,1024}$/.test(status.payment.receiptId))order.receiptId=status.payment.receiptId
-  else if(/^chk_[a-zA-Z0-9]{8,40}$/.test(order.checkoutId))order.receiptId=order.checkoutId
+  // Circle attaches the canonical receipt to its payment attempt. Prefer its
+  // complete URL: legacy receiptId fields can be shorter than signed IDs.
+  const receiptUrl=status.paymentAttempt?.receiptUrl||status.payment?.receiptUrl
+  const canonical=typeof receiptUrl==='string'?/^\/receipt\/([a-zA-Z0-9_.-]{8,1024})$/.exec(receiptUrl)?.[1]:undefined
+  const receiptId=canonical||status.paymentAttempt?.receiptId||status.payment?.receiptId
+  if(typeof receiptId==='string'&&/^[a-zA-Z0-9_.-]{8,1024}$/.test(receiptId))order.receiptId=receiptId
+  else if(/^chk_[a-zA-Z0-9]{8,40}$/.test(status.selectedCheckoutId||order.checkoutId))order.receiptId=status.selectedCheckoutId||order.checkoutId
   if(order.orderPrice||order.checkoutId.startsWith('chks_')&&order.settlementMode!=='usdc')order.payableAmount=paidAmount
   order.settlementMode=expectedSettlement;order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')
   await d.mutate(s=>{s.orders[order.id].settlementMode=order.settlementMode;s.orders[order.id].payableAmount=order.payableAmount;s.orders[order.id].paid=true;s.orders[order.id].receiptId=order.receiptId;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})

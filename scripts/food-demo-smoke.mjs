@@ -66,3 +66,16 @@ for(const mode of ['ngn','ugx']){
  assert.equal(receipt.status,'paid');assert.equal(receipt.amount,'4.6');assert.equal(receipt.cents,450)
 }
 console.log('PASS local bank/mobile settlement: configured choices, exact provider amount, immutable retry and delivery-gated receipt.')
+
+// Repair an already-paid order whose receipt was omitted, using authenticated status.
+let repairStore=structuredClone(circleStore),repairStatus={ok:true,checkoutId:circleId,status:'paid',settlementMode:'usdc',network:'base',payment:{amount:'4.5'},paymentAttempt:{receiptId:'truncated',receiptUrl:'/receipt/r1.'+'a'.repeat(240)+'.signature'}}
+delete repairStore.orders[circleBody.requestId].receiptId
+const repair=createFoodDemoHandler({ready:()=>true,read:async()=>structuredClone(repairStore),mutate:async fn=>{repairStore=fn(structuredClone(repairStore));return structuredClone(repairStore)},now:Date.now,call:async()=>repairStatus})
+async function repairRead(){let data;await repair({method:'GET',query:{id:circleBody.requestId}},{setHeader(){},status(){return this},json(d){data=d;return this}});return data.order}
+assert.equal((await repairRead()).receiptUrl,repairStatus.paymentAttempt.receiptUrl,'Prefer complete signed receipt URL over truncated legacy ID')
+delete repairStore.orders[circleBody.requestId].receiptId
+repairStatus={...repairStatus,payment:{amount:'99'}}
+assert.equal((await repairRead()).receiptUrl,undefined,'Mismatched payment cannot attach receipt')
+repairStatus={...repairStatus,payment:{amount:'4.5'},paymentAttempt:{receiptUrl:'https://attacker.example/receipt/unsafe'}}
+assert.equal((await repairRead()).receiptUrl,'/receipt/'+circleId,'Unsafe receipt URL falls back to the verified checkout')
+console.log('PASS paid-order receipt repair, canonical long attempt receipt, mismatched-payment rejection and safe receipt fallback.')

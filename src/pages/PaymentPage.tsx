@@ -1,3 +1,4 @@
+import useCheckoutActivityRefresh from '../pocket/hooks/useCheckoutActivityRefresh'
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {checkoutFeeReviewChanged} from '../lib/checkoutFeeReview'
 import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
@@ -3456,6 +3457,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const browserPaymentFlow = !pocketScan && !isBankSendPayment
   const fullScreenHumanCheckout = browserPaymentFlow && !isPolymarketFunding && !isAgentOrWalletFunding
   const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
+  useCheckoutActivityRefresh({ verified: isHostedCheckout && pocketScanDelivered, paymentId: hostedCheckoutId,
+    authenticated: privyAuthenticated, userId: privyUser?.id, email: privyEmail, getAccessToken })
   const checkoutSlideStatus: SlideActionStatus = (pocketScan || browserPaymentFlow ? pocketScanDelivered : isConfirmed)
     ? 'successful'
     : isSendError

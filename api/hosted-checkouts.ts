@@ -2,6 +2,7 @@ import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/m
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
 import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
 import {checkoutChildStatusRequest} from './checkout-child-request.js'
+import {checkoutSelectionPublicResult} from './checkout-selection-result.js'
 import hostedBscCheckoutsHandler,{isBscCheckoutId,createHostedBscCheckoutsHandler} from './hosted-bsc-checkouts.js'
 import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 import { isValidSolanaAddress } from '../src/lib/solanaAddress.js'
@@ -986,6 +987,14 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         if(!result.ok)return res.status(409).json(result)
         if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId)).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,...(result.settlementByMethod?{settlementByMethod:true}:{}),checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:child.settlementMode||result.settlementMode||'usdc'})}
         return res.json({...result,status:result.status||'pending',settlementMode:result.settlementMode||'usdc'})
+      }
+      if(req.method==='GET'){
+        try{
+          const result=await invokeCheckoutHandler(selection,req)
+          if(!result.selectedCheckoutId)return res.json(result)
+          const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId))
+          return res.json(checkoutSelectionPublicResult(result,child))
+        }catch(error){return res.status(409).json({ok:false,error:(error as Error).message})}
       }
       return selection(req,res)
     }
