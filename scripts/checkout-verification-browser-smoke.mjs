@@ -7,11 +7,12 @@ const bundle=await build({stdin:{contents:`import React,{useState}from'react';im
 const browser=await chromium.launch({channel:'chrome',headless:true})
 const css=await checkoutTestCss()
 try{for(const width of [390,1280]){
- let level='none',environment='production',statusReads=0
+ let level='none',environment='production',statusReads=0,receiptBlocked=false
  const page=await browser.newPage({viewport:{width,height:950}}),errors=[]
  page.on('pageerror',e=>errors.push(e.message))
  await page.route('https://checkout.test/**',async route=>{
   const path=new URL(route.request().url()).pathname
+  if(path==='/api/receipt'&&receiptBlocked)return route.fulfill({status:403,json:{ok:false,code:'KYC_BASIC_REQUIRED',error:'Complete Basic verification.'}})
   if(path==='/api/pocket/kyc'){statusReads++;return route.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,environment,status:level==='none'?'not_started':'passed',level,paymentLevel:level,verified:false,workflow:{basicPassed:level!=='none',bvnPassed:level!=='none',complete:false,needsAdditional:false,methods:[]}})})}
   if(path.startsWith('/api/'))return route.fulfill({contentType:'application/json',body:'{"ok":true}'})
   if(/\.(png|svg|webp)$/.test(path))return route.fulfill({status:404,body:''})
@@ -34,6 +35,10 @@ try{for(const width of [390,1280]){
  await page.getByRole('button',{name:'Continue to payment',exact:true}).click()
  await page.getByRole('button',{name:'Pay securely',exact:true}).waitFor()
  assert.equal(await page.evaluate(()=>window.sends),0);assert.ok(statusReads>=4);assert.deepEqual(errors,[])
+ receiptBlocked=true;await page.evaluate(()=>{window.kycEvents=0;window.addEventListener('pocket:kyc-required',()=>window.kycEvents++)});
+ await page.getByRole('button',{name:'Pay securely',exact:true}).click();await page.getByRole('button',{name:'Verify identity',exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>window.kycEvents),0,'Inline checkout must not also open the native KYC prompt');assert.equal(await page.evaluate(()=>window.sends),0);
+ await page.getByRole('button',{name:'Verify identity',exact:true}).click();await page.getByRole('heading',{name:'Verify your identity'}).waitFor();
  await page.close()
 }}finally{await browser.close()}
 console.log('PASS mobile/desktop web verification: actual panel loads, incomplete/sandbox states blocked, production status rechecked, return to review without payment.')
