@@ -16,3 +16,9 @@ Passed: web TypeScript, web source build, native source build and native lineage
 Live Lunchroom policy has Base-only acceptance and no saved receiving wallets; BNB/X Layer configurations are absent. Owner-bound Circle and Privy receiving wallets were verified read-only. Saving them and enabling routes awaits the user's destination choice. Never repurpose the bank fallback refund address as the receiving wallet. Existing bank configuration is retained.
 
 Deployment and final Pixel verification are recorded separately after completion. No payment has been signed or sent for this change.
+
+## Shipped verification
+- Commit 21f3a3c4ebf9f74661de9376dbe14a5b9f2070bb pushed; Render dep-dbo2a7hsrm7s73api91g reached live.
+- Final native source build, source guard and Gradle passed. APK installed with adb install -r; Pixel package lastUpdateTime 2026-11-08 08:30:29, data retained.
+- Live fresh Lunchroom selection chks_6c33200879c4402eb66b7136 displayed Cash balance as the only enabled method, reflecting its absent saved receiving wallets. Cash opened Pocket email sign-in with amount retained and no payer-name request. Browser recorded no errors (one existing warning).
+- Pixel was in WhatsApp; no taps or checkout visual verification performed after installation. No funds sent. Stablecoin options remain pending explicit receiving-wallet configuration.
