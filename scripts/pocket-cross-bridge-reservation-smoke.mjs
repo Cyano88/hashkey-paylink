@@ -27,6 +27,20 @@ await xlayer(s=>{s.requests.old.transactionId='recovery-reference';return s}) //
 const journal={crossBridge:{one:row('one','base')}}
 assert.throws(()=>assertNoCrossBridgeReservation(journal,{network:'base',address:wallet},1000),e=>e.code==='wallet_action_pending')
 assert.doesNotThrow(()=>assertNoCrossBridgeReservation(journal,{network:'arbitrum',address:wallet},1000))
+
+// Source execution and destination settlement have different lock lifetimes.
+for(const source of ['arc','base','ethereum','arbitrum','polygon','bsc','xlayer','solana']){
+ const sourceHash=source==='solana'?'3'.repeat(88):'0x'+'a'.repeat(64)
+ const confirmed={...row('old',source),state:'source_confirmed',sourceHash}
+ db=new Map([[keys[0],{crossBridge:{old:confirmed}}]])
+ await reserve('next',source)
+ assert.deepEqual(db.get(keys[0]).crossBridge.old,confirmed,'releasing execution lock must not settle or rewrite the bridge')
+ for(const patch of [{state:'submitted'}, {sourceHash:undefined}, {sourceHash:'invalid'}, {state:'submitted',observedDelivery:{hash:sourceHash}}, {state:'submitted',delivery:{hash:sourceHash}}]){
+  const pending={...confirmed,...patch}
+  assert.throws(()=>assertNoCrossBridgeReservation({crossBridge:{old:pending}},{network:source,address:wallet},1000),e=>e.code==='wallet_action_pending')
+ }
+}
+console.log('PASS finalized source execution releases only its wallet lock; unproven source and destination-only evidence still block; settlement unchanged')
 db=new Map([[keys[0],{actions:{a:{ownerId:'owner',action:'wallet.native-send',status:'submitted',metadata:{source:'base',walletAddress:wallet}}}}]])
 await assert.rejects(()=>reserve('cross','base'),e=>e.code==='wallet_action_pending')
 db=new Map([[keys[0],{actions:{},circleKit:{old:{operations:{a:{state:'pending',quote:{wallets:{source:{network:'base',address:wallet}},expiresAt:0}}}}}}]])
