@@ -4071,7 +4071,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     }
     const nativeBusy = isWalletPending || isConfirming || Boolean(txHash) || circleEvmAcceptedPending || pocketMovePayBusy
     const ready = Boolean(displayedPaymentQuote) && !paymentQuoteLoading && !paymentAmountBlocked && !pocketCheckoutRouting && !pocketMovePayWaiting && !pocketMovePayRetryBlocked && !pocketRouteInsufficient && !circleEvmWalletChecking && !circleSolanaWalletChecking
-    return <PocketMerchantPaymentForm merchant={pocketScan.merchantName || memo || 'Merchant'} network={chain} networkLabel={consumerNetworkName}
+    return <PocketMerchantPaymentForm checkoutId={isHostedCheckout?hostedCheckoutId:undefined} merchant={pocketScan.merchantName || memo || 'Merchant'} network={chain} networkLabel={consumerNetworkName}
       amount={isFlex ? (fxInputMode === 'local' ? localAmt : flexAmt) : effectiveAmt} currency={isFlex && fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset} fixedAmount={!isFlex}
       onAmountChange={value=>{if(isNgPosPaycrestOfframp)setPaycrestOrder(null);if(fxInputMode==='local')setLocalAmt(value);else setFlexAmt(value);setCirclePasskeyError(null);setCircleSolanaError(null)}} requiresName={requiresAttendeeName} name={attendeeName} onNameChange={setAttendeeName}
       paymentAmount={String(payableAmt || '0')+' '+meta.asset} rows={pocketPosReviewRows} funding={pocketFunding}

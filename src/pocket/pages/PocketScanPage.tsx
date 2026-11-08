@@ -33,8 +33,9 @@ export default function PocketScanPage() {
    if(!data)throw Error('Checkout is temporarily unavailable. Please try again.')
    if(response.ok&&data.ok&&data.checkout?.selectionCheckout&&data.checkout.id===code.id&&/^chks_[a-f0-9]{24}$/.test(code.id)){
     if(controller.signal.aborted)return
-    if(data.selectedCheckoutUrl){if(!isSelectedCheckoutPath(data.selectedCheckoutUrl))throw Error('Checkout could not be verified.');openSelected(data.selectedCheckoutUrl)}
-    else if(Array.isArray(data.checkout.options)&&(data.checkout.options.length||data.checkout.paymentMethods?.includes('cash_balance')))setSelection({...data.checkout,...(new URL(code.url).searchParams.get('method')==='cash_balance'&&data.checkout.paymentMethods?.includes('cash_balance')?{paymentMethod:'cash_balance'}:{})})
+    const requestedMethod=new URL(code.url).searchParams.get('method')
+    if(data.selectedCheckoutUrl&&(!requestedMethod||requestedMethod===data.checkout.paymentMethod||!data.checkout.canChange)){if(!isSelectedCheckoutPath(data.selectedCheckoutUrl))throw Error('Checkout could not be verified.');openSelected(data.selectedCheckoutUrl)}
+    else if(Array.isArray(data.checkout.options)){const method=new URL(code.url).searchParams.get('method');if(!['cash_balance','stablecoins'].includes(method||'')||!data.checkout.paymentMethods?.includes(method))throw Error('Choose a payment method on checkout, then open Pocket again.');setSelection({...data.checkout,paymentMethod:method})}
     else throw Error('This checkout has no payment choices available.')
     return
    }

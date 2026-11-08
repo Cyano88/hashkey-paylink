@@ -11,11 +11,11 @@ import {CHECKOUT_NETWORK_ORDER,checkoutStablecoins} from '../src/lib/checkoutSta
 const KEY='hashpaylink:checkout-selections:v1'
 export const isCheckoutSelection=(id:unknown):id is string=>typeof id==='string'&&/^chks_[a-f0-9]{24}$/.test(id)
 type Option={network:string;asset:string;recipient:string;unavailableReason?:string}
-type Selection={settlementByMethod?:true;cashPayer?:CheckoutCashPayer;switchable?:true;routes?:Record<string,{checkoutId:string;checkoutUrl:string}>;selecting?:string;paymentLock?:string;preparing?:boolean;settlementMode?:'ngn';currency?:'NGN';defaultNetwork:string;id:string;projectId:string;amount:string;title:string;merchantName:string;brandImageUrl?:string;returnUrl:string;expiresAt:string;options:Option[];requestHash:string;choice?:Option;checkoutId?:string;checkoutUrl?:string;integrity:string}
+type Selection={cashAccount?:CheckoutCashPayer;settlementByMethod?:true;cashPayer?:CheckoutCashPayer;switchable?:true;routes?:Record<string,{checkoutId:string;checkoutUrl:string}>;selecting?:string;paymentLock?:string;preparing?:boolean;settlementMode?:'ngn';currency?:'NGN';defaultNetwork:string;id:string;projectId:string;amount:string;title:string;merchantName:string;brandImageUrl?:string;returnUrl:string;expiresAt:string;options:Option[];requestHash:string;choice?:Option;checkoutId?:string;checkoutUrl?:string;integrity:string}
 type Store={sessions:Record<string,Selection>;keys:Record<string,string>}
 type Child=(policy:DeveloperCheckoutPolicy,record:Selection,recoverOnly?:boolean)=>Promise<{checkoutId:string;checkoutUrl:string}>
 const defaults={cashPayer:checkoutCashPayer,ready:hasRenderDurableStore,secret:()=>process.env.HOSTED_CHECKOUT_SIGNING_SECRET||'',now:Date.now,read:async()=>await readDurableJson<Store>(KEY)||{sessions:{},keys:{}},mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(KEY,s=>fn(s||{sessions:{},keys:{}})),policy:resolveDeveloperApiKeyPolicy,currentPolicy:resolveCheckoutSelectionPolicy,enabled:(network:string,id:string)=>network!=='bsc'&&network!=='xlayer'||checkoutRailEnabled(network as 'bsc'|'xlayer',id)}
-function sign(r:Selection,secret:string){return createHmac('sha256',secret).update(JSON.stringify([r.id,r.defaultNetwork,r.projectId,r.amount,r.title,r.merchantName,r.brandImageUrl||'',r.returnUrl,r.expiresAt,r.options.map(o=>[o.network,o.asset,o.recipient]),r.requestHash,r.choice?[r.choice.network,r.choice.asset,r.choice.recipient]:null,r.checkoutId||'',r.checkoutUrl||'',...(r.switchable?[true,Object.entries(r.routes||{}).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([key,route])=>[key,route.checkoutId,route.checkoutUrl]),r.selecting||'',r.paymentLock||'']:[]),...(r.currency?[r.currency]:[]),...(r.settlementMode?[r.settlementMode,r.options.map(o=>o.unavailableReason||''),!!r.preparing]:[]),...(r.cashPayer?['cash_balance',r.cashPayer.owner,r.cashPayer.address]:[]),...(r.settlementByMethod?['settlement_by_method_v1']:[])])).digest('hex')}
+function sign(r:Selection,secret:string){return createHmac('sha256',secret).update(JSON.stringify([r.id,r.defaultNetwork,r.projectId,r.amount,r.title,r.merchantName,r.brandImageUrl||'',r.returnUrl,r.expiresAt,r.options.map(o=>[o.network,o.asset,o.recipient]),r.requestHash,r.choice?[r.choice.network,r.choice.asset,r.choice.recipient]:null,r.checkoutId||'',r.checkoutUrl||'',...(r.switchable?[true,Object.entries(r.routes||{}).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([key,route])=>[key,route.checkoutId,route.checkoutUrl]),r.selecting||'',r.paymentLock||'']:[]),...(r.currency?[r.currency]:[]),...(r.settlementMode?[r.settlementMode,r.options.map(o=>o.unavailableReason||''),!!r.preparing]:[]),...(r.cashPayer?['cash_balance',r.cashPayer.owner,r.cashPayer.address]:[]),...(r.settlementByMethod?['settlement_by_method_v1']:[]),...(r.cashAccount?['cash_account_v1',r.cashAccount.owner,r.cashAccount.address]:[])])).digest('hex')}
 function valid(r:Selection|undefined,secret:string):r is Selection{return !!r&&secret.length>=32&&/^[a-f0-9]{64}$/.test(r.integrity)&&timingSafeEqual(Buffer.from(r.integrity,'hex'),Buffer.from(sign(r,secret),'hex'))}
 function options(p:DeveloperCheckoutPolicy,enabled:typeof defaults.enabled,settlementByMethod=false):Option[]{
  if(settlementByMethod)return options({...p,settlementMode:'usdc',paymentOptions:p.stablecoinPaymentOptions||[]},enabled)
@@ -24,13 +24,13 @@ function options(p:DeveloperCheckoutPolicy,enabled:typeof defaults.enabled,settl
  if(p.settlementMode==='ngn')for(const o of list)if(o.network!=='base'||o.asset!=='USDC')o.unavailableReason='This asset cannot fund NGN settlement yet. Choose another payment option.'
  return list.filter(o=>p.settlementMode==='ngn'||!requiresNgnPricing(p)||['USDC','USDT'].includes(o.asset)).sort((a,b)=>CHECKOUT_NETWORK_ORDER.indexOf(a.network as any)-CHECKOUT_NETWORK_ORDER.indexOf(b.network as any))
 }
-function publicRecord(r:Selection){return {ok:true,settlementMode:r.settlementByMethod&&!r.cashPayer?'usdc':r.settlementMode||'usdc',...(r.settlementByMethod?{settlementByMethod:true}:{}),checkoutId:r.id,checkoutUrl:'/pay/c/'+r.id,returnUrl:r.returnUrl,checkout:{id:r.id,selectionCheckout:true,paymentMethods:[...(r.options.length?['stablecoins']:[]),...(r.settlementMode==='ngn'&&r.currency==='NGN'?['cash_balance']:[])],paymentMethod:r.cashPayer?'cash_balance':'stablecoins',currency:r.currency,defaultNetwork:r.defaultNetwork,amount:r.amount,merchantName:r.merchantName,brandImageUrl:r.brandImageUrl,title:r.title,expiresAt:r.expiresAt,status:'pending',settlementMode:r.settlementByMethod&&!r.cashPayer?'usdc':r.settlementMode||'usdc',options:r.options.map(({network,asset,unavailableReason})=>({network,asset,...(unavailableReason?{unavailableReason}:{})})),selected:r.choice?{network:r.choice.network,asset:r.choice.asset}:undefined,canChange:!!r.switchable&&!r.paymentLock&&!r.cashPayer,preparingOption:r.selecting?r.options.find(o=>o.network+':'+o.asset===r.selecting)&&{network:r.selecting.split(':')[0],asset:r.selecting.split(':')[1]}:undefined,selectedCheckoutId:r.checkoutId},...(r.checkoutUrl?{selectedCheckoutUrl:r.checkoutUrl,selectedCheckoutId:r.checkoutId}:{})}}
+function publicRecord(r:Selection){return {ok:true,settlementMode:r.settlementByMethod&&!r.cashPayer?'usdc':r.settlementMode||'usdc',...(r.settlementByMethod?{settlementByMethod:true}:{}),checkoutId:r.id,checkoutUrl:'/pay/c/'+r.id,returnUrl:r.returnUrl,checkout:{id:r.id,selectionCheckout:true,paymentMethods:[...(r.options.length?['stablecoins']:[]),...(r.settlementMode==='ngn'&&r.currency==='NGN'?['cash_balance']:[])],paymentMethod:r.cashPayer?'cash_balance':'stablecoins',currency:r.currency,defaultNetwork:r.defaultNetwork,amount:r.amount,merchantName:r.merchantName,brandImageUrl:r.brandImageUrl,title:r.title,expiresAt:r.expiresAt,status:'pending',settlementMode:r.settlementByMethod&&!r.cashPayer?'usdc':r.settlementMode||'usdc',options:r.options.map(({network,asset,unavailableReason})=>({network,asset,...(unavailableReason?{unavailableReason}:{})})),selected:r.choice?{network:r.choice.network,asset:r.choice.asset}:undefined,canChange:!!r.switchable&&!r.paymentLock&&(!r.cashPayer||!!r.settlementByMethod),preparingOption:r.selecting?r.options.find(o=>o.network+':'+o.asset===r.selecting)&&{network:r.selecting.split(':')[0],asset:r.selecting.split(':')[1]}:undefined,selectedCheckoutId:r.checkoutId},...(r.checkoutUrl?{selectedCheckoutUrl:r.checkoutUrl,selectedCheckoutId:r.checkoutId}:{})}}
 function containsChild(r:Selection,id:string){return r.checkoutId===id||Object.values(r.routes||{}).some(route=>route.checkoutId===id)}
 export async function checkoutSelectionForChild(childId:string){if(!defaults.ready())return undefined;return Object.values((await defaults.read()).sessions).find(r=>containsChild(r,childId)&&valid(r,defaults.secret()))?.id}
 export async function checkoutSelectionNavigation(childId:string,d=defaults){
  if(!d.ready())return null
  const r=Object.values((await d.read()).sessions).find(r=>containsChild(r,childId)&&valid(r,d.secret()))
- return r?.switchable?{id:r.id,canChange:!r.paymentLock&&!r.cashPayer&&Date.parse(r.expiresAt)>d.now()}:null
+ return r?.switchable?{id:r.id,canChange:!r.paymentLock&&(!r.cashPayer||!!r.settlementByMethod)&&Date.parse(r.expiresAt)>d.now()}:null
 }
 /** Shared atomic route lock, acquired before any provider signing/broadcast. Never
  * release on a timeout: the provider may already have accepted the payment. */
@@ -68,33 +68,40 @@ export function createCheckoutSelectionHandler(child:Child,overrides:Partial<typ
     const cash=req.body?.paymentMethod==='cash_balance'
     if(req.body?.paymentMethod!==undefined&&!['cash_balance','stablecoins'].includes(req.body.paymentMethod))throw Error('Choose a valid payment method.')
     if(cash&&(r.settlementMode!=='ngn'||r.currency!=='NGN'||req.body?.network!=='base'||req.body?.asset!=='USDC'))throw Error('Cash balance is available for NGN bank checkout only.')
-    const payer=cash?await d.cashPayer(req):undefined
-    if(r.cashPayer&&(!payer||payer.owner!==r.cashPayer.owner||payer.address!==r.cashPayer.address))throw Error('Continue with the cash account selected for this checkout.')
-    if(r.checkoutUrl&&(!r.switchable||r.cashPayer)){if(cash!==!!r.cashPayer)throw Error('Continue with the selected payment method.');return res.json(publicRecord(r))}
+    const account=r.cashAccount||r.cashPayer
+    const authenticatedPayer=cash||account?await d.cashPayer(req):undefined
+    if(account&&(!authenticatedPayer||account.owner!==authenticatedPayer.owner||account.address!==authenticatedPayer.address))throw Error('Continue with the Pocket account selected for this checkout.')
+    const payer=cash?authenticatedPayer:undefined
+
+    if(r.checkoutUrl&&!r.switchable){if(cash!==!!r.cashPayer)throw Error('Continue with the selected payment method.');return res.json(publicRecord(r))}
     const chosen:Option|undefined=cash&&r.settlementByMethod?{network:'base',asset:'USDC',recipient:p.nairaSettlement!.refundAddress}:r.options.find(o=>o.network===req.body?.network&&o.asset===req.body?.asset)
     if(!chosen||!(cash&&r.settlementByMethod)&&!options(r.currency?p:{...p,profileCountry:undefined},d.enabled,!!r.settlementByMethod).some(o=>o.network===chosen.network&&o.asset===chosen.asset&&o.recipient===chosen.recipient))throw Error('This payment option is no longer available. Return to the store.')
     if(chosen.unavailableReason)throw Error(chosen.unavailableReason)
-    if(r.switchable&&!cash){
-      const routeKey=chosen.network+':'+chosen.asset
-      let reused=false
+    if(r.switchable&&(!cash||r.settlementByMethod)){
+      const routeKey=cash?'cash_balance':chosen.network+':'+chosen.asset
+      const sameMethod=(record:Selection)=>!!record.cashPayer===cash
+      let reused=false,recoverCash=false
       await d.mutate(s=>{
         const current=s.sessions[id]
         if(!valid(current,d.secret())||Date.parse(current.expiresAt)<=d.now())throw Error('Checkout expired.')
-        if(current.cashPayer||current.preparing)throw Error('Continue with the selected cash payment.');
-        if(current.paymentLock){if(current.choice?.network===chosen.network&&current.choice.asset===chosen.asset){reused=true;return s}throw Error('Payment is already being confirmed. Continue with the current payment.')}
+        const bound=current.cashAccount||current.cashPayer
+        if(bound&&(!authenticatedPayer||bound.owner!==authenticatedPayer.owner||bound.address!==authenticatedPayer.address))throw Error('Continue with the Pocket account selected for this checkout.')
+        // Preserve the immutable payer binding and the existing cash child when upgrading older sessions.
+        if(current.cashPayer){current.cashAccount??=current.cashPayer;if(current.checkoutId&&current.checkoutUrl){current.routes??={};current.routes.cash_balance??={checkoutId:current.checkoutId,checkoutUrl:current.checkoutUrl}}}
+        if(current.paymentLock){if(sameMethod(current)&&current.choice?.network===chosen.network&&current.choice.asset===chosen.asset){reused=true;current.integrity=sign(current,d.secret());return s}throw Error('Payment is already being confirmed. Continue with the current payment.')}
         if(current.selecting&&current.selecting!==routeKey)throw Error('Another payment option is being prepared. Try again.')
-        if(!current.selecting&&current.checkoutId&&current.choice?.network===chosen.network&&current.choice.asset===chosen.asset){reused=true;return s}
+        if(!current.selecting&&current.checkoutId&&sameMethod(current)&&current.choice?.network===chosen.network&&current.choice.asset===chosen.asset){reused=true;current.integrity=sign(current,d.secret());return s}
         if(current.checkoutId!==req.body?.expectedCheckoutId)throw Error('Payment option changed in another tab. Reopen checkout.')
         const cached=current.routes?.[routeKey]
-        if(cached){current.choice=chosen;current.checkoutId=cached.checkoutId;current.checkoutUrl=cached.checkoutUrl;reused=true}
-        else current.selecting=routeKey
+        if(cached){current.choice=chosen;current.cashPayer=payer;current.checkoutId=cached.checkoutId;current.checkoutUrl=cached.checkoutUrl;delete current.preparing;reused=true}
+        else {recoverCash=cash&&current.selecting===routeKey&&!!current.preparing;current.selecting=routeKey;if(payer){current.cashAccount??=payer;current.preparing=true}}
         current.integrity=sign(current,d.secret());return s
       })
       if(reused)return res.json(publicRecord((await d.read()).sessions[id]))
       const reserved=(await d.read()).sessions[id]
       let made:Awaited<ReturnType<Child>>
-      try{made=await child(r.currency?p:{...p,profileCountry:undefined},{...reserved,choice:chosen})}
-      catch(error){await d.mutate(s=>{const current=s.sessions[id];if(valid(current,d.secret())&&current.selecting===routeKey){delete current.selecting;current.integrity=sign(current,d.secret())}return s});throw error}
+      try{made=await child(r.currency?p:{...p,profileCountry:undefined},{...reserved,choice:chosen,cashPayer:payer},recoverCash)}
+      catch(error){if(!cash)await d.mutate(s=>{const current=s.sessions[id];if(valid(current,d.secret())&&current.selecting===routeKey){delete current.selecting;current.integrity=sign(current,d.secret())}return s});throw error}
       if(!/^chk(?:b|x)?_[a-zA-Z0-9]{8,40}$/.test(made.checkoutId)||!made.checkoutUrl.startsWith('/pay/c/'+made.checkoutId))throw Error('Checkout could not be verified.')
       await d.mutate(s=>{
         const current=s.sessions[id]
@@ -102,7 +109,7 @@ export function createCheckoutSelectionHandler(child:Child,overrides:Partial<typ
         // Same-route retries recover the same idempotent child after a lost response.
         if(current.routes?.[routeKey]?.checkoutId===made.checkoutId&&current.checkoutId===made.checkoutId)return s
         if(current.selecting!==routeKey||current.paymentLock)throw Error('Checkout conflict.')
-        current.routes??={};current.routes[routeKey]=made;current.choice=chosen;current.checkoutId=made.checkoutId;current.checkoutUrl=made.checkoutUrl;delete current.selecting;current.integrity=sign(current,d.secret());return s
+        current.routes??={};current.routes[routeKey]=made;current.choice=chosen;current.cashPayer=payer;delete current.preparing;current.checkoutId=made.checkoutId;current.checkoutUrl=made.checkoutUrl;delete current.selecting;current.integrity=sign(current,d.secret());return s
       })
       return res.json(publicRecord((await d.read()).sessions[id]))
     }

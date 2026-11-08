@@ -1,3 +1,4 @@
+import PocketCheckoutMethodChange from './PocketCheckoutMethodChange'
 import {checkoutPriceLabel} from '../../lib/checkoutPricing'
 import {CheckoutFooter,HashPayLinkCheckoutBrand} from '../../components/CheckoutChrome'
 import BrowserCheckoutCard from '../../components/BrowserCheckoutCard'
@@ -184,6 +185,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
     <div className="mt-4"><PocketCheckoutFields network="xlayer" networkLabel="X Layer" amount={merchant.fixedAmount||usd} currency={merchant.fixedAmount?(selected?.symbol||'Asset'):'USD'} fixedAmount={Boolean(merchant.fixedAmount)} onAmountChange={setUsd} requiresName={false} name="" onNameChange={()=>{}}/></div>
     <PocketFundingAction {...fundingProps}><button className={cta+' mt-5'} disabled={busy||!Number.isFinite(Number(merchant.fixedAmount||usd))||Number(merchant.fixedAmount||usd)<=0||!token||!wallet.address} onClick={prepare}>{busy?'Preparing payment...':'Continue'}</button></PocketFundingAction>{merchant.swapEnabled&&<button type="button" disabled={busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} className="pocket-cta-secondary mt-3 w-full" onClick={()=>setConverting(true)}>Convert and pay</button>}{!wallet.address&&<button className={cta+' mt-3'} onClick={wallet.connect} disabled={!wallet.ready||wallet.busy}>Open wallet</button>}
    </>:null}
+   {!review&&<PocketCheckoutMethodChange id={merchantId} busy={busy||wallet.busy||payment?.status==='submitted'} onClose={close}/>}
    {!fundingAsset&&error&&<p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error}</p>}
   </div></Surface>)}
   {!open&&error&&<p role="alert" className="mt-4 text-xs text-red-500">{error}</p>}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from './PocketIcons'
+import { X, ArrowLeft } from './PocketIcons'
 import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 import { isPocketNativeRuntime } from '../lib/pocketRoutes'
 
@@ -25,11 +25,11 @@ function lockBackgroundScroll() {
   }
 }
 
-export default function PocketBottomSheet({ title, onClose, children, dismissible = true, showCloseButton = dismissible, dismissOnBackdrop = true, layer = 85, headerLabel, fullScreen = false, desktopCentered = !isPocketNativeRuntime(), fixedHeight }: { fixedHeight?: string; fullScreen?: boolean; desktopCentered?: boolean; headerLabel?: string; title: string; onClose: () => void; children: ReactNode; dismissible?: boolean; showCloseButton?: boolean; dismissOnBackdrop?: boolean; layer?:number }) {
+export default function PocketBottomSheet({ title, onClose, onBack, children, dismissible = true, showCloseButton = dismissible, dismissOnBackdrop = true, layer = 85, headerLabel, fullScreen = false, desktopCentered = !isPocketNativeRuntime(), fixedHeight }: { fixedHeight?: string; fullScreen?: boolean; desktopCentered?: boolean; headerLabel?: string; title: string; onBack?: () => void; onClose: () => void; children: ReactNode; dismissible?: boolean; showCloseButton?: boolean; dismissOnBackdrop?: boolean; layer?:number }) {
   const root = useRef<HTMLDivElement>(null)
-  const close = useRef(onClose)
+  const close = useRef(onBack || onClose)
   const canDismiss = useRef(dismissible)
-  close.current = onClose
+  close.current = onBack || onClose
   canDismiss.current = dismissible
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
@@ -69,6 +69,7 @@ export default function PocketBottomSheet({ title, onClose, children, dismissibl
         <div aria-hidden="true" className="h-1 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
         <p className="absolute right-0 max-w-[42%] truncate text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{headerLabel}</p>
       </div> : <div aria-hidden="true" className="mx-auto mb-6 h-1 w-8 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700" />)}
+      {onBack && <button type="button" aria-label="Back" disabled={!dismissible} onClick={onBack} className="absolute left-3 top-3 flex disabled:opacity-40 h-11 w-11 items-center justify-center rounded-full"><ArrowLeft className="h-5 w-5" /></button>}
       {showCloseButton && <button type="button" aria-label="Close" disabled={!dismissible} onClick={onClose} className="absolute right-3 top-3 flex disabled:opacity-40 h-10 w-10 items-center justify-center rounded-full"><X className="h-5 w-5" /></button>}
       {children}
     </div>

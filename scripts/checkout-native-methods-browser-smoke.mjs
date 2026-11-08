@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict'
+import {build} from 'esbuild'
+import {checkoutTestCss} from './checkout-test-css.mjs'
+const {chromium}=await import('file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
+const bundle=await build({stdin:{contents:`import React,{useState}from'react';import{createRoot}from'react-dom/client';import{BrowserRouter}from'react-router-dom';import Form from'./src/pocket/components/PocketMerchantPaymentForm';function App(){const[ready,setReady]=useState(false);window.closeCount=0;window.sent=0;return <Form checkoutId="chk_test123456" cash merchant="Lunchroom" network="base" networkLabel="Base" amount="2000" currency="NGN" fixedAmount onAmountChange={()=>{}} requiresName={false} name="" onNameChange={()=>{}} paymentAmount="1.50 USDC" rows={[]} funding={{asset:null,network:'base',onReturn:async()=>{},onCancel:()=>{}}} error="" ready={ready} busy={false} prepare={async()=>{await new Promise(r=>setTimeout(r,500));setReady(true)}} confirm={async()=>{window.sent++}} onClose={()=>{window.closeCount++}}/>}createRoot(document.getElementById('root')).render(<BrowserRouter><App/></BrowserRouter>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',plugins:[{name:'native-fixtures',setup(b){
+ const stub=(filter,contents)=>b.onLoad({filter},()=>({contents,loader:'tsx'}));
+ stub(/[\\/]usePocketIdentity\.tsx?$/,"export default function(){return{getAccessToken:async()=> 'test-token'}}");
+ stub(/[\\/]pocketRoutes\.ts$/,"export const isPocketNativeRuntime=()=>true;export const pocketApiUrl=p=>p;export const POCKET_BASE_PATH='/pocket';");
+ stub(/[\\/]PocketLocalEquivalent\.tsx$/,"export default function(){return null}");
+ stub(/[\\/]PocketFundingAction\.tsx$/,"export default function({children}){return children}");
+ stub(/[\\/]PocketConfirmationDetails\.tsx$/,"export default function(){return <h2>Payment confirmation</h2>}");
+ stub(/[\\/]PocketSlideAction\.tsx$/,"export default function(p){return <button disabled={p.disabled} onClick={p.onConfirm}>Confirm payment</button>}");
+ stub(/[\\/]PocketSelect\.tsx$/,"export default function(p){return <select aria-label={p.ariaLabel} value={p.value} disabled={p.disabled} onChange={e=>p.onChange(e.target.value)}>{p.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>}");
+}}]})
+const browser=await chromium.launch({channel:'chrome',headless:true}),css=await checkoutTestCss();
+try{const page=await browser.newPage({viewport:{width:412,height:915}}),writes=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const parent={id:'chks_'+'a'.repeat(24),paymentMethods:['cash_balance','stablecoins'],paymentMethod:'cash_balance',amount:'2000',currency:'NGN',merchantName:'Lunchroom',expiresAt:new Date(Date.now()+600000).toISOString(),canChange:true,selectedCheckoutId:'chk_test123456',options:[{network:'base',asset:'USDC'},{network:'bsc',asset:'USDT'}]};
+ await page.route('https://checkout.test/**',async r=>{const u=new URL(r.request().url());if(u.pathname==='/api/v2/checkouts'){if(r.request().method()==='POST'){writes.push(r.request().postDataJSON());await new Promise(resolve=>setTimeout(resolve,500));return r.fulfill({json:{ok:true,selectedCheckoutUrl:'/pay/c/chk_new123456'}})}return r.fulfill({json:u.searchParams.get('purpose')==='selection'?{ok:true,selection:{id:parent.id,canChange:true}}:{ok:true,checkout:parent}})}if(u.pathname.endsWith('.svg'))return r.fulfill({status:404,body:''});return r.fulfill({contentType:'text/html',body:'<meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><div id="root"></div><script>'+bundle.outputFiles[0].text.replaceAll('</script','<\\/script')+'</script>'})});
+ await page.goto('https://checkout.test/pocket/home/checkout');
+ assert.equal(await page.getByRole('button',{name:'Back',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Change payment method',exact:true}).click();
+ const chooser=page.getByRole('dialog',{name:'Payment methods',exact:true});await chooser.waitFor();
+ for(const label of ['Card','Google Pay','Apple Pay','WalletConnect Pay','Bank transfer'])assert.equal(await chooser.getByRole('button',{name:new RegExp(label+' .*Coming soon')}).isDisabled(),true);
+ await chooser.getByRole('button',{name:'Stablecoins',exact:true}).click();
+ const stable=page.getByRole('dialog',{name:'Stablecoins',exact:true});await stable.getByLabel('Payment network').selectOption('bsc');assert.equal(await stable.getByLabel('Payment asset').inputValue(),'USDT');
+ await stable.getByRole('button',{name:'Back',exact:true}).click();await chooser.getByRole('button',{name:'Cash balance Pay from Pocket'}).click();const cash=page.getByRole('dialog',{name:'Cash balance',exact:true});assert.equal(await cash.getByLabel('Payment network').count(),0);
+ await cash.getByRole('button',{name:'Back',exact:true}).click();await chooser.getByRole('button',{name:'Back',exact:true}).click();
+ assert.equal(writes.length,0);assert.equal(await page.evaluate(()=>window.closeCount),0);
+ await page.getByRole('button',{name:'Continue',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Preparing payment',exact:true}).isDisabled(),true);assert.equal(await page.locator('[role="status"].animate-pulse').count(),0);
+ await page.getByRole('heading',{name:'Payment confirmation'}).waitFor();await page.getByRole('button',{name:'Back',exact:true}).click();await page.getByRole('button',{name:'Continue',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Close',exact:true}).click();assert.equal(await page.evaluate(()=>window.closeCount),1);assert.equal(await page.evaluate(()=>window.sent),0);assert.equal(writes.length,0);assert.deepEqual(errors,[]);
+ await page.getByRole('button',{name:'Change payment method',exact:true}).click();await chooser.getByRole('button',{name:'Stablecoins',exact:true}).click();await stable.getByLabel('Payment network').selectOption('bsc');await stable.getByRole('button',{name:'Continue',exact:true}).click();assert.equal(await stable.getByRole('button',{name:'Preparing payment',exact:true}).isDisabled(),true);await page.waitForURL('**/pocket/home/checkout?code=*');assert.equal(writes.length,1);assert.equal(writes[0].paymentMethod,'stablecoins');assert.equal(writes[0].network,'bsc');assert.equal(writes[0].asset,'USDT');assert.equal(writes[0].expectedCheckoutId,'chk_test123456');assert.equal(await page.evaluate(()=>window.sent),0);
+ console.log('PASS native checkout: cash separation, stacked methods, disabled upcoming rails, stable network/token choice, no writes while browsing, in-button loading, review Back, X closes without payment.');
+}finally{await browser.close()}

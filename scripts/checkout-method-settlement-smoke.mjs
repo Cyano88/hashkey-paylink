@@ -15,8 +15,30 @@ assert.equal(bankCalls,0,'Stablecoin routing must never prepare a bank payout');
 const cashMade=await create('method-cash-switch-0001'),id=cashMade.data.checkoutId,q={id,action:'select-payment'};
 const stable=await req('POST',{network:'polygon',asset:'USDT'},q),old=stable.data.selectedCheckoutId;
 const cash=await req('POST',{network:'base',asset:'USDC',paymentMethod:'cash_balance',expectedCheckoutId:old},q);assert.equal(cash.code,200,JSON.stringify(cash));assert.equal(cash.data.settlementMode,'ngn');assert.equal(cash.data.checkout.paymentMethod,'cash_balance');assert.equal(calls.at(-1).nairaSettlement.refundAddress,payer);assert.equal(bankCalls,1);
+// Round trips keep the order and immutable cash child, and retire each inactive child.
+const cashId=cash.data.selectedCheckoutId;
+for(const network of ['base','arc','arbitrum','polygon','ethereum','solana','bsc','xlayer']){
+ const switched=await req('POST',{network,asset:'USDC',paymentMethod:'stablecoins',expectedCheckoutId:cashId},q);
+ assert.equal(switched.code,200,JSON.stringify(switched));assert.equal(switched.data.checkoutId,id);assert.equal(switched.data.settlementMode,'usdc');assert.equal(switched.data.checkout.paymentMethod,'stablecoins');
+ await assert.rejects(()=>claimCheckoutSelectionPayment(cashId,deps),/changed/);
+ const restored=await req('POST',{network:'base',asset:'USDC',paymentMethod:'cash_balance',expectedCheckoutId:switched.data.selectedCheckoutId},q);
+ assert.equal(restored.code,200,JSON.stringify(restored));assert.equal(restored.data.selectedCheckoutId,cashId);assert.equal(restored.data.checkout.canChange,true);
+ await assert.rejects(()=>claimCheckoutSelectionPayment(switched.data.selectedCheckoutId,deps),/changed/);
+}
+assert.equal(bankCalls,1,'Switching back to cash must reuse the provider order');
 await assert.rejects(()=>claimCheckoutSelectionPayment(old,deps),/changed/);await claimCheckoutSelectionPayment(cash.data.selectedCheckoutId,deps);
 assert.equal((await req('POST',{network:'base',asset:'USDC',paymentMethod:'cash_balance'},q)).code,200);assert.equal(bankCalls,1);assert.equal((await req('POST',{network:'polygon',asset:'USDT'},q)).code,409);
+// A second account cannot take over cash-bound orders, including while cash is inactive.
+const isolated=await create('method-owner-test-0001'),oq={id:isolated.data.checkoutId,action:'select-payment'};
+const owned=await req('POST',{network:'base',asset:'USDC',paymentMethod:'cash_balance'},oq);
+const wrong=createCheckoutSelectionHandler(async()=>{throw Error('Must not create a child')},{...deps,cashPayer:async()=>({owner:'other',address:merchant})});
+let wrongCode=200;await wrong({method:'POST',body:{network:'base',asset:'USDC',paymentMethod:'stablecoins',expectedCheckoutId:owned.data.selectedCheckoutId},query:oq,headers:{}},{setHeader(){},status(n){wrongCode=n;return this},json(){return this}});assert.equal(wrongCode,409);
+// Unknown bank preparation outcomes remain reserved; retry is recovery-only, not a new bank order.
+const uncertain=await create('method-uncertain-0001'),uq={id:uncertain.data.checkoutId,action:'select-payment'};let attempts=[];
+const fails=createCheckoutSelectionHandler(async(p,r,recover)=>{attempts.push(recover);throw Error('provider timeout')},deps);
+async function failSelect(body){let code=200;await fails({method:'POST',body,query:uq,headers:{}},{setHeader(){},status(n){code=n;return this},json(){return this}});return code}
+const cashBody={network:'base',asset:'USDC',paymentMethod:'cash_balance'};
+assert.equal(await failSelect(cashBody),409);assert.equal(await failSelect(cashBody),409);assert.deepEqual(attempts,[false,true]);assert.equal(await failSelect({network:'polygon',asset:'USDT'}),409);assert.equal(attempts.length,2);
 policy.stablecoinPaymentOptions=[];delete policy.bscCheckout;delete policy.xlayerCheckout;
 const only=await create('method-no-wallets-0001');assert.deepEqual(only.data.checkout.options,[]);assert.deepEqual(only.data.checkout.paymentMethods,['cash_balance']);assert.equal((await req('POST',{network:'base',asset:'USDC'},{id:only.data.checkoutId,action:'select-payment'})).code,409,'Refund address must never be used as a merchant wallet');assert.equal((await req('POST',{network:'base',asset:'USDC',paymentMethod:'cash_balance'},{id:only.data.checkoutId,action:'select-payment'})).code,200);
 // Historical bank sessions keep their original signature and bank routing.
