@@ -48,7 +48,8 @@ export default function HostedCheckoutEntry() {
         if(!cancelled&&response.status===410){setExpiredReturn(body?.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
         if(response.ok&&body?.ok&&(body.checkout as any)?.selectionCheckout&&body.checkout?.id===checkoutId&&/^chks_[a-f0-9]{24}$/.test(checkoutId)){
           if(!cancelled){if(!(changePayment&&(body.checkout as unknown as CheckoutSelectionView).canChange)&&body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl+(body.selectedCheckoutUrl.includes('?')?'&':'?')+((new URLSearchParams(location.search).get('browser')==='1')?'browser=1':new URLSearchParams(location.search).get('pocketFallback')==='1'?'pocketFallback=1':new URLSearchParams(location.search).get('mode')==='pocket'?'pocket=1':''),{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
-          return false
+          // The phone can select a child after this desktop handoff is displayed.
+          return true
         }
         if(response.ok&&body?.ok&&body.checkout?.bscCheckout&&body.checkout.id===checkoutId&&/^chkb_[a-f0-9]{24}$/.test(checkoutId)){
           if(!cancelled)setCheckout(body)
