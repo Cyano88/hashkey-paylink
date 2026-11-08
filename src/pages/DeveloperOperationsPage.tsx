@@ -332,8 +332,8 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
       <Detail label="Owner" value={project.ownerEmail || 'Email unavailable'} />
       <Detail label="Profile type" value={project.accountType==='individual'?'Personal':'Business'} />
       <Detail label={project.accountType==='individual'?'Country of residence':'Country of registration'} value={project.profileCountry?builderCountryName(project.profileCountry):'Not supplied'} />
-      {project.settlementMode==='ngn'&&<><Detail label="Checkout payment methods" value="Pocket cash balance / Base USDC"/><Detail label="Cash refunds" value="Authenticated payer Base wallet"/></>}
-      <Detail label="Receives" value={project.settlementMode === 'ugx' ? 'UGX · Mobile money' : project.settlementMode === 'ngn' ? 'NGN · Bank account' : 'Stablecoins · Wallet'} />
+      {project.settlementMode==='ngn'&&<><Detail label="Checkout payment methods" value="Stablecoins to saved wallets / Cash balance to NGN bank"/><Detail label="Cash refunds" value="Authenticated payer Base wallet"/></>}
+      <Detail label="Receives" value={project.settlementMode === 'ugx' ? 'UGX · Mobile money' : project.settlementMode === 'ngn' ? 'Stablecoins · Wallet / NGN · Bank account' : 'Stablecoins · Wallet'} />
     </div>
 
     {canManage && <AdminProfileTypeChange key={project.id} currentType={project.accountType??'business'} projectId={project.id} workspaceId={workspaceId} onChanged={onProfileChanged}/>}
@@ -355,14 +355,15 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
         <Lock className="h-4 w-4 text-gray-400" />
       </div>
       <div className="mt-4 space-y-2">
+        {project.settlementMode==='ngn'&&project.networks.map(network=><RouteRow key={network} label={network+' stablecoin wallet'} value={project.recipients[network]||'Not configured'}/>)}
         {project.settlementMode === 'usdc'
           ? project.networks.map(network => <RouteRow key={network} label={network === 'arc' ? 'Arc Mainnet' : network[0].toUpperCase() + network.slice(1)} value={project.recipients[network] ?? 'Missing'} />)
           : <>
             <RouteRow label="Verified bank" value={`${project.bankName || 'Missing'} · ${project.bankAccountName || 'Account unavailable'} · ••••${project.bankAccountLast4 || '----'}`} />
             <RouteRow label="Base refund" value={project.refundAddress || 'Missing'} />
           </>}
-        {project.settlementMode==='usdc'&&project.bscCheckout&&<><RouteRow label="BNB Chain" value={project.bscCheckout.recipient||'Missing'}/><RouteRow label="BNB checkout activation" value={project.bscCheckoutActivated?'Activated':'Pending activation'}/></>}
-        {project.settlementMode==='usdc'&&project.xlayerCheckout&&<><RouteRow label="X Layer" value={project.xlayerCheckout.recipient||'Missing'}/><RouteRow label="X Layer checkout activation" value={project.xlayerCheckoutActivated?'Activated':'Pending activation'}/></>}
+        {project.settlementMode!=='ugx'&&project.bscCheckout&&<><RouteRow label="BNB Chain" value={project.bscCheckout.recipient||'Missing'}/><RouteRow label="BNB checkout activation" value={project.bscCheckoutActivated?'Activated':'Pending activation'}/></>}
+        {project.settlementMode!=='ugx'&&project.xlayerCheckout&&<><RouteRow label="X Layer" value={project.xlayerCheckout.recipient||'Missing'}/><RouteRow label="X Layer checkout activation" value={project.xlayerCheckoutActivated?'Activated':'Pending activation'}/></>}
       </div>
     </section>
 

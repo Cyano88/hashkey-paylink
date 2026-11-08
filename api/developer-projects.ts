@@ -151,6 +151,7 @@ export type DeveloperCheckoutPolicy = {
   allowedOrigins: string[]
   defaultNetwork: DeveloperNetwork
   paymentOptions: Array<{ network: DeveloperNetwork; recipient: string }>
+  stablecoinPaymentOptions?: Array<{network:DeveloperNetwork;recipient:string}>
   payerOptions?: Array<{network:string;asset:string}>
   payerDefaultNetwork?: DeveloperNetwork
   settlementMode: SettlementMode
@@ -1110,7 +1111,6 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const rawAccount = clean(req.body?.bankAccountNumber, 30)
         const bankAccountNumber = isLocalSettlement(settlementMode) ? normalizePayoutAccount(rawAccount, currency) : ''
         if (isLocalSettlement(settlementMode) && rawAccount && !bankAccountNumber) return res.status(400).json({ok:false,error:currency === 'UGX' ? 'Enter a valid Uganda mobile money number.' : 'Enter a valid 10-digit Nigerian account number.'})
-        if (settlementMode === 'ngn' && (!networks.includes('base') || !acceptedCheckoutAssets('base',acceptedAssets).includes('USDC'))) return res.status(400).json({ok:false,error:'Keep Base USDC enabled for NGN settlement. Other payment choices are retained but cannot fund NGN settlement yet.'})
         if (name.length < 2 || !website || useCase.length < 20) return res.status(400).json({ ok: false, error: 'Complete the platform details.' })
         if (requestedBrandImageUrl && !brandImageUrl) return res.status(400).json({ ok: false, error: 'Checkout brand marks must be PNG, WebP, or JPG files hosted on the project website origin.' })
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
@@ -1286,6 +1286,7 @@ function policyForDeveloperProject(
       payerDefaultNetwork: project.defaultNetwork,
       checkoutDefaultNetwork: project.checkoutDefaultNetwork,
       acceptedAssets: project.acceptedAssets,
+      stablecoinPaymentOptions: project.networks.flatMap(network=>allowedNetworks.has(network)&&(network!=='arc'||project.arcMainnetChainId===5042)&&project.recipients[network]?[{network,recipient:project.recipients[network]!}]:[]),
       payerOptions: project.networks.flatMap(network=>acceptedCheckoutAssets(network,project.acceptedAssets).map(asset=>({network,asset}))),
       xlayerCheckout: currentXLayerCheckoutConfig(project.xlayerCheckout),
       bscCheckout: project.bscCheckout,
@@ -1658,7 +1659,7 @@ export async function resolveStockCheckoutProjectEnabled(projectId:string,recipi
  if(swap||!isXLayerCheckoutAsset(asset))return false
  const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
  return Boolean(project&&projectCheckoutMode(project)==='human'&&!project.removal&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
-  &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'
+  &&project.capabilities?.includes('hosted_checkout')&&['usdc','ngn'].includes(project.settlementMode)
   &&project.xlayerCheckout?.recipient.toLowerCase()===recipient.toLowerCase()&&project.xlayerCheckout.assets.includes(asset.toLowerCase())
   &&(!swap||effectiveProductCapabilities(project).includes('swap_xlayer')))
 }
@@ -1675,6 +1676,6 @@ export async function resolveBscCheckoutProjectEnabled(projectId:string,recipien
  if(!defaults.hasStore())return false
  const project=(await defaults.read(STORE_KEY))?.projects?.[projectId]
  return Boolean(project&&projectCheckoutMode(project)==='human'&&!project.removal&&project.operationalStatus!=='suspended'&&verificationAllowsLive(project.businessVerification)&&project.settlementStatus==='ready'
- &&project.capabilities?.includes('hosted_checkout')&&project.settlementMode==='usdc'
+ &&project.capabilities?.includes('hosted_checkout')&&['usdc','ngn'].includes(project.settlementMode)
  &&project.bscCheckout?.recipient.toLowerCase()===recipient.toLowerCase()&&project.bscCheckout.assets.includes(asset.toLowerCase()))
 }

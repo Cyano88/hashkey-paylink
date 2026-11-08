@@ -40,15 +40,16 @@ async function refreshFoodOrder(d:typeof defaults,order:Order){
  if(!matches){if(order.paid)return 'paid';throw Error('Payment status could not be verified. Please check again.')}
  const pricing=status.pricing||status.checkout?.pricing
  const priceMatches=!order.orderPrice||(pricing?.currency===order.orderPrice.currency&&pricing?.amount===order.orderPrice.amount)
+ const expectedSettlement=order.checkoutId.startsWith('chks_')&&status.settlementByMethod?(status.paymentMethod==='cash_balance'?'ngn':'usdc'):(order.settlementMode||'usdc')
  const paidAmount=String(status.payment?.amount||status.checkout?.amount||'')
- const amountMatches=order.orderPrice?priceMatches&&pricing.paymentAsset===(status.asset||status.checkout?.asset)&&/^\d+(?:\.\d{1,18})?$/.test(paidAmount)&&parseUnits(paidAmount,18)===parseUnits(order.settlementMode==='usdc'?pricing.paymentAmount:(order.checkoutId.startsWith('chks_')?status.amount:order.payableAmount)||'0',18):status.payment?.amount===(order.checkoutId.startsWith('chks_')&&order.settlementMode!=='usdc'?status.amount:order.payableAmount||order.amount)
- if(status.status==='paid'&&priceMatches&&(!order.checkoutId.startsWith('chks_')||['USDC','USDT','USDe','USDG'].includes(status.asset))&&(order.rail==='circle'?status.settlementMode===(order.settlementMode||'usdc')&&amountMatches:status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){
+ const amountMatches=order.orderPrice?priceMatches&&pricing.paymentAsset===(status.asset||status.checkout?.asset)&&/^\d+(?:\.\d{1,18})?$/.test(paidAmount)&&parseUnits(paidAmount,18)===parseUnits(expectedSettlement==='usdc'?pricing.paymentAmount:(order.checkoutId.startsWith('chks_')?status.amount:order.payableAmount)||'0',18):status.payment?.amount===(order.checkoutId.startsWith('chks_')&&order.settlementMode!=='usdc'?status.amount:order.payableAmount||order.amount)
+ if(status.status==='paid'&&priceMatches&&(!order.checkoutId.startsWith('chks_')||['USDC','USDT','USDe','USDG'].includes(status.asset))&&(order.rail==='circle'?status.settlementMode===expectedSettlement&&amountMatches:status.checkout.asset===order.asset&&status.checkout.amount===order.amount)){
   if(order.checkoutId.startsWith('chks_')&&['USDC','USDT','USDe','USDG'].includes(status.asset))order.asset=status.asset
   if(typeof status.payment?.receiptId==='string'&&/^[a-zA-Z0-9_.-]{8,1024}$/.test(status.payment.receiptId))order.receiptId=status.payment.receiptId
   else if(/^chk_[a-zA-Z0-9]{8,40}$/.test(order.checkoutId))order.receiptId=order.checkoutId
   if(order.orderPrice||order.checkoutId.startsWith('chks_')&&order.settlementMode!=='usdc')order.payableAmount=paidAmount
-  order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')
-  await d.mutate(s=>{s.orders[order.id].payableAmount=order.payableAmount;s.orders[order.id].paid=true;s.orders[order.id].receiptId=order.receiptId;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})
+  order.settlementMode=expectedSettlement;order.paid=true;order.network=status.network||status.checkout?.network||(order.rail==='bsc'?'bsc':'xlayer')
+  await d.mutate(s=>{s.orders[order.id].settlementMode=order.settlementMode;s.orders[order.id].payableAmount=order.payableAmount;s.orders[order.id].paid=true;s.orders[order.id].receiptId=order.receiptId;s.orders[order.id].asset=order.asset;s.orders[order.id].network=order.network;return s})
   return 'paid'
  }
  if(order.paid)return 'paid'

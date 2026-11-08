@@ -3,7 +3,8 @@ import {acceptedCheckoutAssets} from '../src/lib/checkoutAcceptance.js'
 
 /** Legacy children retain same-asset Circle choices. Switchable orders use
  * the parent selector exclusively, so each cached child keeps its network. */
-export function checkoutSelectionChildPolicy(policy:DeveloperCheckoutPolicy,record:{cashPayer?:{owner:string;address:string};switchable?:true;merchantName:string;brandImageUrl?:string;options:Array<{network:string;asset:string;recipient:string;unavailableReason?:string}>;choice?:{network:string;asset:string}}):DeveloperCheckoutPolicy{
+export function checkoutSelectionChildPolicy(policy:DeveloperCheckoutPolicy,record:{settlementByMethod?:true;cashPayer?:{owner:string;address:string};switchable?:true;merchantName:string;brandImageUrl?:string;options:Array<{network:string;asset:string;recipient:string;unavailableReason?:string}>;choice?:{network:string;asset:string}}):DeveloperCheckoutPolicy{
+ if(record.settlementByMethod&&!record.cashPayer)policy={...policy,settlementMode:'usdc',nairaSettlement:undefined,paymentOptions:policy.stablecoinPaymentOptions||[]}
  const choice=record.choice
  if(!choice)throw Error('Choose a payment option.')
  const movable=!record.switchable&&policy.settlementMode==='usdc'&&choice.network!=='bsc'&&choice.network!=='xlayer'

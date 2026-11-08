@@ -979,12 +979,12 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         const options={cashPayer:record.cashPayer,policy:async()=>selectedPolicy,expiryLimit:()=>Date.parse(record.expiresAt)}
         const handler=choice.network==='bsc'?createHostedBscCheckoutsHandler(options):choice.network==='xlayer'?createHostedStockCheckoutsHandler(options):createHostedCheckoutsHandler({...dependencies,...options})
         const body={kind:'service',checkoutMode:'human',asset:choice.asset,amount:record.amount,...(record.currency?{currency:record.currency}:{}),title:record.title,returnUrl:record.returnUrl,expiresInMinutes:15}
-        return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id+(record.switchable?':'+choice.network+':'+choice.asset:'')},body,query:{}})
+        return await invokeCheckoutHandler(handler,{method:'POST',headers:{'idempotency-key':'selection:'+record.id+(record.switchable&&!record.cashPayer?':'+choice.network+':'+choice.asset:'')},body,query:{}})
       })
       if(req.method==='GET'&&req.query?.purpose==='status') {
         const result=await invokeCheckoutHandler(selection,req).catch(error=>({ok:false,error:(error as Error).message}))
         if(!result.ok)return res.status(409).json(result)
-        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId)).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:child.settlementMode||result.settlementMode||'usdc'})}
+        if(result.selectedCheckoutId){const child=await invokeCheckoutHandler(createHostedCheckoutsHandler(dependencies),checkoutChildStatusRequest(req,result.selectedCheckoutId)).catch(error=>({ok:false,error:(error as Error).message}));if(!child.ok)return res.status(409).json(child);return res.json({...child,...(result.settlementByMethod?{settlementByMethod:true}:{}),checkoutId:req.query.id,selectedCheckoutId:result.selectedCheckoutId,asset:child.asset||child.checkout?.asset,network:child.network||child.checkout?.network,settlementMode:child.settlementMode||result.settlementMode||'usdc'})}
         return res.json({...result,status:result.status||'pending',settlementMode:result.settlementMode||'usdc'})
       }
       return selection(req,res)

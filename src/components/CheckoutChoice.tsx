@@ -7,7 +7,7 @@ import {QRCodeSVG} from 'qrcode.react'
 import {pocketStoreUrl} from '../lib/pocketStoreUrl'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
 import CheckoutPaymentMethods from './CheckoutPaymentMethods'
-export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,amount,onBrowser,onCash,onPocket,autoOpenPocket=false,expiresAt,returnUrl}:{onCash?:()=>void;onPocket?:()=>void;autoOpenPocket?:boolean;expiresAt?:string;returnUrl?:string;id:string;attempt?:string;merchant:string;brandImageUrl?:string;title?:string;amount:string;onBrowser:()=>void}) {
+export default function CheckoutChoice({stablecoinsEnabled=true,id,attempt,merchant,brandImageUrl,title,amount,onBrowser,onCash,onPocket,autoOpenPocket=false,expiresAt,returnUrl}:{stablecoinsEnabled?:boolean;onCash?:()=>void;onPocket?:()=>void;autoOpenPocket?:boolean;expiresAt?:string;returnUrl?:string;id:string;attempt?:string;merchant:string;brandImageUrl?:string;title?:string;amount:string;onBrowser:()=>void}) {
  const [opened,setOpened]=useState(autoOpenPocket)
  const fallback=new URLSearchParams(window.location.search).get('pocketFallback')==='1'
  const [stablecoins,setStablecoins]=useState(fallback||autoOpenPocket)
@@ -28,7 +28,7 @@ export default function CheckoutChoice({id,attempt,merchant,brandImageUrl,title,
   <h1 className="mt-4 break-words text-center text-3xl font-semibold tracking-tight">{amount || 'Payment request'}</h1>
   {title&&<p className="mt-2 text-center text-sm text-gray-500">{title}</p>}
   <CheckoutCountdown seconds={seconds}/>
-  <div ref={methodNavigation} className="mt-6">{!stablecoins?<CheckoutPaymentMethods onCash={onCash} onStablecoins={()=>{if(checkoutSecondsLeft(expiresAt)!==0)changeStep(true)}}/>:<div className="space-y-3" aria-label="Stablecoin payment options">
+  <div ref={methodNavigation} className="mt-6">{!stablecoins?<CheckoutPaymentMethods stablecoinsEnabled={stablecoinsEnabled} onCash={onCash} onStablecoins={()=>{if(checkoutSecondsLeft(expiresAt)!==0)changeStep(true)}}/>:<div className="space-y-3" aria-label="Stablecoin payment options">
    <h2 className="pb-1 text-sm font-semibold">Pay with stablecoins</h2>
    {fallback&&storeUrl?<a href={storeUrl} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Get Pocket</a>:<a href={handoff?(android?handoff.android:handoff.url):'#'} onClick={event=>{if(checkoutSecondsLeft(expiresAt)===0){event.preventDefault();return}if(onPocket){event.preventDefault();onPocket();return}setOpened(true);if(!android){event.preventDefault()}}} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{fallback?'Try opening Pocket':'Pay with Pocket'}</a>}
    <button onClick={()=>{if(checkoutSecondsLeft(expiresAt)!==0)onBrowser()}} className="min-h-12 w-full rounded-full border border-gray-200 px-4 text-sm font-semibold dark:border-white/15">Pay on web</button>

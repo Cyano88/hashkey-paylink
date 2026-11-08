@@ -43,25 +43,20 @@ assert.equal((await request('POST',{...body,currency:'NGN',amount:'2000.00'},{},
 assert.equal((await request('POST',{network:'xlayer',asset:'USDT'},{id:ngn.data.checkoutId,action:'select-payment'})).code,200)
 console.log('PASS NGN selection: country enforcement, USDC/USDT options, original price and idempotent route creation.')
 
-policy.settlementMode='ngn';policy.nairaSettlement={refundAddress:recipient};policy.payerOptions=policy.paymentOptions.flatMap(o=>checkoutStablecoins(o.network).filter(a=>a.currency==='USD').map(a=>({network:o.network,asset:a.symbol})))
+policy.stablecoinPaymentOptions=policy.paymentOptions;policy.settlementMode='ngn';policy.nairaSettlement={refundAddress:recipient};policy.payerOptions=policy.paymentOptions.flatMap(o=>checkoutStablecoins(o.network).filter(a=>a.currency==='USD').map(a=>({network:o.network,asset:a.symbol})))
 const local=await request('POST',{...body,currency:'NGN',amount:'2000.00'},{},'local-selection-order-001')
-assert.equal(local.code,201,JSON.stringify(local));assert.equal(local.data.settlementMode,'ngn');assert.equal(local.data.checkout.options.length,17)
+assert.equal(local.code,201,JSON.stringify(local));assert.equal(local.data.settlementMode,'usdc');assert.equal(local.data.settlementByMethod,true);assert.equal(local.data.checkout.options.length,15)
 const localId=local.data.checkoutId,previousCount=count
-assert.deepEqual(local.data.checkout.options.filter(o=>!o.unavailableReason),[{network:'base',asset:'USDC'}])
-for(const o of local.data.checkout.options.filter(o=>o.unavailableReason)){
- const rejected=await request('POST',{network:o.network,asset:o.asset},{id:localId,action:'select-payment'})
- assert.equal(rejected.code,409);assert.match(rejected.data.error,/cannot fund NGN/)
-}
-assert.equal(count,previousCount);assert.equal(store.sessions[localId].choice,undefined)
-assert.equal((await request('POST',{network:'base',asset:'USDC'},{id:localId,action:'select-payment'})).code,200)
+assert.ok(local.data.checkout.options.every(o=>!o.unavailableReason),'Saved wallet routes must not inherit the bank funding restriction')
+assert.equal((await request('POST',{network:'polygon',asset:'USDT'},{id:localId,action:'select-payment'})).code,200)
 assert.equal(count,previousCount+1)
 const changed=await request('POST',{...body,currency:'NGN',amount:'2000.00'},{},'local-selection-order-002')
 policy.settlementMode='usdc'
 assert.match((await request('POST',{network:'base',asset:'USDC'},{id:changed.data.checkoutId,action:'select-payment'})).data.error,/settlement changed/)
 assert.equal(count,previousCount+1)
-store.sessions[changed.data.checkoutId].options[1].unavailableReason=undefined
+store.sessions[changed.data.checkoutId].options[1].asset='tampered'
 assert.equal((await request('GET',{}, {id:changed.data.checkoutId})).code,404)
-console.log('PASS NGN choices: all configured assets retained; unsupported routes blocked before provider calls; explicit Base USDC choice; settlement changes and availability tampering rejected.')
+console.log('PASS NGN-priced wallet choices: all saved USDC/USDT routes available, merchant settlement changes and option tampering rejected.')
 
 let localRaceStore={sessions:{},keys:{}},providerCalls=0,storedChild=false,releaseProvider,failParentSave=true
 const providerGate=new Promise(resolve=>releaseProvider=resolve)
@@ -69,14 +64,14 @@ const localRaceHandler=createCheckoutSelectionHandler(async(p,r,recoverOnly)=>{
  if(recoverOnly){if(!storedChild)throw Error('Preparation is pending');return {checkoutId:'chk_recovery1234',checkoutUrl:'/pay/c/chk_recovery1234?attempt=pat_recovery1234'}}
  providerCalls++;await providerGate;storedChild=true
  return {checkoutId:'chk_recovery1234',checkoutUrl:'/pay/c/chk_recovery1234?attempt=pat_recovery1234'}
-},{ready:()=>true,secret:()=> 's'.repeat(32),now:()=>now,read:async()=>structuredClone(localRaceStore),mutate:async fn=>{const next=fn(structuredClone(localRaceStore));if(failParentSave&&Object.values(next.sessions).some(s=>s.checkoutId)){failParentSave=false;throw Error('Parent storage interrupted')}localRaceStore=next;return next},policy:async()=>({...policy,settlementMode:'ngn'}),currentPolicy:async()=>({...policy,settlementMode:'ngn'}),enabled:()=>true})
+},{ready:()=>true,secret:()=> 's'.repeat(32),now:()=>now,read:async()=>structuredClone(localRaceStore),mutate:async fn=>{const next=fn(structuredClone(localRaceStore));if(failParentSave&&Object.values(next.sessions).some(s=>s.checkoutId)){failParentSave=false;throw Error('Parent storage interrupted')}localRaceStore=next;return next},policy:async()=>({...policy,settlementMode:'ngn'}),cashPayer:async()=>({owner:'payer',address:recipient}),currentPolicy:async()=>({...policy,settlementMode:'ngn'}),enabled:()=>true})
 async function localRaceRequest(body,query={}){let code=200,data;await localRaceHandler({method:'POST',body,query,headers:{'idempotency-key':'local-race-order-0001'}},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this}});return {code,data}}
 const localRaceCreated=await localRaceRequest({...body,currency:'NGN',amount:'2000'})
 const localRaceQuery={id:localRaceCreated.data.checkoutId,action:'select-payment'}
-const firstLocal=localRaceRequest({network:'base',asset:'USDC'},localRaceQuery)
+const firstLocal=localRaceRequest({network:'base',asset:'USDC',paymentMethod:'cash_balance'},localRaceQuery)
 while(!providerCalls)await new Promise(resolve=>setTimeout(resolve,1))
-assert.equal((await localRaceRequest({network:'base',asset:'USDC'},localRaceQuery)).code,409)
+assert.equal((await localRaceRequest({network:'base',asset:'USDC',paymentMethod:'cash_balance'},localRaceQuery)).code,409)
 assert.equal(providerCalls,1);releaseProvider();assert.equal((await firstLocal).code,409)
-assert.equal((await localRaceRequest({network:'base',asset:'USDC'},localRaceQuery)).code,200)
+assert.equal((await localRaceRequest({network:'base',asset:'USDC',paymentMethod:'cash_balance'},localRaceQuery)).code,200)
 assert.equal(providerCalls,1,'Concurrent requests and parent-save recovery must not create another provider order')
 console.log('PASS local preparation: durable single creator, concurrent request held, interrupted parent save recovers existing child without another provider order.')

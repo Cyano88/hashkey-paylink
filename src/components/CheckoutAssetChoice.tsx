@@ -18,8 +18,8 @@ export default function CheckoutAssetChoice({checkout,returnUrl,mode='web',cash=
  if(seconds===0)return <CheckoutExpired merchant={checkout.merchantName} brandImageUrl={checkout.brandImageUrl} returnUrl={returnUrl}/>
  const networks=[...new Set(available.map(o=>o.network))],assets=available.filter(o=>o.network===choice?.network)
  async function proceed(){
-  if(lock.current||!choice||choice.unavailableReason)return;lock.current=true;setBusy(true);setError('')
-  try{const token=cash?await getAccessToken():null;if(cash&&!token)throw Error('Sign in to continue.');const path=await selectHostedCheckoutOption(checkout.id,cash?{network:'base',asset:'USDC'}:choice,undefined,undefined,checkout.selectedCheckoutId,cash?{accessToken:token!}:undefined);navigate(path+(path.includes('?')?'&':'?')+(mode==='web'?'browser=1':'pocket=1'),{replace:true})}catch(e){setError(e instanceof Error&&e.name==='TimeoutError'?'This is taking longer than usual. Continue to check your checkout.':(e as Error).message)}finally{lock.current=false;setBusy(false)}
+  if(lock.current||!cash&&(!choice||choice.unavailableReason))return;lock.current=true;setBusy(true);setError('')
+  try{const token=cash?await getAccessToken():null;if(cash&&!token)throw Error('Sign in to continue.');const path=await selectHostedCheckoutOption(checkout.id,cash?{network:'base',asset:'USDC'}:choice!,undefined,undefined,checkout.selectedCheckoutId,cash?{accessToken:token!}:undefined);navigate(path+(path.includes('?')?'&':'?')+(mode==='web'?'browser=1':'pocket=1'),{replace:true})}catch(e){setError(e instanceof Error&&e.name==='TimeoutError'?'This is taking longer than usual. Continue to check your checkout.':(e as Error).message)}finally{lock.current=false;setBusy(false)}
  }
  return <div className="mx-auto w-full max-w-md py-6"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114]">
   {!busy&&<button type="button" onClick={()=>navigate('/pay/c/'+checkout.id)} className="mb-4 min-h-11 text-sm font-medium">Back</button>}
@@ -33,6 +33,6 @@ export default function CheckoutAssetChoice({checkout,returnUrl,mode='web',cash=
   </fieldset>}
   {choice?.unavailableReason&&<p role="status" className="mt-5 text-center text-sm text-gray-500">{choice.unavailableReason}</p>}
   {error&&<p role="alert" className="mt-5 text-center text-sm text-gray-500">{error}</p>}
-  {(!cash||ready&&authenticated)&&<button disabled={busy||!choice||!!choice.unavailableReason||cash&&(!ready||!authenticated)} onClick={()=>void proceed()} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy?'Preparing checkout…':'Continue'}</button>}
+  {(!cash||ready&&authenticated)&&<button disabled={busy||!cash&&(!choice||!!choice.unavailableReason)||cash&&(!ready||!authenticated)} onClick={()=>void proceed()} className="mt-6 min-h-12 w-full rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy?'Preparing checkout…':'Continue'}</button>}
  </section><CheckoutFooter/></div>
 }
