@@ -21,10 +21,10 @@ export default function PocketHostedCheckoutChoice({checkout,onSelected,onClose,
  const networks=[...new Set(available.map(o=>o.network))],assets=available.filter(o=>o.network===choice?.network)
  async function proceed(){
   if(lock.current||expired||!cash&&!choice)return
-  lock.current=true;setBusy(true);setError('');const controller=new AbortController();abort.current=controller
-  try{const token=await getAccessToken();if(!token)throw Error('Sign in to Pocket again.');const path=await selectHostedCheckoutOption(checkout.id,cash?{network:'base',asset:'USDC'}:choice!,pocketApiUrl('/api/v2/checkouts'),controller.signal,checkout.selectedCheckoutId,{accessToken:token,paymentMethod:cash?'cash_balance':'stablecoins'});if(!controller.signal.aborted)onSelected(path)}
+  lock.current=true;setBusy(true);setError('');const controller=new AbortController();abort.current=controller;let handedOff=false
+  try{const token=await getAccessToken();if(!token)throw Error('Sign in to Pocket again.');const path=await selectHostedCheckoutOption(checkout.id,cash?{network:'base',asset:'USDC'}:choice!,pocketApiUrl('/api/v2/checkouts'),controller.signal,checkout.selectedCheckoutId,{accessToken:token,paymentMethod:cash?'cash_balance':'stablecoins'});if(!controller.signal.aborted){handedOff=true;onSelected(path)}}
   catch(e){if(!controller.signal.aborted)setError((e as Error).message||'Payment could not be prepared.')}
-  finally{if(!controller.signal.aborted){lock.current=false;setBusy(false)}}
+  finally{if(!controller.signal.aborted&&!handedOff){lock.current=false;setBusy(false)}}
  }
  return <PocketBottomSheet quietBackdrop title={methods?'Payment methods':cash?'Cash balance':'Stablecoins'} layer={initialMethods?95:85} onClose={onClose} onBack={methods?(onBack||(()=>setMethods(false))):initialMethods?()=>setMethods(true):undefined} showCloseButton dismissOnBackdrop={false} dismissible={!busy}>
   <h2 className="mb-3 text-center text-base font-semibold">{methods?'Payment methods':checkout.merchantName}</h2>
