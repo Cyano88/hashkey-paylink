@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {createMarketplaceWalletPayouts} from './wallet-payouts.js'
 import {createMarketplaceWebhooks} from './webhooks.js'
 import {createMarketplaceBankExecution} from './bank-execution.js'
 import {createMarketplaceBankReconciliation} from './bank-reconciliation.js'
@@ -38,6 +39,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
   }
  return {
+  walletPayouts:createMarketplaceWalletPayouts(d),
   webhooks:createMarketplaceWebhooks(d),
   bankExecution:createMarketplaceBankExecution(d),
   bankReconciliation:createMarketplaceBankReconciliation(d),
@@ -145,8 +147,10 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
      const sameDestination=snapshot?.kind==='wallet'&&current?.kind==='wallet'?snapshot.address===current.address:snapshot?.kind==='bank'&&current?.kind==='bank'?snapshot.destinationDigest===current.destinationDigest:false
      if(!snapshot||!current||current.status!=='active'||!sameDestination||snapshot.sellerId!==current.sellerId||snapshot.asset!==current.asset)throw Error('Payout beneficiary is no longer eligible.')
      if(snapshot.kind==='bank')throw Error('Bank payouts require an accepted quote through reserveBankPayout.')
+     throw Error('Wallet payouts require a bound reservation through walletPayouts.reserve.')
     }
     if(command.type==='result'&&command.status!=='unknown'&&book.bankReservations?.some(r=>r.quote.operationId===command.operationId))throw Error('Bank payouts require verified outcome reconciliation.')
+    if(command.type==='result'&&command.status!=='unknown'&&book.walletReservations?.some(r=>r.operationId===command.operationId))throw Error('Wallet payout outcome verification is not implemented.')
     // Proof references must be canonical chain/log or provider settlement identities.
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')
     if(command.type==='result'&&command.status!=='unknown'&&s.books.some((b,i)=>i!==index&&b.operations.some(o=>o.evidenceId===command.evidenceId)))throw Error('Execution evidence was already used.')

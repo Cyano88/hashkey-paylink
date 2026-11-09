@@ -125,3 +125,13 @@ Delivery preserves event ID, event creation time and body across retries. Each t
 A delivery attempt has a 60-second lease and unique token. Late acknowledgements from a replaced worker cannot overwrite the current attempt. Only a matching event acknowledgement with HTTP 2xx marks delivery successful. Skipped/unconfigured endpoints, errors and non-2xx responses retry after 30 seconds, 2 minutes, 10 minutes, 30 minutes, 1 hour, 2 hours and 6 hours. After eight total attempts the event is retained as dead for operational review. No automatic dead-event reset or manual redrive endpoint is implemented.
 
 Attempt history stores timing, outcome and HTTP status only. Raw error messages, response bodies, webhook URLs and signing secrets are not persisted in the marketplace event. Delivery never changes payout balances or settlement status. Runtime activation, scheduler wiring, production endpoint canaries and operational dead-event recovery remain open.
+
+## Wallet payout reservation checkpoint
+
+The unmounted instruction service now accepts wallet payout reservations under `marketplace:payout`: payment, allocation, operation, amount and business reference only. Project identity comes from the credential resolver. Asset, chain, token and destination come from the immutable verified payment snapshot; callers cannot substitute these fields.
+
+`walletPayouts.reserve` atomically checks released available funds and active matching beneficiary, reserves the exact micro-unit amount, and records the authorization and immutable token/destination binding. USDC and USDT remain separate. Cash balance allocations are rejected. Duplicate requests return the original operation; changed requests under the same key fail. A destination revocation blocks new reservations and transfer preparation while preserving historical records.
+
+`walletPayouts.prepareTransfer` rechecks the destination and operation, then builds the exact Base ERC-20 transfer call with canonical token address, zero native call value, recipient and amount. It is not a full transaction or an escrow-contract release call: no sender, nonce, gas policy, custody wrapping, signing or broadcast is provided. The result explicitly requires execution authorization. There is no implicit token conversion or deduction from the reserved token amount; live fee/gas policy still requires explicit binding before execution.
+
+Unknown outcomes retain reserved funds and cannot be prepared again. Generic commands cannot finalize these wallet reservations; wallet-specific execution/reconciliation remains unimplemented. The bank execution worker is not reused blindly for wallet transfers. No wallet payout endpoint is mounted or enabled.

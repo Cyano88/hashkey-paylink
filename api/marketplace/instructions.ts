@@ -9,7 +9,7 @@ export type MarketplacePrincipal = {
   capabilities: string[]
   scopes: string[]
 }
-type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout'>
+type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts'>
 type Dependencies = {
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
@@ -40,6 +40,14 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
     return {projectId:reference(resolved.projectId), credentialId:reference(resolved.credentialId)}
   }
   return {
+    async reserveWalletPayout(credential: string, key: string, body: unknown) {
+      const input = fields(structuredClone(body),['paymentId','operationId','allocationId','amount','businessReference'])
+      const paymentId=reference(input.paymentId), operationId=reference(input.operationId), allocationId=reference(input.allocationId), businessReference=reference(input.businessReference)
+      reference(key)
+      const principal=await authorize(credential,'marketplace:payout')
+      const result=await repository.walletPayouts.reserve(principal.projectId,paymentId,key,{operationId,allocationId,amount:input.amount as string},{credentialId:principal.credentialId,businessReference})
+      return {paymentId,operationId,status:result.operation.status,network:result.reservation.network,asset:result.reservation.asset,amountUnits:result.reservation.amountUnits,beneficiaryId:result.reservation.beneficiaryId}
+    },
     async reserveBankPayout(credential: string, key: string, body: unknown) {
       const input = fields(structuredClone(body),['paymentId','quoteId','businessReference'])
       const paymentId = reference(input.paymentId), quoteId = reference(input.quoteId), businessReference = reference(input.businessReference)
