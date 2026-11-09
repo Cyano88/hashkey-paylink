@@ -604,6 +604,7 @@ export async function markHostedCheckoutPaid(input: {
   if (!result) throw new Error('Hosted checkout could not be updated.')
   await syncHostedCheckoutExecution(result as CheckoutRecord, dependencies.executions)
   if (newlyPaid) startWebhookDrain(dependencies)
+  if(dependencies===defaults&&newlyPaid&&(result as CheckoutRecord).feePayer==='payer')void import('./marketplace/collection-observer.js').then(m=>m.wakeMarketplaceCollectionObserver()).catch(()=>{})
   return { ...(result as CheckoutRecord) }
 }
 

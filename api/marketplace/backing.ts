@@ -22,7 +22,14 @@ export function createMarketplaceBackingCheck(input:Dependencies){
   let obligations=feeReserveObligations(before),books=0
   const blockers=new Set<string>()
   for(const book of before?.books??[]){
-   if(!book.fundingEvidence){if(book.balances.some(b=>[b.pending,b.available,b.reserved,b.paid,b.refunded,b.feesAccrued??'0',b.feesFunded??'0'].some(v=>v!=='0'))||book.operations.length)blockers.add('unfunded_book_has_balances');continue}
+   if(!book.fundingEvidence){
+    const observation=book.collectionObservation
+    const observed=!!observation&&book.collectionStatus==='pending_finality'&&observation.session.projectId===book.plan.projectId&&observation.session.paymentId===book.plan.paymentId&&observation.session.amountUnits===book.plan.amountUnits&&observation.session.holdingId===d.holding.id&&observation.session.holdingRevision===d.holding.revision&&getAddress(observation.session.holdingAddress)===address
+    if(book.balances.some(b=>b.pending!==(observed?book.plan.allocations.find(a=>a.id===b.allocationId)?.amountUnits:'0')||[b.available,b.reserved,b.paid,b.refunded,b.feesAccrued??'0',b.feesFunded??'0'].some(v=>v!=='0'))||book.operations.length)blockers.add('unfunded_book_has_balances')
+    // Observed funds cannot be spent and are not yet part of this finalized
+    // balance snapshot. Finalization promotes them to protected obligations.
+    continue
+   }
    const origin=book.refundCollection,proof=book.collectionProof
    if(!origin||!proof||origin.fundingEvidenceId!==book.fundingEvidence||proof.evidenceId!==book.fundingEvidence){blockers.add('unverified_ledger_origin');continue}
    if(origin.holdingId!==d.holding.id||origin.holdingRevision!==d.holding.revision||getAddress(origin.holdingAddress)!==address){blockers.add('other_holding_requires_separate_reconciliation');continue}

@@ -160,7 +160,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     const index=s.books.findIndex(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
     if(index<0)throw Error('Marketplace payment not found.')
     const book=s.books[index]
-    if(command.type==='fund'&&(d.collectionVerification||book.collectionProof||book.collectionCheckout))throw Error('Funding requires the collection verifier.')
+    if(command.type==='fund'&&(d.collectionVerification||book.collectionProof||book.collectionObservation||book.collectionCheckout))throw Error('Funding requires the collection verifier.')
     if(command.type==='reserve'&&command.kind==='payout'&&book.beneficiarySnapshots&&!book.journal.some(entry=>entry.key===key)){
      const allocation=book.plan.allocations.find(a=>a.id===command.allocationId)
      const snapshot=book.beneficiarySnapshots.find(b=>b.beneficiaryId===allocation?.beneficiaryId)

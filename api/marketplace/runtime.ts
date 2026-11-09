@@ -53,7 +53,7 @@ export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;
  const holding={id:settings.holdingId,revision:settings.holdingRevision,address:settings.config.treasuryAddress,billsAddress:settings.billsAddress}
  const adapter=createMarketplaceCheckoutCollections({...storage,enabled:true,projectIds:settings.projectIds,holding,readCheckout:input.readCheckout,verifyPayerFees:input.verifyPayerFees,verifyHolding:()=>circle.verifyConfiguredWallet()})
  const collections=createMarketplaceCollections({...storage,enabled:true,holding,chain:input.chain,resolveSession:adapter.resolveSession})
- return {bindCheckout:adapter.bind,verifyCollection:collections.verify,async createCheckout(projectId:string,paymentId:string,presentation:{title:string;returnUrl:string}){
+ return {bindCheckout:adapter.bind,observeCollection:collections.observe,syncCollection:collections.sync,verifyCollection:collections.verify,async createCheckout(projectId:string,paymentId:string,presentation:{title:string;returnUrl:string}){
   if(!settings.projectIds.includes(projectId))throw Error('Marketplace project is not enabled.')
   const book=(await storage.read())?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
   if(!book||book.plan.network!=='base'||book.plan.asset!=='USDC')throw Error('Marketplace Base USDC payment not found.')

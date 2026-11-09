@@ -123,7 +123,7 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
       const book = await repository.get(principal.projectId,reference(paymentId))
       if (!book) return null
       // Internal evidence and credential-bearing command journals are not developer responses.
-      return structuredClone({plan:book.plan, balances:book.balances, operations:book.operations.map(({evidenceId: _evidence, ...operation})=>{const quote=book.walletReservations?.find(r=>r.operationId===operation.id)?.quote;const bankQuote=book.bankReservations?.find(r=>r.quote.operationId===operation.id)?.quote;const final=operation.status==='settled'?true:operation.status==='failed'?false:undefined;return {...operation,...(quote?{fees:walletFeeDisclosure(quote,final)}:bankQuote?{fees:bankFeeDisclosure(bankQuote,final)}:{})}}), funded:!!book.fundingEvidence})
+      return structuredClone({collectionStatus:book.collectionStatus??(book.fundingEvidence?'finalized':'awaiting_payment'),plan:book.plan, balances:book.balances, operations:book.operations.map(({evidenceId: _evidence, ...operation})=>{const quote=book.walletReservations?.find(r=>r.operationId===operation.id)?.quote;const bankQuote=book.bankReservations?.find(r=>r.quote.operationId===operation.id)?.quote;const final=operation.status==='settled'?true:operation.status==='failed'?false:undefined;return {...operation,...(quote?{fees:walletFeeDisclosure(quote,final)}:bankQuote?{fees:bankFeeDisclosure(bankQuote,final)}:{})}}), funded:!!book.fundingEvidence})
     },
     async sellerBalances(credential: string, sellerId: string) {
       const principal = await authorize(credential,'marketplace:read')

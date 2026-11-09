@@ -16,7 +16,8 @@ export default function MarketplaceDocs(){return <DocPage>
   </Section>
   <Section title="Seller balances in your product" id="balances">
     <p>Your marketplace displays seller balances using project-scoped records. USDC and USDT are separate balances, not a combined dollar wallet. Sellers do not need a separate Hash PayLink dashboard.</p>
-    <ul className="list-disc space-y-2 pl-5"><li><strong>Pending:</strong> funded allocations awaiting your release instruction.</li><li><strong>Available:</strong> released amounts eligible for payout.</li><li><strong>Reserved:</strong> amounts committed to a payout or refund whose outcome is not final.</li></ul>
+    <ul className="list-disc space-y-2 pl-5"><li><strong>Pending:</strong> verified payments awaiting chain finality or your delivery-based release instruction. Pending funds cannot be spent.</li><li><strong>Available:</strong> finalized amounts released by your marketplace and eligible for payout.</li><li><strong>Reserved:</strong> amounts committed to a payout or refund whose outcome is not final.</li></ul>
+    <p>Show payment received after the exact buyer payment and fees are verified. Base finality normally takes about 20 minutes from payment and is checked in the background. Finality does not automatically release seller funds: your marketplace must still authorize release. Releases, payouts and refund execution remain blocked until finality. A detected reorganization removes an unfinalized pending credit and requires review. Timing is an estimate, not a settlement guarantee.</p>
     <p>A displayed ledger balance must reconcile with actual held funds. An allocation or a payment-page redirect is not proof of collection.</p>
   </Section>
   <Section title="Planned integration sequence" id="integration">

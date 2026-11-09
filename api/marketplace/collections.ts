@@ -22,6 +22,16 @@ function locate(s:MarketplaceStore|undefined,projectId:string,paymentId:string){
 /** Unmounted verifier. No deposit-address UI, arbitrary tx claims, or signing. */
 export function createMarketplaceCollections(input:Dependencies){
  const d={...input,holding:structuredClone(input.holding)}
+ async function invalidateObservation(projectId:string,paymentId:string,transactionHash:string){
+  await d.mutate(store=>{const book=locate(store,projectId,paymentId)
+   if(!book.fundingEvidence&&book.collectionObservation?.session.transactionHash===transactionHash){
+    if(book.operations.length)throw Error('Unfinalized collection has operations.')
+    book.collectionStatus='review_required'
+    book.balances.forEach(balance=>{balance.pending='0'})
+   }
+   return store
+  })
+ }
  function binding(value:MarketplaceCollectionSession|null,book:MarketplaceBook){
   if(!value)throw Error('Authoritative collection session is unavailable.')
   const s=structuredClone(value)
@@ -33,17 +43,23 @@ export function createMarketplaceCollections(input:Dependencies){
   if(!Number.isSafeInteger(s.issuedAt)||s.issuedAt<0||!Number.isSafeInteger(s.expiresAt)||s.expiresAt<=s.issuedAt)throw Error('Invalid collection session lifetime.')
   return {...s,payerWallet:payer,holdingAddress:holding,transactionHash:s.transactionHash.toLowerCase()}
  }
- return {
-  async verify(projectId:string,paymentId:string){
+  async function verifyCollection(projectId:string,paymentId:string,requireFinality:boolean){
    if(!d.enabled)throw Error('Marketplace collection verification is disabled.')
    marketplaceReference(projectId);marketplaceReference(paymentId)
    const before=locate(await d.read(),projectId,paymentId),request={projectId,paymentId}
    const session=binding(await d.resolveSession(request),before)
    if(await d.chain.getChainId()!==8453)throw Error('Collection verification requires Base.')
    const receipt=await d.chain.getTransactionReceipt({hash:session.transactionHash as `0x${string}`})
-   if(receipt.status!=='success'||receipt.transactionHash.toLowerCase()!==session.transactionHash||!hash.test(receipt.blockHash)||receipt.blockNumber<0n)throw Error('Collection receipt is not a successful matching transaction.')
+   if(receipt.status!=='success'||receipt.transactionHash.toLowerCase()!==session.transactionHash||!hash.test(receipt.blockHash)||receipt.blockNumber<0n){
+    if(receipt.status==='reverted'&&receipt.transactionHash.toLowerCase()===session.transactionHash)await invalidateObservation(projectId,paymentId,session.transactionHash)
+    throw Error('Collection receipt is not a successful matching transaction.')
+   }
    const [finalized,canonical]=await Promise.all([d.chain.getBlock({blockTag:'finalized'}),d.chain.getBlock({blockNumber:receipt.blockNumber})])
-   if(finalized.number===null||receipt.blockNumber>finalized.number||canonical.number!==receipt.blockNumber||canonical.hash?.toLowerCase()!==receipt.blockHash.toLowerCase())throw Error('Collection is not canonical and finalized.')
+   if(canonical.number!==receipt.blockNumber||canonical.hash?.toLowerCase()!==receipt.blockHash.toLowerCase()){
+    await invalidateObservation(projectId,paymentId,session.transactionHash)
+    throw Error('Collection is not canonical and finalized.')
+   }
+   if(finalized.number===null||requireFinality&&receipt.blockNumber>finalized.number)throw Error('Collection is not canonical and finalized.')
    if(canonical.timestamp<BigInt(session.issuedAt)||canonical.timestamp>BigInt(session.expiresAt))throw Error('Collection transfer is outside its checkout session lifetime.')
    const token=getAddress(BASE_STABLECOINS.USDC.address)
    const logs=parseEventLogs({abi,logs:receipt.logs}).filter(log=>getAddress(log.address)===token)
@@ -77,11 +93,28 @@ export function createMarketplaceCollections(input:Dependencies){
      if(book.collectionProof.evidenceId!==evidenceId||JSON.stringify(book.collectionProof.session)!==JSON.stringify(session)||book.collectionProof.blockHash!==proof.blockHash||book.fundingEvidence!==evidenceId||JSON.stringify(book.refundCollection)!==JSON.stringify(origin))throw Error('Conflicting collection proof requires review.')
      return store
     }
-    if(store.books.some(b=>b.fundingEvidence===evidenceId||b.collectionProof?.session.sessionId===session.sessionId||b.collectionProof?.session.transactionHash===session.transactionHash||b.operations.some(o=>o.evidenceId===evidenceId)||[...(b.walletExecutions||[]),...(b.bankExecutions||[]),...(b.refundExecutions||[])].some(e=>e.transactionHash?.toLowerCase()===session.transactionHash)))throw Error('Collection transaction or session was already used.')
+    if(book.collectionObservation&&JSON.stringify(book.collectionObservation.session)!==JSON.stringify(session))throw Error('Conflicting collection observation requires review.')
+    if(store.books.some(b=>b!==book&&(b.fundingEvidence===evidenceId||b.collectionObservation?.session.sessionId===session.sessionId||b.collectionObservation?.session.transactionHash===session.transactionHash||b.collectionProof?.session.sessionId===session.sessionId||b.collectionProof?.session.transactionHash===session.transactionHash||b.operations.some(o=>o.evidenceId===evidenceId)||[...(b.walletExecutions||[]),...(b.bankExecutions||[]),...(b.refundExecutions||[])].some(e=>e.transactionHash?.toLowerCase()===session.transactionHash))))throw Error('Collection transaction or session was already used.')
+    if(book.operations.some(o=>o.evidenceId===evidenceId)||[...(book.walletExecutions||[]),...(book.bankExecutions||[]),...(book.refundExecutions||[])].some(e=>e.transactionHash?.toLowerCase()===session.transactionHash))throw Error('Collection transaction was already used.')
+    if(!requireFinality){
+     if(book.fundingEvidence||book.operations.length||book.balances.some(b=>[b.available,b.reserved,b.paid,b.refunded,b.feesFunded??'0',b.feesAccrued??'0'].some(v=>v!=='0')))throw Error('Unfinalized collection has spendable balances.')
+     book.collectionObservation=proof;book.collectionStatus='pending_finality'
+     book.balances.forEach(b=>{b.pending=book.plan.allocations.find(a=>a.id===b.allocationId)!.amountUnits})
+     return store
+    }
     const next=applyMarketplaceCommand(book,projectId,'collection:'+createHash('sha256').update(session.sessionId).digest('hex'),{type:'fund',evidenceId,network:'base',asset:'USDC',amountUnits:session.amountUnits})
-    next.collectionProof=proof;next.refundCollection=origin;store.books[store.books.indexOf(book)]=next;return store
+    next.collectionProof=proof;next.collectionStatus='finalized';next.refundCollection=origin;store.books[store.books.indexOf(book)]=next;return store
    })
-   return structuredClone(locate(saved,projectId,paymentId).collectionProof!)
+   const book=locate(saved,projectId,paymentId)
+   return structuredClone(book.collectionProof??book.collectionObservation!)
+  }
+ return {
+  observe:(projectId:string,paymentId:string)=>verifyCollection(projectId,paymentId,false),
+  verify:(projectId:string,paymentId:string)=>verifyCollection(projectId,paymentId,true),
+  async sync(projectId:string,paymentId:string){
+   const observation=await verifyCollection(projectId,paymentId,false)
+   if(BigInt(observation.blockNumber)<=BigInt(observation.finalizedBlockNumber))await verifyCollection(projectId,paymentId,true)
+   return structuredClone(locate(await d.read(),projectId,paymentId))
   },
   async resolveRefundCollection(request:{projectId:string;paymentId:string;fundingEvidenceId:string}):Promise<RefundCollection|null>{
    const book=locate(await d.read(),request.projectId,request.paymentId)

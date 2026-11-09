@@ -651,3 +651,5 @@ void drainPocketMoneyPushWorker().catch(error => {
   console.error('[pocket-money-push] startup run failed:', error instanceof Error ? error.message : String(error))
 })
 // General escrow is under development. No public agreement handlers or workers are mounted.
+// Existing Marketplace checkout accounting only; never starts payout/refund execution.
+void import('./api/marketplace/collection-observer.js').then(m=>m.startMarketplaceCollectionObserver()).catch(()=>console.warn('[marketplace] Collection observer startup deferred.'))
