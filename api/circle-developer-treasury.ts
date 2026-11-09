@@ -399,7 +399,17 @@ export function createCircleDeveloperTreasuryClient(options: {
     return transaction
   }
 
+  /** Read-only estimate. It never signs or creates a transfer. */
+  async function estimateUsdcTransfer(input:{destinationAddress:string;amount:string;tokenAddress:string}) {
+    if(!config.verificationReady||!isAddress(input.destinationAddress)||!isAddress(input.tokenAddress)||!/^\d+(?:\.\d{1,6})?$/.test(input.amount)||Number(input.amount)<=0)throw new CircleTreasuryError('CIRCLE_ESTIMATE_INVALID','Invalid transfer estimate request.',400)
+    await verifyConfiguredWallet()
+    const body=await request('/v1/w3s/transactions/transfer/estimateFee',{method:'POST',body:JSON.stringify({walletId:config.walletId,blockchain:config.blockchain,tokenAddress:input.tokenAddress,destinationAddress:input.destinationAddress,amounts:[input.amount]})})
+    const tier=body?.data?.high,networkFee=tier?.networkFeeRaw??tier?.networkFee
+    if(typeof networkFee!=='string'||!/^\d+(?:\.\d{1,18})?$/.test(networkFee)||Number(networkFee)<=0)throw new CircleTreasuryError('CIRCLE_ESTIMATE_UNAVAILABLE','Circle transfer fee estimate is unavailable.',502)
+    return {networkFee,asset:'ETH' as const,blockchain:'BASE' as const,tier:'HIGH' as const}
+  }
   return {
+    estimateUsdcTransfer,
     findTransferByReference,
     createWalletSet,
     createWallet,

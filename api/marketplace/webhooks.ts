@@ -22,7 +22,7 @@ function locate(store:MarketplaceStore,projectId:string,paymentId:string,eventId
  return event
 }
 function due(event:PayoutEvent,now:number){return event.delivery==='pending'&&(event.nextAttemptAt??0)<=now||event.delivery==='delivering'&&(event.leaseUntil??Infinity)<=now}
-function payload(event:PayoutEvent){const common={...('refundId' in event?{refundId:event.refundId}:{}),projectId:event.projectId,paymentId:event.paymentId,operationId:event.operationId,asset:event.asset,currency:event.currency,debitUnits:event.debitUnits};return event.currency==='NGN'?{...common,ngnPaidMinor:event.ngnPaidMinor}:{...common,network:event.network,recipientAmountUnits:event.recipientAmountUnits}}
+function payload(event:PayoutEvent){const common={...('refundNetworkFee' in event&&event.refundNetworkFee?{refundNetworkFee:event.refundNetworkFee}:{}),...('fees' in event&&event.fees?{fees:event.fees}:{}),...('refundId' in event?{refundId:event.refundId}:{}),projectId:event.projectId,paymentId:event.paymentId,operationId:event.operationId,asset:event.asset,currency:event.currency,debitUnits:event.debitUnits};return event.currency==='NGN'?{...common,ngnPaidMinor:event.ngnPaidMinor}:{...common,network:event.network,recipientAmountUnits:event.recipientAmountUnits}}
 /** At-least-once delivery. Consumers must deduplicate event IDs and verify signatures on the raw body. */
 export function createMarketplaceWebhooks(dependencies:Dependencies){
  const d=dependencies

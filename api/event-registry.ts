@@ -522,7 +522,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
     const minimumAmount = checkout.flexible ? amount : checkout.amount
     try {
-      const verifiedTransfer: {amount:string;confirmedAt?:string;fees?:MerchantPaymentFees} = checkout.feePayer==='payer'?await verifyPayerCheckoutTransfer(checkout,{txHash,payer,network:chain}):checkout.feePayer==='merchant'&&!checkout.settlement?await verifyMerchantCheckoutTransfer(checkout,{txHash,payer,network:chain}):chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
+      const verifiedTransfer: {amount:string;confirmedAt?:string;fees?:MerchantPaymentFees;payerFees?:import('../src/lib/payerCheckoutFees.js').PayerCheckoutFeeEvidence} = checkout.feePayer==='payer'?await verifyPayerCheckoutTransfer(checkout,{txHash,payer,network:chain}):checkout.feePayer==='merchant'&&!checkout.settlement?await verifyMerchantCheckoutTransfer(checkout,{txHash,payer,network:chain}):chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
         chain: evmChain!,
         token: assetSymbol,
         txHash,
@@ -542,6 +542,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         payer,
         amount: verifiedTransfer.amount,
         ...('fees' in verifiedTransfer?{fees:verifiedTransfer.fees}:{}),
+        ...(verifiedTransfer.payerFees?{payerFees:verifiedTransfer.payerFees}:{}),
         confirmedAt: verifiedTransfer.confirmedAt,
         network: chain,
         referenceType: chain === 'solana' ? 'solana_signature' : 'evm_tx_hash',

@@ -19,7 +19,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const zero='0x0000000000000000000000000000000000000000'
 type RepositoryDependencies=NonNullable<Parameters<typeof createMarketplaceRepository>[0]>
 type ExecutionConfig=NonNullable<RepositoryDependencies['refundExecution']>
-type RuntimeAdapters={chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];verifyBacking:()=>Promise<{backed:boolean}>;authorizeExecution?:(projectId:string,credentialId:string)=>Promise<boolean>;resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
+type RuntimeAdapters={quoteRefundFees:NonNullable<ExecutionConfig['quoteFees']>;chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];verifyBacking:()=>Promise<{backed:boolean}>;authorizeExecution?:(projectId:string,credentialId:string)=>Promise<boolean>;resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
 
 /** Internal wallet worker composition. A verified provider gas-coverage adapter is
  * required; no default sponsorship assertion, route or scheduler is installed. */
@@ -33,7 +33,7 @@ export function createMarketplaceWalletRuntime(input:{env:NodeJS.ProcessEnv;chai
  const key='hashpaylink:marketplace-accounting-foundation:v1'
  const storage={read:()=>readDurableJson<MarketplaceStore>(key),mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>mutateDurableJson<MarketplaceStore>(key,s=>{if(!s)throw Error('Marketplace ledger is unavailable.');return fn(s)}),now:Date.now}
  const verifyBacking=createMarketplaceBackingCheck({read:storage.read,chain:input.chain,holding:{id:settings.holdingId,revision:settings.holdingRevision,address:settings.config.treasuryAddress,billsAddress:settings.billsAddress}})
- const custody=createMarketplaceWalletCustody({...storage,enabled:true,config:settings.config,holdingId:settings.holdingId,holdingRevision:settings.holdingRevision,billsAddress:settings.billsAddress,projectIds:settings.projectIds,chain:input.chain,verifyBacking,verifyFees:input.verifyFees,authorize:createMarketplaceExecutionAuthority({env:()=>input.env})})
+ const custody=createMarketplaceWalletCustody({...storage,enabled:true,config:settings.config,holdingId:settings.holdingId,holdingRevision:settings.holdingRevision,billsAddress:settings.billsAddress,projectIds:settings.projectIds,chain:input.chain,verifyBacking,verifyFees:transfer=>{if(!transfer.quote)throw Error('Live marketplace wallet payout requires an accepted fee quote.');return input.verifyFees(transfer)},authorize:createMarketplaceExecutionAuthority({env:()=>input.env})})
  const worker=createMarketplaceWalletWorker({...storage,execution:custody,webhooks:createMarketplaceWebhooks({...storage,notifyMarketplace:marketplaceWebhookTransport})})
  return {...custody,async drain(projectId:string,limit=10){
   if(!settings.projectIds.includes(projectId))throw Error('Marketplace project is not enabled.')
@@ -102,6 +102,7 @@ export function readMarketplaceRuntimeConfig(env:NodeJS.ProcessEnv=process.env){
 export function marketplaceRuntimeReadiness(env:NodeJS.ProcessEnv=process.env,adapters?:Partial<RuntimeAdapters>){
  const configuration=readMarketplaceRuntimeConfig(env),blockers=[...configuration.blockers]
  if(typeof adapters?.resolveRefundCollection!=='function')blockers.push('verified_original_collection_adapter_missing')
+ if(typeof adapters?.quoteRefundFees!=='function')blockers.push('refund_fee_quote_adapter_missing')
  if(typeof adapters?.authorizeRefund!=='function')blockers.push('project_authority_custody_and_fee_adapter_missing')
  if(typeof adapters?.verifyBacking!=='function')blockers.push('holding_backing_check_missing')
  if(!adapters?.chain||(['getChainId','getTransactionReceipt','getBlock'] as const).some(method=>typeof adapters.chain?.[method]!=='function'))blockers.push('base_rpc_client_missing')
@@ -117,7 +118,7 @@ export function createMarketplaceRefundRuntime(input:{env:NodeJS.ProcessEnv;adap
  const authorizeExecution=adapters.authorizeExecution??createMarketplaceExecutionAuthority({env:()=>input.env})
  const repository=createMarketplaceRepository({
   resolveRefundCollection:request=>{if(!allowed.has(request.projectId))throw Error('Marketplace project is not enabled.');return adapters.resolveRefundCollection(request)},
-  refundExecution:{enabled:true,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:async reservation=>allowed.has(reservation.collection.projectId)&&(await adapters.verifyBacking()).backed===true&&await adapters.authorizeRefund(reservation)&&await authorizeExecution(reservation.collection.projectId,reservation.authorization.credentialId)},
+  refundExecution:{enabled:true,requireFeeReserve:true,quoteFees:adapters.quoteRefundFees,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:async reservation=>allowed.has(reservation.collection.projectId)&&(await adapters.verifyBacking()).backed===true&&await adapters.authorizeRefund(reservation)&&await authorizeExecution(reservation.collection.projectId,reservation.authorization.credentialId)},
   notifyMarketplace:marketplaceWebhookTransport,
  })
  return {readiness,async drain(projectId:string,limit=10){

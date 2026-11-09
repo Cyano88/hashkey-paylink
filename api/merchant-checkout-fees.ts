@@ -72,7 +72,8 @@ export async function verifyPosMerchantTransfer(merchantId:string,amount:string,
 }
 
 
-export type PayerCheckoutFeeEvidence={quoteId:string;treasuryAddress:string;platformFeeUnits:string;networkFeeUnits:string;treasuryUnits:string;totalUnits:string}
+import type {PayerCheckoutFeeEvidence} from '../src/lib/payerCheckoutFees.js'
+export type {PayerCheckoutFeeEvidence} from '../src/lib/payerCheckoutFees.js'
 /** Authenticated pre-signing quote plus exact transfers. Payer fees never reduce
  * the order amount or appear as merchant deductions. No quote is accepted from
  * a checkout status request or a marketplace instruction body.

@@ -1,3 +1,4 @@
+import {validateMarketplaceWalletQuote} from './wallet-quotes.js'
 import type {MarketplaceCheckoutBinding} from './checkout-collections.js'
 import type {MarketplaceCollectionProof} from './collections.js'
 import {createHash} from 'node:crypto'
@@ -21,10 +22,11 @@ export type MarketplacePlan = {
   projectId: string; paymentId: string; network: 'base'; asset: MarketplaceAsset; amountUnits: string;
   allocations: Array<Omit<AllocationInput, 'amount'> & {amountUnits: string}>
 }
-type Balance = {allocationId: string; pending: string; available: string; reserved: string; paid: string; refunded: string}
+type Balance = {feesFunded?:string;feesAccrued?:string;allocationId: string; pending: string; available: string; reserved: string; paid: string; refunded: string}
 type Operation = {id: string; allocationId: string; kind: 'payout'|'refund'; units: string; fromPending: string; fromAvailable: string; status: 'reserved'|'unknown'|'settled'|'failed'; evidenceId?: string}
 export type MarketplaceBook = {collectionCheckout?:MarketplaceCheckoutBinding;collectionProof?:MarketplaceCollectionProof;payoutCancellations?:PayoutCancellation[];refundExecutions?:RefundExecution[]; refundEvents?:MarketplaceRefundEvent[]; plan: MarketplacePlan; refundCollection?:RefundCollection; refundReservations?:RefundReservation[]; walletReconciliations?:WalletReconciliation[]; walletEvents?:MarketplaceWalletEvent[]; walletExecutions?:WalletExecution[]; walletReservations?:WalletPayoutReservation[]; bankReconciliations?:BankReconciliation[]; bankEvents?:MarketplaceBankEvent[]; bankExecutions?: BankExecution[]; bankReservations?: BankQuoteReservation[]; beneficiarySnapshots?: Array<WalletBeneficiary|BankBeneficiary>; fundingEvidence?: string; balances: Balance[]; operations: Operation[]; journal: Array<{key: string; hash: string; command: MarketplaceCommand}>}
 export type MarketplaceCommand =
+  | {type:'fund_fees';allocationId:string;amountUnits:string}
   | {type: 'fund'; evidenceId: string; network: 'base'; asset: MarketplaceAsset; amountUnits: string}
   | {type: 'release'; allocationId: string; amountUnits: string}
   | {type: 'release_batch'; releases: Array<{allocationId: string; amountUnits: string}>; authorization: {credentialId: string; businessReference: string}}
@@ -83,7 +85,11 @@ export function applyMarketplaceCommand(book: MarketplaceBook, projectId: string
     next.balances.forEach(b=>{b.pending=next.plan.allocations.find(a=>a.id===b.allocationId)!.amountUnits})
   } else {
     if (!next.fundingEvidence) throw Error('Payment has no verified funding.')
-    if (command.type === 'release_batch') {
+    if(command.type==='fund_fees'){
+      const allocation=next.plan.allocations.find(a=>a.id===command.allocationId),balance=next.balances.find(b=>b.allocationId===command.allocationId),amount=units(command.amountUnits)
+      if(next.plan.asset!=='USDC'||allocation?.role!=='platform'||!balance||BigInt(balance.available)<amount)throw Error('Insufficient released platform commission for fees.')
+      balance.available=(BigInt(balance.available)-amount).toString();balance.feesFunded=(BigInt(balance.feesFunded??'0')+amount).toString()
+    } else if (command.type === 'release_batch') {
       identifier(command.authorization.credentialId); identifier(command.authorization.businessReference)
       if (!Array.isArray(command.releases) || command.releases.length < 1 || command.releases.length > 100) throw Error('Provide between 1 and 100 releases.')
       const seen = new Set<string>()
@@ -134,14 +140,21 @@ export function applyMarketplaceCommand(book: MarketplaceBook, projectId: string
           balance.available = (BigInt(balance.available)+BigInt(operation.fromAvailable)).toString()
         } else {
           const field = operation.kind === 'payout' ? 'paid' : 'refunded'
-          balance[field] = (BigInt(balance[field])+BigInt(operation.units)).toString()
+          const quote=next.walletReservations?.find(r=>r.operationId===operation.id)?.quote
+          const bankQuote=next.bankReservations?.find(r=>r.quote.operationId===operation.id)?.quote
+          const networkFee=bankQuote?.networkFeeUnits
+          if(networkFee!==undefined&&(!/^(0|[1-9]\d{0,23})$/.test(networkFee)||bankQuote!.feePolicy!=='fixed_success_only'||BigInt(bankQuote!.fundingUnits)+BigInt(networkFee)!==BigInt(operation.units)))throw Error('Bank fee debit mismatch.')
+          const fee=quote?BigInt(validateMarketplaceWalletQuote(quote).networkFeeUnits):BigInt(networkFee??'0')
+          if(quote&&(operation.kind!=='payout'||quote.debitUnits!==operation.units))throw Error('Wallet fee debit mismatch.')
+          balance[field] = (BigInt(balance[field]??'0')+BigInt(operation.units)-fee).toString()
+          if(quote||networkFee!==undefined)balance.feesAccrued=(BigInt(balance.feesAccrued??'0')+fee).toString()
         }
       }
       operation.status=command.status; operation.evidenceId=command.evidenceId
     } else throw Error('Unsupported marketplace command.')
   }
   for (const balance of next.balances) {
-    const values = [balance.pending,balance.available,balance.reserved,balance.paid,balance.refunded].map(BigInt)
+    const values = [balance.pending,balance.available,balance.reserved,balance.paid,balance.refunded,balance.feesAccrued??'0',balance.feesFunded??'0'].map(BigInt)
     const expected = next.fundingEvidence ? BigInt(next.plan.allocations.find(a=>a.id===balance.allocationId)!.amountUnits) : 0n
     if (values.some(value=>value<0n) || values.reduce((sum,value)=>sum+value,0n)!==expected) throw Error('Marketplace accounting invariant failed.')
   }
@@ -152,10 +165,10 @@ export function applyMarketplaceCommand(book: MarketplaceBook, projectId: string
 export function marketplaceSellerBalances(books: MarketplaceBook[], projectId: string, sellerId: string) {
   identifier(projectId); identifier(sellerId)
   return (['USDC','USDT'] as const).map(asset => {
-    const total = {pending:0n, available:0n, reserved:0n, paid:0n, refunded:0n}
+    const total = {pending:0n, available:0n, reserved:0n, paid:0n, refunded:0n, feesAccrued:0n, feesFunded:0n}
     for (const book of books) if (book.plan.projectId===projectId && book.plan.asset===asset) {
       for (const balance of book.balances) if (book.plan.allocations.some(a=>a.id===balance.allocationId && a.sellerId===sellerId)) {
-        for (const field of Object.keys(total) as Array<keyof typeof total>) total[field]+=BigInt(balance[field])
+        for (const field of Object.keys(total) as Array<keyof typeof total>) total[field]+=BigInt(balance[field]??'0')
       }
     }
     return {network:'base' as const,asset,units:Object.fromEntries(Object.entries(total).map(([field,value])=>[field,value.toString()]))}

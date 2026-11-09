@@ -17,3 +17,10 @@ for(const change of [()=>data.id='different_id',()=>data.status='settled',()=>da
 reset();await assert.rejects(()=>verify({...quote,holdingRevision:'old_revision'}))
 assert.equal(JSON.stringify(await verify(quote)).includes('0123456789'),false)
 console.log('PASS fresh Paycrest quote: verified encrypted bank binding, Base USDC/NGN route, holding refund address, exact expiry/funding/fees/rate, zero duplicate platform fee, payment-activity denial, stale-read and beneficiary-change rejection. Read-only fixtures; no order creation or funding.')
+
+reset()
+const withGas={...quote,debitUnits:'10010000',networkFeeUnits:'10000',feePolicy:'fixed_success_only',exchangeRate:'1500'}
+assert.deepEqual(await verify(withGas),withGas)
+data.rate='1500.000001' // Same rounded NGN total must not conceal a changed accepted rate.
+await assert.rejects(()=>verify(withGas),/exchange rate changed/)
+console.log('PASS Paycrest funding excludes retained network fee; exact accepted rate is immutable even when NGN rounding is unchanged.')

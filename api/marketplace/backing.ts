@@ -1,3 +1,4 @@
+import {feeReserveObligations} from './fee-reserve.js'
 import {createHash} from 'node:crypto'
 import {getAddress,parseAbi,type PublicClient} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
@@ -14,14 +15,14 @@ export function createMarketplaceBackingCheck(input:Dependencies){
   const address=getAddress(d.holding.address),bills=getAddress(d.holding.billsAddress)
   if(address===bills||/^0x0{40}$/i.test(address)||/^0x0{40}$/i.test(bills))throw Error('Backing check requires isolated holding and Bills identities.')
   if(await d.chain.getChainId()!==8453)throw Error('Backing check requires Base.')
-  const before=await d.read(),fingerprint=(s:MarketplaceStore|undefined)=>createHash('sha256').update(JSON.stringify(s?.books??[])).digest('hex')
+  const before=await d.read(),fingerprint=(s:MarketplaceStore|undefined)=>createHash('sha256').update(JSON.stringify({books:s?.books??[],feeAccounts:s?.feeAccounts??[]})).digest('hex')
   if(!before)throw Error('Marketplace ledger is unavailable.')
   const finalized=await d.chain.getBlock({blockTag:'finalized'})
   if(finalized.number===null||!finalized.hash)throw Error('Finalized Base snapshot is unavailable.')
-  let obligations=0n,books=0
+  let obligations=feeReserveObligations(before),books=0
   const blockers=new Set<string>()
   for(const book of before?.books??[]){
-   if(!book.fundingEvidence){if(book.balances.some(b=>[b.pending,b.available,b.reserved,b.paid,b.refunded].some(v=>v!=='0'))||book.operations.length)blockers.add('unfunded_book_has_balances');continue}
+   if(!book.fundingEvidence){if(book.balances.some(b=>[b.pending,b.available,b.reserved,b.paid,b.refunded,b.feesAccrued??'0',b.feesFunded??'0'].some(v=>v!=='0'))||book.operations.length)blockers.add('unfunded_book_has_balances');continue}
    const origin=book.refundCollection,proof=book.collectionProof
    if(!origin||!proof||origin.fundingEvidenceId!==book.fundingEvidence||proof.evidenceId!==book.fundingEvidence){blockers.add('unverified_ledger_origin');continue}
    if(origin.holdingId!==d.holding.id||origin.holdingRevision!==d.holding.revision||getAddress(origin.holdingAddress)!==address){blockers.add('other_holding_requires_separate_reconciliation');continue}
@@ -31,11 +32,11 @@ export function createMarketplaceBackingCheck(input:Dependencies){
    if(new Set(book.plan.allocations.map(a=>a.id)).size!==book.plan.allocations.length||book.balances.length!==book.plan.allocations.length||new Set(book.balances.map(b=>b.allocationId)).size!==book.balances.length)throw Error('Invalid marketplace balance allocation set.')
    let total=0n
    for(const balance of book.balances){
-    const allocation=book.plan.allocations.find(a=>a.id===balance.allocationId),values=[balance.pending,balance.available,balance.reserved,balance.paid,balance.refunded]
+    const allocation=book.plan.allocations.find(a=>a.id===balance.allocationId),values=[balance.pending,balance.available,balance.reserved,balance.paid,balance.refunded,balance.feesAccrued??'0',balance.feesFunded??'0']
     if(!allocation||!integer.test(allocation.amountUnits)||values.some(v=>typeof v!=='string'||!integer.test(v)))throw Error('Invalid marketplace balance units.')
     const numbers=values.map(BigInt)
     if(numbers.reduce((a,b)=>a+b,0n)!==BigInt(allocation.amountUnits))throw Error('Marketplace balance conservation failed.')
-    total+=BigInt(allocation.amountUnits);obligations+=numbers[0]+numbers[1]+numbers[2]
+    total+=BigInt(allocation.amountUnits);obligations+=numbers[0]+numbers[1]+numbers[2]+numbers[5]
    }
    if(!integer.test(book.plan.amountUnits)||total!==BigInt(book.plan.amountUnits))throw Error('Marketplace allocation total mismatch.')
    books++

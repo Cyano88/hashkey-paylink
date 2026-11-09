@@ -2,6 +2,7 @@ import {createHash,randomUUID} from 'node:crypto'
 import {marketplaceReference} from './beneficiaries.js'
 import {applyMarketplaceCommand} from './accounting.js'
 import type {MarketplaceStore} from './repository.js'
+import {bankFeeDisclosure} from './bank-quotes.js'
 import type {MarketplaceBankQuote} from './bank-quotes.js'
 import type {BankExecution} from './bank-execution.js'
 import type {MarketplaceDeliveryState} from './webhooks.js'
@@ -14,7 +15,7 @@ export type BankOutcomeEvidence={
  fundingUnits:string;ngnPaidMinor:string;returnedUnits:string;finalizedAt:number
 }
 export type BankReconciliation={evidence:BankOutcomeEvidence;hash:string;status:'settled'|'failed';eventId:string}
-export type MarketplaceBankEvent={id:string;type:'marketplace.payout.settled'|'marketplace.payout.failed';projectId:string;paymentId:string;operationId:string;asset:'USDC';currency:'NGN';debitUnits:string;ngnPaidMinor:string;createdAt:number;delivery:'pending'|'delivering'|'delivered'|'dead'} & MarketplaceDeliveryState
+export type MarketplaceBankEvent={fees?:ReturnType<typeof bankFeeDisclosure>;id:string;type:'marketplace.payout.settled'|'marketplace.payout.failed';projectId:string;paymentId:string;operationId:string;asset:'USDC';currency:'NGN';debitUnits:string;ngnPaidMinor:string;createdAt:number;delivery:'pending'|'delivering'|'delivered'|'dead'} & MarketplaceDeliveryState
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBankOutcome?:(input:{quote:MarketplaceBankQuote;attempt:BankExecution})=>Promise<BankOutcomeEvidence|null>}
 function locate(store:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
  for(const id of [projectId,paymentId,operationId])marketplaceReference(id)
@@ -40,7 +41,7 @@ function validate(input:BankOutcomeEvidence,quote:MarketplaceBankQuote,attempt:B
   if(paid!==0n||returned!==0n||input.returnEvidenceId!==undefined)throw Error('Reverted funding cannot include bank payment or returned funds.')
  }else if(input.basis==='fully_returned'){
   marketplaceReference(input.returnEvidenceId)
-  if(paid!==0n||returned!==BigInt(quote.debitUnits))throw Error('Only a full verified return can restore the entire reservation.')
+  if(paid!==0n||returned!==BigInt(quote.fundingUnits))throw Error('Only a full verified return can restore the entire reservation.')
  }else throw Error('Bank outcome requires definitive settlement or failure evidence.')
  const ids=[input.evidenceId,input.fundingEvidenceId,input.providerEvidenceId,...(input.returnEvidenceId?[input.returnEvidenceId]:[])]
  if(new Set(ids).size!==ids.length)throw Error('Use distinct canonical evidence references.')
@@ -74,7 +75,7 @@ export function createMarketplaceBankReconciliation(dependencies:Dependencies){
     const nextAttempt=next.bankExecutions!.find(e=>e.attemptId===attempt.attemptId)!
     nextAttempt.transactionHash=evidence.fundingTransactionHash;nextAttempt.state=status
     next.bankReconciliations=[...(next.bankReconciliations||[]),{evidence,hash,status,eventId}]
-    next.bankEvents=[...(next.bankEvents||[]),{id:eventId,type:status==='settled'?'marketplace.payout.settled':'marketplace.payout.failed',projectId,paymentId,operationId,asset:'USDC',currency:'NGN',debitUnits:quote.debitUnits,ngnPaidMinor:evidence.ngnPaidMinor,createdAt:d.now(),delivery:'pending'}]
+    next.bankEvents=[...(next.bankEvents||[]),{id:eventId,type:status==='settled'?'marketplace.payout.settled':'marketplace.payout.failed',projectId,paymentId,operationId,asset:'USDC',currency:'NGN',...(quote.networkFeeUnits!==undefined?{fees:bankFeeDisclosure(quote,status==='settled')}:{}),debitUnits:quote.networkFeeUnits!==undefined&&status==='failed'?'0':quote.debitUnits,ngnPaidMinor:evidence.ngnPaidMinor,createdAt:d.now(),delivery:'pending'}]
     s.books[s.books.indexOf(book)]=next;changed=true;return s
    })
    return {operationId,status:locate(store,projectId,paymentId,operationId).operation.status,changed}

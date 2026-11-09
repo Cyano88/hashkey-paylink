@@ -1,3 +1,4 @@
+import {walletFeeDisclosure,validateMarketplaceWalletQuote} from './wallet-quotes.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {getAddress} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
@@ -11,7 +12,7 @@ import type {MarketplaceDeliveryState} from './webhooks.js'
 /** Normalized output of a trusted canonical-receipt verifier, not a request/webhook body. */
 export type WalletOutcomeEvidence={projectId:string;paymentId:string;operationId:string;attemptId:string;holdingId:string;holdingRevision:string;transferHash:string;chainId:8453;asset:'USDC'|'USDT';tokenAddress:string;sender:string;recipient:string;requestedUnits:string;transferredUnits:string;transactionHash:string;blockHash:string;blockNumber:string;logIndex:number|null;outcome:'transferred'|'reverted';finality:'finalized';finalizedAt:number}
 export type WalletReconciliation={evidence:WalletOutcomeEvidence & {evidenceId:string};hash:string;status:'settled'|'failed';eventId:string}
-export type MarketplaceWalletEvent={id:string;type:'marketplace.payout.settled'|'marketplace.payout.failed';projectId:string;paymentId:string;operationId:string;asset:'USDC'|'USDT';currency:'USDC'|'USDT';network:'base';debitUnits:string;recipientAmountUnits:string;createdAt:number;delivery:'pending'|'delivering'|'delivered'|'dead'} & MarketplaceDeliveryState
+export type MarketplaceWalletEvent={fees?:ReturnType<typeof walletFeeDisclosure>;id:string;type:'marketplace.payout.settled'|'marketplace.payout.failed';projectId:string;paymentId:string;operationId:string;asset:'USDC'|'USDT';currency:'USDC'|'USDT';network:'base';debitUnits:string;recipientAmountUnits:string;createdAt:number;delivery:'pending'|'delivering'|'delivered'|'dead'} & MarketplaceDeliveryState
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyWalletOutcome?:(input:{projectId:string;paymentId:string;reservation:WalletPayoutReservation;attempt:WalletExecution})=>Promise<WalletOutcomeEvidence|null>}
 function locate(store:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
  for(const id of [projectId,paymentId,operationId])marketplaceReference(id)
@@ -29,6 +30,7 @@ function validate(input:WalletOutcomeEvidence,current:ReturnType<typeof locate>,
  if(a.transactionHash&&a.transactionHash!==transactionHash)throw Error('Wallet outcome transaction changed.')
  if(typeof input.blockNumber!=='string'||!/^[1-9]\d{0,19}$/.test(input.blockNumber)||!Number.isSafeInteger(input.finalizedAt)||input.finalizedAt>now||input.finalizedAt<(a.submissionStartedAt??Infinity))throw Error('Invalid wallet outcome block or finalization time.')
  if(units(input.requestedUnits)!==BigInt(r.amountUnits))throw Error('Wallet outcome requested amount changed.')
+ if(r.quote){const q=validateMarketplaceWalletQuote(r.quote);if(q.projectId!==input.projectId||q.paymentId!==input.paymentId||q.operationId!==r.operationId||q.allocationId!==r.allocationId||q.beneficiaryId!==r.beneficiaryId||q.recipient!==recipient||q.recipientUnits!==r.amountUnits||q.debitUnits!==current.operation.units)throw Error('Wallet fee quote binding changed.')}
  const transferred=units(input.transferredUnits)
  if(input.outcome==='transferred'){
   if(transferred!==BigInt(r.amountUnits)||!Number.isSafeInteger(input.logIndex)||(input.logIndex??-1)<0)throw Error('Wallet settlement requires the exact finalized transfer log.')
@@ -61,7 +63,7 @@ export function createMarketplaceWalletReconciliation(dependencies:Dependencies)
     const nextAttempt=next.walletExecutions!.find(e=>e.attemptId===attempt.attemptId)!
     nextAttempt.state=status;nextAttempt.transactionHash=evidence.transactionHash
     next.walletReconciliations=[...(next.walletReconciliations||[]),{evidence,hash,status,eventId}]
-    next.walletEvents=[...(next.walletEvents||[]),{id:eventId,type:status==='settled'?'marketplace.payout.settled':'marketplace.payout.failed',projectId,paymentId,operationId,asset:evidence.asset,currency:evidence.asset,network:'base',debitUnits:evidence.requestedUnits,recipientAmountUnits:evidence.transferredUnits,createdAt:d.now(),delivery:'pending'}]
+    next.walletEvents=[...(next.walletEvents||[]),{id:eventId,type:status==='settled'?'marketplace.payout.settled':'marketplace.payout.failed',projectId,paymentId,operationId,asset:evidence.asset,currency:evidence.asset,network:'base',...(current.reservation.quote?{fees:walletFeeDisclosure(current.reservation.quote,status==='settled')}:{}),debitUnits:current.reservation.quote?(status==='settled'?current.reservation.quote.debitUnits:'0'):evidence.requestedUnits,recipientAmountUnits:evidence.transferredUnits,createdAt:d.now(),delivery:'pending'}]
     s.books[s.books.indexOf(book)]=next;changed=true;return s
    })
    return {operationId,status:locate(store,projectId,paymentId,operationId).operation.status,changed}

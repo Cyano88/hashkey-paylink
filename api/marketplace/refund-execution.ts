@@ -1,3 +1,4 @@
+import {reserveRefundFee,settleRefundFee,type RefundFeeQuote} from './fee-reserve.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {formatUnits,getAddress,parseEventLogs,parseAbi,type PublicClient} from 'viem'
 import {createCircleDeveloperTreasuryClient,type CircleTreasuryConfig,type CircleDeveloperTransaction} from '../circle-developer-treasury.js'
@@ -9,10 +10,10 @@ import type {MarketplaceStore} from './repository.js'
 import type {RefundReservation} from './refunds.js'
 import type {MarketplaceWalletEvent} from './wallet-reconciliation.js'
 
-export type RefundExecution={refundId:string;idempotencyKey:string;refId:string;walletId:string;state:'unknown'|'submitted'|'settled'|'failed';transactionId?:string;transactionHash?:string;evidenceId?:string;terminalEvidence?:{providerState:string;receiptStatus:'success'|'reverted';blockHash:string;blockNumber:string;finalizedBlockNumber:string;verifiedAt:number}}
-export type MarketplaceRefundEvent=Omit<MarketplaceWalletEvent,'type'> & {type:'marketplace.refund.settled'|'marketplace.refund.failed';refundId:string}
+export type RefundExecution={feeQuote?:RefundFeeQuote;refundId:string;idempotencyKey:string;refId:string;walletId:string;state:'unknown'|'submitted'|'settled'|'failed';transactionId?:string;transactionHash?:string;evidenceId?:string;terminalEvidence?:{providerState:string;receiptStatus:'success'|'reverted';blockHash:string;blockNumber:string;finalizedBlockNumber:string;verifiedAt:number}}
+export type MarketplaceRefundEvent=Omit<MarketplaceWalletEvent,'type'> & {type:'marketplace.refund.settled'|'marketplace.refund.failed';refundId:string;refundNetworkFee?:{payer:string;asset:string;quoteId:string;chargedUnits:string}}
 type Circle=Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'|'createUsdcTransfer'|'getTransaction'> & Partial<Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'findTransferByReference'>>
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;enabled?:boolean;config:CircleTreasuryConfig;billsTreasuryAddress:string;holdingId:string;holdingRevision:string;circle?:Circle;chain:Pick<PublicClient,'getChainId'|'getTransactionReceipt'|'getBlock'>;authorize:(reservation:RefundReservation)=>Promise<boolean>}
+type Dependencies={requireFeeReserve?:boolean;quoteFees?:(reservation:RefundReservation)=>Promise<RefundFeeQuote>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;enabled?:boolean;config:CircleTreasuryConfig;billsTreasuryAddress:string;holdingId:string;holdingRevision:string;circle?:Circle;chain:Pick<PublicClient,'getChainId'|'getTransactionReceipt'|'getBlock'>;authorize:(reservation:RefundReservation)=>Promise<boolean>}
 const transferAbi=parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])
 
 /** Internal worker only. No default credentials, public route, or automatic resubmission after ambiguity. */
@@ -49,6 +50,10 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
    const before=locate(await d.read(),projectId,paymentId,refundId);gate(before.reservation)
    if(before.execution)return structuredClone(before.execution)
    await circle.verifyConfiguredWallet()
+   if(d.requireFeeReserve&&!d.quoteFees)throw Error('Refund fee quoting is not configured.')
+   const feeQuote=d.quoteFees?structuredClone(await d.quoteFees(structuredClone(before.reservation))):undefined
+   if(d.requireFeeReserve&&!feeQuote)throw Error('Refund fee quote is unavailable.')
+   if(feeQuote&&(feeQuote.projectId!==projectId||feeQuote.paymentId!==paymentId||feeQuote.refundId!==refundId||feeQuote.amountUnits!==before.reservation.amountUnits))throw Error('Refund fee quote binding mismatch.')
    const authorizationStartedAt=d.now()
    if(!await d.authorize(structuredClone(before.reservation)))throw Error('Marketplace refund execution authorization denied.')
    const idempotencyKey=randomUUID(),refId='marketplace-refund:'+createHash('sha256').update(JSON.stringify([projectId,paymentId,refundId])).digest('hex')
@@ -57,13 +62,14 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
     if(execution)return s
     if(d.now()<authorizationStartedAt||d.now()-authorizationStartedAt>5000)throw Error('Refund execution authorization expired.')
     if(JSON.stringify(reservation)!==JSON.stringify(before.reservation))throw Error('Refund reservation changed.')
+    if(feeQuote)reserveRefundFee(s,feeQuote,d.now())
     let next=book
     for(const a of reservation.allocations){
      const op=next.operations.find(o=>o.id===a.operationId)
      if(!op||op.kind!=='refund'||op.status!=='reserved'||op.units!==a.amountUnits)throw Error('Refund reservation is not executable.')
      next=applyMarketplaceCommand(next,projectId,'refund-start:'+a.operationId,{type:'result',operationId:a.operationId,status:'unknown',evidenceId:'refund-submit:'+idempotencyKey})
     }
-    next.refundExecutions=[...(next.refundExecutions||[]),{refundId,idempotencyKey,refId,walletId:d.config.walletId,state:'unknown'}]
+    next.refundExecutions=[...(next.refundExecutions||[]),{...(feeQuote?{feeQuote:structuredClone(feeQuote)}:{}),refundId,idempotencyKey,refId,walletId:d.config.walletId,state:'unknown'}]
     s.books[s.books.indexOf(book)]=next;return s
    })
    const claimed=locate(saved,projectId,paymentId,refundId).execution!
@@ -112,8 +118,9 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
    // A reverted attempt is insufficient while Circle may still retry that transaction.
    if(failed&&!['FAILED','CANCELLED','DENIED'].includes(tx.state))return structuredClone(attached)
    if(failed&&receipt.logs.length)throw Error('Reverted refund receipt cannot contain logs.')
-   const logs=parseEventLogs({abi:transferAbi,logs:receipt.logs}).filter(l=>getAddress(l.address)===getAddress(r.collection.tokenAddress)&&getAddress(l.args.from)===getAddress(r.collection.holdingAddress)&&getAddress(l.args.to)===getAddress(r.collection.payerWallet)&&l.args.value===BigInt(r.amountUnits))
-   if(!failed&&(logs.length!==1||logs[0].logIndex===null))throw Error('Refund requires one exact original-payer USDC transfer.')
+   const outflows=parseEventLogs({abi:transferAbi,logs:receipt.logs}).filter(l=>getAddress(l.address)===getAddress(r.collection.tokenAddress)&&getAddress(l.args.from)===getAddress(r.collection.holdingAddress))
+   const logs=outflows.filter(l=>getAddress(l.address)===getAddress(r.collection.tokenAddress)&&getAddress(l.args.from)===getAddress(r.collection.holdingAddress)&&getAddress(l.args.to)===getAddress(r.collection.payerWallet)&&l.args.value===BigInt(r.amountUnits))
+   if(!failed&&(outflows.length!==1||logs.length!==1||logs[0].removed||logs[0].blockHash!==receipt.blockHash||logs[0].transactionHash!==transactionHash||logs[0].logIndex===null))throw Error('Refund requires one exact original-payer USDC transfer.')
    const status=failed?'failed' as const:'settled' as const
    const evidenceId=`base:8453:${transactionHash}:${failed?'reverted':logs[0].logIndex}`
    const saved=await d.mutate(s=>{
@@ -129,8 +136,10 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
     const done=next.refundExecutions!.find(x=>x.refundId===refundId)!
     done.state=status;done.transactionHash=transactionHash;done.evidenceId=evidenceId
     done.terminalEvidence={providerState:tx.state,receiptStatus:receipt.status,blockHash:receipt.blockHash,blockNumber:receipt.blockNumber.toString(),finalizedBlockNumber:finalized.number!.toString(),verifiedAt:d.now()}
-    next.refundEvents=[...(next.refundEvents||[]),{id:randomUUID(),type:failed?'marketplace.refund.failed':'marketplace.refund.settled',refundId,operationId:refundId,projectId,paymentId,asset:'USDC',currency:'USDC',network:'base',debitUnits:r.amountUnits,recipientAmountUnits:failed?'0':r.amountUnits,createdAt:d.now(),delivery:'pending'}]
-    s.books[s.books.indexOf(book)]=next;return s
+    next.refundEvents=[...(next.refundEvents||[]),{id:randomUUID(),type:failed?'marketplace.refund.failed':'marketplace.refund.settled',refundId,operationId:refundId,projectId,paymentId,asset:'USDC',currency:'USDC',network:'base',...(execution.feeQuote?{refundNetworkFee:{payer:'marketplace',asset:'USDC',quoteId:execution.feeQuote.quoteId,chargedUnits:failed?'0':execution.feeQuote.networkFeeUnits}}:{}),debitUnits:r.amountUnits,recipientAmountUnits:failed?'0':r.amountUnits,createdAt:d.now(),delivery:'pending'}]
+    s.books[s.books.indexOf(book)]=next
+    if(execution.feeQuote)settleRefundFee(s,projectId,paymentId,refundId,!failed)
+    return s
    })
    return structuredClone(locate(saved,projectId,paymentId,refundId).execution!)
   },

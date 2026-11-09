@@ -1,4 +1,6 @@
+import {payerCheckoutFeeRows,type PayerCheckoutFeeEvidence} from './payerCheckoutFees'
 import {formatUnits,parseUnits} from 'viem'
+import {marketplaceFeeAmount,type MarketplaceWalletReceiptAmounts} from './marketplaceFeeDisplay'
 import type {MerchantPaymentFees} from './merchantPaymentFees'
 import {checkoutPriceLabel,type CheckoutPricing} from './checkoutPricing'
 import {pocketApiUrl} from '../pocket/lib/pocketRoutes'
@@ -9,6 +11,9 @@ import { CHAIN_META, type ChainKey } from './chains'
 import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
+  payerFees?:PayerCheckoutFeeEvidence
+  marketplaceBankFees?:{quoteId:string;debitUnits:string;ngnPaidMinor:string;exchangeRate?:string;chargedProviderFeeUnits?:string;chargedNetworkFeeUnits?:string}
+  marketplaceWalletFees?:MarketplaceWalletReceiptAmounts
   merchantFees?:MerchantPaymentFees
   merchantSettlementAmount?:string
   pricing?:CheckoutPricing
@@ -287,8 +292,9 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
-    variant:'general',badge:'Web payment',amount:checkoutPriceLabel(receipt.pricing,`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`),timestamp:fmtTime(receipt.createdAt),reference,
+    variant:'general',badge:'Web payment',amount:receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees)[3].value:checkoutPriceLabel(receipt.pricing,`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`),timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
+      ...(receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees):[]),
       ...(receipt.pricing?[{label:'Order price',value:checkoutPriceLabel(receipt.pricing,'')},{label:'Paid with',value:compactReceiptAmount(receipt.amount,receipt.asset)+' '+receipt.asset},{label:'Exchange rate',value:'1 '+receipt.pricing.paymentAsset+' = '+receipt.pricing.rate+' NGN'}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:'Merchant',value:receipt.recipient||'Merchant'},
@@ -381,6 +387,33 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       ],
       reference,
     }
+  }
+  if(receipt.source==='marketplace_wallet'&&receipt.marketplaceWalletFees){
+    const f=receipt.marketplaceWalletFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
+    return {variant,badge:'Marketplace withdrawal',amount:display(f.recipientUnits),timestamp:fmtTime(receipt.createdAt),rows:[
+      {label:'Amount debited',value:display(f.debitUnits)},
+      {label:'Network fee',value:display(f.networkFeeUnits)},
+      {label:'Amount received',value:display(f.recipientUnits)},
+      {label:'Network',value:'Base'},
+      {label:'Recipient',value:receipt.recipient||'-',mono:true},
+      {label:'Fee policy',value:'Fixed quote; charged only on success'},
+      {label:'Quote reference',value:f.quoteId,mono:true},
+      {label:'Transaction',value:receipt.txHash,mono:true},
+    ],reference}
+  }
+  if(receipt.source==='marketplace_bank'&&receipt.marketplaceBankFees){
+    const f=receipt.marketplaceBankFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
+    const minor=BigInt(f.ngnPaidMinor),ngn=(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0')+' NGN'
+    return {variant,badge:'Marketplace bank withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[
+      {label:'Amount debited',value:display(f.debitUnits)},
+      {label:'Provider fee',value:display(f.chargedProviderFeeUnits??'0')},
+      {label:'Network fee',value:display(f.chargedNetworkFeeUnits??'0')},
+      {label:'Amount received',value:ngn},
+      ...(f.exchangeRate?[{label:'Quoted exchange rate',value:f.exchangeRate+' NGN per USDC'}]:[]),
+      {label:'Recipient',value:receipt.recipient||'-'},
+      {label:'Quote reference',value:f.quoteId,mono:true},
+      {label:'Funding transaction',value:receipt.txHash,mono:true},
+    ],reference}
   }
   const settlement = String(receipt.settlementType || '').toLowerCase()
   const isBank = receipt.source === 'bank-withdraw' || receipt.source === 'bank-receive' || receipt.source === 'bank-send' || settlement === 'instant_fiat' || settlement === 'paycrest_onramp'

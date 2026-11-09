@@ -1,4 +1,8 @@
 import {marketplaceAmountUnits} from '../../src/lib/marketplacePayments.js'
+import {bankFeeDisclosure} from './bank-quotes.js'
+import {walletFeeDisclosure} from './wallet-quotes.js'
+import {marketplaceWalletReceipt} from './wallet-receipt.js'
+import {marketplaceBankReceipt} from './bank-receipt.js'
 import type {createMarketplaceRepository} from './repository.js'
 import {createMarketplacePrincipalResolver} from './authorization.js'
 
@@ -10,7 +14,7 @@ export type MarketplacePrincipal = {
   capabilities: string[]
   scopes: string[]
 }
-type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts' | 'refunds' | 'cancelPayout'>
+type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'feeReserve' | 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts' | 'refunds' | 'cancelPayout'>
 type Dependencies = {
   createCheckout?: (projectId:string,paymentId:string,presentation:{title:string;returnUrl:string})=>Promise<{checkoutId:string;checkoutUrl:string;paymentId:string;amount:string;network:'base';asset:'USDC';expiresAt:string}>
   repository: Repository
@@ -73,6 +77,37 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
       const result=await repository.walletPayouts.reserve(principal.projectId,paymentId,key,{operationId,allocationId,amount:input.amount as string},{credentialId:principal.credentialId,businessReference})
       return {paymentId,operationId,status:result.operation.status,network:result.reservation.network,asset:result.reservation.asset,amountUnits:result.reservation.amountUnits,beneficiaryId:result.reservation.beneficiaryId}
     },
+    async fundRefundFees(credential:string,key:string,body:unknown){
+      const input=fields(structuredClone(body),['paymentId','allocationId','amount'])
+      const principal=await authorize(credential,'marketplace:payout')
+      return repository.feeReserve.fund(principal.projectId,reference(input.paymentId),reference(input.allocationId),reference(key),marketplaceAmountUnits(input.amount as string),principal.credentialId)
+    },
+    async refundFeeBalance(credential:string){const principal=await authorize(credential,'marketplace:read');return repository.feeReserve.balance(principal.projectId)},
+    async walletPayoutQuote(credential:string,body:unknown){
+      const input=fields(structuredClone(body),['paymentId','quoteId'])
+      const principal=await authorize(credential,'marketplace:payout')
+      const quote=await repository.walletPayouts.preview(principal.projectId,reference(input.paymentId),reference(input.quoteId))
+      return {...walletFeeDisclosure(quote),paymentId:quote.paymentId,operationId:quote.operationId,beneficiaryId:quote.beneficiaryId,recipient:quote.recipient,network:quote.network}
+    },
+    async walletPayoutReceipt(credential:string,paymentId:string,operationId:string){
+      const principal=await authorize(credential,'marketplace:read')
+      const book=await repository.get(principal.projectId,reference(paymentId))
+      if(!book)throw Error('Marketplace payment not found.')
+      return marketplaceWalletReceipt(book,reference(operationId))
+    },
+    async bankPayoutReceipt(credential:string,paymentId:string,operationId:string){
+      const principal=await authorize(credential,'marketplace:read')
+      const book=await repository.get(principal.projectId,reference(paymentId))
+      if(!book)throw Error('Marketplace payment not found.')
+      return marketplaceBankReceipt(book,reference(operationId))
+    },
+    async reserveQuotedWalletPayout(credential:string,key:string,body:unknown){
+      const input=fields(structuredClone(body),['paymentId','quoteId','businessReference'])
+      const principal=await authorize(credential,'marketplace:payout')
+      const result=await repository.walletPayouts.reserveQuoted(principal.projectId,reference(input.paymentId),reference(key),reference(input.quoteId),{credentialId:principal.credentialId,businessReference:reference(input.businessReference)})
+      const quote=result.reservation.quote!
+      return {paymentId:quote.paymentId,operationId:quote.operationId,status:result.operation.status,network:quote.network,beneficiaryId:quote.beneficiaryId,...walletFeeDisclosure(quote,result.operation.status==='settled'?true:result.operation.status==='failed'?false:undefined)}
+    },
     async reserveBankPayout(credential: string, key: string, body: unknown) {
       const input = fields(structuredClone(body),['paymentId','quoteId','businessReference'])
       const paymentId = reference(input.paymentId), quoteId = reference(input.quoteId), businessReference = reference(input.businessReference)
@@ -81,14 +116,14 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
       const result = await repository.reserveBankPayout(principal.projectId,paymentId,quoteId,key,{credentialId:principal.credentialId,businessReference})
       const {quote} = result.reservation
       // Reservation is not payment success. Exclude holding/provider identities and internal proof references.
-      return {paymentId,quoteId,operationId:result.operation.id,status:result.operation.status,asset:quote.asset,currency:quote.currency,debitUnits:quote.debitUnits,feeUnits:quote.feeUnits,ngnMinor:quote.ngnMinor}
+      return {paymentId,quoteId,operationId:result.operation.id,status:result.operation.status,asset:quote.asset,currency:quote.currency,debitUnits:quote.debitUnits,feeUnits:quote.feeUnits,ngnMinor:quote.ngnMinor,fees:bankFeeDisclosure(quote,result.operation.status==='settled'?true:result.operation.status==='failed'?false:undefined)}
     },
     async payment(credential: string, paymentId: string) {
       const principal = await authorize(credential,'marketplace:read')
       const book = await repository.get(principal.projectId,reference(paymentId))
       if (!book) return null
       // Internal evidence and credential-bearing command journals are not developer responses.
-      return structuredClone({plan:book.plan, balances:book.balances, operations:book.operations.map(({evidenceId: _evidence, ...operation})=>operation), funded:!!book.fundingEvidence})
+      return structuredClone({plan:book.plan, balances:book.balances, operations:book.operations.map(({evidenceId: _evidence, ...operation})=>{const quote=book.walletReservations?.find(r=>r.operationId===operation.id)?.quote;const bankQuote=book.bankReservations?.find(r=>r.quote.operationId===operation.id)?.quote;const final=operation.status==='settled'?true:operation.status==='failed'?false:undefined;return {...operation,...(quote?{fees:walletFeeDisclosure(quote,final)}:bankQuote?{fees:bankFeeDisclosure(bankQuote,final)}:{})}}), funded:!!book.fundingEvidence})
     },
     async sellerBalances(credential: string, sellerId: string) {
       const principal = await authorize(credential,'marketplace:read')

@@ -40,7 +40,7 @@ export function createMarketplaceWalletExecution(dependencies:Dependencies){
    const token=randomUUID(),attemptId=randomUUID()
    const store=await d.mutate(s=>{
     const {book}=locate(s,projectId,paymentId,operationId),now=d.now()
-    prepareMarketplaceWalletTransfer(s,projectId,paymentId,operationId)
+    prepareMarketplaceWalletTransfer(s,projectId,paymentId,operationId,now)
     const prior=latest(book,operationId)
     if(prior){if(prior.state!=='claimed'||prior.leaseUntil>now)throw Error('Wallet payout is claimed or may have been submitted.');prior.state='expired'}
     book.walletExecutions=[...(book.walletExecutions||[]),{operationId,attemptId,claimToken:token,workerId,claimedAt:now,leaseUntil:now+30000,state:'claimed'}];return s
@@ -51,14 +51,14 @@ export function createMarketplaceWalletExecution(dependencies:Dependencies){
    if(!d.preflightWalletExecution)throw Error('Wallet execution preflight is not configured.')
    const stored=await d.read(),before=locate(stored,projectId,paymentId,operationId),started=d.now()
    claimed(before.book,operationId,token,started)
-   const transfer=prepareMarketplaceWalletTransfer(stored,projectId,paymentId,operationId)
+   const transfer=prepareMarketplaceWalletTransfer(stored,projectId,paymentId,operationId,started)
    const approved=authorization(await d.preflightWalletExecution(structuredClone(transfer)),transfer,d.now())
    const store=await d.mutate(s=>{
     const {book}=locate(s,projectId,paymentId,operationId),now=d.now(),attempt=claimed(book,operationId,token,now)
     if(now<started||now-started>5000)throw Error('Wallet execution preflight became stale.')
-    const current=prepareMarketplaceWalletTransfer(s,projectId,paymentId,operationId)
+    const current=prepareMarketplaceWalletTransfer(s,projectId,paymentId,operationId,now)
     authorization(approved,current,now)
-    attempt.state='submitting';attempt.submissionStartedAt=now;attempt.executionAuthorization=approved;attempt.submitBefore=Math.min(approved.expiresAt,now+5000)
+    attempt.state='submitting';attempt.submissionStartedAt=now;attempt.executionAuthorization=approved;attempt.submitBefore=Math.min(approved.expiresAt,current.quote?.expiresAt??Infinity,now+5000)
     const next=applyMarketplaceCommand(book,projectId,'wallet-submit:'+attempt.attemptId,{type:'result',operationId,status:'unknown',evidenceId:'wallet-attempt:'+attempt.attemptId})
     s.books[s.books.indexOf(book)]=next;return s
    })

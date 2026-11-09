@@ -32,6 +32,7 @@ export function createMarketplacePaycrestQuoteVerifier(input:Dependencies){
   // If the provider supplies explicit funding totals, every one must agree.
   for(const explicit of [account.amountToTransfer,data.amountToPay,data.totalAmount,data.amountDue,source.amount])if(explicit!==undefined&&units(explicit)!==total)throw Error('Paycrest funding instructions conflict.')
   const rate=units(data.rate,18)
+  if(quote.exchangeRate!==undefined&&rate!==units(quote.exchangeRate,18))throw Error('Paycrest exchange rate changed.')
   if(rate<=0n||(principal*rate+5n*10n**21n)/10n**22n!==BigInt(quote.ngnMinor))throw Error('Paycrest NGN quote amount changed.')
   for(const field of ['amountPaid','amountReturned','percentSettled'] as const)if(data[field]!==undefined&&units(data[field])!==0n)throw Error('Paycrest order already has payment activity.')
   for(const field of ['txHash','transactionHash','depositTxHash'] as const)if(data[field])throw Error('Paycrest order already has a transaction reference.')

@@ -1,3 +1,4 @@
+import {validatePayerCheckoutFees,type PayerCheckoutFeeEvidence} from '../src/lib/payerCheckoutFees.js'
 import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
 import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
@@ -51,6 +52,7 @@ type VerifiedProviderRouting = {
 }
 const verifiedProviderRouting = new WeakMap<Request, VerifiedProviderRouting>()
 type HostedCheckoutPayment = {
+  payerFees?:PayerCheckoutFeeEvidence
   fees?:MerchantPaymentFees
   status: 'processing' | 'paid' | 'failed'
   referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer' | 'solana_signature'
@@ -484,6 +486,7 @@ export function hostedCheckoutPaymentOption(record: Pick<CheckoutRecord, 'networ
 }
 
 export async function markHostedCheckoutPaid(input: {
+  payerFees?:PayerCheckoutFeeEvidence
   fees?:MerchantPaymentFees
   id: string
   txHash: string
@@ -546,9 +549,14 @@ export async function markHostedCheckoutPaid(input: {
       throw new Error('Hosted checkout is already linked to another payment network.')
     }
     newlyPaid = !record.payment
+    const payerFees=input.payerFees?validatePayerCheckoutFees(amount,input.payerFees):undefined
+    if(payerFees&&(record.feePayer!=='payer'||selectedNetwork!=='base'||(record.asset||'USDC')!=='USDC'||input.fees||record.settlement))throw Error('Payer fee evidence does not match checkout route.')
+    if(record.feePayer==='payer'&&!record.payment&&!payerFees)throw Error('Verified payer fees are required.')
+    if(record.payment&&payerFees&&JSON.stringify(record.payment.payerFees)!==JSON.stringify(payerFees))throw Error('Verified payer fees cannot change on replay.')
     const verifiedFees=input.fees||record.settlement?.fees
     if(record.feePayer==='merchant'&&!record.payment){if(!verifiedFees)throw Error('Verified merchant fees are required.');validateMerchantPaymentFees(amount,verifiedFees,6)}
     const payment: HostedCheckoutPayment = record.payment ?? {
+      ...(payerFees?{payerFees}:{}),
       ...(verifiedFees?{fees:verifiedFees}:{}),
       status: record.settlement && record.payout?.status !== 'validated' && record.payout?.status !== 'settled' ? 'processing' : 'paid',
       referenceType,

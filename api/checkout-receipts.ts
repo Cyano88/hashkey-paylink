@@ -1,3 +1,4 @@
+import {validatePayerCheckoutFees} from '../src/lib/payerCheckoutFees.js'
 import type {PaylinkReceipt} from '../src/lib/paymentReceiptPdf.js'
 import {readVerifiedHostedCheckoutRecord, type CheckoutRecord} from './hosted-checkouts.js'
 import {isStockCheckoutId, readStockCheckout, readStockCheckoutReceipt, type StockCheckout} from './hosted-stock-checkouts.js'
@@ -17,6 +18,7 @@ export async function readReceiptCheckout(id:string):Promise<ReceiptCheckout|nul
 export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined{
  const p=record.payment
  if(!p||record.checkoutMode==='agentic')return
+ if('feePayer' in record&&record.feePayer==='payer'&&(!('payerFees' in p)||!p.payerFees))return
  const network=p.network||record.network
  if(!checkoutNetworkNames[network]||!Number.isFinite(Date.parse(p.confirmedAt)))return
  const local='settlement' in record?record.settlement:undefined
@@ -28,6 +30,7 @@ export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined
  const receiptId='receiptId' in p?p.receiptId:record.id
  return {...(record.pricing?{pricing:record.pricing}:{}),type:'money_out',receiptId,receiptHash:p.txHash,eventId:record.id,txHash:p.txHash,title:'Web payment',status,chain:network,
   payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset||'USDC',createdAt:Date.parse(p.confirmedAt),paymentMethod:'wallet',
+  ...('payerFees' in p&&p.payerFees?{payerFees:validatePayerCheckoutFees(p.amount,p.payerFees)}:{}),
   ...('fees' in p&&p.fees?{merchantFees:p.fees,feeAmount:'0',feeAsset:record.asset||'USDC'}:{}),
   source:'hosted_checkout',settlementType:'hosted_checkout',merchantId:record.id,recipient:record.merchantName,destination,
   referenceId:receiptId,brandName:record.merchantName,brandImageUrl:record.brandImageUrl,brandKind:'partner',
@@ -51,7 +54,7 @@ export function checkoutBillingReceipt(receipt:PaylinkReceipt,projectId?:string,
  const network=checkoutNetworkNames[receipt.chain]
  if(!network)throw Error('Receipt network is unavailable.')
  return {id:receipt.receiptId,projectId,merchant:receipt.recipient||receipt.brandName||'Merchant',merchantLogoUrl:receipt.brandImageUrl,
-  pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
+  ...(receipt.payerFees?{payerFees:receipt.payerFees}:{}),pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
   supportEmail:settings?.supportEmail,timeZone:settings?.timeZone||'UTC',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(receipt.receiptId),
   ...(receipt.amountNgn&&receipt.fiatCurrency?{settlement:{amount:receipt.merchantSettlementAmount||receipt.amountNgn,currency:receipt.fiatCurrency}}:{})}
 }
