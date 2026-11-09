@@ -21,7 +21,7 @@ import {requirePocketBasicKyc} from './pocket/kyc-level.js'
 import { authorizeOperations } from './operations-policy.js'
 import { currentXLayerCheckoutConfig, isXLayerCheckoutAsset, normalizeXLayerCheckoutConfig, type XLayerCheckoutConfig } from '../src/lib/xlayerCheckoutConfig.js'
 import { verifyOperationsSection } from './operations-access.js'
-import { effectiveProductCapabilities, isOpenCheckoutProduct, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
+import { effectiveProductCapabilities, isSelectableDeveloperProduct, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
 import { developerEnvironment } from './developer-environment.js'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../src/lib/developerNetworkPolicy.js'
 import { listDeveloperActivity } from './developer-activity-store.js'
@@ -793,7 +793,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (useCase && useCase.length < 20) return res.status(400).json({ ok: false, error: 'Briefly explain what customers will pay for.' })
         if (!checkoutMode) return res.status(400).json({ ok: false, error: 'Choose a valid checkout mode.' })
         if (checkoutMode !== 'human') return res.status(409).json({ ok: false, error: 'Agent payments are coming soon. Create a checkout project instead.' })
-        if (Array.isArray(req.body?.capabilities) && req.body.capabilities.some((value: unknown) => !isOpenCheckoutProduct(clean(value, 40).toLowerCase()))) return res.status(409).json({ ok: false, error: 'Choose Accept payments or Fund Polymarket accounts. Other products are not open for new integrations.' })
+        if (Array.isArray(req.body?.capabilities) && req.body.capabilities.some((value: unknown) => !isSelectableDeveloperProduct(clean(value, 40).toLowerCase()))) return res.status(409).json({ ok: false, error: 'Choose Accept payments, Marketplace Payments early access, or Fund Polymarket accounts.' })
         const capabilities = requestedCapabilities(req.body?.capabilities, checkoutMode)
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         const selectedProfile=req.body?.builderProfileId===undefined?undefined:await ownedProfile(identity.userId,req.body.builderProfileId)
@@ -1074,7 +1074,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           ? effectiveProductCapabilities(currentProject)
           : requestedCapabilities(req.body.capabilities, currentCheckoutMode)
         const existingCapabilities = effectiveProductCapabilities(currentProject)
-        if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !existingCapabilities.includes(capability))) return res.status(409).json({ ok: false, error: 'This product is not open for new integrations.' })
+        if (capabilities.some(capability => !isSelectableDeveloperProduct(capability) && !existingCapabilities.includes(capability))) return res.status(409).json({ ok: false, error: 'This product is not open for new integrations.' })
         const routingRequired = needsSettlementRouting(capabilities)
         let bscCheckout:BscCheckoutConfig|undefined
         try { bscCheckout=normalizeBscCheckoutConfig(req.body?.bscCheckout===undefined?currentProject.bscCheckout:req.body.bscCheckout) } catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
@@ -1158,7 +1158,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const store = await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
-          if (capabilities.some(capability => !isOpenCheckoutProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
+          if (capabilities.some(capability => !isSelectableDeveloperProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
           if (isLocalSettlement(settlementMode) && latest.accountType !== 'individual' && latest.businessVerification?.status !== 'approved') throw Object.assign(Error('Business verification must be approved for local fiat.'),{status:403})
           const next: DeveloperProject = {
             ...latest, receiptEmails:normalizeReceiptEmailSettings(req.body?.receiptEmails,latest.receiptEmails,dependencies.now().toISOString()), name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,

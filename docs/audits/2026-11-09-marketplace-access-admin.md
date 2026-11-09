@@ -82,3 +82,16 @@ Backing counts pending, available and reserved amounts across the holding's ledg
 Validation: mock provider tests exercise timeout/restart/concurrent provisioning, key persistence, separate identities, read-back mismatch and configuration conflicts. Backing fixtures cover shortages, unsettled sends, stale revisions, corrupt accounting and snapshot races. Existing Bills client tests verify unchanged default behavior and new Marketplace request metadata. The local status command reported missing dedicated setup configuration. No real Circle provisioning request, production environment change or live solvency claim was made.
 
 The Circle create-wallet API specifies UUID v4 idempotency keys and fresh entity-secret ciphertext: https://developers.circle.com/api-reference/wallets/developer-controlled-wallets/create-wallet . Holding-wallet migration and least-privilege signing policy remain open audit items.
+
+
+## Individual private-pilot eligibility and registration correction
+
+The product picker and create/update API now distinguish registration from open payment products. Marketplace can be selected alone for app registration; it remains excluded from ordinary production capabilities. The Products panel directs applicants to whitelist review. Selecting the product does not submit a request or grant payment authority.
+
+The Marketplace principal resolver accepts an individual with current Basic or Advanced production KYC, read from the existing owner-bound Pocket verification store. It does not trust the cached personalKycVerified project flag. Businesses still require approved business verification. Both require the explicit project rollout, active app, Marketplace capability, unambiguous current-owner whitelist approval and a valid general live key. Rejected or changes-requested business reviews deny access.
+
+An internal execution-authority resolver rechecks the persisted reservation's project and credential ID against fresh project, whitelist and KYC state. It is not a public authentication endpoint. The refund runtime now requires this check in addition to backing and custody/fee authorization. Ordinary key revocation, expiry, owner transfer, app suspension, whitelist revocation or KYC failure block new submissions. Existing uncertain transfers still require reconciliation rather than another send. Wallet/bank production adapters remain outstanding.
+
+Read-only production check: Multivendor (dev_a48cb83ccc2848a68a) has approved whitelist status, individual account type, no qualifying individual KYC, only hosted_checkout selected, and no rollout inclusion. Collection and instruction flags remain false. No live eligibility, credentials, funding or account type were changed.
+
+Local checks: selectable Marketplace browser regression, product policy, Marketplace principal/worker authority, runtime readiness and focused TypeScript. These are fixture checks, not a funded pilot. Changes in this section have not been deployed. Live testing is blocked by owner verification, remaining execution integration, verified gas coverage and end-to-end settlement evidence.

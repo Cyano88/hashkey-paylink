@@ -10,8 +10,9 @@ export default function MarketplaceDocs(){return <DocPage>
     <p>Wallet settlement describes the destination. It does not bypass the marketplace hold or release instruction.</p>
   </Section>
   <Section title="Availability before integration">
-    <p>Marketplace Payments is not open for production or sandbox integration. The product option is disabled. Existing Checkout and Polymarket Funding keys do not authorize marketplace collection, release, payout or refund.</p>
-    <p>The settlement rules and internal accounting foundation are implemented. Funding custody, beneficiary verification, execution adapters and end-to-end reconciliation still need to be connected and verified. No funds are held by this preview.</p>
+    <p>You can register a Marketplace Payments app and request whitelist review from Products. Approval records your eligibility for a private pilot; it does not activate payments. Marketplace financial endpoints are not yet open for production or sandbox integration. Existing Checkout and Polymarket Funding keys do not authorize marketplace collection, release, payout or refund.</p>
+    <p>Individual developers can qualify with current Basic or Advanced identity verification. Businesses require approved business verification. Both require an active app, Marketplace selection, admin whitelist approval and explicit pilot activation. Verification and authorization are checked again before execution.</p>
+    <p>The settlement rules and internal accounting foundation are implemented. A dedicated Base USDC holding wallet is configured; this is a holding-wallet service, not smart-contract escrow. Execution adapters, gas coverage and a funded end-to-end pilot still need verification. The first pilot is limited to USDC on Base; USDT settlement is planned. No funds are collected by this documentation preview.</p>
   </Section>
   <Section title="Seller balances in your product" id="balances">
     <p>Your marketplace displays seller balances using project-scoped records. USDC and USDT are separate balances, not a combined dollar wallet. Sellers do not need a separate Hash PayLink dashboard.</p>

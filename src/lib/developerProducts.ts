@@ -39,10 +39,15 @@ export function effectiveProductCapabilities(project: {
 export const CHECKOUT_PRODUCTS = [{
   id: 'checkout', title: 'What would you like to do?', description: 'Choose the available payment flows for your app.', options: [
     { capability: 'hosted_checkout', title: 'Accept payments', detail: 'Let customers pay on a checkout page hosted by Hash PayLink.' },
-    { capability: MARKETPLACE_PAYMENTS.capability, title: MARKETPLACE_PAYMENTS.title, detail: 'Collect for multiple sellers, then release to bank accounts or Base wallets. Under development.' },
+    { capability: MARKETPLACE_PAYMENTS.capability, title: MARKETPLACE_PAYMENTS.title, detail: 'Register your marketplace app, then request whitelist review from Products. Payment access requires separate approval and activation.' },
     { capability: 'polymarket_funding', title: 'Fund Polymarket accounts', detail: 'Let customers add USDC to their Polymarket account using Base or Arbitrum.' },
   ],
 }] as const
 export function isOpenCheckoutProduct(capability: string) {
   return capability === 'hosted_checkout' || capability === 'polymarket_funding'
+}
+
+// Registration records product intent; it does not grant payment execution access.
+export function isSelectableDeveloperProduct(capability: string) {
+  return isOpenCheckoutProduct(capability) || capability === MARKETPLACE_PAYMENTS.capability
 }

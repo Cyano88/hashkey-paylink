@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {effectiveProductCapabilities,needsSettlementRouting,productAllowed} from '../src/lib/developerProducts.ts'
+import {effectiveProductCapabilities,needsSettlementRouting,productAllowed,isOpenCheckoutProduct,isSelectableDeveloperProduct} from '../src/lib/developerProducts.ts'
 const now=Date.now(),base={capabilities:['arc_agreements','xstocks_agreements']}
 assert.deepEqual(effectiveProductCapabilities(base,now),base.capabilities)
 const key={scopes:['wallet:swap'],expiresAt:new Date(now+60_000).toISOString()}
@@ -12,3 +12,7 @@ assert.equal(needsSettlementRouting(['swap_arc','swap_xlayer','xstocks_agreement
 assert.equal(needsSettlementRouting(['swap_xlayer','arc_agreements']),true)
 for(const cap of ['swap_arc','swap_xlayer','xstocks_agreements','polymarket_funding'])assert.equal(productAllowed('agentic',cap),false)
 console.log('Product migration passed: only existing unexpired Swap authorization is preserved; explicit removal wins; wallet-only setup and agent boundaries are independent.')
+
+assert.equal(isSelectableDeveloperProduct('marketplace_payments'),true)
+assert.equal(isOpenCheckoutProduct('marketplace_payments'),false,'Registration must not open payment access')
+assert.equal(isSelectableDeveloperProduct('arc_agreements'),false)

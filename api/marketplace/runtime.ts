@@ -1,3 +1,4 @@
+import {createMarketplaceExecutionAuthority} from './authorization.js'
 import {getAddress,isAddress} from 'viem'
 import {readCircleTreasuryConfig,createCircleDeveloperTreasuryClient} from '../circle-developer-treasury.js'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
@@ -14,7 +15,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const zero='0x0000000000000000000000000000000000000000'
 type RepositoryDependencies=NonNullable<Parameters<typeof createMarketplaceRepository>[0]>
 type ExecutionConfig=NonNullable<RepositoryDependencies['refundExecution']>
-type RuntimeAdapters={chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];verifyBacking:()=>Promise<{backed:boolean}>;resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
+type RuntimeAdapters={chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];verifyBacking:()=>Promise<{backed:boolean}>;authorizeExecution?:(projectId:string,credentialId:string)=>Promise<boolean>;resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
 
 /** Internal collection composition. No public route, worker, wallet creation or transfer. */
 export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;chain:ExecutionConfig['chain'];storage?:Pick<Parameters<typeof createMarketplaceCollections>[0],'read'|'mutate'|'now'>;readCheckout?:Parameters<typeof createMarketplaceCheckoutCollections>[0]['readCheckout'];circle?:Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'>}){
@@ -89,9 +90,10 @@ export function createMarketplaceRefundRuntime(input:{env:NodeJS.ProcessEnv;adap
  if(!readiness.workerConstructible)throw Error('Marketplace refund runtime is not ready: '+readiness.blockers.join(', '))
  const {config,holdingId,holdingRevision,billsAddress,projectIds}=readMarketplaceRuntimeConfig(input.env)
  const allowed=new Set(projectIds),adapters=input.adapters
+ const authorizeExecution=adapters.authorizeExecution??createMarketplaceExecutionAuthority({env:()=>input.env})
  const repository=createMarketplaceRepository({
   resolveRefundCollection:request=>{if(!allowed.has(request.projectId))throw Error('Marketplace project is not enabled.');return adapters.resolveRefundCollection(request)},
-  refundExecution:{enabled:true,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:async reservation=>allowed.has(reservation.collection.projectId)&&(await adapters.verifyBacking()).backed===true&&await adapters.authorizeRefund(reservation)},
+  refundExecution:{enabled:true,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:async reservation=>allowed.has(reservation.collection.projectId)&&(await adapters.verifyBacking()).backed===true&&await adapters.authorizeRefund(reservation)&&await authorizeExecution(reservation.collection.projectId,reservation.authorization.credentialId)},
   notifyMarketplace:marketplaceWebhookTransport,
  })
  return {readiness,async drain(projectId:string,limit=10){
