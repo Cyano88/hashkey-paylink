@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {readMarketplaceRuntimeConfig,marketplaceRuntimeReadiness,createMarketplaceRefundRuntime} from '../api/marketplace/runtime.ts'
+import {readMarketplaceRuntimeConfig,marketplaceRuntimeReadiness,createMarketplaceRefundRuntime,createMarketplaceWalletRuntime} from '../api/marketplace/runtime.ts'
 
 const env={MARKETPLACE_REFUND_WORKER_ENABLED:'true',MARKETPLACE_ENVIRONMENT:'base-mainnet',MARKETPLACE_CIRCLE_API_KEY:'fixture_secret_key',MARKETPLACE_CIRCLE_ENTITY_SECRET:'ab'.repeat(32),MARKETPLACE_HOLDING_WALLET_SET_ID:'11111111-1111-4111-8111-111111111111',MARKETPLACE_HOLDING_WALLET_ID:'22222222-2222-4222-8222-222222222222',MARKETPLACE_HOLDING_ADDRESS:'0x'+'22'.repeat(20),MARKETPLACE_HOLDING_ID:'holding_a',MARKETPLACE_HOLDING_REVISION:'revision_a',MARKETPLACE_PROJECT_IDS:'project_a,project_b,project_a',POCKET_BILLS_TREASURY_WALLET_ID:'33333333-3333-4333-8333-333333333333',POCKET_BILLS_TREASURY_ADDRESS:'0x'+'33'.repeat(20)}
 const adapters={verifyBacking:async()=>({backed:true}),chain:{getChainId:async()=>8453,getTransactionReceipt:async()=>{throw Error('no network')},getBlock:async()=>{throw Error('no network')}},resolveRefundCollection:async()=>null,authorizeRefund:async()=>false}
@@ -27,3 +27,10 @@ console.log('PASS runtime readiness: explicit mainnet opt-in, dedicated credenti
 assert.equal(marketplaceRuntimeReadiness(env,{...adapters,verifyBacking:undefined}).workerConstructible,false)
 assert.throws(()=>createMarketplaceRefundRuntime({env,adapters:{...adapters,verifyBacking:undefined}}),/holding_backing_check_missing/)
 console.log('PASS refund runtime cannot construct without a backing-check adapter.')
+
+const walletInput={env:{...env,MARKETPLACE_WALLET_WORKER_ENABLED:'true',MARKETPLACE_INSTRUCTIONS_ENABLED:'true'},chain:{...adapters.chain,readContract:async()=>0n},verifyFees:async()=>{throw Error('No gas attestation')}}
+assert.ok(createMarketplaceWalletRuntime(walletInput))
+for(const patch of [{MARKETPLACE_WALLET_WORKER_ENABLED:'false'},{MARKETPLACE_INSTRUCTIONS_ENABLED:'false'},{MARKETPLACE_PROJECT_IDS:''}])assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,env:{...walletInput.env,...patch}}),/not ready/)
+assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,verifyFees:undefined}),/verified_wallet_fee_adapter_missing/)
+assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,chain:{...adapters.chain}}),/base_rpc_client_missing/)
+console.log('PASS internal wallet runtime requires explicit gates, Base read client, isolated holding and an external verified gas adapter; construction does not send funds.')

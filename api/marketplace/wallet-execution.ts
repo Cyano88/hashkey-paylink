@@ -7,7 +7,7 @@ import type {MarketplaceStore} from './repository.js'
 import type {BankExecution} from './bank-execution.js'
 
 export type WalletExecutionAuthorization={holdingId:string;holdingRevision:string;sender:string;feePolicyId:string;transferHash:string;expiresAt:number;holdingApproved:true;authorizationActive:true;feesCoveredOutsideAllocation:true;additionalTokenDebitUnits:'0'}
-export type WalletExecution=BankExecution & {executionAuthorization?:WalletExecutionAuthorization;submitBefore?:number}
+export type WalletExecution=BankExecution & {executionAuthorization?:WalletExecutionAuthorization;submitBefore?:number;circleTransfer?:{walletId:string;refId:string;transactionId?:string}}
 type Transfer=ReturnType<typeof prepareMarketplaceWalletTransfer>
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;preflightWalletExecution?:(transfer:Transfer)=>Promise<WalletExecutionAuthorization>}
 export function walletTransferHash(transfer:Transfer){return createHash('sha256').update(JSON.stringify(transfer)).digest('hex')}

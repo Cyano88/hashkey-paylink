@@ -104,3 +104,19 @@ Deployed commit 3ba6510839366c53231669fafd02e787bde07dbe through Render deployme
 A fixture API check also created an individual Marketplace-only app successfully and confirmed that enabledCapabilities remained empty. Existing browser selection, authorization, refund-execution, runtime and focused TypeScript checks passed before release.
 
 After deployment, the Multivendor whitelist remained approved, its account remained individual, its configured capability remained hosted_checkout, and production KYC was still none. It was not added to rollout, and collection/instruction flags remained false. Developer action: complete Personal verification (Basic), then select Marketplace in app settings and save. No funds were moved. Remaining financial activation blockers are unchanged.
+
+
+## Base USDC Circle wallet payout adapter
+
+Added internal wallet-custody.ts and createMarketplaceWalletRuntime. The runtime uses the dedicated Marketplace Circle configuration and existing durable ledger. It requires MARKETPLACE_WALLET_WORKER_ENABLED=true, instruction enablement, project rollout, a Base RPC client, current execution authority and an explicit provider gas-coverage adapter. Backing uses the shared finalized Base USDC obligation check. There is no default gas sponsorship claim, public route or automatic scheduler.
+
+Submission uses the existing exclusive claim and submission deadline. The attempt UUID becomes the Circle idempotency key, and a deterministic reference plus holding wallet ID is persisted before the provider call. Retries after an uncertain submission only query the existing reference/transaction. No matching transaction is not evidence that a resend is safe. The provider transaction ID, wallet, reference, source, destination, amount and immutable hash are checked. Recovery is read-only and can continue after credential revocation.
+
+Settlement requires a canonical finalized Base receipt with one exact Base USDC outflow from the configured holding to the verified seller wallet, with no additional USDC outflow. Provider success alone never credits paid balances. Reverted funding restores availability only after a finalized revert and terminal provider failure. The reconciliation transaction creates one ledger result and one outbox event. Concurrent observations may have different observation timestamps; identical financial evidence remains idempotent without accepting changed amounts, destinations or receipt identity.
+
+Validation: new Circle wallet custody fixture covers disabled flags, holding isolation, missing rollout, authority/backing/gas denial, exact decimal formatting, pre-send journal, concurrent claims, provider timeout and restart, empty lookup, no blind resend, provider ID/destination mismatch, wrong chain, reorg, provisional blocks, removed logs, extra outflows, finalized settlement, terminal revert restoration and one outbox event. Existing wallet coordinator/reconciliation and runtime suites pass; focused TypeScript passes. All provider and chain behavior is simulated. No live transfer, gas-policy activation, developer permission change or deployment was performed for this adapter.
+
+Remaining: verified production gas coverage, NGN Paycrest quote/funding/settlement adapter composition, production worker scheduling, and a controlled funded full-lifecycle pilot. The developer's unfinished KYC does not block this implementation work; it continues to block granting that developer live execution access.
+
+
+The internal wallet runtime also exposes a bounded drain (1-20 tasks) with a durable per-project cursor. It skips final/cancelled operations, advances before provider I/O, recovers uncertain attempts without resending, and drains the existing webhook outbox independently of blocked payouts. Worker fixtures cover restart fairness, project isolation, terminal exclusion and sanitized errors. No scheduler or production flag was enabled.
