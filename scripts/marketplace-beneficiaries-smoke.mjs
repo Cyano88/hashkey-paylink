@@ -60,3 +60,16 @@ await repo.execute('project_a','payment_one','release_bound',{type:'release',all
 await assert.rejects(()=>repo.execute('project_a','payment_one','reserve_bound',{type:'reserve',operationId:'payout_bound',allocationId:'share_a',kind:'payout',amountUnits:'1500000'}),/no longer eligible/)
 assert.equal((await repo.get('project_a','payment_one')).balances[0].reserved,'0')
 console.log('PASS revoked beneficiary blocks new payout reservation atomically.')
+
+const {hashMessage}=await import('viem')
+let magic='0x1626ba7e',chainId=8453,reads=0
+const contractClient={getChainId:async()=>chainId,getCode:async()=> '0x6000',readContract:async args=>{reads++;assert.equal(args.functionName,'isValidSignature');assert.equal(args.args[0],hashMessage(contractChallenge.message));return magic}}
+const contractRepo=createMarketplaceRepository({...deps,walletVerificationClient:contractClient})
+const contractChallenge=await contractRepo.beginWalletVerification({...request,beneficiaryId:'wallet_contract',address:'0x'+'55'.repeat(20)})
+chainId=1;await assert.rejects(()=>contractRepo.verifyWallet('project_a','wallet_contract',contractChallenge.nonce,'0x1234'),/requires Base/)
+assert.equal(reads,0)
+chainId=8453;magic='0xffffffff';await assert.rejects(()=>contractRepo.verifyWallet('project_a','wallet_contract',contractChallenge.nonce,'0x1234'),/verification failed/)
+magic='0x1626ba7e'
+await contractRepo.verifyWallet('project_a','wallet_contract',contractChallenge.nonce,'0x1234')
+await assert.rejects(()=>contractRepo.verifyWallet('project_a','wallet_contract',contractChallenge.nonce,'0x1234'),/not found/)
+console.log('PASS deployed Base contract beneficiary verifies ERC-1271 exact challenge, magic value, chain and consumed nonce. Mock RPC only.')

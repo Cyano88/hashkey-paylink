@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {createMarketplacePayoutCancellation} from './payout-cancellation.js'
 import {createMarketplaceRefundWorker} from './refund-worker.js'
 import {createMarketplaceRefundExecution} from './refund-execution.js'
 import {createMarketplaceRefunds} from './refunds.js'
@@ -18,7 +19,7 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
 export type MarketplaceStore={refundWorkerCursors?:Record<string,string>;books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={refundExecution?:Omit<Parameters<typeof createMarketplaceRefundExecution>[0],'read'|'mutate'|'now'>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome'];resolveRefundCollection?:Parameters<typeof createMarketplaceRefunds>[0]['resolveRefundCollection']}
+type Dependencies={walletVerificationClient?:Parameters<typeof verifyWalletChallenge>[3];refundExecution?:Omit<Parameters<typeof createMarketplaceRefundExecution>[0],'read'|'mutate'|'now'>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome'];resolveRefundCollection?:Parameters<typeof createMarketplaceRefunds>[0]['resolveRefundCollection']}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
@@ -47,6 +48,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
   }
  return {
   refunds:createMarketplaceRefunds(d),
+  cancelPayout:createMarketplacePayoutCancellation(d),
   refundExecution,
   refundWorker:createMarketplaceRefundWorker({...d,execution:refundExecution,webhooks}),
   walletReconciliation:createMarketplaceWalletReconciliation(d),
@@ -87,7 +89,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    marketplaceReference(projectId);marketplaceReference(beneficiaryId)
    const challenge=(await d.read())?.walletChallenges?.find(c=>c.projectId===projectId&&c.beneficiaryId===beneficiaryId&&c.nonce===nonce)
    if(!challenge)throw Error('Wallet verification challenge not found.')
-   await verifyWalletChallenge(challenge,signature,d.now())
+   await verifyWalletChallenge(challenge,signature,d.now(),d.walletVerificationClient)
    const store=await d.mutate(s=>{
     if(!s.walletChallenges?.some(c=>c.projectId===projectId&&c.beneficiaryId===beneficiaryId&&c.nonce===nonce))throw Error('Wallet verification challenge was replaced or consumed.')
     const now=d.now()

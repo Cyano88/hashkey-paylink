@@ -57,6 +57,7 @@ const refsTwo=await reserve('payment_two')
 const other=await repo.bankExecution.claim(...refsTwo,'worker_d')
 await repo.bankExecution.beginSubmission(...refsTwo,other.claimToken)
 await assert.rejects(()=>repo.bankExecution.recordSubmission(...refsTwo,other.claimToken,hash),/another payout/)
+const refsExpired=await reserve('payment_expired')
 const refsThree=await reserve('payment_three')
 const revoked=await repo.bankExecution.claim(...refsThree,'worker_e')
 preflight=async quote=>{await repo.revokeBank('project_a','bank_a');return {quote,holdingApproved:true,authorizationActive:true}}
@@ -64,3 +65,19 @@ await assert.rejects(()=>repo.bankExecution.beginSubmission(...refsThree,revoked
 assert.equal((await repo.bankExecution.get(...refsThree)).state,'claimed')
 assert.equal((await repo.get(...refsThree.slice(0,2))).operations[0].status,'reserved')
 console.log('PASS bank execution coordinator: atomic claim race, lease replacement and stale-worker fencing, mandatory fresh preflight, changed custody/authority rejection, durable pre-submission ambiguity, crash recovery without resubmission, hash binding, revocation and reserved-funds preservation. No signing or provider calls.')
+
+const cancelActor={credentialId:'credential_a',businessReference:'cancel_expired'}
+await repo.cancelPayout(...refsThree.slice(0,2),'cancel_a',refsThree[2],cancelActor)
+assert.equal((await repo.get(...refsThree.slice(0,2))).balances[0].available,'10000000')
+assert.equal((await repo.get(...refsThree.slice(0,2))).balances[0].reserved,'0')
+await repo.cancelPayout(...refsThree.slice(0,2),'cancel_a',refsThree[2],cancelActor)
+await assert.rejects(()=>repo.cancelPayout(...refsThree.slice(0,2),'cancel_a',refsThree[2],{...cancelActor,businessReference:'changed'}),/Idempotency/)
+await assert.rejects(()=>repo.bankExecution.beginSubmission(...refsThree,revoked.claimToken),/expired/)
+await assert.rejects(()=>repo.cancelPayout(...refs.slice(0,2),'cancel_submitted',refs[2],cancelActor),/Unsubmitted/)
+console.log('PASS cancellation restores unsubmitted bank reservations once, fences claimed workers and refuses submitted payouts.')
+
+now+=400000
+await repo.cancelPayout(...refsExpired.slice(0,2),'cancel_expired',refsExpired[2],cancelActor)
+assert.equal((await repo.get(...refsExpired.slice(0,2))).balances[0].available,'10000000')
+await assert.rejects(()=>repo.cancelPayout('project_other',refsExpired[1],'cancel_cross',refsExpired[2],cancelActor),/not found/)
+console.log('PASS expired quote cancellation requires no live quote or beneficiary and remains project scoped.')

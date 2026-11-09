@@ -30,7 +30,11 @@ export async function verifyOperationsSection(req: Request, section: OperationsS
   return identity
 }
 
-type Project = { personalKycVerified?:boolean; profileCountry?:string; id: string; name: string; capabilities?: string[]; operationalStatus?: string; environment?: string; accountType?: string; removal?: {status:string}; businessVerification?: {status:string} }
+type Project = { ownerId?:string; personalKycVerified?:boolean; profileCountry?:string; id: string; name: string; capabilities?: string[]; operationalStatus?: string; environment?: string; accountType?: string; removal?: {status:string}; businessVerification?: {status:string} }
+export function marketplaceWhitelistSummary(requests:Array<{projectId:string;ownerId:string;status:string}>,projects:Record<string,Project>,visibleIds:Set<string>,founder:boolean){
+  const current=requests.filter(r=>Boolean(r.ownerId)&&projects[r.projectId]?.ownerId===r.ownerId&&!projects[r.projectId]?.removal)
+  return {approvedProjectIds:[...new Set(current.filter(r=>r.status==='approved'&&visibleIds.has(r.projectId)).map(r=>r.projectId))],...(founder?{pendingCount:current.filter(r=>r.status==='pending').length}:{})}
+}
 export function operationsSession(identity: OperationsIdentity, projects: Project[], env = process.env) {
   const policy = operationsPolicy(env)
   const removed=new Set(projects.filter(p=>p.removal).map(p=>p.id))
@@ -84,7 +88,10 @@ export default async function operationsSessionHandler(req: Request, res: Respon
       session.workspaces.some(w=>w.id!=='pocket'&&(canSupport(w)||w.sections.includes('cases')))?readDurableJson<{cases:Record<string,AttentionCase>}>('hashpaylink:business-support:v1').then(s=>s?.cases||{}).catch(()=>null):{},
       session.workspaces.some(w=>w.id==='pocket'&&(canSupport(w)||w.sections.includes('cases')))?readSupportJson<{cases:Record<string,AttentionCase>}>((process.env.POCKET_SUPPORT_STORE_KEY||'hashpaylink:pocket-support:v1').trim()).then(s=>s?.cases||{}).catch(()=>null):{},
     ])
-    return res.json(withAttentionCounts(session,business,pocket))
+    const visibleIds=new Set(session.workspaces.filter(w=>w.sections.includes('products')).flatMap(w=>w.integrations.map(p=>p.id)))
+    const access=visibleIds.size||session.founder?await readDurableJson<{requests:Array<{projectId:string;ownerId:string;status:string}>}>('hashpaylink:marketplace-access-requests:v1'):undefined
+    const marketplaceWhitelist=marketplaceWhitelistSummary(access?.requests||[],store?.projects||{},visibleIds,session.founder)
+    return res.json({...withAttentionCounts(session,business,pocket),marketplaceWhitelist})
   } catch (e) {
     const error = e as Error & { status?: number }
     return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Operations could not be loaded.' })

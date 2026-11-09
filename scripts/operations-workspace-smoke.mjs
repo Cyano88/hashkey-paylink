@@ -87,3 +87,10 @@ assert.equal(planned, 0)
 console.log('PASS: founder-only defaults, explicit grouping, section grants, cross-workspace reads/writes/signing denied before side effects, and scoped counts.')
 
 assert.deepEqual(operationsSession(founder, projects, env).workspaces.find(w=>w.id==='builders').sections,['cases']);
+import {marketplaceWhitelistSummary} from '../api/operations-access.ts'
+const whitelistProjects={a:{id:'a',name:'A',ownerId:'current'},b:{id:'b',name:'B',ownerId:'current'},removed:{id:'removed',name:'Removed',ownerId:'current',removal:{status:'removed'}}}
+const whitelistRequests=[{projectId:'a',ownerId:'old',status:'approved'},{projectId:'a',ownerId:'current',status:'approved'},{projectId:'b',ownerId:'current',status:'approved'},{projectId:'removed',ownerId:'current',status:'pending'},{projectId:'b',ownerId:'current',status:'pending'}]
+assert.deepEqual(marketplaceWhitelistSummary(whitelistRequests,whitelistProjects,new Set(['a']),false),{approvedProjectIds:['a']})
+assert.deepEqual(marketplaceWhitelistSummary(whitelistRequests,whitelistProjects,new Set(['a']),true),{approvedProjectIds:['a'],pendingCount:1})
+assert.deepEqual(marketplaceWhitelistSummary(whitelistRequests.slice(0,1),whitelistProjects,new Set(['a']),true),{approvedProjectIds:[],pendingCount:0})
+console.log('PASS whitelist summary: owner transfer, removal, visible app scope and founder-only pending count.')

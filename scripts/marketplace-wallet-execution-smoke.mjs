@@ -63,3 +63,11 @@ const bankBook={plan:{projectId:'project_bank',paymentId:'payment_bank'},operati
 stored.books.push(bankBook)
 await assert.rejects(()=>repo.bankExecution.recordSubmission('project_bank','payment_bank','operation_bank','token_bank','0x'+'aa'.repeat(32)),/another payout/)
 console.log('PASS wallet execution: both assets, exclusive claims, stale-worker fencing, mandatory exact-transfer/custody/fee preflight, stale/expired approval, concurrent submission, crash recovery without retry, revocation and cross-route transaction uniqueness. Synthetic signatures only; no transaction signing or network calls.')
+
+const cancelActor={credentialId:'credential_a',businessReference:'cancel_revoked'}
+await repo.cancelPayout(...revoked.slice(0,2),'cancel_wallet',revoked[2],cancelActor)
+assert.equal((await repo.get(...revoked.slice(0,2))).balances[0].available,'1500000')
+assert.equal((await repo.walletExecution.get(...revoked)).state,'expired')
+await assert.rejects(()=>repo.walletExecution.beginSubmission(...revoked,claim.claimToken),/expired/)
+await assert.rejects(()=>repo.walletExecution.claim(...revoked,'worker_late'),/unavailable/)
+console.log('PASS revoked wallet reservation cancellation restores funds and blocks stale or new submission claims.')

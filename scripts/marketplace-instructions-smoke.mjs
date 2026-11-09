@@ -61,3 +61,9 @@ const race=await Promise.allSettled(['race_one','race_two'].map(key=>service.rel
 assert.equal(race.filter(result=>result.status==='fulfilled').length,1)
 assert.equal((await repo.get('project_a','payment_race')).journal.length,2)
 console.log('PASS marketplace instructions: closed default gate, scopes/revocation, project isolation, strict request fields, atomic split release/rollback/race, canonical retry, authorization journal and private evidence redaction. Synthetic fixtures only; no financial calls.')
+
+current={...principal,scopes:['marketplace:read']}
+await assert.rejects(()=>service.cancelPayout('valid','cancel_a',{paymentId:'payment_one',operationId:'operation_a',businessReference:'cancel_order'}),/denied/)
+current=principal
+await assert.rejects(()=>service.cancelPayout('valid','cancel_a',{paymentId:'payment_one',operationId:'operation_a',businessReference:'cancel_order',projectId:'other_project'}),/fields/)
+console.log('PASS cancellation instruction rejects missing payout authority and project override.')

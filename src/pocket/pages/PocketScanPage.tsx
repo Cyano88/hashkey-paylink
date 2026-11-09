@@ -98,6 +98,8 @@ export default function PocketScanPage() {
   return()=>{stop();abort.current?.abort();pending.current=false}
  },[location.search])
  useEffect(()=>{const hide=()=>{if(document.visibilityState!=='visible')stop()};document.addEventListener('visibilitychange',hide);return()=>document.removeEventListener('visibilitychange',hide)},[])
+ const incomingCode=new URLSearchParams(location.search).get('code')
+ const reviewing=Boolean(incomingCode)||busy
  const back=()=>{stop();abort.current?.abort();if(location.state?.xpayReturnTo){navigate(location.state.xpayReturnTo,{replace:true,state:location.state});return}navigate(new URLSearchParams(location.search).get('rail')==='xstocks'?xStockPath('home'):POCKET_BASE_PATH+POCKET_ROUTES.home,{replace:true})}
  return <main className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)] text-gray-950 dark:bg-black dark:text-white'>
   <div className='mx-auto w-full max-w-[462px]'>

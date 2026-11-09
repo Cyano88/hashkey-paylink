@@ -9,7 +9,7 @@ export type MarketplacePrincipal = {
   capabilities: string[]
   scopes: string[]
 }
-type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts' | 'refunds'>
+type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts' | 'refunds' | 'cancelPayout'>
 type Dependencies = {
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
@@ -40,6 +40,12 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
     return {projectId:reference(resolved.projectId), credentialId:reference(resolved.credentialId)}
   }
   return {
+    async cancelPayout(credential:string,key:string,body:unknown){
+      const input=fields(structuredClone(body),['paymentId','operationId','businessReference'])
+      const principal=await authorize(credential,'marketplace:payout')
+      const operation=await repository.cancelPayout(principal.projectId,reference(input.paymentId),reference(key),reference(input.operationId),{credentialId:principal.credentialId,businessReference:reference(input.businessReference)})
+      return {paymentId:input.paymentId,operationId:operation.id,status:'cancelled',amountUnits:operation.units}
+    },
     async reserveRefund(credential: string, key: string, body: unknown) {
       const input=fields(structuredClone(body),['paymentId','refundId','allocations','businessReference'])
       const paymentId=reference(input.paymentId),refundId=reference(input.refundId),businessReference=reference(input.businessReference)

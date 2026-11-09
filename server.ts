@@ -1,3 +1,4 @@
+import marketplaceAccessHandler from './api/marketplace-access.js'
 import checkoutConfirmationHandler from './api/checkout-confirmation.js'
 import { pocketAppLinkPaths, pocketAndroidLinkExtensions } from './api/pocket/app-link-policy.js'
 import supportAttachmentHandler from './api/support-attachments.js'
@@ -464,6 +465,7 @@ app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 const supportPresenceLimiter=rateLimit({name:'support-presence',windowMs:60_000,max:120})
 const supportRequestLimiter=(req:express.Request,res:express.Response,next:express.NextFunction)=>((req.method==='GET'&&req.query.presence)||(req.method==='POST'&&req.body?.action==='typing')?supportPresenceLimiter:strictLimiter)(req,res,next)
 app.all('/api/developer-support', supportRequestLimiter, developerSupportHandler)
+app.all('/api/marketplace-access', strictLimiter, marketplaceAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
