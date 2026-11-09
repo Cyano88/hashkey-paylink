@@ -14,7 +14,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const zero='0x0000000000000000000000000000000000000000'
 type RepositoryDependencies=NonNullable<Parameters<typeof createMarketplaceRepository>[0]>
 type ExecutionConfig=NonNullable<RepositoryDependencies['refundExecution']>
-type RuntimeAdapters={chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
+type RuntimeAdapters={chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];verifyBacking:()=>Promise<{backed:boolean}>;resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
 
 /** Internal collection composition. No public route, worker, wallet creation or transfer. */
 export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;chain:ExecutionConfig['chain'];storage?:Pick<Parameters<typeof createMarketplaceCollections>[0],'read'|'mutate'|'now'>;readCheckout?:Parameters<typeof createMarketplaceCheckoutCollections>[0]['readCheckout'];circle?:Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'>}){
@@ -78,6 +78,7 @@ export function marketplaceRuntimeReadiness(env:NodeJS.ProcessEnv=process.env,ad
  const configuration=readMarketplaceRuntimeConfig(env),blockers=[...configuration.blockers]
  if(typeof adapters?.resolveRefundCollection!=='function')blockers.push('verified_original_collection_adapter_missing')
  if(typeof adapters?.authorizeRefund!=='function')blockers.push('project_authority_custody_and_fee_adapter_missing')
+ if(typeof adapters?.verifyBacking!=='function')blockers.push('holding_backing_check_missing')
  if(!adapters?.chain||(['getChainId','getTransactionReceipt','getBlock'] as const).some(method=>typeof adapters.chain?.[method]!=='function'))blockers.push('base_rpc_client_missing')
  return {configured:configuration.blockers.length===0,workerConstructible:blockers.length===0,liveVerified:false,publicApiEnabled:false,network:'base',asset:'USDC',blockers}
 }
@@ -90,7 +91,7 @@ export function createMarketplaceRefundRuntime(input:{env:NodeJS.ProcessEnv;adap
  const allowed=new Set(projectIds),adapters=input.adapters
  const repository=createMarketplaceRepository({
   resolveRefundCollection:request=>{if(!allowed.has(request.projectId))throw Error('Marketplace project is not enabled.');return adapters.resolveRefundCollection(request)},
-  refundExecution:{enabled:true,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:reservation=>allowed.has(reservation.collection.projectId)?adapters.authorizeRefund(reservation):Promise.resolve(false)},
+  refundExecution:{enabled:true,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:async reservation=>allowed.has(reservation.collection.projectId)&&(await adapters.verifyBacking()).backed===true&&await adapters.authorizeRefund(reservation)},
   notifyMarketplace:marketplaceWebhookTransport,
  })
  return {readiness,async drain(projectId:string,limit=10){

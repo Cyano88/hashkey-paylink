@@ -64,3 +64,21 @@ Marketplace instructions now include a `marketplace:create` permission and stric
 The internal collection runtime verifies the Circle holding wallet before creation and binds the checkout through the existing verified-record adapter. No payer-facing manual-deposit route is introduced. No public Marketplace endpoint is mounted and no production gate or wallet configuration has been changed.
 
 Validation covers request scope/project isolation, routing-field injection, non-allowlisted return URLs, binding failure before notification or link publication, concurrent/retried creation, immutable request conflicts, expiry and revoked access, plus existing hosted-checkout regressions. Tests remain synthetic; dedicated production holding configuration and a live collection/release/refund pilot are still required.
+
+## Dedicated provisioning and backing checks
+
+`api/marketplace/provisioning.ts` now provisions a dedicated Base SCA wallet set and wallet through the existing Circle client with explicit Marketplace labels. Bills remains the default client purpose. Provisioning requires Marketplace-specific credentials, a holding identity/revision, an explicit mainnet setup flag, and Bills wallet/set/address identifiers for separation checks. The Marketplace set, wallet ID and address must differ from Bills.
+
+The durable provisioning journal is written before provider calls. Both UUID v4 creation keys are retained across timeouts and restarts; retries never generate replacements. Configuration changes require recovery review. Created wallets are read back and validated before a non-secret configuration proposal is returned. The workflow does not write environment variables, enable workers, move money, or establish separate signing permissions merely by creating a new wallet set.
+
+Commands (run from the release checkout with authorized server credentials configured):
+
+- `node --import tsx scripts/marketplace-holding-setup.mjs status` checks setup configuration without provider writes.
+- `node --import tsx scripts/marketplace-holding-setup.mjs provision` creates/retrieves the journaled wallet set and wallet, then returns proposed Marketplace identifiers. Requires `MARKETPLACE_PROVISIONING_ENABLED=true` and `MARKETPLACE_ENVIRONMENT=base-mainnet`; do not generate new keys or delete the journal after an ambiguous result.
+- `node --import tsx scripts/marketplace-backing-audit.mjs` verifies the configured Circle wallet and compares finalized Base USDC against ledger obligations. Requires `MARKETPLACE_BASE_RPC_URL` and the dedicated holding configuration. This is read-only.
+
+Backing counts pending, available and reserved amounts across the holding's ledger books, checks conservation, and fails closed on missing origin proofs, other holding revisions, unresolved sends, insufficient USDC, changing chain/ledger snapshots, or missing storage. It is a point-in-time check, not a transactional spending reservation. Fee coverage and submission authorization remain required. The refund runtime now requires a backing-check adapter and runs it before authorizing submission; wallet/bank executors still need their production preflight adapters wired to the same backing policy.
+
+Validation: mock provider tests exercise timeout/restart/concurrent provisioning, key persistence, separate identities, read-back mismatch and configuration conflicts. Backing fixtures cover shortages, unsettled sends, stale revisions, corrupt accounting and snapshot races. Existing Bills client tests verify unchanged default behavior and new Marketplace request metadata. The local status command reported missing dedicated setup configuration. No real Circle provisioning request, production environment change or live solvency claim was made.
+
+The Circle create-wallet API specifies UUID v4 idempotency keys and fresh entity-secret ciphertext: https://developers.circle.com/api-reference/wallets/developer-controlled-wallets/create-wallet . Holding-wallet migration and least-privilege signing policy remain open audit items.

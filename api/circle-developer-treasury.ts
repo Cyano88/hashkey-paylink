@@ -215,6 +215,7 @@ export function encryptCircleEntitySecret(entitySecret: string, publicKeyPem: st
 }
 
 export function createCircleDeveloperTreasuryClient(options: {
+  purpose?: 'bills' | 'marketplace'
   config: CircleTreasuryConfig
   fetchImpl?: FetchLike
   requestId?: () => string
@@ -268,7 +269,7 @@ export function createCircleDeveloperTreasuryClient(options: {
       body: JSON.stringify({
         idempotencyKey: config.walletSetIdempotencyKey,
         entitySecretCiphertext: await freshEntitySecretCiphertext(),
-        name: 'Hash PayLink Bills Treasury',
+        name: options.purpose === 'marketplace' ? 'Hash PayLink Marketplace Holding' : 'Hash PayLink Bills Treasury',
       }),
     })
     const walletSetId = clean(body?.data?.walletSet?.id)
@@ -291,7 +292,7 @@ export function createCircleDeveloperTreasuryClient(options: {
         walletSetId,
         accountType: config.accountType,
         count: 1,
-        metadata: [{ name: 'Hash PayLink Bills Treasury', refId: 'pocket-bills-treasury' }],
+        metadata: [{ name: options.purpose === 'marketplace' ? 'Hash PayLink Marketplace Holding' : 'Hash PayLink Bills Treasury', refId: options.purpose === 'marketplace' ? 'marketplace-holding' : 'pocket-bills-treasury' }],
       }),
     })
     return assertWallet(body?.data?.wallets?.[0])
