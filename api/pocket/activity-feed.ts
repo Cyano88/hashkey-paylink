@@ -72,6 +72,16 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
     if (scope !== undefined && scope !== '' && scope !== 'recent') return res.status(400).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Activity scope is invalid.', retryable: false } })
     try {
       const { userId } = await dependencies.verifyUser(req)
+      if (req.method === 'GET' && req.query?.checkout !== undefined) {
+        const checkout = req.query.checkout
+        if (typeof checkout !== 'string' || !/^chk(?:b|x)?_[a-zA-Z0-9]{8,40}$/.test(checkout) || !dependencies.sources.checkouts) {
+          return res.status(400).json({ok:false,error:{message:'Invalid checkout activity request.'}})
+        }
+        // This authenticated source reads confirmed checkout records, not RPC history.
+        // Keep it independent of slow or in-flight wallet scans after payment success.
+        const result = await dependencies.sources.checkouts(userId)
+        return res.json({ok:true,payments:result.payments.filter(row=>row.merchantId===checkout),merchants:[],collections:[],complete:false,partial:true,refreshing:false})
+      }
       const key = activityFeedKey(userId)
       let saved = await store.read(key)
       if(req.method==='POST'){

@@ -233,6 +233,7 @@ export async function readPocketActivity({
   accessToken,
   recent = false,
   fresh = false,
+  checkoutId,
   observe = false,
   signal,
   fetcher = fetch,
@@ -240,11 +241,12 @@ export async function readPocketActivity({
   accessToken: string
   recent?: boolean
   fresh?: boolean
+  checkoutId?: string
   observe?: boolean
   signal?: AbortSignal
   fetcher?: typeof fetch
 }): Promise<PocketActivityReadResult> {
-  const query = [recent ? 'scope=recent' : '', observe ? 'observe=1' : fresh ? 'refresh=1' : ''].filter(Boolean).join('&')
+  const query = [checkoutId ? 'checkout=' + encodeURIComponent(checkoutId) : '', recent ? 'scope=recent' : '', observe ? 'observe=1' : fresh ? 'refresh=1' : ''].filter(Boolean).join('&')
   const response = await fetcher(POCKET_API.activity + (query ? '?' + query : ''), {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
