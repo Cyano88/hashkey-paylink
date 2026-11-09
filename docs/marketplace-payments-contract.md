@@ -146,4 +146,16 @@ Preflight must finish within five seconds. The submission marker, approval snaps
 
 After that marker, expiry or a crash cannot permit a second submission. Late acknowledgement may attach the same transaction hash; a different hash is rejected. Wallet and bank payouts now share transaction-hash reuse checks, including the bank reconciliation path. This version assumes one transaction per payout; multi-payout batching would need a deliberate log-level binding design.
 
-Wallet outcome verification remains unimplemented, so a hash never marks a wallet payout settled and uncertain funds remain reserved. No public wallet execution endpoint is exposed.
+Wallet outcome verification is covered by the reconciliation checkpoint below; a transaction hash alone never marks a wallet payout settled and uncertain funds remain reserved. No public wallet execution endpoint is exposed.
+
+## Wallet outcome reconciliation checkpoint
+
+`walletReconciliation` requires a trusted `verifyWalletOutcome` adapter, absent by default. Its input includes the reserved payout and submission attempt. The adapter must verify canonical finalized Base transaction/receipt data, the actual holding source, exact approved call and token logs. A normalized `finality: finalized` field is a verifier contract, not evidence that a production RPC verification has occurred.
+
+Successful reconciliation requires the exact canonical USDC/USDT token, approved sender, snapshotted recipient, requested amount and transferred amount, plus the finalized transaction/block/log reference. Finalized reverted transactions require zero transferred tokens and no transfer log. Provisional confirmations, timeouts, partial/extra transfers and unknown statuses cannot finalize the payout. No refund or failure is inferred from a missing transaction.
+
+Evidence identity is derived from Base chain ID, normalized transaction hash and transfer-log index (or reverted receipt marker). Final balances, attempt state, sanitized proof and wallet payout event commit atomically. Duplicate identical evidence is idempotent; conflicting terminal evidence requires review. Transaction reuse across bank and wallet payouts remains blocked. Revocation after submission does not erase a valid historical transfer.
+
+Wallet events use the settlement token as currency and include Base network plus recipientAmountUnits. They do not contain an NGN amount. The existing leased webhook delivery engine now processes both bank and wallet event queues while keeping their payload fields distinct.
+
+A reverted wallet transaction restores the reserved token amount to available, consistent with execution requiring fees/gas to be covered outside that allocation. Actual RPC/finality verification, custody integration and signing are still unwired; no live payout or public reconciliation endpoint is enabled.

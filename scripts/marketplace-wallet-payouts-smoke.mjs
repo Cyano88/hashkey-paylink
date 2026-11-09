@@ -44,7 +44,7 @@ for(const asset of ['USDC','USDT']){
  assert.equal(replay.operation.units,'1500000')
  await assert.rejects(()=>repo.walletPayouts.reserve('project_a',paymentId,record.key,{operationId:record.operationId,allocationId:'share_a',amount:'1.4'},auth),/Idempotency/)
  await assert.rejects(()=>repo.execute('project_a',paymentId,'generic_'+asset,{type:'reserve',operationId:'generic_op_'+asset,allocationId:'share_a',kind:'payout',amountUnits:'1'}),/bound reservation/)
- await assert.rejects(()=>repo.execute('project_a',paymentId,'fake_final_'+asset,{type:'result',operationId:record.operationId,status:'settled',evidenceId:'fixture:fake_final_'+asset}),/verification is not implemented/)
+ await assert.rejects(()=>repo.execute('project_a',paymentId,'fake_final_'+asset,{type:'result',operationId:record.operationId,status:'settled',evidenceId:'fixture:fake_final_'+asset}),/verified outcome/)
  await repo.revokeWallet('project_a',beneficiaryId)
  await assert.rejects(()=>repo.walletPayouts.prepareTransfer('project_a',paymentId,record.operationId),/no longer eligible/)
  assert.equal((await repo.walletPayouts.reserve('project_a',paymentId,record.key,{operationId:record.operationId,allocationId:'share_a',amount:'1.5'},auth)).operation.status,'reserved')
