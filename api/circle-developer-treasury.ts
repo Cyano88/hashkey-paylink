@@ -376,7 +376,30 @@ export function createCircleDeveloperTreasuryClient(options: {
     return assertTransaction(body?.data?.transaction)
   }
 
+  /** Read-only recovery. A reference is an index, not proof; callers verify the full transaction. */
+  async function findTransferByReference(refId: string) {
+    if (!config.verificationReady || !UUID_PATTERN.test(config.walletId)) {
+      throw new CircleTreasuryError('CIRCLE_TREASURY_VERIFICATION_NOT_READY', 'Circle treasury verification configuration is incomplete.', 503)
+    }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,99}$/.test(refId)) {
+      throw new CircleTreasuryError('CIRCLE_TRANSFER_REFERENCE_INVALID', 'Circle transfer reference is invalid.', 400)
+    }
+    const query = new URLSearchParams({walletIds:config.walletId,refId,blockchain:config.blockchain,custodyType:'DEVELOPER',operation:'TRANSFER',txType:'OUTBOUND',includeAll:'true',pageSize:'2'})
+    const body = await request('/v1/w3s/transactions?' + query)
+    const rows = body?.data?.transactions
+    if (!Array.isArray(rows) || rows.length > 1) {
+      throw new CircleTreasuryError('CIRCLE_RECOVERY_AMBIGUOUS', 'Circle reference lookup is incomplete or ambiguous; review required.', 409)
+    }
+    if (!rows.length) return null
+    const transaction = assertTransaction(rows[0])
+    if (transaction.walletId !== config.walletId || transaction.refId !== refId || transaction.blockchain !== config.blockchain || transaction.transactionType !== 'OUTBOUND') {
+      throw new CircleTreasuryError('CIRCLE_RECOVERY_MISMATCH', 'Circle reference lookup scope mismatch.', 409)
+    }
+    return transaction
+  }
+
   return {
+    findTransferByReference,
     createWalletSet,
     createWallet,
     getWallet,

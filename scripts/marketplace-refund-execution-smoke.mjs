@@ -38,6 +38,16 @@ assert.equal(calls,1);assert.equal(race.filter(x=>x.status==='rejected').length,
 assert.equal(stored.books[0].balances[0].reserved,'2000000')
 await createMarketplaceRefundExecution(deps).submit(...args);assert.equal(calls,1,'restart does not blindly resubmit')
 await assert.rejects(()=>worker.reconcile(...args),/recovery/)
+circle.findTransferByReference=async()=>null
+assert.equal((await worker.recover(...args)).state,'unknown')
+assert.equal(calls,1,'empty lookup is not permission to send again')
+circle.findTransferByReference=async()=>({...transaction,destinationAddress:bills})
+await assert.rejects(()=>worker.recover(...args),/does not match/)
+circle.findTransferByReference=async()=>transaction
+await Promise.all([worker.recover(...args),worker.recover(...args)])
+assert.equal(stored.books[0].refundExecutions[0].transactionId,transactionId)
+assert.equal(calls,1)
+
 providerPatch={destinationAddress:bills};await assert.rejects(()=>worker.attachTransaction(...args,transactionId),/does not match/)
 providerPatch={};await worker.attachTransaction(...args,transactionId)
 assert.equal((await worker.reconcile(...args)).state,'submitted','included receipt is not finalized')
@@ -108,3 +118,11 @@ await assert.rejects(()=>worker.submit(...args),/not configured/)
 console.log('PASS marketplace Circle refund execution: gating, treasury isolation, authorization, concurrent submission, timeout/restart recovery, exact original-payer binding, finalized Base transfer, atomic split accounting, single event and webhook delivery. Synthetic provider/chain; no funds moved.')
 
 console.log('PASS definitive refund failure: terminal provider plus canonical finalized revert, exact pending/available restoration, nonterminal/provisional/reorg/missing-hash rejection, immutable hash, commit rollback, concurrent idempotency, restart and failed webhook. Fixtures only.')
+
+stored=structuredClone(reservedSnapshot);providerPatch={};timeout=false;finalized=100n;badLog=false
+await assert.rejects(()=>repo.refundWorker.drain('project_a'),/not configured/)
+const automated=createMarketplaceRepository({...store,refundExecution:deps,notifyMarketplace:async(project,type,data,options)=>({status:'sent',eventId:options.eventId,responseStatus:200})})
+const drained=await automated.refundWorker.drain('project_a')
+assert.equal(drained.results[0].status,'settled');assert.equal(drained.delivered,1)
+assert.equal((await automated.refundWorker.drain('project_a')).results.length,0)
+console.log('PASS configured internal worker submits authorized reservations, reconciles and drains completion outbox; default repository cannot run refunds.')

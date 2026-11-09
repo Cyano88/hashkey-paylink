@@ -11,7 +11,7 @@ import type {MarketplaceWalletEvent} from './wallet-reconciliation.js'
 
 export type RefundExecution={refundId:string;idempotencyKey:string;refId:string;walletId:string;state:'unknown'|'submitted'|'settled'|'failed';transactionId?:string;transactionHash?:string;evidenceId?:string;terminalEvidence?:{providerState:string;receiptStatus:'success'|'reverted';blockHash:string;blockNumber:string;finalizedBlockNumber:string;verifiedAt:number}}
 export type MarketplaceRefundEvent=Omit<MarketplaceWalletEvent,'type'> & {type:'marketplace.refund.settled'|'marketplace.refund.failed';refundId:string}
-type Circle=Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'|'createUsdcTransfer'|'getTransaction'>
+type Circle=Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'|'createUsdcTransfer'|'getTransaction'> & Partial<Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'findTransferByReference'>>
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;enabled?:boolean;config:CircleTreasuryConfig;billsTreasuryAddress:string;holdingId:string;holdingRevision:string;circle?:Circle;chain:Pick<PublicClient,'getChainId'|'getTransactionReceipt'|'getBlock'>;authorize:(reservation:RefundReservation)=>Promise<boolean>}
 const transferAbi=parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])
 
@@ -35,6 +35,16 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
    if(tx.id!==transactionId||tx.walletId!==e.walletId||tx.blockchain!=='BASE'||tx.transactionType!=='OUTBOUND'||tx.refId!==e.refId||getAddress(tx.sourceAddress)!==getAddress(r.collection.holdingAddress)||getAddress(tx.destinationAddress)!==getAddress(r.collection.payerWallet)||tx.amounts.length!==1||marketplaceAmountUnits(tx.amounts[0])!==r.amountUnits)throw Error('Circle transaction does not match the marketplace refund.')
  }
  return {
+  async recover(projectId:string,paymentId:string,refundId:string){
+   const {reservation,execution}=locate(await d.read(),projectId,paymentId,refundId);gate(reservation)
+   if(!execution)throw Error('Refund was not submitted.')
+   if(execution.transactionId||['settled','failed'].includes(execution.state))return structuredClone(execution)
+   if(!circle.findTransferByReference)throw Error('Circle refund reference recovery is not configured.')
+   const found=await circle.findTransferByReference(execution.refId)
+   if(!found)return structuredClone(locate(await d.read(),projectId,paymentId,refundId).execution!)
+   validateTransaction(found,found.id,execution,reservation)
+   return this.attachTransaction(projectId,paymentId,refundId,found.id)
+  },
   async submit(projectId:string,paymentId:string,refundId:string){
    const before=locate(await d.read(),projectId,paymentId,refundId);gate(before.reservation)
    if(before.execution)return structuredClone(before.execution)

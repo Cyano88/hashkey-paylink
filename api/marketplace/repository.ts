@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {createMarketplaceRefundWorker} from './refund-worker.js'
 import {createMarketplaceRefundExecution} from './refund-execution.js'
 import {createMarketplaceRefunds} from './refunds.js'
 import {createMarketplaceWalletReconciliation} from './wallet-reconciliation.js'
@@ -15,12 +16,14 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 
 // No server route imports this foundation. Live funding/signing is deliberately absent.
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
-export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
+export type MarketplaceStore={refundWorkerCursors?:Record<string,string>;books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
 type Dependencies={refundExecution?:Omit<Parameters<typeof createMarketplaceRefundExecution>[0],'read'|'mutate'|'now'>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome'];resolveRefundCollection?:Parameters<typeof createMarketplaceRefunds>[0]['resolveRefundCollection']}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
+ const refundExecution=d.refundExecution?createMarketplaceRefundExecution({...d.refundExecution,read:d.read,mutate:d.mutate,now:d.now}):undefined
+ const webhooks=createMarketplaceWebhooks(d)
  async function create(input:Parameters<typeof createMarketplacePlan>[0],key:string,bindWallets:boolean|'all'){
    if(!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/.test(key))throw Error('Invalid idempotency key.')
    const plan=createMarketplacePlan(input),hash=createHash('sha256').update(JSON.stringify(bindWallets?{plan,bindWallets}:plan)).digest('hex')
@@ -44,11 +47,12 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
   }
  return {
   refunds:createMarketplaceRefunds(d),
-  refundExecution:d.refundExecution?createMarketplaceRefundExecution({...d.refundExecution,read:d.read,mutate:d.mutate,now:d.now}):undefined,
+  refundExecution,
+  refundWorker:createMarketplaceRefundWorker({...d,execution:refundExecution,webhooks}),
   walletReconciliation:createMarketplaceWalletReconciliation(d),
   walletExecution:createMarketplaceWalletExecution(d),
   walletPayouts:createMarketplaceWalletPayouts(d),
-  webhooks:createMarketplaceWebhooks(d),
+  webhooks,
   bankExecution:createMarketplaceBankExecution(d),
   bankReconciliation:createMarketplaceBankReconciliation(d),
   // Legacy unbound creation remains internal fixture infrastructure, not activation-ready.
