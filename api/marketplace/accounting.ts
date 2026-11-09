@@ -14,6 +14,7 @@ export type MarketplaceBook = {plan: MarketplacePlan; fundingEvidence?: string; 
 export type MarketplaceCommand =
   | {type: 'fund'; evidenceId: string; network: 'base'; asset: MarketplaceAsset; amountUnits: string}
   | {type: 'release'; allocationId: string; amountUnits: string}
+  | {type: 'release_batch'; releases: Array<{allocationId: string; amountUnits: string}>; authorization: {credentialId: string; businessReference: string}}
   | {type: 'reserve'; operationId: string; allocationId: string; kind: 'payout'|'refund'; amountUnits: string}
   | {type: 'result'; operationId: string; status: 'unknown'|'settled'|'failed'; evidenceId: string}
 
@@ -69,7 +70,22 @@ export function applyMarketplaceCommand(book: MarketplaceBook, projectId: string
     next.balances.forEach(b=>{b.pending=next.plan.allocations.find(a=>a.id===b.allocationId)!.amountUnits})
   } else {
     if (!next.fundingEvidence) throw Error('Payment has no verified funding.')
-    if (command.type === 'release' || command.type === 'reserve') {
+    if (command.type === 'release_batch') {
+      identifier(command.authorization.credentialId); identifier(command.authorization.businessReference)
+      if (!Array.isArray(command.releases) || command.releases.length < 1 || command.releases.length > 100) throw Error('Provide between 1 and 100 releases.')
+      const seen = new Set<string>()
+      for (const release of command.releases) {
+        identifier(release.allocationId)
+        if (seen.has(release.allocationId)) throw Error('Duplicate release allocation.')
+        seen.add(release.allocationId)
+        const balance = next.balances.find(b=>b.allocationId===release.allocationId)
+        if (!balance) throw Error('Allocation not found.')
+        const amount = units(release.amountUnits)
+        if (amount > BigInt(balance.pending)) throw Error('Release exceeds pending balance.')
+        balance.pending = (BigInt(balance.pending)-amount).toString()
+        balance.available = (BigInt(balance.available)+amount).toString()
+      }
+    } else if (command.type === 'release' || command.type === 'reserve') {
       const balance = next.balances.find(b=>b.allocationId===command.allocationId)
       if (!balance) throw Error('Allocation not found.')
       const amount = units(command.amountUnits)

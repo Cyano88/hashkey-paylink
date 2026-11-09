@@ -44,12 +44,14 @@ Implemented now:
 - Public docs explain destinations before integration and explicitly mark availability.
 - Exact allocation validation and internal transitions for funding, release, payout/refund reservation and verified-result recording.
 - Atomic durable repository adapter, project-scoped idempotency, cross-payment proof reuse rejection, seller balance reads and command journal.
+- Unmounted instruction service with a closed default gate, injected trusted credential resolution, explicit marketplace read/release scopes and per-call revocation checks. No production credential resolver is wired.
+- Atomic multi-allocation release with a credential and business-reference journal. Requests cannot supply a project override, funding evidence, settlement status or destination. Internal proof references and journals are excluded from instruction-service read responses.
 - Fixture coverage for isolation, conservation, concurrent reservations, restart, partial refunds, unknown outcomes, same-asset rules and disabled product access.
 
 Required before activation:
 1. Select and verify the actual custody/holding contract or account model. Existing direct merchant settlement is not escrow.
 2. Bind canonical chain/token/holding recipient/payer/amount/log evidence to collection and prevent replay across all collection consumers.
-3. Add owner-verified beneficiaries, marketplace-specific scopes, immutable authorization and scoped developer request handlers.
+3. Add owner-verified beneficiaries and wire marketplace-specific scopes to actual credential issuance/resolution. The internal scoped instruction service is implemented; public handlers remain unmounted.
 4. Implement signing/execution adapters, leases/idempotency, chain finality and provider reconciliation. Unknown broadcasts must not be treated as safe failures.
 5. Bind Paycrest quotes/fees/debits and refund destinations; confirm provider approval for marketplace seller disbursements rather than inferring it from existing merchant settlement.
 6. Add transactional webhook outbox, receipts and backing/liability reconciliation. The initial single durable-book store is a foundation, not a production-scale accounting design.
