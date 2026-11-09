@@ -7,6 +7,7 @@ try{
 const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
 const base={verified:false,paymentId:'chk_testpayment',authenticated:true,userId:'payer',email:'payer@test.example'};
 const show=async p=>{await page.evaluate(p=>window.show(p),p);await page.waitForTimeout(40)};
+await show({...base,verified:true,seeded:true});assert.equal(await page.evaluate(()=>window.calls.length),0,'confirmation-seeded Activity needs no follow-up request');
 await show(base);assert.equal(await page.evaluate(()=>window.calls.length),0);
 await show({...base,verified:true});assert.equal(await page.evaluate(()=>window.calls.length),1);assert.equal(await page.evaluate(()=>window.calls[0].checkoutId),'chk_testpayment');assert.equal(await page.evaluate(()=>window.cached.length),1);
 await show({...base,verified:true});assert.equal(await page.evaluate(()=>window.calls.length),1);

@@ -1,3 +1,4 @@
+import {checkoutActivityRows} from './pocket/checkout-activity.js'
 import {assertCashCheckoutPayer} from './checkout-cash-policy.js'
 import {merchantFeeTotal,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {verifyMerchantCheckoutTransfer,verifyPosMerchantTransfer} from './merchant-checkout-fees.js'
@@ -464,6 +465,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   let amountNgn = ''
   let intentId = ''
   let hostedCheckoutIdForReceipt = ''
+  let confirmedActivity: ReturnType<typeof checkoutActivityRows> | undefined
   let assetSymbol: 'USDC' | 'USDT' = 'USDC'
   let brandName = ''
   let brandImageUrl = ''
@@ -534,7 +536,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       })
       if (!verifiedTransfer.confirmedAt) throw new Error('Hosted checkout confirmation time was not verified.')
       amount = verifiedTransfer.amount
-      await markHostedCheckoutPaid({
+      const paidCheckout = await markHostedCheckoutPaid({
         id: checkout.id,
         txHash,
         payer,
@@ -544,6 +546,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         network: chain,
         referenceType: chain === 'solana' ? 'solana_signature' : 'evm_tx_hash',
       })
+      if (paidCheckout) confirmedActivity = checkoutActivityRows(paidCheckout, [payer])
     } catch (error) {
       throw paymentError(error instanceof Error ? error.message : 'Hosted checkout could not be verified on-chain.', 409)
     }
@@ -636,7 +639,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       }
       if (hostedCheckoutIdForReceipt) await attachHostedCheckoutReceipt({ id: hostedCheckoutIdForReceipt, txHash, receiptId: result.receiptId, receiptUrl: result.receiptUrl })
       scheduleArchivePayment(entries[manualIndex], payer)
-      return result
+      return { ...result, ...(confirmedActivity ? {activity:confirmedActivity} : {}) }
     }
   }
   // Deduplicate by txHash (for real on-chain txs) OR by payer+eventId for manual detections
@@ -657,7 +660,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
     if (hostedCheckoutIdForReceipt) await attachHostedCheckoutReceipt({ id: hostedCheckoutIdForReceipt, txHash, receiptId: result.receiptId, receiptUrl: result.receiptUrl })
     if (duplicate) scheduleArchivePayment(duplicate, payer)
-    return result
+    return { ...result, ...(confirmedActivity ? {activity:confirmedActivity} : {}) }
   }
   const entry: PaymentEntry = { ...(merchantFees?{merchantFees,merchantNetAmount:merchantFees.netAmount,feeAmount:'0',feeAsset:assetSymbol}:{}), assetSymbol, eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
   if(source==='ngpos' && (isAddress(payer)||chain==='solana'&&isValidSolanaAddress(payer)))entry.verifiedPayer=chain==='solana'?payer:payer.toLowerCase()
@@ -699,7 +702,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   // Use the human-readable name (memo) as payer in the 0G archive so
   // agent-verify can match by name, not wallet address.
   scheduleArchivePayment(entry, payer)
-  return result
+  return { ...result, ...(confirmedActivity ? {activity:confirmedActivity} : {}) }
 }
 
 export async function registerEventPayment(req: Request, res: Response): Promise<void> {

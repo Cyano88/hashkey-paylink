@@ -3,8 +3,8 @@ import { readPocketActivity } from '../api/pocketReadClient'
 import { cacheConfirmedPocketActivity, markPocketActivityDirty } from '../lib/pocketActivityCache'
 
 /** Refresh authoritative history after checkout verification; never invent a payment row. */
-export default function useCheckoutActivityRefresh({ verified, paymentId, authenticated, userId, email, getAccessToken }: {
-  verified: boolean; paymentId: string; authenticated: boolean; userId?: string; email: string
+export default function useCheckoutActivityRefresh({ verified, seeded = false, paymentId, authenticated, userId, email, getAccessToken }: {
+  seeded?: boolean; verified: boolean; paymentId: string; authenticated: boolean; userId?: string; email: string
   getAccessToken: () => Promise<string | null>
 }) {
   const owner = authenticated && userId && email ? `${userId}:${email.trim().toLowerCase()}` : ''
@@ -12,7 +12,7 @@ export default function useCheckoutActivityRefresh({ verified, paymentId, authen
   currentOwner.current = owner
   const refreshed = useRef('')
   useEffect(() => {
-    if (!verified || !paymentId || !owner) return
+    if (!verified || seeded || !paymentId || !owner) return
     const key = `${owner}:${paymentId}`
     if (refreshed.current === key) return
     refreshed.current = key
@@ -27,5 +27,5 @@ export default function useCheckoutActivityRefresh({ verified, paymentId, authen
       for (const row of rows) cacheConfirmedPocketActivity(email,row)
     })().catch(() => { if (currentOwner.current === owner) markPocketActivityDirty(email) })
 
-  }, [verified, paymentId, owner, email, getAccessToken])
+  }, [verified, seeded, paymentId, owner, email, getAccessToken])
 }

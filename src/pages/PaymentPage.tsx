@@ -1,3 +1,4 @@
+import {cacheCheckoutConfirmationActivity} from '../pocket/lib/pocketCheckoutConfirmationActivity'
 import { useCheckoutExpiry, CheckoutExpired } from '../components/CheckoutExpiry'
 import useCheckoutActivityRefresh from '../pocket/hooks/useCheckoutActivityRefresh'
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
@@ -589,6 +590,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const isHostedService = isHostedCheckout && (getPaylinkParam(initParams, 'src', 'src') === 'service' || hostedKind === 'service')
   const [hostedIntentStatus, setHostedIntentStatus] = useState<'idle' | 'checking' | 'verified' | 'error'>(() => isHostedCheckout ? 'checking' : 'idle')
   const [hostedIntentError, setHostedIntentError] = useState('')
+  const [hostedActivitySeeded,setHostedActivitySeeded]=useState('')
   const [hostedExpiresAt, setHostedExpiresAt] = useState<string>()
   const hostedSecondsLeft = useCheckoutExpiry(hostedExpiresAt)
   const hostedSigningStarted = useRef(false)
@@ -3471,7 +3473,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const browserPaymentFlow = !pocketScan && !isBankSendPayment
   const fullScreenHumanCheckout = browserPaymentFlow && !isPolymarketFunding && !isAgentOrWalletFunding
   const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
-  useCheckoutActivityRefresh({ verified: isHostedCheckout && pocketScanDelivered, paymentId: hostedCheckoutId,
+  useCheckoutActivityRefresh({ verified: isHostedCheckout && pocketScanDelivered, paymentId: hostedCheckoutId, seeded:hostedActivitySeeded===`${privyUser?.id}:${hostedCheckoutId}`,
     authenticated: privyAuthenticated, userId: privyUser?.id, email: privyEmail, getAccessToken })
   const checkoutSlideStatus: SlideActionStatus = (pocketScan || browserPaymentFlow ? pocketScanDelivered : isConfirmed)
     ? 'successful'
@@ -3733,6 +3735,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   }
 
   async function registerOrdinaryReceipt() {
+    const activityOwner=privyAuthenticated&&privyUser?.id?{id:privyUser.id,email:privyEmail}:null
     if (!txHash || txHash.startsWith('manual_')) return
     const payer = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
@@ -3767,9 +3770,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
-        const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string; error?: string } | undefined
+        const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string; activity?:unknown; error?: string } | undefined
         if (!res.ok || !data?.ok) throw new Error(data?.error || 'Checkout verification is still pending.')
         if (data.receiptId) setPaymentReceiptId(data.receiptId)
+        if (hosted && activityOwner && checkoutIdentityRef.current===activityOwner.id) {
+          setHostedActivitySeeded(cacheCheckoutConfirmationActivity(activityOwner.email,hostedCheckoutId,txHash,payer,data.activity)?`${activityOwner.id}:${hostedCheckoutId}`:'')
+        }
         if (hosted) setHostedConfirmationStatus(isHostedLocalSettlement ? 'processing' : 'verified')
         return
       } catch (error) {
