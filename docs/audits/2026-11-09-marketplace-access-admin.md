@@ -30,3 +30,15 @@ General live keys carry the app's read, release, payout and refund authority. No
 Validation: authorization smoke tests cover digest matching, configuration gates, owner transfer, suspended/removed apps, verification, key expiry/revocation, request rejection/revocation, duplicate records, storage failure, and denial before repository access. Existing instruction regressions and focused TypeScript checks pass. These are local fixtures, not live provider or database concurrency evidence.
 
 This closes the credential-resolution implementation gap only. No public financial endpoints, production configuration, holding wallets or funds were changed. Workers must still recheck custody/fee authority immediately before submission; the refund runtime's execution-authority adapter remains a separate blocker. Collection verification and live settlement remain outstanding.
+
+## Collection verification dependency
+
+`api/marketplace/collections.ts` verifies Base USDC collection receipts through an injected Base RPC client and an authoritative checkout-session resolver. Callers provide only project/payment references; the transaction hash, payer identity, payer wallet, amount and holding revision come from the trusted session adapter. The verifier does not expose a manual deposit address or accept arbitrary transaction claims.
+
+A credit requires a successful matching receipt, canonical block at or below the finalized head, transfer time within the session lifetime, exactly one USDC transfer into the isolated holding address from the bound payer for the exact plan amount, and no USDC outflow from that holding address in the same transaction. The session is re-read before commit and the plan is compared inside the atomic mutation. A canonical chain/transaction/log identity and the original-payer refund binding are persisted together with pending balances.
+
+The configured repository rejects generic funding commands. Verified retries are idempotent; transaction/session reuse across projects is rejected under the same durable mutation. Refund reservations can resolve the saved original-payer binding from the collection proof. No balance is automatically released or paid out.
+
+Tests cover invalid, wrong-chain, wrong-token, wrong-amount, wrong-recipient, reverted, unfinalized, noncanonical, removed-log and ambiguous evidence; session/plan mutation; RPC failure; concurrent replay; cross-project race; holding isolation; and refund destination binding. Focused collection/repository TypeScript checks pass. All evidence here is synthetic.
+
+Still required before live use: connect the authoritative Circle checkout-session store to this resolver, configure and verify a dedicated holding wallet, bind collection routing before the buyer signs, and run a real end-to-end pilot. This code remains unmounted; no live addresses, wallets, environment flags or financial flows were changed.

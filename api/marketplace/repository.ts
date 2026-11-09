@@ -1,3 +1,4 @@
+import {createMarketplaceCollections} from './collections.js'
 import {createHash} from 'node:crypto'
 import {createMarketplacePayoutCancellation} from './payout-cancellation.js'
 import {createMarketplaceRefundWorker} from './refund-worker.js'
@@ -19,10 +20,11 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
 export type MarketplaceStore={refundWorkerCursors?:Record<string,string>;books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={walletVerificationClient?:Parameters<typeof verifyWalletChallenge>[3];refundExecution?:Omit<Parameters<typeof createMarketplaceRefundExecution>[0],'read'|'mutate'|'now'>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome'];resolveRefundCollection?:Parameters<typeof createMarketplaceRefunds>[0]['resolveRefundCollection']}
+type Dependencies={collectionVerification?:Omit<Parameters<typeof createMarketplaceCollections>[0],'read'|'mutate'|'now'>;walletVerificationClient?:Parameters<typeof verifyWalletChallenge>[3];refundExecution?:Omit<Parameters<typeof createMarketplaceRefundExecution>[0],'read'|'mutate'|'now'>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome'];resolveRefundCollection?:Parameters<typeof createMarketplaceRefunds>[0]['resolveRefundCollection']}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
+ const collections=d.collectionVerification?createMarketplaceCollections({...d.collectionVerification,read:d.read,mutate:d.mutate,now:d.now}):undefined
  const refundExecution=d.refundExecution?createMarketplaceRefundExecution({...d.refundExecution,read:d.read,mutate:d.mutate,now:d.now}):undefined
  const webhooks=createMarketplaceWebhooks(d)
  async function create(input:Parameters<typeof createMarketplacePlan>[0],key:string,bindWallets:boolean|'all'){
@@ -47,7 +49,8 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
   }
  return {
-  refunds:createMarketplaceRefunds(d),
+  collections,
+  refunds:createMarketplaceRefunds({...d,resolveRefundCollection:d.resolveRefundCollection??collections?.resolveRefundCollection}),
   cancelPayout:createMarketplacePayoutCancellation(d),
   refundExecution,
   refundWorker:createMarketplaceRefundWorker({...d,execution:refundExecution,webhooks}),
@@ -154,6 +157,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     const index=s.books.findIndex(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
     if(index<0)throw Error('Marketplace payment not found.')
     const book=s.books[index]
+    if(command.type==='fund'&&(d.collectionVerification||book.collectionProof))throw Error('Funding requires the collection verifier.')
     if(command.type==='reserve'&&command.kind==='payout'&&book.beneficiarySnapshots&&!book.journal.some(entry=>entry.key===key)){
      const allocation=book.plan.allocations.find(a=>a.id===command.allocationId)
      const snapshot=book.beneficiarySnapshots.find(b=>b.beneficiaryId===allocation?.beneficiaryId)
