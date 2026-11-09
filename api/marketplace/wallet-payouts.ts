@@ -46,8 +46,15 @@ export function createMarketplaceWalletPayouts(dependencies:Dependencies){
    return structuredClone({reservation,operation:book.operations.find(o=>o.id===reservation.operationId)!})
   },
   async prepareTransfer(projectId:string,paymentId:string,operationId:string){
+   return prepareMarketplaceWalletTransfer(await d.read(),projectId,paymentId,operationId)
+  },
+ }
+}
+
+/** Pure preparation against one store snapshot; also used under the execution lock. */
+export function prepareMarketplaceWalletTransfer(store:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
    marketplaceReference(operationId)
-   const store=await d.read(),book=locate(store,projectId,paymentId)
+   const book=locate(store,projectId,paymentId)
    const reservation=book.walletReservations?.find(r=>r.operationId===operationId),operation=book.operations.find(o=>o.id===operationId)
    if(!reservation||!operation||operation.status!=='reserved'||operation.kind!=='payout')throw Error('Wallet payout is unavailable or requires reconciliation.')
    const snapshot=beneficiary(store!,book,reservation.allocationId)
@@ -55,6 +62,4 @@ export function createMarketplaceWalletPayouts(dependencies:Dependencies){
    if(reservation.asset!==book.plan.asset||reservation.network!=='base'||getAddress(reservation.tokenAddress)!==tokenAddress||getAddress(reservation.recipient)!==recipient||reservation.beneficiaryId!==snapshot.beneficiaryId||reservation.sellerId!==snapshot.sellerId||reservation.amountUnits!==operation.units||reservation.allocationId!==operation.allocationId)throw Error('Wallet payout reservation binding changed.')
    // This is only the ERC-20 call. The eventual holding adapter must authorize/wrap it and pay gas.
    return {projectId,paymentId,operationId,chainId:8453 as const,asset:reservation.asset,recipient,amountUnits:reservation.amountUnits,to:tokenAddress,value:'0',data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[recipient,BigInt(reservation.amountUnits)]}),requiresExecutionAuthorization:true as const}
-  },
- }
 }

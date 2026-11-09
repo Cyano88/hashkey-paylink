@@ -135,3 +135,15 @@ The unmounted instruction service now accepts wallet payout reservations under `
 `walletPayouts.prepareTransfer` rechecks the destination and operation, then builds the exact Base ERC-20 transfer call with canonical token address, zero native call value, recipient and amount. It is not a full transaction or an escrow-contract release call: no sender, nonce, gas policy, custody wrapping, signing or broadcast is provided. The result explicitly requires execution authorization. There is no implicit token conversion or deduction from the reserved token amount; live fee/gas policy still requires explicit binding before execution.
 
 Unknown outcomes retain reserved funds and cannot be prepared again. Generic commands cannot finalize these wallet reservations; wallet-specific execution/reconciliation remains unimplemented. The bank execution worker is not reused blindly for wallet transfers. No wallet payout endpoint is mounted or enabled.
+
+## Wallet execution coordination checkpoint
+
+The internal `walletExecution` coordinator adds exclusive 30-second claims and stale-worker fencing to reserved USDC/USDT wallet payouts. It reuses the exact same pure transfer preparation under the mutation lock, so destination revocation, token identity, asset and amount are rechecked before submission begins.
+
+A trusted `preflightWalletExecution` adapter is mandatory and absent by default. Its approval binds the hash of the exact prepared transfer to a verified holding ID/revision, sender, fee policy and expiry, with current payout authority. This narrow implementation permits no additional token debit and requires fees/gas to be covered outside the seller allocation. It does not choose the product's live fee policy or prove sponsorship exists; the production adapter must verify that policy and backing. Self-transfers from the holding sender to the same recipient are rejected.
+
+Preflight must finish within five seconds. The submission marker, approval snapshot and unknown ledger state commit before returning a handoff with a five-second submission deadline. The eventual custody adapter must reject an expired handoff and wrap the token call according to the selected holding contract/account. No signer, custody call or broadcasting worker is installed.
+
+After that marker, expiry or a crash cannot permit a second submission. Late acknowledgement may attach the same transaction hash; a different hash is rejected. Wallet and bank payouts now share transaction-hash reuse checks, including the bank reconciliation path. This version assumes one transaction per payout; multi-payout batching would need a deliberate log-level binding design.
+
+Wallet outcome verification remains unimplemented, so a hash never marks a wallet payout settled and uncertain funds remain reserved. No public wallet execution endpoint is exposed.

@@ -78,7 +78,7 @@ export function createMarketplaceBankExecution(dependencies:Dependencies){
     const {book}=locate(s,projectId,paymentId,operationId),attempt=latest(book,operationId)
     if(!attempt||attempt.claimToken!==claimToken||!['submitting','submitted','unknown'].includes(attempt.state))throw Error('Submission attempt does not match.')
     if(attempt.transactionHash&&attempt.transactionHash!==hash)throw Error('Submission attempt already has a different transaction.')
-    if(s.books.some(b=>b.bankExecutions?.some(e=>e.attemptId!==attempt.attemptId&&e.transactionHash===hash)))throw Error('Submission transaction is already bound to another payout.')
+    if(s.books.some(b=>[...(b.bankExecutions||[]),...(b.walletExecutions||[])].some(e=>e.attemptId!==attempt.attemptId&&e.transactionHash===hash)))throw Error('Submission transaction is already bound to another payout.')
     attempt.transactionHash=hash;attempt.state='submitted';return s
    })
    // A transaction hash is a submission reference, never bank settlement proof.
