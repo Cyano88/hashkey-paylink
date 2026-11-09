@@ -12,3 +12,5 @@ Verification:
 - Initial new fixture failed because it expected detail copy hidden by the successful result component; corrected it to assert the actual Successful heading. This was a test expectation correction.
 - Pixel foreground inspected read-only: Home has cash/total balances and the expected Nov 9 Lunchroom received/sent entries. This does not establish a fresh-payment cache-before-success transition or a full restart animation test.
 - Build/typecheck and deployment results are appended below when complete.
+
+Final local checks: source build passed (2m25s), changed-file TypeScript diagnostics passed for both components, and git diff whitespace checks passed. The full-project tsc run was stopped after over nine minutes without a result; no clean full-project typecheck is claimed. This release relies on the complete source build, focused diagnostics and checkout regression suites. No native source changed.
