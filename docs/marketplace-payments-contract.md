@@ -58,3 +58,13 @@ Required before activation:
 7. Validate live funding, split releases, both wallet assets, NGN payout, partial refunds and restart/timeout recovery using authorized canaries before enabling integrations.
 
 Fixtures use synthetic funding and settlement evidence. No production custody, signing, provider payout, public marketplace execution endpoint or live-funded escrow is enabled by this change.
+
+## Wallet beneficiary implementation checkpoint
+
+The internal repository now supports five-minute, single-use EOA wallet-control challenges. The signed message binds the project, seller reference, immutable beneficiary version, Base chain ID, asset, address, random nonce and validity window. Verification is local signature recovery; it does not send a transaction. Contract-wallet signature verification is not implemented.
+
+`createWithVerifiedWallets` atomically validates active matching beneficiaries and snapshots their destinations when creating a payment draft. A changed destination needs a new beneficiary reference and fresh verification. Revocation blocks new bound payout reservations without changing historical snapshots. Retrieving a snapshot is not proof that it remains eligible for execution; the eventual worker must revalidate revocation before signing and reconcile any transaction already submitted.
+
+These methods are trusted internal repository methods, not developer endpoints. The caller must establish project/seller authority; a wallet-control signature does not establish legal identity or marketplace seller ownership. Production registration authorization remains unwired. The original unbound `create` method remains foundation/fixture infrastructure and must not be used as a production bypass.
+
+Bank beneficiary binding intentionally fails closed. No account-name lookup is represented as seller ownership verification, and no USDT-to-bank route is introduced.

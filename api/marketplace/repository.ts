@@ -1,31 +1,86 @@
 import {createHash} from 'node:crypto'
+import {marketplaceReference, walletChallenge, walletChallengeMessage, verifyWalletChallenge, type WalletChallenge, type WalletBeneficiary, type WalletBeneficiaryRequest} from './beneficiaries.js'
 import {mutateDurableJson,readDurableJson} from '../render-durable-store.js'
 import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,marketplaceSellerBalances,type MarketplaceBook,type MarketplaceCommand} from './accounting.js'
 
 // No server route imports this foundation. Live funding/signing is deliberately absent.
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
-export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>}
+export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>}
-const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty()))}
+type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number}
+const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
- return {
-  async create(input:Parameters<typeof createMarketplacePlan>[0],key:string){
+ async function create(input:Parameters<typeof createMarketplacePlan>[0],key:string,bindWallets:boolean){
    if(!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/.test(key))throw Error('Invalid idempotency key.')
-   const plan=createMarketplacePlan(input),hash=createHash('sha256').update(JSON.stringify(plan)).digest('hex')
+   const plan=createMarketplacePlan(input),hash=createHash('sha256').update(JSON.stringify(bindWallets?{plan,bindWallets}:plan)).digest('hex')
    const store=await d.mutate(s=>{
     const replay=s.drafts.find(x=>x.projectId===plan.projectId&&x.key===key)
     if(replay){if(replay.hash!==hash)throw Error('Idempotency key was used for a different draft.');return s}
     if(s.books.some(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId))throw Error('Payment reference already exists.')
-    s.books.push(createMarketplaceBook(plan));s.drafts.push({projectId:plan.projectId,key,paymentId:plan.paymentId,hash});return s
+    const book=createMarketplaceBook(plan)
+    if(bindWallets){
+     book.beneficiarySnapshots=plan.allocations.map(a=>{
+      if(a.settlement==='cash_balance')throw Error('Verified bank beneficiary binding is not implemented.')
+      const beneficiary=s.walletBeneficiaries?.find(b=>b.projectId===plan.projectId&&b.beneficiaryId===a.beneficiaryId)
+      if(!beneficiary||beneficiary.status!=='active'||beneficiary.sellerId!==a.sellerId||beneficiary.asset!==plan.asset||beneficiary.network!==plan.network)throw Error('Allocation requires an active, matching verified wallet beneficiary.')
+      return structuredClone(beneficiary)
+     })
+    }
+    s.books.push(book);s.drafts.push({projectId:plan.projectId,key,paymentId:plan.paymentId,hash});return s
    })
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
+  }
+ return {
+  // Legacy unbound creation remains internal fixture infrastructure, not activation-ready.
+  create:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,false),
+  createWithVerifiedWallets:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,true),
+  /** Trusted caller must establish project/seller authority before requesting a challenge. */
+  async beginWalletVerification(input:WalletBeneficiaryRequest){
+   const challenge=walletChallenge(input,d.now())
+   await d.mutate(s=>{
+    if(s.walletBeneficiaries?.some(b=>b.projectId===challenge.projectId&&b.beneficiaryId===challenge.beneficiaryId))throw Error('Beneficiary version already exists; use a new reference.')
+    s.walletChallenges=(s.walletChallenges||[]).filter(c=>c.expiresAt>d.now()&&!(c.projectId===challenge.projectId&&c.beneficiaryId===challenge.beneficiaryId))
+    s.walletChallenges.push(challenge);return s
+   })
+   return {nonce:challenge.nonce,message:walletChallengeMessage(challenge),expiresAt:challenge.expiresAt}
+  },
+  async verifyWallet(projectId:string,beneficiaryId:string,nonce:string,signature:string){
+   marketplaceReference(projectId);marketplaceReference(beneficiaryId)
+   const challenge=(await d.read())?.walletChallenges?.find(c=>c.projectId===projectId&&c.beneficiaryId===beneficiaryId&&c.nonce===nonce)
+   if(!challenge)throw Error('Wallet verification challenge not found.')
+   await verifyWalletChallenge(challenge,signature,d.now())
+   const store=await d.mutate(s=>{
+    if(!s.walletChallenges?.some(c=>c.projectId===projectId&&c.beneficiaryId===beneficiaryId&&c.nonce===nonce))throw Error('Wallet verification challenge was replaced or consumed.')
+    const now=d.now()
+    if(now<challenge.issuedAt||now>=challenge.expiresAt)throw Error('Wallet verification challenge expired.')
+    if(s.walletBeneficiaries?.some(b=>b.projectId===projectId&&b.beneficiaryId===beneficiaryId))throw Error('Beneficiary version already exists.')
+    const {nonce:_nonce,issuedAt:_issued,expiresAt:_expires,...binding}=challenge
+    s.walletBeneficiaries=[...(s.walletBeneficiaries||[]),{...binding,kind:'wallet',verifiedAt:now,status:'active'}]
+    s.walletChallenges=s.walletChallenges.filter(c=>!(c.projectId===projectId&&c.beneficiaryId===beneficiaryId));return s
+   })
+   return structuredClone(store.walletBeneficiaries!.find(b=>b.projectId===projectId&&b.beneficiaryId===beneficiaryId)!)
+  },
+  async revokeWallet(projectId:string,beneficiaryId:string){
+   marketplaceReference(projectId);marketplaceReference(beneficiaryId)
+   await d.mutate(s=>{
+    const beneficiary=s.walletBeneficiaries?.find(b=>b.projectId===projectId&&b.beneficiaryId===beneficiaryId)
+    if(!beneficiary)throw Error('Beneficiary not found.')
+    beneficiary.status='revoked';return s
+   })
   },
   async execute(projectId:string,paymentId:string,key:string,command:MarketplaceCommand){
+   command=structuredClone(command)
    const store=await d.mutate(s=>{
     const index=s.books.findIndex(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
     if(index<0)throw Error('Marketplace payment not found.')
+    const book=s.books[index]
+    if(command.type==='reserve'&&command.kind==='payout'&&book.beneficiarySnapshots&&!book.journal.some(entry=>entry.key===key)){
+     const allocation=book.plan.allocations.find(a=>a.id===command.allocationId)
+     const snapshot=book.beneficiarySnapshots.find(b=>b.beneficiaryId===allocation?.beneficiaryId)
+     const current=s.walletBeneficiaries?.find(b=>b.projectId===projectId&&b.beneficiaryId===allocation?.beneficiaryId)
+     if(!snapshot||!current||current.status!=='active'||snapshot.address!==current.address||snapshot.sellerId!==current.sellerId||snapshot.asset!==current.asset)throw Error('Payout beneficiary is no longer eligible.')
+    }
     // Proof references must be canonical chain/log or provider settlement identities.
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')
     if(command.type==='result'&&command.status!=='unknown'&&s.books.some((b,i)=>i!==index&&b.operations.some(o=>o.evidenceId===command.evidenceId)))throw Error('Execution evidence was already used.')
