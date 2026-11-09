@@ -1,9 +1,9 @@
+import { useCheckoutExpiry, CheckoutExpired } from '../components/CheckoutExpiry'
 import useCheckoutActivityRefresh from '../pocket/hooks/useCheckoutActivityRefresh'
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {checkoutFeeReviewChanged} from '../lib/checkoutFeeReview'
 import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
 import useCheckoutReceipt from '../lib/useCheckoutReceipt'
-import {CheckoutExpired} from '../components/CheckoutExpiry'
 import { paymentFundingMinimum } from '../lib/paymentFundingMinimum'
 import {checkoutStablecoin} from '../lib/checkoutStablecoins'
 import PocketMerchantPaymentForm from '../pocket/components/PocketMerchantPaymentForm'
@@ -589,6 +589,21 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const isHostedService = isHostedCheckout && (getPaylinkParam(initParams, 'src', 'src') === 'service' || hostedKind === 'service')
   const [hostedIntentStatus, setHostedIntentStatus] = useState<'idle' | 'checking' | 'verified' | 'error'>(() => isHostedCheckout ? 'checking' : 'idle')
   const [hostedIntentError, setHostedIntentError] = useState('')
+  const [hostedExpiresAt, setHostedExpiresAt] = useState<string>()
+  const hostedSecondsLeft = useCheckoutExpiry(hostedExpiresAt)
+  const hostedSigningStarted = useRef(false)
+  const checkoutApprovalAbort = useRef(new AbortController())
+  useEffect(() => { checkoutApprovalAbort.current = new AbortController(); return () => checkoutApprovalAbort.current.abort() }, [])
+  async function approveCurrentCheckout() {
+    const expiresAt = isHostedCheckout ? Date.parse(hostedExpiresAt || '') : undefined
+    if (isHostedCheckout && (!Number.isFinite(expiresAt) || expiresAt! <= Date.now())) {
+      setHostedIntentStatus('error'); setHostedIntentError('Checkout expired. Start a new checkout.')
+      throw Error('Checkout expired. Start a new checkout.')
+    }
+    await requestPocketPaymentApproval({ expiresAt, signal: checkoutApprovalAbort.current.signal })
+    if (isHostedCheckout && expiresAt! <= Date.now()) throw Error('Checkout expired. Start a new checkout.')
+    hostedSigningStarted.current = true
+  }
   const [hostedConfirmationStatus, setHostedConfirmationStatus] = useState<'idle' | 'checking' | 'processing' | 'verified' | 'error'>('idle')
   const canonicalCheckoutReceipt=useCheckoutReceipt(hostedCheckoutId,hostedConfirmationStatus==='verified')
   const [hostedConfirmationError, setHostedConfirmationError] = useState('')
@@ -598,7 +613,6 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [hostedMerchantPaidFees,setMerchantPaidFees]=useState(false)
   const [hostedCash,setHostedCash]=useState(false)
   const [hostedPricing,setHostedPricing]=useState<CheckoutPricing>()
-  const [hostedExpiresAt,setHostedExpiresAt]=useState<string|undefined>()
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
   const hostedMerchantLogo = getPaylinkParam(initParams, 'merchantLogo', 'merchantLogo').slice(0, 400)
@@ -2494,7 +2508,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
       if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw new Error(buildData.error ?? 'Failed to build transaction') }
 
-      if(pocketScan||(isHostedCheckout&&privyAuthenticated))await requestPocketPaymentApproval()
+      if(pocketScan||(isHostedCheckout&&privyAuthenticated))await approveCurrentCheckout()
       const signedB64 = await signCircleSolanaTransaction({
         session,
         rawTransaction: buildData.tx,
@@ -3082,7 +3096,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         if (usePrivyCircleCheckout && !privyAccessToken) {
           throw new Error('Your secure checkout session expired. Sign in again before paying.')
         }
-        if(pocketScan||(isHostedCheckout&&privyAuthenticated))await requestPocketPaymentApproval()
+        if(pocketScan||(isHostedCheckout&&privyAuthenticated))await approveCurrentCheckout()
         if (isHostedCheckout && privyAuthenticated && (!paymentOwner || checkoutIdentityRef.current !== paymentOwner)) throw Error('Your account changed. Sign in again before paying.')
         if (pocketScan && preparedPaycrestOrder) assertPocketScanPayoutPayable(preparedPaycrestOrder)
         const txHash = await sendCircleEvmEmailPayment({
@@ -4045,6 +4059,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   // ────────────────────────────────────────────────────────────────────────────
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
+  if (isHostedCheckout && hostedSecondsLeft === 0 && !hostedSigningStarted.current && !txHash && !isConfirmed && hostedConfirmationStatus !== 'processing' && !circleEvmAcceptedPending) {
+    return <CheckoutExpired returnUrl={hostedReturnUrl} merchant={hostedMerchantName || memo || 'Merchant'} brandImageUrl={hostedMerchantLogo}/>
+  }
+
   if (pocketScan && (pocketScanDelivered || pocketSlowConfirmation || isSendError)) {
     const delivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
     const state = delivered ? 'successful' : isEvmReverted || isBasePaymasterFailed || (isSendError && !txHash) ? 'failed' : 'pending'

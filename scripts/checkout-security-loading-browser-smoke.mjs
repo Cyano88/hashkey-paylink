@@ -10,7 +10,7 @@ const mocks={
  PocketXPay:`export default()=> <h1>Review payment</h1>`,
  pocketRoutes:`export const pocketApiUrl=p=>p,POCKET_BASE_PATH='',POCKET_ROUTES={root:'/'},isPocketNativeRuntime=()=>false`,
  pocketPaymentSecurityClient:`export const checkPocketPaymentPinReset=async()=>({eligible:window.resetEligible===true,error:'Verify email again'});export const readPocketPaymentSecurity=()=>new Promise(resolve=>window.resolveSecurity=resolve);export const verifyPocketPaymentPin=async()=>{window.verifications++;throw Error('Incorrect PIN')};export const updatePocketPaymentSecurity=async()=>{if(window.resetEligible)throw Object.assign(Error('Reset expired'),{code:'PIN_RESET_REAUTH_REQUIRED'});throw Error('Unexpected setup')},beginPocketPaymentPinReset=async()=>({resetToken:'fixture-reset-token',expiresAt:Date.now()+900000})`,
- pocketPaymentApproval:`export const POCKET_PAYMENT_APPROVAL_EVENT='test:approval',POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT='test:cancelled',setPocketPaymentApproval=()=>{window.authorizations++}`,
+ pocketPaymentApproval:`export const POCKET_PAYMENT_APPROVAL_DISMISSED_EVENT='test:dismissed',POCKET_PAYMENT_APPROVAL_EVENT='test:approval',POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT='test:cancelled',setPocketPaymentApproval=()=>{window.authorizations++}`,
  pocketPaymentBiometrics:`export const pocketPaymentBiometricsAvailable=async()=>false,pocketPaymentBiometricsConfigured=()=>false,pocketPaymentBiometricsEnabled=()=>false,disablePocketPaymentBiometrics=async()=>{},enablePocketPaymentBiometrics=async()=>{},readPocketPinWithBiometrics=async()=>null`,
  usePocketSessionSplash:`export const resetPocketSessionSplash=()=>{}`,
  pocketPushPreference:`export const unregisterPocketPushDevice=async()=>{}`,

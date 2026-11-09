@@ -11,13 +11,13 @@ import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Lock, Loader2 } from './PocketIcons'
 import { readPocketPaymentSecurity, updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pocketPaymentSecurityClient'
-import { POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, POCKET_PAYMENT_APPROVAL_EVENT, setPocketPaymentApproval } from '../lib/pocketPaymentApproval'
+import { POCKET_PAYMENT_APPROVAL_DISMISSED_EVENT, POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, POCKET_PAYMENT_APPROVAL_EVENT, setPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsConfigured, pocketPaymentBiometricsEnabled, readPocketPinWithBiometrics } from '../lib/pocketPaymentBiometrics'
 import PocketBottomSheet from './PocketBottomSheet'
 
 export const POCKET_PIN_RESET_KEY = 'pocket:payment-pin:reset-after-login:v1'
 const PAYMENT_SECURITY_CONFIGURED_PREFIX = 'pocket:payment-security:configured:v1:'
-type PendingApproval = { resolve(): void; reject(reason?: unknown): void }
+type PendingApproval = { isActive?(): boolean; resolve(): void; reject(reason?: unknown): void }
 
 function PocketSecuritySurface({ children }: { children: ReactNode; scroll?: boolean }) {
   return <PocketBottomSheet title="Pocket security" onClose={() => {}} dismissible={false} layer={90}><div className="flex justify-center">{children}</div></PocketBottomSheet>
@@ -131,12 +131,13 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
       setApprovalPin('')
       setApprovalOpen(false)
       setError('')
-      const fallback = () => setApprovalOpen(true)
+      const fallback = () => { if (pending.current === detail && detail.isActive?.() !== false) setApprovalOpen(true) }
       if (!pocketPaymentBiometricsEnabled()) return fallback()
       setBusy(true)
       void readPocketPinWithBiometrics(email)
         .then(value => value ? verifyPocketPaymentPin(getAccessToken, value) : Promise.reject(new Error('Use your Pocket PIN.')))
         .then(result => {
+          if (pending.current !== detail || detail.isActive?.() === false) return
           setPocketPaymentApproval(result.approvalToken, result.expiresAt, result.authorization)
           pending.current?.resolve()
           pending.current = null
@@ -145,8 +146,17 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
         .catch(fallback)
         .finally(() => setBusy(false))
     }
+    const dismiss = (event: Event) => {
+      if (pending.current !== (event as CustomEvent<PendingApproval>).detail) return
+      pending.current = null; setApprovalPin(''); setApprovalOpen(false); setBusy(false); setError('')
+    }
     window.addEventListener(POCKET_PAYMENT_APPROVAL_EVENT, request)
-    return () => window.removeEventListener(POCKET_PAYMENT_APPROVAL_EVENT, request)
+    window.addEventListener(POCKET_PAYMENT_APPROVAL_DISMISSED_EVENT, dismiss)
+    return () => {
+      window.removeEventListener(POCKET_PAYMENT_APPROVAL_EVENT, request)
+      window.removeEventListener(POCKET_PAYMENT_APPROVAL_DISMISSED_EVENT, dismiss)
+      pending.current?.reject(new Error('Payment approval was cancelled.')); pending.current = null
+    }
   }, [email, getAccessToken])
 
   useEffect(()=>{const changed=()=>setLoadAttempt(value=>value+1);window.addEventListener('pocket:pin-changed',changed);return ()=>window.removeEventListener('pocket:pin-changed',changed)},[])
@@ -169,14 +179,17 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
   }
 
   const approveWithPin = async () => {
+    const approval = pending.current
+    if (!approval || approval.isActive?.() === false) return
     const value = approvalPin.trim()
     if (!/^(?:\d{4}|\d{6})$/.test(value)) return setError('Enter your Pocket PIN.')
     setBusy(true); setError('')
     try {
       const result = await verifyPocketPaymentPin(getAccessToken, value)
+      if (pending.current !== approval || approval.isActive?.() === false) return
       setPocketPaymentApproval(result.approvalToken, result.expiresAt, result.authorization)
       pending.current?.resolve(); pending.current = null; setApprovalPin(''); setApprovalOpen(false)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Payment approval failed.') }
+    } catch (reason) { if (pending.current === approval && approval.isActive?.() !== false) setError(reason instanceof Error ? reason.message : 'Payment approval failed.') }
     finally { setBusy(false) }
   }
 
@@ -202,14 +215,16 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
 
   const retryBiometric = async () => {
     if (busy || !pending.current) return
+    const approval = pending.current
     setApprovalOpen(false); setBusy(true); setError('')
     try {
       const value = await readPocketPinWithBiometrics(email)
       if (!value) throw new Error('Use your Pocket PIN.')
       const result = await verifyPocketPaymentPin(getAccessToken, value)
+      if (pending.current !== approval || approval.isActive?.() === false) return
       setPocketPaymentApproval(result.approvalToken, result.expiresAt, result.authorization)
       pending.current?.resolve(); pending.current = null; setApprovalPin('')
-    } catch { setApprovalOpen(true) }
+    } catch { if (pending.current === approval && approval.isActive?.() !== false) setApprovalOpen(true) }
     finally { setBusy(false) }
   }
   const forgotPin = async () => {
