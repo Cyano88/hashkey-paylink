@@ -634,6 +634,15 @@ export async function readPaycrestSupportStatus(providerOrderId:string) {
   return {status,checkedAt:Date.now()}
 }
 
+/** Fresh authenticated provider read for strict adapters. No cached fallback,
+ * order creation, ledger mutation or existing checkout lifecycle update. */
+export async function readPaycrestOrderSnapshot(providerOrderId:string):Promise<unknown> {
+  if(!/^[a-zA-Z0-9_-]{6,120}$/.test(providerOrderId))throw new Error('Invalid payout reference.')
+  const data=await paycrestFetch<any>('/v2/sender/orders/'+encodeURIComponent(providerOrderId),{method:'GET',signal:AbortSignal.timeout(8000)})
+  if(data?.id!==providerOrderId)throw new Error('Payout reference did not match.')
+  return data
+}
+
 export async function refreshPaycrestOrderStatus(id: string) {
   const record = await getPaycrestPosOrder(id)
   if (!record) return null
