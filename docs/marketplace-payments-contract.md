@@ -67,4 +67,17 @@ The internal repository now supports five-minute, single-use EOA wallet-control 
 
 These methods are trusted internal repository methods, not developer endpoints. The caller must establish project/seller authority; a wallet-control signature does not establish legal identity or marketplace seller ownership. Production registration authorization remains unwired. The original unbound `create` method remains foundation/fixture infrastructure and must not be used as a production bypass.
 
-Bank beneficiary binding intentionally fails closed. No account-name lookup is represented as seller ownership verification, and no USDT-to-bank route is introduced.
+The wallet-only creation method rejects bank allocations. The general verified-beneficiary method now supports banks only when the separate ownership verifier is configured. No account-name lookup is represented as seller ownership verification, and no USDT-to-bank route is introduced.
+
+
+## Bank beneficiary and payout preparation checkpoint
+
+`createMarketplaceBankVerifier` reuses the Paycrest account-name lookup but requires a separate trusted seller-ownership verifier. It has no default ownership implementation. That verifier must bind the project, seller, resolved institution and full account number; it cannot trust identity claims submitted by the marketplace request body. Production identity verification and registration authorization remain unwired.
+
+Bank details (including holder name) use AES-256-GCM with a dedicated 32-byte key, key version and authenticated project/seller/beneficiary context. Stored records contain encrypted details, a keyed destination digest and last four digits. Registration responses exclude ciphertext and ownership evidence. Key provisioning and rotation still need operational integration; no runtime secrets are created by this implementation.
+
+`createWithVerifiedBeneficiaries` snapshots active matching wallet or bank versions in one transaction. Bank versions cannot replace wallet versions or pending wallet challenges with the same project/reference. Revocation blocks new bound payout reservations. Existing historical snapshots remain unchanged.
+
+`prepareMarketplaceBankPayout` is an internal, read-only preparation step: released Base USDC only, NGN precision of at most two decimals, explicit total debit and maximum fee budget, matching destination and holding refund address. It returns sensitive ephemeral provider-request material and must never be returned from a developer endpoint or written to a journal. The holding refund address must come from the eventual trusted custody configuration, not caller input. Preparation does not validate that custody configuration itself.
+
+No provider order is created and no funds are reserved here. A live adapter must still bind the actual returned quote, fees, expiry, funding address, destination and provider order ID to an atomic reservation, recheck eligibility before signing, and reconcile unknown outcomes. The existing Pocket merchant source/fee policy must not be silently reused as marketplace disbursement authorization. USDT remains wallet-only.

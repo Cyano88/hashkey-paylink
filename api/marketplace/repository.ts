@@ -1,17 +1,18 @@
 import {createHash} from 'node:crypto'
+import type {BankBeneficiary,BankRequest} from './bank-beneficiaries.js'
 import {marketplaceReference, walletChallenge, walletChallengeMessage, verifyWalletChallenge, type WalletChallenge, type WalletBeneficiary, type WalletBeneficiaryRequest} from './beneficiaries.js'
 import {mutateDurableJson,readDurableJson} from '../render-durable-store.js'
 import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,marketplaceSellerBalances,type MarketplaceBook,type MarketplaceCommand} from './accounting.js'
 
 // No server route imports this foundation. Live funding/signing is deliberately absent.
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
-export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[]}
+export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number}
+type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
- async function create(input:Parameters<typeof createMarketplacePlan>[0],key:string,bindWallets:boolean){
+ async function create(input:Parameters<typeof createMarketplacePlan>[0],key:string,bindWallets:boolean|'all'){
    if(!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/.test(key))throw Error('Invalid idempotency key.')
    const plan=createMarketplacePlan(input),hash=createHash('sha256').update(JSON.stringify(bindWallets?{plan,bindWallets}:plan)).digest('hex')
    const store=await d.mutate(s=>{
@@ -21,8 +22,9 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     const book=createMarketplaceBook(plan)
     if(bindWallets){
      book.beneficiarySnapshots=plan.allocations.map(a=>{
-      if(a.settlement==='cash_balance')throw Error('Verified bank beneficiary binding is not implemented.')
-      const beneficiary=s.walletBeneficiaries?.find(b=>b.projectId===plan.projectId&&b.beneficiaryId===a.beneficiaryId)
+      if(a.settlement==='cash_balance'&&bindWallets!=='all')throw Error('Verified bank beneficiary binding requires createWithVerifiedBeneficiaries.')
+      const directory=a.settlement==='cash_balance'?s.bankBeneficiaries:s.walletBeneficiaries
+      const beneficiary=directory?.find(b=>b.projectId===plan.projectId&&b.beneficiaryId===a.beneficiaryId)
       if(!beneficiary||beneficiary.status!=='active'||beneficiary.sellerId!==a.sellerId||beneficiary.asset!==plan.asset||beneficiary.network!==plan.network)throw Error('Allocation requires an active, matching verified wallet beneficiary.')
       return structuredClone(beneficiary)
      })
@@ -35,11 +37,26 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
   // Legacy unbound creation remains internal fixture infrastructure, not activation-ready.
   create:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,false),
   createWithVerifiedWallets:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,true),
+  createWithVerifiedBeneficiaries:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,'all'),
+  async registerBank(input:BankRequest){
+   if(!d.verifyBank)throw Error('Seller bank verification is not configured.')
+   const request=structuredClone(input),record=await d.verifyBank(request)
+   if(record.projectId!==request.projectId||record.sellerId!==request.sellerId||record.beneficiaryId!==request.beneficiaryId||record.kind!=='bank'||record.asset!=='USDC'||record.network!=='base'||record.currency!=='NGN'||record.status!=='active')throw Error('Bank verification binding mismatch.')
+   await d.mutate(s=>{
+    if([...(s.bankBeneficiaries||[]),...(s.walletBeneficiaries||[])].some(b=>b.projectId===record.projectId&&b.beneficiaryId===record.beneficiaryId)||s.walletChallenges?.some(c=>c.projectId===record.projectId&&c.beneficiaryId===record.beneficiaryId))throw Error('Beneficiary version already exists; use a new reference.')
+    s.bankBeneficiaries=[...(s.bankBeneficiaries||[]),structuredClone(record)];return s
+   })
+   return {beneficiaryId:record.beneficiaryId,sellerId:record.sellerId,kind:record.kind,currency:record.currency,last4:record.last4,status:record.status}
+  },
+  async revokeBank(projectId:string,beneficiaryId:string){
+   marketplaceReference(projectId);marketplaceReference(beneficiaryId)
+   await d.mutate(s=>{const record=s.bankBeneficiaries?.find(b=>b.projectId===projectId&&b.beneficiaryId===beneficiaryId);if(!record)throw Error('Beneficiary not found.');record.status='revoked';return s})
+  },
   /** Trusted caller must establish project/seller authority before requesting a challenge. */
   async beginWalletVerification(input:WalletBeneficiaryRequest){
    const challenge=walletChallenge(input,d.now())
    await d.mutate(s=>{
-    if(s.walletBeneficiaries?.some(b=>b.projectId===challenge.projectId&&b.beneficiaryId===challenge.beneficiaryId))throw Error('Beneficiary version already exists; use a new reference.')
+    if([...(s.walletBeneficiaries||[]),...(s.bankBeneficiaries||[])].some(b=>b.projectId===challenge.projectId&&b.beneficiaryId===challenge.beneficiaryId))throw Error('Beneficiary version already exists; use a new reference.')
     s.walletChallenges=(s.walletChallenges||[]).filter(c=>c.expiresAt>d.now()&&!(c.projectId===challenge.projectId&&c.beneficiaryId===challenge.beneficiaryId))
     s.walletChallenges.push(challenge);return s
    })
@@ -78,8 +95,9 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     if(command.type==='reserve'&&command.kind==='payout'&&book.beneficiarySnapshots&&!book.journal.some(entry=>entry.key===key)){
      const allocation=book.plan.allocations.find(a=>a.id===command.allocationId)
      const snapshot=book.beneficiarySnapshots.find(b=>b.beneficiaryId===allocation?.beneficiaryId)
-     const current=s.walletBeneficiaries?.find(b=>b.projectId===projectId&&b.beneficiaryId===allocation?.beneficiaryId)
-     if(!snapshot||!current||current.status!=='active'||snapshot.address!==current.address||snapshot.sellerId!==current.sellerId||snapshot.asset!==current.asset)throw Error('Payout beneficiary is no longer eligible.')
+     const current=[...(s.walletBeneficiaries||[]),...(s.bankBeneficiaries||[])].find(b=>b.projectId===projectId&&b.beneficiaryId===allocation?.beneficiaryId)
+     const sameDestination=snapshot?.kind==='wallet'&&current?.kind==='wallet'?snapshot.address===current.address:snapshot?.kind==='bank'&&current?.kind==='bank'?snapshot.destinationDigest===current.destinationDigest:false
+     if(!snapshot||!current||current.status!=='active'||!sameDestination||snapshot.sellerId!==current.sellerId||snapshot.asset!==current.asset)throw Error('Payout beneficiary is no longer eligible.')
     }
     // Proof references must be canonical chain/log or provider settlement identities.
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')
