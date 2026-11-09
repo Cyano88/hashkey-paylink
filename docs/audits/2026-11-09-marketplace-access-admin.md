@@ -95,3 +95,12 @@ An internal execution-authority resolver rechecks the persisted reservation's pr
 Read-only production check: Multivendor (dev_a48cb83ccc2848a68a) has approved whitelist status, individual account type, no qualifying individual KYC, only hosted_checkout selected, and no rollout inclusion. Collection and instruction flags remain false. No live eligibility, credentials, funding or account type were changed.
 
 Local checks: selectable Marketplace browser regression, product policy, Marketplace principal/worker authority, runtime readiness and focused TypeScript. These are fixture checks, not a funded pilot. Changes in this section have not been deployed. Live testing is blocked by owner verification, remaining execution integration, verified gas coverage and end-to-end settlement evidence.
+
+
+## Registration and individual eligibility release verified
+
+Deployed commit 3ba6510839366c53231669fafd02e787bde07dbe through Render deployment dep-dbp1cchsrm7s73aql290; Render reported live. The source production build passed. The served developer portal bundles contain the new selectable Marketplace registration copy and individual eligibility documentation. The developer portal and main /api/health both returned HTTP 200. The asset verification follows dynamically imported DeveloperApp, DeveloperPortalPage and DocsApp chunks; it does not claim an authenticated live creation test.
+
+A fixture API check also created an individual Marketplace-only app successfully and confirmed that enabledCapabilities remained empty. Existing browser selection, authorization, refund-execution, runtime and focused TypeScript checks passed before release.
+
+After deployment, the Multivendor whitelist remained approved, its account remained individual, its configured capability remained hosted_checkout, and production KYC was still none. It was not added to rollout, and collection/instruction flags remained false. Developer action: complete Personal verification (Basic), then select Marketplace in app settings and save. No funds were moved. Remaining financial activation blockers are unchanged.
