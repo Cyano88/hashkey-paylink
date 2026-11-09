@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto'
 import {createMarketplaceBankExecution} from './bank-execution.js'
+import {createMarketplaceBankReconciliation} from './bank-reconciliation.js'
 import {validateMarketplaceBankQuote,type MarketplaceBankQuote,type BankQuoteAuthorization} from './bank-quotes.js'
 import type {BankBeneficiary,BankRequest} from './bank-beneficiaries.js'
 import {marketplaceReference, walletChallenge, walletChallengeMessage, verifyWalletChallenge, type WalletChallenge, type WalletBeneficiary, type WalletBeneficiaryRequest} from './beneficiaries.js'
@@ -10,7 +11,7 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
 export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution']}
+type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome']}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
@@ -37,6 +38,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
   }
  return {
   bankExecution:createMarketplaceBankExecution(d),
+  bankReconciliation:createMarketplaceBankReconciliation(d),
   // Legacy unbound creation remains internal fixture infrastructure, not activation-ready.
   create:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,false),
   createWithVerifiedWallets:(input:Parameters<typeof createMarketplacePlan>[0],key:string)=>create(input,key,true),
@@ -142,6 +144,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
      if(!snapshot||!current||current.status!=='active'||!sameDestination||snapshot.sellerId!==current.sellerId||snapshot.asset!==current.asset)throw Error('Payout beneficiary is no longer eligible.')
      if(snapshot.kind==='bank')throw Error('Bank payouts require an accepted quote through reserveBankPayout.')
     }
+    if(command.type==='result'&&command.status!=='unknown'&&book.bankReservations?.some(r=>r.quote.operationId===command.operationId))throw Error('Bank payouts require verified outcome reconciliation.')
     // Proof references must be canonical chain/log or provider settlement identities.
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')
     if(command.type==='result'&&command.status!=='unknown'&&s.books.some((b,i)=>i!==index&&b.operations.some(o=>o.evidenceId===command.evidenceId)))throw Error('Execution evidence was already used.')

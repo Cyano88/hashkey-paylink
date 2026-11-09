@@ -4,7 +4,7 @@ import {validateMarketplaceBankQuote,type MarketplaceBankQuote} from './bank-quo
 import {applyMarketplaceCommand,type MarketplaceBook} from './accounting.js'
 import type {MarketplaceStore} from './repository.js'
 
-export type BankExecution={operationId:string;attemptId:string;workerId:string;claimToken:string;claimedAt:number;leaseUntil:number;state:'claimed'|'expired'|'submitting'|'submitted'|'unknown';submissionStartedAt?:number;transactionHash?:string}
+export type BankExecution={operationId:string;attemptId:string;workerId:string;claimToken:string;claimedAt:number;leaseUntil:number;state:'claimed'|'expired'|'submitting'|'submitted'|'unknown'|'settled'|'failed';submissionStartedAt?:number;transactionHash?:string}
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;
  preflightBankExecution?:(quote:MarketplaceBankQuote)=>Promise<{quote:MarketplaceBankQuote;holdingApproved:boolean;authorizationActive:boolean}>}
 function locate(store:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
