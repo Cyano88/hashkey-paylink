@@ -1,7 +1,7 @@
 import {marketplaceAmountUnits} from '../../src/lib/marketplacePayments.js'
 import type {createMarketplaceRepository} from './repository.js'
 
-export type MarketplaceScope = 'marketplace:read' | 'marketplace:release' | 'marketplace:payout'
+export type MarketplaceScope = 'marketplace:read' | 'marketplace:release' | 'marketplace:payout' | 'marketplace:refund'
 export type MarketplacePrincipal = {
   projectId: string
   credentialId: string
@@ -9,7 +9,7 @@ export type MarketplacePrincipal = {
   capabilities: string[]
   scopes: string[]
 }
-type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts'>
+type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts' | 'refunds'>
 type Dependencies = {
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
@@ -29,7 +29,7 @@ function fields(value: unknown, keys: string[]): Record<string, unknown> {
   return record
 }
 
-/** Unmounted application boundary. No generic command, funding, result or refund endpoint. */
+/** Unmounted application boundary. No generic command, funding or result endpoint. */
 export function createMarketplaceInstructions(dependencies: Dependencies) {
   const {repository, resolvePrincipal, enabled = false} = dependencies
   async function authorize(credential: string, scope: MarketplaceScope) {
@@ -40,6 +40,16 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
     return {projectId:reference(resolved.projectId), credentialId:reference(resolved.credentialId)}
   }
   return {
+    async reserveRefund(credential: string, key: string, body: unknown) {
+      const input=fields(structuredClone(body),['paymentId','refundId','allocations','businessReference'])
+      const paymentId=reference(input.paymentId),refundId=reference(input.refundId),businessReference=reference(input.businessReference)
+      reference(key)
+      if(!Array.isArray(input.allocations)||input.allocations.length<1||input.allocations.length>100)throw Error('Provide between 1 and 100 refund allocations.')
+      const allocations=input.allocations.map(value=>{const row=fields(value,['allocationId','amount']);return {allocationId:reference(row.allocationId),amount:row.amount as string}})
+      const principal=await authorize(credential,'marketplace:refund')
+      const result=await repository.refunds.reserve(principal.projectId,paymentId,key,{refundId,allocations},{credentialId:principal.credentialId,businessReference})
+      return {paymentId,refundId,asset:result.reservation.collection.asset,network:'base',amountUnits:result.reservation.amountUnits,allocations:result.operations.map(operation=>({allocationId:operation.allocationId,operationId:operation.id,amountUnits:operation.units,status:operation.status}))}
+    },
     async reserveWalletPayout(credential: string, key: string, body: unknown) {
       const input = fields(structuredClone(body),['paymentId','operationId','allocationId','amount','businessReference'])
       const paymentId=reference(input.paymentId), operationId=reference(input.operationId), allocationId=reference(input.allocationId), businessReference=reference(input.businessReference)

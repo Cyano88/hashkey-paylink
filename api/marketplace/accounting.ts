@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import type {RefundCollection,RefundReservation} from './refunds.js'
 import type {WalletBeneficiary} from './beneficiaries.js'
 import type {BankBeneficiary} from './bank-beneficiaries.js'
 import type {BankQuoteReservation} from './bank-quotes.js'
@@ -18,7 +19,7 @@ export type MarketplacePlan = {
 }
 type Balance = {allocationId: string; pending: string; available: string; reserved: string; paid: string; refunded: string}
 type Operation = {id: string; allocationId: string; kind: 'payout'|'refund'; units: string; fromPending: string; fromAvailable: string; status: 'reserved'|'unknown'|'settled'|'failed'; evidenceId?: string}
-export type MarketplaceBook = {plan: MarketplacePlan; walletReconciliations?:WalletReconciliation[]; walletEvents?:MarketplaceWalletEvent[]; walletExecutions?:WalletExecution[]; walletReservations?:WalletPayoutReservation[]; bankReconciliations?:BankReconciliation[]; bankEvents?:MarketplaceBankEvent[]; bankExecutions?: BankExecution[]; bankReservations?: BankQuoteReservation[]; beneficiarySnapshots?: Array<WalletBeneficiary|BankBeneficiary>; fundingEvidence?: string; balances: Balance[]; operations: Operation[]; journal: Array<{key: string; hash: string; command: MarketplaceCommand}>}
+export type MarketplaceBook = {plan: MarketplacePlan; refundCollection?:RefundCollection; refundReservations?:RefundReservation[]; walletReconciliations?:WalletReconciliation[]; walletEvents?:MarketplaceWalletEvent[]; walletExecutions?:WalletExecution[]; walletReservations?:WalletPayoutReservation[]; bankReconciliations?:BankReconciliation[]; bankEvents?:MarketplaceBankEvent[]; bankExecutions?: BankExecution[]; bankReservations?: BankQuoteReservation[]; beneficiarySnapshots?: Array<WalletBeneficiary|BankBeneficiary>; fundingEvidence?: string; balances: Balance[]; operations: Operation[]; journal: Array<{key: string; hash: string; command: MarketplaceCommand}>}
 export type MarketplaceCommand =
   | {type: 'fund'; evidenceId: string; network: 'base'; asset: MarketplaceAsset; amountUnits: string}
   | {type: 'release'; allocationId: string; amountUnits: string}

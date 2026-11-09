@@ -159,3 +159,15 @@ Evidence identity is derived from Base chain ID, normalized transaction hash and
 Wallet events use the settlement token as currency and include Base network plus recipientAmountUnits. They do not contain an NGN amount. The existing leased webhook delivery engine now processes both bank and wallet event queues while keeping their payload fields distinct.
 
 A reverted wallet transaction restores the reserved token amount to available, consistent with execution requiring fees/gas to be covered outside that allocation. Actual RPC/finality verification, custody integration and signing are still unwired; no live payout or public reconciliation endpoint is enabled.
+
+## Buyer refund reservation checkpoint
+
+The unmounted instruction service adds `marketplace:refund`, separate from payout permission. Requests contain payment/refund references, explicit allocation amounts and a business reference. They cannot select project, asset, destination or result. The response exposes amounts and child-operation statuses, not payer/holding evidence.
+
+`refunds.reserve` requires a trusted original-collection resolver, absent by default. It must bind the original verified payer wallet/session to the payment's exact funding proof, Base token/amount and holding identity. It must not derive a refund target blindly from transaction.from (which may be a relayer/provider), a seller beneficiary, a return URL or caller-supplied bank/wallet data. This first path accepts wallet-origin Base USDC/USDT only; fiat-funded and exchange-mediated purchases require separate original-route refund adapters.
+
+All selected allocations reserve atomically. Each child refund consumes unspent pending funds first, then available funds, and retains that provenance. Commission is included only when its allocation is explicitly requested. Paid or already reserved funds are unavailable; there is no implicit seller clawback. If any allocation fails, no child reservation or original-payer binding is persisted.
+
+The first successful reservation pins the original refund collection/destination. Later partial refunds must match it. Retries with the same normalized allocations and business authorization retrieve the original reservation without resolving a replacement destination; changed requests under the same key fail. Competing refunds cannot overspend available funds.
+
+This stage only reserves funds. It does not build or submit a buyer refund, mark it refunded, or emit a refund-completed event. Generic refund/result commands cannot bypass the new bound path. Dedicated grouped refund execution, fee treatment and verified reconciliation remain required, including restoring each child's original buckets after a proven failed refund.

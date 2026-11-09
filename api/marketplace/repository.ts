@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {createMarketplaceRefunds} from './refunds.js'
 import {createMarketplaceWalletReconciliation} from './wallet-reconciliation.js'
 import {createMarketplaceWalletExecution} from './wallet-execution.js'
 import {createMarketplaceWalletPayouts} from './wallet-payouts.js'
@@ -15,7 +16,7 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
 export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome']}
+type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace'];preflightWalletExecution?:Parameters<typeof createMarketplaceWalletExecution>[0]['preflightWalletExecution'];verifyWalletOutcome?:Parameters<typeof createMarketplaceWalletReconciliation>[0]['verifyWalletOutcome'];resolveRefundCollection?:Parameters<typeof createMarketplaceRefunds>[0]['resolveRefundCollection']}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
@@ -41,6 +42,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
   }
  return {
+  refunds:createMarketplaceRefunds(d),
   walletReconciliation:createMarketplaceWalletReconciliation(d),
   walletExecution:createMarketplaceWalletExecution(d),
   walletPayouts:createMarketplaceWalletPayouts(d),
@@ -155,6 +157,8 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     }
     if(command.type==='result'&&command.status!=='unknown'&&book.bankReservations?.some(r=>r.quote.operationId===command.operationId))throw Error('Bank payouts require verified outcome reconciliation.')
     if(command.type==='result'&&command.status!=='unknown'&&book.walletReservations?.some(r=>r.operationId===command.operationId))throw Error('Wallet payouts require verified outcome reconciliation.')
+    if(command.type==='reserve'&&command.kind==='refund'&&(book.beneficiarySnapshots||book.refundCollection))throw Error('Refunds require verified original-payer binding through refunds.reserve.')
+    if(command.type==='result'&&command.status!=='unknown'&&book.refundReservations?.some(r=>r.allocations.some(a=>a.operationId===command.operationId)))throw Error('Refunds require dedicated verified outcome reconciliation.')
     // Proof references must be canonical chain/log or provider settlement identities.
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')
     if(command.type==='result'&&command.status!=='unknown'&&s.books.some((b,i)=>i!==index&&b.operations.some(o=>o.evidenceId===command.evidenceId)))throw Error('Execution evidence was already used.')
