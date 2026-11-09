@@ -1361,6 +1361,47 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
 
 const hostedCheckoutsHandler = createHostedCheckoutsHandler()
 
+/** Internal Marketplace creation only. The caller supplies authenticated project
+ * metadata and a verified holding address. No public handler calls this helper.
+ * A failed binding leaves a retryable private draft and publishes no webhook/link.
+ */
+export async function createBoundMarketplaceHostedCheckout(input:{projectId:string;paymentId:string;amount:string;holdingAddress:string;holdingId:string;holdingRevision:string;merchantName:string;title:string;returnUrl:string;allowedOrigins:string[]},bind:(checkoutId:string)=>Promise<unknown>,overrides:Partial<Dependencies>={}){
+ const d={...defaults,...overrides},secret=d.signingSecret()
+ if(!d.hasStore()||secret.length<32)throw Error('Hosted checkout storage is unavailable.')
+ for(const id of [input.projectId,input.paymentId,input.holdingId,input.holdingRevision])if(!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/.test(id))throw Error('Invalid Marketplace checkout reference.')
+ const amount=normalizePositiveUsdc(input.amount),recipient=isAddress(input.holdingAddress)?getAddress(input.holdingAddress):''
+ if(!amount||!validRecipient('base',recipient))throw Error('Invalid Marketplace collection amount or holding address.')
+ if(typeof input.merchantName!=='string'||input.merchantName.trim().length<2||input.merchantName.length>80||typeof input.title!=='string'||!input.title.trim()||input.title.length>100||typeof input.returnUrl!=='string'||input.returnUrl.length>300)throw Error('Invalid Marketplace checkout presentation.')
+ if(input.returnUrl&&(!normalizedOrigin(input.returnUrl)||!input.allowedOrigins.includes(normalizedOrigin(input.returnUrl)!)))throw Error('Return URL origin is not allowlisted for this project.')
+ const reference=createHash('sha256').update(JSON.stringify([input.projectId,input.paymentId])).digest('hex')
+ const key=`marketplace:${reference}`,requestHash=createHash('sha256').update(JSON.stringify([input.projectId,input.paymentId,amount,recipient,input.holdingId,input.holdingRevision,input.merchantName,input.title,input.returnUrl])).digest('hex')
+ const now=d.now()
+ const saved=await d.mutate(STORE_KEY,current=>{
+  const s=current??{checkouts:{},idempotency:{}}
+  const previous=s.idempotency[key]
+  if(previous){const record=s.checkouts[previous];if(!record||!integrityValid(record,secret)||record.requestHash!==requestHash)throw Error('Marketplace checkout request conflicts with its existing draft.');return s}
+  const requested=hostedCheckoutAmountUnits(amount),limit=hostedCheckoutDailyLimitUnits()
+  if(requested>limit||reservedCheckoutUnits(s,input.projectId,now.getTime())+requested>limit)throw checkoutCapacityError()
+  const id=d.createId()
+  if(!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)||s.checkouts[id])throw Error('Invalid or reused hosted checkout identity.')
+  const unsigned:Omit<CheckoutRecord,'integrity'>={id,partnerId:input.projectId,kind:'usdc_request',environment:'live',merchantName:input.merchantName,title:input.title,description:'',amount,flexible:false,asset:'USDC',network:'base',recipient,paymentOptions:[{network:'base',recipient}],checkoutMode:'human',memo:input.paymentId,returnUrl:input.returnUrl,createdAt:now.toISOString(),expiresAt:new Date(now.getTime()+15*60_000).toISOString(),requestHash}
+  unsigned.paymentAttempts=[initialPaymentAttempt(unsigned)]
+  return {...s,checkouts:{...s.checkouts,[id]:{...unsigned,integrity:sign(unsigned,secret)}},idempotency:{...s.idempotency,[key]:id}}
+ })
+ const record=saved.checkouts[saved.idempotency[key]]
+ if(!record.payment&&Date.parse(record.expiresAt)<=d.now().getTime())throw Error('Marketplace checkout expired; create a new order reference.')
+ await bind(record.id)
+ await ensureHostedCheckoutExecution(record,d.executions)
+ // Enqueue only after binding. Atomic deduplication covers concurrent retries.
+ await d.mutate(STORE_KEY,current=>{
+  if(!current||current.checkouts[record.id]?.integrity!==record.integrity)throw Error('Marketplace checkout changed before publication.')
+  if(current.outbox?.some(e=>e.event==='checkout.created'&&e.data.checkoutId===record.id))return current
+  return enqueueWebhook(current,input.projectId,'checkout.created',{checkoutId:record.id,product:'marketplace_payments',paymentId:input.paymentId,status:'pending',checkoutMode:'human',amount:record.amount,network:'base',expiresAt:record.expiresAt},d.now())
+ })
+ startWebhookDrain(d)
+ return {checkoutId:record.id,checkoutUrl:hostedCheckoutUiUrl(record),paymentId:input.paymentId,amount:record.amount,network:'base' as const,asset:'USDC' as const,expiresAt:record.expiresAt}
+}
+
 export async function createProviderRoutedHostedCheckout(
   req: Request,
   res: Response,

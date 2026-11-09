@@ -4,6 +4,8 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {createMarketplaceCheckoutCollections} from './checkout-collections.js'
 import {createMarketplaceCollections} from './collections.js'
 import type {MarketplaceStore} from './repository.js'
+import {createBoundMarketplaceHostedCheckout} from '../hosted-checkouts.js'
+import {formatUnits} from 'viem'
 import {createMarketplaceRepository} from './repository.js'
 import {marketplaceWebhookTransport} from './webhooks.js'
 
@@ -26,7 +28,16 @@ export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;
  const holding={id:settings.holdingId,revision:settings.holdingRevision,address:settings.config.treasuryAddress,billsAddress:settings.billsAddress}
  const adapter=createMarketplaceCheckoutCollections({...storage,enabled:true,projectIds:settings.projectIds,holding,readCheckout:input.readCheckout,verifyHolding:()=>circle.verifyConfiguredWallet()})
  const collections=createMarketplaceCollections({...storage,enabled:true,holding,chain:input.chain,resolveSession:adapter.resolveSession})
- return {bindCheckout:adapter.bind,verifyCollection:collections.verify,async resolveRefundCollection(request:Parameters<typeof collections.resolveRefundCollection>[0]){
+ return {bindCheckout:adapter.bind,verifyCollection:collections.verify,async createCheckout(projectId:string,paymentId:string,presentation:{title:string;returnUrl:string}){
+  if(!settings.projectIds.includes(projectId))throw Error('Marketplace project is not enabled.')
+  const book=(await storage.read())?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
+  if(!book||book.plan.network!=='base'||book.plan.asset!=='USDC')throw Error('Marketplace Base USDC payment not found.')
+  const projects=await readDurableJson<{projects:Record<string,{name:string;allowedOrigins:string[];operationalStatus?:string;removal?:unknown}>}>((input.env.DEVELOPER_PROJECT_STORE_KEY??'hashpaylink:developer-projects:v1').trim())
+  const project=projects?.projects[projectId]
+  if(!project||project.removal||project.operationalStatus!=='active')throw Error('Marketplace project is not active.')
+  await circle.verifyConfiguredWallet()
+  return createBoundMarketplaceHostedCheckout({projectId,paymentId,amount:formatUnits(BigInt(book.plan.amountUnits),6),holdingAddress:holding.address,holdingId:holding.id,holdingRevision:holding.revision,merchantName:project.name,title:presentation.title,returnUrl:presentation.returnUrl,allowedOrigins:project.allowedOrigins},id=>adapter.bind(projectId,paymentId,id))
+ },async resolveRefundCollection(request:Parameters<typeof collections.resolveRefundCollection>[0]){
   if(!settings.projectIds.includes(request.projectId))throw Error('Marketplace project is not enabled.')
   return collections.resolveRefundCollection(request)
  }}

@@ -5,7 +5,7 @@ import type {MarketplacePrincipal,MarketplaceScope} from './instructions.js'
 
 type Projects=NonNullable<Parameters<typeof developerPolicyFromStore>[0]>
 type Access={requests:Array<{projectId:string;ownerId:string;status:string}>}
-const scopes:MarketplaceScope[]=['marketplace:read','marketplace:release','marketplace:payout','marketplace:refund']
+const scopes:MarketplaceScope[]=['marketplace:read','marketplace:create','marketplace:release','marketplace:payout','marketplace:refund']
 type Dependencies={readProjects:()=>Promise<Projects|undefined>;readAccess:()=>Promise<Access|undefined>;env:()=>NodeJS.ProcessEnv;now:()=>number}
 const defaults:Dependencies={
  readProjects:()=>readDurableJson<Projects>((process.env.DEVELOPER_PROJECT_STORE_KEY??'hashpaylink:developer-projects:v1').trim()),

@@ -2,7 +2,7 @@ import {marketplaceAmountUnits} from '../../src/lib/marketplacePayments.js'
 import type {createMarketplaceRepository} from './repository.js'
 import {createMarketplacePrincipalResolver} from './authorization.js'
 
-export type MarketplaceScope = 'marketplace:read' | 'marketplace:release' | 'marketplace:payout' | 'marketplace:refund'
+export type MarketplaceScope = 'marketplace:read' | 'marketplace:create' | 'marketplace:release' | 'marketplace:payout' | 'marketplace:refund'
 export type MarketplacePrincipal = {
   projectId: string
   credentialId: string
@@ -12,6 +12,7 @@ export type MarketplacePrincipal = {
 }
 type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout' | 'walletPayouts' | 'refunds' | 'cancelPayout'>
 type Dependencies = {
+  createCheckout?: (projectId:string,paymentId:string,presentation:{title:string;returnUrl:string})=>Promise<{checkoutId:string;checkoutUrl:string;paymentId:string;amount:string;network:'base';asset:'USDC';expiresAt:string}>
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
   resolvePrincipal?: (credential: string) => Promise<MarketplacePrincipal | null>
@@ -41,6 +42,13 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
     return {projectId:reference(resolved.projectId), credentialId:reference(resolved.credentialId)}
   }
   return {
+    async createCheckout(credential:string,body:unknown){
+      const input=fields(structuredClone(body),['paymentId','title','returnUrl'])
+      if(typeof input.title!=='string'||!input.title.trim()||input.title.length>100||typeof input.returnUrl!=='string'||input.returnUrl.length>300)throw Error('Invalid Marketplace checkout presentation.')
+      const principal=await authorize(credential,'marketplace:create')
+      if(!dependencies.createCheckout)throw Error('Marketplace checkout creation is not configured.')
+      return dependencies.createCheckout(principal.projectId,reference(input.paymentId),{title:input.title,returnUrl:input.returnUrl})
+    },
     async cancelPayout(credential:string,key:string,body:unknown){
       const input=fields(structuredClone(body),['paymentId','operationId','businessReference'])
       const principal=await authorize(credential,'marketplace:payout')
