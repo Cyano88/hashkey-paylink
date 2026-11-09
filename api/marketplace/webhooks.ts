@@ -4,7 +4,8 @@ import {marketplaceReference} from './beneficiaries.js'
 import type {MarketplaceStore} from './repository.js'
 import type {MarketplaceBankEvent} from './bank-reconciliation.js'
 import type {MarketplaceWalletEvent} from './wallet-reconciliation.js'
-type PayoutEvent=MarketplaceBankEvent|MarketplaceWalletEvent
+import type {MarketplaceRefundEvent} from './refund-execution.js'
+type PayoutEvent=MarketplaceBankEvent|MarketplaceWalletEvent|MarketplaceRefundEvent
 
 // Explicit opt-in adapter; never installed by the repository defaults.
 // Reuses signed requests, project-owned URLs/secrets and public-HTTPS/DNS protections.
@@ -16,12 +17,12 @@ const delays=[30_000,120_000,600_000,1_800_000,3_600_000,7_200_000,21_600_000]
 const maxAttempts=8,leaseMs=60_000
 function locate(store:MarketplaceStore,projectId:string,paymentId:string,eventId:string){
  const book=store.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
- const event=[...(book?.bankEvents||[]),...(book?.walletEvents||[])].find(e=>e.id===eventId&&e.projectId===projectId&&e.paymentId===paymentId)
+ const event=[...(book?.bankEvents||[]),...(book?.walletEvents||[]),...(book?.refundEvents||[])].find(e=>e.id===eventId&&e.projectId===projectId&&e.paymentId===paymentId)
  if(!event)throw Error('Marketplace payout event not found.')
  return event
 }
 function due(event:PayoutEvent,now:number){return event.delivery==='pending'&&(event.nextAttemptAt??0)<=now||event.delivery==='delivering'&&(event.leaseUntil??Infinity)<=now}
-function payload(event:PayoutEvent){const common={projectId:event.projectId,paymentId:event.paymentId,operationId:event.operationId,asset:event.asset,currency:event.currency,debitUnits:event.debitUnits};return event.currency==='NGN'?{...common,ngnPaidMinor:event.ngnPaidMinor}:{...common,network:event.network,recipientAmountUnits:event.recipientAmountUnits}}
+function payload(event:PayoutEvent){const common={...('refundId' in event?{refundId:event.refundId}:{}),projectId:event.projectId,paymentId:event.paymentId,operationId:event.operationId,asset:event.asset,currency:event.currency,debitUnits:event.debitUnits};return event.currency==='NGN'?{...common,ngnPaidMinor:event.ngnPaidMinor}:{...common,network:event.network,recipientAmountUnits:event.recipientAmountUnits}}
 /** At-least-once delivery. Consumers must deduplicate event IDs and verify signatures on the raw body. */
 export function createMarketplaceWebhooks(dependencies:Dependencies){
  const d=dependencies
@@ -29,7 +30,7 @@ export function createMarketplaceWebhooks(dependencies:Dependencies){
   async pending(projectId:string,limit=20){
    marketplaceReference(projectId)
    if(!Number.isInteger(limit)||limit<1||limit>100)throw Error('Use a webhook batch size between 1 and 100.')
-   return ((await d.read())?.books||[]).filter(b=>b.plan.projectId===projectId).flatMap(b=>[...(b.bankEvents||[]),...(b.walletEvents||[])]).filter(e=>e.projectId===projectId&&due(e,d.now())).sort((a,b)=>a.createdAt-b.createdAt).slice(0,limit).map(e=>({paymentId:e.paymentId,eventId:e.id}))
+   return ((await d.read())?.books||[]).filter(b=>b.plan.projectId===projectId).flatMap(b=>[...(b.bankEvents||[]),...(b.walletEvents||[]),...(b.refundEvents||[])]).filter(e=>e.projectId===projectId&&due(e,d.now())).sort((a,b)=>a.createdAt-b.createdAt).slice(0,limit).map(e=>({paymentId:e.paymentId,eventId:e.id}))
   },
   async deliver(projectId:string,paymentId:string,eventId:string){
    for(const id of [projectId,paymentId,eventId])marketplaceReference(id)

@@ -55,6 +55,7 @@ export function createMarketplaceWalletReconciliation(dependencies:Dependencies)
     if(previous){if(previous.hash!==hash)throw Error('Wallet reconciliation evidence was changed.');return s}
     if(operation.status==='settled'||operation.status==='failed')throw Error('Wallet payout is already final; conflicting evidence requires review.')
     if(s.books.some(b=>b.fundingEvidence===evidence.evidenceId||b.operations.some(o=>o.evidenceId===evidence.evidenceId)))throw Error('Wallet outcome evidence was already consumed.')
+    if(s.books.some(b=>b.refundExecutions?.some(e=>e.transactionHash===evidence.transactionHash)))throw Error('Transaction already used by a marketplace refund.')
     if(s.books.some(b=>[...(b.bankExecutions||[]),...(b.walletExecutions||[])].some(e=>e.attemptId!==attempt.attemptId&&e.transactionHash===evidence.transactionHash)))throw Error('Wallet outcome transaction is already bound to another payout.')
     const eventId=randomUUID(),next=applyMarketplaceCommand(book,projectId,'wallet-result:'+eventId,{type:'result',operationId,status,evidenceId:evidence.evidenceId})
     const nextAttempt=next.walletExecutions!.find(e=>e.attemptId===attempt.attemptId)!

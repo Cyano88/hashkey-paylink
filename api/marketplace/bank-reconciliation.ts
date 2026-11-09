@@ -67,6 +67,7 @@ export function createMarketplaceBankReconciliation(dependencies:Dependencies){
     const references=proofs(evidence)
     if(s.books.some(b=>b.bankReconciliations?.some(r=>proofs(r.evidence).some(id=>references.includes(id)))))throw Error('Reconciliation evidence was already used.')
     if(s.books.some(b=>references.includes(b.fundingEvidence||'')||b.operations.some(o=>references.includes(o.evidenceId||''))))throw Error('Reconciliation proof was already consumed by accounting.')
+    if(s.books.some(b=>b.refundExecutions?.some(e=>e.transactionHash===evidence.fundingTransactionHash)))throw Error('Transaction already used by a marketplace refund.')
     if(s.books.some(b=>[...(b.bankExecutions||[]),...(b.walletExecutions||[])].some(e=>e.attemptId!==attempt.attemptId&&e.transactionHash===evidence.fundingTransactionHash)))throw Error('Funding transaction is already bound to another payout.')
     const eventId=randomUUID()
     const next=applyMarketplaceCommand(book,projectId,'bank-result:'+eventId,{type:'result',operationId,status,evidenceId:evidence.evidenceId})
