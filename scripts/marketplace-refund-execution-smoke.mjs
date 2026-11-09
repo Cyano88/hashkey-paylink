@@ -13,6 +13,8 @@ const store={read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.t
 const repo=createMarketplaceRepository({...store,resolveRefundCollection:async()=>collection})
 await repo.create({projectId:'project_a',paymentId:'payment_a',network:'base',asset:'USDC',amount:'10',allocations:[{id:'seller_a',sellerId:'seller_a',role:'seller',amount:'9',settlement:'wallet_usdc',beneficiaryId:'wallet_a'},{id:'fee_a',sellerId:'platform_a',role:'platform',amount:'1',settlement:'wallet_usdc',beneficiaryId:'wallet_fee'}]},'draft_a')
 await repo.execute('project_a','payment_a','fund_a',{type:'fund',evidenceId:collection.fundingEvidenceId,network:'base',asset:'USDC',amountUnits:'10000000'})
+await repo.execute('project_a','payment_a','release_a',{type:'release',allocationId:'seller_a',amountUnits:'8000000'})
+const originalBalances=structuredClone(stored.books[0].balances)
 await repo.refunds.reserve('project_a','payment_a','reserve_a',{refundId:'refund_a',allocations:[{allocationId:'seller_a',amount:'2'},{allocationId:'fee_a',amount:'0.5'}]},{credentialId:'credential_a',businessReference:'delivery_failed'})
 const reservedSnapshot=structuredClone(stored)
 let transaction,providerPatch={}
@@ -60,6 +62,49 @@ stored=structuredClone(reservedSnapshot)
 let clock=0
 await assert.rejects(()=>createMarketplaceRefundExecution({...deps,now:()=>clock,authorize:async()=>{clock=6000;return true}}).submit(...args),/expired/)
 assert.equal(stored.books[0].refundExecutions,undefined)
+// Definitive failure restores pending and available provenance, never marks the buyer paid.
+await worker.submit(...args)
+const submittedSnapshot=structuredClone(stored)
+const revertedChain={...chain,getTransactionReceipt:async()=>({...await chain.getTransactionReceipt(),status:'reverted',logs:[]})}
+const recovery=createMarketplaceRefundExecution({...deps,chain:revertedChain})
+providerPatch={state:'SENT'}
+assert.equal((await recovery.reconcile(...args)).state,'submitted')
+assert.equal(stored.books[0].balances[0].reserved,'2000000')
+providerPatch={state:'FAILED'};finalized=99n
+assert.equal((await recovery.reconcile(...args)).state,'submitted')
+finalized=100n
+const reorg=createMarketplaceRefundExecution({...deps,chain:{...revertedChain,getBlock:async input=>({...await chain.getBlock(input),hash:input.blockTag?blockHash:'0x'+'cc'.repeat(32)})}})
+assert.equal((await reorg.reconcile(...args)).state,'submitted')
+providerPatch={state:'FAILED',txHash:'0x'+'dd'.repeat(32)}
+await assert.rejects(()=>recovery.reconcile(...args),/hash changed/)
+providerPatch={state:'FAILED'}
+const rollback=createMarketplaceRefundExecution({...deps,chain:revertedChain,mutate:async fn=>{const next=fn(structuredClone(stored));if(next.books[0].refundEvents?.length)throw Error('database commit failed');stored=next;return structuredClone(next)}})
+await assert.rejects(()=>rollback.reconcile(...args),/database commit failed/)
+assert.equal(stored.books[0].refundEvents,undefined)
+assert.equal(stored.books[0].balances[0].reserved,'2000000')
+await Promise.all([recovery.reconcile(...args),recovery.reconcile(...args)])
+assert.deepEqual(stored.books[0].balances,originalBalances)
+assert.equal(stored.books[0].refundEvents.length,1)
+assert.equal(stored.books[0].refundEvents[0].type,'marketplace.refund.failed')
+assert.equal(stored.books[0].refundEvents[0].recipientAmountUnits,'0')
+const failureCalls=calls
+assert.equal((await recovery.submit(...args)).state,'failed')
+assert.equal((await createMarketplaceRefundExecution({...deps,chain:revertedChain}).reconcile(...args)).state,'failed')
+await recovery.attachTransaction(...args,transactionId)
+assert.equal(stored.books[0].refundExecutions[0].state,'failed')
+assert.equal(calls,failureCalls)
+let failurePayload
+const failureRepo=createMarketplaceRepository({...store,notifyMarketplace:async(project,type,data,options)=>{assert.equal(type,'marketplace.refund.failed');failurePayload=data;return {status:'sent',eventId:options.eventId,responseStatus:200}}})
+const [failedEvent]=await failureRepo.webhooks.pending('project_a')
+await failureRepo.webhooks.deliver('project_a',failedEvent.paymentId,failedEvent.eventId)
+assert.equal(failurePayload.recipientAmountUnits,'0')
+// Terminal provider labels without a chain hash cannot free reservations.
+stored=structuredClone(submittedSnapshot);providerPatch={state:'FAILED',txHash:''}
+assert.equal((await recovery.reconcile(...args)).state,'submitted')
+assert.equal(stored.books[0].balances[0].reserved,'2000000')
+providerPatch={};stored=structuredClone(reservedSnapshot)
 stored.books[0].refundReservations[0].collection.asset='USDT'
 await assert.rejects(()=>worker.submit(...args),/not configured/)
 console.log('PASS marketplace Circle refund execution: gating, treasury isolation, authorization, concurrent submission, timeout/restart recovery, exact original-payer binding, finalized Base transfer, atomic split accounting, single event and webhook delivery. Synthetic provider/chain; no funds moved.')
+
+console.log('PASS definitive refund failure: terminal provider plus canonical finalized revert, exact pending/available restoration, nonterminal/provisional/reorg/missing-hash rejection, immutable hash, commit rollback, concurrent idempotency, restart and failed webhook. Fixtures only.')

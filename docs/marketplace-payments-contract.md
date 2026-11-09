@@ -170,7 +170,7 @@ All selected allocations reserve atomically. Each child refund consumes unspent 
 
 The first successful reservation pins the original refund collection/destination. Later partial refunds must match it. Retries with the same normalized allocations and business authorization retrieve the original reservation without resolving a replacement destination; changed requests under the same key fail. Competing refunds cannot overspend available funds.
 
-The reservation layer only reserves funds. Execution is a separate internal worker described below. Generic refund/result commands cannot bypass the new bound path. The execution checkpoint below adds the USDC success path. Runtime fee policy and restoration of each child's original buckets after a proven failed refund remain outstanding.
+The reservation layer only reserves funds. Execution is a separate internal worker described below. Generic refund/result commands cannot bypass the new bound path. The execution checkpoint below adds the USDC success path. Runtime fee policy remains outstanding; finalized top-level revert recovery is described below.
 
 
 ## Base USDC refund execution checkpoint
@@ -181,4 +181,13 @@ The platform authorizes a reserved refund; the buyer does not claim it in Hash P
 
 Reconciliation reads the Circle transaction and Base RPC receipt, checks chain ID, successful execution, canonical block and finalized head, and requires one exact USDC Transfer log from the dedicated holding to the original payer. Provider COMPLETE or a transaction hash alone is insufficient. One parent transaction proof backs distinct child accounting references; all child balances, completion state and a single `marketplace.refund.settled` event commit atomically. The shared signed webhook dispatcher handles that event, including refundId and token-unit amounts, without exposing payer data. Transaction reuse across refund and payout reconciliation is rejected.
 
-Execution currently supports USDC only. USDT reservations remain non-executable here. Reverted, missing, mismatched and ambiguous outcomes do not restore funds or report success; proven-failure recovery remains a separate unfinished path. Wallet provisioning, authoritative collection verification, runtime authorization/fee policy, scheduling and production activation remain outstanding. Public endpoints stay closed. Fixture tests do not establish provider or live-payment readiness.
+Execution currently supports USDC only. USDT reservations remain non-executable here. Missing, mismatched and ambiguous outcomes do not restore funds or report success. Finalized top-level revert recovery is covered below. Wallet provisioning, authoritative collection verification, runtime authorization/fee policy, scheduling and production activation remain outstanding. Public endpoints stay closed. Fixture tests do not establish provider or live-payment readiness.
+
+
+## Definitive refund failure recovery checkpoint
+
+A terminal Circle failure (`FAILED`, `CANCELLED` or `DENIED`) plus a canonical finalized Base receipt with top-level `reverted` status and no logs can now fail a submitted refund. Neither condition alone releases funds. These provider states are terminal according to [Circle transaction states](https://developers.circle.com/api-reference/wallets/transaction-states-and-errors), checked November 9, 2026.
+
+The first verified provider transaction hash is pinned. Replacement hashes require review; they cannot silently overwrite the original. Each provider read is checked against the refund's wallet, original payer, amount and scoped reference. The terminal result retains block/hash/finality evidence and provider state. Child-operation failures restore their exact original pending/available amounts, with execution state and one `marketplace.refund.failed` event in the same database mutation. That event reports zero recipient units. Concurrent retries and restarts cannot restore twice, overwrite terminal outcomes or resubmit the failed refund. A new attempt requires a new authorized refund reservation/reference.
+
+Recovery remains deliberately narrow: pre-broadcast failures without a transaction hash, missing receipts, provisional/reorged receipts, and smart-account inner-operation failures inside a successful outer transaction remain reserved for review. An ERC-4337 inner failure needs a separately verified UserOperation proof; absence of a USDC Transfer log is not proof of failure. Fees remain outside buyer refund allocations. This checkpoint does not enable public routes, provision holding wallets, install scheduling or establish live provider readiness.
