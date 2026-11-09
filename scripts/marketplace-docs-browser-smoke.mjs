@@ -13,7 +13,7 @@ try{for(const width of [320,390,1280])for(const dark of [false,true]){
  const headings=await page.getByRole('heading',{level:2}).allTextContents();assert.equal(headings[0],'Choose wallet or bank account settlement');assert(headings.indexOf('Choose wallet or bank account settlement')<headings.indexOf('Planned integration sequence'))
  assert.equal(await page.getByRole('article').count(),3)
  await page.getByText('Bank account settlement: Cash balance',{exact:true}).waitFor();await page.getByText('Wallet settlement: USDT on Base',{exact:true}).waitFor()
- assert.match(await page.locator('main').innerText(),/not open for production or sandbox/)
+ assert.match(await page.locator('main').innerText(),/not yet open for production or sandbox/)
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
  await page.screenshot({path:'output/playwright/marketplace-docs-'+width+(dark?'-dark':'-light')+'.png',fullPage:true})
  await page.getByRole('link',{name:/Checkout API/}).click();await page.getByRole('heading',{name:'Checkout API',exact:true}).waitFor();await page.getByRole('link',{name:'Marketplace Payments',exact:true}).click();await page.getByRole('heading',{name:'Marketplace Payments',exact:true}).waitFor();await page.getByRole('link',{name:/Polymarket funding/}).click();await page.getByRole('heading',{name:'Polymarket funding',exact:true}).waitFor();assert.deepEqual(errors,[]);await page.close()
