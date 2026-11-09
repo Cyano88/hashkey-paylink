@@ -4,6 +4,7 @@ import {applyMarketplaceCommand} from './accounting.js'
 import type {MarketplaceStore} from './repository.js'
 import type {MarketplaceBankQuote} from './bank-quotes.js'
 import type {BankExecution} from './bank-execution.js'
+import type {MarketplaceDeliveryState} from './webhooks.js'
 
 /** Trusted verifier output only. Neither webhook bodies nor developer-supplied statuses satisfy this boundary. */
 export type BankOutcomeEvidence={
@@ -13,7 +14,7 @@ export type BankOutcomeEvidence={
  fundingUnits:string;ngnPaidMinor:string;returnedUnits:string;finalizedAt:number
 }
 export type BankReconciliation={evidence:BankOutcomeEvidence;hash:string;status:'settled'|'failed';eventId:string}
-export type MarketplaceBankEvent={id:string;type:'marketplace.payout.settled'|'marketplace.payout.failed';projectId:string;paymentId:string;operationId:string;asset:'USDC';currency:'NGN';debitUnits:string;ngnPaidMinor:string;createdAt:number;delivery:'pending'}
+export type MarketplaceBankEvent={id:string;type:'marketplace.payout.settled'|'marketplace.payout.failed';projectId:string;paymentId:string;operationId:string;asset:'USDC';currency:'NGN';debitUnits:string;ngnPaidMinor:string;createdAt:number;delivery:'pending'|'delivering'|'delivered'|'dead'} & MarketplaceDeliveryState
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBankOutcome?:(input:{quote:MarketplaceBankQuote;attempt:BankExecution})=>Promise<BankOutcomeEvidence|null>}
 function locate(store:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
  for(const id of [projectId,paymentId,operationId])marketplaceReference(id)

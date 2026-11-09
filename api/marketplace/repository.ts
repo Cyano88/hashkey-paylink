@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {createMarketplaceWebhooks} from './webhooks.js'
 import {createMarketplaceBankExecution} from './bank-execution.js'
 import {createMarketplaceBankReconciliation} from './bank-reconciliation.js'
 import {validateMarketplaceBankQuote,type MarketplaceBankQuote,type BankQuoteAuthorization} from './bank-quotes.js'
@@ -11,7 +12,7 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
 export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome']}
+type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>;preflightBankExecution?:Parameters<typeof createMarketplaceBankExecution>[0]['preflightBankExecution'];verifyBankOutcome?:Parameters<typeof createMarketplaceBankReconciliation>[0]['verifyBankOutcome'];notifyMarketplace?:Parameters<typeof createMarketplaceWebhooks>[0]['notifyMarketplace']}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
@@ -37,6 +38,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
   }
  return {
+  webhooks:createMarketplaceWebhooks(d),
   bankExecution:createMarketplaceBankExecution(d),
   bankReconciliation:createMarketplaceBankReconciliation(d),
   // Legacy unbound creation remains internal fixture infrastructure, not activation-ready.

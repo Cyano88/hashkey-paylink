@@ -115,3 +115,13 @@ Evidence is scoped to project, payment, operation, submission attempt, provider 
 The terminal ledger transition, execution state, sanitized evidence and pending payout event commit atomically. A failed commit leaves all unchanged; replay creates no duplicate event. Events contain project/payment/operation references, debit and NGN result, not bank account details, holding credentials or raw provider payloads. The ledger paid bucket tracks the consumed USDC debit including accepted fees; the event's NGN amount records the bank payout separately.
 
 The pending event queue is not a delivered webhook. A signed delivery worker, subscription configuration, delivery retries and acknowledgements remain to be implemented. There is still no production verifier, signer, bank payout or exposed reconciliation endpoint.
+
+## Webhook delivery checkpoint
+
+The internal outbox now supports project-scoped pending-event reads and leased delivery attempts. A transport must be explicitly configured; defaults cannot send. The provided `marketplaceWebhookTransport` reuses `dispatchDeveloperWebhook`, including project-owned URL/secret resolution, the existing HMAC signature format, public-HTTPS destination validation, DNS pinning and request timeout. No scheduler or public delivery endpoint is installed.
+
+Delivery preserves event ID, event creation time and body across retries. Each transport attempt signs with the current project secret and attempt timestamp. Consumers must verify the raw-body signature, enforce timestamp freshness, deduplicate event IDs and retrieve canonical payment status. Delivery is at least once: an acknowledged remote request followed by a lost local commit can be sent again with the same event ID. It cannot execute a payment again.
+
+A delivery attempt has a 60-second lease and unique token. Late acknowledgements from a replaced worker cannot overwrite the current attempt. Only a matching event acknowledgement with HTTP 2xx marks delivery successful. Skipped/unconfigured endpoints, errors and non-2xx responses retry after 30 seconds, 2 minutes, 10 minutes, 30 minutes, 1 hour, 2 hours and 6 hours. After eight total attempts the event is retained as dead for operational review. No automatic dead-event reset or manual redrive endpoint is implemented.
+
+Attempt history stores timing, outcome and HTTP status only. Raw error messages, response bodies, webhook URLs and signing secrets are not persisted in the marketplace event. Delivery never changes payout balances or settlement status. Runtime activation, scheduler wiring, production endpoint canaries and operational dead-event recovery remain open.
