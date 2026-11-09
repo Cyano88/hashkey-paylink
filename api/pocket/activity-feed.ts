@@ -29,6 +29,7 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
   const store: Store = dependencies.store ?? pocketActivityStore
   const now = dependencies.now ?? Date.now
   const pending = new Map<string, Promise<void>>()
+  const forced = new Map<string, Promise<void>>()
   const retryAfter = new Map<string, number>()
   const sourceRetries = new Map<string, {failures: number; nextAt: number}>()
   const sourceNames = Object.keys(dependencies.sources)
@@ -90,17 +91,32 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
       const observe = req.query?.observe === '1'
       const force = !observe && req.query?.refresh === '1'
       const stale = force || sourceNames.some(name => !saved?.sources[name] || now() - saved.sources[name].updatedAt >= 60_000)
-      if (!observe && stale && !pending.has(key) && (retryAfter.get(key) ?? 0) <= now() && pending.size < 16) {
-        const work = refresh(userId, key, saved, force).finally(() => {
-          pending.delete(key)
+      if (force) {
+        let work = forced.get(key)
+        if (!work && (pending.size < 16 || pending.has(key))) {
+          const previous = pending.get(key)
+          work = (async () => {
+            // An older background scan may have skipped a recently cached source.
+            // A post-payment read needs its own forced pass after that scan finishes.
+            if (previous) await previous
+            await refresh(userId, key, await store.read(key), true)
+          })().finally(() => {
+            forced.delete(key)
+            if (pending.get(key) === work) pending.delete(key)
+            if (retryAfter.size >= 256) retryAfter.delete(retryAfter.keys().next().value!)
+            retryAfter.set(key, now() + 5_000)
+          })
+          forced.set(key, work); pending.set(key, work)
+        }
+        if (work) await work
+        saved = await store.read(key)
+      } else if (!observe && stale && !pending.has(key) && (retryAfter.get(key) ?? 0) <= now() && pending.size < 16) {
+        const work = refresh(userId, key, saved, false).finally(() => {
+          if (pending.get(key) === work) pending.delete(key)
           if (retryAfter.size >= 256) retryAfter.delete(retryAfter.keys().next().value!)
           retryAfter.set(key, now() + 5_000)
         })
         pending.set(key, work)
-      }
-      if (force && pending.has(key)) {
-        await pending.get(key)
-        saved = await store.read(key)
       }
       if (!saved && pending.has(key)) {
         let timer: ReturnType<typeof setTimeout> | undefined
