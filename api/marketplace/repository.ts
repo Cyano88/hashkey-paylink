@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {validateMarketplaceBankQuote,type MarketplaceBankQuote,type BankQuoteAuthorization} from './bank-quotes.js'
 import type {BankBeneficiary,BankRequest} from './bank-beneficiaries.js'
 import {marketplaceReference, walletChallenge, walletChallengeMessage, verifyWalletChallenge, type WalletChallenge, type WalletBeneficiary, type WalletBeneficiaryRequest} from './beneficiaries.js'
 import {mutateDurableJson,readDurableJson} from '../render-durable-store.js'
@@ -8,7 +9,7 @@ import {applyMarketplaceCommand,createMarketplaceBook,createMarketplacePlan,mark
 const KEY='hashpaylink:marketplace-accounting-foundation:v1'
 export type MarketplaceStore={books:MarketplaceBook[];drafts:Array<{projectId:string;key:string;paymentId:string;hash:string}>;walletChallenges?:WalletChallenge[];walletBeneficiaries?:WalletBeneficiary[];bankBeneficiaries?:BankBeneficiary[]}
 const empty=():MarketplaceStore=>({books:[],drafts:[]})
-type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>}
+type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyBank?:(input:BankRequest)=>Promise<BankBeneficiary>;resolveBankQuote?:(input:{projectId:string;paymentId:string;quoteId:string})=>Promise<MarketplaceBankQuote|null>}
 const defaults:Dependencies={read:()=>readDurableJson<MarketplaceStore>(KEY),mutate:fn=>mutateDurableJson<MarketplaceStore>(KEY,current=>fn(current||empty())),now:Date.now}
 export function createMarketplaceRepository(dependencies:Partial<Dependencies>={}){
  const d={...defaults,...dependencies}
@@ -86,6 +87,45 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     beneficiary.status='revoked';return s
    })
   },
+  /** Internal only. Caller must establish marketplace payout authority before this method. */
+  async reserveBankPayout(projectId:string,paymentId:string,quoteId:string,key:string,authorization:BankQuoteAuthorization){
+   for(const ref of [projectId,paymentId,quoteId,key])marketplaceReference(ref)
+   const actor={credentialId:marketplaceReference(authorization.credentialId),businessReference:marketplaceReference(authorization.businessReference)}
+   const requestHash=createHash('sha256').update(JSON.stringify({quoteId,authorization:actor})).digest('hex')
+   const replay=(book:MarketplaceBook|undefined)=>{
+    const existing=book?.bankReservations?.find(r=>r.key===key)
+    if(existing){if(existing.requestHash!==requestHash)throw Error('Idempotency key was used for a different bank payout.');return existing}
+    if(book?.journal.some(entry=>entry.key===key))throw Error('Idempotency key was used for a different request.')
+    return undefined
+   }
+   const prior=(await d.read())?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
+   const existing=replay(prior)
+   if(existing)return structuredClone({reservation:existing,operation:prior!.operations.find(o=>o.id===existing.quote.operationId)!})
+   if(!prior)throw Error('Marketplace payment not found.')
+   if(!d.resolveBankQuote)throw Error('Marketplace bank quote verification is not configured.')
+   const resolved=await d.resolveBankQuote({projectId,paymentId,quoteId})
+   if(!resolved)throw Error('Marketplace bank quote not found.')
+   const quote=validateMarketplaceBankQuote(structuredClone(resolved),d.now())
+   if(quote.projectId!==projectId||quote.paymentId!==paymentId||quote.quoteId!==quoteId)throw Error('Bank quote project or payment binding mismatch.')
+   const store=await d.mutate(s=>{
+    const index=s.books.findIndex(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
+    if(index<0)throw Error('Marketplace payment not found.')
+    const book=s.books[index]
+    if(replay(book))return s
+    validateMarketplaceBankQuote(quote,d.now())
+    if(s.books.some(b=>b.bankReservations?.some(r=>r.quote.providerOrderId===quote.providerOrderId||r.quote.intentId===quote.intentId||r.quote.quoteId===quote.quoteId)))throw Error('Bank quote or provider order was already reserved.')
+    const allocation=book.plan.allocations.find(a=>a.id===quote.allocationId)
+    const snapshot=book.beneficiarySnapshots?.find(b=>b.beneficiaryId===quote.beneficiaryId)
+    const current=s.bankBeneficiaries?.find(b=>b.projectId===projectId&&b.beneficiaryId===quote.beneficiaryId)
+    if(book.plan.asset!=='USDC'||book.plan.network!=='base'||!allocation||allocation.settlement!=='cash_balance'||allocation.beneficiaryId!==quote.beneficiaryId||snapshot?.kind!=='bank'||!current||current.status!=='active'||snapshot.destinationDigest!==quote.destinationDigest||current.destinationDigest!==quote.destinationDigest||current.sellerId!==allocation.sellerId||snapshot.sellerId!==allocation.sellerId)throw Error('Bank quote beneficiary is no longer eligible.')
+    const next=applyMarketplaceCommand(book,projectId,key,{type:'reserve',operationId:quote.operationId,allocationId:quote.allocationId,kind:'payout',amountUnits:quote.debitUnits})
+    next.bankReservations=[...(book.bankReservations||[]),{key,requestHash,quote:structuredClone(quote),authorization:actor}]
+    s.books[index]=next;return s
+   })
+   const book=store.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)!
+   const reservation=book.bankReservations!.find(r=>r.key===key)!
+   return structuredClone({reservation,operation:book.operations.find(o=>o.id===reservation.quote.operationId)!})
+  },
   async execute(projectId:string,paymentId:string,key:string,command:MarketplaceCommand){
    command=structuredClone(command)
    const store=await d.mutate(s=>{
@@ -98,6 +138,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
      const current=[...(s.walletBeneficiaries||[]),...(s.bankBeneficiaries||[])].find(b=>b.projectId===projectId&&b.beneficiaryId===allocation?.beneficiaryId)
      const sameDestination=snapshot?.kind==='wallet'&&current?.kind==='wallet'?snapshot.address===current.address:snapshot?.kind==='bank'&&current?.kind==='bank'?snapshot.destinationDigest===current.destinationDigest:false
      if(!snapshot||!current||current.status!=='active'||!sameDestination||snapshot.sellerId!==current.sellerId||snapshot.asset!==current.asset)throw Error('Payout beneficiary is no longer eligible.')
+     if(snapshot.kind==='bank')throw Error('Bank payouts require an accepted quote through reserveBankPayout.')
     }
     // Proof references must be canonical chain/log or provider settlement identities.
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')

@@ -1,7 +1,7 @@
 import {marketplaceAmountUnits} from '../../src/lib/marketplacePayments.js'
 import type {createMarketplaceRepository} from './repository.js'
 
-export type MarketplaceScope = 'marketplace:read' | 'marketplace:release'
+export type MarketplaceScope = 'marketplace:read' | 'marketplace:release' | 'marketplace:payout'
 export type MarketplacePrincipal = {
   projectId: string
   credentialId: string
@@ -9,7 +9,7 @@ export type MarketplacePrincipal = {
   capabilities: string[]
   scopes: string[]
 }
-type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute'>
+type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | 'sellerBalances' | 'execute' | 'reserveBankPayout'>
 type Dependencies = {
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
@@ -29,7 +29,7 @@ function fields(value: unknown, keys: string[]): Record<string, unknown> {
   return record
 }
 
-/** Unmounted application boundary. No generic command, funding, result, payout or refund endpoint. */
+/** Unmounted application boundary. No generic command, funding, result or refund endpoint. */
 export function createMarketplaceInstructions(dependencies: Dependencies) {
   const {repository, resolvePrincipal, enabled = false} = dependencies
   async function authorize(credential: string, scope: MarketplaceScope) {
@@ -40,6 +40,16 @@ export function createMarketplaceInstructions(dependencies: Dependencies) {
     return {projectId:reference(resolved.projectId), credentialId:reference(resolved.credentialId)}
   }
   return {
+    async reserveBankPayout(credential: string, key: string, body: unknown) {
+      const input = fields(structuredClone(body),['paymentId','quoteId','businessReference'])
+      const paymentId = reference(input.paymentId), quoteId = reference(input.quoteId), businessReference = reference(input.businessReference)
+      reference(key)
+      const principal = await authorize(credential,'marketplace:payout')
+      const result = await repository.reserveBankPayout(principal.projectId,paymentId,quoteId,key,{credentialId:principal.credentialId,businessReference})
+      const {quote} = result.reservation
+      // Reservation is not payment success. Exclude holding/provider identities and internal proof references.
+      return {paymentId,quoteId,operationId:result.operation.id,status:result.operation.status,asset:quote.asset,currency:quote.currency,debitUnits:quote.debitUnits,feeUnits:quote.feeUnits,ngnMinor:quote.ngnMinor}
+    },
     async payment(credential: string, paymentId: string) {
       const principal = await authorize(credential,'marketplace:read')
       const book = await repository.get(principal.projectId,reference(paymentId))
