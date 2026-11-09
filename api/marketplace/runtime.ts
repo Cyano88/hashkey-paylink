@@ -1,5 +1,9 @@
 import {getAddress,isAddress} from 'viem'
-import {readCircleTreasuryConfig} from '../circle-developer-treasury.js'
+import {readCircleTreasuryConfig,createCircleDeveloperTreasuryClient} from '../circle-developer-treasury.js'
+import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
+import {createMarketplaceCheckoutCollections} from './checkout-collections.js'
+import {createMarketplaceCollections} from './collections.js'
+import type {MarketplaceStore} from './repository.js'
 import {createMarketplaceRepository} from './repository.js'
 import {marketplaceWebhookTransport} from './webhooks.js'
 
@@ -9,6 +13,24 @@ const zero='0x0000000000000000000000000000000000000000'
 type RepositoryDependencies=NonNullable<Parameters<typeof createMarketplaceRepository>[0]>
 type ExecutionConfig=NonNullable<RepositoryDependencies['refundExecution']>
 type RuntimeAdapters={chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
+
+/** Internal collection composition. No public route, worker, wallet creation or transfer. */
+export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;chain:ExecutionConfig['chain'];storage?:Pick<Parameters<typeof createMarketplaceCollections>[0],'read'|'mutate'|'now'>;readCheckout?:Parameters<typeof createMarketplaceCheckoutCollections>[0]['readCheckout'];circle?:Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'>}){
+ const settings=readMarketplaceRuntimeConfig(input.env),blockers=settings.blockers.filter(b=>b!=='worker_disabled')
+ if(input.env.MARKETPLACE_COLLECTIONS_ENABLED!=='true')blockers.push('collections_disabled')
+ if(!input.chain||(['getChainId','getTransactionReceipt','getBlock'] as const).some(method=>typeof input.chain[method]!=='function'))blockers.push('base_rpc_client_missing')
+ if(blockers.length)throw Error('Marketplace collections are not ready: '+blockers.join(', '))
+ const key='hashpaylink:marketplace-accounting-foundation:v1'
+ const storage=input.storage??{read:()=>readDurableJson<MarketplaceStore>(key),mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>mutateDurableJson<MarketplaceStore>(key,s=>fn(s??{books:[],drafts:[]})),now:Date.now}
+ const circle=input.circle??createCircleDeveloperTreasuryClient({config:settings.config})
+ const holding={id:settings.holdingId,revision:settings.holdingRevision,address:settings.config.treasuryAddress,billsAddress:settings.billsAddress}
+ const adapter=createMarketplaceCheckoutCollections({...storage,enabled:true,projectIds:settings.projectIds,holding,readCheckout:input.readCheckout,verifyHolding:()=>circle.verifyConfiguredWallet()})
+ const collections=createMarketplaceCollections({...storage,enabled:true,holding,chain:input.chain,resolveSession:adapter.resolveSession})
+ return {bindCheckout:adapter.bind,verifyCollection:collections.verify,async resolveRefundCollection(request:Parameters<typeof collections.resolveRefundCollection>[0]){
+  if(!settings.projectIds.includes(request.projectId))throw Error('Marketplace project is not enabled.')
+  return collections.resolveRefundCollection(request)
+ }}
+}
 
 /** Explicit marketplace names only. Never inherit a Bills wallet or generic Circle credentials. */
 export function readMarketplaceRuntimeConfig(env:NodeJS.ProcessEnv=process.env){

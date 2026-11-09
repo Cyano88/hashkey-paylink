@@ -42,3 +42,15 @@ The configured repository rejects generic funding commands. Verified retries are
 Tests cover invalid, wrong-chain, wrong-token, wrong-amount, wrong-recipient, reverted, unfinalized, noncanonical, removed-log and ambiguous evidence; session/plan mutation; RPC failure; concurrent replay; cross-project race; holding isolation; and refund destination binding. Focused collection/repository TypeScript checks pass. All evidence here is synthetic.
 
 Still required before live use: connect the authoritative Circle checkout-session store to this resolver, configure and verify a dedicated holding wallet, bind collection routing before the buyer signs, and run a real end-to-end pilot. This code remains unmounted; no live addresses, wallets, environment flags or financial flows were changed.
+
+## Hosted checkout adapter and holding-wallet composition
+
+`checkout-collections.ts` now uses `readVerifiedHostedCheckoutRecord` by default. An internal caller must bind an unpaid, fixed, live Base USDC checkout to its marketplace order before exposing the checkout URL. The recipient must already be the configured holding address. This adapter never rewrites a merchant checkout recipient or converts a paid checkout into escrow.
+
+The durable binding records checkout integrity, exact amount, order/project, holding identity/revision and lifetime. It rejects local-settlement, cash-balance collection, provider-funding, flexible, agentic, multi-network, and merchant-fee deduction paths. Current server-recorded payer/transaction evidence is then independently checked by the finalized on-chain verifier. The payer identifier is explicitly wallet-scoped; it is not presented as a verified Circle or Privy user ID.
+
+`createMarketplaceCollectionRuntime` composes the durable store, authoritative checkout adapter, collection verifier, and Circle `verifyConfiguredWallet`. The Circle check validates the configured wallet ID, wallet set, address, Base chain, account type and live state. It does not create a wallet or send a transaction. Collections require their own `MARKETPLACE_COLLECTIONS_ENABLED=true` flag; enabling them does not require enabling the refund worker. Explicit Marketplace credentials and holding configuration are still mandatory, with no fallback to Bills credentials or wallet identity.
+
+At 2026-11-09T16:07:29Z, read-only production inspection confirmed the live portal/admin revision was 672ee03fc and Marketplace configuration was still missing. No environment variables or wallets were changed. The adapter/runtime are internal and unmounted; the public checkout-creation flow still needs a Marketplace-specific creation hook that binds the checkout before returning its URL. Dedicated holding-wallet provisioning and verification, execution authorization, and a controlled live pilot remain outstanding.
+
+Validation uses mocked provider/checkout reads and real ledger transitions, covering pre-payment binding, duplicate binding, exact routing, changed records, expiry/reconciliation, holding verification failures, disabled configuration and original-wallet refund resolution. No live settlement is claimed.
