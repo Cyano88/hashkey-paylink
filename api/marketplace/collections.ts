@@ -47,6 +47,15 @@ export function createMarketplaceCollections(input:Dependencies){
    if(!d.enabled)throw Error('Marketplace collection verification is disabled.')
    marketplaceReference(projectId);marketplaceReference(paymentId)
    const before=locate(await d.read(),projectId,paymentId),request={projectId,paymentId}
+   // Recheck the previous inclusion before asking the checkout adapter to
+   // reverify fees. A dropped transaction can make that adapter fail first;
+   // the old block still supplies positive evidence of a reorganization.
+   if(!before.fundingEvidence&&before.collectionObservation){
+    if(await d.chain.getChainId()!==8453)throw Error('Collection verification requires Base.')
+    const previous=before.collectionObservation
+    const block=await d.chain.getBlock({blockNumber:BigInt(previous.blockNumber)})
+    if(block.number===BigInt(previous.blockNumber)&&block.hash&&block.hash.toLowerCase()!==previous.blockHash.toLowerCase())await invalidateObservation(projectId,paymentId,previous.session.transactionHash)
+   }
    const session=binding(await d.resolveSession(request),before)
    if(await d.chain.getChainId()!==8453)throw Error('Collection verification requires Base.')
    const receipt=await d.chain.getTransactionReceipt({hash:session.transactionHash as `0x${string}`})
