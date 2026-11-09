@@ -1,5 +1,6 @@
 import {marketplaceAmountUnits} from '../../src/lib/marketplacePayments.js'
 import type {createMarketplaceRepository} from './repository.js'
+import {createMarketplacePrincipalResolver} from './authorization.js'
 
 export type MarketplaceScope = 'marketplace:read' | 'marketplace:release' | 'marketplace:payout' | 'marketplace:refund'
 export type MarketplacePrincipal = {
@@ -13,8 +14,8 @@ type Repository = Pick<ReturnType<typeof createMarketplaceRepository>, 'get' | '
 type Dependencies = {
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
-  resolvePrincipal: (credential: string) => Promise<MarketplacePrincipal | null>
-  /** Explicit internal gate. No production resolver or public route is installed. */
+  resolvePrincipal?: (credential: string) => Promise<MarketplacePrincipal | null>
+  /** Explicit internal gate. The default resolver also requires rollout configuration. No public route is installed. */
   enabled?: boolean
 }
 
@@ -31,7 +32,7 @@ function fields(value: unknown, keys: string[]): Record<string, unknown> {
 
 /** Unmounted application boundary. No generic command, funding or result endpoint. */
 export function createMarketplaceInstructions(dependencies: Dependencies) {
-  const {repository, resolvePrincipal, enabled = false} = dependencies
+  const {repository, resolvePrincipal = createMarketplacePrincipalResolver(), enabled = false} = dependencies
   async function authorize(credential: string, scope: MarketplaceScope) {
     if (!enabled) throw Error('Marketplace instructions are not enabled.')
     if (typeof credential !== 'string' || !credential.trim()) throw Error('Marketplace authorization required.')

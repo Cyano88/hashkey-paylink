@@ -15,3 +15,18 @@ The live baseline before release was d8a367dbd44f65a0147922aa88e0a7c9de5e6538 on
 This release enables access requests and administrative review only. Marketplace financial routes and workers remain inactive. Approval is rollout eligibility, not an automatic production payment capability grant.
 
 Remaining financial activation work includes authoritative collection/funding verification, production project authentication, dedicated holding wallet policy, wallet and bank execution wiring, refund proof verification, real-database concurrency validation, and an end-to-end live payment/release/refund pilot. Existing fixture passes must not be represented as live settlement evidence.
+
+## Next dependency: developer instruction authentication
+
+The internal instruction service now defaults to the durable developer API-key adapter in `api/marketplace/authorization.ts`. It reuses the portal HMAC digest format and re-reads project/key and whitelist state for every request. It requires all of:
+
+- `MARKETPLACE_INSTRUCTIONS_ENABLED=true` and explicit `MARKETPLACE_PROJECT_IDS` rollout inclusion.
+- An active business app with approved business verification and the Marketplace capability configured.
+- Exactly one approved whitelist request belonging to the current app owner.
+- A matching, unrevoked, unexpired general live API key; scoped app/CLI/test keys are denied.
+
+General live keys carry the app's read, release, payout and refund authority. No new key issuance or scope-grant UI is exposed. Missing or ambiguous records fail closed. A storage failure propagates and cannot authorize a command. The existing instruction gate also stays disabled by default.
+
+Validation: authorization smoke tests cover digest matching, configuration gates, owner transfer, suspended/removed apps, verification, key expiry/revocation, request rejection/revocation, duplicate records, storage failure, and denial before repository access. Existing instruction regressions and focused TypeScript checks pass. These are local fixtures, not live provider or database concurrency evidence.
+
+This closes the credential-resolution implementation gap only. No public financial endpoints, production configuration, holding wallets or funds were changed. Workers must still recheck custody/fee authority immediately before submission; the refund runtime's execution-authority adapter remains a separate blocker. Collection verification and live settlement remain outstanding.
