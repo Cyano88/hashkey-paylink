@@ -1,4 +1,5 @@
-export type ProductCapability = 'hosted_checkout' | 'arc_agreements' | 'xstocks_agreements' | 'swap_arc' | 'swap_xlayer' | 'polymarket_funding'
+import {MARKETPLACE_PAYMENTS} from './marketplacePayments.js'
+export type ProductCapability = 'marketplace_payments' | 'hosted_checkout' | 'arc_agreements' | 'xstocks_agreements' | 'swap_arc' | 'swap_xlayer' | 'polymarket_funding'
 export const PRODUCT_GROUPS = [
   { id: 'checkout', title: 'Checkout', description: 'Accept payments, with optional funding for supported external accounts.', options: [
     { capability: 'hosted_checkout', title: 'Hosted checkout', detail: 'Choose settlement networks below. Agent checkout supports Base and Arc.' },
@@ -36,8 +37,9 @@ export function effectiveProductCapabilities(project: {
 
 // Public onboarding catalog. Legacy capability definitions above remain for existing integrations.
 export const CHECKOUT_PRODUCTS = [{
-  id: 'checkout', title: 'What would you like to do?', description: 'Choose one or both.', options: [
+  id: 'checkout', title: 'What would you like to do?', description: 'Choose the available payment flows for your app.', options: [
     { capability: 'hosted_checkout', title: 'Accept payments', detail: 'Let customers pay on a checkout page hosted by Hash PayLink.' },
+    { capability: MARKETPLACE_PAYMENTS.capability, title: MARKETPLACE_PAYMENTS.title, detail: 'Collect for multiple sellers, then release to bank accounts or Base wallets. Under development.' },
     { capability: 'polymarket_funding', title: 'Fund Polymarket accounts', detail: 'Let customers add USDC to their Polymarket account using Base or Arbitrum.' },
   ],
 }] as const

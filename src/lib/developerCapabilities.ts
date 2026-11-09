@@ -1,3 +1,4 @@
+import {MARKETPLACE_PAYMENTS, MARKETPLACE_SETTLEMENTS} from './marketplacePayments.js'
 import { developerCheckoutNetworks } from './developerNetworkPolicy.js'
 // Public product contract; network support does not imply project or provider readiness.
 export const DEVELOPER_CAPABILITIES_VERSION = 2
@@ -7,6 +8,7 @@ export const TEST_NETWORKS = {
   arc_testnet: { name: 'Arc Testnet', chainId: 5042002, circleChain: 'ARC-TESTNET' },
 } as const
 export const DEVELOPER_PRODUCTS = [
+  { id: MARKETPLACE_PAYMENTS.capability, name: MARKETPLACE_PAYMENTS.title, live: { networks: ['base'], status: MARKETPLACE_PAYMENTS.status }, sandbox: { networks: [], status: 'not_enabled', reason: 'Internal accounting fixtures only; no hosted funding, custody or payout execution.' }, settlementOptions: MARKETPLACE_SETTLEMENTS },
   { id: 'hosted_checkout', name: 'Human checkout', live: { networks: developerCheckoutNetworks('human'), status: 'project_configuration' }, sandbox: { networks: ['base_sepolia', 'arbitrum_sepolia', 'arc_testnet'], status: 'not_enabled', reason: 'Isolated testnet wallet, checkout and verification adapters are not enabled.' } },
   { id: 'agent_checkout', name: 'Agent checkout', live: { networks: developerCheckoutNetworks('agentic'), status: 'project_configuration' }, sandbox: { networks: ['base_sepolia', 'arc_testnet'], status: 'not_enabled', reason: 'Isolated testnet payment and reconciliation adapters are not enabled.' } },
   { id: 'arc_agreements', name: 'Escrow service', live: { networks: [], status: 'under_development' }, sandbox: { networks: ['arc_testnet'], status: 'not_enabled', reason: 'Isolated draft storage and a reviewed testnet deployment are required before lifecycle testing.' } },

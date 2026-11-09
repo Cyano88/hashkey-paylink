@@ -1,5 +1,5 @@
 import type {BusinessVerification} from './verificationTypes'
-import {CHECKOUT_PRODUCTS, productAllowed} from '../lib/developerProducts'
+import {CHECKOUT_PRODUCTS, productAllowed, isOpenCheckoutProduct} from '../lib/developerProducts'
 
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check, ChevronRight, Clock } from 'lucide-react'
@@ -57,7 +57,7 @@ export function ProductsPanel({project,onConfigure}:{project:ProjectSummary;onCo
       const options=group.options.filter(option=>productAllowed(project.checkoutMode,option.capability))
       if(!options.length)return null
       return <section key={group.id} className="py-5"><h2 className="text-base font-semibold">Payment options</h2>
-        {options.map(option=><div key={option.capability} className="mt-4 flex items-start justify-between gap-4"><div><h3 className="text-sm font-semibold">{option.title}</h3><p className={muted}>{option.detail}</p></div><span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-white/5">{!project.capabilities.includes(option.capability)?'Not selected':project.operationalStatus==='suspended'?'Suspended':project.enabledCapabilities&&!project.enabledCapabilities.includes(option.capability)?'Verification required':project.settlementStatus==='ready'?'Configured':'Setup required'}</span></div>)}
+        {options.map(option=><div key={option.capability} className="mt-4 flex items-start justify-between gap-4"><div><h3 className="text-sm font-semibold">{option.title}</h3><p className={muted}>{option.detail}</p></div><span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-white/5">{!isOpenCheckoutProduct(option.capability)?'Under development':!project.capabilities.includes(option.capability)?'Not selected':project.operationalStatus==='suspended'?'Suspended':project.enabledCapabilities&&!project.enabledCapabilities.includes(option.capability)?'Verification required':project.settlementStatus==='ready'?'Configured':'Setup required'}</span></div>)}
       </section>
     })}</div><p className={'mt-4 '+muted}>Payment processing is available after setup and any required approval.</p><button type="button" onClick={onConfigure} className="developer-primary mt-6">Configure payments</button><ComingSoonProducts/></div>
 }

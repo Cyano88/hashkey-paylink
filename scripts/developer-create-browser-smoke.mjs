@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { build } from 'esbuild'
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
+import {checkoutTestCss} from './checkout-test-css.mjs'
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
 const source = `import React,{useState}from'react';import{createRoot}from'react-dom/client';import Card from './src/developer/CreateProjectCard';import{ProductsPanel}from'./src/developer/PortalPanels';function App(){const[form,setForm]=useState({name:'',website:'',useCase:'',checkoutMode:'human',capabilities:['hosted_checkout']});window.form=form;window.calls=window.calls||0;window.cancels=window.cancels||0;const onCreate=async()=>{window.calls++;await new Promise((resolve,reject)=>{window.complete=resolve;window.fail=()=>reject(new Error('Connection failed. Try again.'))})};return <main className="mx-auto max-w-xl p-6"><Card form={form} setForm={setForm} busy={false} error="" onCreate={onCreate} onCancel={()=>window.cancels++} embedded/></main>}createRoot(document.getElementById('root')).render(<App/>);`
 const result=await build({stdin:{contents:source,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic'})
-const css=readFileSync('.codex-temp/browser-checkout.css','utf8')
+const css=await checkoutTestCss()
 const html='<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body><div id="root"></div><script>'+result.outputFiles[0].text+'</script></body></html>'
 mkdirSync('output/playwright',{recursive:true});writeFileSync('output/playwright/developer-create-preview.html',html)
 const browser=await chromium.launch({channel:'chrome',headless:true})
@@ -13,20 +14,20 @@ try {
  const errors=[];page.on('pageerror',error=>errors.push(error.message))
  await page.setContent(html)
  await page.getByRole('button',{name:'Continue',exact:true}).click()
- assert.match(await page.getByRole('alert').textContent(),/project name/)
+ assert.match(await page.getByRole('alert').textContent(),/app name/)
  assert.equal(await page.evaluate(()=>window.calls),0)
- await page.getByLabel('Project name',{exact:true}).fill('Checkout demo')
+ await page.getByLabel('App name',{exact:true}).fill('Checkout demo')
  assert.equal(await page.getByLabel('Website',{exact:true}).count(),0,'activation details are deferred')
- await page.getByLabel('Project name',{exact:true}).press('Enter')
+ await page.getByLabel('App name',{exact:true}).press('Enter')
  assert.equal(await page.evaluate(()=>window.calls),0,'first step does not create a project')
  await page.getByRole('button',{name:'Back',exact:true}).click()
- assert.equal(await page.getByLabel('Project name',{exact:true}).inputValue(),'Checkout demo')
+ assert.equal(await page.getByLabel('App name',{exact:true}).inputValue(),'Checkout demo')
  await page.getByRole('button',{name:'Continue',exact:true}).click()
  await page.getByRole('checkbox',{name:/Fund Polymarket/}).focus()
  await page.keyboard.press('Space')
  assert.deepEqual(await page.evaluate(()=>window.form.capabilities),['hosted_checkout','polymarket_funding'])
- await page.getByRole('button',{name:'Create project',exact:true}).press('Enter')
- await page.getByRole('button',{name:'Creating project',exact:true}).waitFor()
+ await page.getByRole('button',{name:'Create app',exact:true}).press('Enter')
+ await page.getByRole('button',{name:'Creating app',exact:true}).waitFor()
  await page.evaluate(()=>{document.querySelector('form').requestSubmit();document.querySelector('form').requestSubmit()})
  assert.equal(await page.evaluate(()=>window.calls),1,'duplicate submissions blocked')
  assert.equal(await page.getByRole('button',{name:'Back',exact:true}).isDisabled(),true)
@@ -36,10 +37,10 @@ try {
  await page.getByRole('alert').waitFor()
  assert.match(await page.getByRole('alert').textContent(),/Connection failed/)
  assert.equal(await page.evaluate(()=>window.form.name),'Checkout demo')
- await page.getByRole('button',{name:'Create project',exact:true}).click()
+ await page.getByRole('button',{name:'Create app',exact:true}).click()
  assert.equal(await page.evaluate(()=>window.calls),2)
  await page.evaluate(()=>window.complete())
- await page.getByRole('button',{name:'Create project',exact:true}).waitFor()
+ await page.getByRole('button',{name:'Create app',exact:true}).waitFor()
  await page.screenshot({path:'output/playwright/developer-create-desktop.png',fullPage:true})
  for(const width of [390,320]) {
   await page.setViewportSize({width,height:844})

@@ -1,3 +1,4 @@
+import MarketplaceDocs from '../pages/docs/MarketplaceDocs'
 import {BrowserRouter,Routes,Route,Navigate} from 'react-router-dom'
 import DocsLayout from '../pages/docs/DocsLayout'
 import DocsHome from '../pages/docs/DocsHome'
@@ -19,6 +20,7 @@ export default function DocsApp(){return <BrowserRouter><Routes>
   <Route path="getting-started" element={<GettingStarted/>}/>
   <Route path="api" element={<ApiReference/>}/>
   <Route path="funding" element={<FundingDocs/>}/>
+  <Route path="marketplaces" element={<MarketplaceDocs/>}/>
   <Route path="pocket" element={<PocketOverview/>}/>
   <Route path="pocket/pay" element={<PocketPay/>}/>
   <Route path="pocket/transfers" element={<PocketTransfers/>}/>

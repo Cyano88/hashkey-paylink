@@ -19,7 +19,7 @@ export default function CreateProjectCard({ form, setForm, busy, error, onCreate
     event.preventDefault()
     if (locked || submitting.current) return
     let message = ''
-    if (form.name.trim().length < 2) message = 'Enter a app name with at least 2 characters.'
+    if (form.name.trim().length < 2) message = 'Enter an app name with at least 2 characters.'
     if (!message && (!form.capabilities.length || !form.capabilities.every(isOpenCheckoutProduct))) message = 'Choose at least one payment option.'
     setValidation(message)
     if (message) return
@@ -34,7 +34,7 @@ export default function CreateProjectCard({ form, setForm, busy, error, onCreate
     {(onCancel || step === 2) && <button type="button" disabled={locked} onClick={() => { if (step === 2) { setStep(1); setValidation('') } else onCancel?.() }} className="mb-5 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-gray-500 disabled:opacity-50"><ArrowLeft className="h-4 w-4"/>{step === 2 ? 'Back' : 'Back to apps'}</button>}
     <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-300">Step {step} of 2</p>
     <h1 className="mt-2 text-2xl font-semibold tracking-tight">{step === 1 ? 'Name your app' : 'How will you use Hash PayLink?'}</h1>
-    <p className="mt-2 text-sm leading-6 text-gray-500">{step === 1 ? 'Use the name of your app or business.' : 'Choose one or both. You can change this later.'}</p>
+    <p className="mt-2 text-sm leading-6 text-gray-500">{step === 1 ? 'Use the name of your app or business.' : 'Choose the available payment flows for your app. You can change this later.'}</p>
     {emptyAccount && <p className="mt-3 text-sm leading-6 text-gray-500">No projects are linked to this sign-in. If you expected an existing project, use the email that created it.</p>}
     <fieldset disabled={locked} className="mt-6 min-w-0 space-y-4" onChange={() => setValidation('')}>
       {step === 1 && <label className="block space-y-1.5"><span className="text-sm font-semibold">App name</span><input className={inputClass} value={form.name} maxLength={100} autoComplete="organization" onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder="Your app"/></label>}

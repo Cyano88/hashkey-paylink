@@ -528,11 +528,11 @@ function requestedCapabilities(value: unknown, checkoutMode: DeveloperCheckoutMo
   const allowed = new Set<DeveloperCapability>(
     checkoutMode === 'agentic'
       ? ['hosted_checkout', 'arc_agreements']
-      : ['hosted_checkout', 'polymarket_funding', 'arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer'],
+      : ['hosted_checkout', 'polymarket_funding', 'marketplace_payments', 'arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer'],
   )
   if (value.some(item => typeof item !== 'string' || !allowed.has(clean(item, 40).toLowerCase() as DeveloperCapability))) throw Object.assign(new Error('Choose products supported for this project mode. Bridge is not available.'), {status:400})
   const capabilities = value.map(item => clean(item, 40).toLowerCase()).filter((item): item is DeveloperCapability => allowed.has(item as DeveloperCapability))
-  return Array.from(new Set(capabilities)).slice(0, 6)
+  return Array.from(new Set(capabilities)).slice(0, 7)
 }
 
 function statusCode(error: unknown) {

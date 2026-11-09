@@ -53,3 +53,7 @@ origin to the supplied website if no explicit origin has been set.
 Business details, receiving accounts and branding have separate settings views.
 Polymarket-only projects cannot choose local bank settlement. Unsaved settings
 and webhook edits are preserved when navigation confirmation is dismissed.
+
+## Marketplace Payments foundation (9 November 2026)
+
+Marketplace Payments is now catalogued as a third, disabled option under development. It cannot be selected for new projects or enabled on existing projects, and grants no production permissions. See marketplace-payments-contract.md for Base USDC/USDT wallet settlement, USDC-funded NGN bank settlement, accounting boundaries and remaining activation work. No public marketplace money endpoint is enabled.

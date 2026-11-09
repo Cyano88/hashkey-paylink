@@ -10,7 +10,7 @@ type AccessProject = {
 // Verification is a product gate, not permission to bypass suspension or route activation.
 export function productionCapabilities(project: AccessProject): ProductCapability[] {
   if (project.removal || project.operationalStatus === 'suspended' || ['rejected','changes_requested'].includes(project.businessVerification?.status ?? '') || (project.businessVerification?.reviewedAt && project.businessVerification.status !== 'approved')) return []
-  const capabilities = effectiveProductCapabilities(project)
+  const capabilities = effectiveProductCapabilities(project).filter(c=>c!=='marketplace_payments')
   const local = project.settlementMode === 'ngn' || project.settlementMode === 'ugx'
   if (local) return (project.accountType === 'individual' ? project.personalKycVerified : project.businessVerification?.status === 'approved') ? capabilities.filter(c => c === 'hosted_checkout') : []
   if (!project.businessVerification?.required || project.businessVerification.status === 'approved') return capabilities

@@ -101,7 +101,7 @@ const immutableMode = await request(handler, 'PUT', {
 assert.equal(immutableMode.statusCode, 409)
 
 // New onboarding is checkout-only; legacy products remain readable/configurable.
-for (const capability of ['arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer']) {
+for (const capability of ['marketplace_payments', 'arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer']) {
   const denied = await request(handler, 'POST', { action: 'create', name: 'Deferred product', website: 'https://example.com', checkoutMode: 'human', capabilities: [capability], useCase: 'Customers pay for a service offered through our platform.' })
   assert.equal(denied.statusCode, 409)
   const updateDenied = await request(handler, 'PUT', { action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade', useCase: 'Customers pay for a service offered through our platform.', capabilities: ['hosted_checkout', capability] })
@@ -441,7 +441,7 @@ assert.equal((await request(handler,'PUT',{...activateDraft,bscCheckout:{...bscC
 console.log('PASS BNB acceptance and default, disabled default and wrong-network asset rejection.')
 
 const receiptDraft={...activateDraft,xlayerCheckout:xlayerConfig,receiptEmails:{enabled:true,supportEmail:'help@example.test',timeZone:'Africa/Lagos',enabledAt:'2000-01-01'}};
-const receiptSave=await request(handler,'PUT',receiptDraft);assert.equal(receiptSave.statusCode,200,JSON.stringify(receiptSave.body));assert.equal(receiptSave.body.project.receiptEmails.supportEmail,'help@example.test');assert.equal(receiptSave.body.project.receiptEmails.enabledAt,'2026-07-19T12:00:00.000Z');
+const receiptSave=await request(handler,'PUT',receiptDraft);assert.equal(receiptSave.statusCode,200,JSON.stringify(receiptSave.body));assert.equal(receiptSave.body.project.receiptEmails.supportEmail,'help@example.test');assert.equal(receiptSave.body.project.receiptEmails.enabledAt,undefined,'Client cannot inject receipt enable history');
 assert.equal((await request(handler,'PUT',{...receiptDraft,receiptEmails:{...receiptDraft.receiptEmails,supportEmail:'bad'}})).statusCode,400);
 const receiptOwner=activeIdentity;activeIdentity={userId:'stranger',email:'stranger@example.test'};assert.equal((await request(handler,'PUT',receiptDraft)).statusCode,404);activeIdentity=receiptOwner;
-const disabledReceipts=await request(handler,'PUT',{...receiptDraft,receiptEmails:{...receiptDraft.receiptEmails,enabled:false}});assert.equal(disabledReceipts.body.project.receiptEmails.enabled,false);console.log('PASS project-owned receipt settings round-trip, validation, enable-time integrity and disable.');
+const disabledReceipts=await request(handler,'PUT',{...receiptDraft,receiptEmails:{...receiptDraft.receiptEmails,enabled:false}});assert.equal(disabledReceipts.body.project.receiptEmails.enabled,true,'Legacy clients cannot disable platform receipts');console.log('PASS project-owned receipt settings round-trip, validation, enable-history integrity and mandatory platform receipts.');

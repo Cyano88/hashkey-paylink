@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict'
+import {marketplaceAmountUnits,marketplaceSettlement} from '../src/lib/marketplacePayments.ts'
+import {createMarketplacePlan,createMarketplaceBook,applyMarketplaceCommand} from '../api/marketplace/accounting.ts'
+import {createMarketplaceRepository} from '../api/marketplace/repository.ts'
+import {productionCapabilities} from '../src/lib/developerAccess.ts'
+import {isOpenCheckoutProduct} from '../src/lib/developerProducts.ts'
+const input={projectId:'project_alpha',paymentId:'payment_one',network:'base',asset:'USDC',amount:'10.000001',allocations:[
+ {id:'share_a',sellerId:'seller_a',role:'seller',amount:'6',settlement:'cash_balance',beneficiaryId:'bank_a'},
+ {id:'share_b',sellerId:'seller_b',role:'seller',amount:'3',settlement:'wallet_usdc',beneficiaryId:'wallet_b'},
+ {id:'fee',sellerId:'platform_alpha',role:'platform',amount:'1.000001',settlement:'wallet_usdc',beneficiaryId:'wallet_platform'},
+]}
+const plan=createMarketplacePlan(input)
+assert.equal(plan.amountUnits,'10000001')
+for(const amount of ['1e3','NaN','-1','0','1.0000001','1,000.00','01',' 1','1.'])assert.throws(()=>marketplaceAmountUnits(amount))
+assert.equal(marketplaceAmountUnits('999999999999999999.999999'),'999999999999999999999999')
+for(const args of [['cash_balance','USDT','base'],['wallet_usdc','USDT','base'],['wallet_usdt','USDC','base'],['wallet_usdc','USDC','arc']])assert.throws(()=>marketplaceSettlement(...args))
+assert.equal(marketplaceSettlement('wallet_usdt','USDT','base').currency,'USDT')
+assert.throws(()=>createMarketplacePlan({...input,amount:'11'}),/equal/)
+assert.throws(()=>createMarketplacePlan({...input,allocations:[input.allocations[0],input.allocations[0]]}),/Duplicate/)
+let book=createMarketplaceBook(plan)
+const run=(key,command)=>book=applyMarketplaceCommand(book,input.projectId,key,command)
+assert.throws(()=>run('early',{type:'release',allocationId:'share_a',amountUnits:'1'}),/funding/)
+assert.throws(()=>applyMarketplaceCommand(book,'project_other','key',{type:'fund',evidenceId:'base:proof1',network:'base',asset:'USDC',amountUnits:'10000001'}),/not found/)
+assert.throws(()=>run('wrong_asset',{type:'fund',evidenceId:'base:proof1',network:'base',asset:'USDT',amountUnits:'10000001'}),/match/)
+run('funding',{type:'fund',evidenceId:'base:proof1',network:'base',asset:'USDC',amountUnits:'10000001'})
+assert.throws(()=>run('early_payout',{type:'reserve',operationId:'payout_a',allocationId:'share_a',kind:'payout',amountUnits:'1'}),/Insufficient/)
+run('release_a',{type:'release',allocationId:'share_a',amountUnits:'4000000'})
+const before=structuredClone(book)
+run('release_a',{amountUnits:'4000000',allocationId:'share_a',type:'release'})
+assert.deepEqual(book,before,'canonical retries cannot double release')
+assert.throws(()=>run('release_a',{type:'release',allocationId:'share_a',amountUnits:'1'}),/Idempotency/)
+run('payout_a',{type:'reserve',operationId:'payout_a',allocationId:'share_a',kind:'payout',amountUnits:'4000000'})
+run('uncertain_a',{type:'result',operationId:'payout_a',status:'unknown',evidenceId:'provider:timeout'})
+assert.equal(book.balances[0].reserved,'4000000')
+assert.throws(()=>run('double_payout',{type:'reserve',operationId:'payout_b',allocationId:'share_a',kind:'payout',amountUnits:'1'}),/Insufficient/)
+run('partial_refund',{type:'reserve',operationId:'refund_a',allocationId:'share_a',kind:'refund',amountUnits:'1000000'})
+run('refund_failed',{type:'result',operationId:'refund_a',status:'failed',evidenceId:'base:failed_refund'})
+assert.equal(book.balances[0].pending,'2000000','proven failure restores original pending bucket')
+run('refund_retry',{type:'reserve',operationId:'refund_b',allocationId:'share_a',kind:'refund',amountUnits:'2000000'})
+run('refund_settled',{type:'result',operationId:'refund_b',status:'settled',evidenceId:'base:refund_final'})
+run('payout_settled',{type:'result',operationId:'payout_a',status:'settled',evidenceId:'provider:paid_final'})
+assert.deepEqual(book.balances[0],{allocationId:'share_a',pending:'0',available:'0',reserved:'0',paid:'4000000',refunded:'2000000'})
+assert.throws(()=>run('late_failure',{type:'result',operationId:'payout_a',status:'failed',evidenceId:'provider:late'}),/final/)
+assert.throws(()=>run('refund_paid',{type:'reserve',operationId:'refund_paid',allocationId:'share_a',kind:'refund',amountUnits:'1'}),/Insufficient/)
+assert.equal(book.balances[2].pending,'1000001','commission never releases implicitly')
+
+let stored,queue=Promise.resolve()
+const deps={read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{const next=fn(structuredClone(stored||{books:[],drafts:[]}));stored=next;return structuredClone(next)});queue=job.catch(()=>{});return job}}
+let repo=createMarketplaceRepository(deps)
+await repo.create(input,'create_one');await repo.create(input,'create_one')
+assert.equal(stored.books.length,1)
+await assert.rejects(()=>repo.create({...input,amount:'10.000002',allocations:input.allocations.map(a=>a.id==='fee'?{...a,amount:'1.000002'}:a)},'create_one'),/Idempotency/)
+await repo.execute(input.projectId,input.paymentId,'fund',{type:'fund',evidenceId:'base:global_proof',network:'base',asset:'USDC',amountUnits:'10000001'})
+await repo.create({...input,projectId:'project_other'},'create_one')
+await assert.rejects(()=>repo.execute('project_other',input.paymentId,'fund',{type:'fund',evidenceId:'base:global_proof',network:'base',asset:'USDC',amountUnits:'10000001'}),/already used/)
+assert.equal(await repo.get('project_missing',input.paymentId),null)
+await repo.execute(input.projectId,input.paymentId,'release',{type:'release',allocationId:'share_a',amountUnits:'6000000'})
+const race=await Promise.allSettled(['one','two'].map(id=>repo.execute(input.projectId,input.paymentId,'reserve_'+id,{type:'reserve',operationId:'operation_'+id,allocationId:'share_a',kind:'payout',amountUnits:'4000000'})))
+assert.equal(race.filter(r=>r.status==='fulfilled').length,1,'atomic reservation prevents overspend')
+repo=createMarketplaceRepository(deps)
+const balance=await repo.sellerBalances(input.projectId,'seller_a')
+assert.equal(balance[0].units.available,'2000000');assert.equal(balance[0].units.reserved,'4000000');assert.equal(balance[1].units.available,'0')
+assert.equal((await repo.sellerBalances('project_other','seller_a'))[0].units.available,'0')
+await repo.create({...input,paymentId:'payment_usdt',asset:'USDT',allocations:input.allocations.map(a=>({...a,settlement:'wallet_usdt'}))},'create_usdt')
+await repo.execute(input.projectId,'payment_usdt','fund',{type:'fund',evidenceId:'base:usdt_proof',network:'base',asset:'USDT',amountUnits:'10000001'})
+assert.equal((await repo.sellerBalances(input.projectId,'seller_a'))[1].units.pending,'6000000')
+assert.equal(isOpenCheckoutProduct('marketplace_payments'),false)
+assert.deepEqual(productionCapabilities({checkoutMode:'human',settlementMode:'usdc',capabilities:['marketplace_payments']}),[])
+assert.deepEqual(productionCapabilities({checkoutMode:'human',settlementMode:'usdc',capabilities:['hosted_checkout','marketplace_payments']}),['hosted_checkout'])
+console.log('PASS marketplace foundation: exact splits, Base asset/settlement policy, project isolation, canonical idempotency, partial refunds, uncertain payouts, conservation, atomic race/restart, separate seller assets and closed production gate. No financial calls.')
