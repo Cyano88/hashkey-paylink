@@ -31,3 +31,20 @@ fixture.failTreasury=true;await assert.rejects(()=>verifyMerchantCheckoutTransfe
 await assert.rejects(()=>verifyMerchantCheckoutTransfer(checkout,{...input,payer:recipient}))
 fixture.store.quotes[signed.quote.id].token+='x';await assert.rejects(()=>verifyMerchantCheckoutTransfer(checkout,input))
 console.log('PASS signed checkout fee binding, durable recovery, exact merchant and treasury proof, full order fulfillment amount, wrong payer/asset/network and tampered quote rejection. No live calls.')
+
+fixture.checkout={...checkout,feePayer:'payer'}
+const gross=createPaymentFeeQuote({...binding,mode:'gross'},10000n,false,Date.now())
+await assertMerchantFeeBinding(gross.quote)
+await rememberMerchantFeeQuote(gross.token,gross.quote)
+assert.ok(Number.isSafeInteger(fixture.store.quotes[gross.quote.id].acceptedAt))
+assert.equal(fixture.store.quotes[gross.quote.id].quote.recipientUnits,'1000000')
+assert.equal(fixture.store.quotes[gross.quote.id].quote.totalUnits,'1012500')
+await assert.rejects(()=>assertMerchantFeeBinding(binding))
+const tampered=createPaymentFeeQuote({...binding,mode:'gross'},10000n,false,Date.now())
+await assert.rejects(()=>rememberMerchantFeeQuote(tampered.token+'x',tampered.quote))
+assert.equal(fixture.store.quotes[tampered.quote.id],undefined)
+fixture.checkout={...checkout,feePayer:undefined}
+const ordinary=createPaymentFeeQuote({...binding,mode:'gross'},10000n,false,Date.now())
+await rememberMerchantFeeQuote(ordinary.token,ordinary.quote)
+assert.equal(fixture.store.quotes[ordinary.quote.id],undefined,'ordinary payer checkout behavior stays unchanged')
+console.log('PASS Marketplace gross quote is durably recorded before signing with an acceptance time; net mode and tampered tokens cannot bypass payer fees.')

@@ -25,6 +25,7 @@ export default function MarketplaceDocs(){return <DocPage>
   <Section title="Refunds, fees and retries" id="refunds">
     <p>A refund must identify the original payment and allocations, including any platform commission you are returning. Partial refunds cannot exceed remaining unspent allocations. Funds already paid out cannot be reversed by changing a ledger entry.</p>
     <p>USDC payments refund USDC; USDT payments refund USDT to the verified original payer. A bank-settlement preference does not change the original payment asset.</p>
+    <p>The buyer pays Hash PayLink?s processing fee and collection gas reimbursement on top of the order amount. The full order amount reaches holding and is divided into seller shares and the marketplace?s own commission. The buyer reviews the quoted fee and total before authorizing payment. Later payout and refund gas require separate coverage.</p>
     <p>Platform commission and payment/provider fees are separate. NGN payout amounts depend on the accepted Paycrest quote, its fees and expiry. A stablecoin balance does not guarantee a fixed future naira amount.</p>
     <p>Every money-changing request will require a project-scoped idempotency key. A retry with the same key and different details must fail. Timeouts must be reconciled before retrying execution or making reserved funds available again.</p>
   </Section>

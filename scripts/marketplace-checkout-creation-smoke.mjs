@@ -25,7 +25,7 @@ const results=await Promise.all([service.createCheckout('valid',body),service.cr
 assert.equal(results[0].checkoutId,results[1].checkoutId);assert.equal(ids,1);assert.equal(hosted.outbox.length,1)
 assert.equal(market.books[0].collectionCheckout.checkoutId,results[0].checkoutId)
 assert.ok(results[0].checkoutUrl.includes(results[0].checkoutId));assert.equal(results[0].holdingAddress,undefined)
-const record=hosted.checkouts[results[0].checkoutId];assert.equal(record.recipient,holding);assert.equal(record.amount,'10');assert.equal(record.network,'base');assert.equal(record.environment,'live');assert.equal(record.flexible,false)
+const record=hosted.checkouts[results[0].checkoutId];assert.equal(record.recipient,holding);assert.equal(record.amount,'10');assert.equal(record.network,'base');assert.equal(record.environment,'live');assert.equal(record.flexible,false);assert.equal(record.feePayer,'payer')
 await drainHostedCheckoutWebhookOutbox(dependencies)
 await assert.rejects(()=>service.createCheckout('valid',{...body,title:'changed order'}),/conflicts/)
 active=false;await assert.rejects(()=>service.createCheckout('valid',body),/denied/)

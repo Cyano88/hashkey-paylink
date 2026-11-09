@@ -1,3 +1,4 @@
+import {verifyPayerCheckoutTransfer} from '../merchant-checkout-fees.js'
 import {getAddress} from 'viem'
 import {readVerifiedHostedCheckoutRecord,type CheckoutRecord} from '../hosted-checkouts.js'
 import {marketplaceAmountUnits} from '../../src/lib/marketplacePayments.js'
@@ -6,12 +7,12 @@ import type {MarketplaceStore} from './repository.js'
 import type {MarketplaceCollectionSession} from './collections.js'
 
 export type MarketplaceCheckoutBinding={checkoutId:string;projectId:string;paymentId:string;amountUnits:string;holdingId:string;holdingRevision:string;holdingAddress:string;checkoutIntegrity:string;createdAt:string;expiresAt:string;boundAt:number}
-type Dependencies={enabled?:boolean;projectIds:string[];holding:{id:string;revision:string;address:string;billsAddress:string};read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyHolding:()=>Promise<unknown>;readCheckout?:(id:string)=>Promise<CheckoutRecord|null>}
+type Dependencies={enabled?:boolean;projectIds:string[];holding:{id:string;revision:string;address:string;billsAddress:string};read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;verifyHolding:()=>Promise<unknown>;verifyPayerFees?:typeof verifyPayerCheckoutTransfer;readCheckout?:(id:string)=>Promise<CheckoutRecord|null>}
 
 /** Internal pre-payment association. Call after creating the fixed hosted checkout,
  * before returning its payment URL. This never changes a checkout recipient. */
 export function createMarketplaceCheckoutCollections(input:Dependencies){
- const d={...input,projectIds:[...input.projectIds],holding:structuredClone(input.holding),readCheckout:input.readCheckout??((id:string)=>readVerifiedHostedCheckoutRecord(id,{allowExpiredForReconciliation:true}))}
+ const d={...input,verifyPayerFees:input.verifyPayerFees??verifyPayerCheckoutTransfer,projectIds:[...input.projectIds],holding:structuredClone(input.holding),readCheckout:input.readCheckout??((id:string)=>readVerifiedHostedCheckoutRecord(id,{allowExpiredForReconciliation:true}))}
  function gate(projectId:string){if(!d.enabled||!d.projectIds.includes(projectId))throw Error('Marketplace checkout collection is not enabled.')}
  function locate(s:MarketplaceStore|undefined,projectId:string,paymentId:string){const book=s?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId);if(!book)throw Error('Marketplace payment not found.');return book}
  function validate(record:CheckoutRecord|null,projectId:string,amountUnits:string){
@@ -19,7 +20,7 @@ export function createMarketplaceCheckoutCollections(input:Dependencies){
   const address=getAddress(d.holding.address),bills=getAddress(d.holding.billsAddress)
   if(address==='0x0000000000000000000000000000000000000000'||bills==='0x0000000000000000000000000000000000000000'||address===bills)throw Error('Marketplace holding must be isolated from Bills.')
   const options=record.paymentOptions??[{network:record.network,recipient:record.recipient}]
-  if(record.partnerId!==projectId||record.kind!=='usdc_request'||record.flexible||record.checkoutMode==='agentic'||record.environment!=='live'||record.network!=='base'||(record.asset??'USDC')!=='USDC'||record.settlement||record.providerFunding||record.cashPayer||record.feePayer||record.payment?.fees||options.length!==1||options[0].network!=='base'||getAddress(options[0].recipient)!==address||getAddress(record.recipient)!==address||marketplaceAmountUnits(record.amount)!==amountUnits)throw Error('Checkout is not an exact Base USDC marketplace collection.')
+  if(record.partnerId!==projectId||record.kind!=='usdc_request'||record.flexible||record.checkoutMode==='agentic'||record.environment!=='live'||record.network!=='base'||(record.asset??'USDC')!=='USDC'||record.settlement||record.providerFunding||record.cashPayer||record.feePayer!=='payer'||record.payment?.fees||options.length!==1||options[0].network!=='base'||getAddress(options[0].recipient)!==address||getAddress(record.recipient)!==address||marketplaceAmountUnits(record.amount)!==amountUnits)throw Error('Checkout is not an exact Base USDC marketplace collection.')
   if(!/^[a-f0-9]{64}$/.test(record.integrity)||!Number.isFinite(Date.parse(record.createdAt))||!Number.isFinite(Date.parse(record.expiresAt))||Date.parse(record.expiresAt)<=Date.parse(record.createdAt))throw Error('Invalid checkout integrity or lifetime.')
   return record
  }
@@ -58,7 +59,8 @@ export function createMarketplaceCheckoutCollections(input:Dependencies){
    if(payment.status!=='paid'||payment.network!=='base'||payment.referenceType!=='evm_tx_hash'||!/^0x[0-9a-f]{64}$/i.test(payment.txHash)||marketplaceAmountUnits(payment.amount)!==binding.amountUnits||!Number.isFinite(Date.parse(payment.confirmedAt))||Date.parse(payment.confirmedAt)<binding.boundAt||Date.parse(payment.confirmedAt)>Date.parse(binding.expiresAt))throw Error('Checkout payment is not a matching collection.')
    await d.verifyHolding()
    const payerWallet=getAddress(payment.payer)
-   return {sessionId:binding.checkoutId,projectId,paymentId,payerId:'wallet:base:'+payerWallet.toLowerCase(),payerWallet,holdingId:binding.holdingId,holdingRevision:binding.holdingRevision,holdingAddress:binding.holdingAddress,network:'base',asset:'USDC',amountUnits:binding.amountUnits,transactionHash:payment.txHash.toLowerCase(),issuedAt:Math.ceil(binding.boundAt/1000),expiresAt:Math.floor(Date.parse(binding.expiresAt)/1000)}
+   const {payerFees}=await d.verifyPayerFees(record,{txHash:payment.txHash,payer:payerWallet,network:'base'})
+   return {payerFees,sessionId:binding.checkoutId,projectId,paymentId,payerId:'wallet:base:'+payerWallet.toLowerCase(),payerWallet,holdingId:binding.holdingId,holdingRevision:binding.holdingRevision,holdingAddress:binding.holdingAddress,network:'base',asset:'USDC',amountUnits:binding.amountUnits,transactionHash:payment.txHash.toLowerCase(),issuedAt:Math.ceil(binding.boundAt/1000),expiresAt:Math.floor(Date.parse(binding.expiresAt)/1000)}
   },
  }
 }

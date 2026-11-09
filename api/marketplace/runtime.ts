@@ -42,7 +42,7 @@ export function createMarketplaceWalletRuntime(input:{env:NodeJS.ProcessEnv;chai
 }
 
 /** Internal collection composition. No public route, worker, wallet creation or transfer. */
-export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;chain:ExecutionConfig['chain'];storage?:Pick<Parameters<typeof createMarketplaceCollections>[0],'read'|'mutate'|'now'>;readCheckout?:Parameters<typeof createMarketplaceCheckoutCollections>[0]['readCheckout'];circle?:Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'>}){
+export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;chain:ExecutionConfig['chain'];storage?:Pick<Parameters<typeof createMarketplaceCollections>[0],'read'|'mutate'|'now'>;readCheckout?:Parameters<typeof createMarketplaceCheckoutCollections>[0]['readCheckout'];verifyPayerFees?:Parameters<typeof createMarketplaceCheckoutCollections>[0]['verifyPayerFees'];circle?:Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'>}){
  const settings=readMarketplaceRuntimeConfig(input.env),blockers=settings.blockers.filter(b=>b!=='worker_disabled')
  if(input.env.MARKETPLACE_COLLECTIONS_ENABLED!=='true')blockers.push('collections_disabled')
  if(!input.chain||(['getChainId','getTransactionReceipt','getBlock'] as const).some(method=>typeof input.chain[method]!=='function'))blockers.push('base_rpc_client_missing')
@@ -51,7 +51,7 @@ export function createMarketplaceCollectionRuntime(input:{env:NodeJS.ProcessEnv;
  const storage=input.storage??{read:()=>readDurableJson<MarketplaceStore>(key),mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>mutateDurableJson<MarketplaceStore>(key,s=>fn(s??{books:[],drafts:[]})),now:Date.now}
  const circle=input.circle??createCircleDeveloperTreasuryClient({config:settings.config})
  const holding={id:settings.holdingId,revision:settings.holdingRevision,address:settings.config.treasuryAddress,billsAddress:settings.billsAddress}
- const adapter=createMarketplaceCheckoutCollections({...storage,enabled:true,projectIds:settings.projectIds,holding,readCheckout:input.readCheckout,verifyHolding:()=>circle.verifyConfiguredWallet()})
+ const adapter=createMarketplaceCheckoutCollections({...storage,enabled:true,projectIds:settings.projectIds,holding,readCheckout:input.readCheckout,verifyPayerFees:input.verifyPayerFees,verifyHolding:()=>circle.verifyConfiguredWallet()})
  const collections=createMarketplaceCollections({...storage,enabled:true,holding,chain:input.chain,resolveSession:adapter.resolveSession})
  return {bindCheckout:adapter.bind,verifyCollection:collections.verify,async createCheckout(projectId:string,paymentId:string,presentation:{title:string;returnUrl:string}){
   if(!settings.projectIds.includes(projectId))throw Error('Marketplace project is not enabled.')

@@ -1,3 +1,5 @@
+import type {PayerCheckoutFeeEvidence} from '../merchant-checkout-fees.js'
+import {EVM_PLATFORM_TREASURY,paymentFeeBreakdown} from '../../src/lib/platformFees.js'
 import {createHash} from 'node:crypto'
 import {getAddress,parseAbi,parseEventLogs,type PublicClient} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
@@ -10,7 +12,7 @@ import type {RefundCollection} from './refunds.js'
  * Transaction hash and payer identity must already be bound to that session.
  * issuedAt/expiresAt are Unix seconds; late verification of an on-time transfer is allowed.
  */
-export type MarketplaceCollectionSession={sessionId:string;projectId:string;paymentId:string;payerId:string;payerWallet:string;holdingId:string;holdingRevision:string;holdingAddress:string;network:'base';asset:'USDC';amountUnits:string;transactionHash:string;issuedAt:number;expiresAt:number}
+export type MarketplaceCollectionSession={payerFees?:PayerCheckoutFeeEvidence;sessionId:string;projectId:string;paymentId:string;payerId:string;payerWallet:string;holdingId:string;holdingRevision:string;holdingAddress:string;network:'base';asset:'USDC';amountUnits:string;transactionHash:string;issuedAt:number;expiresAt:number}
 export type MarketplaceCollectionProof={session:MarketplaceCollectionSession;evidenceId:string;blockHash:string;blockNumber:string;finalizedBlockNumber:string;logIndex:number;verifiedAt:number}
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;enabled?:boolean;holding:{id:string;revision:string;address:string;billsAddress:string};chain:Pick<PublicClient,'getChainId'|'getTransactionReceipt'|'getBlock'>;resolveSession:(request:{projectId:string;paymentId:string})=>Promise<MarketplaceCollectionSession|null>}
 const abi=parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])
@@ -23,6 +25,7 @@ export function createMarketplaceCollections(input:Dependencies){
  function binding(value:MarketplaceCollectionSession|null,book:MarketplaceBook){
   if(!value)throw Error('Authoritative collection session is unavailable.')
   const s=structuredClone(value)
+  if(book.collectionCheckout&&!s.payerFees)throw Error('Marketplace checkout requires verified payer fees.')
   for(const id of [s.sessionId,s.projectId,s.paymentId,s.payerId,s.holdingId,s.holdingRevision])marketplaceReference(id)
   const holding=getAddress(d.holding.address),payer=getAddress(s.payerWallet),bills=getAddress(d.holding.billsAddress)
   if(holding===zero||payer===zero||bills===zero||holding===bills||payer===holding||payer===bills)throw Error('Collection requires an isolated holding wallet and original payer.')
@@ -48,6 +51,18 @@ export function createMarketplaceCollections(input:Dependencies){
    if(incoming.length!==1||getAddress(incoming[0].args.from)!==session.payerWallet||incoming[0].args.value!==BigInt(session.amountUnits)||logs.some(log=>getAddress(log.args.from)===session.holdingAddress))throw Error('Collection requires one exact payer-to-holding USDC transfer and no holding outflow.')
    const log=incoming[0]
    if(!Number.isSafeInteger(log.logIndex)||log.logIndex===null||log.logIndex<0||log.removed||log.transactionHash?.toLowerCase()!==session.transactionHash||log.blockHash?.toLowerCase()!==receipt.blockHash.toLowerCase()||log.blockNumber!==receipt.blockNumber)throw Error('Collection transfer log does not match its receipt.')
+   if(session.payerFees){
+    const fees=session.payerFees,treasury=getAddress(EVM_PLATFORM_TREASURY)
+    if(treasury===session.holdingAddress||treasury===session.payerWallet||getAddress(fees.treasuryAddress)!==treasury||!fees.quoteId)throw Error('Marketplace fee destination is invalid.')
+    for(const value of [fees.platformFeeUnits,fees.networkFeeUnits,fees.treasuryUnits,fees.totalUnits])if(!/^(0|[1-9]\d{0,30})$/.test(value))throw Error('Invalid Marketplace fee units.')
+    const amounts=paymentFeeBreakdown(BigInt(session.amountUnits),BigInt(fees.networkFeeUnits),'gross')
+    if(amounts.platformFee.toString()!==fees.platformFeeUnits||amounts.treasury.toString()!==fees.treasuryUnits||amounts.total.toString()!==fees.totalUnits)throw Error('Marketplace payer fee totals changed.')
+    const feeLogs=logs.filter(l=>getAddress(l.args.from)===session.payerWallet&&getAddress(l.args.to)===treasury)
+    if(amounts.treasury===0n?feeLogs.length!==0:feeLogs.length!==1||feeLogs[0].args.value!==amounts.treasury)throw Error('Marketplace requires the exact payer-to-treasury fee transfer.')
+    if(feeLogs.some(l=>l.removed||l.logIndex===null||!Number.isSafeInteger(l.logIndex)||l.logIndex<0||l.transactionHash?.toLowerCase()!==session.transactionHash||l.blockHash?.toLowerCase()!==receipt.blockHash.toLowerCase()||l.blockNumber!==receipt.blockNumber))throw Error('Marketplace fee log does not match its receipt.')
+    const payerOutflows=logs.filter(l=>getAddress(l.args.from)===session.payerWallet)
+    if(payerOutflows.length!==(amounts.treasury===0n?1:2)||payerOutflows.reduce((sum,l)=>sum+l.args.value,0n)!==amounts.total)throw Error('Marketplace payer debit differs from the accepted total.')
+   }
    const latest=binding(await d.resolveSession(request),before)
    if(JSON.stringify(latest)!==JSON.stringify(session))throw Error('Collection session changed during verification.')
    const verifiedAt=d.now()

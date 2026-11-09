@@ -1,7 +1,7 @@
 import {checkoutActivityRows} from './pocket/checkout-activity.js'
 import {assertCashCheckoutPayer} from './checkout-cash-policy.js'
 import {merchantFeeTotal,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
-import {verifyMerchantCheckoutTransfer,verifyPosMerchantTransfer} from './merchant-checkout-fees.js'
+import {verifyPayerCheckoutTransfer,verifyMerchantCheckoutTransfer,verifyPosMerchantTransfer} from './merchant-checkout-fees.js'
 import {baseStablecoin} from '../src/lib/baseStablecoins.js'
 import {verifySolanaUsdcTransfer} from './solana-usdc-transfer-verify.js'
 import {isValidSolanaAddress} from '../src/lib/solanaAddress.js'
@@ -522,7 +522,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
     const minimumAmount = checkout.flexible ? amount : checkout.amount
     try {
-      const verifiedTransfer: {amount:string;confirmedAt?:string;fees?:MerchantPaymentFees} = checkout.feePayer==='merchant'&&!checkout.settlement?await verifyMerchantCheckoutTransfer(checkout,{txHash,payer,network:chain}):chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
+      const verifiedTransfer: {amount:string;confirmedAt?:string;fees?:MerchantPaymentFees} = checkout.feePayer==='payer'?await verifyPayerCheckoutTransfer(checkout,{txHash,payer,network:chain}):checkout.feePayer==='merchant'&&!checkout.settlement?await verifyMerchantCheckoutTransfer(checkout,{txHash,payer,network:chain}):chain === 'solana' ? await verifySolanaUsdcTransfer({txHash,payer,asset:assetSymbol,recipient:paymentOption.recipient,minAmount:minimumAmount,exactAmount:true,notBefore:checkout.createdAt,notAfter:checkout.expiresAt,confirmation:'finalized'}) : await verifyEvmUsdcTransfer({
         chain: evmChain!,
         token: assetSymbol,
         txHash,

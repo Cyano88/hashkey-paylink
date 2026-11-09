@@ -120,3 +120,14 @@ Remaining: verified production gas coverage, NGN Paycrest quote/funding/settleme
 
 
 The internal wallet runtime also exposes a bounded drain (1-20 tasks) with a durable per-project cursor. It skips final/cancelled operations, advances before provider I/O, recovers uncertain attempts without resending, and drains the existing webhook outbox independently of blocked payouts. Worker fixtures cover restart fairness, project isolation, terminal exclusion and sanitized errors. No scheduler or production flag was enabled.
+
+
+## Payer-paid Marketplace checkout fees
+
+Marketplace checkout creation now signs an explicit feePayer=payer policy into the hosted checkout and versions its idempotency fingerprint. Older drafts cannot silently reuse a different fee policy. The shared gross-mode quote adds the existing Hash PayLink platform fee and collection gas reimbursement above the order principal. The full principal remains the sum of seller allocations and the developer marketplace commission; neither is reduced by these fees.
+
+The existing pre-signing fee-proof store now retains authenticated gross quotes for explicitly payer-paid Marketplace checkouts, including acceptance time. Ordinary gross checkout and merchant-paid fee behavior remain unchanged. The receipt registration path requires a valid accepted non-exempt Base USDC payment quote, the full holding transfer and the separate exact fee-treasury transfer. It never treats these as merchant fee deductions.
+
+Marketplace collection additionally verifies the signed-quote fee totals against the same finalized receipt: exact principal into holding, exact payer fee into the configured Hash PayLink treasury, no extra payer USDC outflow and no holding outflow. Only the principal is credited to allocation balances. Fee evidence is retained in the collection proof; it is not added to seller refundable principal. Any fee refunds would require their own explicit policy and accounting rather than debiting seller allocations.
+
+Validation covers gross quote persistence, wrong fee mode, tampered/expired accepted quote, exemptions, wrong asset/checkout/destination, missing and malformed treasury transfers, total debit conservation and unchanged merchant-paid regressions. TypeScript, checkout creation and collection tests pass. Fixtures only: no fee collection, financial activation or deployment. Payout/refund gas remains independently gated; a collection gas quote does not authorize future transaction costs.

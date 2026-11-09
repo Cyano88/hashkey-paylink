@@ -9,7 +9,7 @@ import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.js'
 import type {MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 const KEY='hashpaylink:merchant-checkout-fee-proofs:v1'
 type FeeContext=Pick<CheckoutRecord,'cashPayer'|'id'|'feePayer'|'asset'|'amount'|'flexible'|'createdAt'|'expiresAt'|'network'|'recipient'|'paymentOptions'>
-type Store={quotes:Record<string,{token:string;quote:PaymentFeeQuote}>}
+type Store={quotes:Record<string,{token:string;quote:PaymentFeeQuote;acceptedAt?:number}>}
 const equal=(a:string,b:string,chain:string)=>chain==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
 export async function assertMerchantFeeBinding(binding:PaymentFeeBinding){
  if(!binding.checkoutId)return
@@ -28,11 +28,18 @@ export async function assertMerchantFeeBinding(binding:PaymentFeeBinding){
 /** Save authenticated quote evidence before signing. Recovery does not depend on a browser session. */
 export async function rememberMerchantFeeQuote(token:string,quote:PaymentFeeQuote){
  await (await import('./checkout-selection.js')).claimCheckoutSelectionPayment(quote.checkoutId)
- if(!quote.checkoutId||quote.mode!=='net'||quote.exemption!=='none')return
+ if(!quote.checkoutId||quote.exemption!=='none')return
+ if(quote.mode==='gross'){
+  const checkout=await readVerifiedHostedCheckoutRecord(quote.checkoutId)
+  if(checkout?.feePayer!=='payer')return
+  if(quote.chain!=='base'||quote.purpose!=='payment'||(quote.asset||'USDC')!=='USDC')throw Error('Payer-paid Marketplace fees require a Base USDC payment quote.')
+ }
+ const acceptedAt=Date.now()
+ if(quote.mode==='gross')verifyPaymentFeeQuote(token,quote,acceptedAt)
  await mutateDurableJson<Store>(KEY,current=>{
   const store=current||{quotes:{}}
   for(const[id,item]of Object.entries(store.quotes))if(item.quote.expiresAt<Date.now()-31*86400000)delete store.quotes[id]
-  store.quotes[quote.id]??={token,quote}
+  store.quotes[quote.id]??={token,quote,acceptedAt}
   return store
  })
 }
@@ -63,3 +70,32 @@ export async function verifyPosMerchantTransfer(merchantId:string,amount:string,
  const context=await readPosCryptoFeeContext(merchantId,input.network)
  return verifyMerchantCheckoutTransfer({id:'pos_'+merchantId,feePayer:'merchant',asset:'USDC',amount,flexible:false,createdAt:context.createdAt,expiresAt:new Date(Date.now()+5000).toISOString(),network:input.network as CheckoutRecord['network'],recipient:context.recipient},input)
 }
+
+
+export type PayerCheckoutFeeEvidence={quoteId:string;treasuryAddress:string;platformFeeUnits:string;networkFeeUnits:string;treasuryUnits:string;totalUnits:string}
+/** Authenticated pre-signing quote plus exact transfers. Payer fees never reduce
+ * the order amount or appear as merchant deductions. No quote is accepted from
+ * a checkout status request or a marketplace instruction body.
+ */
+export function createPayerCheckoutFeeVerifier(overrides:Partial<{read:()=>Promise<Store|undefined>;verifyTransfer:typeof verifyEvmUsdcTransfer}>={}){
+ const d={read:()=>readDurableJson<Store>(KEY),verifyTransfer:verifyEvmUsdcTransfer,...overrides}
+ return async(c:FeeContext,input:{txHash:string;payer:string;network:string})=>{
+  if(c.feePayer!=='payer'||c.network!=='base'||input.network!=='base'||(c.asset||'USDC')!=='USDC'||c.flexible)throw Error('Payer fee verification requires fixed Base USDC checkout.')
+  const option=hostedCheckoutPaymentOption(c,'base')
+  if(!option||equal(option.recipient,EVM_PLATFORM_TREASURY,'base'))throw Error('Marketplace holding must be separate from the fee treasury.')
+  const candidates=Object.values((await d.read())?.quotes||{}).filter(({quote:q})=>q.checkoutId===c.id&&q.mode==='gross'&&q.chain==='base'&&equal(q.walletAddress,input.payer,'base'))
+  for(const item of candidates){try{
+   if(!Number.isSafeInteger(item.acceptedAt))continue
+   const q=verifyPaymentFeeQuote(item.token,{checkoutId:c.id,purpose:'payment',asset:'USDC',chain:'base',walletId:item.quote.walletId,walletAddress:input.payer,recipient:option.recipient,amountUnits:parseUnits(c.amount,6).toString(),mode:'gross'},item.acceptedAt)
+   if(q.exemption!=='none'||q.recipientUnits!==q.amountUnits)continue
+   const before=new Date(Math.max(Date.parse(c.createdAt),q.issuedAt-2000)).toISOString()
+   const verify=(recipient:string,units:string)=>d.verifyTransfer({txHash:input.txHash,payer:input.payer,chain:'base',token:'USDC',recipient,minAmount:formatUnits(BigInt(units),6),exactAmount:true,notBefore:before,notAfter:c.expiresAt,confirmation:'base-included'})
+   const received=await verify(option.recipient,q.amountUnits)
+   if(BigInt(q.treasuryUnits)>0n){const fee=await verify(EVM_PLATFORM_TREASURY,q.treasuryUnits);if(fee.confirmedAt!==received.confirmedAt)continue}
+   const payerFees:PayerCheckoutFeeEvidence={quoteId:q.id,treasuryAddress:EVM_PLATFORM_TREASURY,platformFeeUnits:q.platformFeeUnits,networkFeeUnits:q.networkFeeUnits,treasuryUnits:q.treasuryUnits,totalUnits:q.totalUnits}
+   return {...received,amount:formatUnits(BigInt(q.amountUnits),6),payerFees}
+  }catch{/* Another accepted quote may identify this transaction. */}}
+  throw Error('The full order amount and payer-paid fees are still being verified.')
+ }
+}
+export const verifyPayerCheckoutTransfer=createPayerCheckoutFeeVerifier()

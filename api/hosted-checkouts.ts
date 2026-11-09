@@ -99,7 +99,7 @@ type HostedCheckoutSettlement = {
 }
 export type CheckoutRecord = {
   cashPayer?:CheckoutCashPayer
-  feePayer?:'merchant'
+  feePayer?:'merchant'|'payer'
   pricing?:CheckoutPricing
   environment?: 'live'
   id: string
@@ -1374,7 +1374,7 @@ export async function createBoundMarketplaceHostedCheckout(input:{projectId:stri
  if(typeof input.merchantName!=='string'||input.merchantName.trim().length<2||input.merchantName.length>80||typeof input.title!=='string'||!input.title.trim()||input.title.length>100||typeof input.returnUrl!=='string'||input.returnUrl.length>300)throw Error('Invalid Marketplace checkout presentation.')
  if(input.returnUrl&&(!normalizedOrigin(input.returnUrl)||!input.allowedOrigins.includes(normalizedOrigin(input.returnUrl)!)))throw Error('Return URL origin is not allowlisted for this project.')
  const reference=createHash('sha256').update(JSON.stringify([input.projectId,input.paymentId])).digest('hex')
- const key=`marketplace:${reference}`,requestHash=createHash('sha256').update(JSON.stringify([input.projectId,input.paymentId,amount,recipient,input.holdingId,input.holdingRevision,input.merchantName,input.title,input.returnUrl])).digest('hex')
+ const key=`marketplace:${reference}`,requestHash=createHash('sha256').update(JSON.stringify([input.projectId,input.paymentId,amount,recipient,input.holdingId,input.holdingRevision,input.merchantName,input.title,input.returnUrl,'payer-fees-v1'])).digest('hex')
  const now=d.now()
  const saved=await d.mutate(STORE_KEY,current=>{
   const s=current??{checkouts:{},idempotency:{}}
@@ -1384,7 +1384,7 @@ export async function createBoundMarketplaceHostedCheckout(input:{projectId:stri
   if(requested>limit||reservedCheckoutUnits(s,input.projectId,now.getTime())+requested>limit)throw checkoutCapacityError()
   const id=d.createId()
   if(!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)||s.checkouts[id])throw Error('Invalid or reused hosted checkout identity.')
-  const unsigned:Omit<CheckoutRecord,'integrity'>={id,partnerId:input.projectId,kind:'usdc_request',environment:'live',merchantName:input.merchantName,title:input.title,description:'',amount,flexible:false,asset:'USDC',network:'base',recipient,paymentOptions:[{network:'base',recipient}],checkoutMode:'human',memo:input.paymentId,returnUrl:input.returnUrl,createdAt:now.toISOString(),expiresAt:new Date(now.getTime()+15*60_000).toISOString(),requestHash}
+  const unsigned:Omit<CheckoutRecord,'integrity'>={id,partnerId:input.projectId,kind:'usdc_request',environment:'live',merchantName:input.merchantName,title:input.title,description:'',amount,flexible:false,asset:'USDC',network:'base',recipient,paymentOptions:[{network:'base',recipient}],feePayer:'payer',checkoutMode:'human',memo:input.paymentId,returnUrl:input.returnUrl,createdAt:now.toISOString(),expiresAt:new Date(now.getTime()+15*60_000).toISOString(),requestHash}
   unsigned.paymentAttempts=[initialPaymentAttempt(unsigned)]
   return {...s,checkouts:{...s.checkouts,[id]:{...unsigned,integrity:sign(unsigned,secret)}},idempotency:{...s.idempotency,[key]:id}}
  })

@@ -714,7 +714,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           returnUrl?: string
           merchantName?:string
           brandImageUrl?:string
-          checkout?: { paymentMethod?:string; feePayer?:'merchant'; pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
+          checkout?: { paymentMethod?:string; feePayer?:'merchant'|'payer'; pricing?:CheckoutPricing; expiresAt?:string; checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
           error?: string
         } | undefined
         if(!cancelled&&response.status===410){if(body?.returnUrl)setHostedReturnUrl(body.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
