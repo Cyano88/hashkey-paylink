@@ -26,7 +26,7 @@ export default function HostedCheckoutEntry() {
   const navigate = useNavigate(), location=useLocation()
   const changePayment=new URLSearchParams(location.search).get('change')==='1'
   const { checkoutId = '' } = useParams()
-  const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
+  const attemptId = new URLSearchParams(location.search).get('attempt') ?? ''
   const [error, setError] = useState('')
   const [expiredReturn,setExpiredReturn]=useState<string|undefined>()
   const [expiredBrand,setExpiredBrand]=useState<{name?:string;logo?:string}>({})
@@ -34,19 +34,33 @@ export default function HostedCheckoutEntry() {
   const [checkout, setCheckout] = useState<HostedCheckoutLookup|null>(null)
   const [selection,setSelection]=useState<{checkout:CheckoutSelectionView;returnUrl?:string}|null>(null)
   const cash=new URLSearchParams(location.search).get('method')==='cash_balance'
-  const browser = new URLSearchParams(window.location.search).get('browser') === '1'
+  const browser = new URLSearchParams(location.search).get('browser') === '1'
 
+  const pocketMode=new URLSearchParams(location.search).get('mode')==='pocket'
+  const handoffChange=(cash:boolean,opened:boolean)=>{
+    const query=new URLSearchParams(location.search)
+    if(opened){query.set('mode','pocket');query.set('method',cash?'cash_balance':'stablecoins');query.delete('change')}
+    else {query.delete('mode');query.delete('method');query.set('change','1')}
+    navigate({pathname:location.pathname,search:query.toString()},{replace:true})
+  }
+
+  useEffect(()=>{setSelection(null);setCheckout(null);setStock(null);setError('');setExpiredReturn(undefined);setExpiredBrand({})},[checkoutId])
   useEffect(() => {
-    setSelection(null);setCheckout(null);setStock(null);setError('')
     let cancelled = false
-    setError(''); setExpiredReturn(undefined); setExpiredBrand({}); setCheckout(null); setStock(null);setSelection(null)
     async function openCheckout(signal: AbortSignal): Promise<boolean> {
         const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}&purpose=return`, { cache: 'no-store', signal })
         const body = await response.json().catch(() => undefined) as HostedCheckoutLookup | undefined
         signal.throwIfAborted()
         if(cancelled)return false
+        if(response.ok&&body?.ok)setError('')
         if(!cancelled&&response.status===410){setExpiredReturn(body?.returnUrl);setExpiredBrand({name:body?.merchantName,logo:body?.brandImageUrl})}
         if(response.ok&&body?.ok&&(body.checkout as any)?.selectionCheckout&&body.checkout?.id===checkoutId&&/^chks_[a-f0-9]{24}$/.test(checkoutId)){
+          // Keep the parent QR stable while the phone selects or changes its pending route.
+          // The server projects only the signed parent's exact child status here.
+          if(pocketMode&&!browser&&!changePayment&&(!body.selectedCheckoutUrl||body.checkout.status==='pending')){
+            setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})
+            return true
+          }
           if(!cancelled){if(!(changePayment&&(body.checkout as unknown as CheckoutSelectionView).canChange)&&body.selectedCheckoutUrl&&/^\/pay\/c\/chk(?:b|x)?_[a-zA-Z0-9]{8,40}(?:\?attempt=[a-zA-Z0-9_-]+)?$/.test(body.selectedCheckoutUrl))navigate(body.selectedCheckoutUrl+(body.selectedCheckoutUrl.includes('?')?'&':'?')+((new URLSearchParams(location.search).get('browser')==='1')?'browser=1':new URLSearchParams(location.search).get('pocketFallback')==='1'?'pocketFallback=1':new URLSearchParams(location.search).get('mode')==='pocket'?'pocket=1':''),{replace:true});else setSelection({checkout:body.checkout as unknown as CheckoutSelectionView,returnUrl:body.returnUrl})}
           // The phone can select a child after this desktop handoff is displayed.
           return true
@@ -73,10 +87,10 @@ export default function HostedCheckoutEntry() {
       if (!cancelled) setError(timedOut ? 'Checkout took too long to respond. Please reopen the link.' : cause instanceof Error ? cause.message : 'This checkout could not be opened.')
     })
     return () => { cancelled = true; stop() }
-  }, [attemptId, checkoutId, navigate, browser,changePayment])
+  }, [attemptId, checkoutId, navigate, browser,changePayment,location.search,pocketMode])
 
   if(error&&/expired/i.test(error))return <CheckoutExpired merchant={expiredBrand.name||checkout?.checkout?.merchantName||stock?.checkout?.merchantName} brandImageUrl={expiredBrand.logo||checkout?.checkout?.brandImageUrl||stock?.checkout?.brandImageUrl} returnUrl={expiredReturn||checkout?.returnUrl||stock?.returnUrl}/>
-  if(selection){const mode=new URLSearchParams(location.search).get('mode');return browser?<CheckoutAssetChoice cash={(cash||selection.checkout.paymentMethods?.length===1)&&selection.checkout.paymentMethods?.includes('cash_balance')} key={checkoutId+(cash?'cash':'stablecoins')} {...selection} mode={mode==='pocket'?'pocket':'web'}/>:<div className="py-6"><CheckoutChoice autoOpenPocket={mode==='pocket'} initialCash={cash} stablecoinsEnabled={selection.checkout.options.some(o=>!o.unavailableReason)} onCash={selection.checkout.paymentMethods?.includes('cash_balance')?()=>navigate('/pay/c/'+checkoutId+'?browser=1&method=cash_balance'):undefined} id={checkoutId} merchant={selection.checkout.merchantName} brandImageUrl={selection.checkout.brandImageUrl} title={selection.checkout.title} expiresAt={selection.checkout.expiresAt} returnUrl={selection.returnUrl} amount={checkoutPriceLabel(selection.checkout.currency?{currency:selection.checkout.currency,amount:selection.checkout.amount}:undefined,selection.checkout.amount+' '+(selection.checkout.options[0]?.asset||''))} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1')}/></div>}
+  if(selection&&!error){const mode=new URLSearchParams(location.search).get('mode');return browser?<CheckoutAssetChoice cash={(cash||selection.checkout.paymentMethods?.length===1)&&selection.checkout.paymentMethods?.includes('cash_balance')} key={checkoutId+(cash?'cash':'stablecoins')} {...selection} mode={mode==='pocket'?'pocket':'web'}/>:<div className="py-6"><CheckoutChoice onHandoffChange={handoffChange} autoOpenPocket={mode==='pocket'} initialCash={pocketMode&&selection.checkout.selectedCheckoutId?selection.checkout.paymentMethod==='cash_balance':cash} stablecoinsEnabled={selection.checkout.options.some(o=>!o.unavailableReason)} onCash={selection.checkout.paymentMethods?.includes('cash_balance')?()=>navigate('/pay/c/'+checkoutId+'?browser=1&method=cash_balance'):undefined} id={checkoutId} merchant={selection.checkout.merchantName} brandImageUrl={selection.checkout.brandImageUrl} title={selection.checkout.title} expiresAt={selection.checkout.expiresAt} returnUrl={selection.returnUrl} amount={checkoutPriceLabel(selection.checkout.currency?{currency:selection.checkout.currency,amount:selection.checkout.amount}:undefined,selection.checkout.amount+' '+(selection.checkout.options[0]?.asset||''))} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1')}/></div>}
 
   if(checkout?.checkout?.bscCheckout&&!browser&&checkout.checkout.status!=='paid')return <div className="py-6"><CheckoutChoice autoOpenPocket={new URLSearchParams(location.search).get('pocket')==='1'} expiresAt={checkout.checkout.expiresAt} returnUrl={checkout.returnUrl} id={checkoutId} attempt={attemptId} brandImageUrl={checkout.checkout.brandImageUrl} merchant={checkout.checkout.merchantName} title={checkout.checkout.title} amount={checkoutPriceLabel(checkout.checkout.pricing,`${checkout.checkout.amount} ${checkout.checkout.asset}`)} onBrowser={()=>navigate('/pay/c/'+checkoutId+'?browser=1',{replace:true})}/></div>
   if(checkout?.checkout?.bscCheckout)return <Suspense fallback={<div role="status" aria-label="Opening payment" className="mx-auto h-96 max-w-md animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}><BscCheckout checkout={checkout.checkout} returnUrl={checkout.returnUrl}/></Suspense>

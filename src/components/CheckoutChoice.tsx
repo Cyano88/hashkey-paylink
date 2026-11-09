@@ -7,16 +7,17 @@ import {QRCodeSVG} from 'qrcode.react'
 import {pocketStoreUrl} from '../lib/pocketStoreUrl'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
 import CheckoutPaymentMethods from './CheckoutPaymentMethods'
-export default function CheckoutChoice({cashOnly=false,initialCash=false,stablecoinsEnabled=true,id,attempt,merchant,brandImageUrl,title,amount,onBrowser,onCash,onPocket,autoOpenPocket=false,expiresAt,returnUrl}:{cashOnly?:boolean;initialCash?:boolean;stablecoinsEnabled?:boolean;onCash?:()=>void;onPocket?:()=>void;autoOpenPocket?:boolean;expiresAt?:string;returnUrl?:string;id:string;attempt?:string;merchant:string;brandImageUrl?:string;title?:string;amount:string;onBrowser:()=>void}) {
+export default function CheckoutChoice({cashOnly=false,initialCash=false,stablecoinsEnabled=true,id,attempt,merchant,brandImageUrl,title,amount,onBrowser,onCash,onPocket,onHandoffChange,autoOpenPocket=false,expiresAt,returnUrl}:{cashOnly?:boolean;initialCash?:boolean;stablecoinsEnabled?:boolean;onCash?:()=>void;onPocket?:()=>void;onHandoffChange?:(cash:boolean,opened:boolean)=>void;autoOpenPocket?:boolean;expiresAt?:string;returnUrl?:string;id:string;attempt?:string;merchant:string;brandImageUrl?:string;title?:string;amount:string;onBrowser:()=>void}) {
  const [opened,setOpened]=useState(autoOpenPocket)
  const fallback=new URLSearchParams(window.location.search).get('pocketFallback')==='1'
  const [cash,setCash]=useState(cashOnly||initialCash)
+ useEffect(()=>{setCash(cashOnly||initialCash)},[cashOnly,initialCash])
  const [stablecoins,setStablecoins]=useState(fallback||autoOpenPocket||cashOnly||initialCash)
  const backNavigation=useRef<HTMLDivElement>(null)
  const methodNavigation=useRef<HTMLDivElement>(null)
  const focusNavigation=useRef(false)
  useEffect(()=>{if(focusNavigation.current){(stablecoins?backNavigation:methodNavigation).current?.querySelector<HTMLElement>('button')?.focus();focusNavigation.current=false}},[stablecoins])
- const changeStep=(next:boolean)=>{focusNavigation.current=true;setStablecoins(next);setOpened(false)}
+ const changeStep=(next:boolean)=>{focusNavigation.current=true;setStablecoins(next);setOpened(false);if(opened)onHandoffChange?.(cash,false)}
  const [storeUrl,setStoreUrl]=useState('')
  useEffect(()=>{const controller=new AbortController();void fetch('/api/pocket/checkout-config',{signal:controller.signal}).then(r=>r.ok?r.json():null).then(data=>setStoreUrl(pocketStoreUrl(data?.playStoreUrl))).catch(()=>{});return()=>controller.abort()},[])
  const handoff=onPocket?null:checkoutHandoff(id,attempt,cash)
@@ -31,7 +32,7 @@ export default function CheckoutChoice({cashOnly=false,initialCash=false,stablec
   <CheckoutCountdown seconds={seconds}/>
   <div ref={methodNavigation} className="mt-6">{!stablecoins?<CheckoutPaymentMethods stablecoinsEnabled={stablecoinsEnabled&&!cashOnly} onCash={onCash?()=>{setCash(true);changeStep(true)}:undefined} onStablecoins={()=>{if(checkoutSecondsLeft(expiresAt)!==0){setCash(false);changeStep(true)}}}/>:<div className="space-y-3" aria-label={cash?"Cash balance payment options":"Stablecoin payment options"}>
    <h2 className="pb-1 text-sm font-semibold">{cash?"Pay with cash balance":"Pay with stablecoins"}</h2>
-   {fallback&&storeUrl?<a href={storeUrl} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Get Pocket</a>:<a href={handoff?(android?handoff.android:handoff.url):'#'} onClick={event=>{if(checkoutSecondsLeft(expiresAt)===0){event.preventDefault();return}if(onPocket){event.preventDefault();onPocket();return}setOpened(true);if(!android){event.preventDefault()}}} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{fallback?'Try opening Pocket':'Pay with Pocket'}</a>}
+   {fallback&&storeUrl?<a href={storeUrl} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Get Pocket</a>:<a href={handoff?(android?handoff.android:handoff.url):'#'} onClick={event=>{if(checkoutSecondsLeft(expiresAt)===0){event.preventDefault();return}if(onPocket){event.preventDefault();onPocket();return}setOpened(true);onHandoffChange?.(cash,true);if(!android){event.preventDefault()}}} className="flex min-h-12 w-full items-center justify-center rounded-full bg-gray-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{fallback?'Try opening Pocket':'Pay with Pocket'}</a>}
    <button onClick={()=>{if(checkoutSecondsLeft(expiresAt)!==0)(cash&&onCash?onCash:onBrowser)()}} className="min-h-12 w-full rounded-full border border-gray-200 px-4 text-sm font-semibold dark:border-white/15">Pay on web</button>
   </div>}</div>
   {stablecoins&&fallback&&<p role="status" className="mt-4 text-center text-xs leading-5 text-gray-500">{storeUrl?'Pocket did not open. Get Pocket or continue on web.':'Pocket did not open. You can retry or continue on web.'}</p>}
