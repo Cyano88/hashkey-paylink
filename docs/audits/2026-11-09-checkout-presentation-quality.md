@@ -34,3 +34,11 @@ Pixel review for parent chks_409f3f0343e6415ea7a18eea / stable child chk_4f72e15
 A separate live UX issue was caught: Lunchroom showed Payments are currently unavailable while its initial price request was pending. Added explicit Loading prices status and disabled checkout during load. Delayed-response browser regression passes along with expired/pending/paid/processing/unavailable-order recovery. Follow-up web source build passed (2m32s). Native source does not need another rebuild for this merchant website change.
 
 Cash switching selected child chk_80a9293900a144e7bd18 and Close returned to Home. The real-device frame log revealed a brief old-form exposure when the method chooser closed before navigation. Follow-up correction retains the chooser in its disabled loading state until the destination replaces it; selecting the same checkout closes normally instead of leaving a stuck spinner. Regression covers both changed and identical destination URLs. Lunchroom loading release c998846cd / dep-dboqhm3rjlhs73c0llf0 is live, updated 2026-11-09T11:10:32.896915Z.
+
+## Final method-transition package
+
+Both native and web regressions passed changed-route and same-route reselection. Final source builds passed (native 2m09s, web 2m03s), Capacitor sync passed, Gradle passed in 21s, and adb install -r succeeded. Final installed APK SHA256 a13b83f17073e2d45d1d82959e6fda5ca6ccd52f3820a57c0c5b2e6a177b6f0c supersedes the earlier package hash. The native source ZIP/manifest were refreshed to include both method-transition components. Phone was in WhatsApp at final install; it was not brought forward. Thus actual-device decimal, review Back, chooser Back, cash switch, expiry and Close are observed, while the final transition adjustment is verified by component regressions and build/install rather than a second live device sequence.
+
+Web method-transition commit d8a367dbd44f65a0147922aa88e0a7c9de5e6538 is deploying as dep-dboqln3m8hqs73eok0bg. No funds moved in this QA session.
+
+Final Render release dep-dboqln3m8hqs73eok0bg is LIVE at d8a367dbd, updated 2026-11-09T11:18:48.204212Z. Transient 502 responses during replacement cleared; both app.hashpaylink.com and pocket.hashpaylink.com /api/health returned JSON HTTP 200, ok=true, healthy=true, database=true, unresolved=0 and stale=0.
