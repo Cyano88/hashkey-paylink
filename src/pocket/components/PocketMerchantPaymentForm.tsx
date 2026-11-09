@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type ComponentProps} from 'react'
+import {useLayoutEffect,useRef,useState,type ComponentProps} from 'react'
 import PocketCheckoutMethodChange from './PocketCheckoutMethodChange'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketCheckoutFields from './PocketCheckoutFields'
@@ -27,7 +27,7 @@ export default function PocketMerchantPaymentForm({checkoutId,merchant,paymentAm
  const prepareReview=async()=>{setPrepared(false);await prepare();setPrepared(true)}
  const waiting=preparing||(prepared&&!ready&&!error&&!localError&&!funding.asset)
  const disabled=busy||waiting
- useEffect(()=>{if(prepared&&ready&&!preparing){setReview(true)}},[prepared,ready,preparing])
+ useLayoutEffect(()=>{if(prepared&&ready&&!preparing){setReview(true)}},[prepared,ready,preparing])
  const valid=/^\d+(?:\.\d{1,6})?$/.test(fields.amount)&&Number(fields.amount)>0&&(!fields.requiresName||!!fields.name.trim())
  const message=localError||error
  return <PocketBottomSheet quietBackdrop title={review?'Confirm payment':'Pay '+merchant} showCloseButton dismissOnBackdrop={false} dismissible={!disabled} onClose={onClose} onBack={review?()=>{setReview(false);setPrepared(false)}:undefined}>
@@ -35,10 +35,10 @@ export default function PocketMerchantPaymentForm({checkoutId,merchant,paymentAm
   {message&&!funding.asset&&<p role="alert" className="mt-4 text-center text-xs text-gray-500">{message}</p>}
   <div className="mt-5"><PocketFundingAction {...funding} locked={disabled||funding.locked}>
    {review?<>
-    <PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} disabled={disabled||!prepared||!ready} status={busy?'pending':'idle'} labels={{idle:'Confirm payment',disabled:preparing?'Preparing payment...':'Preparing payment',pending:'Processing'}} onConfirm={()=>void run(confirm)}/>
+    <PocketSlideAction plain approvalRequired={false} onPrepare={async()=>{}} disabled={disabled||!prepared||!ready} status={busy||preparing?'pending':'idle'} labels={{idle:'Confirm payment',disabled:preparing?'Preparing payment...':'Preparing payment',pending:preparing?'Preparing payment':'Processing'}} onConfirm={()=>void run(confirm)}/>
     {!disabled&&Boolean(message)&&<button type="button" className="mt-2 min-h-11 w-full text-xs font-semibold" onClick={()=>void run(prepareReview)}>Try again</button>}
    </>:<button type="button" className="pocket-cta-primary flex w-full items-center justify-center gap-2" aria-busy={disabled} disabled={disabled||!valid} onClick={()=>void run(prepareReview)}>{disabled&&<span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent"/>}{disabled?'Preparing payment':'Continue'}</button>}
   </PocketFundingAction></div>
-  {!review&&<PocketCheckoutMethodChange id={checkoutId} busy={disabled} onClose={onClose}/>}
+  <div hidden={review}><PocketCheckoutMethodChange id={checkoutId} busy={disabled||review} onClose={onClose}/></div>
  </PocketBottomSheet>
 }

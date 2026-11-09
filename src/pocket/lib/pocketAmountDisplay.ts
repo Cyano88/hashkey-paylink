@@ -20,3 +20,9 @@ export function formatPocketFiatValue(value:string|number,currency:string){
  if(!formatter){const digits=new Intl.NumberFormat('en-US',{style:'currency',currency}).resolvedOptions().maximumFractionDigits;formatter=new Intl.NumberFormat('en-US',{minimumFractionDigits:digits,maximumFractionDigits:digits});fiatFormats.set(currency,formatter)}
  return formatter.format(Number(value))
 }
+
+/** Format a presentation label only; never feed this text back into payment math. */
+export function formatPocketAmountLabel(label:string){
+ const match=label.match(/^([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?) ([A-Za-z0-9]+)$/)
+ return match?formatPocketAssetAmount(match[1].replace(/,/g,''),match[2])+' '+match[2]:label
+}

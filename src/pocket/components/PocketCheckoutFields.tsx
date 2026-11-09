@@ -1,3 +1,4 @@
+import {formatPocketAssetAmount} from '../lib/pocketAmountDisplay'
 import PocketNetworkMark from './PocketNetworkMark'
 import PocketLocalEquivalent from './PocketLocalEquivalent'
 
@@ -23,7 +24,7 @@ export default function PocketCheckoutFields({ network, networkLabel, amount, cu
     <label className="block">
       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Amount</span>
       <span className="mt-2 flex items-center rounded-xl border border-gray-200 bg-white px-3.5 dark:border-[#262626] dark:bg-[#121212]">
-        <input aria-label="Amount" type="number" min="0" step="any" inputMode="decimal" value={amount} readOnly={fixedAmount} onChange={event => onAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" />
+        <input aria-label="Amount" type={fixedAmount?"text":"number"} min="0" step="any" inputMode="decimal" value={fixedAmount?formatPocketAssetAmount(amount,currency):amount} readOnly={fixedAmount} onChange={event => onAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" />
         <b className="text-xs text-gray-500 dark:text-gray-400">{currency}</b>
       </span>
       {currency === 'USDC' && Number(amount) > 0 && <PocketLocalEquivalent amount={Number(amount)} />}

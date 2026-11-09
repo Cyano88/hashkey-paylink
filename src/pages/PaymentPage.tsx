@@ -1,3 +1,4 @@
+import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {cacheCheckoutConfirmationActivity} from '../pocket/lib/pocketCheckoutConfirmationActivity'
 import { useCheckoutExpiry, CheckoutExpired } from '../components/CheckoutExpiry'
 import useCheckoutActivityRefresh from '../pocket/hooks/useCheckoutActivityRefresh'
@@ -3507,7 +3508,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     ...(hostedPricing?[['Order price',checkoutPriceLabel(hostedPricing,'')]] as [string,string][]:[]),
     ['Merchant', hostedMerchantName || memo || 'Merchant'], ['Network', meta.label],
     ...(isNgPosPaycrestOfframp ? [['Merchant receives', (paycrestOrder?.fiat_currency || 'NGN')+' '+(paycrestOrder?.merchant_net_fiat || paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt)] as [string,string]] : []),
-    ...(displayedPaymentQuote && merchantPaidFees ? [['Total',formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : displayedPaymentQuote ? [['Fee', formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits)+BigInt(displayedPaymentQuote.quote.networkFeeUnits),6)+' '+checkoutAsset], ['Total', formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6)+' '+checkoutAsset]] as [string,string][] : []),
+    ...(displayedPaymentQuote && merchantPaidFees ? [['Total',formatPocketAssetAmount(formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6),checkoutAsset)+' '+checkoutAsset]] as [string,string][] : displayedPaymentQuote ? [['Fee', formatPocketAssetAmount(formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits)+BigInt(displayedPaymentQuote.quote.networkFeeUnits),6),checkoutAsset)+' '+checkoutAsset], ['Total', formatPocketAssetAmount(formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits),6),checkoutAsset)+' '+checkoutAsset]] as [string,string][] : []),
   ]
   function resetCheckoutError() {
     setPaymentAttemptStarted(false)
@@ -4076,7 +4077,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
       type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
-    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={checkoutPriceLabel(hostedPricing,String(payableAmt)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
+    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={checkoutPriceLabel(hostedPricing,formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
   }
 
   if (pocketScan?.native) {
@@ -4101,7 +4102,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     return <PocketMerchantPaymentForm checkoutId={isHostedCheckout?hostedCheckoutId:undefined} merchant={pocketScan.merchantName || memo || 'Merchant'} network={chain} networkLabel={consumerNetworkName}
       amount={isFlex ? (fxInputMode === 'local' ? localAmt : flexAmt) : effectiveAmt} currency={isFlex && fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset} fixedAmount={!isFlex}
       onAmountChange={value=>{if(isNgPosPaycrestOfframp)setPaycrestOrder(null);if(fxInputMode==='local')setLocalAmt(value);else setFlexAmt(value);setCirclePasskeyError(null);setCircleSolanaError(null)}} requiresName={requiresAttendeeName} name={attendeeName} onNameChange={setAttendeeName}
-      paymentAmount={String(payableAmt || '0')+' '+meta.asset} rows={pocketPosReviewRows} funding={pocketFunding}
+      paymentAmount={formatPocketAssetAmount(payableAmt || '0',meta.asset)+' '+meta.asset} rows={pocketPosReviewRows} funding={pocketFunding}
       error={circlePasskeyError || circleSolanaError || paymentQuoteError || pocketMovePayError || collectionError || ''} ready={ready} busy={nativeBusy} prepare={prepare} onClose={pocketScan.onBack}
       confirm={async()=>{await pocketScan.verify?.();if(!ready)throw Error('Review the current payment details.');if(pocketMovePayReady)await handlePocketMoveAndPay();else if(chain==='solana')await handleCircleSolanaEmailPay();else await handleCirclePasskeyPay()}}/>
   }
@@ -4112,7 +4113,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const confirmedReceipt=canonicalCheckoutReceipt||paymentReceipt
     const receipt = confirmedReceipt ? { ...confirmedReceipt, ...(hostedPricing?{pricing:hostedPricing}:{}), status: state === 'successful' ? 'confirmed' as const : state === 'failed' ? 'failed' as const : 'processing' as const } : null
     return <><HashPayLinkCheckoutBrand/><BrowserPaymentResult fullScreen={fullScreenHumanCheckout}
-      state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={checkoutPriceLabel(hostedPricing,String(payableAmt)+' '+meta.asset)} receipt={receipt}
+      state={state} merchant={hostedMerchantName || memo || (isPolymarketFunding ? 'Polymarket funding' : 'Merchant')} amount={checkoutPriceLabel(hostedPricing,formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset)} receipt={receipt}
       statusLabel={state==='successful' && (isPolymarketFunding||isAgentOrWalletFunding) ? 'Funded' : undefined}
       detail={state === 'successful' ? undefined : hostedPayoutFailed ? 'Local delivery failed. Check the refund status or contact support. Do not pay again.' : failed ? 'The transaction failed. Check its status before starting another payment.' : isPolymarketBridge ? 'Waiting for funds to reach your Polymarket account. Do not pay again.' : isHostedLocalSettlement && hostedConfirmationStatus === 'processing' || isNgPosPaycrestOfframp && isConfirmed ? (posFiatCurrency === 'UGX' ? 'USDC confirmed. Mobile money delivery is processing.' : 'USDC confirmed. Bank delivery is processing.') : 'Waiting for payment verification. Do not pay again.'}
       returnUrl={isPolymarketBridge ? resolvedPolymarketReturnUrl : isAgentOrWalletFunding ? agentFundingBackUrl : hostedReturnUrl || undefined}
@@ -4166,7 +4167,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard onChoose={()=>navigate('/pay/c/'+hostedCheckoutId+'?'+new URLSearchParams({attempt:hostedAttemptId,choose:'1'}))} pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${shortfall} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard onChoose={()=>navigate('/pay/c/'+hostedCheckoutId+'?'+new URLSearchParams({attempt:hostedAttemptId,choose:'1'}))} pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${formatPocketAssetAmount(shortfall,checkoutAsset)} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
       amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
       amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={hostedCash}
@@ -5518,7 +5519,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                 </div>
               )}
               {pocketScan&&pocketFunding.asset&&!pocketFunding.locked?<PocketFundingAction {...pocketFunding}>{null}</PocketFundingAction>:circleSmartAccount && circleEvmWalletUnlocked && (!circleWalletNeedsFunds || pocketMovePayExpected) && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
-                <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+                <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset} rows={pocketPosReviewRows}
                   status={checkoutSlideStatus}
                   disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                   onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCirclePasskeyPay}
@@ -5628,7 +5629,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                       </div>
                     )}
                     {pocketScan&&pocketFunding.asset&&!pocketFunding.locked?<PocketFundingAction {...pocketFunding}>{null}</PocketFundingAction>:circleSolanaSession && (!circleSolanaNeedsFunds || pocketMovePayExpected) ? (
-                      <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+                      <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset} rows={pocketPosReviewRows}
                         status={checkoutSlideStatus}
                         disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                         onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCircleSolanaEmailPay}
@@ -5739,7 +5740,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   </div>
                 ) : !smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
               <div className="space-y-2">
-              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
@@ -5789,7 +5790,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
             </div>
           ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
-              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={String(payableAmt)+' '+meta.asset} rows={pocketPosReviewRows}
+              <PocketPosPaymentAction funding={pocketFunding} pocket={Boolean(pocketScan)} webReview={browserPaymentFlow} fullScreenReview={fullScreenHumanCheckout} onReviewClose={pocketScan?.onBack} amount={formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset} rows={pocketPosReviewRows}
                 status={checkoutSlideStatus}
                 disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 onConfirm={handlePay}
