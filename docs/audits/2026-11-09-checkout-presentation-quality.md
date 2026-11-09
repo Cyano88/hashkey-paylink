@@ -16,3 +16,19 @@ Verification so far:
 Final build, device verification and release evidence will be appended after completion.
 
 Final source builds passed in both roots (2m24s each). Native source-lineage guard and Capacitor sync passed. The browser card regression passed at 320/390/1280 in light and dark themes, including already formatted grouped/tiny values, duplicate taps, funding return, cancellation and expiry. Focused diagnostics including BscCheckoutPage passed with the same existing native resetEmail exception.
+
+## Native package and web rollout
+
+Native Gradle assembleDebug passed (1m19s), and adb install -r succeeded on Pixel 10 Pro 5A160DLCH006VM with app data retained. APK SHA256: 1764bd5b981d160ad1130a5fe79d4fb942ed74641fd35cff7e2e2fd6d7064be2. Final reviewed native sources and SHA256 manifest are saved under native-release/checkout-presentation-source-20261109.zip and checkout-presentation-source-sha256.json in the original native folder. Native/web sources remain separate.
+
+Web commit e95b77b29eebb8b0dd60d2227c655572f9407548 was pushed and Render deploy dep-dboq7frbc2fs73ct6jrg started. Live status/health still pending at this entry.
+
+Fresh unpaid UI-check order 0c7082 uses parent chks_fe8804d0de7547e286052bff. Device verification paused after installation because Instagram was foreground; user asked to bring Pocket forward. No checkout approval was requested or submitted in this correction.
+
+## Live verification
+
+Render dep-dboq7frbc2fs73ct6jrg is live at e95b77b29, updated 2026-11-09T10:48:47.394633Z. Both app and pocket /api/health returned HTTP 200 with healthy database state.
+
+Pixel review for parent chks_409f3f0343e6415ea7a18eea / stable child chk_4f72e15049684e72879a showed heading 1.50 USDC, Total 1.50 USDC, order price NGN 2,053.13 and Base. Captured and visually inspected output/playwright/pixel-checkout-precision-review.png. Review Back returned to amount input with method control present; method chooser Back returned cleanly; switching to Cash retained order amount. No confirmation/PIN/signature was submitted. Earlier near-expiry order entered review then removed payment controls on expiry and returned Home correctly. Frame sampling captured loading/review/expiry transitions without horizontal overflow.
+
+A separate live UX issue was caught: Lunchroom showed Payments are currently unavailable while its initial price request was pending. Added explicit Loading prices status and disabled checkout during load. Delayed-response browser regression passes along with expired/pending/paid/processing/unavailable-order recovery. Follow-up web source build passed (2m32s). Native source does not need another rebuild for this merchant website change.
