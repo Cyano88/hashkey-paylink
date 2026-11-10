@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {isDeepStrictEqual} from 'node:util'
 import type {MarketplaceStore} from './repository.js'
 import {marketplaceReference} from './beneficiaries.js'
 import {applyMarketplaceCommand} from './accounting.js'
@@ -50,7 +51,7 @@ export function createMarketplaceFeeReserve(d:{read:()=>Promise<MarketplaceStore
    let account=s.feeAccounts.find(a=>a.projectId===projectId)
    if(!account){account={projectId,available:'0',reserved:'0',accrued:'0',funded:'0',credits:[],reservations:[]};s.feeAccounts.push(account)}
    const credit={key,paymentId,allocationId,units:amountUnits,credentialId},prior=account.credits.find(c=>c.key===key)
-   if(prior){if(JSON.stringify(prior)!==JSON.stringify(credit))throw Error('Fee funding idempotency conflict.');return s}
+   if(prior){if(!isDeepStrictEqual(prior,credit))throw Error('Fee funding idempotency conflict.');return s}
    const next=applyMarketplaceCommand(book,projectId,'fee-budget:'+createHash('sha256').update(key).digest('hex'),{type:'fund_fees',allocationId,amountUnits})
    s.books[s.books.indexOf(book)]=next
    account.available=(units(account.available)+units(amountUnits)).toString();account.funded=(units(account.funded)+units(amountUnits)).toString();account.credits.push(credit)

@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {isDeepStrictEqual} from 'node:util'
 import {getAddress} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
 import {marketplaceAmountUnits,type MarketplaceAsset} from '../../src/lib/marketplacePayments.js'
@@ -42,7 +43,7 @@ export function createMarketplaceRefunds(dependencies:Dependencies){
     const book=locate(s,projectId,paymentId)
     if(replay(book))return s
     collection(origin,book)
-    if(book.refundCollection&&JSON.stringify(book.refundCollection)!==JSON.stringify(origin))throw Error('Original refund destination binding changed.')
+    if(book.refundCollection&&!isDeepStrictEqual(book.refundCollection,origin))throw Error('Original refund destination binding changed.')
     if(book.refundReservations?.some(r=>r.refundId===request.refundId))throw Error('Refund reference already exists.')
     let next=structuredClone(book)
     const bound=allocations.map((a,index)=>{

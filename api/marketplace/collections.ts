@@ -1,6 +1,7 @@
 import type {PayerCheckoutFeeEvidence} from '../merchant-checkout-fees.js'
 import {EVM_PLATFORM_TREASURY,paymentFeeBreakdown} from '../../src/lib/platformFees.js'
 import {createHash} from 'node:crypto'
+import {isDeepStrictEqual} from 'node:util'
 import {getAddress,parseAbi,parseEventLogs,type PublicClient} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
 import {applyMarketplaceCommand,type MarketplaceBook} from './accounting.js'
@@ -89,7 +90,7 @@ export function createMarketplaceCollections(input:Dependencies){
     if(payerOutflows.length!==(amounts.treasury===0n?1:2)||payerOutflows.reduce((sum,l)=>sum+l.args.value,0n)!==amounts.total)throw Error('Marketplace payer debit differs from the accepted total.')
    }
    const latest=binding(await d.resolveSession(request),before)
-   if(JSON.stringify(latest)!==JSON.stringify(session))throw Error('Collection session changed during verification.')
+   if(!isDeepStrictEqual(latest,session))throw Error('Collection session changed during verification.')
    const verifiedAt=d.now()
    if(!Number.isSafeInteger(verifiedAt)||verifiedAt<0)throw Error('Invalid collection verification time.')
    const evidenceId=`base:8453:${session.transactionHash}:${log.logIndex}`
@@ -97,12 +98,12 @@ export function createMarketplaceCollections(input:Dependencies){
    const origin:RefundCollection={projectId,paymentId,fundingEvidenceId:evidenceId,route:'wallet',network:'base',asset:'USDC',tokenAddress:token,amountUnits:session.amountUnits,payerId:session.payerId,payerWallet:session.payerWallet,holdingId:session.holdingId,holdingRevision:session.holdingRevision,holdingAddress:session.holdingAddress}
    const saved=await d.mutate(store=>{
     const book=locate(store,projectId,paymentId)
-    if(JSON.stringify(book.plan)!==JSON.stringify(before.plan))throw Error('Marketplace payment changed during verification.')
+    if(!isDeepStrictEqual(book.plan,before.plan))throw Error('Marketplace payment changed during verification.')
     if(book.collectionProof){
-     if(book.collectionProof.evidenceId!==evidenceId||JSON.stringify(book.collectionProof.session)!==JSON.stringify(session)||book.collectionProof.blockHash!==proof.blockHash||book.fundingEvidence!==evidenceId||JSON.stringify(book.refundCollection)!==JSON.stringify(origin))throw Error('Conflicting collection proof requires review.')
+     if(book.collectionProof.evidenceId!==evidenceId||!isDeepStrictEqual(book.collectionProof.session,session)||book.collectionProof.blockHash!==proof.blockHash||book.fundingEvidence!==evidenceId||!isDeepStrictEqual(book.refundCollection,origin))throw Error('Conflicting collection proof requires review.')
      return store
     }
-    if(book.collectionObservation&&JSON.stringify(book.collectionObservation.session)!==JSON.stringify(session))throw Error('Conflicting collection observation requires review.')
+    if(book.collectionObservation&&!isDeepStrictEqual(book.collectionObservation.session,session))throw Error('Conflicting collection observation requires review.')
     if(store.books.some(b=>b!==book&&(b.fundingEvidence===evidenceId||b.collectionObservation?.session.sessionId===session.sessionId||b.collectionObservation?.session.transactionHash===session.transactionHash||b.collectionProof?.session.sessionId===session.sessionId||b.collectionProof?.session.transactionHash===session.transactionHash||b.operations.some(o=>o.evidenceId===evidenceId)||[...(b.walletExecutions||[]),...(b.bankExecutions||[]),...(b.refundExecutions||[])].some(e=>e.transactionHash?.toLowerCase()===session.transactionHash))))throw Error('Collection transaction or session was already used.')
     if(book.operations.some(o=>o.evidenceId===evidenceId)||[...(book.walletExecutions||[]),...(book.bankExecutions||[]),...(book.refundExecutions||[])].some(e=>e.transactionHash?.toLowerCase()===session.transactionHash))throw Error('Collection transaction was already used.')
     if(!requireFinality){

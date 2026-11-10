@@ -8,7 +8,9 @@ const abi=parseAbi(['event Transfer(address indexed from, address indexed to, ui
 function transfer(from=payer,to=holding,value=10000000n){return {address:BASE_STABLECOINS.USDC.address,topics:encodeEventTopics({abi,eventName:'Transfer',args:{from,to}}),data:encodeAbiParameters([{type:'uint256'}],[value]),logIndex:0,blockNumber:100n,blockHash:block,transactionHash:tx,transactionIndex:0,removed:false}}
 const baseSession={sessionId:'session_a',projectId:'project_a',paymentId:'payment_a',payerId:'buyer_a',payerWallet:payer,holdingId:'holding_a',holdingRevision:'revision_a',holdingAddress:holding,network:'base',asset:'USDC',amountUnits:'10000000',transactionHash:tx,issuedAt:50,expiresAt:150}
 let stored,queue=Promise.resolve(),session,receipt,canonical,finalized,chainId,sessionReads,changed=false,failRpc=false
-const storage={read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{stored=fn(structuredClone(stored||{books:[],drafts:[]}));return structuredClone(stored)});queue=job.catch(()=>{});return job},now:()=>200000}
+// Model JSONB persistence: object keys reorder, while array order is preserved.
+function jsonb(value){if(Array.isArray(value))return value.map(jsonb);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,jsonb(value[key])]));return value}
+const storage={read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{stored=jsonb(fn(structuredClone(stored||{books:[],drafts:[]})));return structuredClone(stored)});queue=job.catch(()=>{});return job},now:()=>200000}
 const config={...storage,enabled:true,holding:{id:'holding_a',revision:'revision_a',address:holding,billsAddress:bills},resolveSession:async()=>{sessionReads++;return changed&&sessionReads>1?{...session,payerId:'changed'}:structuredClone(session)},chain:{getChainId:async()=>chainId,getTransactionReceipt:async()=>{if(failRpc)throw Error('RPC unavailable');return structuredClone(receipt)},getBlock:async input=>structuredClone(input.blockTag?finalized:canonical)}}
 const repo=createMarketplaceRepository({...storage,collectionVerification:config})
 const plan={projectId:'project_a',paymentId:'payment_a',network:'base',asset:'USDC',amount:'10',allocations:[{id:'seller_share',sellerId:'seller_a',role:'seller',amount:'9',settlement:'wallet_usdc',beneficiaryId:'wallet_a'},{id:'platform_fee',sellerId:'platform_a',role:'platform',amount:'1',settlement:'wallet_usdc',beneficiaryId:'wallet_b'}]}
@@ -93,3 +95,14 @@ const observationRace=await Promise.allSettled([cross.observe('project_a','payme
 assert.equal(observationRace.filter(r=>r.status==='fulfilled').length,1)
 assert.equal(stored.books.filter(b=>b.collectionObservation).length,1)
 console.log('PASS pending observation: exact credit, no early release/refund/fee funding, no double credit, conservative backing, finality promotion, reorg invalidation, RPC retry and cross-project replay protection.')
+
+reset();await repo.collections.sync('project_a','payment_a');await repo.collections.sync('project_a','payment_a')
+assert.equal(stored.books[0].journal.length,1)
+await repo.execute('project_a','payment_a','release_platform',{type:'release',allocationId:'platform_fee',amountUnits:'1000000'})
+await repo.feeReserve.fund('project_a','payment_a','platform_fee','fee_budget','200000','credential_a')
+await repo.feeReserve.fund('project_a','payment_a','platform_fee','fee_budget','200000','credential_a')
+assert.equal(stored.feeAccounts[0].funded,'200000')
+await assert.rejects(()=>repo.feeReserve.fund('project_a','payment_a','platform_fee','fee_budget','200001','credential_a'),/conflict/)
+stored.books[0].refundCollection.payerId='tampered'
+await assert.rejects(()=>repo.collections.verify('project_a','payment_a'),/Conflicting/)
+console.log('PASS JSONB reordered persistence: collection observe/finalize/replay, original refund binding, fee reserve replay and changed-value rejection.')
