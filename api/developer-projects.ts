@@ -1,3 +1,4 @@
+import {marketplacePortalBalances} from './marketplace/portal-balances.js'
 import {marketplaceKeyAccess} from './marketplace/key-access.js'
 import {validBuilderCountry} from '../src/lib/builderCountries.js'
 import {productDisplayName} from '../src/lib/retiredProductPresentation.js'
@@ -173,6 +174,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  marketplaceRead?:()=>Promise<import('./marketplace/repository.js').MarketplaceStore|undefined>
   receivingWallets?: typeof developerReceivingWallets
   removal?: typeof manageAppRemoval
   operationsEnv?: () => NodeJS.ProcessEnv
@@ -673,6 +675,14 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         }
         const store = await dependencies.read(STORE_KEY)
         if (resource === 'businesses') return res.json({ok:true,businesses:Object.values(store?.projects??{}).filter(project=>!project.removal&&project.businessVerification?.status==='approved'&&project.operationalStatus!=='suspended'&&project.directoryProfile?.enabled).map(project=>({id:project.id,name:productDisplayName(project.id,project.name),website:project.website,logo:project.brandImageUrl??'',introduction:project.directoryProfile!.introduction})).sort((a,b)=>a.name.localeCompare(b.name))})
+        if(resource==='marketplace-balances'){
+          const project=findOwnedProject(store,clean(req.query?.projectId,80),identity.userId)
+          if(!project)return res.status(404).json({ok:false,error:'Project not found.'})
+          if(req.query?.environment&&req.query.environment!=='live')return res.status(400).json({ok:false,error:'Marketplace balances are live only.'})
+          const sellerId=req.query?.sellerId
+          if(sellerId!==undefined&&(typeof sellerId!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/.test(sellerId)))return res.status(400).json({ok:false,error:'Enter a valid seller reference.'})
+          return res.json({ok:true,...marketplacePortalBalances(await (dependencies.marketplaceRead??(()=>readDurableJson<import('./marketplace/repository.js').MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1')))(),project.id,sellerId as string|undefined)})
+        }
         if (resource === 'activity' || resource === 'payments') {
           const projectId = clean(req.query?.projectId, 80)
           const project = findOwnedProject(store, projectId, identity.userId)

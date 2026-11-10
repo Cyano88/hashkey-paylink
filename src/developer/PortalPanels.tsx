@@ -4,17 +4,17 @@ import {CHECKOUT_PRODUCTS, productAllowed, isOpenCheckoutProduct} from '../lib/d
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check, ChevronRight, Clock } from 'lucide-react'
 
-export type PortalSection = 'overview' | 'products' | 'activity' | 'setup' | 'keys' | 'webhooks' | 'quickstart' | 'verification'
+export type PortalSection = 'marketplace' | 'overview' | 'products' | 'activity' | 'setup' | 'keys' | 'webhooks' | 'quickstart' | 'verification'
 export const portalSections: Array<[PortalSection, string]> = [['overview','Overview'],['products','Payments'],['quickstart','Developers'],['setup','Settings']]
 export function portalParent(section: PortalSection): PortalSection {
   if (section === 'verification') return 'setup'
-  if (section === 'activity') return 'products'
+  if (section === 'activity' || section === 'marketplace') return 'products'
   if (section === 'keys' || section === 'webhooks') return 'quickstart'
   return section
 }
 export const portalSubsections: Partial<Record<PortalSection, Array<[PortalSection, string]>>> = {
   setup: [['setup','App settings'],['verification','Verification']],
-  products: [['products', 'Payment options'], ['activity', 'Activity']],
+  products: [['products', 'Payment options'], ['activity', 'Activity'], ['marketplace','Marketplace balances']],
   quickstart: [['quickstart', 'Get started'], ['keys', 'API keys'], ['webhooks', 'Webhooks']],
 }
 export type ProjectSummary = {

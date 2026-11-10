@@ -1,3 +1,4 @@
+import MarketplaceBalancesPanel from '../developer/MarketplaceBalancesPanel'
 import {MARKETPLACE_WITHDRAWAL_MINIMUMS} from '../lib/marketplaceWithdrawalPolicy'
 import MarketplaceAccessRequest from '../developer/MarketplaceAccessRequest'
 import BuilderOnboarding from '../developer/BuilderOnboarding'
@@ -131,7 +132,7 @@ export default function DeveloperPortalPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const selectedTab = params.get('section')
-  const tab: PortalSection = ['overview','products','activity','setup','verification','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
+  const tab: PortalSection = ['overview','products','activity','marketplace','setup','verification','keys','webhooks','quickstart'].includes(selectedTab ?? '') ? selectedTab as PortalSection : 'overview'
   const sandbox = params.get('environment') === 'test' || (!params.has('environment') && !params.has('project') && !params.has('section'))
   const linkedProfileProject=allProjects.find(p=>p.id===params.get('project'))
   const activeProfileId=linkedProfileProject?projectBuilderProfileId(linkedProfileProject):params.get('profile')??(selectedTab&&!sandbox&&allProjects[0]?projectBuilderProfileId(allProjects[0]):'personal')
@@ -466,6 +467,7 @@ export default function DeveloperPortalPage() {
             : accountView==='home' ? <AccountHome key={activeProfile.id} apps={projects} onOpen={selectProject} onCreate={startNewProject} onApps={openApps}/> : accountView==='businesses' ? <BusinessDirectory/> : showingApps || !projects.length ? <AppsPanel apps={projects} onOpen={selectProject} onCreate={startNewProject} disabled={busy}/> : active?.removal ? <><h1 className="text-2xl font-semibold">{active.name}</h1><p className="mb-8 mt-2 text-sm text-gray-500">Closed app. Payment history is retained for your records.</p><PaymentActivityPanel key={active.id} projectId={active.id}/></> : <>
               {active && tab === 'overview' && <OverviewPanel project={active} onNavigate={setTab} />}
               {active && tab === 'products' && <><ProductsPanel project={active} onConfigure={() => setTab('setup')} /><MarketplaceAccessRequest key={(user?.id??'')+':'+active.id} projectId={active.id}/></>}
+              {active && tab === 'marketplace' && <MarketplaceBalancesPanel key={(user?.id??'')+':'+active.id} projectId={active.id} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
               {active && draft && tab === 'setup' && <><SetupPanel onWalletsReady={setReceivingWallets} onWalletBusy={setBusy} error={error} notice={notice} receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
               {active && tab === 'verification' && (!builderProfileReady(activeProfile) ? <p className="text-sm text-gray-500">Complete your profile name and country above to continue verification.</p> : active.accountType === 'individual' ? <PersonalVerificationPanel /> : <BusinessVerificationPanel key={active.id} profileCountry={activeProfile.country} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/>) }
