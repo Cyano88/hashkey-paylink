@@ -31,6 +31,19 @@ export function createMarketplaceService({repository,resolvePrincipal,createChec
  const instructions=createMarketplaceInstructions({repository,resolvePrincipal,enabled:true,createCheckout})
  async function authorize(token:string,scope:string){const p=await resolvePrincipal(token);if(!p||p.active!==true||!p.capabilities.includes('marketplace_payments')||!p.scopes.includes(scope))throw Error('Marketplace authorization denied.');return p}
  return {...instructions,
+  async createWithdrawalQuote(token:string,body:unknown){
+   const v=marketplaceFields(body,['sellerId','role','beneficiaryId','operationId','amount'])
+   const p=await authorize(token,'marketplace:payout')
+   if(v.role!=='seller'&&v.role!=='platform')throw Error('Invalid withdrawal role.')
+   const plan=await repository.planWithdrawal(p.projectId,marketplaceReference(v.sellerId),v.role,marketplaceReference(v.beneficiaryId),marketplaceAmountUnits(v.amount as string))
+   if(plan.beneficiary.kind!=='wallet')throw Error('Marketplace bank withdrawal provider is not enabled.')
+   const first=plan.sources[0]
+   const q=await quoteWallet({projectId:p.projectId,paymentId:first.paymentId,allocationId:first.allocationId,operationId:marketplaceReference(v.operationId),beneficiaryId:plan.beneficiary.beneficiaryId,recipient:getAddress(plan.beneficiary.address),debitUnits:marketplaceAmountUnits(v.amount as string)})
+   q.withdrawal=plan
+   await saveQuote(q)
+   const disclosure=await instructions.walletPayoutQuote(token,{paymentId:q.paymentId,quoteId:q.quoteId})
+   return {...disclosure,sellerId:plan.sellerId,role:plan.role,sourceCount:plan.sources.length}
+  },
   async beginWallet(token:string,body:unknown){
    const p=await authorize(token,'marketplace:create'),v=marketplaceFields(body,['sellerId','beneficiaryId','address'])
    if(typeof v.address!=='string')throw Error('Invalid wallet address.')

@@ -1,3 +1,5 @@
+import {reserveWithdrawalSources} from './withdrawal-accounting.js'
+import {selectWithdrawalSources,currentWithdrawalBeneficiary} from './withdrawal-plan.js'
 import {createMarketplaceFeeReserve,type FeeAccount} from './fee-reserve.js'
 import {createMarketplaceCollections} from './collections.js'
 import {createHash} from 'node:crypto'
@@ -51,6 +53,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
   }
  return {
+  planWithdrawal:async(projectId:string,sellerId:string,role:'seller'|'platform',beneficiaryId:string,debitUnits:string)=>selectWithdrawalSources(await d.read(),projectId,sellerId,role,beneficiaryId,debitUnits),
   feeReserve:createMarketplaceFeeReserve(d),
   collections,
   refunds:createMarketplaceRefunds({...d,resolveRefundCollection:d.resolveRefundCollection??collections?.resolveRefundCollection}),
@@ -144,10 +147,10 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     validateMarketplaceBankQuote(quote,d.now())
     if(s.books.some(b=>b.bankReservations?.some(r=>r.quote.providerOrderId===quote.providerOrderId||r.quote.intentId===quote.intentId||r.quote.quoteId===quote.quoteId)))throw Error('Bank quote or provider order was already reserved.')
     const allocation=book.plan.allocations.find(a=>a.id===quote.allocationId)
-    const snapshot=book.beneficiarySnapshots?.find(b=>b.beneficiaryId===quote.beneficiaryId)
+    const snapshot=quote.withdrawal?currentWithdrawalBeneficiary(s,projectId,quote.withdrawal):book.beneficiarySnapshots?.find(b=>b.beneficiaryId===quote.beneficiaryId)
     const current=s.bankBeneficiaries?.find(b=>b.projectId===projectId&&b.beneficiaryId===quote.beneficiaryId)
-    if(book.plan.asset!=='USDC'||book.plan.network!=='base'||!allocation||allocation.settlement!=='cash_balance'||allocation.beneficiaryId!==quote.beneficiaryId||snapshot?.kind!=='bank'||!current||current.status!=='active'||snapshot.destinationDigest!==quote.destinationDigest||current.destinationDigest!==quote.destinationDigest||current.sellerId!==allocation.sellerId||snapshot.sellerId!==allocation.sellerId)throw Error('Bank quote beneficiary is no longer eligible.')
-    const next=applyMarketplaceCommand(book,projectId,key,{type:'reserve',operationId:quote.operationId,allocationId:quote.allocationId,kind:'payout',amountUnits:quote.debitUnits})
+    if(book.plan.asset!=='USDC'||book.plan.network!=='base'||!allocation||(!quote.withdrawal&&(allocation.settlement!=='cash_balance'||allocation.beneficiaryId!==quote.beneficiaryId))||snapshot?.kind!=='bank'||!current||current.status!=='active'||snapshot.destinationDigest!==quote.destinationDigest||current.destinationDigest!==quote.destinationDigest||current.sellerId!==allocation.sellerId||snapshot.sellerId!==allocation.sellerId)throw Error('Bank quote beneficiary is no longer eligible.')
+    const next=quote.withdrawal?reserveWithdrawalSources(s,quote,key):applyMarketplaceCommand(book,projectId,key,{type:'reserve',operationId:quote.operationId,allocationId:quote.allocationId,kind:'payout',amountUnits:quote.debitUnits})
     next.bankReservations=[...(book.bankReservations||[]),{key,requestHash,quote:structuredClone(quote),authorization:actor}]
     s.books[index]=next;return s
    })
@@ -162,6 +165,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     const index=s.books.findIndex(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
     if(index<0)throw Error('Marketplace payment not found.')
     const book=s.books[index]
+    if(command.type==='reserve'&&command.withdrawal||command.type==='result'&&book.operations.find(o=>o.id===command.operationId)?.withdrawal)throw Error('Withdrawals require coordinated reservation and reconciliation.')
     if(command.type==='fund'&&(d.collectionVerification||book.collectionProof||book.collectionObservation||book.collectionCheckout))throw Error('Funding requires the collection verifier.')
     if(command.type==='reserve'&&command.kind==='payout'&&book.beneficiarySnapshots&&!book.journal.some(entry=>entry.key===key)){
      const allocation=book.plan.allocations.find(a=>a.id===command.allocationId)
@@ -177,6 +181,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     if(command.type==='reserve'&&command.kind==='refund'&&(book.beneficiarySnapshots||book.refundCollection))throw Error('Refunds require verified original-payer binding through refunds.reserve.')
     if(command.type==='result'&&command.status!=='unknown'&&book.refundReservations?.some(r=>r.allocations.some(a=>a.operationId===command.operationId)))throw Error('Refunds require dedicated verified outcome reconciliation.')
     // Proof references must be canonical chain/log or provider settlement identities.
+    if(command.type==='reserve'&&command.withdrawal||command.type==='result'&&book.operations.find(o=>o.id===command.operationId)?.withdrawal)throw Error('Withdrawals require coordinated reservation and reconciliation.')
     if(command.type==='fund'&&s.books.some((b,i)=>i!==index&&b.fundingEvidence===command.evidenceId))throw Error('Funding evidence was already used.')
     if(command.type==='result'&&command.status!=='unknown'&&s.books.some((b,i)=>i!==index&&b.operations.some(o=>o.evidenceId===command.evidenceId)))throw Error('Execution evidence was already used.')
     s.books[index]=applyMarketplaceCommand(s.books[index],projectId,key,command);return s

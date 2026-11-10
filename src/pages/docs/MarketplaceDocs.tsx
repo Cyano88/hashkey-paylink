@@ -5,7 +5,7 @@ import {DocPage,DocHeader,Section,Code,NavFooter} from './components'
 export default function MarketplaceDocs(){return <DocPage>
   <DocHeader badge="Under development" title="Marketplace Payments" description="Your marketplace manages sellers, orders, commissions and delivery conditions. Hash PayLink is building the payment infrastructure to hold allocations and execute authorized releases, payouts and refunds."/>
   <Section title="Choose wallet or bank account settlement" id="settlement">
-    <p>Choose the settlement route before integrating. Each payment uses one stablecoin on Base; seller allocations and the marketplace commission remain in that asset.</p>
+    <p>Each payment uses one stablecoin on Base. Seller shares and your commission stay in that asset while held. Choose a verified destination when requesting withdrawal.</p>
     <div className="grid gap-4">{MARKETPLACE_SETTLEMENTS.map(route=><article key={route.id} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><h3 className="font-semibold text-gray-950 dark:text-white">{route.title}: {route.label}</h3><p className="mt-2">{route.detail}</p><dl className="mt-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><dt>Funding asset</dt><dd>{route.asset} on Base</dd></div><div className="mt-2 flex flex-wrap justify-between gap-2"><dt>Recipient receives</dt><dd>{route.currency}</dd></div><div className="mt-2 flex flex-wrap justify-between gap-2"><dt>Destination</dt><dd>{route.destination}</dd></div></dl></article>)}</div>
     <p><strong>Cash balance means local NGN settlement.</strong> USDT goes to a Base wallet and cannot use this local route. There is no automatic USDC/USDT conversion. A payment containing an NGN bank allocation must therefore be funded in USDC.</p>
     <p>Wallet settlement describes the destination. It does not bypass the marketplace hold or release instruction.</p>
@@ -15,11 +15,11 @@ export default function MarketplaceDocs(){return <DocPage>
     <p><strong>Withdrawal minimums, not purchase minimums:</strong> wallet withdrawals must deliver at least {MARKETPLACE_WITHDRAWAL_MINIMUMS.wallet.amount} USDC on Base. Bank withdrawals must convert at least {MARKETPLACE_WITHDRAWAL_MINIMUMS.bank.amount} USDC to NGN. Applicable fees are additional and shown in the quote.</p>
     <p>Apply the minimum separately to each seller and your marketplace commission. Your commission percentage does not impose a minimum order size. For example, a 1 USDC order with a 10% commission credits 0.90 USDC to the seller and 0.10 USDC to the marketplace. The commission remains visible below the withdrawal minimum.</p>
     <p>After release, label a small balance <strong>Available ? below withdrawal minimum</strong>, not Pending. Pending describes a release restriction; a payout minimum is a separate condition. Refunds are not subject to withdrawal minimums.</p>
-    <p><strong>Accumulated withdrawals are still being built.</strong> Balances already total across orders, but the current pilot can only reserve a payout from one order allocation. Combining those balances into one withdrawal and choosing bank or wallet at withdrawal time are not yet available. The current pilot binds a destination to each allocation; Marketplace NGN payouts remain gated.</p>
+    <p><strong>Combine small balances into one withdrawal.</strong> The private-pilot wallet API can combine released USDC shares from up to 100 order allocations for the same recipient and role. Choose that recipient?s verified Base wallet. The original orders stay unchanged for refunds and reconciliation. Marketplace bank payouts remain disabled until their provider and ownership-verification integration is approved and tested.</p>
   </Section>
   <Section title="Availability before integration">
     <p>Register your Marketplace Payments app, select the product and request whitelist review. Individual developers can qualify with current Basic or Advanced identity verification. Businesses require approved business verification. Admin approval and explicit pilot activation are also required.</p>
-    <p>Marketplace financial endpoints are not yet open for production or sandbox integration. The private pilot uses a dedicated Base USDC holding wallet, not smart-contract escrow. USDT, Marketplace bank payouts and combined withdrawals across orders are not yet available. Approval does not automatically activate them.</p>
+    <p>Marketplace financial endpoints are not yet open for production or sandbox integration. The private pilot uses a dedicated Base USDC holding wallet, not smart-contract escrow. USDT and Marketplace bank payouts are not yet available. Combined USDC wallet withdrawals are implemented behind the private-pilot gate. Approval does not automatically activate them.</p>
   </Section>
   <Section title="Seller balances in your product" id="balances">
     <p>Your app shows each seller?s balance and your marketplace?s commission separately. Sellers do not need a separate Hash PayLink dashboard.</p>
@@ -36,8 +36,12 @@ export default function MarketplaceDocs(){return <DocPage>
     <p>The marketplace must fund a separate refund-fee reserve from its released commission. This covers refund gas without reducing the buyer?s approved refund. Seller funds cannot fund this reserve.</p>
     <p>Use the same idempotency key to retry the same instruction. A timeout is not proof of failure: check status before retrying or releasing reserved funds. Receipts show the confirmed amount and applicable fees.</p>
   </Section>
-  <Section title="API contract status">
-    <p>Select <Code>marketplace_payments</Code> for this product. Integration examples will be published as each route completes its acceptance checks. Ordinary checkout settles immediately and must not be used as a substitute for Marketplace holding and release.</p>
+  <Section title="Private-pilot withdrawal API">
+    <p>Your server must authenticate the withdrawing user and enforce their seller ID and role. Keep the API key on your server: it authorizes your marketplace, not an individual seller.</p>
+    <p>With an activated app, request <Code>POST /api/marketplace/v1/withdrawal-quotes</Code> using <Code>sellerId</Code>, <Code>role</Code> (seller or platform), <Code>beneficiaryId</Code>, <Code>operationId</Code> and <Code>amount</Code>. Amount is the total USDC balance debit, including the quoted withdrawal fee.</p>
+    <p>The quote returns the exact amount received, fee, expiry, source count and an anchor <Code>paymentId</Code>. Approve it with <Code>POST /api/marketplace/v1/withdrawals</Code>, sending that <Code>paymentId</Code>, <Code>quoteId</Code> and your <Code>businessReference</Code>, with an idempotency key. Reuse the same request and key after a timeout.</p>
+    <p>The anchor identifies the withdrawal for status, cancellation and receipts; it does not mean only that order funded the payout. Cancellation is allowed before submission. After submission, keep funds reserved until the outcome is confirmed.</p>
+    <p>Select <Code>marketplace_payments</Code> for this product. Ordinary checkout settles immediately and must not be used as a substitute for Marketplace holding and release.</p>
   </Section>
   <NavFooter prev={{label:'Checkout API',path:'/docs/api'}} next={{label:'Polymarket funding',path:'/docs/funding'}}/>
 </DocPage>}

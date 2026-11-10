@@ -1,3 +1,4 @@
+import {applyPayoutResult} from './withdrawal-accounting.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {getAddress} from 'viem'
 import {marketplaceReference} from './beneficiaries.js'
@@ -59,7 +60,7 @@ export function createMarketplaceWalletExecution(dependencies:Dependencies){
     const current=prepareMarketplaceWalletTransfer(s,projectId,paymentId,operationId,now)
     authorization(approved,current,now)
     attempt.state='submitting';attempt.submissionStartedAt=now;attempt.executionAuthorization=approved;attempt.submitBefore=Math.min(approved.expiresAt,current.quote?.expiresAt??Infinity,now+5000)
-    const next=applyMarketplaceCommand(book,projectId,'wallet-submit:'+attempt.attemptId,{type:'result',operationId,status:'unknown',evidenceId:'wallet-attempt:'+attempt.attemptId})
+    const next=applyPayoutResult(s,book,projectId,'wallet-submit:'+attempt.attemptId,operationId,'unknown','wallet-attempt:'+attempt.attemptId)
     s.books[s.books.indexOf(book)]=next;return s
    })
    return {attempt:structuredClone(latest(locate(store,projectId,paymentId,operationId).book,operationId)!),transfer}

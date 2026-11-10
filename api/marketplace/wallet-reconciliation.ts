@@ -1,3 +1,4 @@
+import {applyPayoutResult} from './withdrawal-accounting.js'
 import {isDeepStrictEqual} from 'node:util'
 import {walletFeeDisclosure,validateMarketplaceWalletQuote} from './wallet-quotes.js'
 import {createHash,randomUUID} from 'node:crypto'
@@ -31,7 +32,7 @@ function validate(input:WalletOutcomeEvidence,current:ReturnType<typeof locate>,
  if(a.transactionHash&&a.transactionHash!==transactionHash)throw Error('Wallet outcome transaction changed.')
  if(typeof input.blockNumber!=='string'||!/^[1-9]\d{0,19}$/.test(input.blockNumber)||!Number.isSafeInteger(input.finalizedAt)||input.finalizedAt>now||input.finalizedAt<(a.submissionStartedAt??Infinity))throw Error('Invalid wallet outcome block or finalization time.')
  if(units(input.requestedUnits)!==BigInt(r.amountUnits))throw Error('Wallet outcome requested amount changed.')
- if(r.quote){const q=validateMarketplaceWalletQuote(r.quote);if(q.projectId!==input.projectId||q.paymentId!==input.paymentId||q.operationId!==r.operationId||q.allocationId!==r.allocationId||q.beneficiaryId!==r.beneficiaryId||q.recipient!==recipient||q.recipientUnits!==r.amountUnits||q.debitUnits!==current.operation.units)throw Error('Wallet fee quote binding changed.')}
+ if(r.quote){const q=validateMarketplaceWalletQuote(r.quote);if(q.projectId!==input.projectId||q.paymentId!==input.paymentId||q.operationId!==r.operationId||q.allocationId!==r.allocationId||q.beneficiaryId!==r.beneficiaryId||q.recipient!==recipient||q.recipientUnits!==r.amountUnits||(q.withdrawal?q.withdrawal.sources[0].units:q.debitUnits)!==current.operation.units)throw Error('Wallet fee quote binding changed.')}
  const transferred=units(input.transferredUnits)
  if(input.outcome==='transferred'){
   if(transferred!==BigInt(r.amountUnits)||!Number.isSafeInteger(input.logIndex)||(input.logIndex??-1)<0)throw Error('Wallet settlement requires the exact finalized transfer log.')
@@ -60,7 +61,7 @@ export function createMarketplaceWalletReconciliation(dependencies:Dependencies)
     if(s.books.some(b=>b.fundingEvidence===evidence.evidenceId||b.operations.some(o=>o.evidenceId===evidence.evidenceId)))throw Error('Wallet outcome evidence was already consumed.')
     if(s.books.some(b=>b.refundExecutions?.some(e=>e.transactionHash===evidence.transactionHash)))throw Error('Transaction already used by a marketplace refund.')
     if(s.books.some(b=>[...(b.bankExecutions||[]),...(b.walletExecutions||[])].some(e=>e.attemptId!==attempt.attemptId&&e.transactionHash===evidence.transactionHash)))throw Error('Wallet outcome transaction is already bound to another payout.')
-    const eventId=randomUUID(),next=applyMarketplaceCommand(book,projectId,'wallet-result:'+eventId,{type:'result',operationId,status,evidenceId:evidence.evidenceId})
+    const eventId=randomUUID(),next=applyPayoutResult(s,book,projectId,'wallet-result:'+eventId,operationId,status,evidence.evidenceId)
     const nextAttempt=next.walletExecutions!.find(e=>e.attemptId===attempt.attemptId)!
     nextAttempt.state=status;nextAttempt.transactionHash=evidence.transactionHash
     next.walletReconciliations=[...(next.walletReconciliations||[]),{evidence,hash,status,eventId}]

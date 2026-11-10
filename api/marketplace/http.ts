@@ -26,6 +26,7 @@ export function createMarketplaceRouter(d=defaults){
      const e=error as Error&{code:string;minimumUnits:string;asset:string;route:string}
      return res.status(400).json({ok:false,error:message,code:e.code,minimumNetUnits:e.minimumUnits,asset:e.asset,route:e.route,feesAdditional:true})
     }
+    if(message==='Marketplace bank withdrawal provider is not enabled.')return res.status(503).json({ok:false,code:'MARKETPLACE_BANK_NOT_ENABLED',error:'Marketplace bank withdrawals are not enabled. Use an approved wallet route.'})
     if(message==='Marketplace authorization denied.')return res.status(403).json({ok:false,error:'Marketplace access denied.'})
     if(/Idempotency key|already exists/.test(message))return res.status(409).json({ok:false,error:'Reference or idempotency key conflicts with an existing request.'})
     if(/^(Invalid |Unexpected |Use |Provide |Duplicate |Amount |Insufficient |Allocation |Seller allocations|Settlement must|Payment has no verified|Wallet quote expired)/.test(message))return res.status(400).json({ok:false,error:'Invalid request, insufficient released funds, or expired quote. Check the documented fields and refresh status.'})
@@ -36,6 +37,8 @@ export function createMarketplaceRouter(d=defaults){
  route('post','/wallet-beneficiaries/challenges',(s,t,r)=>s.beginWallet(t,r.body))
  route('post','/wallet-beneficiaries/:beneficiaryId/verify',(s,t,r)=>s.verifyWallet(t,id(r,'beneficiaryId'),r.body))
  route('delete','/wallet-beneficiaries/:beneficiaryId',(s,t,r)=>s.revokeWallet(t,id(r,'beneficiaryId')))
+ route('post','/withdrawal-quotes',(s,t,r)=>s.createWithdrawalQuote(t,r.body))
+ route('post','/withdrawals',(s,t,r)=>s.reserveQuotedWalletPayout(t,key(r),r.body))
  route('post','/payments',(s,t,r)=>s.createPayment(t,key(r),r.body))
  route('get','/payments/:paymentId',(s,t,r)=>s.payment(t,id(r,'paymentId')))
  route('post','/payments/:paymentId/checkout',(s,t,r)=>s.createCheckout(t,body(r,id(r,'paymentId'))))

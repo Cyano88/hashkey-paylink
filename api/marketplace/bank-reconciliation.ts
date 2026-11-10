@@ -1,3 +1,4 @@
+import {applyPayoutResult} from './withdrawal-accounting.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {marketplaceReference} from './beneficiaries.js'
 import {applyMarketplaceCommand} from './accounting.js'
@@ -71,7 +72,7 @@ export function createMarketplaceBankReconciliation(dependencies:Dependencies){
     if(s.books.some(b=>b.refundExecutions?.some(e=>e.transactionHash===evidence.fundingTransactionHash)))throw Error('Transaction already used by a marketplace refund.')
     if(s.books.some(b=>[...(b.bankExecutions||[]),...(b.walletExecutions||[])].some(e=>e.attemptId!==attempt.attemptId&&e.transactionHash===evidence.fundingTransactionHash)))throw Error('Funding transaction is already bound to another payout.')
     const eventId=randomUUID()
-    const next=applyMarketplaceCommand(book,projectId,'bank-result:'+eventId,{type:'result',operationId,status,evidenceId:evidence.evidenceId})
+    const next=applyPayoutResult(s,book,projectId,'bank-result:'+eventId,operationId,status,evidence.evidenceId)
     const nextAttempt=next.bankExecutions!.find(e=>e.attemptId===attempt.attemptId)!
     nextAttempt.transactionHash=evidence.fundingTransactionHash;nextAttempt.state=status
     next.bankReconciliations=[...(next.bankReconciliations||[]),{evidence,hash,status,eventId}]

@@ -24,14 +24,14 @@ export type MarketplacePlan = {
   allocations: Array<Omit<AllocationInput, 'amount'> & {amountUnits: string}>
 }
 type Balance = {feesFunded?:string;feesAccrued?:string;allocationId: string; pending: string; available: string; reserved: string; paid: string; refunded: string}
-type Operation = {id: string; allocationId: string; kind: 'payout'|'refund'; units: string; fromPending: string; fromAvailable: string; status: 'reserved'|'unknown'|'settled'|'failed'; evidenceId?: string}
+type Operation = {withdrawal?:{parentPaymentId:string;parentOperationId:string;feeUnits:string};id: string; allocationId: string; kind: 'payout'|'refund'; units: string; fromPending: string; fromAvailable: string; status: 'reserved'|'unknown'|'settled'|'failed'; evidenceId?: string}
 export type MarketplaceBook = {collectionObservation?:MarketplaceCollectionProof;collectionStatus?:'pending_finality'|'finalized'|'review_required';collectionCheckout?:MarketplaceCheckoutBinding;collectionProof?:MarketplaceCollectionProof;payoutCancellations?:PayoutCancellation[];refundExecutions?:RefundExecution[]; refundEvents?:MarketplaceRefundEvent[]; plan: MarketplacePlan; refundCollection?:RefundCollection; refundReservations?:RefundReservation[]; walletReconciliations?:WalletReconciliation[]; walletEvents?:MarketplaceWalletEvent[]; walletExecutions?:WalletExecution[]; walletReservations?:WalletPayoutReservation[]; bankReconciliations?:BankReconciliation[]; bankEvents?:MarketplaceBankEvent[]; bankExecutions?: BankExecution[]; bankReservations?: BankQuoteReservation[]; beneficiarySnapshots?: Array<WalletBeneficiary|BankBeneficiary>; fundingEvidence?: string; balances: Balance[]; operations: Operation[]; journal: Array<{key: string; hash: string; command: MarketplaceCommand}>}
 export type MarketplaceCommand =
   | {type:'fund_fees';allocationId:string;amountUnits:string}
   | {type: 'fund'; evidenceId: string; network: 'base'; asset: MarketplaceAsset; amountUnits: string}
   | {type: 'release'; allocationId: string; amountUnits: string}
   | {type: 'release_batch'; releases: Array<{allocationId: string; amountUnits: string}>; authorization: {credentialId: string; businessReference: string}}
-  | {type: 'reserve'; operationId: string; allocationId: string; kind: 'payout'|'refund'; amountUnits: string}
+  | {type: 'reserve'; withdrawal?:{parentPaymentId:string;parentOperationId:string;feeUnits:string}; operationId: string; allocationId: string; kind: 'payout'|'refund'; amountUnits: string}
   | {type: 'result'; operationId: string; status: 'unknown'|'settled'|'failed'; evidenceId: string}
 
 function identifier(value: string) {
@@ -124,7 +124,8 @@ export function applyMarketplaceCommand(book: MarketplaceBook, projectId: string
         balance.pending = (BigInt(balance.pending)-fromPending).toString()
         balance.available = (BigInt(balance.available)-fromAvailable).toString()
         balance.reserved = (BigInt(balance.reserved)+amount).toString()
-        next.operations.push({id:command.operationId,allocationId:command.allocationId,kind:command.kind,units:amount.toString(),fromPending:fromPending.toString(),fromAvailable:fromAvailable.toString(),status:'reserved'})
+        if(command.withdrawal&&(command.kind!=='payout'||!/^(0|[1-9]\d{0,23})$/.test(command.withdrawal.feeUnits)||BigInt(command.withdrawal.feeUnits)>amount))throw Error('Invalid withdrawal fee allocation.')
+        next.operations.push({... (command.withdrawal?{withdrawal:structuredClone(command.withdrawal)}:{}),id:command.operationId,allocationId:command.allocationId,kind:command.kind,units:amount.toString(),fromPending:fromPending.toString(),fromAvailable:fromAvailable.toString(),status:'reserved'})
       }
     } else if (command.type === 'result') {
       const operation = next.operations.find(o=>o.id===command.operationId)
@@ -143,10 +144,10 @@ export function applyMarketplaceCommand(book: MarketplaceBook, projectId: string
           const field = operation.kind === 'payout' ? 'paid' : 'refunded'
           const quote=next.walletReservations?.find(r=>r.operationId===operation.id)?.quote
           const bankQuote=next.bankReservations?.find(r=>r.quote.operationId===operation.id)?.quote
-          const networkFee=bankQuote?.networkFeeUnits
-          if(networkFee!==undefined&&(!/^(0|[1-9]\d{0,23})$/.test(networkFee)||bankQuote!.feePolicy!=='fixed_success_only'||BigInt(bankQuote!.fundingUnits)+BigInt(networkFee)!==BigInt(operation.units)))throw Error('Bank fee debit mismatch.')
-          const fee=quote?BigInt(validateMarketplaceWalletQuote(quote).networkFeeUnits):BigInt(networkFee??'0')
-          if(quote&&(operation.kind!=='payout'||quote.debitUnits!==operation.units))throw Error('Wallet fee debit mismatch.')
+          const networkFee=operation.withdrawal?.feeUnits??bankQuote?.networkFeeUnits
+          if(!operation.withdrawal&&networkFee!==undefined&&(!/^(0|[1-9]\d{0,23})$/.test(networkFee)||bankQuote!.feePolicy!=='fixed_success_only'||BigInt(bankQuote!.fundingUnits)+BigInt(networkFee)!==BigInt(operation.units)))throw Error('Bank fee debit mismatch.')
+          const fee=operation.withdrawal?BigInt(operation.withdrawal.feeUnits):quote?BigInt(validateMarketplaceWalletQuote(quote).networkFeeUnits):BigInt(networkFee??'0')
+          if(quote&&!operation.withdrawal&&(operation.kind!=='payout'||quote.debitUnits!==operation.units))throw Error('Wallet fee debit mismatch.')
           balance[field] = (BigInt(balance[field]??'0')+BigInt(operation.units)-fee).toString()
           if(quote||networkFee!==undefined)balance.feesAccrued=(BigInt(balance.feesAccrued??'0')+fee).toString()
         }
@@ -188,9 +189,10 @@ export function marketplaceSellerBalances(books: MarketplaceBook[], projectId: s
       }
     }
     return {network:'base' as const,asset,units:Object.fromEntries(Object.entries(total).map(([field,value])=>[field,value.toString()])),
+      withdrawalBalances:(['seller','platform'] as const).map(role=>{const available=[...accounts.values()].filter(a=>a.role===role).reduce((sum,a)=>sum+a.available,0n).toString();return {role,availableUnits:available,...(asset==='USDC'?{wallet:marketplaceWithdrawalEligibility(available,'wallet'),bank:marketplaceWithdrawalEligibility(available,'bank')}:{})}}),
       withdrawalAccounts:[...accounts.values()].map(a=>({role:a.role,beneficiaryId:a.beneficiaryId,settlement:a.settlement,
         availableUnits:a.available.toString(),pendingUnits:a.pending.toString(),reservedUnits:a.reserved.toString(),
-        largestSingleAllocationUnits:a.largestAvailable.toString(),crossOrderWithdrawalEnabled:false,
+        largestSingleAllocationUnits:a.largestAvailable.toString(),crossOrderWithdrawalEnabled:asset==='USDC',
         ...(asset==='USDC'?{withdrawal:marketplaceWithdrawalEligibility(a.available.toString(),a.settlement==='cash_balance'?'bank':'wallet')}:{})}))}
 
   })

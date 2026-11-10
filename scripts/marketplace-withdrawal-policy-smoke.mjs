@@ -22,7 +22,7 @@ let summary=marketplaceSellerBalances([a,b,foreign],'project_one','recipient_one
 assert.equal(summary.units.available,'800000')
 const seller=summary.withdrawalAccounts.find(x=>x.role==='seller'),platform=summary.withdrawalAccounts.find(x=>x.role==='platform')
 assert.equal(seller.availableUnits,'600000');assert.equal(seller.largestSingleAllocationUnits,'300000')
-assert.equal(seller.crossOrderWithdrawalEnabled,false)
+assert.equal(seller.crossOrderWithdrawalEnabled,true)
 assert.equal(platform.availableUnits,'200000');assert.equal(platform.withdrawal.status,'below_minimum')
 assert.equal(platform.withdrawal.shortfallUnits,'300000')
 // A tiny buyer refund remains valid and a reservation stops those funds from being counted as available.

@@ -1,3 +1,6 @@
+import {currentWithdrawalBeneficiary} from './withdrawal-plan.js'
+import {checkWithdrawalSources} from './withdrawal-accounting.js'
+import {applyPayoutResult} from './withdrawal-accounting.js'
 import {randomUUID} from 'node:crypto'
 import {marketplaceReference} from './beneficiaries.js'
 import {validateMarketplaceBankQuote,type MarketplaceBankQuote} from './bank-quotes.js'
@@ -16,7 +19,8 @@ function locate(store:MarketplaceStore|undefined,projectId:string,paymentId:stri
  return {book,operation,reservation}
 }
 function eligible(store:MarketplaceStore,book:MarketplaceBook,quote:MarketplaceBankQuote){
- const snapshot=book.beneficiarySnapshots?.find(b=>b.beneficiaryId===quote.beneficiaryId)
+ const snapshot=quote.withdrawal?currentWithdrawalBeneficiary(store,book.plan.projectId,quote.withdrawal):book.beneficiarySnapshots?.find(b=>b.beneficiaryId===quote.beneficiaryId)
+ if(quote.withdrawal&&checkWithdrawalSources(store,quote,true).some(s=>s.operation?.status!=='reserved'))throw Error('Withdrawal requires reconciliation.')
  const current=store.bankBeneficiaries?.find(b=>b.projectId===book.plan.projectId&&b.beneficiaryId===quote.beneficiaryId)
  if(snapshot?.kind!=='bank'||!current||current.status!=='active'||current.destinationDigest!==quote.destinationDigest||snapshot.destinationDigest!==quote.destinationDigest||current.sellerId!==snapshot.sellerId)throw Error('Bank payout beneficiary is no longer eligible.')
 }
@@ -65,7 +69,7 @@ export function createMarketplaceBankExecution(dependencies:Dependencies){
     if(JSON.stringify(reservation.quote)!==JSON.stringify(expected))throw Error('Accepted payout changed during preflight.')
     attempt.state='submitting';attempt.submissionStartedAt=now
     // Durable ambiguity marker is committed BEFORE an external signing/submission call.
-    const next=applyMarketplaceCommand(book,projectId,'exec-submit:'+attempt.attemptId,{type:'result',operationId,status:'unknown',evidenceId:'exec-attempt:'+attempt.attemptId})
+    const next=applyPayoutResult(s,book,projectId,'exec-submit:'+attempt.attemptId,operationId,'unknown','exec-attempt:'+attempt.attemptId)
     s.books[s.books.indexOf(book)]=next;return s
    })
    const {book,reservation}=locate(store,projectId,paymentId,operationId)

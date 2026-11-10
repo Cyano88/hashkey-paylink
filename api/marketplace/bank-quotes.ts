@@ -1,9 +1,11 @@
+import {validateWithdrawalPlan,type WithdrawalPlan} from './withdrawal-plan.js'
 import {getAddress,parseUnits} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
 import {marketplaceReference} from './beneficiaries.js'
 
 /** Trusted adapter output, never a developer request body. Production resolver is not installed. */
 export type MarketplaceBankQuote={
+ withdrawal?:WithdrawalPlan;
  exchangeRate?:string;networkFeeUnits?:string;feePolicy?:'fixed_success_only';
  quoteId:string;projectId:string;paymentId:string;allocationId:string;operationId:string;beneficiaryId:string;destinationDigest:string;
  provider:'paycrest';providerOrderId:string;intentId:string;network:'base';asset:'USDC';tokenAddress:string;currency:'NGN';
@@ -34,7 +36,7 @@ export function validateMarketplaceBankQuote(input:MarketplaceBankQuote,now:numb
  if(units(input.ngnMinor)!==units(input.requestedNgnMinor))throw Error('Bank quote NGN amount changed; review a new quote.')
  if(!Number.isSafeInteger(now)||!Number.isSafeInteger(input.issuedAt)||!Number.isSafeInteger(input.expiresAt)||input.issuedAt>now||input.expiresAt<=now+90_000||input.expiresAt<=input.issuedAt)throw Error('Bank quote is expired or too close to expiry.')
  // Whitelist persisted terms. Raw provider payloads, account numbers and credentials are excluded.
- return {...(input.networkFeeUnits!==undefined?{exchangeRate:input.exchangeRate,networkFeeUnits:input.networkFeeUnits,feePolicy:'fixed_success_only' as const}:{}),quoteId:input.quoteId,projectId:input.projectId,paymentId:input.paymentId,allocationId:input.allocationId,operationId:input.operationId,beneficiaryId:input.beneficiaryId,destinationDigest:input.destinationDigest,provider:'paycrest',providerOrderId:input.providerOrderId,intentId:input.intentId,network:'base',asset:'USDC',tokenAddress:address(input.tokenAddress),currency:'NGN',debitUnits:input.debitUnits,fundingUnits:input.fundingUnits,netUnits:input.netUnits,feeUnits:input.feeUnits,maximumFeeUnits:input.maximumFeeUnits,feePayer:'allocation',ngnMinor:input.ngnMinor,requestedNgnMinor:input.requestedNgnMinor,holdingId:input.holdingId,holdingRevision:input.holdingRevision,refundAddress:address(input.refundAddress),fundingAddress:address(input.fundingAddress),issuedAt:input.issuedAt,expiresAt:input.expiresAt,status:'initiated',submitted:false}
+ return {...(input.withdrawal?{withdrawal:validateWithdrawalPlan(input.withdrawal,input.projectId,input.paymentId,input.allocationId,input.beneficiaryId,input.debitUnits)}:{}),...(input.networkFeeUnits!==undefined?{exchangeRate:input.exchangeRate,networkFeeUnits:input.networkFeeUnits,feePolicy:'fixed_success_only' as const}:{}),quoteId:input.quoteId,projectId:input.projectId,paymentId:input.paymentId,allocationId:input.allocationId,operationId:input.operationId,beneficiaryId:input.beneficiaryId,destinationDigest:input.destinationDigest,provider:'paycrest',providerOrderId:input.providerOrderId,intentId:input.intentId,network:'base',asset:'USDC',tokenAddress:address(input.tokenAddress),currency:'NGN',debitUnits:input.debitUnits,fundingUnits:input.fundingUnits,netUnits:input.netUnits,feeUnits:input.feeUnits,maximumFeeUnits:input.maximumFeeUnits,feePayer:'allocation',ngnMinor:input.ngnMinor,requestedNgnMinor:input.requestedNgnMinor,holdingId:input.holdingId,holdingRevision:input.holdingRevision,refundAddress:address(input.refundAddress),fundingAddress:address(input.fundingAddress),issuedAt:input.issuedAt,expiresAt:input.expiresAt,status:'initiated',submitted:false}
 }
 
 export function bankFeeDisclosure(q:MarketplaceBankQuote,settled?:boolean){

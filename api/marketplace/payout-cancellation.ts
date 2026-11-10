@@ -1,3 +1,4 @@
+import {applyPayoutResult} from './withdrawal-accounting.js'
 import {createHash} from 'node:crypto'
 import {marketplaceReference} from './beneficiaries.js'
 import {applyMarketplaceCommand} from './accounting.js'
@@ -20,7 +21,7 @@ export function createMarketplacePayoutCancellation(d:{mutate:(fn:(s:Marketplace
    if(!operation||operation.kind!=='payout'||operation.status!=='reserved'||!book.walletReservations?.some(r=>r.operationId===operationId)&&!book.bankReservations?.some(r=>r.quote.operationId===operationId))throw Error('Unsubmitted payout reservation not found.')
    const attempts=[...(book.bankExecutions||[]),...(book.walletExecutions||[])].filter(e=>e.operationId===operationId)
    if(attempts.some(e=>e.submissionStartedAt!==undefined||e.transactionHash||!['claimed','expired'].includes(e.state)))throw Error('Payout may have been submitted; reconciliation is required.')
-   const next=applyMarketplaceCommand(book,projectId,key,{type:'result',operationId,status:'failed',evidenceId:'cancel:'+createHash('sha256').update(JSON.stringify([projectId,paymentId,operationId,key])).digest('hex')})
+   const next=applyPayoutResult(s,book,projectId,key,operationId,'failed','cancel:'+createHash('sha256').update(JSON.stringify([projectId,paymentId,operationId,key])).digest('hex'))
    for(const attempt of [...(next.bankExecutions||[]),...(next.walletExecutions||[])].filter(e=>e.operationId===operationId)){attempt.state='expired';attempt.leaseUntil=d.now()}
    next.payoutCancellations=[...(next.payoutCancellations||[]),{key,operationId,requestHash,authorization:actor,cancelledAt:d.now()}]
    s.books[s.books.indexOf(book)]=next;return s

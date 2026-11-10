@@ -27,15 +27,18 @@ export function createMarketplaceWalletCustody(input:Dependencies){
  function locate(s:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
   const book=s?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId),reservation=book?.walletReservations?.find(r=>r.operationId===operationId)
   if(!book||!reservation)throw Error('Marketplace wallet reservation not found.')
-  return {book,reservation,attempt:book.walletExecutions?.filter(e=>e.operationId===operationId).at(-1)}
+  const sourceBooks=reservation.quote?.withdrawal?.sources.map(source=>{const found=s?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===source.paymentId);if(!found)throw Error('Withdrawal source collection not found.');return found})??[book]
+  return {book,sourceBooks,reservation,attempt:book.walletExecutions?.filter(e=>e.operationId===operationId).at(-1)}
  }
  function gate(projectId:string){
   if(!d.enabled||!d.projectIds.includes(projectId))throw Error('Marketplace wallet custody is disabled for this project.')
   if(!d.config.verificationReady||d.config.blockchain!=='BASE'||d.config.accountType!=='SCA'||!d.holdingId||!d.holdingRevision||getAddress(d.config.treasuryAddress)===getAddress(d.billsAddress)||/^0x0{40}$/i.test(d.config.treasuryAddress))throw Error('Marketplace holding configuration is invalid.')
  }
  function holding(current:ReturnType<typeof locate>){
-  const c=current.book.refundCollection,r=current.reservation
-  if(!c||!current.book.collectionProof||current.book.collectionProof.evidenceId!==current.book.fundingEvidence||c.fundingEvidenceId!==current.book.fundingEvidence||c.projectId!==current.book.plan.projectId||c.paymentId!==current.book.plan.paymentId||c.asset!=='USDC'||c.network!=='base'||r.asset!=='USDC'||r.network!=='base'||c.holdingId!==d.holdingId||c.holdingRevision!==d.holdingRevision||getAddress(c.holdingAddress)!==getAddress(d.config.treasuryAddress)||getAddress(r.tokenAddress)!==getAddress(BASE_STABLECOINS.USDC.address))throw Error('Payout requires the verified Base USDC holding collection.')
+  for(const book of current.sourceBooks){
+   const c=book.refundCollection,r=current.reservation
+   if(!c||!book.collectionProof||book.collectionProof.evidenceId!==book.fundingEvidence||c.fundingEvidenceId!==book.fundingEvidence||c.projectId!==book.plan.projectId||c.paymentId!==book.plan.paymentId||c.asset!=='USDC'||c.network!=='base'||r.asset!=='USDC'||r.network!=='base'||c.holdingId!==d.holdingId||c.holdingRevision!==d.holdingRevision||getAddress(c.holdingAddress)!==getAddress(d.config.treasuryAddress)||getAddress(r.tokenAddress)!==getAddress(BASE_STABLECOINS.USDC.address))throw Error('Payout requires the verified Base USDC holding collection for every source.')
+  }
  }
  const execution=createMarketplaceWalletExecution({...d,preflightWalletExecution:async transfer=>{
   gate(transfer.projectId)

@@ -10,8 +10,8 @@ export const MARKETPLACE_PAYMENTS = {
 
 export const MARKETPLACE_SETTLEMENTS = [
   {id: 'cash_balance', title: 'Bank account settlement', label: 'Cash balance', asset: 'USDC', currency: 'NGN', destination: 'Verified bank account', detail: 'USDC funds an NGN payout through the Paycrest quote and settlement flow.'},
-  {id: 'wallet_usdc', title: 'Wallet settlement', label: 'USDC on Base', asset: 'USDC', currency: 'USDC', destination: 'Verified Base wallet', detail: 'Release USDC to the seller\'s wallet on Base.'},
-  {id: 'wallet_usdt', title: 'Wallet settlement', label: 'USDT on Base', asset: 'USDT', currency: 'USDT', destination: 'Verified Base wallet', detail: 'Release USDT to the seller\'s wallet on Base. Local settlement is not supported.'},
+  {id: 'wallet_usdc', title: 'Wallet settlement', label: 'USDC on Base', asset: 'USDC', currency: 'USDC', destination: 'Verified Base wallet', detail: 'Withdraw released USDC to a verified wallet on Base.'},
+  {id: 'wallet_usdt', title: 'Wallet settlement', label: 'USDT on Base', asset: 'USDT', currency: 'USDT', destination: 'Verified Base wallet', detail: 'Planned: withdraw released USDT to a verified Base wallet. Local settlement is not supported.'},
 ] as const
 
 export type MarketplaceAsset = typeof MARKETPLACE_PAYMENTS.assets[number]
