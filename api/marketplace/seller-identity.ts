@@ -28,7 +28,7 @@ export function createMarketplaceSellerIdentity(d:Dependencies){
    await d.mutate(s=>{s.sessions=s.sessions.filter(x=>x.expiresAt>d.now());if(s.sessions.length>=10000)throw Error('Seller session capacity reached.');s.sessions.push(record);return s})
    return {sessionId:record.id,verificationUrl:'https://developer.hashpaylink.com/marketplace/verify#token='+token,expiresAt:record.expiresAt}
   },
-  async inspect(token:string,owner:string){const s=await session(token,owner),link=(await d.read())?.links.find(l=>l.projectId===s.projectId&&l.sellerId===s.sellerId&&!l.revokedAt);if(link&&link.owner!==owner)throw Error('This seller is linked to a different account.');const k=await d.kyc(owner);return {projectName:s.projectName,sellerId:s.sellerId,connected:!!link,level:k.level,bankEligible:!!link&&k.country==='NG'&&(k.level==='basic'||k.level==='advanced')&&!!k.legalName&&!!k.reference,returnUrl:s.returnUrl,expiresAt:s.expiresAt}},
+  async inspect(token:string,owner:string){const s=await session(token,owner),link=(await d.read())?.links.find(l=>l.projectId===s.projectId&&l.sellerId===s.sellerId&&!l.revokedAt);if(link&&link.owner!==owner)throw Error('This seller is linked to a different account.');const k=await d.kyc(owner);return {projectName:s.projectName,sellerId:s.sellerId,connected:!!link&&s.owner===owner,level:k.level,bankEligible:!!link&&s.owner===owner&&k.country==='NG'&&(k.level==='basic'||k.level==='advanced')&&!!k.legalName&&!!k.reference,returnUrl:s.returnUrl,expiresAt:s.expiresAt}},
   async connect(token:string,owner:string,consent:boolean){
    if(consent!==true)throw Error('Consent is required to connect your seller account.')
    const record=await session(token,owner)
