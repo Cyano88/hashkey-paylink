@@ -2,7 +2,7 @@ import {formatUnits,decodeEventLog,decodeFunctionData,type Address,type Hex} fro
 import {lifiAbi,LIFI_DIAMOND,validateLifiPlan,type LifiOutboundPlan,type LifiDestination} from '../../src/pocket/lib/pocketLifiOutbound.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {evmStablecoinDelta} from './xlayer-bridge-evidence.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient,type FeeRouting} from '../../src/lib/platformFees.js'
 import {assertLifiBridgeAvailable,deferLifiBridgeQuotes,lifiBridgeQuoteError} from './bridge-quote-error.js'
 import {lifiBridgeRevenue,lifiRevenueFraction} from './lifi-bridge-revenue.js'
 import {lifiRevenueProven} from './lifi-revenue-evidence.js'
@@ -26,9 +26,9 @@ export async function quoteLifiOutbound(input:{destination:LifiDestination;owner
  if(revenue)p.revenue=revenue
  validateLifiPlan(p);return p
 }
-export function lifiSourceProven(p:LifiOutboundPlan,feeUnits:string,receipt:any,hash:Hex){
+export function lifiSourceProven(p:LifiOutboundPlan,feeUnits:string,receipt:any,hash:Hex,routing:FeeRouting={}){
  if(!lifiRevenueProven(p.revenue,sourceToken,receipt,hash))return false
- if(evmStablecoinDelta(receipt,'xlayer','USDT',p.owner,hash)!==-(BigInt(p.amountUnits)+BigInt(feeUnits))||evmStablecoinDelta(receipt,'xlayer','USDT',EVM_PLATFORM_TREASURY,hash)!==BigInt(feeUnits))return false
+ if(evmStablecoinDelta(receipt,'xlayer','USDT',p.owner,hash)!==-(BigInt(p.amountUnits)+BigInt(feeUnits))||evmStablecoinDelta(receipt,'xlayer','USDT',evmGasRecipient(routing),hash)!==BigInt(feeUnits))return false
  const expected=validateLifiPlan(p,p.expiresAt-1).bridgeData
  const matches=receipt.logs.filter((l:any)=>{
   if(l.removed||!same(l.address,LIFI_DIAMOND))return false

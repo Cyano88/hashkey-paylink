@@ -17,7 +17,7 @@ import {readCircleLink,circleLinkKey} from '../privy-circle-link.js'
 import {quoteRelayStablecoin,RELAY_STABLECOIN_CHAINS,stablecoinAddress,type RelayStablecoinRefund} from './xlayer-bridge-provider.js'
 import {quoteXLayerReimbursement,openXLayerReimbursement,sealXLayerReimbursement,refreshXLayerReimbursement,type XLayerFeeQuote,type XLayerFeeEstimator,type XLayerReimbursementPolicy} from './xlayer-reimbursement.js'
 import {xlayerBridgeSourceProven,xlayerBridgeDeliveryCandidate,xlayerBridgeDeliveryProven} from './xlayer-bridge-evidence.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 
 export type XLayerOutboundQuote={purpose?:'cash';version:1;source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;destinationWalletId:string;destinationAddress:string;orderId:Hex;requestId:Hex;receiveUnits:string;minimumUnits:string;refundOptions:RelayStablecoinRefund[];conversion?:XLayerBridgeConversion;fee:XLayerFeeQuote}
 const abi=parseAbi(['function approve(address,uint256) returns(bool)','function depositErc20(address,address,uint256,bytes32)'])
@@ -51,7 +51,7 @@ export function openOutboundBridge(token:string,owner:string){
  if(extra||expected.length!==actual.length||!timingSafeEqual(expected,actual))invalid()
  const q=JSON.parse(Buffer.from(body,'base64url').toString()) as XLayerOutboundQuote;check(q,owner);return q
 }
-export function outboundBridgePreview(q:XLayerOutboundQuote){return {...(q.purpose?{purpose:q.purpose}:{}),id:q.fee.intentId,rail:'xlayer' as const,execution:'privy' as const,...(q.lifi?{lifi:q.lifi}:{}),...(q.conversion?{conversion:q.conversion,refundOptions:q.refundOptions}:{}),walletAddress:q.fee.walletAddress,orderId:q.orderId,source:q.source,destination:q.destination,asset:q.fee.asset,amount:formatUnits(BigInt(q.fee.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),networkFee:formatUnits(BigInt(q.fee.networkFeeUnits),6),fee:formatUnits(BigInt(q.fee.totalUnits)-BigInt(q.receiveUnits),6),total:formatUnits(BigInt(q.fee.totalUnits),6),expiresAt:q.fee.expiresAt,destinationAddress:q.destinationAddress}}
+export function outboundBridgePreview(q:XLayerOutboundQuote){return {feeRoutingVersion:q.fee.feeRoutingVersion,...(q.purpose?{purpose:q.purpose}:{}),id:q.fee.intentId,rail:'xlayer' as const,execution:'privy' as const,...(q.lifi?{lifi:q.lifi}:{}),...(q.conversion?{conversion:q.conversion,refundOptions:q.refundOptions}:{}),walletAddress:q.fee.walletAddress,orderId:q.orderId,source:q.source,destination:q.destination,asset:q.fee.asset,amount:formatUnits(BigInt(q.fee.amountUnits),6),receive:formatUnits(BigInt(q.receiveUnits),6),minimumReceive:formatUnits(BigInt(q.minimumUnits),6),networkFee:formatUnits(BigInt(q.fee.networkFeeUnits),6),fee:formatUnits(BigInt(q.fee.totalUnits)-BigInt(q.receiveUnits),6),total:formatUnits(BigInt(q.fee.totalUnits),6),expiresAt:q.fee.expiresAt,destinationAddress:q.destinationAddress}}
 import {inboundBridgeRpcUrl} from './inbound-bridge-networks.js'
 const chainMap={base,xlayer:xLayer,arbitrum,ethereum:mainnet,polygon,arc:arcChain}
 const client=(network:Exclude<OutboundDestination,'solana'>|'xlayer')=>{
@@ -105,15 +105,15 @@ export function createXLayerOutboundBridge(overrides:Partial<typeof defaults>={}
    const status=await r.json()
    if(status.originChainId!==196||!Array.isArray(status.inTxHashes)||status.inTxHashes.length!==1||!hash(status.inTxHashes[0]))return null
    const candidate=status.inTxHashes[0] as Hex,proof=await d.sourceProof('xlayer',candidate,{owner:q.fee.walletAddress,callData:encodeXLayerSponsoredBatch(q.fee.calls)}),source=proof.receipt
-   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
+   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:evmGasRecipient(q.fee)}
    return proof.outcome==='completed'&&xlayerBridgeSourceProven(binding,source,candidate)?candidate:null
   },
   async status(q:XLayerOutboundQuote,sourceHash:Hex){
    const {receipt:source,outcome}=await d.sourceProof('xlayer',sourceHash,{owner:q.fee.walletAddress,callData:encodeXLayerSponsoredBatch(q.fee.calls)})
    if(outcome==='failed')return {status:'failed' as const}
-   if(q.lifi){if(!lifiSourceProven(q.lifi,q.fee.networkFeeUnits,source,sourceHash))return {status:'needs_attention' as const};return lifiDelivery(q.lifi,sourceHash,d.deliveryReceipt,d.fetch)}
+   if(q.lifi){if(!lifiSourceProven(q.lifi,q.fee.networkFeeUnits,source,sourceHash,q.fee))return {status:'needs_attention' as const};return lifiDelivery(q.lifi,sourceHash,d.deliveryReceipt,d.fetch)}
    if(q.fee.asset!=='USDC'&&q.fee.asset!=='USDT')return {status:'needs_attention' as const}
-   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,refundOptions:q.refundOptions,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:EVM_PLATFORM_TREASURY}
+   const binding={asset:q.fee.asset,source:q.source,destination:q.destination,sender:q.fee.walletAddress,recipient:q.destinationAddress,amountUnits:q.fee.amountUnits,...(q.conversion?{depositAsset:'USDC' as const,depositUnits:q.conversion.depositUnits}:{}),minimumUnits:q.minimumUnits,orderId:q.orderId,requestId:q.requestId,refundOptions:q.refundOptions,networkFeeUnits:q.fee.networkFeeUnits,reimbursementTreasury:evmGasRecipient(q.fee)}
    if(!xlayerBridgeSourceProven(binding,source,sourceHash))return {status:'needs_attention' as const}
    const get=async(path:string)=>{if(!d.apiKey())invalid();const r=await d.fetch('https://api.relay.link'+path,{headers:{'x-api-key':d.apiKey()},redirect:'error',signal:AbortSignal.timeout(15000)});if(!r.ok)invalid();return r.json()}
    const status=await get('/intents/status/v3?requestId='+encodeURIComponent(q.requestId))

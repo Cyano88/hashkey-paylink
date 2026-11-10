@@ -3,7 +3,7 @@ import {mergePocketActivityRows,mergePocketActivitySnapshot} from '../src/pocket
 import {bankPayoutActivityRow} from '../src/pocket/lib/pocketBankActivity.ts'
 import {pocketActivityShortDate} from '../src/pocket/components/pocketActivityIcon.ts'
 import {pocketActivityReceipt} from '../src/pocket/lib/pocketReceipt.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 const hash='0x'+'a'.repeat(64), other='0x'+'b'.repeat(64)
 const main={eventId:'base:'+hash+':1',txHash:hash,chain:'base',payer:'0x'+'1'.repeat(40),recipient:'0x'+'2'.repeat(40),memo:'USDC sent',amount:'1',ts:1000,source:'wallet-withdrawal',direction:'out',paycrestStatus:'confirmed'}
 const fee={...main,eventId:'base:'+hash+':2',recipient:EVM_PLATFORM_TREASURY,amount:'0.0089'}
@@ -25,3 +25,8 @@ const snapshot=mergePocketActivitySnapshot({payments:[main,fee],merchants:[],col
 assert.equal(bankPayoutActivityRow({...bank,txHash:''},main.payer),null)
 assert.equal(pocketActivityShortDate(new Date(2026,8,28).getTime()),'Sep 28')
 console.log('PASS: fee grouping, ordinary sends preserved, cached bank labels, receipt fees and date format')
+
+const newGas={...fee,recipient:EVM_GAS_REIMBURSEMENT}
+assert.equal(mergePocketActivityRows([],[main,newGas]).length,1)
+assert.equal(mergePocketActivityRows([],[main,newGas])[0].feeAmount,'0.0089')
+assert.equal(mergePocketActivityRows([],[newGas]).length,1,'standalone payment to gas wallet remains visible')

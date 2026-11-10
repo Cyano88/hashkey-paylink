@@ -1,7 +1,7 @@
 import {parseAbi,parseEventLogs,type Hex} from 'viem'
 import {validateBscSend,bscSendCalls,type BscSendQuote} from '../../src/pocket/lib/pocketBscSend.js'
 import {POCKET_BSC} from '../../src/pocket/lib/pocketBsc.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 import {encodeXLayerSponsoredBatch,XLAYER_ENTRY_POINT,type XLayerCostRpc} from './xlayer-sponsored-cost.js'
 import {sponsoredSwapOperationProof} from './sponsored-swap-operation-proof.js'
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
@@ -25,7 +25,7 @@ export async function readBscSendSettlement(q:BscSendQuote,txHash:Hex,rpc:XLayer
  const logs=parseEventLogs({abi,logs:r.logs.filter((l:any)=>same(l.address,POCKET_BSC.assets[q.asset].address))})
  const outgoing=logs.filter(l=>same(l.args.from,q.walletAddress))
  const received=logs.filter(l=>same(l.args.to,q.recipient))
- const fees=logs.filter(l=>same(l.args.from,q.walletAddress)&&same(l.args.to,EVM_PLATFORM_TREASURY))
+ const fees=logs.filter(l=>same(l.args.from,q.walletAddress)&&same(l.args.to,evmGasRecipient(q)))
  const net=(wallet:string)=>logs.reduce((n,l)=>n+(same(l.args.to,wallet)?l.args.value:0n)-(same(l.args.from,wallet)?l.args.value:0n),0n)
  if(outgoing.length!==2||received.length!==1||!same(received[0].args.from,q.walletAddress)||received[0].args.value!==BigInt(q.amountUnits)||fees.length!==1||fees[0].args.value!==BigInt(q.reimbursementUnits)
  ||net(q.recipient)!==BigInt(q.amountUnits)||net(q.walletAddress)!==-(BigInt(q.amountUnits)+BigInt(q.reimbursementUnits)))return fail()

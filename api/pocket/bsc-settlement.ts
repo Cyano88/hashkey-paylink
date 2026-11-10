@@ -2,7 +2,7 @@ import {isAddress,parseAbi,parseEventLogs,type Hex} from 'viem'
 import {sponsoredSwapOperationProof} from './sponsored-swap-operation-proof.js'
 import {bscSponsoredSwapCalls,validateBscSwap,type BscSwapQuote} from '../../src/pocket/lib/pocketBscSwap.js'
 import {POCKET_BSC,pocketBscAsset} from '../../src/pocket/lib/pocketBsc.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 import {encodeXLayerSponsoredBatch,XLAYER_ENTRY_POINT,type XLayerCostRpc} from './xlayer-sponsored-cost.js'
 import type {BscSettlement} from './bsc-operations.js'
 const transfers=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
@@ -49,7 +49,7 @@ export async function readBscSwapSettlement(q:BscSwapQuote,hash:Hex,rpc:XLayerCo
  if(!native){
   const inputLogs=tokenLogs(input.address)
   const spent=inputLogs.reduce((n,l)=>n+(same(l.args.from,q.walletAddress)?l.args.value:0n)-(same(l.args.to,q.walletAddress)?l.args.value:0n),0n)
-  const paid=inputLogs.filter(l=>same(l.args.from,q.walletAddress)&&same(l.args.to,EVM_PLATFORM_TREASURY))
+  const paid=inputLogs.filter(l=>same(l.args.from,q.walletAddress)&&same(l.args.to,evmGasRecipient(q)))
   if(spent!==BigInt(q.totalInputUnits)||paid.length!==1||paid[0].args.value!==BigInt(q.reimbursementUnits))return fail()
  }
  if(!output.native){

@@ -71,12 +71,13 @@ try {
   assert.deepEqual(retry.approval,first.approval)
   assert.equal(executions.at(-1).idempotencyKey,request.idempotencyKey)
   const batch=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData})
-  assert.equal(batch.args[0].length,2)
+  assert.equal(batch.args[0].length,3)
   const transfer=decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),data:batch.args[0][0].data})
   assert.equal(transfer.args[0].toLowerCase(),recipient)
   assert.equal(transfer.args[1],100000000n)
   const fee=decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),data:batch.args[0][1].data})
-  assert.equal(fee.args[1],1050000n)
+  assert.equal(fee.args[1],250000n)
+  const gas=decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),data:batch.args[0][2].data});assert.equal(gas.args[1],800000n);assert.equal(gas.args[0].toLowerCase(),'0xbf36a13d26df07dbb7a9a1eed1b5a575d4ada822')
   assert.equal(fee.args[0].toLowerCase(),'0xce5df9e1115f81a2fc2f65941b20b820d508e753')
  }
  assert.equal(deduplicated.size,5)
@@ -108,7 +109,7 @@ try {
   assert.equal(result.approval.asset,'USDT')
   const batch=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData})
   assert(batch.args[0].every(call=>call.target.toLowerCase()===POCKET_USDT_ASSETS[chain].address.toLowerCase()))
-  assert.equal(batch.args[0].length,2)
+  assert.equal(batch.args[0].length,3)
  }
  blockchain='ARC'
  await call({...base,asset:'USDT',chain:'arc'},400)

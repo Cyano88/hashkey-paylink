@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto'
 import {encodeFunctionData,parseAbi,isAddress,type Hex} from 'viem'
 import {PublicKey,SystemProgram,type TransactionInstruction} from '@solana/web3.js'
 import {createTransferCheckedInstruction,getAssociatedTokenAddress} from '../solana-token.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_GAS_REIMBURSEMENT} from '../../src/lib/platformFees.js'
 import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import type {validateCrossBridgeRelayQuote} from './cross-bridge-provider.js'
 import type {CrossBridgeWalletBinding} from './cross-bridge-wallets.js'
@@ -49,7 +49,7 @@ const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,by
 const transferAbi=parseAbi(['function transfer(address to,uint256 amount) returns(bool)'])
 /** Reimbursement recipient only. Provider app fees are bound in their own quote. */
 export function crossBridgeReimbursementRecipient(network:CrossBridgeNetwork,env:NodeJS.ProcessEnv=process.env){
- const recipient=network==='solana'?(env.SOLANA_TREASURY||'').trim():EVM_PLATFORM_TREASURY
+ const recipient=network==='solana'?(env.SOLANA_TREASURY||'').trim():EVM_GAS_REIMBURSEMENT
  if(network==='solana'){try{const key=new PublicKey(recipient);if(key.equals(PublicKey.default)||key.toBase58()!==recipient)fail()}catch{fail()}}
  return recipient
 }

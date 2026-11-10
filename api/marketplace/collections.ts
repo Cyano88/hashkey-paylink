@@ -1,5 +1,5 @@
 import type {PayerCheckoutFeeEvidence} from '../merchant-checkout-fees.js'
-import {EVM_PLATFORM_TREASURY,paymentFeeBreakdown} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,paymentFeeBreakdown,evmFeeTransfers} from '../../src/lib/platformFees.js'
 import {createHash} from 'node:crypto'
 import {isDeepStrictEqual} from 'node:util'
 import {getAddress,parseAbi,parseEventLogs,type PublicClient} from 'viem'
@@ -83,11 +83,13 @@ export function createMarketplaceCollections(input:Dependencies){
     for(const value of [fees.platformFeeUnits,fees.networkFeeUnits,fees.treasuryUnits,fees.totalUnits])if(!/^(0|[1-9]\d{0,30})$/.test(value))throw Error('Invalid Marketplace fee units.')
     const amounts=paymentFeeBreakdown(BigInt(session.amountUnits),BigInt(fees.networkFeeUnits),'gross')
     if(amounts.platformFee.toString()!==fees.platformFeeUnits||amounts.treasury.toString()!==fees.treasuryUnits||amounts.total.toString()!==fees.totalUnits)throw Error('Marketplace payer fee totals changed.')
-    const feeLogs=logs.filter(l=>getAddress(l.args.from)===session.payerWallet&&getAddress(l.args.to)===treasury)
-    if(amounts.treasury===0n?feeLogs.length!==0:feeLogs.length!==1||feeLogs[0].args.value!==amounts.treasury)throw Error('Marketplace requires the exact payer-to-treasury fee transfer.')
+    const expectedFees=evmFeeTransfers(fees,amounts.platformFee,amounts.networkFee)
+    if(expectedFees.some(f=>getAddress(f.recipient)===session.holdingAddress||getAddress(f.recipient)===session.payerWallet))throw Error('Invalid fee recipient.')
+    const feeLogs=logs.filter(l=>getAddress(l.args.from)===session.payerWallet&&expectedFees.some(f=>getAddress(f.recipient)===getAddress(l.args.to)))
+    if(feeLogs.length!==expectedFees.length||expectedFees.some(f=>!feeLogs.some(l=>getAddress(l.args.to)===getAddress(f.recipient)&&l.args.value===f.units)))throw Error('Marketplace requires the exact payer-to-treasury fee transfer.')
     if(feeLogs.some(l=>l.removed||l.logIndex===null||!Number.isSafeInteger(l.logIndex)||l.logIndex<0||l.transactionHash?.toLowerCase()!==session.transactionHash||l.blockHash?.toLowerCase()!==receipt.blockHash.toLowerCase()||l.blockNumber!==receipt.blockNumber))throw Error('Marketplace fee log does not match its receipt.')
     const payerOutflows=logs.filter(l=>getAddress(l.args.from)===session.payerWallet)
-    if(payerOutflows.length!==(amounts.treasury===0n?1:2)||payerOutflows.reduce((sum,l)=>sum+l.args.value,0n)!==amounts.total)throw Error('Marketplace payer debit differs from the accepted total.')
+    if(payerOutflows.length!==1+expectedFees.length||payerOutflows.reduce((sum,l)=>sum+l.args.value,0n)!==amounts.total)throw Error('Marketplace payer debit differs from the accepted total.')
    }
    const latest=binding(await d.resolveSession(request),before)
    if(!isDeepStrictEqual(latest,session))throw Error('Collection session changed during verification.')

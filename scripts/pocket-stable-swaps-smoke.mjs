@@ -5,7 +5,7 @@ import {encodeFunctionData,getAddress} from 'viem'
 import {nativeSwapPair,NATIVE_SWAP_NETWORKS} from '../src/pocket/lib/pocketNativeSwap.ts'
 import {quoteReimbursedNativeEvmSwap,validateNativeEvmSwap,nativeSwapCalls,NATIVE_SWAP_CONTRACTS} from '../api/pocket/native-evm-swap-quote.ts'
 import {nativeSwapOutput} from '../api/pocket/native-evm-swap-reconciliation.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 import {inspectNativeSolanaSwapEnvelope} from '../api/pocket/native-solana-swap-envelope.ts'
 import {inspectNativeSolanaSwapEffects} from '../api/pocket/native-solana-swap-effects.ts'
 import {solSwapReceiptOutput} from '../api/pocket/native-solana-swap-reconciliation.ts'
@@ -26,7 +26,7 @@ for(const network of NATIVE_SWAP_NETWORKS)for(const from of ['USDT','USDC']){
  assert.equal(q.version,2);assert.equal(BigInt(q.amountUnits)+BigInt(q.stableFeeUnits),2000000n);validateNativeEvmSwap(q,false,now)
  const calls=nativeSwapCalls(q).map(c=>({type:'CALL',from:wallet,to:c.target,input:c.data,value:'0x'+c.value.toString(16)}))
  calls[2].logs=[transfer(tokenOut.address,contracts.router,wallet,BigInt(q.expectedOutUnits))]
- calls[4].logs=[transfer(tokenIn.address,wallet,EVM_PLATFORM_TREASURY,BigInt(q.stableFeeUnits))]
+ calls[4].logs=[transfer(tokenIn.address,wallet,EVM_GAS_REIMBURSEMENT,BigInt(q.stableFeeUnits))]
  const trace={type:'CALL',to:wallet,input:q.callData,calls}
  assert.equal(nativeSwapOutput(q,trace),BigInt(q.expectedOutUnits))
  for(const mutate of [t=>t.calls[2].logs=[],t=>t.calls[4].logs=[],t=>t.calls[2].logs[0].address=tokenIn.address]){const bad=structuredClone(trace);mutate(bad);assert.equal(nativeSwapOutput(q,bad),null)}

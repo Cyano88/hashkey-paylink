@@ -1,4 +1,4 @@
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 ﻿import {decodeEventLog,formatUnits,parseAbi,type Hex} from 'viem'
 import {recordCirclePocketAction,type CirclePocketActionRecord} from '../circle-pocket-action-journal.js'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.js'
@@ -21,7 +21,7 @@ export function nativeSwapOutput(q:NativeEvmSwapQuote,trace:Trace):bigint|null{
  const {tokenIn,tokenOut}=nativeSwapPair(q.network,q.from,q.to);let amount=0n
  if(q.version===2){
   const feeCall=outgoing[outgoing.length-1];let paid=0n
-  walk(feeCall,node=>{for(const log of node.logs||[]){if(!sameSwapAddress(log.address,tokenIn.address))continue;try{const e=decodeEventLog({abi:transferAbi,data:log.data,topics:log.topics as [Hex,...Hex[]]});if(sameSwapAddress(e.args.from,q.walletAddress)&&sameSwapAddress(e.args.to,EVM_PLATFORM_TREASURY))paid+=e.args.value}catch{}}})
+  walk(feeCall,node=>{for(const log of node.logs||[]){if(!sameSwapAddress(log.address,tokenIn.address))continue;try{const e=decodeEventLog({abi:transferAbi,data:log.data,topics:log.topics as [Hex,...Hex[]]});if(sameSwapAddress(e.args.from,q.walletAddress)&&sameSwapAddress(e.args.to,evmGasRecipient(q)))paid+=e.args.value}catch{}}})
   if(paid!==BigInt(q.stableFeeUnits!))return null
  }
  walk(router,node=>{

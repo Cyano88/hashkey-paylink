@@ -6,7 +6,7 @@ import {encodeAbiParameters,encodeEventTopics,parseAbi,parseAbiParameters} from 
 import {createBscInboundBridgeHandler} from '../api/pocket/bsc-inbound-bridge.ts'
 import {validateBscRelayQuote,bscBridgeTokenAddress,RELAY_BSC_CHAINS} from '../api/pocket/bsc-bridge-provider.ts'
 import {quoteEvmBridgeFee} from '../api/pocket/evm-bridge-reimbursement.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-bsc-bridge-secret-not-production-12345'
 const response=JSON.parse(readFileSync('scripts/fixtures/bsc-bridge/usdc-in.json','utf8'));const fixture={response,now:response.protocol.v2.orderData.output.deadline*1000-7*86400000,input:{asset:'USDC',source:'base',destination:'bsc',sender:'0xd7579fa0784288ef6eab335bc97d3c8ebc7ec435',recipient:'0xd7579fa0784288ef6eab335bc97d3c8ebc7ec435',amountUnits:'10000000'}}
 const route=validateBscRelayQuote(fixture.response,fixture.input,fixture.now)
@@ -55,7 +55,7 @@ assert.equal((await h.request(status)).status,'awaiting_approval','approval is n
 assert.equal((await h.request({...status,action:'cancel'})).status,'cancelled')
 assert.equal([...h.records.values()][0].metadata.approvalCancelled,'true','Verified cancellation is hidden durably, without declaring an unsubmitted challenge settled')
 const depositLog={address:RELAY_BSC_CHAINS.base.depository,data:encodeAbiParameters(parseAbiParameters('address,address,uint256,bytes32'),[sender,bscBridgeTokenAddress('base','USDC'),10000000n,route.orderId]),topics:encodeEventTopics({abi:deposit,eventName:'RelayErc20Deposit'})}
-const sourceReceipt={status:'success',transactionHash:sourceHash,blockNumber:1n,blockHash,logs:[log('base',sender,RELAY_BSC_CHAINS.base.depository,10000000n),depositLog,log('base',sender,EVM_PLATFORM_TREASURY,3000n)]}
+const sourceReceipt={status:'success',transactionHash:sourceHash,blockNumber:1n,blockHash,logs:[log('base',sender,RELAY_BSC_CHAINS.base.depository,10000000n),depositLog,log('base',sender,EVM_GAS_REIMBURSEMENT,3000n)]}
 h.receipts.set(sourceHash,sourceReceipt);h.providerStatus='success'
 assert.equal((await h.request({...status,txHash:sourceHash})).status,'pending','provider success without receipt is pending')
 assert.equal(h.ledger,0)

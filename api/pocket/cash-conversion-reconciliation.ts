@@ -1,7 +1,7 @@
 import {decodeEventLog,formatUnits,parseAbi,type Hex} from 'viem'
 import {recordCirclePocketAction,type CirclePocketActionRecord} from '../circle-pocket-action-journal.js'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 import {nativeSendRpc} from './native-send-reconciliation.js'
 import {revertedNativeBatch,type NativeCallTrace} from './native-send-quote.js'
 import {CASH_CONVERSION_ACTION,CASH_CONVERSION_PREFIX,cashConversionCalls,openCashConversion,sameCashAddress,type CashConversionQuote} from './cash-conversion-quote.js'
@@ -33,7 +33,7 @@ export function cashConversionOutput(q:CashConversionQuote,trace:Trace):bigint|n
  const router=outgoing[2],repayment=outgoing[4]
  const gross=netToken(router,BASE_STABLECOINS.USDC.address,q.walletAddress),fee=BigInt(q.feeUnits)
  if(gross<BigInt(q.minimumOutUnits)||netToken(router,BASE_STABLECOINS.USDT.address,q.walletAddress)!==-BigInt(q.amountUnits))return null
- if(netToken(repayment,BASE_STABLECOINS.USDC.address,q.walletAddress)!==-fee||netToken(repayment,BASE_STABLECOINS.USDC.address,EVM_PLATFORM_TREASURY)!==fee)return null
+ if(netToken(repayment,BASE_STABLECOINS.USDC.address,q.walletAddress)!==-fee||netToken(repayment,BASE_STABLECOINS.USDC.address,evmGasRecipient(q))!==fee)return null
  // Entire batch must agree; no hidden transfer in an approval or callback.
  if(netToken(matches[0],BASE_STABLECOINS.USDC.address,q.walletAddress)!==gross-fee||netToken(matches[0],BASE_STABLECOINS.USDT.address,q.walletAddress)!==-BigInt(q.amountUnits))return null
  return gross-fee

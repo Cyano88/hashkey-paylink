@@ -6,7 +6,7 @@ import {encodeAbiParameters,encodeEventTopics,parseAbi,decodeFunctionData,format
 import {createXLayerOutboundBridge,openOutboundBridge,sealOutboundBridge,outboundBridgeCalls} from '../api/pocket/xlayer-outbound-bridge.ts'
 import {validateRelayStablecoinQuote,stablecoinAddress,RELAY_STABLECOIN_CHAINS} from '../api/pocket/xlayer-bridge-provider.ts'
 import {createXLayerSponsorshipHandler} from '../api/pocket/xlayer-sponsorship.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-outbound-bridge-secret-not-production'
 const fixture=JSON.parse(readFileSync('scripts/fixtures/relay-xlayer/USDC-xlayer-base.json','utf8'))
 const {input,now}=fixture,hash='0x'+'a'.repeat(64),outHash='0x'+'b'.repeat(64),blockHash='0x'+'c'.repeat(64)
@@ -15,7 +15,7 @@ const transferAbi=parseAbi(['event Transfer(address indexed from,address indexed
 const depositAbi=parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
 const transfer=(network,from,to,value)=>({address:stablecoinAddress(network,'USDC'),topics:encodeEventTopics({abi:transferAbi,eventName:'Transfer',args:{from,to}}),data:encodeAbiParameters([{type:'uint256'}],[value])})
 const depository=RELAY_STABLECOIN_CHAINS.xlayer.depository
-const source={status:'success',transactionHash:hash,blockHash,blockNumber:1n,logs:[transfer('xlayer',input.sender,depository,BigInt(input.amountUnits)),transfer('xlayer',input.sender,EVM_PLATFORM_TREASURY,125n),{address:depository,topics:encodeEventTopics({abi:depositAbi,eventName:'RelayErc20Deposit'}),data:encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'bytes32'}],[input.sender,stablecoinAddress('xlayer','USDC'),BigInt(input.amountUnits),route.orderId])}]}
+const source={status:'success',transactionHash:hash,blockHash,blockNumber:1n,logs:[transfer('xlayer',input.sender,depository,BigInt(input.amountUnits)),transfer('xlayer',input.sender,EVM_GAS_REIMBURSEMENT,125n),{address:depository,topics:encodeEventTopics({abi:depositAbi,eventName:'RelayErc20Deposit'}),data:encodeAbiParameters([{type:'address'},{type:'address'},{type:'uint256'},{type:'bytes32'}],[input.sender,stablecoinAddress('xlayer','USDC'),BigInt(input.amountUnits),route.orderId])}]}
 const destinationReceipt={status:'success',transactionHash:outHash,blockHash,blockNumber:1n,logs:[transfer('base',depository,input.recipient,BigInt(route.receiveUnits))]}
 let state={destination:input.recipient,missingDelivery:false,reorg:false,wrongChain:false,quoteUnavailable:false,source:structuredClone(source),delivery:structuredClone(destinationReceipt)}
 const status={status:'success',originChainId:196,destinationChainId:8453,inTxHashes:[hash],txHashes:[outHash]}
@@ -65,7 +65,7 @@ billingBlocked=true
 const stopped=await call(send);assert.equal(stopped.body.code,'pocket_sponsor_not_submitted');assert.equal(broadcasts,0);assert.equal(store,undefined)
 billingBlocked=false
 assert.equal((await call(send)).body.hash,hash);assert.deepEqual(sent,send.request.body);assert.ok(Object.values(store.requests)[0].bridgeQuoteToken)
-assert.deepEqual(Object.values(store.requests)[0].coverage,{walletId:'fixturewallet123',asset:'USDC',feeUnits:'125'})
+assert.deepEqual(Object.values(store.requests)[0].coverage,{feeRoutingVersion:2,walletId:'fixturewallet123',asset:'USDC',feeUnits:'125'})
 billingBlocked=true
 assert.equal((await call(send)).body.hash,hash);assert.equal(broadcasts,1)
 billingBlocked=false

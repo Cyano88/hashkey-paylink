@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {decodeFunctionData,encodeFunctionData,formatUnits,parseAbi} from 'viem'
 import {quoteEvmBridgeFee,sealEvmBridgeFee,openEvmBridgeFee,refreshEvmBridgeFee} from '../api/pocket/evm-bridge-reimbursement.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-bridge-test-key-not-production-123456789'
 const batch=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const transfer=parseAbi(['function transfer(address to,uint256 amount) returns(bool)'])
@@ -19,7 +19,7 @@ for(const source of ['base','arbitrum','ethereum','polygon','arc'])for(const ass
  const decoded=decodeFunctionData({abi:batch,data:q.callData}).args[0]
  assert.deepEqual(decoded.slice(0,1),calls)
  const recovery=decodeFunctionData({abi:transfer,data:decoded[1].data})
- assert.equal(recovery.args[0].toLowerCase(),EVM_PLATFORM_TREASURY.toLowerCase());assert.equal(recovery.args[1],3000n)
+ assert.equal(recovery.args[0].toLowerCase(),EVM_GAS_REIMBURSEMENT.toLowerCase());assert.equal(recovery.args[1],3000n)
  const sealed=sealEvmBridgeFee(q);assert.deepEqual(openEvmBridgeFee(sealed,binding,now),q)
  for(const [field,value]of Object.entries({ownerId:'other',walletId:'other',walletAddress:destinationAddress,destinationAddress:wallet,amountUnits:'2000000',asset:asset==='USDC'?'USDT':'USDC',tokenAddress:wallet,bridgeDebitUnits:'1010001'}))assert.throws(()=>openEvmBridgeFee(sealed,{...binding,[field]:value},now))
  assert.throws(()=>openEvmBridgeFee(sealed,binding,q.expiresAt))

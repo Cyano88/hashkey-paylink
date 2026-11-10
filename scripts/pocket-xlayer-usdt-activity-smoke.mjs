@@ -16,6 +16,6 @@ for (const [asset,refundAsset,refundNetwork] of [['USDT','USDC','xlayer'],['USDT
  assert.equal(row.refundAsset,refundAsset);assert.equal(row.refundNetwork,refundNetwork)
  assert.equal(pocketActivityAmount(row),'0.98 '+refundAsset)
  const notice=pocketMoneyNotification(row)
- assert.equal(notice.title,'Refund completed');assert.ok(notice.body.includes('0.98 '+refundAsset));assert.ok(notice.body.includes(asset+' bridge'))
+ assert.equal(notice.title,'Bridge refunded');assert.ok(notice.body.includes('0.98 '+refundAsset));assert.ok(notice.body.includes(asset+' bridge'))
 }
 console.log('PASS server Activity preserves original USDT/USDC amounts and projects actual Base/X Layer refunds into receipts and notifications. Synthetic only.')

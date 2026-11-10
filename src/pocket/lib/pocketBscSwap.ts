@@ -3,9 +3,9 @@ import routerAbi from './pocketOkxRouterAbi.json'
 import {POCKET_BSC, pocketBscAsset, type PocketBscAsset} from './pocketBsc.js'
 import {bscSwapGasPolicy} from './pocketBscFunding.js'
 import {readStockSwapFee} from './pocketXStocksSwap.js'
-import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient,evmFeeTransfers,type FeeRouting} from '../../lib/platformFees.js'
 
-export type BscSwapQuote = {
+export type BscSwapQuote = FeeRouting & {
   version: 1; chainId: 56; id: string; ownerId: string; walletId: string; walletAddress: Hex
   from: PocketBscAsset; to: PocketBscAsset; totalInputUnits: string; tradeInputUnits: string
   reimbursementUnits: string; nativeGasReserveUnits: string; expectedOutUnits: string; minimumOutUnits: string
@@ -66,7 +66,7 @@ export function bscSponsoredSwapCalls(q: BscSwapQuote, now = Date.now()) {
   const token = getAddress(pocketBscAsset(q.from).address)
   const approve = (amount: bigint) => ({to: token, value: '0x0' as const, data: encodeFunctionData({abi: tokenAbi, functionName: 'approve', args: [getAddress(POCKET_BSC.spender), amount]})})
   return [approve(0n), approve(BigInt(q.tradeInputUnits)), {to: q.tx.to, data: q.tx.data, value: '0x0' as const}, approve(0n),
-    {to: token, value: '0x0' as const, data: encodeFunctionData({abi: tokenAbi, functionName: 'transfer', args: [EVM_PLATFORM_TREASURY, BigInt(q.reimbursementUnits)]})}]
+    {to: token, value: '0x0' as const, data: encodeFunctionData({abi: tokenAbi, functionName: 'transfer', args: [evmGasRecipient(q), BigInt(q.reimbursementUnits)]})}]
 }
 
 export function bscSwapRequest(q: BscSwapQuote, appId: string, now = Date.now()) {

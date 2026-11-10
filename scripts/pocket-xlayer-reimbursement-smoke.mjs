@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {decodeFunctionData,encodeFunctionData,parseAbi} from 'viem'
 import {quoteXLayerReimbursement,sealXLayerReimbursement,openXLayerReimbursement,refreshXLayerReimbursement} from '../api/pocket/xlayer-reimbursement.ts'
 import {makeSponsoredBatchRequest} from '../src/pocket/lib/pocketSponsoredRequest.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-xlayer-reimbursement-secret-not-production'
 const abi=parseAbi(['function transfer(address,uint256) returns(bool)'])
 const wallet='0x1111111111111111111111111111111111111111',recipient='0x2222222222222222222222222222222222222222'
@@ -17,7 +17,7 @@ for(const [asset,token] of [['USDC','0xb6ceceab302e2e4948951ee7843fc24e92933061'
  const q=await quoteXLayerReimbursement(binding,calls,now+60000,estimate,pricing,()=>now)
  assert.equal(count,2);assert.equal(q.totalUnits,'1000267');assert.equal(q.expiresAt,now+20000)
  const feeCall=q.calls[1],decoded=decodeFunctionData({abi,data:feeCall.data})
- assert.equal(feeCall.to.toLowerCase(),token);assert.equal(decoded.args[0].toLowerCase(),EVM_PLATFORM_TREASURY.toLowerCase());assert.equal(decoded.args[1],267n)
+ assert.equal(feeCall.to.toLowerCase(),token);assert.equal(decoded.args[0].toLowerCase(),EVM_GAS_REIMBURSEMENT.toLowerCase());assert.equal(decoded.args[1],267n)
  const signed=sealXLayerReimbursement(q)
  const batch=makeSponsoredBatchRequest({appId:'fixture',walletId:'wallet',attemptId:'intent',expiresAt:q.expiresAt,calls:q.calls})
  assert.equal(batch.body.method,'wallet_sendCalls');assert.equal(batch.body.caip2,'eip155:196');assert.equal(batch.body.sponsor,true);assert.deepEqual(batch.body.params.calls,q.calls)
@@ -50,7 +50,8 @@ for(const [asset,{address:token,decimals}] of Object.entries(xLayerFeeAssets)){
  const q=await quoteXLayerReimbursement(binding,calls,now+60000,estimate,pricing,()=>now,gross)
  assert.equal(q.totalUnits,String(gross));assert.equal(q.networkFeeUnits,'250')
  assert.equal(decodeFunctionData({abi,data:q.calls[0].data}).args[1],gross-gross*25n/10000n-250n)
- assert.equal(decodeFunctionData({abi,data:q.calls[1].data}).args[1],gross*25n/10000n+250n)
+ assert.equal(decodeFunctionData({abi,data:q.calls[1].data}).args[1],gross*25n/10000n)
+ assert.equal(q.calls.length,3);assert.equal(decodeFunctionData({abi,data:q.calls[2].data}).args[1],250n);assert.equal(decodeFunctionData({abi,data:q.calls[2].data}).args[0].toLowerCase(),EVM_GAS_REIMBURSEMENT.toLowerCase())
  assert.deepEqual(openXLayerReimbursement(sealXLayerReimbursement(q),binding,calls,now),q)
  assert.deepEqual(await refreshXLayerReimbursement(q,calls,estimate,()=>now),q)
  assert.throws(()=>openXLayerReimbursement(sealXLayerReimbursement(q),{...binding,merchantPaymentId:'other'},calls,now))

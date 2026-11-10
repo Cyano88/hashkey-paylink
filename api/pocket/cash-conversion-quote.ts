@@ -3,7 +3,7 @@ import {decodeFunctionData,encodeFunctionData,formatUnits,getAddress,isAddress,p
 import routerAbi from '../../src/pocket/lib/pocketOkxRouterAbi.json' with {type:'json'}
 import {readStockSwapFee} from '../../src/pocket/lib/pocketXStocksSwap.js'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient,evmFeeTransfers,type FeeRouting} from '../../src/lib/platformFees.js'
 import {nativeFeeToUsdcUnits} from '../payment-network-fees.js'
 import {nativeSwapUnits} from './native-swap-quote.js'
 import {NATIVE_SWAP_CONTRACTS} from './native-evm-swap-quote.js'
@@ -15,7 +15,7 @@ export const CASH_CONVERSION_PREFIX='pocket:cash-conversion:'
 export const CASH_BATCH_ABI=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const tokenAbi=parseAbi(['function approve(address spender,uint256 amount) returns(bool)','function transfer(address recipient,uint256 amount) returns(bool)'])
 export type CashConversionBinding={fundingBridge?:string;ownerId:string;walletId:string;walletAddress:Hex;network:'base';from:'USDT';to:'USDC';amount:string}
-export type CashConversionQuote=CashConversionBinding&{positiveSlippageFee?:{capPercent:number;recipient:Hex};version:1;id:string;amountUnits:string;expectedOutUnits:string;minimumOutUnits:string;feeUnits:string;tx:{from:Hex;to:Hex;data:Hex;value:string};callData:Hex;issuedAt:number;expiresAt:number;priceImpact:string}
+export type CashConversionQuote=CashConversionBinding&FeeRouting&{positiveSlippageFee?:{capPercent:number;recipient:Hex};version:1;id:string;amountUnits:string;expectedOutUnits:string;minimumOutUnits:string;feeUnits:string;tx:{from:Hex;to:Hex;data:Hex;value:string};callData:Hex;issuedAt:number;expiresAt:number;priceImpact:string}
 export const sameCashAddress=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const fail=():never=>{throw Object.assign(Error('Cash conversion details changed. Review the amount again.'),{status:409})}
 function binding(b:CashConversionBinding){
@@ -25,7 +25,7 @@ function binding(b:CashConversionBinding){
 }
 export function cashConversionCalls(q:CashConversionQuote){
  const approve=(amount:bigint)=>({target:getAddress(BASE_STABLECOINS.USDT.address),value:0n,data:encodeFunctionData({abi:tokenAbi,functionName:'approve',args:[getAddress(NATIVE_SWAP_CONTRACTS.base.spender),amount]})})
- return [approve(0n),approve(BigInt(q.amountUnits)),{target:q.tx.to,value:0n,data:q.tx.data},approve(0n),{target:getAddress(BASE_STABLECOINS.USDC.address),value:0n,data:encodeFunctionData({abi:tokenAbi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,BigInt(q.feeUnits)]})}]
+ return [approve(0n),approve(BigInt(q.amountUnits)),{target:q.tx.to,value:0n,data:q.tx.data},approve(0n),{target:getAddress(BASE_STABLECOINS.USDC.address),value:0n,data:encodeFunctionData({abi:tokenAbi,functionName:'transfer',args:[evmGasRecipient(q),BigInt(q.feeUnits)]})}]
 }
 export function cashConversionBatch(q:CashConversionQuote){return encodeFunctionData({abi:CASH_BATCH_ABI,functionName:'executeBatch',args:[cashConversionCalls(q)]})}
 export function validateCashConversion(q:CashConversionQuote,recovery=false,now=Date.now()){
@@ -60,7 +60,7 @@ export async function quoteCashConversion(b:CashConversionBinding,estimate:(data
  for(const [actual,expected] of [[route.fromToken,BASE_STABLECOINS.USDT],[route.toToken,BASE_STABLECOINS.USDC]])if(!actual||!sameCashAddress(actual.tokenContractAddress,expected.address)||String(actual.decimal)!=='6'||actual.isHoneyPot===true||actual.taxRate==null||!/^0(?:\.0+)?$/.test(String(actual.taxRate)))fail()
  const approval=await read('approve-transaction',{chainIndex:'8453',tokenContractAddress:BASE_STABLECOINS.USDT.address,approveAmount:String(units)})
  if(!sameCashAddress(approval?.dexContractAddress,NATIVE_SWAP_CONTRACTS.base.spender)||!data?.tx)fail()
- const q:CashConversionQuote={...b,amount:formatUnits(units,6),version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:String(route.toTokenAmount),minimumOutUnits:String(data.tx.minReceiveAmount),feeUnits:'1',priceImpact:route.priceImpactPercent,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value??'0')},callData:'0x',issuedAt,expiresAt:issuedAt+45000}
+ const q:CashConversionQuote={...b,feeRoutingVersion:2,amount:formatUnits(units,6),version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:String(route.toTokenAmount),minimumOutUnits:String(data.tx.minReceiveAmount),feeUnits:'1',priceImpact:route.priceImpactPercent,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value??'0')},callData:'0x',issuedAt,expiresAt:issuedAt+45000}
  const providerFee=cashProviderFee(q.tx,q.expectedOutUnits);if(providerFee)q.positiveSlippageFee=providerFee
  for(let pass=0;pass<4;pass++){
   q.callData=cashConversionBatch(q);validateCashConversion(q,false,now())

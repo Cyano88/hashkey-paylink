@@ -4,7 +4,7 @@ import type {CircleKitSourceReceipt} from './circle-bridge-source-proof.js'
 import type {NativeCallTrace} from './native-send-quote.js'
 import {validatePocketBridgeMessage} from './bridge-proof.js'
 import {readFinalizedBridgeSource} from './circle-bridge-source-reader.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 
 const abi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)','event MessageSent(bytes message)','event Transfer(address indexed from,address indexed to,uint256 value)'])
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
@@ -38,7 +38,7 @@ export async function proveDirectCctpSource(q:EvmBridgeFeeQuote,receipt:CircleKi
  if(messages.length!==1)fail()
  await validatePocketBridgeMessage(messages[0],{source:q.source as Parameters<typeof validatePocketBridgeMessage>[1]['source'],destination:q.destination as Parameters<typeof validatePocketBridgeMessage>[1]['destination'],sourceAddress:q.walletAddress,destinationAddress:q.destinationAddress,amount:formatUnits(BigInt(q.amountUnits),6),txHash:receipt.transactionHash})
  const outgoing=transfers.filter(t=>same(t.from,q.walletAddress))
- if(transfers.some(t=>same(t.to,q.walletAddress))||outgoing.length!==2||!outgoing.some(t=>same(t.to,'0x'+'0'.repeat(40))&&t.value===BigInt(q.bridgeDebitUnits))||!outgoing.some(t=>same(t.to,EVM_PLATFORM_TREASURY)&&t.value===BigInt(q.networkFeeUnits)))fail()
+ if(transfers.some(t=>same(t.to,q.walletAddress))||outgoing.length!==2||!outgoing.some(t=>same(t.to,'0x'+'0'.repeat(40))&&t.value===BigInt(q.bridgeDebitUnits))||!outgoing.some(t=>same(t.to,evmGasRecipient(q))&&t.value===BigInt(q.networkFeeUnits)))fail()
  return {outcome:'source_confirmed' as const}
 }
 export async function readDirectCctpSource(q:EvmBridgeFeeQuote,hash:Hex,rpc?:Parameters<typeof readFinalizedBridgeSource>[3]){

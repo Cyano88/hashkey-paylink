@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { Connection, Keypair, Transaction } from '@solana/web3.js'
+import { Connection, Keypair, Transaction, PublicKey } from '@solana/web3.js'
 import {build} from 'esbuild'
 await build({entryPoints:['api/relay-solana.ts'],outfile:'.codex-temp/solana-fee-relay-fixture.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'pause-state',setup(b){b.onResolve({filter:/render-durable-store\.js$/},a=>a.importer.endsWith('emergency-pause.ts')?{path:a.path,namespace:'pause-fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'pause-fixture'},()=>({contents:`export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>({paused:!!globalThis.fixtureSolanaPaused,revision:0,history:[]});export const mutateDurableJson=async()=>{throw Error('Unexpected pause mutation')}`}))}}]})
 const {buildSolanaTx}=await import('../.codex-temp/solana-fee-relay-fixture.mjs')
-import { SOLANA_TOKEN_PROGRAM_ID } from '../api/solana-token.ts'
+import { SOLANA_TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '../api/solana-token.ts'
 const relayer=Keypair.generate(),sender=Keypair.generate(),recipient=Keypair.generate(),treasury=Keypair.generate()
 process.env.RELAYER_PRIVATE_KEY_SOLANA=JSON.stringify([...relayer.secretKey])
 process.env.SOLANA_RPC_URL='https://fixture.invalid'
@@ -31,9 +31,10 @@ try {
  assert.equal((await call({feeQuoteToken:q.body.token,feeMode:'net'})).status,409,'A gross quote cannot be replayed as merchant-paid')
  const net=await call({quoteOnly:true,feeMode:'net'});assert.equal(net.status,200)
  const netPaid=await call({feeQuoteToken:net.body.token,feeMode:'net'});assert.equal(netPaid.status,200,JSON.stringify(netPaid.body));assert.equal(netPaid.body.totalAmount,'100');assert.equal(netPaid.body.recipientAmount,'99.749')
- const netTx=Transaction.from(Buffer.from(netPaid.body.tx,'base64'));assert.equal(netTx.instructions.at(-2).data.readBigUInt64LE(1),99749000n);assert.equal(netTx.instructions.at(-1).data.readBigUInt64LE(1),251000n)
+ const netTx=Transaction.from(Buffer.from(netPaid.body.tx,'base64'));assert.equal(netTx.instructions.at(-3).data.readBigUInt64LE(1),99749000n);assert.equal(netTx.instructions.at(-1).data.readBigUInt64LE(1),1000n)
  const paid=await call({feeQuoteToken:q.body.token});assert.equal(paid.status,200);assert.equal(paid.body.recipientAmount,'100');assert.equal(paid.body.totalAmount,'100.251')
- const tx=Transaction.from(Buffer.from(paid.body.tx,'base64'));const transfers=tx.instructions.filter(x=>x.programId.equals(SOLANA_TOKEN_PROGRAM_ID));assert.equal(transfers.length,2);assert.equal(transfers[0].data.readBigUInt64LE(1),100000000n);assert.equal(transfers[1].data.readBigUInt64LE(1),251000n)
+ const tx=Transaction.from(Buffer.from(paid.body.tx,'base64'));const transfers=tx.instructions.filter(x=>x.programId.equals(SOLANA_TOKEN_PROGRAM_ID));assert.equal(transfers.length,3);assert.equal(transfers[0].data.readBigUInt64LE(1),100000000n);assert.equal(transfers[1].data.readBigUInt64LE(1),250000n);assert.equal(transfers[2].data.readBigUInt64LE(1),1000n)
+ assert.equal(transfers[1].keys[2].pubkey.toBase58(),(await getAssociatedTokenAddress(new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),new PublicKey('Cj7mBKS9uW9zbkfTwCKReEVRGYQD1QJZkA7VbzuUERaA'))).toBase58());assert.equal(transfers[2].keys[2].pubkey.toBase58(),(await getAssociatedTokenAddress(new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),treasury.publicKey)).toBase58())
  assert.equal((await call({feeQuoteToken:q.body.token,amount:'99'})).status,409)
 
  for(const asset of ['USDC','USDT']){
@@ -49,7 +50,7 @@ try {
  fee=5000
  const cheaper=await call({feeQuoteToken:q.body.token});assert.equal(cheaper.status,200);assert.equal(cheaper.body.gasRecoveryAmount,'0.0005');assert.equal(cheaper.body.totalAmount,'100.2505')
  fee=20000;assert.equal((await call({feeQuoteToken:q.body.token})).status,409)
- setup=true;const rent=await call({quoteOnly:true});assert.equal(rent.body.includesAccountSetup,true);assert.equal(rent.body.quote.networkFeeUnits,'409856')
+ setup=true;const rent=await call({quoteOnly:true});assert.equal(rent.body.includesAccountSetup,true);assert.equal(rent.body.quote.networkFeeUnits,'613784')
  setup=false
  const noSetup=await call({feeQuoteToken:rent.body.token});assert.equal(noSetup.status,200);assert.equal(noSetup.body.gasRecoveryAmount,'0.002')
  globalThis.fixtureSolanaPaused=true;assert.equal((await call({feeQuoteToken:rent.body.token})).status,503);globalThis.fixtureSolanaPaused=false

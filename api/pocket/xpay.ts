@@ -1,5 +1,5 @@
 import {xLayerFeeAssets,type XLayerFeeAsset} from '../../src/pocket/lib/pocketXLayerFeeAssets.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,evmFeeTransfers,type FeeRouting} from '../../src/lib/platformFees.js'
 import {validateMerchantPaymentFees} from '../../src/lib/merchantPaymentFees.js'
 import type {XLayerFeeQuote} from './xlayer-reimbursement.js'
 import {checkoutStablecoins} from '../../src/lib/checkoutStablecoins.js'
@@ -22,7 +22,7 @@ import { readStockMarketPrices } from './xstocks-prices.js'
 import type { XPayMerchant, XPayPayment } from '../../src/pocket/lib/pocketXPay.js'
 const KEY='hashpaylink:pocket-xpay:v1'
 type Merchant=XPayMerchant&{owner:string;createKey?:string}
-type Payment=XPayPayment&{receiptEmail?:string;owner:string;merchantOwner:string;units:string;authorizedAt?:number;authorizedBlock?:string;scanBlock?:string;blockNumber?:string;blockHash?:string;confirmedAt?:string;checkoutSynced?:boolean}
+type Payment=XPayPayment&FeeRouting&{receiptEmail?:string;owner:string;merchantOwner:string;units:string;authorizedAt?:number;authorizedBlock?:string;scanBlock?:string;blockNumber?:string;blockHash?:string;confirmedAt?:string;checkoutSynced?:boolean}
 type Store={merchants:Record<string,Merchant>;payments:Record<string,Payment>;hashes:Record<string,string>}
 const normalize=(s?:Store):Store=>({merchants:s?.merchants||{},payments:s?.payments||{},hashes:s?.hashes||{}})
 const read=async()=>normalize(await readDurableJson<Store>(KEY))
@@ -52,7 +52,7 @@ export function xpayUnits(usd:string,price:number,decimals:number){
  const rate=parseUnits(price.toFixed(18),18);if(rate<=0n)fail('Price unavailable.')
  return (parseUnits(usd,18)*10n**BigInt(decimals)+rate-1n)/rate
 }
-export function verifyXPayTransfer(p:Pick<Payment,'payer'|'recipient'|'token'|'units'|'authorizedAt'|'fees'|'feePayer'>,receipt:{status:string;logs:readonly any[]},timestamp:number){
+export function verifyXPayTransfer(p:Pick<Payment,'payer'|'recipient'|'token'|'units'|'authorizedAt'|'fees'|'feePayer'|'feeRoutingVersion'>,receipt:{status:string;logs:readonly any[]},timestamp:number){
  if(receipt.status!=='success')return false
  if(!p.authorizedAt||timestamp<p.authorizedAt-5000)return false
  if(p.feePayer==='merchant'){
@@ -60,7 +60,7 @@ export function verifyXPayTransfer(p:Pick<Payment,'payer'|'recipient'|'token'|'u
   const decimals=Object.values(xLayerFeeAssets).find(a=>a.address.toLowerCase()===p.token.toLowerCase())?.decimals
   if(decimals===undefined)return false
   const amounts=validateMerchantPaymentFees(formatUnits(BigInt(p.units),decimals),p.fees,decimals)
-  return exactTokenTransfer({...p,units:String(amounts.net)},receipt)&&exactTokenTransfer({...p,recipient:EVM_PLATFORM_TREASURY,units:String(amounts.totalFee)},receipt)
+  return exactTokenTransfer({...p,units:String(amounts.net)},receipt)&&evmFeeTransfers(p,parseUnits(p.fees.platformFee,decimals),parseUnits(p.fees.networkFee,decimals)).every(f=>exactTokenTransfer({...p,recipient:f.recipient,units:String(f.units)},receipt))
  }
  return exactTokenTransfer(p,receipt)
 }
@@ -211,5 +211,5 @@ export async function bindXPayFeeQuote(owner:string,paymentId:string,wallet:stri
  const gross=BigInt(units),platform=gross*25n/10000n,network=BigInt(quote.networkFeeUnits)
  const fees={payer:'merchant' as const,platformFee:formatUnits(platform,decimals),networkFee:formatUnits(network,decimals),netAmount:formatUnits(gross-platform-network,decimals)}
  validateMerchantPaymentFees(p.amount,fees,decimals)
- await mutate(s=>{const current=check(s.payments[paymentId]);if(submitting){if(!current.fees||(['payer','platformFee','networkFee','netAmount'] as const).some(key=>current.fees![key]!==fees[key]))fail('Merchant fee approval changed.',409)}else current.fees=fees})
+ await mutate(s=>{const current=check(s.payments[paymentId]);if(submitting){if(current.feeRoutingVersion!==quote.feeRoutingVersion||!current.fees||(['payer','platformFee','networkFee','netAmount'] as const).some(key=>current.fees![key]!==fees[key]))fail('Merchant fee approval changed.',409)}else {current.fees=fees;current.feeRoutingVersion=quote.feeRoutingVersion}})
 }

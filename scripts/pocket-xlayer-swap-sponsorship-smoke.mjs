@@ -3,7 +3,7 @@ import {encodeXLayerSponsoredBatch,XLAYER_ENTRY_POINT} from '../api/pocket/xlaye
 import {stockTradeProof,recordStockTradeNotices,nativeTradeLegs} from '../api/pocket/stock-trade-notifications.ts'
 import {entryPoint07Abi} from 'viem/account-abstraction'
 import {encodeEventTopics,encodeAbiParameters,parseAbi,parseAbiParameters} from 'viem'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {encodeFunctionData,getAddress} from 'viem'
@@ -28,7 +28,7 @@ for(const tokenIn of [stockUsdc,stockUsdt,stockUsde,stockUsdg,stockAssets[0]])fo
  let estimateFailure=false
  const estimate=async i=>{if(estimateFailure)throw Error("Network fee increased. Review the updated transfer.");assert.equal(i.calls.length,5);assert.equal(i.calls[2].data,q.tx.data);return {feeUnits:String(8000n*scale),expiresAt:Date.now()+25000,estimateId:'fixture'}}
  const fee=await quoteXLayerReimbursement(swapFeeBinding(q,owner,walletId),calls,q.expiresAt,estimate,pricing)
- const routeToken=sealStockQuote(q,owner),feeToken=sealXLayerReimbursement(fee),request=makeSponsoredBatchRequest({appId:'fixture',walletId,attemptId:q.id,expiresAt:fee.expiresAt,calls:fee.calls}),s={feeToken,feeUnits:fee.networkFeeUnits,totalUnits:fee.totalUnits,expiresAt:fee.expiresAt,request}
+ const routeToken=sealStockQuote(q,owner),feeToken=sealXLayerReimbursement(fee),request=makeSponsoredBatchRequest({appId:'fixture',walletId,attemptId:q.id,expiresAt:fee.expiresAt,calls:fee.calls}),s={feeRoutingVersion:fee.feeRoutingVersion,feeToken,feeUnits:fee.networkFeeUnits,totalUnits:fee.totalUnits,expiresAt:fee.expiresAt,request}
  if(sale){
   await assert.rejects(quoteXLayerReimbursement(swapFeeBinding(q,owner,walletId),calls,q.expiresAt,estimate,{...pricing,minimumFeeUnits:String(minUnits)}),/too small to cover/)
   assert.throws(()=>validateSponsoredSwap(q,{...s,totalUnits:String(inputUnits+10000n)}))
@@ -43,7 +43,7 @@ for(const tokenIn of [stockUsdc,stockUsdt,stockUsde,stockUsdg,stockAssets[0]])fo
  const transferAbi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
  const hash='0x'+'b'.repeat(64),outer={hash,from:OKX_XLAYER_ROUTER,to:XLAYER_ENTRY_POINT,input:encodeFunctionData({abi:entryPoint07Abi,functionName:'handleOps',args:[[op],wallet]})}
  const operationLog={address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:eventAbi,args:{userOpHash:hash,sender:wallet,paymaster:'0x'+'0'.repeat(40)}}),data:encodeAbiParameters(parseAbiParameters('uint256,bool,uint256,uint256'),[0n,true,0n,1n])}
- const feeLog={address:sale?tokenOut.address:tokenIn.address,topics:encodeEventTopics({abi:transferAbi,args:{from:wallet,to:EVM_PLATFORM_TREASURY}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[BigInt(fee.networkFeeUnits)])}
+ const feeLog={address:sale?tokenOut.address:tokenIn.address,topics:encodeEventTopics({abi:transferAbi,args:{from:wallet,to:EVM_GAS_REIMBURSEMENT}}),data:encodeAbiParameters(parseAbiParameters('uint256'),[BigInt(fee.networkFeeUnits)])}
  const serviceAbi=parseAbi(['event CommissionFromTokenRecord(address fromTokenAddress,uint256 commissionAmount,address referrerAddress,uint256 commissionRate)']);const serviceLogs=service?[[EVM_PLATFORM_TREASURY,2000n*serviceScale,2000000n],[OKX_STOCK_FEE_RECIPIENT,500n*serviceScale,500000n]].map(([recipient,units,rate])=>({address:OKX_XLAYER_ROUTER,topics:encodeEventTopics({abi:serviceAbi}),data:encodeAbiParameters(parseAbiParameters('address,uint256,address,uint256'),[tokenIn.address,units,recipient,rate])})):[]
  const receipt={status:'success',logs:[operationLog,feeLog,...serviceLogs]},proof=stockTradeProof(outer,receipt)
  if(service){assert.equal(proof.serviceFeeUnits,String(2500n*serviceScale));assert.equal(stockTradeProof(outer,{...receipt,logs:[operationLog,feeLog]}),undefined)}

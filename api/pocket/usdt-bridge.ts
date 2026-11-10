@@ -17,7 +17,7 @@ import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
 import {POCKET_USDT_ASSETS} from '../../src/pocket/lib/pocketUsdtAssets.js'
 import {bridgeError,openUsdtBridgeQuote,quoteUsdtBridge,sameAddress,sealUsdtBridgeQuote,USDT_BRIDGE_ROUTER,USDT_TRANSFER_ABI,usdtBridgeNetwork,type UsdtBridgeQuote,type UsdtBridgeNetwork} from './usdt-bridge-provider.js'
 
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 
 const ACTION='wallet.usdt-bridge'
 const chains={base,arbitrum,ethereum:mainnet,polygon}
@@ -51,7 +51,7 @@ export default async function usdtBridgeHandler(req:Request,res:Response){
       const q=destination==='solana'?await quoteEvmSolanaUsdt({...binding,destinationAddress:to.circleWalletAddress}):await quoteUsdtBridge({...binding,destination,destinationAddress:getAddress(to.circleWalletAddress)})
       Object.assign(q,purpose)
       const priced=await quoteCircleEvmBatchRecovery({ownerId:identity.userId,walletId:q.walletId,walletAddress:q.walletAddress,source,destination,destinationAddress:q.destinationAddress,asset:'USDT',tokenAddress:getAddress(POCKET_USDT_ASSETS[source].address),amountUnits:q.amountUnits,bridgeDebitUnits:q.amountUnits,bridgeCallData:q.callData,providerExpiresAt:q.expiresAt,userToken:String(req.body.circleUserToken||'')})
-      q.callData=priced.callData;q.networkFeeUnits=priced.networkFeeUnits;q.totalUnits=priced.totalUnits;q.total=formatUnits(BigInt(priced.totalUnits),6);q.reimbursementTreasury=EVM_PLATFORM_TREASURY;q.expiresAt=priced.expiresAt
+      q.callData=priced.callData;q.networkFeeUnits=priced.networkFeeUnits;q.totalUnits=priced.totalUnits;q.total=formatUnits(BigInt(priced.totalUnits),6);q.reimbursementTreasury=evmGasRecipient(priced);q.expiresAt=priced.expiresAt
       q.fee=formatUnits(BigInt(priced.networkFeeUnits)+parseUnits(q.fee,6),6)
       const balance=await client(source).readContract({address:getAddress(POCKET_USDT_ASSETS[source].address),abi:BALANCE,functionName:'balanceOf',args:[q.walletAddress]})
       return res.json({ok:true,quote:preview(q),quoteToken:sealUsdtBridgeQuote(q),sufficientBalance:balance>=BigInt(q.totalUnits!)})

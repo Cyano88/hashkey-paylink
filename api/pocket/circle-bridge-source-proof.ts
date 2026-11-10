@@ -1,7 +1,7 @@
 import {decodeEventLog,parseAbi,formatUnits,type Hex} from 'viem'
 import {CIRCLE_KIT_BRIDGE,type buildCircleKitFeeBatch} from './circle-bridge-platform-fee.js'
 import {validatePocketBridgeMessage} from './bridge-proof.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 import type {NativeCallTrace} from './native-send-quote.js'
 const transmitter='0x81D40F21F12A8F0E3252Bccb954D722d4c464B64'
 const events=parseAbi(['event MessageSent(bytes message)','event Transfer(address indexed from,address indexed to,uint256 value)'])
@@ -44,7 +44,7 @@ export async function proveCircleKitSource(expected:CircleKitSourceExpectation,r
  await validatePocketBridgeMessage(messages[0],{source:batch.source,destination:batch.destination,sourceAddress:CIRCLE_KIT_BRIDGE,destinationAddress:expected.destinationAddress,amount:formatUnits(batch.burnUnits-batch.bridgeParams.maxFee,6),txHash})
  const outgoing=transfers.filter(t=>same(t.from,walletAddress)),incoming=transfers.filter(t=>same(t.to,walletAddress))
  const reimbursement=batch.totalUnits-batch.approvalUnits
- if(incoming.length||outgoing.length!==2||!outgoing.some(t=>same(t.to,CIRCLE_KIT_BRIDGE)&&t.value===batch.approvalUnits)||!outgoing.some(t=>same(t.to,EVM_PLATFORM_TREASURY)&&t.value===reimbursement))fail()
+ if(incoming.length||outgoing.length!==2||!outgoing.some(t=>same(t.to,CIRCLE_KIT_BRIDGE)&&t.value===batch.approvalUnits)||!outgoing.some(t=>same(t.to,evmGasRecipient(batch))&&t.value===reimbursement))fail()
  const revenue=transfers.filter(t=>same(t.to,batch.platformFee.recipient)||same(t.from,batch.platformFee.recipient))
  if(revenue.length!==1||!same(revenue[0].from,CIRCLE_KIT_BRIDGE)||revenue[0].value!==expected.developerFeeUnits)fail()
  return {sourceConfirmed:true as const,txHash,message:messages[0],platformFee:{collector:'circle_bridge_kit' as const,state:'collected' as const,recipient:batch.platformFee.recipient,grossAmountUnits:batch.platformFee.grossAmountUnits,developerAmountUnits:String(revenue[0].value)},reimbursementUnits:String(reimbursement)}

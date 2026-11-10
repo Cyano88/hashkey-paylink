@@ -26,7 +26,7 @@ const handlerSource = await readFile(new URL('../api/circle-solana-email.ts', im
 assert.match(handlerSource, /action === 'executeSolanaTransfer'/)
 assert.match(handlerSource, /\/v1\/w3s\/user\/transactions\/transfer/)
 assert.match(handlerSource, /requireCircleSolanaGasStationWallet\(/)
-assert.match(handlerSource, /tokenAddress: SOLANA_USDC_MINT/)
+assert.match(handlerSource, /tokenAddress: asset === 'USDT' \? POCKET_USDT_ASSETS.solana.address : SOLANA_USDC_MINT/)
 assert.match(handlerSource, /blockchain: 'SOL'/)
 
 const controllerSource = await readFile(new URL('../src/pocket/controllers/usePocketWithdrawalController.ts', import.meta.url), 'utf8')

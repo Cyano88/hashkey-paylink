@@ -5,7 +5,7 @@ import {quoteReimbursedNativeEvmSwap,nativeSwapCalls,nativeSwapBatch,validateNat
 import {nativeSwapOutput,reconcileNativeEvmSwap} from '../api/pocket/native-evm-swap-reconciliation.ts'
 import {createNativeEvmSwapHandler,nativeSwapReview} from '../api/pocket/native-evm-swap.ts'
 import {COMPACT_V3_ABI,ETHEREUM_WETH,ethereumV3Pool} from '../api/pocket/native-ethereum-compact-swap.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 import routerAbi from '../src/pocket/lib/pocketOkxRouterAbi.json' with {type:'json'}
 process.env.POCKET_SWAP_QUOTE_SECRET='stable-reimbursement-test-'.repeat(3)
 const transferAbi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)','function transfer(address recipient,uint256 amount) returns(bool)'])
@@ -25,13 +25,13 @@ for(const network of ['ethereum','base','arbitrum','polygon'])for(const stable o
  assert.equal(delayed.expiresAt-delayedClock,33000,'final route keeps its own 45-second bound, less actual request/estimate latency')
  assert.throws(()=>validateNativeEvmSwap(delayed,false,delayed.expiresAt),'expiry remains enforced')
  const review=nativeSwapReview(q);assert.equal(review.feeAsset,stable);assert.equal(review.feeFromOutput,false);assert.equal(review.feeIncludedInInput,true);assert.equal(review.expectedOut,formatUnits(BigInt(q.expectedOutUnits),18));assert.equal(review.minimumOut,formatUnits(BigInt(q.minimumOutUnits),18))
- const batch=nativeSwapCalls(q);assert(batch.every(c=>c.value===0n),'no native reimbursement or native balance needed');const fee=decodeFunctionData({abi:transferAbi,data:batch.at(-1).data});assert.equal(fee.args[0],EVM_PLATFORM_TREASURY);assert.equal(fee.args[1],BigInt(q.stableFeeUnits));assert.equal(batch.at(-1).target.toLowerCase(),f.response.routerResult.fromToken.tokenContractAddress.toLowerCase())
- const outgoing=batch.map(c=>({type:'CALL',from:wallet,to:c.target,input:c.data,value:'0x0'}));outgoing[2].calls=[{type:'CALL',from:q.tx.to,to:wallet,input:'0x',value:'0x'+BigInt(q.expectedOutUnits).toString(16)}];outgoing.at(-1).logs=[{address:batch.at(-1).target,topics:encodeEventTopics({abi:transferAbi,eventName:'Transfer',args:{from:wallet,to:EVM_PLATFORM_TREASURY}}),data:encodeAbiParameters([{type:'uint256'}],[BigInt(q.stableFeeUnits)])}]
+ const batch=nativeSwapCalls(q);assert(batch.every(c=>c.value===0n),'no native reimbursement or native balance needed');const fee=decodeFunctionData({abi:transferAbi,data:batch.at(-1).data});assert.equal(fee.args[0],EVM_GAS_REIMBURSEMENT);assert.equal(fee.args[1],BigInt(q.stableFeeUnits));assert.equal(batch.at(-1).target.toLowerCase(),f.response.routerResult.fromToken.tokenContractAddress.toLowerCase())
+ const outgoing=batch.map(c=>({type:'CALL',from:wallet,to:c.target,input:c.data,value:'0x0'}));outgoing[2].calls=[{type:'CALL',from:q.tx.to,to:wallet,input:'0x',value:'0x'+BigInt(q.expectedOutUnits).toString(16)}];outgoing.at(-1).logs=[{address:batch.at(-1).target,topics:encodeEventTopics({abi:transferAbi,eventName:'Transfer',args:{from:wallet,to:EVM_GAS_REIMBURSEMENT}}),data:encodeAbiParameters([{type:'uint256'}],[BigInt(q.stableFeeUnits)])}]
  const trace={type:'CALL',to:wallet,input:q.callData,calls:outgoing};assert.equal(nativeSwapOutput(q,trace),BigInt(q.expectedOutUnits))
  const missingFee=structuredClone(trace);delete missingFee.calls.at(-1).logs;assert.equal(nativeSwapOutput(q,missingFee),null,'no success without reimbursement proof')
  const wrongFee=structuredClone(trace);wrongFee.calls.at(-1).logs[0].data=encodeAbiParameters([{type:'uint256'}],[BigInt(q.stableFeeUnits)+1n]);assert.equal(nativeSwapOutput(q,wrongFee),null)
  const extra=structuredClone(trace);extra.calls.push(extra.calls.at(-1));assert.equal(nativeSwapOutput(q,extra),null,'duplicate fee rejected')
- for(const change of [x=>x.stableFeeUnits=String(BigInt(x.stableFeeUnits)+1n),x=>x.totalInputUnits='1000001',x=>x.rateScaled8='1',x=>x.amountUnits='1',x=>x.version=1,x=>x.feeUnits='1',x=>x.walletAddress=EVM_PLATFORM_TREASURY]){const bad=structuredClone(q);change(bad);bad.callData=nativeSwapBatch(bad);assert.throws(()=>validateNativeEvmSwap(bad,false,f.now))}
+ for(const change of [x=>x.stableFeeUnits=String(BigInt(x.stableFeeUnits)+1n),x=>x.totalInputUnits='1000001',x=>x.rateScaled8='1',x=>x.amountUnits='1',x=>x.version=1,x=>x.feeUnits='1',x=>x.walletAddress=EVM_GAS_REIMBURSEMENT]){const bad=structuredClone(q);change(bad);bad.callData=nativeSwapBatch(bad);assert.throws(()=>validateNativeEvmSwap(bad,false,f.now))}
  const token=sealNativeEvmSwap(q);assert.equal(openNativeEvmSwap(token,owner,true,f.now+50000).version,2);assert.throws(()=>openNativeEvmSwap(token,'other',true,f.now));assert.throws(()=>openNativeEvmSwap(token,owner,false,f.now+50000))
  let record=null,writes=0,currentRate=rate,currentGas='0.00001',balance=1000000n,clock=f.now,priceDown=false
  const ids={ethereum:1,base:8453,arbitrum:42161,polygon:137},chains={ethereum:'ETH',base:'BASE',arbitrum:'ARB',polygon:'MATIC'}

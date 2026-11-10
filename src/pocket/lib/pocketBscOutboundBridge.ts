@@ -1,11 +1,11 @@
 import {validBridgeDestination,isPocketBridgeDestination,type PocketCircleBridgeNetwork} from './pocketBridgeDestination.js'
 import {encodeFunctionData,decodeFunctionData,parseAbi,isAddress,type Address,type Hex} from 'viem'
 import {POCKET_BSC} from './pocketBsc'
-import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient,evmFeeTransfers,type FeeRouting} from '../../lib/platformFees'
 export type BscBridgeDestination=PocketCircleBridgeNetwork|'xlayer'
 export const isBscBridgeDestination=(n:unknown):n is BscBridgeDestination=>n==='xlayer'||isPocketBridgeDestination(n)
 export const validBscBridgeDestination=(n:unknown,a:unknown):a is string=>n==='xlayer'?typeof a==='string'&&isAddress(a)&&!/^0x0{40}$/i.test(a):validBridgeDestination(n,a)
-export type BscOutboundQuote={refundOptions?:Array<{network:BscBridgeDestination|'bsc';asset:'USDC'|'USDT';recipient:string}>;purpose?:'cash';version:1;id:string;ownerId:string;walletId:string;walletAddress:Hex;destinationAddress:string;source:'bsc';destination:BscBridgeDestination;asset:'USDC'|'USDT';from:'USDC'|'USDT';amountUnits:string;minimumOutUnits:string;receiveUnits:string;reimbursementUnits:string;totalInputUnits:string;orderId:Hex;requestId:Hex;issuedAt:number;expiresAt:number}
+export type BscOutboundQuote=FeeRouting & {refundOptions?:Array<{network:BscBridgeDestination|'bsc';asset:'USDC'|'USDT';recipient:string}>;purpose?:'cash';version:1;id:string;ownerId:string;walletId:string;walletAddress:Hex;destinationAddress:string;source:'bsc';destination:BscBridgeDestination;asset:'USDC'|'USDT';from:'USDC'|'USDT';amountUnits:string;minimumOutUnits:string;receiveUnits:string;reimbursementUnits:string;totalInputUnits:string;orderId:Hex;requestId:Hex;issuedAt:number;expiresAt:number}
 export const BSC_BRIDGE_DEPOSITORY='0x4cd00e387622c35bddb9b4c962c136462338bc31' as const
 const abi=parseAbi(['function approve(address,uint256) returns(bool)','function depositErc20(address,address,uint256,bytes32)','function transfer(address,uint256) returns(bool)'])
 export function validateBscOutbound(q:BscOutboundQuote,now=Date.now()){
@@ -21,7 +21,7 @@ export function validateBscOutbound(q:BscOutboundQuote,now=Date.now()){
 export function bscOutboundCalls(q:BscOutboundQuote,now=Date.now()){
  validateBscOutbound(q,now);const token=POCKET_BSC.assets[q.asset].address as Address
  const approve=(n:bigint)=>({to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'approve',args:[BSC_BRIDGE_DEPOSITORY,n]})})
- return [approve(0n),approve(BigInt(q.amountUnits)),{to:BSC_BRIDGE_DEPOSITORY,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[q.walletAddress,token,BigInt(q.amountUnits),q.orderId]})},approve(0n),{to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,BigInt(q.reimbursementUnits)]})}]
+ return [approve(0n),approve(BigInt(q.amountUnits)),{to:BSC_BRIDGE_DEPOSITORY,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[q.walletAddress,token,BigInt(q.amountUnits),q.orderId]})},approve(0n),{to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[evmGasRecipient(q),BigInt(q.reimbursementUnits)]})}]
 }
 export function bscOutboundRequest(q:BscOutboundQuote,appId:string,now=Date.now()){
  validateBscOutbound(q,now);if(!/^[a-zA-Z0-9]{1,128}$/.test(appId))throw Error('Reconnect your Pocket wallet.')

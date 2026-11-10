@@ -1,5 +1,5 @@
 import {isPocketBankActivityVisible} from './pocketBankActivityVisibility'
-import { EVM_PLATFORM_TREASURY } from '../../lib/platformFees'
+import { EVM_PLATFORM_TREASURY, EVM_GAS_REIMBURSEMENT, SOLANA_PLATFORM_TREASURY, SOLANA_GAS_REIMBURSEMENT } from '../../lib/platformFees'
 import {merchantFeeTotal} from '../../lib/merchantPaymentFees'
 import type { PocketActivityReadData, PocketActivityRow } from './pocketSchemas'
 
@@ -72,12 +72,11 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     const address=(value:string)=>row.chain==='solana'?value:value.toLowerCase()
     // A verified merchant split is already included in the customer's gross
     // order amount. Remove only its exact EVM treasury leg, never another send.
-    if(checkout.direction==='out'&&checkout.merchantFees&&row.chain!=='solana'
+    if(checkout.direction==='out'&&checkout.merchantFees
       && ['wallet-withdrawal','wallet-transfer'].includes(row.source||'')
       && address(row.payer)===address(checkout.payer)
       && (row.assetSymbol||'USDC')===checkout.assetSymbol
-      && address(row.recipient||'')===EVM_PLATFORM_TREASURY.toLowerCase()
-      && decimalIdentity(row.amount)===decimalIdentity(merchantFeeTotal(checkout.merchantFees,18))){rows.delete(key);continue}
+      && ((address(row.recipient||'')===(row.chain==='solana'?SOLANA_PLATFORM_TREASURY:EVM_PLATFORM_TREASURY.toLowerCase())&&[merchantFeeTotal(checkout.merchantFees,18),checkout.merchantFees.platformFee].some(a=>decimalIdentity(row.amount)===decimalIdentity(a)))||(address(row.recipient||'')===(row.chain==='solana'?SOLANA_GAS_REIMBURSEMENT:EVM_GAS_REIMBURSEMENT.toLowerCase())&&decimalIdentity(row.amount)===decimalIdentity(checkout.merchantFees.networkFee)))){rows.delete(key);continue}
     if(address(row.payer)!==address(checkout.payer)||(row.assetSymbol||'USDC')!==checkout.assetSymbol||(decimalIdentity(row.amount)!==decimalIdentity(checkout.amount)&&(!checkout.merchantNetAmount||decimalIdentity(row.amount)!==decimalIdentity(checkout.merchantNetAmount))))continue
     const raw=['wallet-withdrawal','wallet-deposit','wallet-transfer'].includes(row.source||'')
     const sameCheckout=(row.settlementType==='hosted_checkout'||row.source==='hosted_checkout')&&(row.merchantId===checkout.merchantId)
@@ -100,15 +99,15 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   const asset = (row: PocketActivityRow) => (row.assetSymbol || 'USDC').toUpperCase().replace(/^USDT0$/, 'USDT')
   for (const fee of observed) {
     if (!outgoing(fee) || !/^0x[0-9a-f]{64}$/i.test(fee.txHash)
-      || fee.recipient?.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase()
+      || ![EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(a=>fee.recipient?.toLowerCase()===a.toLowerCase())
       || !['USDC','USDT','ETH','POL','OKB'].includes(asset(fee))) continue
     const peers = observed.filter(row => row !== fee && outgoing(row)
       && transactionKey(row) === transactionKey(fee) && row.payer.toLowerCase() === fee.payer.toLowerCase()
-      && row.recipient && row.recipient.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase()
+      && row.recipient && ![EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(a=>row.recipient!.toLowerCase()===a.toLowerCase())
       && asset(row) === asset(fee))
     const feePeers = observed.filter(row => outgoing(row) && transactionKey(row) === transactionKey(fee)
       && row.payer.toLowerCase() === fee.payer.toLowerCase() && asset(row) === asset(fee)
-      && row.recipient?.toLowerCase() === EVM_PLATFORM_TREASURY.toLowerCase())
+      && [EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(a=>row.recipient?.toLowerCase()===a.toLowerCase()))
     if (peers.length !== 1 || feePeers.length !== 1) continue
     feeRows.add(fee)
     fees.set(peers[0], fee.amount)

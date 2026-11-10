@@ -1,11 +1,11 @@
 import {xLayerFeeAssets,type XLayerFeeAsset} from '../lib/pocketXLayerFeeAssets'
 import {encodeFunctionData,isAddress,parseAbi,type Address} from 'viem'
-import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees'
+import {evmFeeTransfers,type FeeRouting} from '../../lib/platformFees'
 import {makeSponsoredBatchRequest,SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 import {sponsoredTransferRequest} from './pocketSponsoredTransfer'
 
 export type StablecoinIntent={merchantPaymentId?:string;asset:XLayerFeeAsset;recipient:Address;amountUnits:string}
-export type SponsoredStablecoinQuote={owner:Address;attemptId:string;intent:StablecoinIntent;quoteToken:string;feeUnits:string;totalUnits:string;expiresAt:number;request:ReturnType<typeof makeSponsoredBatchRequest>}
+export type SponsoredStablecoinQuote=FeeRouting & {owner:Address;attemptId:string;intent:StablecoinIntent;quoteToken:string;feeUnits:string;totalUnits:string;expiresAt:number;request:ReturnType<typeof makeSponsoredBatchRequest>}
 type Dependencies={getAccessToken():Promise<string|null>;assertCurrent():void;fetcher?:typeof fetch}
 const tokens=Object.fromEntries(Object.entries(xLayerFeeAssets).map(([symbol,a])=>[symbol,a.address])) as Record<XLayerFeeAsset,Address>
 const abi=parseAbi(['function transfer(address,uint256) returns(bool)'])
@@ -20,7 +20,8 @@ export function validateSponsoredStablecoinQuote(q:SponsoredStablecoinQuote,now=
  const walletId=q.request?.url?.match(/^https:\/\/api\.privy\.io\/v1\/wallets\/([a-zA-Z0-9]{10,64})\/rpc$/)?.[1]
  const appId=q.request?.headers?.['privy-app-id']
  if(!walletId||typeof appId!=='string'||!appId)return fail()
- const calls=[{to:tokens[q.intent.asset],value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[q.intent.recipient,BigInt(q.intent.amountUnits)-(q.intent.merchantPaymentId?BigInt(q.feeUnits):0n)]})},{to:tokens[q.intent.asset],value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,BigInt(q.feeUnits)]})}]
+ const platform=q.intent.merchantPaymentId?BigInt(q.intent.amountUnits)*25n/10000n:0n
+ const calls=[{to:tokens[q.intent.asset],value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[q.intent.recipient,BigInt(q.intent.amountUnits)-(q.intent.merchantPaymentId?BigInt(q.feeUnits):0n)]})},...evmFeeTransfers(q,platform,BigInt(q.feeUnits)-platform).map(f=>({to:tokens[q.intent.asset],value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[f.recipient,f.units]})}))]
  const expected=makeSponsoredBatchRequest({appId,walletId,attemptId:q.attemptId,expiresAt:q.expiresAt,calls})
  // Address casing may differ in the server's checksum formatting.
  const actual=structuredClone(q.request)

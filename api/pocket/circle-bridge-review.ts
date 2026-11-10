@@ -28,6 +28,7 @@ export async function openCircleKitReview(token:string,ownerId:string,options:{r
 export async function quoteCircleKitReview(input:Omit<CircleKitFeeInput,'reimbursementUnits'>,wallets:CrossBridgeWalletBinding,deps:{estimate(callData:Hex):Promise<string>;feeShares(gross:bigint):Promise<readonly [bigint,bigint]>;availableUnits:bigint;nativeRateScaled8:bigint;providerExpiresAt:number;now?():number},env:NodeJS.ProcessEnv=process.env){
  const now=deps.now?.()??Date.now(),policy={...env}
  if(!Number.isSafeInteger(deps.providerExpiresAt)||deps.providerExpiresAt<=now)fail()
+ input={...input,feeRoutingVersion:2}
  const seed=await buildCircleKitFeeBatch({...input,reimbursementUnits:1n},policy)
  const bridgeCallData=encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[seed.calls.slice(0,-1)]})
  const priced=await quoteEvmBridgeFee({ownerId:wallets.ownerId,walletId:wallets.source.walletId,walletAddress:input.walletAddress,source:input.source,destination:input.destination,destinationAddress:input.destinationAddress,asset:'USDC',tokenAddress:seed.bridgeParams.burnToken,amountUnits:String(input.transferUnits),bridgeDebitUnits:String(seed.approvalUnits),bridgeCallData,providerExpiresAt:Math.min(deps.providerExpiresAt,now+30000)},deps.estimate,deps.nativeRateScaled8,now,deps.availableUnits)

@@ -4,7 +4,7 @@ import {entryPoint07Abi} from 'viem/account-abstraction'
 import {encodeXLayerSponsoredBatch,XLAYER_ENTRY_POINT} from './xlayer-sponsored-cost.js'
 import {OKX_XLAYER_ROUTER,OKX_XLAYER_SPENDER} from '../../src/pocket/lib/pocketXStocksSwap.js'
 import {stockUsdc,stockUsdt,stockAssets} from '../../src/pocket/lib/pocketXStocksWallet.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT} from '../../src/lib/platformFees.js'
 const kernel=parseAbi(['function execute(bytes32 mode,bytes executionCalldata)'])
 const tokenAbi=parseAbi(['function approve(address,uint256) returns(bool)','function transfer(address,uint256) returns(bool)'])
 const events=parseAbi(['event UserOperationEvent(bytes32 indexed userOpHash,address indexed sender,address indexed paymaster,uint256 nonce,bool success,uint256 actualGasCost,uint256 actualGasUsed)'])
@@ -27,8 +27,8 @@ export function sponsoredSwapTradeCall(tx:{hash:string;to:string|null;input:Hex}
   if(!same(calls[4].to,sale?stockUsdc.address:calls[0].to))return
   const approval=decodeFunctionData({abi:tokenAbi,data:calls[1].data});if(approval.functionName!=='approve'||!same(approval.args[0],OKX_XLAYER_SPENDER)||approval.args[1]<=0n)return
   for(const i of [0,3])if(!same(calls[i].data,encodeFunctionData({abi:tokenAbi,functionName:'approve',args:[OKX_XLAYER_SPENDER,0n]})))return
-  const fee=decodeFunctionData({abi:tokenAbi,data:calls[4].data});if(fee.functionName!=='transfer'||!same(fee.args[0],EVM_PLATFORM_TREASURY)||fee.args[1]<=0n)return
-  const paid=parseEventLogs({abi:transfers,logs:receipt.logs.filter(l=>same(l.address,calls[4].to))}).filter(e=>same(e.args.from,op.sender)&&same(e.args.to,EVM_PLATFORM_TREASURY))
+  const fee=decodeFunctionData({abi:tokenAbi,data:calls[4].data});if(fee.functionName!=='transfer'||![EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(a=>same(fee.args[0],a))||fee.args[1]<=0n)return
+  const paid=parseEventLogs({abi:transfers,logs:receipt.logs.filter(l=>same(l.address,calls[4].to))}).filter(e=>same(e.args.from,op.sender)&&same(e.args.to,fee.args[0]))
   if(paid.length!==1||paid[0].args.value!==fee.args[1])return
   return {tx:{hash:tx.hash,from:op.sender,to:calls[2].to,input:calls[2].data},input:calls[0].to.toLowerCase(),inputUnits:approval.args[1].toString(),feeUnits:fee.args[1].toString(),feeAsset:calls[4].to.toLowerCase()}
  }catch{return}

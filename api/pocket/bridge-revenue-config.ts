@@ -1,6 +1,6 @@
 import {isAddress, getAddress} from 'viem'
 import {PublicKey} from '@solana/web3.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT,SOLANA_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 
 /** Shared recipient configuration; LI.FI activation is independently gated. */
 export function readBridgeRevenueConfig(env:NodeJS.ProcessEnv=process.env){
@@ -11,7 +11,7 @@ export function readBridgeRevenueConfig(env:NodeJS.ProcessEnv=process.env){
   const evm=(env.POCKET_BRIDGE_REVENUE_EVM_ADDRESS||'').trim()
   const solana=(env.POCKET_BRIDGE_REVENUE_SOLANA_ADDRESS||'').trim()
   if(!isAddress(evm)||/^0x0{40}$/i.test(evm))issues.push('A valid nonzero bridge revenue EVM address is required.')
-  const reimbursementEvm=[EVM_PLATFORM_TREASURY,env.TREASURY_ADDRESS].filter(Boolean)
+  const reimbursementEvm=[EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT,env.TREASURY_ADDRESS].filter(Boolean)
   if(evm&&reimbursementEvm.some(address=>address!.toLowerCase()===evm.toLowerCase()))issues.push('Bridge revenue EVM address must differ from the reimbursement treasury.')
   try{
     const key=new PublicKey(solana)
@@ -38,6 +38,6 @@ export function evmBridgeRevenue(amountUnits:bigint,env:NodeJS.ProcessEnv=proces
 
 export function validateEvmBridgeRevenue(revenue:EvmBridgeRevenue,principal:bigint,sender:string){
   if(!revenue||!isAddress(revenue.recipient)||/^0x0{40}$/i.test(revenue.recipient)
-    ||[sender,EVM_PLATFORM_TREASURY].some(address=>address.toLowerCase()===revenue.recipient.toLowerCase())
+    ||[sender,EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(address=>address.toLowerCase()===revenue.recipient.toLowerCase())
     ||revenue.amountUnits!==bridgeRevenueUnits(principal,revenue.bps).toString())throw Error('Bridge revenue binding mismatch.')
 }

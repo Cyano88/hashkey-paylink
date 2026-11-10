@@ -37,7 +37,7 @@ export async function quoteBscSwap(binding: BscSwapBinding, d: Dependencies): Pr
     if (!route || String(route.chainIndex) !== '56' || route.fromTokenAmount !== String(trade)
       || route.fromToken?.tokenContractAddress?.toLowerCase() !== input.address.toLowerCase() || route.toToken?.tokenContractAddress?.toLowerCase() !== output.address.toLowerCase()
       || Number(route.fromToken?.decimal) !== 18 || Number(route.toToken?.decimal) !== 18 || !integer(route.toTokenAmount)) fail()
-    const q: BscSwapQuote = normalizeBscProviderCall({...binding, version: 1, chainId: 56, id, tradeInputUnits: String(trade), reimbursementUnits: String(fee),
+    const q: BscSwapQuote = normalizeBscProviderCall({...binding, feeRoutingVersion:2, version: 1, chainId: 56, id, tradeInputUnits: String(trade), reimbursementUnits: String(fee),
       nativeGasReserveUnits: policy.mode === 'native' ? '21000' : '0',
       ...(policy.mode === 'native' ? {nativeGas: {gasLimit: '21000', maxFeePerGas: '1', maxPriorityFeePerGas: '0'}} : {}),
       expectedOutUnits: route.toTokenAmount, minimumOutUnits: data.tx?.minReceiveAmount, priceImpact: String(route.priceImpactPercent),

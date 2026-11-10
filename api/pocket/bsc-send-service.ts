@@ -72,7 +72,7 @@ export function createBscSendService(overrides:Partial<typeof dependencies>={}){
     const {asset,recipient,amount}=req.body;
     if(!['USDC','USDT'].includes(asset)||typeof recipient!=='string'||!isAddress(recipient)||typeof amount!=='string'||!/^(0|[1-9]\d{0,40})(?:\.\d{1,18})?$/.test(amount)||parseUnits(amount,18)<=0n)return res.status(400).json({ok:false,error:'Enter a supported asset, recipient and amount.'});
     await d.billing(binding.walletAddress);
-    const now=Date.now(),q:BscSendQuote={version:1,chainId:56,id:randomUUID(),transferId:'sendb_'+randomBytes(12).toString('hex'),...binding,asset,recipient:getAddress(recipient),amountUnits:parseUnits(amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:now+BSC_SEND_REVIEW_TTL_MS};
+    const now=Date.now(),q:BscSendQuote={feeRoutingVersion:2,version:1,chainId:56,id:randomUUID(),transferId:'sendb_'+randomBytes(12).toString('hex'),...binding,asset,recipient:getAddress(recipient),amountUnits:parseUnits(amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:now+BSC_SEND_REVIEW_TTL_MS};
     validateBscSend(q);
     const balance=await runtime.balance(q.asset,q.walletAddress)
     if(balance<=BigInt(q.amountUnits))return res.status(422).json({ok:false,error:'Insufficient '+asset+' to cover the amount and fee.'})

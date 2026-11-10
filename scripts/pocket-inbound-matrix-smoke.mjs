@@ -13,7 +13,7 @@ import {quoteEvmBridgeFee} from '../api/pocket/evm-bridge-reimbursement.ts'
 import {build} from 'esbuild'
 import {reconcileSolanaExternalBridge} from '../api/pocket/solana-external-bridge-settlement.ts'
 import {createSolanaUsdtBridgeState} from '../api/pocket/solana-usdt-bridge-state.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-inbound-secret-not-production-12345'
 // Keep the real emergency guard, with isolated durable state for synthetic signing.
 await build({entryPoints:['api/pocket/solana-usdt-relay-transaction.ts'],outfile:'.codex-temp/inbound-solana-fixture.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'pause-state',setup(b){b.onResolve({filter:/render-durable-store\.js$/},a=>a.importer.endsWith('emergency-pause.ts')?{path:a.path,namespace:'pause-fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'pause-fixture'},()=>({contents:`export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>({paused:false,revision:0,history:[]});export const mutateDurableJson=async()=>{throw Error('Unexpected pause mutation')}`}))}}]})
@@ -71,7 +71,7 @@ for(const file of readdirSync('scripts/fixtures/inbound-bridge').filter(n=>n.end
   const body={action:'status',quoteToken:quote.quoteToken,circleUserToken:'fixture'}
   assert.equal((await call(body)).status,'awaiting_approval')
   const dep={address:RELAY_BSC_CHAINS[i.source].depository,data:encodeAbiParameters(parseAbiParameters('address,address,uint256,bytes32'),[i.sender,bscBridgeTokenAddress(i.source,i.asset),10000000n,q.orderId]),topics:encodeEventTopics({abi:deposit,eventName:'RelayErc20Deposit'})}
-  receipts.set(sourceHash,{status:'success',transactionHash:sourceHash,blockHash,blockNumber:1n,logs:[log(i.source,i.sender,RELAY_BSC_CHAINS[i.source].depository,10000000n),log(i.source,i.sender,EVM_PLATFORM_TREASURY,3000n),dep]})
+  receipts.set(sourceHash,{status:'success',transactionHash:sourceHash,blockHash,blockNumber:1n,logs:[log(i.source,i.sender,RELAY_BSC_CHAINS[i.source].depository,10000000n),log(i.source,i.sender,EVM_GAS_REIMBURSEMENT,3000n),dep]})
   body.txHash=sourceHash;providerStatus='success';assert.equal((await call(body)).status,'pending')
   receipts.set(destHash,{status:'success',transactionHash:destHash,blockHash,blockNumber:1n,logs:[log(i.destination,RELAY_BSC_CHAINS[i.destination].depository,i.recipient,BigInt(q.receiveUnits))]})
   assert.equal((await call(body)).status,'completed')

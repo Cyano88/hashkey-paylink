@@ -1,8 +1,8 @@
 import {encodeFunctionData, getAddress, isAddress, parseAbi, type Hex} from 'viem'
 import {POCKET_BSC} from './pocketBsc.js'
-import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient,evmFeeTransfers,type FeeRouting} from '../../lib/platformFees.js'
 
-export type BscSendQuote = {
+export type BscSendQuote = FeeRouting & {
  version:1; chainId:56; id:string; transferId:string; ownerId:string; walletId:string; walletAddress:Hex;
  asset:'USDC'|'USDT'; recipient:Hex; amountUnits:string; reimbursementUnits:string; issuedAt:number; expiresAt:number;
 }
@@ -27,7 +27,7 @@ export function bscSendCalls(q:BscSendQuote,now=Date.now()){
  validateBscSend(q,now)
  const to=getAddress(POCKET_BSC.assets[q.asset].address)
  const transfer=(recipient:Hex,value:string)=>({to,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[recipient,BigInt(value)]})})
- return [transfer(q.recipient,q.amountUnits),transfer(EVM_PLATFORM_TREASURY,q.reimbursementUnits)]
+ return [transfer(q.recipient,q.amountUnits),transfer(evmGasRecipient(q),q.reimbursementUnits)]
 }
 export function bscSendRequest(q:BscSendQuote,appId:string,now=Date.now()){
  validateBscSend(q,now)

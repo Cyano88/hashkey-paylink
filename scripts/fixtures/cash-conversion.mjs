@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs'
 import {encodeFunctionData,getAddress} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.ts'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.ts'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient} from '../../src/lib/platformFees.ts'
 import {NATIVE_SWAP_CONTRACTS} from '../../api/pocket/native-evm-swap-quote.ts'
 import {quoteCashConversion,cashConversionCalls} from '../../api/pocket/cash-conversion-quote.ts'
 const abi=JSON.parse(readFileSync(new URL('../../src/pocket/lib/pocketOkxRouterAbi.json',import.meta.url),'utf8'))
@@ -16,6 +16,6 @@ export async function cashFixture(){
  const q=await quoteCashConversion(binding,async()=> '0.00001',rate,provider,()=>now)
  const calls=cashConversionCalls(q).map(c=>({type:'CALL',from:wallet,to:c.target,input:c.data,value:'0x0'}))
  calls[2].logs=[transfer(BASE_STABLECOINS.USDT.address,wallet,contracts.router,10000000n),transfer(BASE_STABLECOINS.USDC.address,contracts.router,wallet,out)]
- calls[4].logs=[transfer(BASE_STABLECOINS.USDC.address,wallet,EVM_PLATFORM_TREASURY,BigInt(q.feeUnits))]
+ calls[4].logs=[transfer(BASE_STABLECOINS.USDC.address,wallet,evmGasRecipient(q),BigInt(q.feeUnits))]
  return {q,binding,response,provider,now,out,trace:{type:'CALL',to:wallet,input:q.callData,calls}}
 }

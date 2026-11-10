@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
-import { paymentFeeBreakdown, PLATFORM_FEE_BPS } from '../src/lib/platformFees.js'
-export type PaymentFeeQuote = {
+import { paymentFeeBreakdown, PLATFORM_FEE_BPS, validateFeeRouting, type FeeRouting } from '../src/lib/platformFees.js'
+export type PaymentFeeQuote = FeeRouting & {
   version: 1; id: string; checkoutId?: string; purpose?: 'payment' | 'wallet-send'; asset?: 'USDC' | 'USDT'; chain: string; walletId: string; walletAddress: string; recipient: string
   amountUnits: string; platformFeeUnits: string; networkFeeUnits: string; treasuryUnits: string
   recipientUnits: string; totalUnits: string; feeBps: number; mode: 'gross' | 'net'
@@ -13,7 +13,7 @@ export function createPaymentFeeQuote(binding: PaymentFeeBinding, networkFeeUnit
   if (!/^\d{1,78}$/.test(binding.amountUnits)) throw new Error('Invalid payment amount.')
   if (!['USDC','USDT'].includes(binding.asset ?? 'USDC')) throw new Error('Unsupported payment asset.')
   const amounts = paymentFeeBreakdown(BigInt(binding.amountUnits), networkFeeUnits, binding.mode, exempt || binding.purpose === 'wallet-send')
-  const quote: PaymentFeeQuote = { ...binding, walletAddress: (binding.chain === 'solana' ? binding.walletAddress : binding.walletAddress.toLowerCase()), recipient: (binding.chain === 'solana' ? binding.recipient : binding.recipient.toLowerCase()), version: 1, id: randomUUID(), platformFeeUnits: amounts.platformFee.toString(), networkFeeUnits: amounts.networkFee.toString(), treasuryUnits: amounts.treasury.toString(), recipientUnits: amounts.recipient.toString(), totalUnits: amounts.total.toString(), feeBps: exempt || binding.purpose === 'wallet-send' ? 0 : PLATFORM_FEE_BPS, issuedAt: now, expiresAt: now + 120_000, exemption: exempt ? 'verified-payout' : 'none' }
+  const quote: PaymentFeeQuote = { ...binding, feeRoutingVersion:2, walletAddress: (binding.chain === 'solana' ? binding.walletAddress : binding.walletAddress.toLowerCase()), recipient: (binding.chain === 'solana' ? binding.recipient : binding.recipient.toLowerCase()), version: 1, id: randomUUID(), platformFeeUnits: amounts.platformFee.toString(), networkFeeUnits: amounts.networkFee.toString(), treasuryUnits: amounts.treasury.toString(), recipientUnits: amounts.recipient.toString(), totalUnits: amounts.total.toString(), feeBps: exempt || binding.purpose === 'wallet-send' ? 0 : PLATFORM_FEE_BPS, issuedAt: now, expiresAt: now + 120_000, exemption: exempt ? 'verified-payout' : 'none' }
   const payload = Buffer.from(JSON.stringify(quote)).toString('base64url')
   return { quote, token: payload + '.' + signature(payload, key).toString('base64url') }
 }
@@ -24,6 +24,7 @@ export function verifyPaymentFeeQuote(token: string, binding: PaymentFeeBinding,
   const actual = Buffer.from(mac, 'base64url'), expected = signature(payload, key)
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('Invalid payment quote.')
   const quote = JSON.parse(Buffer.from(payload, 'base64url').toString()) as PaymentFeeQuote
+  validateFeeRouting(quote)
   if (quote.version !== 1 || !Number.isSafeInteger(quote.issuedAt) || quote.expiresAt <= quote.issuedAt || !Number.isSafeInteger(quote.expiresAt) || quote.expiresAt <= now || quote.issuedAt > now + 5000 || quote.expiresAt - quote.issuedAt > 120_000) throw new Error('Payment quote expired. Review the refreshed fees.')
   if (quote.checkoutId !== binding.checkoutId) throw new Error('Checkout changed. Refresh the quote.')
   if ((quote.purpose ?? 'payment') !== (binding.purpose ?? 'payment')) throw new Error('Payment purpose changed. Refresh the quote.')

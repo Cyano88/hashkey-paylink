@@ -5,7 +5,7 @@ import {decodeFunctionData,encodeFunctionData,formatUnits,getAddress,isAddress,p
 import routerAbi from '../../src/pocket/lib/pocketOkxRouterAbi.json' with {type:'json'}
 import {readStockSwapFee} from '../../src/pocket/lib/pocketXStocksSwap.js'
 import {nativeSwapPair} from '../../src/pocket/lib/pocketNativeSwap.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient,evmFeeTransfers,type FeeRouting} from '../../src/lib/platformFees.js'
 import {bufferedNativeFee,nativeAmountUnits,nativeEvmNetworks,type NativeEvmNetwork} from './native-send-quote.js'
 import {nativeSwapUnits,quoteNativeSwap} from './native-swap-quote.js'
 import {okxGet} from './xstocks-swap-provider.js'
@@ -20,13 +20,13 @@ export const NATIVE_SWAP_BATCH_ABI=parseAbi(['function executeBatch((address tar
 const swapAbi=[...routerAbi,...COMPACT_V3_ABI] as Abi
 const approveAbi=parseAbi(['function approve(address spender,uint256 amount) returns(bool)','function transfer(address recipient,uint256 amount) returns(bool)'])
 export type NativeEvmSwapBinding={ownerId:string;walletId:string;walletAddress:Hex;network:NativeEvmNetwork;from:string;to:string;amount:string}
-export type NativeEvmSwapQuote=NativeEvmSwapBinding&{version:1|2;stableFeeUnits?:string;rateScaled8?:string;totalInputUnits?:string;id:string;amountUnits:string;inputUsdPrice?:number;outputUsdPrice?:number;expectedOutUnits:string;minimumOutUnits:string;priceImpact:string;tx:{from:Hex;to:Hex;data:Hex;value:string};spender:Hex;feeUnits:string;callData:Hex;issuedAt:number;expiresAt:number;positiveSlippageFee?:{capPercent:number;recipient:Hex}}
+export type NativeEvmSwapQuote=NativeEvmSwapBinding&FeeRouting&{version:1|2;stableFeeUnits?:string;rateScaled8?:string;totalInputUnits?:string;id:string;amountUnits:string;inputUsdPrice?:number;outputUsdPrice?:number;expectedOutUnits:string;minimumOutUnits:string;priceImpact:string;tx:{from:Hex;to:Hex;data:Hex;value:string};spender:Hex;feeUnits:string;callData:Hex;issuedAt:number;expiresAt:number;positiveSlippageFee?:{capPercent:number;recipient:Hex}}
 const fail=()=>{throw Object.assign(Error('Swap details changed. Review the amount and fee again.'),{status:409})}
 export const sameSwapAddress=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 export function nativeSwapCalls(q:NativeEvmSwapQuote,fee=BigInt(q.feeUnits)){
  const {tokenIn}=nativeSwapPair(q.network,q.from,q.to)
  const approval=(amount:bigint)=>({target:getAddress(tokenIn.address),value:0n,data:encodeFunctionData({abi:approveAbi,functionName:'approve',args:[q.spender,amount]})})
- return [...(tokenIn.native?[]:[approval(0n),approval(BigInt(q.amountUnits))]),{target:q.tx.to,value:BigInt(q.tx.value),data:q.tx.data},...(tokenIn.native?[]:[approval(0n)]),q.version===2?{target:getAddress(tokenIn.address),value:0n,data:encodeFunctionData({abi:approveAbi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,BigInt(q.stableFeeUnits!)]})}:{target:getAddress(EVM_PLATFORM_TREASURY),value:fee,data:'0x' as Hex}]
+ return [...(tokenIn.native?[]:[approval(0n),approval(BigInt(q.amountUnits))]),{target:q.tx.to,value:BigInt(q.tx.value),data:q.tx.data},...(tokenIn.native?[]:[approval(0n)]),q.version===2?{target:getAddress(tokenIn.address),value:0n,data:encodeFunctionData({abi:approveAbi,functionName:'transfer',args:[evmGasRecipient(q),BigInt(q.stableFeeUnits!)]})}:{target:getAddress(evmGasRecipient(q)),value:fee,data:'0x' as Hex}]
 }
 export function nativeSwapBatch(q:NativeEvmSwapQuote,fee=BigInt(q.feeUnits)){return encodeFunctionData({abi:NATIVE_SWAP_BATCH_ABI,functionName:'executeBatch',args:[nativeSwapCalls(q,fee)]})}
 export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Date.now()){
@@ -63,7 +63,7 @@ export async function prepareNativeEvmSwapRoute(binding:NativeEvmSwapBinding,rea
  const spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
  if(!tokenIn.native){const approval=await read('approve-transaction',{chainIndex:String(nativeEvmNetworks[binding.network].id),tokenContractAddress:tokenIn.address,approveAmount:String(units)});if(!sameSwapAddress(approval?.dexContractAddress,spender))fail()}
  if(!data?.tx)fail()
- const q:NativeEvmSwapQuote={...binding,amount:preview.amount,inputUsdPrice:preview.inputUsdPrice,outputUsdPrice:preview.outputUsdPrice,version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:'1',callData:'0x',issuedAt,expiresAt:issuedAt+45000}
+ const q:NativeEvmSwapQuote={...binding,feeRoutingVersion:2,amount:preview.amount,inputUsdPrice:preview.inputUsdPrice,outputUsdPrice:preview.outputUsdPrice,version:1,id:randomUUID(),amountUnits:String(units),expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:'1',callData:'0x',issuedAt,expiresAt:issuedAt+45000}
  try{q.positiveSlippageFee=readStockSwapFee({tx:q.tx,expectedOut:preview.expectedOut,decimalsOut:tokenOut.decimals},swapAbi)}catch{throw Object.assign(Error('This swap route is not supported yet. Try another pair.'),{status:422})}
  q.callData=nativeSwapBatch(q);return validateNativeEvmSwap(q,false,now())
 }
@@ -103,7 +103,7 @@ export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,
   const data=await read('swap',{...(binding.network==='ethereum'?{directRoute:'true'}:{}),chainIndex:String(nativeEvmNetworks[binding.network].id),fromTokenAddress:tokenIn.address,toTokenAddress:tokenOut.address,amount:String(units),userWalletAddress:binding.walletAddress,swapReceiverAddress:binding.walletAddress,swapMode:'exactIn',slippagePercent:'0.5',disableRFQ:'true',autoSlippage:'false',priceImpactProtectionPercent:'3'})
   const preview=await quoteNativeSwap({...binding,amount},async()=>data?.routerResult,now)
   if(!data?.tx)fail()
-  const q:NativeEvmSwapQuote={...binding,amount:formatUnits(total,6),version:2,id,totalInputUnits:String(total),stableFeeUnits:String(stableFee),rateScaled8:String(rateScaled8),amountUnits:String(units),inputUsdPrice:preview.inputUsdPrice,outputUsdPrice:preview.outputUsdPrice,expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:String(nativeCap),callData:'0x',issuedAt,expiresAt:issuedAt+45000}
+  const q:NativeEvmSwapQuote={...binding,feeRoutingVersion:2,amount:formatUnits(total,6),version:2,id,totalInputUnits:String(total),stableFeeUnits:String(stableFee),rateScaled8:String(rateScaled8),amountUnits:String(units),inputUsdPrice:preview.inputUsdPrice,outputUsdPrice:preview.outputUsdPrice,expectedOutUnits:preview.expectedOutUnits,minimumOutUnits:String(data.tx.minReceiveAmount),priceImpact:preview.priceImpact,tx:{from:data.tx.from,to:data.tx.to,data:data.tx.data,value:String(data.tx.value||'0')},spender,feeUnits:String(nativeCap),callData:'0x',issuedAt,expiresAt:issuedAt+45000}
   try{q.positiveSlippageFee=readStockSwapFee({tx:q.tx,expectedOut:preview.expectedOut,decimalsOut:tokenOut.decimals},swapAbi)}catch{throw Object.assign(Error('This swap route is not supported yet. Try another pair.'),{status:422})}
   q.callData=nativeSwapBatch(q);validateNativeEvmSwap(q,false,now())
   if(affordable&&!await affordable(q))throw Object.assign(Error('Insufficient '+tokenIn.symbol+' for this swap and fee.'),{status:409})

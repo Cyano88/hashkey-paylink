@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {createNativeSendHandler} from '../api/pocket/native-send.ts'
 import {quoteNativeSend,sealNativeSend} from '../api/pocket/native-send-quote.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='native-send-api-fixture-secret-'.repeat(3)
 const owner='owner-a',address='0x'+'1'.repeat(40),recipient='0x'+'2'.repeat(40),hash='0x'+'a'.repeat(64)
 let existing=null,writes=0,allow=true,fee='0.0001',trace=null,provider={status:'pending',txHash:hash},enabled=true,now=Date.now()
@@ -13,7 +13,7 @@ assert.equal((await call({action:'execute',quoteToken:token})).status,200);asser
 assert.equal((await call({action:'execute',quoteToken:token})).data.challengeId,'challenge');assert.equal(writes,1)
 // An unrelated successful receipt is insufficient: missing exact native trace never completes.
 trace={type:'CALL',calls:[]};assert.equal((await call({action:'status',quoteToken:token,circleUserToken:'session'})).data.status,'pending');assert.equal(existing.status,'submitted')
-trace={type:'CALL',to:address,input:quote.callData,calls:[{type:'CALL',from:address,to:recipient,input:'0x',value:'0x'+BigInt(quote.amountUnits).toString(16)},{type:'CALL',from:address,to:EVM_PLATFORM_TREASURY,input:'0x',value:'0x'+BigInt(quote.feeUnits).toString(16)}]}
+trace={type:'CALL',to:address,input:quote.callData,calls:[{type:'CALL',from:address,to:recipient,input:'0x',value:'0x'+BigInt(quote.amountUnits).toString(16)},{type:'CALL',from:address,to:EVM_GAS_REIMBURSEMENT,input:'0x',value:'0x'+BigInt(quote.feeUnits).toString(16)}]}
 assert.equal((await call({action:'status',quoteToken:token,circleUserToken:'session'})).data.status,'completed');assert.equal(existing.metadata.txHash,hash)
 existing=null;allow=false;assert.equal((await call({action:'execute',quoteToken:token})).status,403);assert.equal(writes,1)
 allow=true;fee='0.0002';assert.equal((await call({action:'execute',quoteToken:token})).status,409);assert.equal(existing,null)

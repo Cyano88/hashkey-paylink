@@ -6,7 +6,7 @@ import {bscSponsoredSwapCalls, bscSwapRequest, validateBscSwap} from '../src/poc
 import {quoteBscSwap, sealBscSwap, openBscSwap} from '../api/pocket/bsc-swap-quote.ts'
 import {normalizeBscProviderCall} from '../api/pocket/bsc-provider-call.ts'
 import {makeSponsoredBatchRequest} from '../src/pocket/lib/pocketSponsoredRequest.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_PLATFORM_TREASURY,evmGasRecipient} from '../src/lib/platformFees.ts'
 const abi = JSON.parse(readFileSync('src/pocket/lib/pocketOkxRouterAbi.json', 'utf8'))
 const erc20 = parseAbi(['function approve(address,uint256) returns(bool)', 'function transfer(address,uint256) returns(bool)'])
 const wallet = getAddress('0x' + '1'.repeat(40)), now = Date.now(), secret = 'bsc-fixture-secret-'.repeat(3)
@@ -54,7 +54,7 @@ for (const stable of ['USDC', 'USDT']) for (let reverse of [false, true, 'stable
     assert.equal(decodeFunctionData({abi: erc20, data: calls[1].data}).args[1], BigInt(q.tradeInputUnits))
     assert.equal(decodeFunctionData({abi: erc20, data: calls[3].data}).args[1], 0n)
     const payment = decodeFunctionData({abi: erc20, data: calls[4].data})
-    assert.equal(payment.args[0].toLowerCase(), EVM_PLATFORM_TREASURY.toLowerCase()); assert.equal(payment.args[1], fee)
+    assert.equal(payment.args[0].toLowerCase(), evmGasRecipient(q).toLowerCase()); assert.equal(payment.args[1], fee)
     assert.equal(calls[4].to.toLowerCase(), POCKET_BSC.assets[stable].address.toLowerCase())
     assert.equal(q.expiresAt, now + 25000)
     assert.equal(requests.filter(r => r.path === 'swap').length, 2)

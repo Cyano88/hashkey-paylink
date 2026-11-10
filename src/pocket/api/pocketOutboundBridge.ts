@@ -2,11 +2,11 @@ import {validBridgeDestination,isPocketBridgeDestination,sameBridgeDestination} 
 import {lifiOutboundCalls,LIFI_DESTINATIONS,type LifiOutboundPlan,type OutboundDestination} from '../lib/pocketLifiOutbound'
 import {xlayerConversionCalls,type XLayerBridgeConversion} from '../lib/pocketXLayerBridgeConversion'
 import {encodeFunctionData,isAddress,parseAbi,parseUnits,type Address} from 'viem'
-import {EVM_PLATFORM_TREASURY} from '../../lib/platformFees'
+import {evmGasRecipient,type FeeRouting} from '../../lib/platformFees'
 import {makeSponsoredBatchRequest,SponsoredTransferNotSubmitted} from '../lib/pocketSponsoredRequest'
 import {sponsoredTransferRequest} from './pocketSponsoredTransfer'
 
-export type OutboundBridgeQuote={purpose?:'cash';id:string;rail:'xlayer';execution:'privy';source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;asset:'USDC'|'USDT';walletAddress:Address;destinationAddress:string;orderId:`0x${string}`;amount:string;receive:string;minimumReceive:string;networkFee:string;fee:string;total:string;expiresAt:number;conversion?:XLayerBridgeConversion;refundOptions?:Array<{network:string;asset:'USDC'|'USDT';recipient:string}>}
+export type OutboundBridgeQuote=FeeRouting & {purpose?:'cash';id:string;rail:'xlayer';execution:'privy';source:'xlayer';destination:OutboundDestination;lifi?:LifiOutboundPlan;asset:'USDC'|'USDT';walletAddress:Address;destinationAddress:string;orderId:`0x${string}`;amount:string;receive:string;minimumReceive:string;networkFee:string;fee:string;total:string;expiresAt:number;conversion?:XLayerBridgeConversion;refundOptions?:Array<{network:string;asset:'USDC'|'USDT';recipient:string}>}
 export type OutboundBridgeReview={quote:OutboundBridgeQuote;quoteToken:string;request:ReturnType<typeof makeSponsoredBatchRequest>}
 export const outboundTokens={USDC:'0xb6ceceab302e2e4948951ee7843fc24e92933061',USDT:'0x779ded0c9e1022225f8e0630b35a9b54be713736'} as const
 const depository='0x4cd00e387622c35bddb9b4c962c136462338bc31'
@@ -20,7 +20,7 @@ export function validateOutboundBridge(review:OutboundBridgeReview,owner:Address
   const sent=amount(q.amount),fee=amount(q.networkFee),total=amount(q.total),received=amount(q.receive),minimum=amount(q.minimumReceive)
   if(sent!==amount(inputAmount)||sent<=0n||fee<=0n||total!==sent+fee||minimum<=0n||minimum>received||received>sent||amount(q.fee)!==total-received)throw Error()
   const token=outboundTokens[asset],approval=(units:bigint)=>({to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'approve',args:[depository,units]})})
-  const directCalls=[approval(0n),approval(sent),{to:depository,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[owner,token,sent,q.orderId]})},approval(0n),{to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,fee]})}]
+  const directCalls=[approval(0n),approval(sent),{to:depository,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'depositErc20',args:[owner,token,sent,q.orderId]})},approval(0n),{to:token,value:'0x0' as const,data:encodeFunctionData({abi,functionName:'transfer',args:[evmGasRecipient(q),fee]})}]
   if(q.conversion&&(asset!=='USDT'||!Array.isArray(q.refundOptions)||q.refundOptions.length!==2||!q.refundOptions.some(r=>r.network==='xlayer'&&r.asset==='USDC'&&r.recipient.toLowerCase()===owner.toLowerCase())||!q.refundOptions.some(r=>r.network===q.destination&&r.asset==='USDT'&&sameBridgeDestination(q.destination,r.recipient,destination))))throw Error()
   if(q.lifi&&(q.asset!=='USDT'||q.conversion||q.lifi.destination!==q.destination||q.lifi.recipient.toLowerCase()!==destination.toLowerCase()||q.lifi.owner.toLowerCase()!==owner.toLowerCase()||q.lifi.amountUnits!==sent.toString()||q.lifi.receiveUnits!==received.toString()||q.lifi.minimumUnits!==minimum.toString()||q.lifi.transactionId!==q.orderId))throw Error()
   const calls=q.lifi?[...lifiOutboundCalls(q.lifi,now),directCalls[directCalls.length-1]]:q.conversion?[...xlayerConversionCalls(q.conversion,owner,sent.toString(),q.orderId,now),directCalls[directCalls.length-1]]:directCalls

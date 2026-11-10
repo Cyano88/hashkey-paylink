@@ -8,11 +8,11 @@ const {reconcileNativeSend}=await import('../api/pocket/native-send-reconciliati
 const {quoteNativeSend,sealNativeSend}=await import('../api/pocket/native-send-quote.ts')
 const {recordCirclePocketAction}=await import('../api/circle-pocket-action-journal.ts')
 const {runPocketReconciliation}=await import('../api/pocket/reconciliation-worker.ts')
-const {EVM_PLATFORM_TREASURY}=await import('../src/lib/platformFees.ts')
+const {EVM_GAS_REIMBURSEMENT}=await import('../src/lib/platformFees.ts')
 const wallet='0x'+'1'.repeat(40),recipient='0x'+'2'.repeat(40),hash='0x'+'a'.repeat(64)
 const q=await quoteNativeSend({ownerId:'owner',network:'base',walletId:'wallet',walletAddress:wallet,recipient,amount:'0.01'},async()=> '0.0001')
 let record={id:'native',ownerId:'owner',action:'wallet.native-send',idempotencyKey:'pocket:native-send:'+q.id,status:'submitted',metadata:{network:'base',quoteToken:sealNativeSend(q),txHash:hash,amount:q.amount},createdAt:1,updatedAt:1}
-const validTrace={type:'CALL',to:wallet,input:q.callData,calls:[{type:'CALL',from:wallet,to:recipient,input:'0x',value:'0x'+BigInt(q.amountUnits).toString(16)},{type:'CALL',from:wallet,to:EVM_PLATFORM_TREASURY,input:'0x',value:'0x'+BigInt(q.feeUnits).toString(16)}]}
+const validTrace={type:'CALL',to:wallet,input:q.callData,calls:[{type:'CALL',from:wallet,to:recipient,input:'0x',value:'0x'+BigInt(q.amountUnits).toString(16)},{type:'CALL',from:wallet,to:EVM_GAS_REIMBURSEMENT,input:'0x',value:'0x'+BigInt(q.feeUnits).toString(16)}]}
 let trace=validTrace,block=hash,chain='0x2105',saved=0
 const deps={rpc:async(_network,method)=>({eth_chainId:chain,eth_getTransactionReceipt:{status:'0x1',transactionHash:hash,blockHash:hash,blockNumber:'0x10'},eth_getBlockByNumber:{hash:block},debug_traceTransaction:trace}[method]),record:async input=>{saved++;return input}}
 assert.equal((await reconcileNativeSend({...record,metadata:{...record.metadata,txHash:undefined}},{...deps,rpc:async()=>assert.fail('Unsigned EVM recovery must not read RPC')})).status,'pending')
@@ -28,7 +28,7 @@ const terminal=await recordCirclePocketAction({...durable,status:'completed'})
 assert.equal((await recordCirclePocketAction({...durable,status:'submitted'})).status,'completed')
 const records=['error','pending','completed','failed'].map(id=>({...record,id}))
 const seen=[]
-const result=await runPocketReconciliation({executions:{listUnresolved:async()=>[]},auditXLayerBilling:async()=>{},listBridges:async action=>action==='wallet.native-send'?records:[],reconcileNative:async r=>{seen.push(r.id);if(r.id==='error')throw Error('RPC offline');return {status:r.id}},sendEmail:async()=>assert.fail('No fixture email')})
+const result=await runPocketReconciliation({executions:{listUnresolved:async()=>[]},auditXLayerBilling:async()=>{},reconcileBscOutbound:async()=>({errors:0}),reconcileBsc:async()=>({checked:0,billingChecked:false,unresolved:0}),listBridges:async action=>action==='wallet.native-send'?records:[],reconcileNative:async r=>{seen.push(r.id);if(r.id==='error')throw Error('RPC offline');return {status:r.id}},sendEmail:async()=>assert.fail('No fixture email')})
 assert.deepEqual(seen,['error','pending','completed','failed']);assert.equal(result.errors,1);assert.equal(result.reconciled,2);assert.equal(result.unchanged,1)
 const swapRecord={...record,action:'wallet.native-swap',idempotencyKey:'pocket:native-swap:test'}
 const swapSaved=await recordCirclePocketAction(swapRecord)

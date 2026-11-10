@@ -8,7 +8,7 @@ import { paymentBalanceError } from './payment-balance-error.js'
 import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
 import { readNativeUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
-import { paymentFeeBreakdown, EVM_PLATFORM_TREASURY } from '../src/lib/platformFees.js'
+import { paymentFeeBreakdown, EVM_PLATFORM_TREASURY, evmFeeTransfers, type FeeRouting } from '../src/lib/platformFees.js'
 import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
@@ -381,10 +381,10 @@ function paymentToken(chain: keyof typeof EVM_CHAINS, asset: 'USDC' | 'USDT') {
   if (!supportsPocketUsdt(chain)) throw Object.assign(new Error('USDT is not supported on this network.'), {status:400})
   return POCKET_USDT_ASSETS[chain].address
 }
-function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, recipientUnits: bigint, treasuryUnits: bigint, asset: 'USDC' | 'USDT' = 'USDC') {
+function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, recipientUnits: bigint, platformUnits: bigint, gasUnits: bigint, routing:FeeRouting, asset: 'USDC' | 'USDT' = 'USDC') {
   const target = paymentToken(chain, asset) as `0x${string}`
   const calls = [{ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [recipient as `0x${string}`, recipientUnits] }) }]
-  if (treasuryUnits > 0n) calls.push({ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [EVM_TREASURY as `0x${string}`, treasuryUnits] }) })
+  for(const fee of evmFeeTransfers(routing,platformUnits,gasUnits)) calls.push({ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [fee.recipient, fee.units] }) })
   return encodeFunctionData({ abi: SMART_WALLET_BATCH_ABI, functionName: 'executeBatch', args: [calls] })
 }
 async function verifiedPayoutExemption(params: Record<string, string>, checkOnly = true, checkCapacity = true) {
@@ -878,7 +878,7 @@ export default async function handler(req: Request, res: Response) {
           const fees = paymentFeeBreakdown(BigInt(totalUnits), recovery, mode, purpose === 'wallet-send')
           const estimate = await circleJson<{ high?: { networkFeeRaw?: string; networkFee?: string } }>('/v1/w3s/transactions/contractExecution/estimateFee', {
             method: 'POST', userToken, apiKey: circleApiKey({ chain: network }),
-            body: JSON.stringify({ walletId: wallet.id, contractAddress: wallet.address, callData: paymentCallData(network, recipient, fees.recipient, fees.treasury, asset) }),
+            body: JSON.stringify({ walletId: wallet.id, contractAddress: wallet.address, callData: paymentCallData(network, recipient, fees.recipient, fees.platformFee, fees.networkFee, {feeRoutingVersion:2}, asset) }),
           })
           const native = estimate.high?.networkFeeRaw || estimate.high?.networkFee
           if (!native) throw Object.assign(new Error('Network fee quote is unavailable. Try again.'), { status: 503 })
@@ -925,7 +925,7 @@ export default async function handler(req: Request, res: Response) {
         await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(link.privyUserId,{id:quote.checkoutId,network:chain,asset,amount:formatUnits(BigInt(quote.amountUnits),6),recipient,payer:walletAddress},false)
       }
       await rememberMerchantFeeQuote(params.feeQuoteToken,quote)
-      const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits), asset)
+      const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.platformFeeUnits), BigInt(quote.networkFeeUnits), quote, asset)
 
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },false)
       let paymentIdempotencyKey=idempotencyKey

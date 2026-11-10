@@ -218,7 +218,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         if(transfer.binding.merchantPaymentId)await bindXPayFeeQuote(identity.userId,transfer.binding.merchantPaymentId,wallet,transfer.token,req.body.intent.recipient,transfer.binding.amountUnits)
         const quote=await quoteXLayerReimbursement(transfer.binding,transfer.calls,d.now()+30000,d.reimbursement.estimate,d.reimbursement.pricing,d.now)
         if(quote.merchantPaymentId)await bindXPayFeeQuote(identity.userId,quote.merchantPaymentId,wallet,transfer.token,req.body.intent.recipient,quote.amountUnits,quote)
-        return res.json({ok:true,quoteToken:sealXLayerReimbursement(quote),feeUnits:String(BigInt(quote.networkFeeUnits)+(quote.merchantPaymentId?BigInt(quote.amountUnits)*25n/10000n:0n)),totalUnits:quote.totalUnits,expiresAt:quote.expiresAt,
+        return res.json({ok:true,feeRoutingVersion:quote.feeRoutingVersion,quoteToken:sealXLayerReimbursement(quote),feeUnits:String(BigInt(quote.networkFeeUnits)+(quote.merchantPaymentId?BigInt(quote.amountUnits)*25n/10000n:0n)),totalUnits:quote.totalUnits,expiresAt:quote.expiresAt,
           request:makeSponsoredBatchRequest({appId:c.appId,walletId:embedded.id,attemptId:quote.intentId,expiresAt:quote.expiresAt,calls:quote.calls})})
       }
       if (req.body?.action === 'prepare') return res.json({ok:true,appId:c.appId,walletId:embedded.id})
@@ -300,7 +300,7 @@ export function createXLayerSponsorshipHandler(overrides: Partial<{
         // neither retries nor restarts can silently broadcast another transfer.
         const recent = Object.values(store.requests).filter(r => r.at > d.now() - 86_400_000)
         if (recent.length >= 50 || recent.filter(r => r.wallet === wallet || r.owner === identity.userId).length >= 10) throw fail('Sponsored transfer limit reached. Try again tomorrow.', 429)
-        store.requests[id] = {...(swapEvidence?{swap:swapEvidence}:{}),fingerprint,wallet,owner:identity.userId,at:d.now(),...(approved?{coverage:{walletId:embedded.id!,asset:approved.asset,feeUnits:approved.networkFeeUnits}}:{}),...(req.body?.purpose==='bridge'?{bridgeQuoteToken:req.body.bridgeQuoteToken}:{})}
+        store.requests[id] = {...(swapEvidence?{swap:swapEvidence}:{}),fingerprint,wallet,owner:identity.userId,at:d.now(),...(approved?{coverage:{feeRoutingVersion:approved.feeRoutingVersion,walletId:embedded.id!,asset:approved.asset,feeUnits:approved.networkFeeUnits}}:{}),...(req.body?.purpose==='bridge'?{bridgeQuoteToken:req.body.bridgeQuoteToken}:{})}
         return store
       })
       reserved = true

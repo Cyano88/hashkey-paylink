@@ -1,6 +1,6 @@
 import {decodeEventLog, parseAbi, type Hex} from 'viem'
 import {RELAY_STABLECOIN_CHAINS, stablecoinAddress, type RelayStablecoinInput, type RelayStablecoinRefund} from './xlayer-bridge-provider.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT} from '../../src/lib/platformFees.js'
 
 type Network = RelayStablecoinInput['source']
 type Asset = RelayStablecoinInput['asset']
@@ -42,7 +42,7 @@ export function xlayerBridgeSourceProven(q:XLayerBridgeBinding,receipt:any,hash:
   if(converted&&(q.source!=='xlayer'||q.destination==='xlayer'||q.asset!=='USDT'||q.depositAsset!=='USDC'||!units(q.depositUnits)||BigInt(q.depositUnits)<=0n||BigInt(q.depositUnits)>BigInt(q.amountUnits)))return false
   if(converted){const delta=evmStablecoinDelta(receipt,'xlayer','USDC',q.sender,hash);if(delta===null||delta<0n)return false}
   const hasFee=q.networkFeeUnits!==undefined||q.reimbursementTreasury!==undefined
-  if(hasFee&&(!units(q.networkFeeUnits)||BigInt(q.networkFeeUnits)<=0n||!same(q.source,q.reimbursementTreasury,EVM_PLATFORM_TREASURY)||same(q.source,q.sender,EVM_PLATFORM_TREASURY)))return false
+  if(hasFee&&(!units(q.networkFeeUnits)||BigInt(q.networkFeeUnits)<=0n||![EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(a=>same(q.source,q.reimbursementTreasury,a))||same(q.source,q.sender,q.reimbursementTreasury!)))return false
   const fee=hasFee?BigInt(q.networkFeeUnits!):0n
   if(evmStablecoinDelta(receipt,q.source,q.asset,q.sender,hash)!==-(BigInt(q.amountUnits)+fee))return false
   if(hasFee){
@@ -51,7 +51,7 @@ export function xlayerBridgeSourceProven(q:XLayerBridgeBinding,receipt:any,hash:
       if(log.removed||!same(q.source,log.address,stablecoinAddress(q.source,q.asset)))return []
       try{
         const {args}=decodeEventLog({abi:transfer,eventName:'Transfer',data:log.data as Hex,topics:log.topics as [Hex,...Hex[]]})
-        return same(q.source,args.from,q.sender)&&same(q.source,args.to,EVM_PLATFORM_TREASURY)?[args.value]:[]
+        return same(q.source,args.from,q.sender)&&same(q.source,args.to,q.reimbursementTreasury!)?[args.value]:[]
       }catch{return []}
     })
     if(fees.length!==1||fees[0]!==fee)return false

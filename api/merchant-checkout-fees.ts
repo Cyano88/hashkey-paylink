@@ -5,7 +5,7 @@ import {readVerifiedHostedCheckoutRecord,hostedCheckoutPaymentOption,type Checko
 import {verifyPaymentFeeQuote,type PaymentFeeBinding,type PaymentFeeQuote} from './payment-fee-quotes.js'
 import {verifyEvmUsdcTransfer,normalizeEvmUsdcChain} from './usdc-transfer-verify.js'
 import {verifySolanaUsdcTransfer} from './solana-usdc-transfer-verify.js'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.js'
+import {EVM_PLATFORM_TREASURY,evmFeeTransfers,solanaFeeTransfers,EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.js'
 import type {MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 const KEY='hashpaylink:merchant-checkout-fee-proofs:v1'
 type FeeContext=Pick<CheckoutRecord,'cashPayer'|'id'|'feePayer'|'asset'|'amount'|'flexible'|'createdAt'|'expiresAt'|'network'|'recipient'|'paymentOptions'>
@@ -57,7 +57,8 @@ export async function verifyMerchantCheckoutTransfer(c:FeeContext,input:{txHash:
    const treasury=input.network==='solana'?process.env.SOLANA_TREASURY||'':EVM_PLATFORM_TREASURY
    const verify=async(recipient:string,units:string)=>input.network==='solana'?verifySolanaUsdcTransfer({txHash:input.txHash,payer:input.payer,asset:c.asset||'USDC',recipient,minAmount:formatUnits(BigInt(units),6),exactAmount:true,notBefore:before,notAfter:after,confirmation:'finalized'}):verifyEvmUsdcTransfer({txHash:input.txHash,payer:input.payer,chain:normalizeEvmUsdcChain(input.network)!,token:c.asset||'USDC',recipient,minAmount:formatUnits(BigInt(units),6),exactAmount:true,notBefore:before,notAfter:after,confirmation:input.network==='base'?'base-included':'finalized'})
    const received=await verify(option.recipient,q.recipientUnits)
-   if(BigInt(q.treasuryUnits)>0n){const collected=await verify(treasury,q.treasuryUnits);if(collected.confirmedAt!==received.confirmedAt)continue}
+   const feeTransfers=input.network==='solana'?solanaFeeTransfers(q,BigInt(q.platformFeeUnits),BigInt(q.networkFeeUnits),treasury):evmFeeTransfers(q,BigInt(q.platformFeeUnits),BigInt(q.networkFeeUnits))
+   for(const f of feeTransfers){const collected=await verify(f.recipient,f.units.toString());if(collected.confirmedAt!==received.confirmedAt)throw Error('Fee confirmation mismatch.')}
    const fees:MerchantPaymentFees={payer:'merchant',platformFee:formatUnits(BigInt(q.platformFeeUnits),6),networkFee:formatUnits(BigInt(q.networkFeeUnits),6),netAmount:formatUnits(BigInt(q.recipientUnits),6)}
    return {...received,amount:formatUnits(BigInt(q.amountUnits),6),fees}
   }catch{/* another issued quote may be the executed one */}
@@ -83,7 +84,7 @@ export function createPayerCheckoutFeeVerifier(overrides:Partial<{read:()=>Promi
  return async(c:FeeContext,input:{txHash:string;payer:string;network:string})=>{
   if(c.feePayer!=='payer'||c.network!=='base'||input.network!=='base'||(c.asset||'USDC')!=='USDC'||c.flexible)throw Error('Payer fee verification requires fixed Base USDC checkout.')
   const option=hostedCheckoutPaymentOption(c,'base')
-  if(!option||equal(option.recipient,EVM_PLATFORM_TREASURY,'base'))throw Error('Marketplace holding must be separate from the fee treasury.')
+  if(!option||[EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT].some(a=>equal(option.recipient,a,'base')))throw Error('Marketplace holding must be separate from the fee treasury.')
   const candidates=Object.values((await d.read())?.quotes||{}).filter(({quote:q})=>q.checkoutId===c.id&&q.mode==='gross'&&q.chain==='base'&&equal(q.walletAddress,input.payer,'base'))
   for(const item of candidates){try{
    if(!Number.isSafeInteger(item.acceptedAt))continue
@@ -92,8 +93,8 @@ export function createPayerCheckoutFeeVerifier(overrides:Partial<{read:()=>Promi
    const before=new Date(Math.max(Date.parse(c.createdAt),q.issuedAt-2000)).toISOString()
    const verify=(recipient:string,units:string)=>d.verifyTransfer({txHash:input.txHash,payer:input.payer,chain:'base',token:'USDC',recipient,minAmount:formatUnits(BigInt(units),6),exactAmount:true,notBefore:before,notAfter:c.expiresAt,confirmation:'base-included'})
    const received=await verify(option.recipient,q.amountUnits)
-   if(BigInt(q.treasuryUnits)>0n){const fee=await verify(EVM_PLATFORM_TREASURY,q.treasuryUnits);if(fee.confirmedAt!==received.confirmedAt)continue}
-   const payerFees:PayerCheckoutFeeEvidence={quoteId:q.id,treasuryAddress:EVM_PLATFORM_TREASURY,platformFeeUnits:q.platformFeeUnits,networkFeeUnits:q.networkFeeUnits,treasuryUnits:q.treasuryUnits,totalUnits:q.totalUnits}
+   for(const f of evmFeeTransfers(q,BigInt(q.platformFeeUnits),BigInt(q.networkFeeUnits))){const fee=await verify(f.recipient,f.units.toString());if(fee.confirmedAt!==received.confirmedAt)throw Error('Fee confirmation mismatch.')}
+   const payerFees:PayerCheckoutFeeEvidence={...(q.feeRoutingVersion?{feeRoutingVersion:q.feeRoutingVersion}:{}),quoteId:q.id,treasuryAddress:EVM_PLATFORM_TREASURY,platformFeeUnits:q.platformFeeUnits,networkFeeUnits:q.networkFeeUnits,treasuryUnits:q.treasuryUnits,totalUnits:q.totalUnits}
    return {...received,amount:formatUnits(BigInt(q.amountUnits),6),payerFees}
   }catch{/* Another accepted quote may identify this transaction. */}}
   throw Error('The full order amount and payer-paid fees are still being verified.')

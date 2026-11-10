@@ -14,9 +14,9 @@ import {sumPrivyTransactionGas} from './privy-transaction-gas.js'
 import {encodeEventTopics,parseAbi} from 'viem'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {readStockMarketPrices} from './xstocks-prices.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient} from '../../src/lib/platformFees.js'
 
-export type XLayerCoverage={walletId:string;asset:XLayerFeeAsset;feeUnits:string}
+export type XLayerCoverage={feeRoutingVersion?:2;walletId:string;asset:XLayerFeeAsset;feeUnits:string}
 type Attempt={wallet:string;at:number;hash?:string;transactionId?:string;coverage?:XLayerCoverage;providerFailure?:{status:number;code?:string}}
 type Halt={haltedAt:number;reason:'billed_cost_exceeds_coverage';billedUsdMicros:string;coverageUsdMicros:string}
 const key='pocket:xlayer-billing-halt:v1'
@@ -79,7 +79,7 @@ export function createXLayerBillingGuard(d:{
     if(receipt.status!=='0x1')return unavailable()
     const c=r.coverage!,token=tokens[c.asset],price=prices[token]
     const priceNow=d.now();if(!price||!Number.isFinite(price.usd)||price.usd<=0||!Number.isSafeInteger(price.fetchedAt)||price.fetchedAt+30000<=priceNow||price.fetchedAt>priceNow+5000)return unavailable()
-    const topics=encodeEventTopics({abi,eventName:'Transfer',args:{from:r.wallet as `0x${string}`,to:EVM_PLATFORM_TREASURY}})
+    const topics=encodeEventTopics({abi,eventName:'Transfer',args:{from:r.wallet as `0x${string}`,to:evmGasRecipient(c)}})
     const paid=receipt.logs.filter((log:any)=>same(log.address,token)&&log.topics?.length===3&&topics.every((t,i)=>typeof t==='string'&&same(log.topics[i],t))&&/^0x[0-9a-f]{64}$/i.test(log.data))
     if(paid.length!==1||BigInt(paid[0].data)!==BigInt(c.feeUnits))return 0n
     // Discount current USD value by 5%; never assume a stablecoin dollar peg.

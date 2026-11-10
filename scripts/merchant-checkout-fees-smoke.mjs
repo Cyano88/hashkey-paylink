@@ -12,7 +12,7 @@ const mocks={
  './ng-pos.js':`export const readPosCryptoFeeContext=async()=>({recipient:fixture.checkout.recipient,createdAt:fixture.checkout.createdAt})`,
  './hosted-checkouts.js':`export const readVerifiedHostedCheckoutRecord=async()=>fixture.checkout;export const hostedCheckoutPaymentOption=(c,n)=>n===c.network?{recipient:c.recipient}:undefined`,
  './render-durable-store.js':`export const readDurableJson=async()=>fixture.store;export const mutateDurableJson=async(k,f)=>{fixture.store=f(fixture.store);return fixture.store}`,
- './usdc-transfer-verify.js':`export const normalizeEvmUsdcChain=c=>c;export const verifyEvmUsdcTransfer=async i=>{fixture.calls.push(i);if(i.recipient===fixture.checkout.recipient){if(i.minAmount!=='0.9875')throw Error('wrong net')}else if(fixture.failTreasury||i.minAmount!=='0.0125')throw Error('missing fee');return {amount:i.minAmount,confirmedAt:new Date(${now+1000}).toISOString()}}`,
+ './usdc-transfer-verify.js':`export const normalizeEvmUsdcChain=c=>c;export const verifyEvmUsdcTransfer=async i=>{fixture.calls.push(i);if(i.recipient===fixture.checkout.recipient){if(i.minAmount!=='0.9875')throw Error('wrong net')}else if(fixture.failTreasury||i.minAmount!==(i.recipient.toLowerCase()==='0xce5df9e1115f81a2fc2f65941b20b820d508e753'?'0.0025':'0.01'))throw Error('missing fee');return {amount:i.minAmount,confirmedAt:new Date(${now+1000}).toISOString()}}`,
  './solana-usdc-transfer-verify.js':`export const verifySolanaUsdcTransfer=async()=>{throw Error('unexpected')}`,
 }
 await build({entryPoints:['api/merchant-checkout-fees.ts'],outfile:'.codex-temp/merchant-checkout-fees-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
@@ -26,7 +26,7 @@ assert.equal(fixture.claimed,checkout.id,'Signing evidence first claims the shar
 fixture.rejectClaim=true;await assert.rejects(()=>rememberMerchantFeeQuote(signed.token,signed.quote),/Payment option changed/);fixture.rejectClaim=false
 const result=await verifyMerchantCheckoutTransfer(checkout,input)
 assert.equal(result.amount,'1');assert.deepEqual(result.fees,{payer:'merchant',platformFee:'0.0025',networkFee:'0.01',netAmount:'0.9875'})
-assert.equal(fixture.calls.length,2);assert(fixture.calls.every(x=>x.exactAmount&&x.txHash===input.txHash&&x.payer===payer&&x.notAfter===checkout.expiresAt))
+assert.equal(fixture.calls.length,3);assert(fixture.calls.every(x=>x.exactAmount&&x.txHash===input.txHash&&x.payer===payer&&x.notAfter===checkout.expiresAt))
 fixture.failTreasury=true;await assert.rejects(()=>verifyMerchantCheckoutTransfer(checkout,input));fixture.failTreasury=false
 await assert.rejects(()=>verifyMerchantCheckoutTransfer(checkout,{...input,payer:recipient}))
 fixture.store.quotes[signed.quote.id].token+='x';await assert.rejects(()=>verifyMerchantCheckoutTransfer(checkout,input))

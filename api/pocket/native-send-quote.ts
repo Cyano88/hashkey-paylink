@@ -1,23 +1,23 @@
 import {POCKET_NATIVE_FEE_ALLOWANCE_BPS} from './native-fee-policy.js'
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto'
 import {encodeFunctionData,parseAbi,parseUnits,formatUnits,isAddress,getAddress,type Hex} from 'viem'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient,type FeeRouting} from '../../src/lib/platformFees.js'
 export const nativeEvmNetworks={ethereum:{id:1,symbol:'ETH',blockchain:'ETH'},base:{id:8453,symbol:'ETH',blockchain:'BASE'},arbitrum:{id:42161,symbol:'ETH',blockchain:'ARB'},polygon:{id:137,symbol:'POL',blockchain:'MATIC'}} as const
 export type NativeEvmNetwork=keyof typeof nativeEvmNetworks
 export type NativeSendBinding={ownerId:string;network:NativeEvmNetwork;walletId:string;walletAddress:Hex;recipient:Hex;amount:string}
-export type NativeSendQuote=NativeSendBinding&{version:1;id:string;asset:'ETH'|'POL';amountUnits:string;feeUnits:string;totalUnits:string;callData:Hex;issuedAt:number;expiresAt:number}
+export type NativeSendQuote=NativeSendBinding&FeeRouting&{version:1;id:string;asset:'ETH'|'POL';amountUnits:string;feeUnits:string;totalUnits:string;callData:Hex;issuedAt:number;expiresAt:number}
 const abi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const fail=()=>{throw Object.assign(Error('Transfer details changed. Review the amount and fee again.'),{status:409})}
 export function nativeAmountUnits(amount:string){if(typeof amount!=='string'||! /^(?:0|[1-9]\d{0,59})(?:\.\d{1,18})?$/.test(amount))fail();const units=parseUnits(amount,18);if(units<=0n||units>=2n**256n)fail();return units}
 function validateBinding(b:NativeSendBinding){if(!Object.hasOwn(nativeEvmNetworks,b.network)||!b.ownerId||!b.walletId||!isAddress(b.walletAddress)||!isAddress(b.recipient)||/^0x0{40}$/i.test(b.recipient)||b.recipient.toLowerCase()===b.walletAddress.toLowerCase())fail();nativeAmountUnits(b.amount)}
-export function nativeSendCallData(b:NativeSendBinding,fee:bigint){validateBinding(b);if(fee<=0n)fail();return encodeFunctionData({abi,functionName:'executeBatch',args:[[{target:getAddress(b.recipient),value:nativeAmountUnits(b.amount),data:'0x'},{target:EVM_PLATFORM_TREASURY,value:fee,data:'0x'}]]})}
+export function nativeSendCallData(b:NativeSendBinding & FeeRouting,fee:bigint){validateBinding(b);if(fee<=0n)fail();return encodeFunctionData({abi,functionName:'executeBatch',args:[[{target:getAddress(b.recipient),value:nativeAmountUnits(b.amount),data:'0x'},{target:evmGasRecipient(b),value:fee,data:'0x'}]]})}
 // Native units throughout: no USD peg assumptions, float rounding or price-service dependency.
 export function bufferedNativeFee(estimate:string){return (nativeAmountUnits(estimate)*BigInt(10000+POCKET_NATIVE_FEE_ALLOWANCE_BPS)+9999n)/10000n}
 export async function quoteNativeSend(binding:NativeSendBinding,estimate:(data:Hex)=>Promise<string>,now=Date.now()):Promise<NativeSendQuote>{
  validateBinding(binding);let fee=1n
  for(let pass=0;pass<4;pass++){
-  const callData=nativeSendCallData(binding,fee),next=bufferedNativeFee(await estimate(callData))
-  if(next<=fee){const amount=nativeAmountUnits(binding.amount),total=amount+fee;if(total>=2n**256n)fail();return {...binding,amount:formatUnits(amount,18),version:1,id:randomUUID(),asset:nativeEvmNetworks[binding.network].symbol,amountUnits:String(amount),feeUnits:String(fee),totalUnits:String(total),callData,issuedAt:now,expiresAt:now+45000}}
+  const callData=nativeSendCallData({...binding,feeRoutingVersion:2},fee),next=bufferedNativeFee(await estimate(callData))
+  if(next<=fee){const amount=nativeAmountUnits(binding.amount),total=amount+fee;if(total>=2n**256n)fail();return {...binding,feeRoutingVersion:2,amount:formatUnits(amount,18),version:1,id:randomUUID(),asset:nativeEvmNetworks[binding.network].symbol,amountUnits:String(amount),feeUnits:String(fee),totalUnits:String(total),callData,issuedAt:now,expiresAt:now+45000}}
   fee=next
  }
  throw Object.assign(Error('Network fees changed. Try the estimate again.'),{status:409})
@@ -51,6 +51,6 @@ export function confirmsNativeSend(q:NativeSendQuote,trace:NativeCallTrace){
  walk(trace);if(matches.length!==1)return false
  const outgoing:NativeCallTrace[]=[]
  const scan=(node:NativeCallTrace)=>{if(node.error||node.revertReason)return;for(const child of node.calls||[]){if(same(child.from,q.walletAddress)&&child.type==='CALL'&&BigInt(child.value||'0')>0n)outgoing.push(child);scan(child)}};scan(matches[0])
- const expected=[{to:q.recipient,value:BigInt(q.amountUnits)},{to:EVM_PLATFORM_TREASURY,value:BigInt(q.feeUnits)}]
+ const expected=[{to:q.recipient,value:BigInt(q.amountUnits)},{to:evmGasRecipient(q),value:BigInt(q.feeUnits)}]
  return outgoing.length===2&&outgoing.every((call,index)=>!call.error&&!call.revertReason&&same(call.to,expected[index].to)&&BigInt(call.value||'0')===expected[index].value&&(!call.input||call.input==='0x'))
 }

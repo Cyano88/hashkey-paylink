@@ -2,6 +2,8 @@
 import fs from 'node:fs'
 fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
+'../checkout-wallet-allowance.js':`export const checkCheckoutWalletAllowance=async()=>{}`,
+'../checkout-selection.js':`export const claimCheckoutSelectionPayment=async()=>{}`,
 '../developer-receipt-settings.js':`export const readDeveloperReceiptSettings=async()=>globalThis.fixture.emailEnabled?{enabled:true}:undefined`,
 '../hosted-stock-checkouts.js':`export const readStockCheckoutBranding=async()=>new Map();export const isStockCheckoutId=id=>typeof id==='string'&&/^chkx_[a-f0-9]{24}$/.test(id);export const readStockCheckout=async id=>globalThis.fixture.stockCheckout?.id===id?globalThis.fixture.stockCheckout:null;export const assertStockCheckoutPayable=async()=>{if(globalThis.fixture.stockDisabled)throw Object.assign(Error('Checkout disabled'),{status:409})};export const settleStockCheckout=async proof=>{globalThis.fixture.stockSettled=proof;globalThis.fixture.stockCheckout.payment={status:'paid',txHash:proof.hash}}`,
 './payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
@@ -129,7 +131,7 @@ await call({...stockBody,key:'fixture-stock-checkout-0003'},409);
 console.log('PASS shared developer stock engine: fixed units, disabled-project authorization, concurrent payer lock, verified settlement and paid-order replay rejection.');
 
 const {xLayerFeeAssets}=await import('../src/pocket/lib/pocketXLayerFeeAssets.ts')
-const {EVM_PLATFORM_TREASURY}=await import('../src/lib/platformFees.ts')
+const {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT}=await import('../src/lib/platformFees.ts')
 const {formatUnits}=await import('viem')
 for(const [symbol,{address,decimals}]of Object.entries(xLayerFeeAssets)){
  const gross=10n**BigInt(decimals),fee=gross*25n/10000n+250n,net=gross-fee,stamp=Date.now()
@@ -137,6 +139,11 @@ for(const [symbol,{address,decimals}]of Object.entries(xLayerFeeAssets)){
  const log=(recipient,units)=>({address,topics:encodeEventTopics({abi:[event],eventName:'Transfer',args:{from,to:recipient}}),data:encodeAbiParameters([{type:'uint256'}],[units])})
  const logs=[log(to,net),log(EVM_PLATFORM_TREASURY,fee)]
  assert.equal(verifyXPayTransfer(p,{status:'success',logs},stamp),true)
+ const current={...p,feeRoutingVersion:2},split=[log(to,net),log(EVM_PLATFORM_TREASURY,gross*25n/10000n),log(EVM_GAS_REIMBURSEMENT,250n)]
+ assert.equal(verifyXPayTransfer(current,{status:'success',logs:split},stamp),true)
+ assert.equal(verifyXPayTransfer(current,{status:'success',logs},stamp),false,'new quotes reject legacy combined fee movement')
+ assert.equal(verifyXPayTransfer(current,{status:'success',logs:split.slice(0,2)},stamp),false,'missing gas cannot settle')
+ assert.equal(verifyXPayTransfer(p,{status:'success',logs:split},stamp),false,'legacy proof remains bound to original fee topology')
  assert.equal(verifyXPayTransfer(p,{status:'success',logs:logs.slice(0,1)},stamp),false)
  assert.equal(verifyXPayTransfer(p,{status:'success',logs:[log(to,gross),logs[1]]},stamp),false)
 }

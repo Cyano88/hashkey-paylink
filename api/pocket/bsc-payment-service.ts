@@ -85,7 +85,7 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
    if(action==='quote'){
     const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)
     if(c.asset!=='USDC'&&c.asset!=='USDT')return unavailable()
-    const now=Date.now(),q:BscPaymentQuote={version:2,chainId:56,id:randomUUID(),checkoutId:c.id,...binding,asset:c.asset,recipient:c.recipient as `0x${string}`,amountUnits:parseUnits(c.amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:Math.min(now+30000,Date.parse(c.expiresAt))}
+    const now=Date.now(),q:BscPaymentQuote={feeRoutingVersion:2,version:2,chainId:56,id:randomUUID(),checkoutId:c.id,...binding,asset:c.asset,recipient:c.recipient as `0x${string}`,amountUnits:parseUnits(c.amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:Math.min(now+30000,Date.parse(c.expiresAt))}
     const fee=await estimate(q);q.reimbursementUnits=fee.feeUnits;q.expiresAt=fee.expiresAt
     let covered=false
     for(let i=0;i<3;i++){

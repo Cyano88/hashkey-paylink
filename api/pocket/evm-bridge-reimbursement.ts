@@ -1,12 +1,12 @@
 import {createHmac,timingSafeEqual} from 'node:crypto'
 import {decodeFunctionData,encodeFunctionData,isAddress,parseAbi,type Hex} from 'viem'
 import {nativeFeeToUsdcUnits} from '../payment-network-fees.js'
-import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
+import {evmGasRecipient,type FeeRouting} from '../../src/lib/platformFees.js'
 
 const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const transferAbi=parseAbi(['function transfer(address to,uint256 amount) returns(bool)'])
 export type EvmBridgeFeeBinding={ownerId:string;walletId:string;walletAddress:string;source:string;destination:string;destinationAddress:string;asset:'USDC'|'USDT';tokenAddress:Hex;amountUnits:string;bridgeDebitUnits:string}
-export type EvmBridgeFeeQuote=EvmBridgeFeeBinding&{version:1;bridgeCallData:Hex;callData:Hex;networkFeeUnits:string;totalUnits:string;issuedAt:number;expiresAt:number}
+export type EvmBridgeFeeQuote=EvmBridgeFeeBinding&FeeRouting&{version:1;bridgeCallData:Hex;callData:Hex;networkFeeUnits:string;totalUnits:string;issuedAt:number;expiresAt:number}
 const fail=()=>{throw Object.assign(Error('Bridge quote changed or expired. Review a new quote.'),{status:409})}
 function valid(input:EvmBridgeFeeBinding){
  if(!input.ownerId||!input.walletId||!isAddress(input.walletAddress)||!isAddress(input.tokenAddress)||!input.destinationAddress||!['USDC','USDT'].includes(input.asset)||!['base','arbitrum','ethereum','polygon','arc'].includes(input.source)||!['base','arbitrum','ethereum','polygon','arc','solana','xlayer','bsc'].includes(input.destination)||input.source===input.destination||(input.asset==='USDT'&&(input.source==='arc'||input.destination==='arc')))fail()
@@ -14,11 +14,11 @@ function valid(input:EvmBridgeFeeBinding){
  if(['xlayer','bsc'].includes(input.destination)&&(!isAddress(input.destinationAddress)||/^0x0{40}$/i.test(input.destinationAddress)))fail()
  for(const value of [input.amountUnits,input.bridgeDebitUnits])if(!/^[1-9]\d{0,77}$/.test(value)||BigInt(value)>=2n**256n)fail()
 }
-function withRecovery(bridgeCallData:Hex,token:Hex,units:bigint){
+function withRecovery(bridgeCallData:Hex,token:Hex,units:bigint,routing:FeeRouting={}){
  const decoded=decodeFunctionData({abi:batchAbi,data:bridgeCallData})
  const calls=decoded.args[0]
  if(!calls.length||calls.length>12||calls.some(c=>c.value!==0n))fail()
- return encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[[...calls,{target:token,value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[EVM_PLATFORM_TREASURY,units]})}]]})
+ return encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[[...calls,{target:token,value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[evmGasRecipient(routing),units]})}]]})
 }
 /** Server-only: bridgeCallData must come from the validated provider/CCTP builder, never a request body. */
 export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallData:Hex;providerExpiresAt:number},estimate:(callData:Hex)=>Promise<string>,rateScaled8:bigint,now=Date.now(),availableUnits?:bigint):Promise<EvmBridgeFeeQuote>{
@@ -34,7 +34,7 @@ export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallDat
    const maximum=BigInt(input.amountUnits)-(BigInt(input.bridgeDebitUnits)+units-availableUnits)
    throw Object.assign(Error('Insufficient '+input.asset+' to cover the bridge and network fee. Enter a smaller amount.'),{status:422,code:'insufficient_balance',maximumAmountUnits:(maximum>0n?maximum:0n).toString()})
   }
-  const callData=withRecovery(input.bridgeCallData,input.tokenAddress,units)
+  const callData=withRecovery(input.bridgeCallData,input.tokenAddress,units,{feeRoutingVersion:2})
   const next=nativeFeeToUsdcUnits(await estimate(callData),rateScaled8)
   const relativeTolerance=units/1000n
   const absorbedDrift=relativeTolerance<100n?relativeTolerance:100n
@@ -42,7 +42,7 @@ export async function quoteEvmBridgeFee(input:EvmBridgeFeeBinding&{bridgeCallDat
    const total=BigInt(input.bridgeDebitUnits)+units
    if(total>=2n**256n)fail()
    const {providerExpiresAt,...binding}=input
-   return {...binding,version:1,callData,networkFeeUnits:units.toString(),totalUnits:total.toString(),issuedAt:now,expiresAt:Math.min(providerExpiresAt,now+30000)}
+   return {...binding,feeRoutingVersion:2,version:1,callData,networkFeeUnits:units.toString(),totalUnits:total.toString(),issuedAt:now,expiresAt:Math.min(providerExpiresAt,now+30000)}
   }
   units=next
  }
@@ -64,7 +64,7 @@ export function openEvmBridgeFee(token:string,binding:Omit<EvmBridgeFeeBinding,'
  }
  if(quote.version!==1||!Number.isSafeInteger(quote.issuedAt)||!Number.isSafeInteger(quote.expiresAt)||quote.issuedAt>now+5000||quote.expiresAt<=now||quote.expiresAt<=quote.issuedAt||quote.expiresAt-quote.issuedAt>30000||!/^\d{1,78}$/.test(quote.networkFeeUnits))fail()
  const recovery=BigInt(quote.networkFeeUnits)
- if(recovery<=0n||BigInt(quote.totalUnits)!==BigInt(quote.bridgeDebitUnits)+recovery||BigInt(quote.totalUnits)>=2n**256n||quote.callData!==withRecovery(quote.bridgeCallData,quote.tokenAddress,recovery))fail()
+ if(recovery<=0n||BigInt(quote.totalUnits)!==BigInt(quote.bridgeDebitUnits)+recovery||BigInt(quote.totalUnits)>=2n**256n||quote.callData!==withRecovery(quote.bridgeCallData,quote.tokenAddress,recovery,quote))fail()
  return quote
 }
 /** Repricing can reduce the debit, but increasing it always requires a new approval. */

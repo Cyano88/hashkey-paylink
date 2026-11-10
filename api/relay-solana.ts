@@ -1,3 +1,4 @@
+import {solanaFeeTransfers,type FeeRouting} from '../src/lib/platformFees.js'
 import {assertMerchantFeeBinding,rememberMerchantFeeQuote} from './merchant-checkout-fees.js'
 import {assertSolanaSponsorshipRunning} from './emergency-pause.js'
 import {POCKET_USDT_ASSETS} from '../src/pocket/lib/pocketUsdtAssets.js'
@@ -283,17 +284,23 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
 
     const isWithdraw = mode === 'withdraw'
     const feeRaw = isWithdraw || mode === 'send' ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    // Build the exact instruction topology before asking the RPC for its fee.
-    const treasuryPubkey = isWithdraw ? null : getSolanaTreasury(1n)
-    const treasury = treasuryPubkey?.equals(toPubkey) ? { ata: toATA, created: false } : treasuryPubkey ? await ensureATA(connection, tx, mint, treasuryPubkey, relayer.publicKey) : null
-    tx.add(createTransferCheckedInstruction(fromATA, mint, toATA, fromPubkey, totalRaw, USDC_DECIMALS))
-    if (treasury) tx.add(createTransferCheckedInstruction(fromATA, mint, treasury.ata, fromPubkey, feeRaw || 1n, USDC_DECIMALS))
+    const binding = { checkoutId, purpose: mode === 'send' ? 'wallet-send' as const : 'payment' as const, asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: feeMode==='net'?'net' as const:'gross' as const }
+    let accepted:ReturnType<typeof verifyPaymentFeeQuote>|undefined
+    if(!isWithdraw&&!quoteOnly){try{accepted=verifyPaymentFeeQuote(feeQuoteToken||'',binding)}catch(error){res.status(409).json({ok:false,error:(error as Error).message});return}}
+    const routing:FeeRouting=accepted??{feeRoutingVersion:2}
+    // Include both fee destinations and any ATA rent in the exact network estimate.
+    const feeRows=isWithdraw?[]:solanaFeeTransfers(routing,feeRaw,1n,getSolanaTreasury(1n)!.toBase58())
+    const feeAccounts:Array<{recipient:string;units:bigint;ata:PublicKey;created:boolean}>=[]
+    for(const row of feeRows){const owner=new PublicKey(row.recipient);const account=owner.equals(toPubkey)?{ata:toATA,created:false}:await ensureATA(connection,tx,mint,owner,relayer.publicKey);feeAccounts.push({...row,...account})}
+    const paymentInstructionIndex=tx.instructions.length
+    tx.add(createTransferCheckedInstruction(fromATA,mint,toATA,fromPubkey,totalRaw,USDC_DECIMALS))
+    for(const row of feeAccounts)tx.add(createTransferCheckedInstruction(fromATA,mint,row.ata,fromPubkey,row.units,USDC_DECIMALS))
     let gasRecoveryRaw = 0n
     let quote: ReturnType<typeof createPaymentFeeQuote> | undefined
     if (!isWithdraw) {
       const fee = await connection.getFeeForMessage(tx.compileMessage(), 'confirmed')
       if (!Number.isSafeInteger(fee.value) || fee.value === null || fee.value <= 0) throw new Error('Solana network fee quote is unavailable. Try again.')
-      const setupCount = Number(createsRecipientAta) + Number(treasury?.created ?? false)
+      const setupCount = Number(createsRecipientAta) + feeAccounts.filter(row=>row.created).length
       const rent = setupCount ? await connection.getMinimumBalanceForRentExemption(165, 'confirmed') : 0
       if (!Number.isSafeInteger(rent) || rent < 0) throw new Error('Solana account setup quote is unavailable.')
       const lamports = BigInt(fee.value) + BigInt(rent) * BigInt(setupCount)
@@ -301,16 +308,13 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       // lamports (1e9 SOL), rate (1e8 USDC), output USDC base units (1e6).
       gasRecoveryRaw = solanaReimbursementUnits(lamports, rate)
       await checkSolanaRelayerBalance(connection, relayer.publicKey, lamports)
-      const binding = { checkoutId, purpose: mode === 'send' ? 'wallet-send' as const : 'payment' as const, asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: feeMode==='net'?'net' as const:'gross' as const }
       await assertMerchantFeeBinding(binding)
       if (quoteOnly) {
         quote = createPaymentFeeQuote(binding, gasRecoveryRaw)
         res.json({ ok: true, ...quote, includesAccountSetup: setupCount > 0 })
         return
       }
-      let accepted
-      try { accepted = verifyPaymentFeeQuote(feeQuoteToken || '', binding) }
-      catch (error) { res.status(409).json({ ok: false, error: (error as Error).message }); return }
+      if(!accepted)throw Error('Accepted fee quote required.')
       if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
         res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
       }
@@ -322,17 +326,19 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       }
       await rememberMerchantFeeQuote(feeQuoteToken!,accepted)
       if(accepted.mode==='net'){gasRecoveryRaw=BigInt(accepted.networkFeeUnits)}
-      // Gross legacy quotes retain their existing reimbursement behavior.
+      // Gross quotes retain the lower live reimbursement when costs fall.
     }
     const treasuryRaw = feeRaw + gasRecoveryRaw
     const recipientRaw=feeMode==='net'?totalRaw-treasuryRaw:totalRaw
     const requiredRaw = feeMode==='net'?totalRaw:totalRaw + treasuryRaw
     if(recipientRaw<=0n)throw Error('Amount cannot cover payment fees.')
-    tx.instructions[tx.instructions.length-(treasury?2:1)]=createTransferCheckedInstruction(fromATA,mint,toATA,fromPubkey,recipientRaw,USDC_DECIMALS)
+    tx.instructions[paymentInstructionIndex]=createTransferCheckedInstruction(fromATA,mint,toATA,fromPubkey,recipientRaw,USDC_DECIMALS)
     if (fromAmount === null || fromAmount < requiredRaw) {
       res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` }); return
     }
-    if (treasury) tx.instructions[tx.instructions.length - 1] = createTransferCheckedInstruction(fromATA, mint, treasury.ata, fromPubkey, treasuryRaw, USDC_DECIMALS)
+    const finalFees=isWithdraw?[]:solanaFeeTransfers(routing,feeRaw,gasRecoveryRaw,getSolanaTreasury(1n)!.toBase58())
+    if(finalFees.length!==feeAccounts.length)throw Error('Fee transfer topology changed.')
+    finalFees.forEach((row,index)=>{if(row.recipient!==feeAccounts[index].recipient)throw Error('Fee destination changed.');tx.instructions[paymentInstructionIndex+1+index]=createTransferCheckedInstruction(fromATA,mint,feeAccounts[index].ata,fromPubkey,row.units,USDC_DECIMALS)})
 
     // Relayer partial-signs as fee payer
     await assertSolanaSponsorshipRunning()

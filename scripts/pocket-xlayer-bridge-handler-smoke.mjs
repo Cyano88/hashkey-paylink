@@ -6,7 +6,7 @@ import {encodeAbiParameters,encodeEventTopics,parseAbi,parseAbiParameters} from 
 import {createXLayerBridgeHandler} from '../api/pocket/xlayer-bridge.ts'
 import {validateRelayStablecoinQuote,stablecoinAddress,RELAY_STABLECOIN_CHAINS} from '../api/pocket/xlayer-bridge-provider.ts'
 import {quoteEvmBridgeFee} from '../api/pocket/evm-bridge-reimbursement.ts'
-import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {EVM_GAS_REIMBURSEMENT} from '../src/lib/platformFees.ts'
 process.env.POCKET_SWAP_QUOTE_SECRET='synthetic-xlayer-bridge-secret-not-production-12345'
 const fixture=JSON.parse(readFileSync('scripts/fixtures/relay-xlayer/USDC-base-xlayer.json','utf8'))
 const route=validateRelayStablecoinQuote(fixture.response,fixture.input,fixture.now)
@@ -53,7 +53,7 @@ assert.equal((await h.request(execute)).challengeId,'challenge');assert.equal(h.
 const status={...execute,action:'status'}
 assert.equal((await h.request(status)).status,'awaiting_approval','approval is not completed bridging')
 const depositLog={address:RELAY_STABLECOIN_CHAINS.base.depository,data:encodeAbiParameters(parseAbiParameters('address,address,uint256,bytes32'),[sender,stablecoinAddress('base','USDC'),10000000n,route.orderId]),topics:encodeEventTopics({abi:deposit,eventName:'RelayErc20Deposit'})}
-const sourceReceipt={status:'success',transactionHash:sourceHash,blockNumber:1n,blockHash,logs:[log('base',sender,RELAY_STABLECOIN_CHAINS.base.depository,10000000n),depositLog,log('base',sender,EVM_PLATFORM_TREASURY,3000n)]}
+const sourceReceipt={status:'success',transactionHash:sourceHash,blockNumber:1n,blockHash,logs:[log('base',sender,RELAY_STABLECOIN_CHAINS.base.depository,10000000n),depositLog,log('base',sender,EVM_GAS_REIMBURSEMENT,3000n)]}
 h.receipts.set(sourceHash,sourceReceipt);h.providerStatus='success'
 assert.equal((await h.request({...status,txHash:sourceHash})).status,'pending','provider success without receipt is pending')
 assert.equal(h.ledger,0)
