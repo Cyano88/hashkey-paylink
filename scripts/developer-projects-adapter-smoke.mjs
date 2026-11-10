@@ -100,8 +100,8 @@ const immutableMode = await request(handler, 'PUT', {
 })
 assert.equal(immutableMode.statusCode, 409)
 
-// New onboarding is checkout-only; legacy products remain readable/configurable.
-for (const capability of ['marketplace_payments', 'arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer']) {
+// Marketplace onboarding is available for approval; retired products remain blocked.
+for (const capability of ['arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer']) {
   const denied = await request(handler, 'POST', { action: 'create', name: 'Deferred product', website: 'https://example.com', checkoutMode: 'human', capabilities: [capability], useCase: 'Customers pay for a service offered through our platform.' })
   assert.equal(denied.statusCode, 409)
   const updateDenied = await request(handler, 'PUT', { action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade', useCase: 'Customers pay for a service offered through our platform.', capabilities: ['hosted_checkout', capability] })

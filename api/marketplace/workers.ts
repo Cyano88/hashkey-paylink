@@ -1,3 +1,4 @@
+import {createMarketplaceBankRuntime} from './bank-runtime.js'
 import {createPublicClient,http} from 'viem'
 import {base} from 'viem/chains'
 import {readDurableJson,mutateDurableJson,hasRenderDurableStore} from '../render-durable-store.js'
@@ -31,7 +32,7 @@ let running=false,timer:ReturnType<typeof setInterval>|undefined,lastBackingAt=0
 export async function runMarketplaceWorkers(env:NodeJS.ProcessEnv=process.env){
  if(running||!hasRenderDurableStore())return
  const settings=readMarketplaceRuntimeConfig(env)
- if(env.MARKETPLACE_MONITOR_ENABLED!=='true'&&env.MARKETPLACE_WEBHOOK_WORKER_ENABLED!=='true'&&env.MARKETPLACE_WALLET_WORKER_ENABLED!=='true'&&env.MARKETPLACE_REFUND_WORKER_ENABLED!=='true')return
+ if(env.MARKETPLACE_BANK_WORKER_ENABLED!=='true'&&env.MARKETPLACE_MONITOR_ENABLED!=='true'&&env.MARKETPLACE_WEBHOOK_WORKER_ENABLED!=='true'&&env.MARKETPLACE_WALLET_WORKER_ENABLED!=='true'&&env.MARKETPLACE_REFUND_WORKER_ENABLED!=='true')return
  running=true
  try{
   const chain=createPublicClient({transport:http(env.PRIVATE_RPC_URL||base.rpcUrls.default.http[0],{timeout:10000,retryCount:0})}),errors:string[]=[]
@@ -56,6 +57,7 @@ export async function runMarketplaceWorkers(env:NodeJS.ProcessEnv=process.env){
     }catch{errors.push('refund_execution_deferred')}}
    }catch{errors.push('execution_deferred')}
   }
+  if(env.MARKETPLACE_BANK_WORKER_ENABLED==='true'){try{const bank=createMarketplaceBankRuntime(env,chain);for(const projectId of settings.projectIds){if((await bank.drain(projectId)).deferred)errors.push('bank_payout_deferred')}}catch{errors.push('bank_execution_deferred')}}
   if(env.MARKETPLACE_WEBHOOK_WORKER_ENABLED==='true'){
    try{const activation=await mutateDurableJson<{startedAt:number}>('hashpaylink:marketplace-webhook-worker-activation:v1',s=>s||{startedAt:Date.now()});await drainMarketplaceWebhooks(settings.projectIds,activation.startedAt)}catch{errors.push('webhook_drain_deferred')}
   }

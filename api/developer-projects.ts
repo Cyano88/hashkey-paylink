@@ -1,3 +1,4 @@
+import {marketplaceKeyAccess} from './marketplace/key-access.js'
 import {validBuilderCountry} from '../src/lib/builderCountries.js'
 import {productDisplayName} from '../src/lib/retiredProductPresentation.js'
 import {builderProfilesForProjects,projectBuilderProfileId,validBuilderProfileId,builderProfileReady,type BuilderProfile} from '../src/lib/builderProfiles.js'
@@ -1179,21 +1180,22 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if (req.method === 'POST' && action === 'create-key') {
         const environment = developerEnvironment(req.body?.environment, 'live')
         if (environment === 'test') return res.status(409).json({ ok: false, error: 'Create simulation keys from Sandbox in the dashboard. Production projects do not issue test keys.' })
-        if (!productionVerificationAllows(currentProject)) return res.status(409).json({ok:false,error:'Complete the verification required for this payment option before creating production keys.'})
+        const marketplaceKey=await marketplaceKeyAccess(currentProject)
+        if (!marketplaceKey&&!productionVerificationAllows(currentProject)) return res.status(409).json({ok:false,error:'Complete the verification required for this payment option before creating production keys.'})
         if (isLocalSettlement(currentProject.settlementMode) && currentProject.accountType === 'individual') await (dependencies.requireLocalPayoutEligibility ?? requirePocketBasicKyc)(identity.userId)
         if (currentProject.operationalStatus === 'suspended') {
           return res.status(409).json({ ok: false, error: 'This project is suspended. Contact Hash PayLink operations.' })
         }
-        if (currentProject.settlementStatus !== 'ready') {
+        if (!marketplaceKey&&currentProject.settlementStatus !== 'ready') {
           return res.status(409).json({ ok: false, error: 'Complete and verify settlement before creating a live key.' })
         }
-        if (!currentProject.allowedOrigins.length || (currentProject.settlementMode === 'usdc' && currentProject.networks.some(network => !currentProject.recipients[network]))) {
+        if (!currentProject.allowedOrigins.length || (!marketplaceKey&&currentProject.settlementMode === 'usdc' && currentProject.networks.some(network => !currentProject.recipients[network]))) {
           return res.status(409).json({ ok: false, error: 'Complete checkout routing before creating a key.' })
         }
         if (projectCheckoutMode(currentProject) === 'agentic' && currentProject.networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(409).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Update project networks before creating a key.' })
         const environmentNetworks = developerProductNetworks(projectCheckoutMode(currentProject), currentProject.capabilities ?? ['hosted_checkout'])
 
-        if (currentProject.settlementMode === 'usdc' && !currentProject.networks.some(network => environmentNetworks.includes(network))) {
+        if (!marketplaceKey&&currentProject.settlementMode === 'usdc' && !currentProject.networks.some(network => environmentNetworks.includes(network))) {
           return res.status(409).json({ ok: false, error: 'Configure a supported live network before creating this key.' })
         }
         const rawKey = dependencies.createSecret('hpl_live')
@@ -1205,7 +1207,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
-          if (!productionVerificationAllows(latest) || latest.operationalStatus==='suspended' || latest.settlementStatus!=='ready') throw Object.assign(Error('Production access requires complete setup and any verification required for this payment option.'),{status:409})
+          if(marketplaceKey&&(latest.accountType!==currentProject.accountType||JSON.stringify(latest.capabilities)!==JSON.stringify(currentProject.capabilities)||JSON.stringify(latest.businessVerification)!==JSON.stringify(currentProject.businessVerification)||latest.operationalStatus!=='active'))throw Object.assign(Error('Marketplace access changed; retry.'),{status:409})
+          if (!marketplaceKey&&(!productionVerificationAllows(latest) || latest.operationalStatus==='suspended' || latest.settlementStatus!=='ready')) throw Object.assign(Error('Production access requires complete setup and any verification required for this payment option.'),{status:409})
           if (latest.keys.filter(item => !item.revokedAt && (!item.expiresAt || Date.parse(item.expiresAt) > dependencies.now().getTime())).length >= 10) throw Object.assign(new Error('Revoke an active API key before creating another.'), { status: 409 })
           next = { ...latest, keys: retainDeveloperKeys([...latest.keys, key], dependencies.now().getTime()), updatedAt: dependencies.now().toISOString() }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }

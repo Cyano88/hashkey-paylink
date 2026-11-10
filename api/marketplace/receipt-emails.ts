@@ -10,6 +10,15 @@ import type {MarketplaceStore} from './repository.js'
 const ACTIVATION='hashpaylink:marketplace-receipt-email-activation:v1'
 /** Wallet links are server-verified identities. Never substitute project owner email. */
 export async function marketplaceReceiptRecipient(r:MarketplaceSettlementReceipt){
+ if(r.settlement==='bank'){
+  if(!r.sellerId)return null
+  const identities=await readDurableJson<import('./seller-identity.js').SellerIdentityStore>('hashpaylink:marketplace-seller-identities:v1'),links=identities?.links.filter(l=>l.projectId===r.projectId&&l.sellerId===r.sellerId&&!l.revokedAt)??[]
+  const appId=process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID,secret=process.env.PRIVY_APP_SECRET
+  if(links.length!==1||!appId||!secret)return null
+  const user=await new PrivyClient(appId,secret).getUserById(links[0].owner),emails=user.linkedAccounts.filter(a=>a.type==='email'&&a.latestVerifiedAt instanceof Date&&Number.isFinite(a.latestVerifiedAt.getTime()))
+  return emails.length===1&&emails[0].type==='email'?emails[0].address:null
+ }
+
  const found=await queryDurablePostgres<{privy_user_id:string;email:string;circle_wallet_address:string}>("select privy_user_id,email,circle_wallet_address from privy_circle_links where chain='base' and coalesce(purpose,'payment')='payment' and lower(circle_wallet_address)=lower($1)",[r.recipient])
  const recipients=new Set(found.rows.filter(row=>row.email&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)).map(row=>row.privy_user_id+'|'+row.email.toLowerCase()))
  if(recipients.size!==1||found.rows.some(row=>!row.privy_user_id||!row.email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)))return null

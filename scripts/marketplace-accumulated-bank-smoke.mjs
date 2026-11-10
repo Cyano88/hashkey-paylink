@@ -1,3 +1,4 @@
+import {createMarketplaceService} from '../api/marketplace/application.ts'
 import assert from 'node:assert/strict'
 import {createMarketplaceRepository} from '../api/marketplace/repository.ts'
 import {createMarketplaceBankVerifier} from '../api/marketplace/bank-beneficiaries.ts'
@@ -10,6 +11,12 @@ await repo.registerBank({projectId:'project_one',sellerId:'seller_one',beneficia
 for(let i=0;i<2;i++){const paymentId='order_'+i;await repo.create({projectId:'project_one',paymentId,network:'base',asset:'USDC',amount:'0.7',allocations:[{id:'share_one',sellerId:'seller_one',role:'seller',beneficiaryId:'old_wallet',settlement:'wallet_usdc',amount:'0.7'}]},'draft_'+i);await repo.execute('project_one',paymentId,'fund_'+i,{type:'fund',network:'base',asset:'USDC',amountUnits:'700000',evidenceId:'proof_'+i});await repo.execute('project_one',paymentId,'release_'+i,{type:'release',allocationId:'share_one',amountUnits:'700000'})}
 const plan=await repo.planWithdrawal('project_one','seller_one','seller','bank_one','1110000')
 quote={withdrawal:plan,quoteId:'quote_one',projectId:'project_one',paymentId:'order_0',allocationId:'share_one',operationId:'withdrawal_one',beneficiaryId:'bank_one',destinationDigest:plan.beneficiary.destinationDigest,provider:'paycrest',providerOrderId:'provider_one',intentId:'intent_one',network:'base',asset:'USDC',tokenAddress:BASE_STABLECOINS.USDC.address,currency:'NGN',debitUnits:'1110000',fundingUnits:'1100000',netUnits:'1000000',networkFeeUnits:'10000',feePolicy:'fixed_success_only',exchangeRate:'1500',feeUnits:'100000',maximumFeeUnits:'110000',feePayer:'allocation',ngnMinor:'150000',requestedNgnMinor:'150000',holdingId:'holding_one',holdingRevision:'revision_one',refundAddress:'0x'+'11'.repeat(20),fundingAddress:'0x'+'22'.repeat(20),issuedAt:now,expiresAt:now+300000,status:'initiated',submitted:false}
+const principal={projectId:'project_one',credentialId:'credential_one',active:true,capabilities:['marketplace_payments'],scopes:['marketplace:payout']}
+const service=createMarketplaceService({repository:repo,resolvePrincipal:async token=>token==='credential'?principal:null,createCheckout:async()=>{throw Error('Unexpected checkout')},quoteWallet:async()=>{throw Error('Unexpected wallet quote')},saveQuote:async()=>{},quoteBank:async()=>quote,resolveBankQuote:async(p,payment,id)=>p===quote.projectId&&payment===quote.paymentId&&id===quote.quoteId?quote:null})
+const disclosure=await service.createWithdrawalQuote('credential',{sellerId:'seller_one',role:'seller',beneficiaryId:'bank_one',operationId:'withdrawal_one',amount:'1.11'})
+assert.equal(disclosure.settlement,'cash_balance');assert.equal(disclosure.ngnMinor,'150000');assert.equal(JSON.stringify(disclosure).includes('0123456789'),false)
+await assert.rejects(()=>service.reserveWithdrawal('invalid','reserve_one',{paymentId:'order_0',quoteId:quote.quoteId,businessReference:'withdraw_requested'}),/denied/)
+await service.reserveWithdrawal('credential','reserve_one',{paymentId:'order_0',quoteId:quote.quoteId,businessReference:'withdraw_requested'})
 await repo.reserveBankPayout('project_one','order_0',quote.quoteId,'reserve_one',{credentialId:'credential_one',businessReference:'withdraw_requested'})
 assert.equal(stored.books[0].balances[0].reserved,'700000');assert.equal(stored.books[1].balances[0].reserved,'410000')
 const attempt=await repo.bankExecution.claim('project_one','order_0','withdrawal_one','worker_one');await repo.bankExecution.beginSubmission('project_one','order_0','withdrawal_one',attempt.claimToken)

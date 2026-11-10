@@ -1,8 +1,9 @@
 import {createHash} from 'node:crypto'
 import {formatUnits,getAddress} from 'viem'
 import type {MarketplaceStore} from './repository.js'
+import {marketplaceBankReceipt} from './bank-receipt.js'
 import {marketplaceWalletReceipt} from './wallet-receipt.js'
-export type MarketplaceSettlementReceipt={id:string;projectId:string;marketplaceName?:string;paymentId:string;kind:'refund'|'payout';recipient:string;sender:string;amount:string;debitAmount:string;networkFee:string;feePayer:'marketplace'|'seller';transactionHash:string;settledAt:number}
+export type MarketplaceSettlementReceipt={settlement?:'bank';sellerId?:string;currency?:'NGN';providerFee?:string;id:string;projectId:string;marketplaceName?:string;paymentId:string;kind:'refund'|'payout';recipient:string;sender:string;amount:string;debitAmount:string;networkFee:string;feePayer:'marketplace'|'seller';transactionHash:string;settledAt:number}
 const hash=/^0x[0-9a-f]{64}$/i
 /** Read-only projection from finalized accounting evidence. Never a send instruction. */
 export function marketplaceSettlementReceipts(store:MarketplaceStore|undefined):MarketplaceSettlementReceipt[]{
@@ -18,6 +19,12 @@ export function marketplaceSettlementReceipts(store:MarketplaceStore|undefined):
    if(r.collection.payerWallet.toLowerCase()!==origin.payerWallet.toLowerCase()||r.collection.holdingAddress.toLowerCase()!==origin.holdingAddress.toLowerCase()||r.collection.fundingEvidenceId!==book.fundingEvidence||!r.allocations.length||r.allocations.some(a=>!book.operations.some(o=>o.id===a.operationId&&o.kind==='refund'&&o.status==='settled'&&o.units===a.amountUnits))||r.allocations.reduce((n,a)=>n+BigInt(a.amountUnits),0n)!==BigInt(r.amountUnits))continue
    rows.push({id:id(book.plan.projectId,book.plan.paymentId,'refund',r.refundId),projectId:book.plan.projectId,paymentId:book.plan.paymentId,kind:'refund',recipient:getAddress(origin.payerWallet),sender:getAddress(origin.holdingAddress),amount:formatUnits(BigInt(r.amountUnits),6),debitAmount:formatUnits(BigInt(r.amountUnits),6),networkFee:formatUnits(BigInt(e.feeQuote?.networkFeeUnits||'0'),6),feePayer:'marketplace',transactionHash:e.transactionHash!,settledAt:proof.verifiedAt})
    } catch { /* Malformed legacy evidence must not suppress other valid receipts. */ }
+  }
+  for(const reservation of book.bankReservations||[]){
+   try{const q=reservation.quote,proof=book.bankReconciliations?.find(r=>r.evidence.operationId===q.operationId);if(proof?.status!=='settled'||proof.evidence.basis!=='bank_settled')continue
+    const receipt=marketplaceBankReceipt(book,q.operationId);if(!hash.test(receipt.txHash))continue
+    rows.push({id:id(book.plan.projectId,book.plan.paymentId,'bank-payout',q.operationId),projectId:book.plan.projectId,paymentId:book.plan.paymentId,kind:'payout',settlement:'bank',sellerId:q.withdrawal?.sellerId??book.plan.allocations.find(a=>a.id===q.allocationId)?.sellerId,currency:'NGN',recipient:receipt.recipient!,sender:getAddress(origin.holdingAddress),amount:formatUnits(BigInt(q.ngnMinor),2),debitAmount:formatUnits(BigInt(q.debitUnits),6),networkFee:formatUnits(BigInt(q.networkFeeUnits??'0'),6),providerFee:formatUnits(BigInt(q.feeUnits),6),feePayer:'seller',transactionHash:receipt.txHash,settledAt:receipt.createdAt})
+   }catch{/* Only verified final bank receipts are projected. */}
   }
   for(const reservation of book.walletReservations||[]){
    try {

@@ -1,3 +1,6 @@
+import {createMarketplaceBankRuntime} from './bank-runtime.js'
+import {bankFeeDisclosure,type MarketplaceBankQuote} from './bank-quotes.js'
+import type {BankQuoteInput} from './bank-quote-service.js'
 import {marketplaceSellerIdentity} from './seller-runtime.js'
 import {createPublicClient,http,getAddress} from 'viem'
 import {base} from 'viem/chains'
@@ -24,14 +27,16 @@ export function createMarketplaceApplication(env:NodeJS.ProcessEnv=process.env){
  const quoteKey='hashpaylink:marketplace-wallet-quotes:v1'
  type Quotes={quotes:MarketplaceWalletQuote[]}
  const resolveQuote=async({projectId,paymentId,quoteId}:{projectId:string;paymentId:string;quoteId:string})=>(await readDurableJson<Quotes>(quoteKey))?.quotes.find(q=>q.projectId===projectId&&q.paymentId===paymentId&&q.quoteId===quoteId)||null
- const repository=createMarketplaceRepository({...marketplaceStorage,walletVerificationClient:chain,resolveWalletQuote:resolveQuote,resolveRefundCollection:collections.resolveRefundCollection})
+ const bank=env.MARKETPLACE_BANK_PAYOUTS_ENABLED==='true'?createMarketplaceBankRuntime(env,chain):undefined
+ const repository=createMarketplaceRepository({...marketplaceStorage,resolveBankQuote:bank?.quotes.resolve?(i)=>bank.quotes.resolve(i.projectId,i.paymentId,i.quoteId):undefined,walletVerificationClient:chain,resolveWalletQuote:resolveQuote,resolveRefundCollection:collections.resolveRefundCollection})
  const resolvePrincipal=createMarketplacePrincipalResolver({env:()=>env})
- return createMarketplaceService({sellerIdentity:marketplaceSellerIdentity(),repository,resolvePrincipal,createCheckout:collections.createCheckout,quoteWallet:gas.wallet,saveQuote:q=>mutateDurableJson<Quotes>(quoteKey,s=>({quotes:[...(s?.quotes||[]).filter(x=>x.expiresAt>Date.now()),q]}))})
+ return createMarketplaceService({quoteBank:bank?.quotes.quote,resolveBankQuote:bank?.quotes.resolve,sellerIdentity:marketplaceSellerIdentity(),repository,resolvePrincipal,createCheckout:collections.createCheckout,quoteWallet:gas.wallet,saveQuote:q=>mutateDurableJson<Quotes>(quoteKey,s=>({quotes:[...(s?.quotes||[]).filter(x=>x.expiresAt>Date.now()),q]}))})
 }
-export function createMarketplaceService({sellerIdentity,repository,resolvePrincipal,createCheckout,quoteWallet,saveQuote}:{sellerIdentity?:ReturnType<typeof marketplaceSellerIdentity>;repository:ReturnType<typeof createMarketplaceRepository>;resolvePrincipal:ReturnType<typeof createMarketplacePrincipalResolver>;createCheckout:ReturnType<typeof createMarketplaceCollectionRuntime>['createCheckout'];quoteWallet:ReturnType<typeof createMarketplaceGasQuotes>['wallet'];saveQuote:(q:MarketplaceWalletQuote)=>Promise<unknown>}){
+export function createMarketplaceService({quoteBank,resolveBankQuote,sellerIdentity,repository,resolvePrincipal,createCheckout,quoteWallet,saveQuote}:{quoteBank?:(i:BankQuoteInput)=>Promise<MarketplaceBankQuote>;resolveBankQuote?:(projectId:string,paymentId:string,quoteId:string)=>Promise<MarketplaceBankQuote|null>;sellerIdentity?:ReturnType<typeof marketplaceSellerIdentity>;repository:ReturnType<typeof createMarketplaceRepository>;resolvePrincipal:ReturnType<typeof createMarketplacePrincipalResolver>;createCheckout:ReturnType<typeof createMarketplaceCollectionRuntime>['createCheckout'];quoteWallet:ReturnType<typeof createMarketplaceGasQuotes>['wallet'];saveQuote:(q:MarketplaceWalletQuote)=>Promise<unknown>}){
  const instructions=createMarketplaceInstructions({repository,resolvePrincipal,enabled:true,createCheckout})
  async function authorize(token:string,scope:string){const p=await resolvePrincipal(token);if(!p||p.active!==true||!p.capabilities.includes('marketplace_payments')||!p.scopes.includes(scope))throw Error('Marketplace authorization denied.');return p}
  return {...instructions,
+  async reserveWithdrawal(token:string,key:string,body:unknown){const p=await authorize(token,'marketplace:payout'),v=marketplaceFields(body,['paymentId','quoteId','businessReference']),paymentId=marketplaceReference(v.paymentId),quoteId=marketplaceReference(v.quoteId);const book=await repository.get(p.projectId,paymentId);const prior=book?.bankReservations?.find(r=>r.quote.quoteId===quoteId);if(prior||resolveBankQuote&&await resolveBankQuote(p.projectId,paymentId,quoteId))return instructions.reserveBankPayout(token,key,body);return instructions.reserveQuotedWalletPayout(token,key,body)},
   async createSellerSession(token:string,body:unknown){const p=await authorize(token,'marketplace:create'),v=marketplaceFields(body,['sellerId','returnUrl']);if(!sellerIdentity)throw Error('Seller verification is not configured.');if(typeof v.returnUrl!=='string')throw Error('Invalid return URL.');return sellerIdentity.issue(p.projectId,marketplaceReference(v.sellerId),p.credentialId,v.returnUrl)},
   async sellerVerification(token:string,sellerId:string){const p=await authorize(token,'marketplace:read');if(!sellerIdentity)throw Error('Seller verification is not configured.');const id=marketplaceReference(sellerId);return {...await sellerIdentity.status(p.projectId,id),bankAccounts:await repository.sellerBanks(p.projectId,id)}},
   async createWithdrawalQuote(token:string,body:unknown){
@@ -39,7 +44,7 @@ export function createMarketplaceService({sellerIdentity,repository,resolvePrinc
    const p=await authorize(token,'marketplace:payout')
    if(v.role!=='seller'&&v.role!=='platform')throw Error('Invalid withdrawal role.')
    const plan=await repository.planWithdrawal(p.projectId,marketplaceReference(v.sellerId),v.role,marketplaceReference(v.beneficiaryId),marketplaceAmountUnits(v.amount as string))
-   if(plan.beneficiary.kind!=='wallet')throw Error('Marketplace bank withdrawal provider is not enabled.')
+   if(plan.beneficiary.kind!=='wallet'){if(!quoteBank)throw Error('Marketplace bank withdrawal provider is not enabled.');const q=await quoteBank({projectId:p.projectId,operationId:marketplaceReference(v.operationId),debitUnits:marketplaceAmountUnits(v.amount as string),plan});return {paymentId:q.paymentId,operationId:q.operationId,settlement:'cash_balance',beneficiaryId:q.beneficiaryId,...bankFeeDisclosure(q),sellerId:plan.sellerId,role:plan.role,sourceCount:plan.sources.length}}
    const first=plan.sources[0]
    const q=await quoteWallet({projectId:p.projectId,paymentId:first.paymentId,allocationId:first.allocationId,operationId:marketplaceReference(v.operationId),beneficiaryId:plan.beneficiary.beneficiaryId,recipient:getAddress(plan.beneficiary.address),debitUnits:marketplaceAmountUnits(v.amount as string)})
    q.withdrawal=plan
