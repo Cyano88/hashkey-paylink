@@ -1,3 +1,4 @@
+import {marketplaceReceiptNames} from './receipt-branding.js'
 import {PrivyClient} from '@privy-io/server-auth'
 import {createHash} from 'node:crypto'
 import {readDurableJson,mutateDurableJson,queryDurablePostgres,hasRenderDurableStore} from '../render-durable-store.js'
@@ -19,13 +20,14 @@ export async function marketplaceReceiptRecipient(r:MarketplaceSettlementReceipt
  const user=await new PrivyClient(appId,secret).getUserById(owner)
  return user.linkedAccounts.some(a=>a.type==='email'&&a.address.toLowerCase()===email&&a.latestVerifiedAt instanceof Date&&Number.isFinite(a.latestVerifiedAt.getTime()))?email:null
 }
-const defaults={enabled:()=>hasRenderDurableStore()&&process.env.CHECKOUT_RECEIPT_EMAIL_ENABLED==='true',now:Date.now,activation:()=>mutateDurableJson<{startedAt:number}>(ACTIVATION,old=>old||{startedAt:Date.now()}),read:()=>readDurableJson<MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1'),queued:async()=>new Set(Object.keys((await readDurableJson<{jobs:Record<string,unknown>}>('hashpaylink:checkout-receipt-emails:v1'))?.jobs||{})),settings:readDeveloperReceiptSettings,recipient:marketplaceReceiptRecipient,queue:queuePreparedReceiptEmail,pdf:marketplaceReceiptPdf}
+const defaults={names:marketplaceReceiptNames,enabled:()=>hasRenderDurableStore()&&process.env.CHECKOUT_RECEIPT_EMAIL_ENABLED==='true',now:Date.now,activation:()=>mutateDurableJson<{startedAt:number}>(ACTIVATION,old=>old||{startedAt:Date.now()}),read:()=>readDurableJson<MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1'),queued:async()=>new Set(Object.keys((await readDurableJson<{jobs:Record<string,unknown>}>('hashpaylink:checkout-receipt-emails:v1'))?.jobs||{})),settings:readDeveloperReceiptSettings,recipient:marketplaceReceiptRecipient,queue:queuePreparedReceiptEmail,pdf:marketplaceReceiptPdf}
 let running=false
 export async function reconcileMarketplaceReceiptEmails(d=defaults){
  if(!d.enabled()||running)return
  running=true
  try{
   const {startedAt}=await d.activation(),receipts=marketplaceSettlementReceipts(await d.read()),queued=await d.queued()
+  const names=d.names?await d.names():{}
   // Activation is durable: deployment/restarts do not email historical payments.
   let prepared=0
   for(const r of receipts.filter(r=>r.settledAt>=startedAt&&!queued.has(createHash('sha256').update(r.id).digest('hex')))){
@@ -33,6 +35,7 @@ export async function reconcileMarketplaceReceiptEmails(d=defaults){
    if(!await d.settings(r.projectId))continue
    // Identity/provider failures for one recipient must not block unrelated receipts.
    const to=await d.recipient(r).catch(()=>null);if(!to)continue
+   r.marketplaceName=names[r.projectId]
    const pdf=await d.pdf(r)
    prepared++
    await d.queue(r.id,r.projectId,{to,fromName:'Hash PayLink',...marketplaceReceiptEmail(r),context:'marketplace '+r.kind+' receipt',attachments:[{filename:r.id+'.pdf',content:pdf.toString('base64'),content_type:'application/pdf'}]})

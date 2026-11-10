@@ -20,3 +20,12 @@
 ## Separate developer reporting
 
 The owner prefers a daily batch summary for developers rather than a copy of every recipient receipt. That reporting feature is not part of this change. API/webhook settlement reporting remains unchanged. No new public money-movement gate is enabled.
+
+## Release verification and naming follow-up
+
+- Receipt release 87eff67cb deployed live through Render dep-dbpbo5etlv9c73f4qdcg. Developer portal and health returned 200.
+- Production worker activation was confirmed. Both historical pilot receipts remained absent from the email outbox.
+- Pixel home showed Marketplace refund, Received, +0.03 USDC after app resume. This verifies receipt visibility, not a general auto-refresh fix.
+- The owner's naming correction uses the registered marketplace app name plus Refund/Payout in Pocket. Email subject and PDF details use the same server-owned name. Missing names retain a generic fallback; names are escaped in email HTML.
+- The live read-only projection returned Hash PayLink Marketplace Test - Refund exactly once. Focused receipt tests and TypeScript checks passed, including app-name escaping, fee display, owner isolation, and durable email idempotency. Both named PDF variants were rendered and inspected.
+- The initial full regression run passed all 37 suites; focused receipt outbox and Pocket adapter tests also passed. No funds or historical emails were sent.

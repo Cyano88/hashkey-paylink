@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto'
 import {formatUnits,getAddress} from 'viem'
 import type {MarketplaceStore} from './repository.js'
 import {marketplaceWalletReceipt} from './wallet-receipt.js'
-export type MarketplaceSettlementReceipt={id:string;projectId:string;paymentId:string;kind:'refund'|'payout';recipient:string;sender:string;amount:string;debitAmount:string;networkFee:string;feePayer:'marketplace'|'seller';transactionHash:string;settledAt:number}
+export type MarketplaceSettlementReceipt={id:string;projectId:string;marketplaceName?:string;paymentId:string;kind:'refund'|'payout';recipient:string;sender:string;amount:string;debitAmount:string;networkFee:string;feePayer:'marketplace'|'seller';transactionHash:string;settledAt:number}
 const hash=/^0x[0-9a-f]{64}$/i
 /** Read-only projection from finalized accounting evidence. Never a send instruction. */
 export function marketplaceSettlementReceipts(store:MarketplaceStore|undefined):MarketplaceSettlementReceipt[]{

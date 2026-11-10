@@ -30,14 +30,17 @@ const copy=marketplaceReceiptEmail(receipts[0]);assert.match(copy.text,/Fee dedu
 assert.ok(activeReceiptSettings({capabilities:['marketplace_payments'],operationalStatus:'active'}));assert.equal(activeReceiptSettings({capabilities:['marketplace_payments'],operationalStatus:'suspended'}),undefined)
 let outbox={jobs:{}},queued=0
 const outboxDeps={enabled:()=>true,from:()=> 'receipts@example.com',now:()=>3000,read:async()=>outbox,mutate:async fn=>outbox=fn(outbox)}
-const deps={enabled:()=>true,now:()=>3000,activation:async()=>({startedAt:1500}),read:async()=>state,queued:async()=>new Set(Object.keys(outbox.jobs)),settings:async()=>({enabled:true}),recipient:async r=>r.kind==='refund'?'buyer@example.com':'seller@example.com',pdf:async()=>Buffer.from('fixture'),queue:async(...args)=>{queued++;return queuePreparedReceiptEmail(...args,outboxDeps)}}
+const deps={names:async()=>({project_a:'Example Marketplace'}),enabled:()=>true,now:()=>3000,activation:async()=>({startedAt:1500}),read:async()=>state,queued:async()=>new Set(Object.keys(outbox.jobs)),settings:async()=>({enabled:true}),recipient:async r=>r.kind==='refund'?'buyer@example.com':'seller@example.com',pdf:async()=>Buffer.from('fixture'),queue:async(...args)=>{queued++;return queuePreparedReceiptEmail(...args,outboxDeps)}}
 await reconcileMarketplaceReceiptEmails(deps);await reconcileMarketplaceReceiptEmails(deps)
 assert.equal(queued,2);assert.equal(Object.keys(outbox.jobs).length,2)
 assert.deepEqual(Object.values(outbox.jobs).map(j=>j.input.to).sort(),['buyer@example.com','seller@example.com'])
+assert.ok(Object.values(outbox.jobs).every(j=>j.input.subject.startsWith('Example Marketplace - ')))
+assert.equal(marketplaceReceiptActivity([{...receipts[0],marketplaceName:'Example Marketplace'}],payer)[0].contextLabel,'Example Marketplace - Refund')
+assert.match(marketplaceReceiptEmail({...receipts[0],marketplaceName:'<Test & Marketplace>'}).html,/&lt;Test &amp; Marketplace&gt;/)
 outbox={jobs:{}};queued=0
 await reconcileMarketplaceReceiptEmails({...deps,activation:async()=>({startedAt:2500})});assert.equal(queued,0,'no retroactive email')
 await reconcileMarketplaceReceiptEmails({...deps,recipient:async()=>null});assert.equal(queued,0,'no fallback to developer email')
 await assert.rejects(()=>queuePreparedReceiptEmail('invalid','project_a',{to:'bad\n@example.com',subject:'a',text:'a',html:'a',context:'test'},outboxDeps),/Verified/)
 fs.mkdirSync('output/marketplace-receipts',{recursive:true})
-for(const r of receipts){const pdf=await marketplaceReceiptPdf(r);assert.ok(pdf.subarray(0,4).toString()==='%PDF');fs.writeFileSync('output/marketplace-receipts/'+r.kind+'.pdf',pdf);fs.writeFileSync('output/marketplace-receipts/'+r.kind+'.html',marketplaceReceiptEmail(r).html)}
+for(const raw of receipts){const r={...raw,marketplaceName:'Example Marketplace'};const pdf=await marketplaceReceiptPdf(r);assert.ok(pdf.subarray(0,4).toString()==='%PDF');fs.writeFileSync('output/marketplace-receipts/'+r.kind+'.pdf',pdf);fs.writeFileSync('output/marketplace-receipts/'+r.kind+'.html',marketplaceReceiptEmail(r).html)}
 console.log('PASS verified Marketplace receipt projection, owner scope, deposit deduplication, fees, recipient isolation, durable email idempotency, activation cutoff, and refund/payout PDF generation. No live emails sent.')
