@@ -11,6 +11,7 @@ import { CHAIN_META, type ChainKey } from './chains'
 import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
+  marketplaceName?: string
   payerFees?:PayerCheckoutFeeEvidence
   marketplaceBankFees?:{quoteId:string;debitUnits:string;ngnPaidMinor:string;exchangeRate?:string;chargedProviderFeeUnits?:string;chargedNetworkFeeUnits?:string}
   marketplaceWalletFees?:MarketplaceWalletReceiptAmounts
@@ -184,6 +185,14 @@ export function receiptChainKey(value?: string): ChainKey | 'xlayer' | undefined
   return chain === 'xlayer' ? 'xlayer' : Object.prototype.hasOwnProperty.call(CHAIN_META, chain) ? chain as ChainKey : undefined
 }
 
+// Settlement receipts preserve micro-unit precision without redundant trailing zeros.
+function marketplaceReceiptAmount(value: string) {
+  const match = /^(\d+)(?:\.(\d{1,6}))?$/.exec(value)
+  if (!match) return value
+  const fraction = (match[2] || '').replace(/0+$/, '').padEnd(2, '0')
+  return match[1].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + fraction
+}
+
 export function compactReceiptAmount(value?: string, asset = 'USDC') {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return value || '0'
@@ -309,6 +318,17 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       ]:!receipt.merchantFees&&receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
   }
+  if (['marketplace-refund','marketplace-payout'].includes(receipt.source || '')) {
+    const kind = receipt.source === 'marketplace-refund' ? 'Refund' : 'Payout'
+    return {variant:'general',badge:kind,amount:marketplaceReceiptAmount(receipt.amount)+' '+receipt.asset,timestamp:fmtTime(receipt.createdAt),reference,rows:[
+      {label:'Type',value:kind},
+      ...(receipt.marketplaceName ? [{label:'Marketplace',value:receipt.marketplaceName}] : []),
+      {label:'Network',value:network},
+      {label:'From',value:receipt.payer || '-',mono:true},
+      {label:'To',value:receipt.recipient || '-',mono:true},
+      ...(receipt.feeAmount ? [{label:kind === 'Refund' ? 'Fee deducted' : 'Withdrawal fee',value:marketplaceReceiptAmount(receipt.feeAmount)+' '+(receipt.feeAsset || receipt.asset)}] : []),
+    ]}
+  }
   if(['wallet-transfer','wallet-deposit','wallet-withdrawal'].includes(receipt.source||'')&&['money_in','money_out'].includes(receipt.type)){
     const incoming=receipt.type==='money_in'
     const narration=receipt.narration||receipt.memo||''
@@ -432,7 +452,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       { label: 'Network', value: network },
       { label: 'From', value: receipt.payer || '-', mono: true },
       { label: 'To', value: recipient, mono: /^0x/.test(recipient) },
-      { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
+      ...((/^0x[0-9a-f]{40}$/i.test(destination) ? destination.toLowerCase() === recipient.toLowerCase() : destination.trim() === recipient.trim()) ? [] : [{ label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) }]),
       ...(!automaticBankNarration && narration ? [{ label: 'Narration', value: narration }] : []),
       ...(localAmount ? [{ label: bankPayout ? 'Paid with' : pocketUsdc ? 'Local amount' : `Total ${receipt.asset}`, value: bankPayout || !pocketUsdc ? `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}` : localAmount }] : []),
       ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount, receipt.asset)} ${receipt.asset || 'USDC'}` }] : []),

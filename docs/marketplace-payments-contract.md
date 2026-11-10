@@ -1,6 +1,10 @@
 # Marketplace Payments - implementation contract
 
-Status: foundation under development; not a production or public sandbox integration.
+Status (2026-11-10): internal funded Base USDC pilot verified; external production and public sandbox financial APIs remain closed.
+
+Current evidence: collection, wallet payout and partial buyer refund finalized on Base; buyer receipt visibility and recipient email wiring verified separately. API route mounting, recurring execution/reconciliation and live external webhook acceptance remain launch gates. USDT and NGN marketplace payouts have not completed an authorized live canary.
+
+The implementation checkpoints below are chronological history. Statements about missing components in earlier checkpoints describe that checkpoint, not a current readiness verdict. See `audits/2026-11-10-marketplace-production-readiness.md` for the current release decision.
 Capability: marketplace_payments. Initial network: Base. Assets: USDC and USDT, accounted for separately.
 
 ## Settlement comes first
@@ -57,7 +61,7 @@ Required before activation:
 6. Add transactional webhook outbox, receipts and backing/liability reconciliation. The initial single durable-book store is a foundation, not a production-scale accounting design.
 7. Validate live funding, split releases, both wallet assets, NGN payout, partial refunds and restart/timeout recovery using authorized canaries before enabling integrations.
 
-Fixtures use synthetic funding and settlement evidence. No production custody, signing, provider payout, public marketplace execution endpoint or live-funded escrow is enabled by this change.
+Foundation fixtures use synthetic funding and settlement evidence. A later internal Base USDC pilot verified real holding-wallet collection, payout and refund; this does not activate external marketplace endpoints or establish USDT/NGN production readiness.
 
 ## Wallet beneficiary implementation checkpoint
 

@@ -11,16 +11,16 @@ assert.equal(cachedPocketDirectLiquidity({...snapshot,wallets:{}},'base',1500000
 const bank={eventId:'fixture',txHash:'0x'+'2'.repeat(64),chain:'base',payer:'fixture',memo:'Bank transfer',amount:'1',ts:now,source:'bank-withdraw',direction:'out',paycrestStatus:'pending'}
 assert.equal(pocketActivityStatus(bank),'pending')
 const handoff={...bank,handoffVerified:true,bankSettlementStatus:'pending'}
-const receipt=pocketActivityReceipt(handoff)
-assert.equal(paymentReceiptOutcome(receipt).state,'successful')
+const receipt=pocketActivityReceipt(handoff,{allowPending:true})
+assert.equal(paymentReceiptOutcome(receipt).state,'pending')
 assert.equal(paymentReceiptView(receipt).rows.find(r=>r.label==='Bank delivery').value,'Processing')
 assert.equal(pocketActivityStatus({...handoff,txHash:''}),'pending')
 assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'refunding'}),'reversing')
 assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'refunded'}),'reversed')
 assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'expired'}),'payout incomplete')
-assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'failed'}),'failed')
+assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'failed'}),'payout incomplete')
 assert.equal(paymentReceiptView(pocketActivityReceipt({...handoff,bankSettlementStatus:'settled'})).rows.find(r=>r.label==='Bank delivery').value,'Delivered')
-console.log('PASS fresh direct routing hints reject stale/insufficient balances; only verified bank handoffs succeed; bank delivery/refunds remain explicit')
+console.log('PASS fresh direct routing hints reject stale/insufficient balances; bank handoffs remain pending until settlement; bank delivery/refunds remain explicit')
 
 assert.equal(cachedPocketDirectLiquidity({...snapshot,displayRows:[{...row,stale:true,observedAt:now-120000}]},'base',1500000n,now,true)?.route.kind,'direct')
 assert.equal(cachedPocketDirectLiquidity({...snapshot,displayRows:[{...row,balance:1,stale:true}]},'base',1500000n,now,true),null)

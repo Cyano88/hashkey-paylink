@@ -95,6 +95,8 @@ export function pocketBillTitle(category?: string): string {
 }
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
+  if (normalizedSource(row) === 'marketplace-refund') return 'Refund'
+  if (normalizedSource(row) === 'marketplace-payout') return 'Payout'
   if(row.settlementType==='hosted_checkout')return 'Web payment '+(row.direction==='in'?'received':'sent')
   if (normalizedSource(row) === 'esim') return pocketActivityStatus(row) === 'refunded' ? 'eSIM refunded' : 'eSIM purchase'
   if (normalizedSource(row) === 'wallet-bridge') return (row.assetSymbol || 'USDC') + ' bridge'
@@ -136,6 +138,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     receiptId: row.receiptId || row.billReference || row.eventId,
     receiptHash: row.txHash || reference,
     title: pocketMovementTitle(row),
+    marketplaceName: ['marketplace-refund','marketplace-payout'].includes(source) ? row.merchantName || (row.contextLabel?.match(/^(.*) - (?:Refund|Payout)$/)?.[1]) : undefined,
     status: pocketActivityStatus(row),
     bankSettlementStatus: source === 'bank-withdraw' || source === 'xpay' ? row.bankSettlementStatus || row.paycrestStatus : undefined,
     eventId: row.eventId,

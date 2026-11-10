@@ -134,8 +134,9 @@ assert.equal(paymentReceiptOutcome({status:'confirmed'}).label,'Successful')
 
 for (const status of ['failed','rejected','cancelled']) {
  const row={...bankPending,paycrestStatus:status}
- assert.equal(pocketActivityStatus(row),'failed')
- assert.equal(pocketActivityReceipt(row,{allowPending:true})?.status,'failed')
+ assert.equal(pocketActivityStatus(row),'payout incomplete')
+ assert.equal(pocketActivityReceipt(row,{allowPending:true})?.status,'payout incomplete')
+ assert.equal(pocketActivityStatus({...row,txHash:'',handoffVerified:false}),'failed')
 }
 for (const status of ['pending','deposited','fulfilling','fulfilled','validated','settling']) assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:status}),'pending')
 assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:'settled'}),'successful')
@@ -171,3 +172,5 @@ assert.equal(paymentReceiptOutcome({source:'request',status:'awaiting response'}
 assert.equal(paymentReceiptOutcome({source:'request',status:'processing'}).label,'Processing')
 assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Refunded')
 assert.equal(paymentReceiptOutcome({status:'expired'}).state,'failed')
+
+assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:'fulfilled',handoffVerified:true}),'pending','funding handoff is not bank settlement')
