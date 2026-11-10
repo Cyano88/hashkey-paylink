@@ -1,3 +1,4 @@
+import {isDeepStrictEqual} from 'node:util'
 import {walletFeeDisclosure,validateMarketplaceWalletQuote} from './wallet-quotes.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {getAddress} from 'viem'
@@ -54,7 +55,7 @@ export function createMarketplaceWalletReconciliation(dependencies:Dependencies)
     const current=locate(s,projectId,paymentId,operationId),{book,operation,attempt}=current
     validate(evidence,current,d.now())
     const previous=book.walletReconciliations?.find(r=>r.evidence.evidenceId===evidence.evidenceId)
-    if(previous){if(JSON.stringify({...previous.evidence,finalizedAt:evidence.finalizedAt})!==JSON.stringify(evidence))throw Error('Wallet reconciliation evidence was changed.');return s}
+    if(previous){if(!isDeepStrictEqual({...previous.evidence,finalizedAt:evidence.finalizedAt},evidence))throw Error('Wallet reconciliation evidence was changed.');return s}
     if(operation.status==='settled'||operation.status==='failed')throw Error('Wallet payout is already final; conflicting evidence requires review.')
     if(s.books.some(b=>b.fundingEvidence===evidence.evidenceId||b.operations.some(o=>o.evidenceId===evidence.evidenceId)))throw Error('Wallet outcome evidence was already consumed.')
     if(s.books.some(b=>b.refundExecutions?.some(e=>e.transactionHash===evidence.transactionHash)))throw Error('Transaction already used by a marketplace refund.')

@@ -4,7 +4,8 @@ import {createMarketplaceRepository} from '../api/marketplace/repository.ts'
 import {walletTransferHash} from '../api/marketplace/wallet-execution.ts'
 const wallet=privateKeyToAccount('0x'+'44'.repeat(32))
 let stored,queue=Promise.resolve(),now=1000000,preflight
-const deps={now:()=>now,preflightWalletExecution:transfer=>preflight(transfer),read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{const next=fn(structuredClone(stored||{books:[],drafts:[]}));stored=next;return structuredClone(next)});queue=job.catch(()=>{});return job}}
+function jsonb(v){if(Array.isArray(v))return v.map(jsonb);if(v&&typeof v==='object')return Object.fromEntries(Object.keys(v).sort().map(k=>[k,jsonb(v[k])]));return v}
+const deps={now:()=>now,preflightWalletExecution:transfer=>preflight(transfer),read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{const next=fn(structuredClone(stored||{books:[],drafts:[]}));stored=jsonb(next);return structuredClone(next)});queue=job.catch(()=>{});return job}}
 let repo=createMarketplaceRepository(deps)
 const good=transfer=>({holdingId:'holding_one',holdingRevision:'revision_one',sender:'0x'+'22'.repeat(20),feePolicyId:'fee_policy_one',transferHash:walletTransferHash(transfer),expiresAt:now+60000,holdingApproved:true,authorizationActive:true,feesCoveredOutsideAllocation:true,additionalTokenDebitUnits:'0'})
 async function reserved(asset,id){
@@ -76,3 +77,14 @@ stored=structuredClone(original);timeout=true;providerState='COMPLETE';receiptSt
 custody=createMarketplaceWalletCustody(input);await assert.rejects(()=>custody.submit(...refs,'worker_timeout'))
 const sent=sends;transaction=undefined;await custody.submit(...refs,'worker_retry');assert.equal(sends,sent);assert.equal(stored.books[0].balances[0].reserved,'1500000')
 console.log('PASS Circle wallet custody: fail-closed gates, exact formatted USDC, durable pre-send binding, concurrent submission, timeout recovery, no blind resend, finalized exact payout, reorg/wrong-chain/extra-outflow rejection, terminal failure restoration and idempotent webhooks. Fixtures only; no funds moved.')
+
+// Independent preflight checks must all start before any provider result is ready.
+stored=structuredClone(original);allowed=true;backed=true;fees=true;timeout=false
+let startedChecks=0,releaseChecks
+const barrier=new Promise(resolve=>{releaseChecks=resolve})
+const gateCheck=async value=>{startedChecks++;if(startedChecks===4)releaseChecks();await barrier;return value}
+const concurrent=createMarketplaceWalletCustody({...input,circle:{...circle,verifyConfiguredWallet:()=>gateCheck({})},verifyBacking:()=>gateCheck({backed:true}),authorize:()=>gateCheck(true),verifyFees:()=>gateCheck({feePolicyId:'concurrent_checks',expiresAt:now+60000,feesCoveredOutsideAllocation:true,additionalTokenDebitUnits:'0'})})
+let checkTimer
+try{await Promise.race([concurrent.submit(...refs,'worker_concurrent'),new Promise((_,reject)=>{checkTimer=setTimeout(()=>reject(Error('Independent checks did not overlap')),1000)})])}finally{clearTimeout(checkTimer)}
+assert.equal(startedChecks,4)
+console.log('PASS independent custody checks overlap without removing preflight guards.')

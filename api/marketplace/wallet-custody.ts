@@ -40,11 +40,14 @@ export function createMarketplaceWalletCustody(input:Dependencies){
  const execution=createMarketplaceWalletExecution({...d,preflightWalletExecution:async transfer=>{
   gate(transfer.projectId)
   const current=locate(await d.read(),transfer.projectId,transfer.paymentId,transfer.operationId);holding(current)
-  await circle.verifyConfiguredWallet()
-  if(!(await d.verifyBacking()).backed)throw Error('Marketplace holding is not backed.')
-  const fees=await d.verifyFees(transfer)
+  // Independent read-only checks share the same strict preflight deadline.
+  const [,backing,fees,authorized]=await Promise.all([
+   circle.verifyConfiguredWallet(),d.verifyBacking(),d.verifyFees(transfer),
+   authorize(transfer.projectId,current.reservation.authorization.credentialId),
+  ])
+  if(!backing.backed)throw Error('Marketplace holding is not backed.')
   if(fees.feesCoveredOutsideAllocation!==true||fees.additionalTokenDebitUnits!=='0')throw Error('Marketplace payout gas coverage is not verified.')
-  if(!await authorize(transfer.projectId,current.reservation.authorization.credentialId))throw Error('Marketplace payout authority was revoked.')
+  if(!authorized)throw Error('Marketplace payout authority was revoked.')
   return {...fees,feesCoveredOutsideAllocation:true,additionalTokenDebitUnits:'0',holdingId:d.holdingId,holdingRevision:d.holdingRevision,sender:d.config.treasuryAddress,transferHash:walletTransferHash(transfer),holdingApproved:true,authorizationActive:true}
  }})
  function validate(tx:CircleDeveloperTransaction,current:ReturnType<typeof locate>){
