@@ -23,7 +23,11 @@ export function marketplaceFields(value:unknown,names:string[]):Record<string,un
 export function createMarketplaceApplication(env:NodeJS.ProcessEnv=process.env){
  if(env.MARKETPLACE_INSTRUCTIONS_ENABLED!=='true')throw Error('Marketplace instructions are not enabled.')
  const settings=readMarketplaceRuntimeConfig(env),chain=createPublicClient({transport:http(env.PRIVATE_RPC_URL||base.rpcUrls.default.http[0],{timeout:10000,retryCount:0})})
- const collections=createMarketplaceCollectionRuntime({env,chain}),gas=createMarketplaceGasQuotes({config:settings.config,maximumFeeUnits:env.MARKETPLACE_MAX_NETWORK_FEE_UNITS||'',providerSurchargeBps:Number(env.MARKETPLACE_PROVIDER_SURCHARGE_BPS??'NaN')})
+ // Identity setup and authenticated reads must not activate collection/signing
+ // adapters. Financial gates remain enforced when those operations are requested.
+ const collectionRuntime=()=>createMarketplaceCollectionRuntime({env,chain})
+ const collections={createCheckout:(...args:Parameters<ReturnType<typeof createMarketplaceCollectionRuntime>['createCheckout']>)=>collectionRuntime().createCheckout(...args),resolveRefundCollection:(...args:Parameters<ReturnType<typeof createMarketplaceCollectionRuntime>['resolveRefundCollection']>)=>collectionRuntime().resolveRefundCollection(...args)}
+ const gas={wallet:(...args:Parameters<ReturnType<typeof createMarketplaceGasQuotes>['wallet']>)=>createMarketplaceGasQuotes({config:settings.config,maximumFeeUnits:env.MARKETPLACE_MAX_NETWORK_FEE_UNITS||'',providerSurchargeBps:Number(env.MARKETPLACE_PROVIDER_SURCHARGE_BPS??'NaN')}).wallet(...args)}
  const quoteKey='hashpaylink:marketplace-wallet-quotes:v1'
  type Quotes={quotes:MarketplaceWalletQuote[]}
  const resolveQuote=async({projectId,paymentId,quoteId}:{projectId:string;paymentId:string;quoteId:string})=>(await readDurableJson<Quotes>(quoteKey))?.quotes.find(q=>q.projectId===projectId&&q.paymentId===paymentId&&q.quoteId===quoteId)||null

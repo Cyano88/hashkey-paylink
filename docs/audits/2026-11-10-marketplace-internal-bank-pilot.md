@@ -26,3 +26,7 @@ Verified the exact existing account `onojacyano@gmail.com` using Privy and curre
 Remaining live acceptance: seller signs in and connects their account, registers a matching bank through hosted verification, funds a new real order sufficient for 1 USDC net conversion plus quoted fees, and confirms bank arrival. Do not fabricate identity consent, beneficiary ownership, ledger funding or receipt success. Automatic provider-return restoration remains deliberately unavailable until a canonical return transaction can be bound to the provider order; ambiguous/partial outcomes retain reservations.
 
 Provider references checked: https://docs.paycrest.io/api-reference/sender/initiate-payment-order-v2 and https://docs.paycrest.io/api-reference/sender/get-payment-order-by-id-v2 .
+
+## Setup-only follow-up
+
+Production preflight exposed a collection-disabled constructor dependency on seller session endpoints. Collection and gas adapters now initialize only when their financial operation is requested. A dedicated setup-gate test plus application and pooled-bank regressions passed; production-environment construction passed with all bank payout gates still off. Focused TypeScript passed (34 relevant files after the previous checkpoint commit).
