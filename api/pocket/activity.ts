@@ -1,3 +1,4 @@
+import {readPocketMarketplaceActivity} from './marketplace-activity.js'
 import {merchantFeeTotal} from '../../src/lib/merchantPaymentFees.js'
 import {readCrossBridgeActivity} from './cross-bridge-activity.js'
 import {readPocketCheckoutActivity} from './checkout-activity.js'
@@ -454,7 +455,7 @@ const sourceGroups: Record<string, Partial<PocketActivityHandlerDependencies>> =
 export async function transformPocketActivitySnapshot(owner:string, snapshot:import('../../src/pocket/lib/pocketSchemas.js').PocketActivityReadData) {
     // Read persisted bank context before publishing wallet logs. This does not
     // poll Paycrest or wait for bank settlement; the workers own that work.
-    const [hashes, history, bankRoutes, assetActions] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false }), listCirclePocketActions(owner, 500, 'bank-withdraw.route'), listCirclePocketActions(owner, 500)])
+    const [hashes, history, bankRoutes, assetActions, marketplaceRows] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false }), listCirclePocketActions(owner, 500, 'bank-withdraw.route'), listCirclePocketActions(owner, 500),readPocketMarketplaceActivity(owner)])
     const bankRows = history.payments.map(sanitizedActivityRow)
     const assetRows = assetActions.flatMap(record => { const row = bridgeActivityRow(record); return row ? [row] : [] })
     const closedApprovals = new Set(assetActions.filter(record=>record.action==='wallet.swap'&&['cancelled','not_submitted'].includes(record.status)&&!record.metadata?.txHash).map(record=>record.resourceId||record.idempotencyKey.replace(/^pocket:arc-swap:/,'')))
@@ -465,7 +466,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
       const parent = route?.metadata?.intentId && bankRows.find(item => item.source === 'bank-withdraw' && item.providerReference === route.metadata!.intentId)
       return parent ? {...row,fundingParent:'bank-withdraw:'+route!.metadata!.intentId,fundingPayment:parent} : row
     })
-    const payments = collapsePocketAssetMoves(groupPocketPaymentFunding(mergePocketActivityRows(linkedRows, bankRows)))
+    const payments = collapsePocketAssetMoves(groupPocketPaymentFunding(mergePocketActivityRows(linkedRows, [...bankRows,...marketplaceRows])))
     for (const row of payments) for (const funding of row.paymentFunding || []) {
       hashes.add(funding.txHash.toLowerCase())
       if (funding.destinationTxHash) hashes.add(funding.destinationTxHash.toLowerCase())

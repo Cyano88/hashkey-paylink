@@ -20,6 +20,14 @@ export async function queueCheckoutReceiptEmail(to:string,receipt:BillingReceipt
  const input:SendEmailInput={to,fromEmail:d.from(),fromName:receipt.merchant+' via Hash PayLink',...(receipt.supportEmail?{replyTo:receipt.supportEmail}:{}),...copy,context:'checkout receipt',idempotencyKey:'checkout-receipt/'+id,attachments:[{filename:'Receipt-'+receipt.id+'.pdf',content:pdf.toString('base64'),content_type:'application/pdf'}]}
  await d.mutate(s=>{s.jobs[id]??={id,projectId:receipt.projectId,input,state:'pending',createdAt:d.now(),attempts:0,nextAt:d.now()};return s})
 }
+/** Reuses the durable, leased receipt outbox for other verified receipt types. */
+export async function queuePreparedReceiptEmail(receiptId:string,projectId:string,message:Omit<SendEmailInput,'fromEmail'|'idempotencyKey'>,d=defaults){
+ if(!d.enabled()||!d.from())return
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(message.to)||/\r|\n/.test(message.to)||message.to.length>254)throw Error('Verified receipt email required.')
+ const id=createHash('sha256').update(receiptId).digest('hex')
+ const input={...message,fromEmail:d.from(),idempotencyKey:'checkout-receipt/'+id}
+ await d.mutate(s=>{s.jobs[id]??={id,projectId,input,state:'pending',createdAt:d.now(),attempts:0,nextAt:d.now()};return s})
+}
 export async function drainCheckoutReceiptEmails(d=defaults){
  if(!d.enabled())return
  for(const item of Object.values((await d.read()).jobs).filter(j=>j.state==='pending'&&j.nextAt<=d.now()).slice(0,10)){

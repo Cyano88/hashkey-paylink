@@ -1,3 +1,4 @@
+import {reconcileMarketplaceReceiptEmails} from './api/marketplace/receipt-emails.js'
 import marketplaceAccessHandler from './api/marketplace-access.js'
 import checkoutConfirmationHandler from './api/checkout-confirmation.js'
 import { pocketAppLinkPaths, pocketAndroidLinkExtensions } from './api/pocket/app-link-policy.js'
@@ -606,6 +607,7 @@ app.listen(PORT, () => {
 })
 
 const hostedCheckoutOutboxTimer = setInterval(() => {
+  void reconcileMarketplaceReceiptEmails().catch(()=>console.warn('[marketplace-receipt-email] preparation deferred'))
   void reconcileCheckoutReceiptEmails().catch(()=>console.warn('[receipt-email] delivery deferred'))
   void drainBscCheckoutWebhooks().catch(()=>console.warn('[bsc-checkout] webhook delivery deferred'))
   void reconcileBscSends().catch(()=>console.warn('[bsc-send] confirmation deferred'))

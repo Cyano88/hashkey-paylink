@@ -213,3 +213,11 @@ The runtime exposes only readiness and an allowlisted drain operation. Runtime c
 Run `node --import tsx scripts/marketplace-runtime-readiness.mjs` for safe local diagnostics. It reads the process environment only (no implicit dotenv files), performs no provider/network calls and prints fixed blocker codes without credentials, addresses, IDs or raw provider errors. `configured` means syntax/configuration checks pass; `workerConstructible` additionally requires adapters. `liveVerified` and `publicApiEnabled` remain false. The CLI intentionally supplies no production adapters, so it cannot declare a live worker ready.
 
 No sandbox network is silently substituted: the current token bindings, chain verifier and accounting plan require Base chain 8453. A provider-backed testnet run needs a deliberate test deployment with its own chain/token configuration and isolated data; current fixture tests are not Circle sandbox evidence.
+
+## Recipient receipt emails
+
+Finalized Base USDC wallet payouts and buyer refunds can produce receipt emails through Hash PayLink's receipt outbox. The receiving wallet must belong to a linked Pocket account with a currently verified email. Hash PayLink does not substitute the marketplace developer's email for a buyer or seller email. An external wallet without a verified recipient email still receives its on-chain settlement; no email receipt is sent.
+
+Buyer refund receipts show the requested amount returned with zero refund fee deducted. Seller payout receipts show the net received, withdrawal fee, and total balance debit. Failed or unfinalized transfers do not receive a completed receipt. Delivery uses durable retry and idempotency; historical settlements before email activation are excluded.
+
+Developer daily summaries are planned separately. Integrations must continue using authenticated API status and signed settlement webhooks, not email, to update orders and balances.
