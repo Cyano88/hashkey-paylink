@@ -135,3 +135,28 @@ const drained=await automated.refundWorker.drain('project_a')
 assert.equal(drained.results[0].status,'settled');assert.equal(drained.delivered,1)
 assert.equal((await automated.refundWorker.drain('project_a')).results.length,0)
 console.log('PASS configured internal worker submits authorized reservations, reconciles and drains completion outbox; default repository cannot run refunds.')
+
+// A successful durable commit can return after the pre-send deadline. No provider
+// call occurred, so only this invocation can safely record an abort and restore.
+stored=structuredClone(reservedSnapshot);timeout=false;clock=1000
+const beforeAbortCalls=calls
+const lateCommit=createMarketplaceRefundExecution({...deps,now:()=>clock,mutate:async fn=>{stored=fn(structuredClone(stored));clock=7000;return structuredClone(stored)}})
+await assert.rejects(()=>lateCommit.submit(...args),/before provider call; reservation restored/)
+assert.equal(calls,beforeAbortCalls)
+assert.equal(stored.books[0].refundExecutions[0].state,'failed')
+assert.equal(stored.books[0].refundExecutions[0].abortedBeforeSendAt,7000)
+assert.equal(stored.books[0].balances[0].reserved,'0')
+assert.equal(stored.books[0].balances[1].reserved,'0')
+assert.equal(stored.books[0].balances[0].refunded,'0')
+assert.equal(stored.feeAccounts[0].reserved,'0')
+assert.equal(stored.feeAccounts[0].available,'100000')
+assert.equal(stored.feeAccounts[0].accrued,'0')
+assert.equal(stored.books[0].refundEvents.length,1)
+assert.equal(stored.books[0].refundEvents[0].refundNetworkFee.chargedUnits,'0')
+const {abortMarketplaceRefundBeforeProviderCall}=await import('../api/marketplace/refund-execution.ts')
+const attempt=stored.books[0].refundExecutions[0]
+abortMarketplaceRefundBeforeProviderCall(stored,...args,attempt.idempotencyKey,8000)
+assert.equal(stored.books[0].refundEvents.length,1)
+attempt.transactionId=transactionId
+assert.throws(()=>abortMarketplaceRefundBeforeProviderCall(stored,...args,attempt.idempotencyKey,8000),/binding changed/)
+console.log('PASS known pre-provider deadline abort restores principal and fee reserve once; provider-associated attempts cannot abort.')

@@ -10,7 +10,7 @@ import type {MarketplaceStore} from './repository.js'
 import type {RefundReservation} from './refunds.js'
 import type {MarketplaceWalletEvent} from './wallet-reconciliation.js'
 
-export type RefundExecution={feeQuote?:RefundFeeQuote;refundId:string;idempotencyKey:string;refId:string;walletId:string;state:'unknown'|'submitted'|'settled'|'failed';transactionId?:string;transactionHash?:string;evidenceId?:string;terminalEvidence?:{providerState:string;receiptStatus:'success'|'reverted';blockHash:string;blockNumber:string;finalizedBlockNumber:string;verifiedAt:number}}
+export type RefundExecution={abortedBeforeSendAt?:number;feeQuote?:RefundFeeQuote;refundId:string;idempotencyKey:string;refId:string;walletId:string;state:'unknown'|'submitted'|'settled'|'failed';transactionId?:string;transactionHash?:string;evidenceId?:string;terminalEvidence?:{providerState:string;receiptStatus:'success'|'reverted';blockHash:string;blockNumber:string;finalizedBlockNumber:string;verifiedAt:number}}
 export type MarketplaceRefundEvent=Omit<MarketplaceWalletEvent,'type'> & {type:'marketplace.refund.settled'|'marketplace.refund.failed';refundId:string;refundNetworkFee?:{payer:string;asset:string;quoteId:string;chargedUnits:string}}
 type Circle=Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'verifyConfiguredWallet'|'createUsdcTransfer'|'getTransaction'> & Partial<Pick<ReturnType<typeof createCircleDeveloperTreasuryClient>,'findTransferByReference'>>
 type Dependencies={requireFeeReserve?:boolean;quoteFees?:(reservation:RefundReservation)=>Promise<RefundFeeQuote>;read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;enabled?:boolean;config:CircleTreasuryConfig;billsTreasuryAddress:string;holdingId:string;holdingRevision:string;circle?:Circle;chain:Pick<PublicClient,'getChainId'|'getTransactionReceipt'|'getBlock'>;authorize:(reservation:RefundReservation)=>Promise<boolean>}
@@ -74,7 +74,12 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
    })
    const claimed=locate(saved,projectId,paymentId,refundId).execution!
    if(claimed.idempotencyKey!==idempotencyKey)return structuredClone(claimed)
-   if(d.now()<authorizationStartedAt||d.now()-authorizationStartedAt>5000)throw Error('Refund submission deadline expired; recovery required.')
+   if(d.now()<authorizationStartedAt||d.now()-authorizationStartedAt>5000){
+    // This invocation has not called the provider. Record that fact atomically;
+    // provider timeouts and process crashes still remain unknown for recovery.
+    await d.mutate(s=>abortMarketplaceRefundBeforeProviderCall(s,projectId,paymentId,refundId,idempotencyKey,d.now()))
+    throw Error('Refund submission deadline expired before provider call; reservation restored.')
+   }
    // A timeout or crash leaves unknown. Never issue a second transfer on an ordinary retry.
    const created=await circle.createUsdcTransfer({idempotencyKey,refId,destinationAddress:before.reservation.collection.payerWallet,amount:formatUnits(BigInt(before.reservation.amountUnits),6),tokenAddress:before.reservation.collection.tokenAddress})
    return this.attachTransaction(projectId,paymentId,refundId,created.id)
@@ -144,4 +149,26 @@ export function createMarketplaceRefundExecution(dependencies:Dependencies){
    return structuredClone(locate(saved,projectId,paymentId,refundId).execution!)
   },
  }
+}
+
+/** Internal ledger primitive, ONLY when the submitting invocation proves it has
+ * not called the provider. Never invoke based on an empty provider lookup. */
+export function abortMarketplaceRefundBeforeProviderCall(store:MarketplaceStore,projectId:string,paymentId:string,refundId:string,idempotencyKey:string,now:number):MarketplaceStore{
+ const book=store.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId),r=book?.refundReservations?.find(r=>r.refundId===refundId),e=book?.refundExecutions?.find(e=>e.refundId===refundId)
+ if(!book||!r||!e||e.idempotencyKey!==idempotencyKey||e.transactionId||e.transactionHash||!Number.isSafeInteger(now)||now<0)throw Error('Refund abort binding changed.')
+ if(e.state==='failed'&&e.abortedBeforeSendAt!==undefined)return store
+ if(e.state!=='unknown')throw Error('Refund may have been submitted.')
+ let next=book
+ for(const a of r.allocations){
+  const op=next.operations.find(o=>o.id===a.operationId)
+  if(!op||op.status!=='unknown'||op.evidenceId!=='refund-submit:'+idempotencyKey)throw Error('Refund submission evidence changed.')
+  const evidenceId='refund-abort:'+createHash('sha256').update(JSON.stringify([idempotencyKey,a.operationId])).digest('hex')
+  next=applyMarketplaceCommand(next,projectId,evidenceId,{type:'result',operationId:a.operationId,status:'failed',evidenceId})
+ }
+ const done=next.refundExecutions!.find(e=>e.refundId===refundId)!
+ done.state='failed';done.abortedBeforeSendAt=now
+ next.refundEvents=[...(next.refundEvents||[]),{id:randomUUID(),type:'marketplace.refund.failed',refundId,operationId:refundId,projectId,paymentId,asset:'USDC',currency:'USDC',network:'base',...(e.feeQuote?{refundNetworkFee:{payer:'marketplace',asset:'USDC',quoteId:e.feeQuote.quoteId,chargedUnits:'0'}}:{}),debitUnits:r.amountUnits,recipientAmountUnits:'0',createdAt:now,delivery:'pending'}]
+ store.books[store.books.indexOf(book)]=next
+ if(e.feeQuote)settleRefundFee(store,projectId,paymentId,refundId,false)
+ return store
 }

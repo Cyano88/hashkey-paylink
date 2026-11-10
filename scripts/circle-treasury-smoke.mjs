@@ -133,7 +133,7 @@ const recoveryClient=createCircleDeveloperTreasuryClient({config,fetchImpl:async
  const parsed=new URL(url)
  assert.equal(parsed.pathname,'/v1/w3s/transactions');assert.equal(init.method??'GET','GET')
  assert.equal(parsed.searchParams.get('walletIds'),walletId);assert.equal(parsed.searchParams.get('refId'),'marketplace-refund:fixture')
- assert.equal(parsed.searchParams.get('pageSize'),'2');assert.equal(parsed.searchParams.get('blockchain'),'BASE');assert.equal(parsed.searchParams.get('txType'),'OUTBOUND');assert.equal(parsed.searchParams.get('operation'),'TRANSFER')
+ assert.equal(parsed.searchParams.get('pageSize'),'2');assert.equal(parsed.searchParams.has('blockchain'),false);assert.equal(parsed.searchParams.get('txType'),'OUTBOUND');assert.equal(parsed.searchParams.get('operation'),'TRANSFER')
  return new Response(JSON.stringify({data:{transactions:recoveryRows}}),{status:200})
 }})
 assert.equal(await recoveryClient.findTransferByReference('marketplace-refund:fixture'),null)
@@ -141,6 +141,7 @@ recoveryRows=[{id:transactionId,state:'SENT',walletId,refId:'marketplace-refund:
 assert.equal((await recoveryClient.findTransferByReference('marketplace-refund:fixture')).id,transactionId)
 recoveryRows.push({...recoveryRows[0]});await assert.rejects(()=>recoveryClient.findTransferByReference('marketplace-refund:fixture'),/ambiguous/)
 recoveryRows=[{...recoveryRows[0],walletId:walletSetId}];await assert.rejects(()=>recoveryClient.findTransferByReference('marketplace-refund:fixture'),/scope mismatch/)
+recoveryRows=[{id:transactionId,state:'SENT',walletId,refId:'marketplace-refund:fixture',blockchain:'MATIC',transactionType:'OUTBOUND'}];await assert.rejects(()=>recoveryClient.findTransferByReference('marketplace-refund:fixture'),/scope mismatch/)
 const previousRequests=recoveryRequests
 await assert.rejects(()=>recoveryClient.findTransferByReference('invalid reference'),/invalid/)
 assert.equal(recoveryRequests,previousRequests)

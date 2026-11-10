@@ -385,7 +385,9 @@ export function createCircleDeveloperTreasuryClient(options: {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,99}$/.test(refId)) {
       throw new CircleTreasuryError('CIRCLE_TRANSFER_REFERENCE_INVALID', 'Circle transfer reference is invalid.', 400)
     }
-    const query = new URLSearchParams({walletIds:config.walletId,refId,blockchain:config.blockchain,custodyType:'DEVELOPER',operation:'TRANSFER',txType:'OUTBOUND',includeAll:'true',pageSize:'2'})
+    // Base currently rejects the list endpoint's blockchain filter. Scope by
+    // wallet and reference, then enforce the returned blockchain below.
+    const query = new URLSearchParams({walletIds:config.walletId,refId,custodyType:'DEVELOPER',operation:'TRANSFER',txType:'OUTBOUND',includeAll:'true',pageSize:'2'})
     const body = await request('/v1/w3s/transactions?' + query)
     const rows = body?.data?.transactions
     if (!Array.isArray(rows) || rows.length > 1) {
