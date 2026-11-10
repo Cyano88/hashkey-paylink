@@ -22,7 +22,7 @@ export function createMarketplaceSellerRouter(){
     return res.json({ok:true,data:{beneficiaryId:b.beneficiaryId,last4:b.last4,status:b.status}})
    }
    return res.status(400).json({ok:false,error:'Invalid seller action.'})
-  }catch(error){const message=error instanceof Error?error.message:'';const safe=/^(Seller session|This seller|Consent is required|Seller identity replacement|Connect |Complete Nigerian Basic|Bank account name does not match|Use a resolved institution|Invalid bank account|Marketplace bank setup|Beneficiary version)/.test(message);return res.status(safe?400:503).json({ok:false,error:safe?message:'Seller setup could not be completed. Sign in again or retry shortly.'})}
+  }catch(error){const message=error instanceof Error?error.message:'';const safe=/^(Seller verification link has expired|Seller session|This seller|Consent is required|Seller identity replacement|Connect |Complete Nigerian Basic|Bank account name does not match|Use a resolved institution|Invalid bank account|Marketplace bank setup|Beneficiary version)/.test(message);return res.status(safe?400:503).json({ok:false,error:safe?message:'Seller setup could not be completed. Sign in again or retry shortly.'})}
  })
  return router
 }

@@ -1,3 +1,4 @@
+import SellerVerificationSkeleton from '../components/SellerVerificationSkeleton'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import DeveloperLayout from './DeveloperLayout'
@@ -10,7 +11,7 @@ const MarketplaceSellerVerificationPage=lazy(()=>import('../pages/MarketplaceSel
 const DeveloperCliAccessPage = lazy(() => import('../pages/DeveloperCliAccessPage'))
 
 export default function DeveloperApp() {
-  return <BrowserRouter><Suspense fallback={<DeveloperLoadingSkeleton fullPage />}><Routes>
+  return <BrowserRouter><Suspense fallback={window.location.pathname.replace(/\/$/,'')==='/marketplace/verify'?<SellerVerificationSkeleton/>:<DeveloperLoadingSkeleton fullPage />}><Routes>
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
     <Route path="marketplace/verify" element={<MarketplaceSellerVerificationPage/>}/>
     <Route element={<DeveloperLayout />}>

@@ -10,7 +10,8 @@ export function createMarketplaceSellerIdentity(d:Dependencies){
  async function session(token:string,owner:string){
   if(typeof token!=='string'||!/^[a-zA-Z0-9_-]{43}$/.test(token)||!owner)throw Error('Seller session is invalid or expired.')
   const record=(await d.read())?.sessions.find(s=>s.digest===digest(token))
-  if(!record||record.expiresAt<=d.now()||record.owner&&record.owner!==owner||!await d.authorize(record.projectId,record.credentialId))throw Error('Seller session is invalid or expired.')
+  if(record&&record.expiresAt<=d.now())throw Error('Seller verification link has expired. Return to your marketplace for a new link.')
+  if(!record||record.owner&&record.owner!==owner||!await d.authorize(record.projectId,record.credentialId))throw Error('Seller session is invalid or expired.')
   return record
  }
  async function identity(projectId:string,sellerId:string){

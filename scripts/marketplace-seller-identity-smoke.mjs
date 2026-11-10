@@ -39,5 +39,5 @@ authorized=false
 await assert.rejects(()=>service.inspect(token,'owner_a'),/invalid or expired/)
 await assert.rejects(issue,/authorization/)
 authorized=true;now+=3600001
-await assert.rejects(()=>service.connect(token,'owner_a',true),/invalid or expired/)
+await assert.rejects(()=>service.connect(token,'owner_a',true),/link has expired/)
 console.log('PASS seller identity consent, Pocket reuse, session binding, expiry, revocation, name matching and privacy (fixtures).')
