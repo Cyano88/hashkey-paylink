@@ -11,7 +11,7 @@ type PayoutEvent=MarketplaceBankEvent|MarketplaceWalletEvent|MarketplaceRefundEv
 // Reuses signed requests, project-owned URLs/secrets and public-HTTPS/DNS protections.
 export const marketplaceWebhookTransport=dispatchDeveloperWebhook
 export type MarketplaceDeliveryAttempt={token:string;startedAt:number;finishedAt?:number;result?:'delivered'|'failed'|'skipped';responseStatus?:number}
-export type MarketplaceDeliveryState={attempts?:number;nextAttemptAt?:number;leaseUntil?:number;claimToken?:string;deliveredAt?:number;deliveryAttempts?:MarketplaceDeliveryAttempt[]}
+export type MarketplaceDeliveryState={replayApprovedAt?:number;replayApprovals?:Array<{actorId:string;reason:string;at:number}>;attempts?:number;nextAttemptAt?:number;leaseUntil?:number;claimToken?:string;deliveredAt?:number;deliveryAttempts?:MarketplaceDeliveryAttempt[]}
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;notifyMarketplace?:typeof dispatchDeveloperWebhook}
 const delays=[30_000,120_000,600_000,1_800_000,3_600_000,7_200_000,21_600_000]
 const maxAttempts=8,leaseMs=60_000

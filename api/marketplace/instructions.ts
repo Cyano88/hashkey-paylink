@@ -20,7 +20,7 @@ type Dependencies = {
   repository: Repository
   /** Trusted server-side credential lookup, never a principal supplied in the request body. */
   resolvePrincipal?: (credential: string) => Promise<MarketplacePrincipal | null>
-  /** Explicit internal gate. The default resolver also requires rollout configuration. No public route is installed. */
+  /** Explicit gate. The default resolver also requires rollout configuration. */
   enabled?: boolean
 }
 
@@ -35,7 +35,7 @@ function fields(value: unknown, keys: string[]): Record<string, unknown> {
   return record
 }
 
-/** Unmounted application boundary. No generic command, funding or result endpoint. */
+/** Application boundary. No generic command, funding or result endpoint. */
 export function createMarketplaceInstructions(dependencies: Dependencies) {
   const {repository, resolvePrincipal = createMarketplacePrincipalResolver(), enabled = false} = dependencies
   async function authorize(credential: string, scope: MarketplaceScope) {

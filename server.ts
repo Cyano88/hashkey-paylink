@@ -1,3 +1,6 @@
+import {createMarketplaceOperationsHandler} from './api/marketplace/operations.js'
+import {createMarketplaceRouter} from './api/marketplace/http.js'
+import {startMarketplaceWorkers} from './api/marketplace/workers.js'
 import {reconcileMarketplaceReceiptEmails} from './api/marketplace/receipt-emails.js'
 import marketplaceAccessHandler from './api/marketplace-access.js'
 import checkoutConfirmationHandler from './api/checkout-confirmation.js'
@@ -467,6 +470,8 @@ const supportPresenceLimiter=rateLimit({name:'support-presence',windowMs:60_000,
 const supportRequestLimiter=(req:express.Request,res:express.Response,next:express.NextFunction)=>((req.method==='GET'&&req.query.presence)||(req.method==='POST'&&req.body?.action==='typing')?supportPresenceLimiter:strictLimiter)(req,res,next)
 app.all('/api/developer-support', supportRequestLimiter, developerSupportHandler)
 app.all('/api/marketplace-access', strictLimiter, marketplaceAccessHandler)
+app.use('/api/marketplace/v1', strictLimiter, createMarketplaceRouter())
+app.all('/api/marketplace-operations', strictLimiter, createMarketplaceOperationsHandler())
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/operations-session', strictLimiter, operationsSessionHandler)
 app.all('/api/operations-team', strictLimiter, operationsTeamHandler)
@@ -655,3 +660,5 @@ void drainPocketMoneyPushWorker().catch(error => {
 // General escrow is under development. No public agreement handlers or workers are mounted.
 // Existing Marketplace checkout accounting only; never starts payout/refund execution.
 void import('./api/marketplace/collection-observer.js').then(m=>m.startMarketplaceCollectionObserver()).catch(()=>console.warn('[marketplace] Collection observer startup deferred.'))
+
+startMarketplaceWorkers()

@@ -30,9 +30,11 @@ console.log('PASS refund runtime cannot construct without a backing-check adapte
 
 const walletInput={env:{...env,MARKETPLACE_WALLET_WORKER_ENABLED:'true',MARKETPLACE_INSTRUCTIONS_ENABLED:'true'},chain:{...adapters.chain,readContract:async()=>0n},verifyFees:async()=>{throw Error('No gas attestation')}}
 assert.ok(createMarketplaceWalletRuntime(walletInput))
-for(const patch of [{MARKETPLACE_WALLET_WORKER_ENABLED:'false'},{MARKETPLACE_INSTRUCTIONS_ENABLED:'false'},{MARKETPLACE_PROJECT_IDS:''}])assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,env:{...walletInput.env,...patch}}),/not ready/)
+for(const patch of [{MARKETPLACE_WALLET_WORKER_ENABLED:'false'},{MARKETPLACE_PROJECT_IDS:''}])assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,env:{...walletInput.env,...patch}}),/not ready/)
 assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,verifyFees:undefined}),/verified_wallet_fee_adapter_missing/)
 assert.throws(()=>createMarketplaceWalletRuntime({...walletInput,chain:{...adapters.chain}}),/base_rpc_client_missing/)
 console.log('PASS internal wallet runtime requires explicit gates, Base read client, isolated holding and an external verified gas adapter; construction does not send funds.')
 
 assert.equal(marketplaceRuntimeReadiness(env,{...adapters,quoteRefundFees:undefined}).workerConstructible,false)
+
+assert.ok(createMarketplaceWalletRuntime({...walletInput,env:{...walletInput.env,MARKETPLACE_INSTRUCTIONS_ENABLED:'false'}}),'disabled new instructions must not prevent reconciliation construction')

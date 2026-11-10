@@ -44,8 +44,18 @@ Read-only production audit:
 
 ## Receipt verification and release scope
 
-The original erroneous receipt was inspected on the connected Pixel. The native build comes from C:/Users/USER/pocket-play-update-20261101, whose source-lineage check passed; the recovery Git checkout is not the native build source. The native receipt fix was built and installed as the same debug app without clearing data. Subsequent live-screen verification is pending while the device is in use elsewhere.
+The original erroneous receipt was inspected on the connected Pixel. The native build comes from C:/Users/USER/pocket-play-update-20261101, whose source-lineage check passed; the recovery Git checkout is not the native build source. The native receipt fix was built and installed as the same debug app without clearing data. The corrected receipt was subsequently verified on the connected Pixel: Refund, Hash PayLink Marketplace Test, 0.03 USDC, one To row, no duplicate Destination/Narration, and Fee deducted 0.00 USDC.
 
 The actual receipt component passed automated browser checks at 320px and 426px: registered app name, exact refund amount, one recipient, no duplicate destination/narration, back/reopen, no horizontal overflow and image/PDF generation. Screenshots and exported image were inspected; the PDF export is one page. Test artifacts use synthetic addresses and do not constitute another payment.
 
 Bank handoff, receipt policy, bank receipt refresh, activity grouping and focused TypeScript checks pass. The native production web build and Android debug build pass. The native test install is not a Play Store release. Public activation is a separate decision after the P0 closure criteria above are met.
+
+## Follow-up blocker closure - Pixel and runtime wiring
+
+The Base USDC REST boundary is now mounted behind the existing financial gate. New tests cover real HTTP credential authentication/revocation, project isolation, idempotency, forbidden scope overrides and provider-error redaction. A service-level test exercises signed beneficiary ownership, payment creation, release, quoting, payout reservation, refund-fee funding, original-payer refund and cancellation.
+
+Recurring wallet/refund workers and independent leased webhook delivery are mounted, default closed. Gas coverage now requires a bounded, current operator-reviewed record and finalized canonical EntryPoint evidence. Historical webhook events are excluded at activation; founder-approved replay preserves event identity and attempt history. Founder-only operational status exposes unknown operations, expired quotes, backing and webhook backlog. Read `../marketplace-api-operations.md` for exact API and recovery procedures.
+
+Validation: 41 Marketplace/related suites passed, plus the founder recovery suite (42 total); focused TypeScript checks passed for 26 files. These are fixture results, not additional live payments or notification delivery. Pixel verification is complete.
+
+Remaining launch acceptance: confirmed seller wallets and authorized multi-seller API canary; current provider gas-policy approval and bounded coverage record; explicit webhook/email test destinations and observed delivery; operational alert routing/on-call ownership and restart/outage acceptance. Financial and notification activation remain closed. No disputed recipient is reused and no additional funds or notifications were sent. External-recipient email enrollment and developer daily summaries are not implemented; first-launch receipt email support is limited to verified linked Pocket recipients.

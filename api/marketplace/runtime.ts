@@ -12,7 +12,6 @@ import type {MarketplaceStore} from './repository.js'
 import {createBoundMarketplaceHostedCheckout} from '../hosted-checkouts.js'
 import {formatUnits} from 'viem'
 import {createMarketplaceRepository} from './repository.js'
-import {marketplaceWebhookTransport} from './webhooks.js'
 
 const reference=/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -22,11 +21,11 @@ type ExecutionConfig=NonNullable<RepositoryDependencies['refundExecution']>
 type RuntimeAdapters={quoteRefundFees:NonNullable<ExecutionConfig['quoteFees']>;chain:ExecutionConfig['chain'];authorizeRefund:ExecutionConfig['authorize'];verifyBacking:()=>Promise<{backed:boolean}>;authorizeExecution?:(projectId:string,credentialId:string)=>Promise<boolean>;resolveRefundCollection:NonNullable<RepositoryDependencies['resolveRefundCollection']>}
 
 /** Internal wallet worker composition. A verified provider gas-coverage adapter is
- * required; no default sponsorship assertion, route or scheduler is installed. */
+ * required; no default sponsorship assertion is accepted. */
 export function createMarketplaceWalletRuntime(input:{env:NodeJS.ProcessEnv;chain:Parameters<typeof createMarketplaceWalletCustody>[0]['chain'] & Parameters<typeof createMarketplaceBackingCheck>[0]['chain'];verifyFees:Parameters<typeof createMarketplaceWalletCustody>[0]['verifyFees']}){
  const settings=readMarketplaceRuntimeConfig(input.env),blockers=settings.blockers.filter(b=>b!=='worker_disabled')
  if(input.env.MARKETPLACE_WALLET_WORKER_ENABLED!=='true')blockers.push('wallet_worker_disabled')
- if(input.env.MARKETPLACE_INSTRUCTIONS_ENABLED!=='true')blockers.push('instructions_disabled')
+ // Revoked instruction authority blocks new submissions in preflight, while prior sends still reconcile.
  if(typeof input.verifyFees!=='function')blockers.push('verified_wallet_fee_adapter_missing')
  if(!input.chain||(['getChainId','getBlock','getTransactionReceipt','readContract'] as const).some(method=>typeof input.chain?.[method]!=='function'))blockers.push('base_rpc_client_missing')
  if(blockers.length)throw Error('Marketplace wallet runtime is not ready: '+blockers.join(', '))
@@ -34,7 +33,7 @@ export function createMarketplaceWalletRuntime(input:{env:NodeJS.ProcessEnv;chai
  const storage={read:()=>readDurableJson<MarketplaceStore>(key),mutate:(fn:(s:MarketplaceStore)=>MarketplaceStore)=>mutateDurableJson<MarketplaceStore>(key,s=>{if(!s)throw Error('Marketplace ledger is unavailable.');return fn(s)}),now:Date.now}
  const verifyBacking=createMarketplaceBackingCheck({read:storage.read,chain:input.chain,holding:{id:settings.holdingId,revision:settings.holdingRevision,address:settings.config.treasuryAddress,billsAddress:settings.billsAddress}})
  const custody=createMarketplaceWalletCustody({...storage,enabled:true,config:settings.config,holdingId:settings.holdingId,holdingRevision:settings.holdingRevision,billsAddress:settings.billsAddress,projectIds:settings.projectIds,chain:input.chain,verifyBacking,verifyFees:transfer=>{if(!transfer.quote)throw Error('Live marketplace wallet payout requires an accepted fee quote.');return input.verifyFees(transfer)},authorize:createMarketplaceExecutionAuthority({env:()=>input.env})})
- const worker=createMarketplaceWalletWorker({...storage,execution:custody,webhooks:createMarketplaceWebhooks({...storage,notifyMarketplace:marketplaceWebhookTransport})})
+ const worker=createMarketplaceWalletWorker({...storage,execution:custody,webhooks:createMarketplaceWebhooks({...storage})})
  return {...custody,async drain(projectId:string,limit=10){
   if(!settings.projectIds.includes(projectId))throw Error('Marketplace project is not enabled.')
   return worker.drain(projectId,limit)
@@ -109,7 +108,7 @@ export function marketplaceRuntimeReadiness(env:NodeJS.ProcessEnv=process.env,ad
  return {configured:configuration.blockers.length===0,workerConstructible:blockers.length===0,liveVerified:false,publicApiEnabled:false,network:'base',asset:'USDC',blockers}
 }
 
-/** Unmounted composition root. Readiness is configuration only, never evidence of wallet ownership or backing. */
+/** Refund worker composition root. Readiness is configuration only, never evidence of wallet ownership or backing. */
 export function createMarketplaceRefundRuntime(input:{env:NodeJS.ProcessEnv;adapters:RuntimeAdapters}){
  const readiness=marketplaceRuntimeReadiness(input.env,input.adapters)
  if(!readiness.workerConstructible)throw Error('Marketplace refund runtime is not ready: '+readiness.blockers.join(', '))
@@ -119,7 +118,7 @@ export function createMarketplaceRefundRuntime(input:{env:NodeJS.ProcessEnv;adap
  const repository=createMarketplaceRepository({
   resolveRefundCollection:request=>{if(!allowed.has(request.projectId))throw Error('Marketplace project is not enabled.');return adapters.resolveRefundCollection(request)},
   refundExecution:{enabled:true,requireFeeReserve:true,quoteFees:adapters.quoteRefundFees,config,holdingId,holdingRevision,billsTreasuryAddress:billsAddress,chain:adapters.chain,authorize:async reservation=>allowed.has(reservation.collection.projectId)&&(await adapters.verifyBacking()).backed===true&&await adapters.authorizeRefund(reservation)&&await authorizeExecution(reservation.collection.projectId,reservation.authorization.credentialId)},
-  notifyMarketplace:marketplaceWebhookTransport,
+  // Independent activation-controlled webhook worker owns delivery.
  })
  return {readiness,async drain(projectId:string,limit=10){
   if(!allowed.has(projectId))throw Error('Marketplace project is not enabled.')
