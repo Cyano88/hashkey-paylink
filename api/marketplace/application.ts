@@ -1,3 +1,4 @@
+import {marketplaceSellerIdentity} from './seller-runtime.js'
 import {createPublicClient,http,getAddress} from 'viem'
 import {base} from 'viem/chains'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
@@ -25,12 +26,14 @@ export function createMarketplaceApplication(env:NodeJS.ProcessEnv=process.env){
  const resolveQuote=async({projectId,paymentId,quoteId}:{projectId:string;paymentId:string;quoteId:string})=>(await readDurableJson<Quotes>(quoteKey))?.quotes.find(q=>q.projectId===projectId&&q.paymentId===paymentId&&q.quoteId===quoteId)||null
  const repository=createMarketplaceRepository({...marketplaceStorage,walletVerificationClient:chain,resolveWalletQuote:resolveQuote,resolveRefundCollection:collections.resolveRefundCollection})
  const resolvePrincipal=createMarketplacePrincipalResolver({env:()=>env})
- return createMarketplaceService({repository,resolvePrincipal,createCheckout:collections.createCheckout,quoteWallet:gas.wallet,saveQuote:q=>mutateDurableJson<Quotes>(quoteKey,s=>({quotes:[...(s?.quotes||[]).filter(x=>x.expiresAt>Date.now()),q]}))})
+ return createMarketplaceService({sellerIdentity:marketplaceSellerIdentity(),repository,resolvePrincipal,createCheckout:collections.createCheckout,quoteWallet:gas.wallet,saveQuote:q=>mutateDurableJson<Quotes>(quoteKey,s=>({quotes:[...(s?.quotes||[]).filter(x=>x.expiresAt>Date.now()),q]}))})
 }
-export function createMarketplaceService({repository,resolvePrincipal,createCheckout,quoteWallet,saveQuote}:{repository:ReturnType<typeof createMarketplaceRepository>;resolvePrincipal:ReturnType<typeof createMarketplacePrincipalResolver>;createCheckout:ReturnType<typeof createMarketplaceCollectionRuntime>['createCheckout'];quoteWallet:ReturnType<typeof createMarketplaceGasQuotes>['wallet'];saveQuote:(q:MarketplaceWalletQuote)=>Promise<unknown>}){
+export function createMarketplaceService({sellerIdentity,repository,resolvePrincipal,createCheckout,quoteWallet,saveQuote}:{sellerIdentity?:ReturnType<typeof marketplaceSellerIdentity>;repository:ReturnType<typeof createMarketplaceRepository>;resolvePrincipal:ReturnType<typeof createMarketplacePrincipalResolver>;createCheckout:ReturnType<typeof createMarketplaceCollectionRuntime>['createCheckout'];quoteWallet:ReturnType<typeof createMarketplaceGasQuotes>['wallet'];saveQuote:(q:MarketplaceWalletQuote)=>Promise<unknown>}){
  const instructions=createMarketplaceInstructions({repository,resolvePrincipal,enabled:true,createCheckout})
  async function authorize(token:string,scope:string){const p=await resolvePrincipal(token);if(!p||p.active!==true||!p.capabilities.includes('marketplace_payments')||!p.scopes.includes(scope))throw Error('Marketplace authorization denied.');return p}
  return {...instructions,
+  async createSellerSession(token:string,body:unknown){const p=await authorize(token,'marketplace:create'),v=marketplaceFields(body,['sellerId','returnUrl']);if(!sellerIdentity)throw Error('Seller verification is not configured.');if(typeof v.returnUrl!=='string')throw Error('Invalid return URL.');return sellerIdentity.issue(p.projectId,marketplaceReference(v.sellerId),p.credentialId,v.returnUrl)},
+  async sellerVerification(token:string,sellerId:string){const p=await authorize(token,'marketplace:read');if(!sellerIdentity)throw Error('Seller verification is not configured.');const id=marketplaceReference(sellerId);return {...await sellerIdentity.status(p.projectId,id),bankAccounts:await repository.sellerBanks(p.projectId,id)}},
   async createWithdrawalQuote(token:string,body:unknown){
    const v=marketplaceFields(body,['sellerId','role','beneficiaryId','operationId','amount'])
    const p=await authorize(token,'marketplace:payout')

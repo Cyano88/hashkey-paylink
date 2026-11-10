@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict'
+import {build} from 'esbuild'
+import {mkdirSync,readFileSync} from 'node:fs'
+import {checkoutTestCss} from './checkout-test-css.mjs'
+const {chromium}=await import('file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
+const bundle=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import Page from './src/pages/MarketplaceSellerVerificationPage';createRoot(document.getElementById('root')).render(<Page/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,outdir:'out',jsx:'automatic',plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/^@privy-io\/react-auth$/},()=>({path:'auth',namespace:'fixture'}));b.onResolve({filter:/Pocket(KycPanel|EmailLogin)$/},a=>({path:a.path.includes('Kyc')?'kyc':'login',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({loader:'jsx',resolveDir:process.cwd(),contents:a.path==='auth'?`export const usePrivy=()=>({ready:true,authenticated:true,user:{id:'owner_a',email:{address:'seller@example.test'}},getAccessToken:async()=>'fixture-token',logout:async()=>{location.href='/logged-out'}});`:`import React from'react';export default()=> <div data-testid="${a.path}">${a.path==='kyc'?'Basic verification fixture':'Login fixture'}</div>`}));b.onLoad({filter:/\.css$/},()=>({contents:'',loader:'css'}))}}]})
+const css=(await checkoutTestCss())+'\n'+readFileSync('src/developer/developer.css','utf8'),browser=await chromium.launch({channel:'chrome',headless:true})
+mkdirSync('output/playwright',{recursive:true})
+try{for(const width of [320,390,1280])for(const dark of [false,true]){
+ const page=await browser.newPage({viewport:{width,height:844}}),errors=[];let connected=false,eligible=true,bankCalls=0,fail=true,refs=[]
+ page.on('pageerror',e=>errors.push(e.message))
+ const state=()=>({projectName:'Example marketplace',sellerId:'seller_a',connected,level:'basic',bankEligible:connected&&eligible,returnUrl:'https://shop.example/seller',expiresAt:Date.now()+3600000})
+ await page.route('https://seller.test/**',async r=>{const req=r.request();if(req.url().endsWith('/hash-logo-transparent.png'))return r.fulfill({contentType:'image/png',body:readFileSync('public/hash-logo-transparent.png')});if(req.url().includes('/api/')){const b=req.postDataJSON();assert.equal(req.headers()['x-seller-session'],'test-session');let data=state();if(b.action==='connect'){connected=true;data=state()}if(b.action==='banks')data=[{code:'TEST',name:'Example bank'}];if(b.action==='bank'){bankCalls++;refs.push(b.beneficiaryId);await new Promise(r=>setTimeout(r,100));if(fail){fail=false;return r.fulfill({status:503,json:{ok:false,error:'Temporary bank lookup failure. Retry.'}})}data={last4:'6789'}}return r.fulfill({json:{ok:true,data}})}return r.fulfill({contentType:'text/html',body:'<html class="'+(dark?'dark':'')+'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><div id="root"></div><script>'+bundle.outputFiles.find(f=>f.text.includes('createRoot')).text+'</script>'})})
+ await page.goto('https://seller.test/marketplace/verify#token=test-session')
+ await page.getByRole('button',{name:'Connect my account'}).click()
+ await page.getByText('Your existing verification is confirmed.',{exact:false}).waitFor();assert.equal(await page.getByTestId('kyc').count(),0)
+ await page.getByRole('button',{name:'Add bank account'}).click();await page.getByRole('combobox').selectOption('TEST');await page.getByLabel('Account number',{exact:true}).fill('0123456789')
+ await page.getByRole('button',{name:'Verify bank account'}).evaluate(b=>{b.click();b.click()})
+ await page.getByRole('alert').filter({hasText:'Temporary bank'}).waitFor();assert.equal(bankCalls,1)
+ await page.getByRole('button',{name:'Verify bank account'}).click();await page.getByText('Bank account ending 6789 is verified.',{exact:true}).waitFor();assert.equal(bankCalls,2);assert.equal(refs[0],refs[1])
+ assert.equal(page.url().includes('#'),false);assert.equal(await page.getByRole('link',{name:'Return to Example marketplace'}).getAttribute('href'),'https://shop.example/seller')
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ await page.screenshot({path:'output/playwright/marketplace-seller-'+width+(dark?'-dark':'-light')+'.png',fullPage:true})
+ eligible=false;await page.reload();await page.getByTestId('kyc').waitFor();assert.equal(await page.getByRole('button',{name:'Add bank account'}).count(),0)
+ eligible=true;await page.getByRole('button',{name:'Check verification status'}).click();await page.getByRole('button',{name:'Add bank account'}).waitFor()
+ assert.deepEqual(errors,[]);await page.close()
+}
+const phoneBundle=await build({stdin:{contents:`import React from'react';import{createRoot}from'react-dom/client';import Handoff from'./src/developer/VerificationPhoneHandoff';createRoot(document.getElementById('root')).render(<Handoff level="basic" country="NG" method="nin" open={true} onOpenChange={()=>{}} sessionToken="test-session"/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic'})
+const phonePage=await browser.newPage();await phonePage.route('https://phone.test/**',r=>r.fulfill({contentType:'text/html',body:'<div id="root"></div><script>'+phoneBundle.outputFiles[0].text+'</script>'}));await phonePage.goto('https://phone.test/marketplace/verify');const phoneUrl=new URL(await phonePage.getByLabel('Verification link',{exact:true}).inputValue());assert.equal(phoneUrl.pathname,'/marketplace/verify');assert.equal(phoneUrl.searchParams.get('continueOnPhone'),'1');assert.equal(phoneUrl.searchParams.has('token'),false);assert.equal(new URLSearchParams(phoneUrl.hash.slice(1)).get('token'),'test-session');await phonePage.close()
+console.log('PASS hosted seller page: consent, verified skip, Basic fallback, double-submit lock, retry reference, return link, no overflow at 320/390/1280 light/dark (mocked auth/KYC/provider).')}finally{await browser.close()}

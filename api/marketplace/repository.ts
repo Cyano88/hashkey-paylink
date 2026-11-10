@@ -53,6 +53,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    return structuredClone(store.books.find(b=>b.plan.projectId===plan.projectId&&b.plan.paymentId===plan.paymentId)!)
   }
  return {
+  async sellerBanks(projectId:string,sellerId:string){marketplaceReference(projectId);marketplaceReference(sellerId);return ((await d.read())?.bankBeneficiaries??[]).filter(b=>b.projectId===projectId&&b.sellerId===sellerId).map(b=>({beneficiaryId:b.beneficiaryId,last4:b.last4,currency:b.currency,status:b.status}))},
   planWithdrawal:async(projectId:string,sellerId:string,role:'seller'|'platform',beneficiaryId:string,debitUnits:string)=>selectWithdrawalSources(await d.read(),projectId,sellerId,role,beneficiaryId,debitUnits),
   feeReserve:createMarketplaceFeeReserve(d),
   collections,
@@ -75,6 +76,8 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
    const request=structuredClone(input),record=await d.verifyBank(request)
    if(record.projectId!==request.projectId||record.sellerId!==request.sellerId||record.beneficiaryId!==request.beneficiaryId||record.kind!=='bank'||record.asset!=='USDC'||record.network!=='base'||record.currency!=='NGN'||record.status!=='active')throw Error('Bank verification binding mismatch.')
    await d.mutate(s=>{
+    const prior=s.bankBeneficiaries?.find(b=>b.projectId===record.projectId&&b.beneficiaryId===record.beneficiaryId)
+    if(prior?.status==='active'&&prior.sellerId===record.sellerId&&prior.destinationDigest===record.destinationDigest&&prior.keyId===record.keyId&&prior.ownershipEvidenceId===record.ownershipEvidenceId)return s
     if([...(s.bankBeneficiaries||[]),...(s.walletBeneficiaries||[])].some(b=>b.projectId===record.projectId&&b.beneficiaryId===record.beneficiaryId)||s.walletChallenges?.some(c=>c.projectId===record.projectId&&c.beneficiaryId===record.beneficiaryId))throw Error('Beneficiary version already exists; use a new reference.')
     s.bankBeneficiaries=[...(s.bankBeneficiaries||[]),structuredClone(record)];return s
    })

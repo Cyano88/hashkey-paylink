@@ -6,11 +6,13 @@ import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
 const DeveloperPortalPage = lazy(() => import('../pages/DeveloperPortalPage'))
 const OperationsWorkspacePage = lazy(() => import('../pages/OperationsWorkspacePage'))
 
+const MarketplaceSellerVerificationPage=lazy(()=>import('../pages/MarketplaceSellerVerificationPage'))
 const DeveloperCliAccessPage = lazy(() => import('../pages/DeveloperCliAccessPage'))
 
 export default function DeveloperApp() {
   return <BrowserRouter><Suspense fallback={<DeveloperLoadingSkeleton fullPage />}><Routes>
     <Route path="docs/*" element={<ExternalRedirect origin="https://docs.hashpaylink.com" />} />
+    <Route path="marketplace/verify" element={<MarketplaceSellerVerificationPage/>}/>
     <Route element={<DeveloperLayout />}>
       <Route index element={<DeveloperPortalPage />} />
       <Route path="support" element={<Navigate to="/?support=open" replace />} />

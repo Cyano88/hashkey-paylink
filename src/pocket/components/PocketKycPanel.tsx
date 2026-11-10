@@ -22,7 +22,7 @@ function loadSmile() {
   return Promise.resolve()
 }
 
-export default function PocketKycPanel({ getAccessToken, email = '', surface = 'pocket', initialLevel }: { email?:string; surface?:'pocket'|'developer'|'checkout'; initialLevel?:'basic'|'advanced'; getAccessToken: () => Promise<string | null> }) {
+export default function PocketKycPanel({ getAccessToken, email = '', surface = 'pocket', initialLevel, phoneSessionToken }: { phoneSessionToken?:string; email?:string; surface?:'pocket'|'developer'|'checkout'; initialLevel?:'basic'|'advanced'; getAccessToken: () => Promise<string | null> }) {
   const [country,setCountry]=useState<'NG'|'UG'>(()=>surface==='developer' && ['NG','UG'].includes(new URLSearchParams(window.location.search).get('verificationCountry')||'') ? new URLSearchParams(window.location.search).get('verificationCountry') as 'NG'|'UG' : readPocketCountry(email))
   const [ugandaIdentity,setUgandaIdentity]=useState({fullName:'',idNumber:'',cardNumber:'',dob:''})
   const identityRef=useRef(ugandaIdentity);identityRef.current=ugandaIdentity
@@ -175,7 +175,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
           <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{option.description}</span></span>
         </label>)}
       </fieldset>}
-      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff level={selectedLevel} country={country} method={additionalMethod} open={phoneOpen} onOpenChange={setPhoneOpen} />}
+      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff sessionToken={phoneSessionToken} level={selectedLevel} country={country} method={additionalMethod} open={phoneOpen} onOpenChange={setPhoneOpen} />}
       {retryable && !phoneOpen && <>
         {country==='UG' && <div className="space-y-4">
           <p className="text-xs text-gray-500">Checks your National ID details. No selfie is required.</p>

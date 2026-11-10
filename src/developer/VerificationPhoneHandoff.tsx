@@ -17,11 +17,11 @@ export function verificationPhoneUrl(location: string, level: 'basic' | 'advance
   return link.toString()
 }
 
-export default function VerificationPhoneHandoff({ level, country, method, open, onOpenChange }: {
-  level: 'basic' | 'advanced'; country: 'NG' | 'UG'; method: 'nin' | 'government_id'; open: boolean; onOpenChange: (open: boolean) => void
+export default function VerificationPhoneHandoff({ level, country, method, open, onOpenChange, sessionToken }: {
+  sessionToken?: string; level: 'basic' | 'advanced'; country: 'NG' | 'UG'; method: 'nin' | 'government_id'; open: boolean; onOpenChange: (open: boolean) => void
 }) {
   const [copyStatus, setCopyStatus] = useState('')
-  const link = verificationPhoneUrl(window.location.href, level, country, method)
+  const link = verificationPhoneUrl(window.location.href, level, country, method) + (sessionToken ? '#token=' + encodeURIComponent(sessionToken) : '')
   return <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
     <button type="button" aria-expanded={open} onClick={() => { onOpenChange(!open); setCopyStatus('') }} className="min-h-11 text-sm font-semibold">{open ? 'Close phone option' : 'Continue on phone'}</button>
     {open && <div className="space-y-4 pt-2">

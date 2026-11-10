@@ -1,3 +1,4 @@
+import {createMarketplaceSellerRouter} from './api/marketplace/seller-http.js'
 import {createMarketplaceOperationsHandler} from './api/marketplace/operations.js'
 import {createMarketplaceRouter} from './api/marketplace/http.js'
 import {startMarketplaceWorkers} from './api/marketplace/workers.js'
@@ -470,6 +471,7 @@ const supportPresenceLimiter=rateLimit({name:'support-presence',windowMs:60_000,
 const supportRequestLimiter=(req:express.Request,res:express.Response,next:express.NextFunction)=>((req.method==='GET'&&req.query.presence)||(req.method==='POST'&&req.body?.action==='typing')?supportPresenceLimiter:strictLimiter)(req,res,next)
 app.all('/api/developer-support', supportRequestLimiter, developerSupportHandler)
 app.all('/api/marketplace-access', strictLimiter, marketplaceAccessHandler)
+app.use('/api/marketplace/seller', strictLimiter, createMarketplaceSellerRouter())
 app.use('/api/marketplace/v1', strictLimiter, createMarketplaceRouter())
 app.all('/api/marketplace-operations', strictLimiter, createMarketplaceOperationsHandler())
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
