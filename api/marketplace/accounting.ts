@@ -1,3 +1,4 @@
+import {marketplaceWithdrawalEligibility} from '../../src/lib/marketplaceWithdrawalPolicy.js'
 import {validateMarketplaceWalletQuote} from './wallet-quotes.js'
 import type {MarketplaceCheckoutBinding} from './checkout-collections.js'
 import type {MarketplaceCollectionProof} from './collections.js'
@@ -171,6 +172,26 @@ export function marketplaceSellerBalances(books: MarketplaceBook[], projectId: s
         for (const field of Object.keys(total) as Array<keyof typeof total>) total[field]+=BigInt(balance[field]??'0')
       }
     }
-    return {network:'base' as const,asset,units:Object.fromEntries(Object.entries(total).map(([field,value])=>[field,value.toString()]))}
+    // Keep ownership roles and destinations separate. Aggregate balance is not
+    // permission to combine allocations into a financial execution.
+    const accounts = new Map<string,{role:'seller'|'platform';beneficiaryId:string;settlement:MarketplaceSettlementId;available:bigint;pending:bigint;reserved:bigint;largestAvailable:bigint}>()
+    for(const book of books) if(book.plan.projectId===projectId&&book.plan.asset===asset) {
+      for(const allocation of book.plan.allocations) if(allocation.sellerId===sellerId) {
+        const balance=book.balances.find(b=>b.allocationId===allocation.id)
+        if(!balance)continue
+        const key=JSON.stringify([allocation.role,allocation.beneficiaryId,allocation.settlement])
+        const account=accounts.get(key)??{role:allocation.role,beneficiaryId:allocation.beneficiaryId,settlement:allocation.settlement,available:0n,pending:0n,reserved:0n,largestAvailable:0n}
+        const available=BigInt(balance.available)
+        account.available+=available;account.pending+=BigInt(balance.pending);account.reserved+=BigInt(balance.reserved)
+        if(available>account.largestAvailable)account.largestAvailable=available
+        accounts.set(key,account)
+      }
+    }
+    return {network:'base' as const,asset,units:Object.fromEntries(Object.entries(total).map(([field,value])=>[field,value.toString()])),
+      withdrawalAccounts:[...accounts.values()].map(a=>({role:a.role,beneficiaryId:a.beneficiaryId,settlement:a.settlement,
+        availableUnits:a.available.toString(),pendingUnits:a.pending.toString(),reservedUnits:a.reserved.toString(),
+        largestSingleAllocationUnits:a.largestAvailable.toString(),crossOrderWithdrawalEnabled:false,
+        ...(asset==='USDC'?{withdrawal:marketplaceWithdrawalEligibility(a.available.toString(),a.settlement==='cash_balance'?'bank':'wallet')}:{})}))}
+
   })
 }

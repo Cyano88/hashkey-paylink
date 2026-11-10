@@ -1,3 +1,4 @@
+import {assertMarketplaceWithdrawalMinimum} from '../../src/lib/marketplaceWithdrawalPolicy.js'
 import {randomUUID} from 'node:crypto'
 import {formatUnits,getAddress} from 'viem'
 import {createCircleDeveloperTreasuryClient,type CircleTreasuryConfig} from '../circle-developer-treasury.js'
@@ -27,11 +28,13 @@ export function createMarketplaceGasQuotes(input:Dependencies){
   async wallet(binding:Pick<MarketplaceWalletQuote,'projectId'|'paymentId'|'operationId'|'allocationId'|'beneficiaryId'|'recipient'|'debitUnits'>){
    const b=structuredClone(binding),started=now()
    if(!/^[1-9]\d{0,23}$/.test(b.debitUnits))throw Error('Invalid wallet withdrawal debit.')
+   assertMarketplaceWithdrawalMinimum('wallet',b.debitUnits)
    let fee=await networkFee(b.recipient,b.debitUnits)
    // Re-estimate the actual net transfer; keep the larger fixed quote, never
    // silently reduce the accepted recipient amount at execution time.
    for(let i=0;i<3;i++){
     const net=BigInt(b.debitUnits)-fee;if(net<=0n)throw Error('Withdrawal cannot cover its network fee.')
+    assertMarketplaceWithdrawalMinimum('wallet',net.toString())
     const actual=await networkFee(b.recipient,net.toString())
     if(actual<=fee){if(now()-started>30000)throw Error('Wallet quote became stale.');return validateMarketplaceWalletQuote({...b,quoteId:randomUUID(),recipient:getAddress(b.recipient),asset:'USDC',network:'base',feePayer:'allocation',feePolicy:'fixed_success_only',networkFeeUnits:fee.toString(),recipientUnits:net.toString(),issuedAt:now(),expiresAt:now()+60000},now())}
     fee=actual

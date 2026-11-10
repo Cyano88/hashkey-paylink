@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto'
+import {assertMarketplaceWithdrawalMinimum} from '../../src/lib/marketplaceWithdrawalPolicy.js'
 import {encodeFunctionData,getAddress,parseAbi} from 'viem'
 import {BASE_STABLECOINS} from '../../src/lib/baseStablecoins.js'
 import {marketplaceAmountUnits,type MarketplaceAsset} from '../../src/lib/marketplacePayments.js'
@@ -37,6 +38,7 @@ export function createMarketplaceWalletPayouts(dependencies:Dependencies){
    const quote=validateMarketplaceWalletQuote(resolved,d.now()),s=await d.read(),book=locate(s,projectId,paymentId),snapshot=beneficiary(s!,book,quote.allocationId)
    if(quote.projectId!==projectId||quote.paymentId!==paymentId||quote.quoteId!==quoteId||book.plan.asset!=='USDC'||snapshot.beneficiaryId!==quote.beneficiaryId||getAddress(snapshot.address)!==quote.recipient)throw Error('Wallet quote binding mismatch.')
    if(!book.fundingEvidence||BigInt(book.balances.find(b=>b.allocationId===quote.allocationId)?.available??'0')<BigInt(quote.debitUnits))throw Error('Insufficient released funds for wallet quote.')
+   assertMarketplaceWithdrawalMinimum('wallet',quote.recipientUnits)
    return validateMarketplaceWalletQuote(quote,d.now())
   },
   async reserveQuoted(projectId:string,paymentId:string,key:string,quoteId:string,authorization:BankQuoteAuthorization){
@@ -55,6 +57,7 @@ export function createMarketplaceWalletPayouts(dependencies:Dependencies){
     const book=locate(s,projectId,paymentId),snapshot=beneficiary(s,book,quote.allocationId)
     validateMarketplaceWalletQuote(quote,d.now())
     if(book.plan.asset!=='USDC'||snapshot.beneficiaryId!==quote.beneficiaryId||getAddress(snapshot.address)!==quote.recipient)throw Error('Wallet quote destination changed.')
+    assertMarketplaceWithdrawalMinimum('wallet',quote.recipientUnits)
     if(s.books.some(b=>b.walletReservations?.some(r=>r.quote?.quoteId===quoteId)))throw Error('Wallet quote already reserved.')
     const next=applyMarketplaceCommand(book,projectId,key,{type:'reserve',operationId:quote.operationId,allocationId:quote.allocationId,kind:'payout',amountUnits:quote.debitUnits})
     next.walletReservations=[...(book.walletReservations||[]),{key,requestHash,operationId:quote.operationId,allocationId:quote.allocationId,beneficiaryId:snapshot.beneficiaryId,sellerId:snapshot.sellerId,network:'base',asset:'USDC',tokenAddress:getAddress(BASE_STABLECOINS.USDC.address),recipient:quote.recipient,amountUnits:quote.recipientUnits,authorization:actor,quote}]
@@ -72,6 +75,7 @@ export function createMarketplaceWalletPayouts(dependencies:Dependencies){
     if(existing){if(existing.requestHash!==requestHash)throw Error('Idempotency key was used for a different wallet payout.');return s}
     if(book.journal.some(j=>j.key===key))throw Error('Idempotency key was used for a different request.')
     const snapshot=beneficiary(s,book,request.allocationId)
+    if(book.plan.asset==='USDC')assertMarketplaceWithdrawalMinimum('wallet',request.amountUnits)
     const next=applyMarketplaceCommand(book,projectId,key,{type:'reserve',operationId:request.operationId,allocationId:request.allocationId,kind:'payout',amountUnits:request.amountUnits})
     next.walletReservations=[...(book.walletReservations||[]),{key,requestHash,operationId:request.operationId,allocationId:request.allocationId,beneficiaryId:snapshot.beneficiaryId,sellerId:snapshot.sellerId,network:'base',asset:book.plan.asset,tokenAddress:getAddress(BASE_STABLECOINS[book.plan.asset].address),recipient:getAddress(snapshot.address),amountUnits:request.amountUnits,authorization:request.authorization}]
     s.books[s.books.indexOf(book)]=next;return s

@@ -18,7 +18,9 @@ assert.equal(quote.networkFeeUnits,'3150');assert.equal(quote.recipientUnits,'99
 assert.equal(calls.filter(u=>u.includes('estimateFee')).length,2)
 bad=true;await assert.rejects(()=>gas.networkFee(recipient,'1000000'),/unavailable/);bad=false
 fee='1';await assert.rejects(()=>gas.networkFee(recipient,'1000000'),/limit/);fee='0.000001'
-await assert.rejects(()=>gas.wallet({...quote,debitUnits:'1'}),/cannot cover/)
+await assert.rejects(()=>gas.wallet({...quote,debitUnits:'1'}),/Minimum wallet/)
+await assert.rejects(()=>gas.wallet({...quote,debitUnits:'503149'}),/Minimum wallet/)
+assert.equal((await gas.wallet({...quote,debitUnits:'503150'})).recipientUnits,'500000')
 const stale=createMarketplaceGasQuotes({config,maximumFeeUnits:'100000',providerSurchargeBps:0,now:()=>now,estimate:async()=>{now+=15001;return {networkFee:fee,asset:'ETH',blockchain:'BASE'}},rate:async()=>300000000000n})
 await assert.rejects(()=>stale.networkFee(recipient,'1000000'),/stale/)
 console.log('PASS Circle read-only estimate schema, owned wallet verification, no signing/transfer, fresh ETH conversion, fixed bounded net quote, provider surcharge, missing/malformed estimates, insufficient amount and stale/capped estimates. Fixtures only.')

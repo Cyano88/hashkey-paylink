@@ -28,6 +28,15 @@ const refs=await setup('success')
 for(const patch of [{networkFeeUnits:'10001'},{recipientUnits:'0'},{feePayer:'buyer'},{asset:'USDT'},{expiresAt:now+5000},{debitUnits:'9e7'}])assert.throws(()=>validateMarketplaceWalletQuote({...quote,...patch},now))
 assert.equal((await repo.walletPayouts.preview(...refs.slice(0,2),quote.quoteId)).recipientUnits,'89990000')
 await assert.rejects(()=>createMarketplaceRepository({...deps,resolveWalletQuote:undefined}).walletPayouts.reserveQuoted(...refs.slice(0,2),'missing_a',quote.quoteId,actor),/not configured/)
+const originalQuote=structuredClone(quote)
+quote={...quote,debitUnits:'510000',recipientUnits:'499999',networkFeeUnits:'10001'}
+assert.equal(validateMarketplaceWalletQuote(quote).recipientUnits,'499999','Historical small quotes remain readable')
+await assert.rejects(()=>repo.walletPayouts.preview(...refs.slice(0,2),quote.quoteId),/Minimum wallet/)
+await assert.rejects(()=>repo.walletPayouts.reserveQuoted(...refs.slice(0,2),'below_minimum',quote.quoteId,actor),/Minimum wallet/)
+assert.equal((await repo.get(...refs.slice(0,2))).balances[0].reserved,'0')
+quote={...quote,debitUnits:'510001',recipientUnits:'500000'}
+assert.equal((await repo.walletPayouts.preview(...refs.slice(0,2),quote.quoteId)).recipientUnits,'500000')
+quote=originalQuote
 const accepted=structuredClone(quote)
 quote={...accepted,projectId:'project_other'}
 await assert.rejects(()=>repo.walletPayouts.reserveQuoted(...refs.slice(0,2),'wrong_a',accepted.quoteId,actor),/binding/)

@@ -1,3 +1,4 @@
+import {assertMarketplaceWithdrawalMinimum} from '../src/lib/marketplaceWithdrawalPolicy.ts'
 import assert from 'node:assert/strict'
 import express from 'express'
 import {createHmac} from 'node:crypto'
@@ -11,7 +12,7 @@ const auth=createMarketplacePrincipalResolver({env:()=>({MARKETPLACE_INSTRUCTION
 const repo=createMarketplaceRepository({read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)}})
 for(const id of [projectId,'dev_99999999']){await repo.create({projectId:id,paymentId:'payment_one',network:'base',asset:'USDC',amount:'1',allocations:[{id:'seller_a',sellerId:'seller_a',beneficiaryId:'wallet_a',role:'seller',settlement:'wallet_usdc',amount:'1'}]},'draft_a');await repo.execute(id,'payment_one','fund_a',{type:'fund',network:'base',asset:'USDC',amountUnits:'1000000',evidenceId:'fixture:'+id})}
 const service=createMarketplaceInstructions({repository:repo,resolvePrincipal:auth,enabled:true})
-const app=express();app.use(express.json());app.use('/v1',createMarketplaceRouter({enabled:()=>enabled,authorize:auth,service:()=>{calls++;return {...service,createPayment:async()=>{throw Error('provider secret should not escape')}}}}))
+const app=express();app.use(express.json());app.use('/v1',createMarketplaceRouter({enabled:()=>enabled,authorize:auth,service:()=>{calls++;return {...service,createWalletQuote:async()=>assertMarketplaceWithdrawalMinimum('wallet','499999'),createPayment:async()=>{throw Error('provider secret should not escape')}}}}))
 const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port
 async function req(path,method='GET',body,key,credential=token){const r=await fetch(origin+'/v1'+path,{method,headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()}}
 try{
@@ -25,6 +26,7 @@ try{
  assert.equal((await req('/payments/payment_one/releases','POST',release,'release_a')).status,200)
  assert.equal(store.books[0].balances[0].available,'100000');assert.equal(store.books[1].balances[0].available,'0')
  assert.equal((await req('/payments/payment_one/releases','POST',{...release,releases:[{allocationId:'seller_a',amount:'0.2'}]},'release_a')).status,409)
+ r=await req('/payments/payment_one/payout-quotes','POST',{});assert.equal(r.status,400);assert.equal(r.body.code,'MARKETPLACE_WITHDRAWAL_BELOW_MINIMUM');assert.equal(r.body.minimumNetUnits,'500000');assert.equal(r.body.feesAdditional,true)
  revoked=true;assert.equal((await req('/payments/payment_one')).status,403);revoked=false
  assert.equal((await req('/ledger/result','POST',{},'result_a')).status,404)
  r=await req('/payments','POST',{},'create_a');assert.equal(r.status,503);assert.ok(!JSON.stringify(r.body).includes('provider secret'))

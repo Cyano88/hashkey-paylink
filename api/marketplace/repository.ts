@@ -1,6 +1,7 @@
 import {createMarketplaceFeeReserve,type FeeAccount} from './fee-reserve.js'
 import {createMarketplaceCollections} from './collections.js'
 import {createHash} from 'node:crypto'
+import {assertMarketplaceWithdrawalMinimum} from '../../src/lib/marketplaceWithdrawalPolicy.js'
 import {createMarketplacePayoutCancellation} from './payout-cancellation.js'
 import {createMarketplaceRefundWorker} from './refund-worker.js'
 import {createMarketplaceRefundExecution} from './refund-execution.js'
@@ -139,6 +140,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
     if(index<0)throw Error('Marketplace payment not found.')
     const book=s.books[index]
     if(replay(book))return s
+    assertMarketplaceWithdrawalMinimum('bank',quote.netUnits)
     validateMarketplaceBankQuote(quote,d.now())
     if(s.books.some(b=>b.bankReservations?.some(r=>r.quote.providerOrderId===quote.providerOrderId||r.quote.intentId===quote.intentId||r.quote.quoteId===quote.quoteId)))throw Error('Bank quote or provider order was already reserved.')
     const allocation=book.plan.allocations.find(a=>a.id===quote.allocationId)

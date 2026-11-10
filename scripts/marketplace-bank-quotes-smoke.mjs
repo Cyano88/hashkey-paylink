@@ -24,6 +24,10 @@ await assert.rejects(()=>createMarketplaceRepository({...deps,resolveBankQuote:u
 for(const patch of [{projectId:'project_other'},{paymentId:'payment_other'},{beneficiaryId:'bank_other'},{destinationDigest:'a'.repeat(64)},{allocationId:'share_other'}]){
  quotes.set('quote_one',{...base,...patch});await assert.rejects(()=>reserve());assert.equal((await repo.get('project_a','payment_one')).balances[0].reserved,'0')
 }
+quotes.set('quote_one',{...base,debitUnits:'1099999',fundingUnits:'1099999',netUnits:'999999'})
+assert.equal(validateMarketplaceBankQuote(quotes.get('quote_one'),now).netUnits,'999999','Historical small bank quotes remain readable')
+await assert.rejects(()=>reserve('below_minimum'),/Minimum local bank/)
+assert.equal((await repo.get('project_a','payment_one')).balances[0].reserved,'0')
 quotes.set('quote_one',base)
 await assert.rejects(()=>repo.execute('project_a','payment_one','generic_reserve',{type:'reserve',operationId:'generic_operation',allocationId:'share_a',kind:'payout',amountUnits:'1'}),/accepted quote/)
 // Expiry must be checked again inside the transaction, after resolving a quote.
