@@ -44,7 +44,7 @@ export function createMarketplaceRepository(dependencies:Partial<Dependencies>={
       if(a.settlement==='cash_balance'&&bindWallets!=='all')throw Error('Verified bank beneficiary binding requires createWithVerifiedBeneficiaries.')
       const directory=a.settlement==='cash_balance'?s.bankBeneficiaries:s.walletBeneficiaries
       const beneficiary=directory?.find(b=>b.projectId===plan.projectId&&b.beneficiaryId===a.beneficiaryId)
-      if(!beneficiary||beneficiary.status!=='active'||beneficiary.sellerId!==a.sellerId||beneficiary.asset!==plan.asset||beneficiary.network!==plan.network)throw Error('Allocation requires an active, matching verified wallet beneficiary.')
+      if(!beneficiary||beneficiary.status!=='active'||beneficiary.sellerId!==a.sellerId||beneficiary.asset!==plan.asset||beneficiary.network!==plan.network)throw Error('Allocation requires an active, matching verified beneficiary.')
       return structuredClone(beneficiary)
      })
     }

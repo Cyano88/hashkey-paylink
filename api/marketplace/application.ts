@@ -72,11 +72,13 @@ export function createMarketplaceService({quoteBank,resolveBankQuote,sellerIdent
    const p=await authorize(token,'marketplace:create'),v=marketplaceFields(body,['paymentId','amount','allocations'])
    if(typeof v.amount!=='string'||!Array.isArray(v.allocations)||v.allocations.length<1||v.allocations.length>100)throw Error('Invalid marketplace allocations.')
    const allocations=v.allocations.map(a=>{
-    const x=marketplaceFields(a,['id','sellerId','role','amount','beneficiaryId'])
+    const x=marketplaceFields(a,['id','sellerId','role','amount','beneficiaryId',...(a&&typeof a==='object'&&Object.hasOwn(a,'settlement')?['settlement']:[])])
     if(!['seller','platform'].includes(String(x.role))||typeof x.amount!=='string')throw Error('Invalid allocation role or amount.')
-    return {id:marketplaceReference(x.id),sellerId:marketplaceReference(x.sellerId),role:x.role,amount:x.amount,beneficiaryId:marketplaceReference(x.beneficiaryId),settlement:'wallet_usdc'} as AllocationInput
+    if(x.settlement!==undefined&&x.settlement!=='wallet_usdc'&&x.settlement!=='cash_balance')throw Error('Invalid settlement route.')
+    return {id:marketplaceReference(x.id),sellerId:marketplaceReference(x.sellerId),role:x.role,amount:x.amount,beneficiaryId:marketplaceReference(x.beneficiaryId),settlement:x.settlement??'wallet_usdc'} as AllocationInput
    })
-   const b=await repository.createWithVerifiedWallets({projectId:p.projectId,paymentId:marketplaceReference(v.paymentId),asset:'USDC',network:'base',amount:v.amount,allocations},marketplaceReference(key))
+   const create=allocations.some(a=>a.settlement==='cash_balance')?repository.createWithVerifiedBeneficiaries:repository.createWithVerifiedWallets
+   const b=await create({projectId:p.projectId,paymentId:marketplaceReference(v.paymentId),asset:'USDC',network:'base',amount:v.amount,allocations},marketplaceReference(key))
    return {plan:b.plan,balances:b.balances,funded:!!b.fundingEvidence}
   },
   async createWalletQuote(token:string,paymentId:string,body:unknown){

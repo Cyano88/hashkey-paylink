@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {privateKeyToAccount} from 'viem/accounts'
 import {BASE_STABLECOINS} from '../src/lib/baseStablecoins.ts'
 import {createMarketplaceRepository} from '../api/marketplace/repository.ts'
+import {createMarketplaceBankVerifier} from '../api/marketplace/bank-beneficiaries.ts'
 import {createMarketplaceService} from '../api/marketplace/application.ts'
 let store={books:[],drafts:[]},quotes=[],now=100000,active=true
 const projectId='dev_12345678',payer='0x'+'3'.repeat(40),holding='0x'+'4'.repeat(40)
@@ -26,5 +27,19 @@ const refund=await service.reserveRefund('credential','refund_a',{paymentId:'ord
 assert.equal(refund.amountUnits,'30000');assert.equal(store.books[0].refundReservations[0].collection.payerWallet.toLowerCase(),payer)
 await service.cancelPayout('credential','cancel_a',{paymentId:'order_a',operationId:'payout_a',businessReference:'cancelled_withdrawal'})
 await service.revokeWallet('credential','seller_a_wallet');await assert.rejects(()=>service.createWalletQuote('credential','order_a',{allocationId:'seller_share',operationId:'payout_b',amount:'0.501'}),/eligible/)
+const bankRequest={projectId,sellerId:'bank_seller',beneficiaryId:'verified_bank',bankCode:'TEST',accountNumber:'0123456789'}
+const verifier=createMarketplaceBankVerifier({key:Buffer.alloc(32,17),keyId:'test_key',verifyAccount:async()=> 'Verified Test Seller',verifyOwnership:async()=>({...bankRequest,verified:true,evidenceId:'ownership_test'}),now:()=>now})
+store.bankBeneficiaries=[await verifier.verify(bankRequest)]
+const bankOrder={paymentId:'bank_order',amount:'2',allocations:[{id:'bank_share',sellerId:'bank_seller',role:'seller',amount:'1.8',beneficiaryId:'verified_bank',settlement:'cash_balance'},{id:'platform_share',sellerId:'platform_a',role:'platform',amount:'0.2',beneficiaryId:'platform_a_wallet'}]}
+const bankDraft=await service.createPayment('credential','bank_order_create',bankOrder)
+assert.equal(bankDraft.funded,false);assert.equal(bankDraft.plan.allocations[0].settlement,'cash_balance')
+await service.createPayment('credential','bank_order_create',bankOrder)
+assert.equal(store.books.filter(b=>b.plan.paymentId==='bank_order').length,1)
+assert.equal(store.books.find(b=>b.plan.paymentId==='bank_order').beneficiarySnapshots[0].kind,'bank')
+await service.createPayment('credential','create_a',payment) // Historical wallet request hash stays unchanged.
+for(const patch of [{settlement:'USDT'},{settlement:'wallet_usdc'},{sellerId:'other_seller'},{beneficiaryId:'missing_bank'}])await assert.rejects(()=>service.createPayment('credential','bad_bank_order',{...bankOrder,paymentId:'bad_bank_order',allocations:[{...bankOrder.allocations[0],amount:'2',...patch}]}),/Invalid settlement|verified beneficiary/)
+const bankOnly=await service.createPayment('credential','bank_only_create',{paymentId:'bank_only_order',amount:'1',allocations:[{...bankOrder.allocations[0],amount:'1'}]});assert.equal(bankOnly.plan.amountUnits,'1000000');assert.equal(bankOnly.funded,false)
+store.bankBeneficiaries[0].status='revoked'
+await assert.rejects(()=>service.createPayment('credential','revoked_bank_order',{...bankOrder,paymentId:'revoked_bank_order'}),/verified beneficiary/)
 active=false;await assert.rejects(()=>service.payment('credential','order_a'),/denied/)
-console.log('PASS verified EOA beneficiaries, fixed Base USDC drafts, duplicate creation, release, exact quoted payout, commission-funded fee balance, original-payer refund, cancellation and revocation. Synthetic collection only; no transfers.')
+console.log('PASS verified EOA beneficiaries, fixed Base USDC drafts, duplicate creation, release, exact quoted payout, commission-funded fee balance, original-payer refund, cancellation and revocation. Bank-only/mixed creation, route validation, revoked and mismatched bank rejection, historical wallet idempotency. Synthetic collection only; no transfers.')
