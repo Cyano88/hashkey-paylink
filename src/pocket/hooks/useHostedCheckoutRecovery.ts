@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react'
 
 type PaidAttempt = { id: string; status: 'paid'; receiptId: string; transaction?: string }
+export function hostedReceiptReference(attempt: {receiptId?: string; receiptUrl?: string} | undefined): string {
+  const signed = attempt?.receiptUrl?.match(/^\/receipt\/(r1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/)?.[1]
+  return signed || attempt?.receiptId || ''
+}
 export function verifiedPaidCheckoutAttempt(body: any, checkoutId: string, attemptId: string): PaidAttempt | undefined {
   const checkout = body?.checkout, attempt = checkout?.paymentAttempt
   return body?.ok === true && checkout?.id === checkoutId && checkout?.status === 'paid' &&
     Boolean(attemptId) && attempt?.id === attemptId && attempt?.status === 'paid' &&
-    typeof attempt.receiptId === 'string' && Boolean(attempt.receiptId) ? attempt : undefined
+    typeof attempt.receiptId === 'string' && Boolean(attempt.receiptId) ? {...attempt, receiptId: hostedReceiptReference(attempt)} : undefined
 }
 // Only the server-verified, exact attempt may recover a lost confirmation response.
 export default function useHostedCheckoutRecovery({ enabled, checkoutId, attemptId, onPaid }: {

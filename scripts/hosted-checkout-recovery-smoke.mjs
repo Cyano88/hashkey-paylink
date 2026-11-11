@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import React from 'react'
 import {create, act} from 'react-test-renderer'
-import useRecovery from '../src/pocket/hooks/useHostedCheckoutRecovery.ts'
+import useRecovery, {hostedReceiptReference} from '../src/pocket/hooks/useHostedCheckoutRecovery.ts'
+assert.equal(hostedReceiptReference({receiptId:'short',receiptUrl:'/receipt/r1.payload.full_signature'}),'r1.payload.full_signature')
+assert.equal(hostedReceiptReference({receiptId:'short',receiptUrl:'https://untrusted.test/receipt/r1.payload.signature'}),'short')
+assert.equal(hostedReceiptReference({receiptId:'short',receiptUrl:'/receipt/r1.payload.signature?redirect=elsewhere'}),'short')
 const originalFetch=globalThis.fetch, originalTimer=globalThis.setTimeout, originalClear=globalThis.clearTimeout
 let queue=[], responses=[], calls=[], paid=[]
 globalThis.setTimeout=(fn,ms,...args)=>ms===3000?(queue.push(fn),fn):originalTimer(fn,ms,...args)

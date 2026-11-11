@@ -2,7 +2,7 @@ import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {cacheCheckoutConfirmationActivity} from '../pocket/lib/pocketCheckoutConfirmationActivity'
 import { useCheckoutExpiry, CheckoutExpired } from '../components/CheckoutExpiry'
 import useCheckoutActivityRefresh from '../pocket/hooks/useCheckoutActivityRefresh'
-import useHostedCheckoutRecovery from '../pocket/hooks/useHostedCheckoutRecovery'
+import useHostedCheckoutRecovery, {hostedReceiptReference} from '../pocket/hooks/useHostedCheckoutRecovery'
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {checkoutFeeReviewChanged} from '../lib/checkoutFeeReview'
 import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
@@ -741,7 +741,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc' || attempt?.network === 'ethereum' || attempt?.network === 'polygon' || attempt?.network === 'solana') {
             setHostedLockedNetwork(attempt.network)
           }
-          if (attempt?.receiptId) setPaymentReceiptId(attempt.receiptId)
+          if (attempt?.receiptId) setPaymentReceiptId(hostedReceiptReference(attempt))
           if (attempt?.transaction && /^0x[a-fA-F0-9]{64}$/.test(attempt.transaction)) {
             setManualTxHash(attempt.transaction as `0x${string}`)
           }
