@@ -1,3 +1,4 @@
+import {bankQuoteErrorResponse} from './bank-readiness.js'
 import {Router,type Request,type Response} from 'express'
 import {createMarketplaceApplication,marketplaceFields} from './application.js'
 import {createMarketplacePrincipalResolver} from './authorization.js'
@@ -21,12 +22,12 @@ export function createMarketplaceRouter(d=defaults){
  function route(method:'get'|'post'|'delete',path:string,fn:(s:Service,t:string,req:Request)=>Promise<unknown>){
   router[method](path,async(req:Request,res:Response)=>{
    try{const value=await fn(d.service(),res.locals.marketplaceToken,req);if(value===null)return res.status(404).json({ok:false,error:'Marketplace record not found.'});return res.json({ok:true,data:value})}
-   catch(error){const message=error instanceof Error?error.message:''
+   catch(error){const bankError=bankQuoteErrorResponse(error);if(bankError)return res.status(bankError.status).json(bankError.body);const message=error instanceof Error?error.message:''
     if(error instanceof Error&&'code' in error&&error.code==='MARKETPLACE_WITHDRAWAL_BELOW_MINIMUM'){
      const e=error as Error&{code:string;minimumUnits:string;asset:string;route:string}
      return res.status(400).json({ok:false,error:message,code:e.code,minimumNetUnits:e.minimumUnits,asset:e.asset,route:e.route,feesAdditional:true})
     }
-    if(message==='Marketplace bank withdrawal provider is not enabled.')return res.status(503).json({ok:false,code:'MARKETPLACE_BANK_NOT_ENABLED',error:'Marketplace bank withdrawals are not enabled. Use an approved wallet route.'})
+    if(message==='Marketplace bank withdrawal provider is not enabled.')return res.status(503).json({ok:false,code:'MARKETPLACE_BANK_NOT_ENABLED',error:'Marketplace bank withdrawals are not enabled. Provider fee setup and payout verification must be completed; your balance is retained.'})
     if(message==='Marketplace authorization denied.')return res.status(403).json({ok:false,error:'Marketplace access denied.'})
     if(/Idempotency key|already exists/.test(message))return res.status(409).json({ok:false,error:'Reference or idempotency key conflicts with an existing request.'})
     if(/^(Invalid |Unexpected |Use |Provide |Duplicate |Amount |Insufficient |Allocation |Seller allocations|Settlement must|Payment has no verified|Wallet quote expired)/.test(message))return res.status(400).json({ok:false,error:'Invalid request, insufficient released funds, or expired quote. Check the documented fields and refresh status.'})

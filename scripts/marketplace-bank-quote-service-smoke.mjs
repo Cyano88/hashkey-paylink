@@ -18,3 +18,8 @@ fail=false;senderFee='0.01';await assert.rejects(()=>svc.quote({...input,operati
 await assert.rejects(()=>svc.quote({...input,operationId:'small_one',debitUnits:'999999'}),/minimum|at least/i)
 assert.equal(JSON.stringify(store).includes(details.accountNumber),false)
 console.log('PASS bank quote exact total debit, provider fee and gas, zero duplicate commission, minimum, scope, immutable retry, ambiguous-create no retry, encrypted recipient only (provider fixtures).')
+const commissionFailure=store.requests.find(r=>r.operationId==='extra_fee');assert.equal(commissionFailure.failure.code,'MARKETPLACE_BANK_COMMISSION_NOT_ZERO');assert.equal(commissionFailure.failure.details.commissionUnits,'10000')
+const countBefore=calls;await assert.rejects(()=>svc.quote({...input,operationId:'extra_fee'}),e=>e.failure.code==='MARKETPLACE_BANK_COMMISSION_NOT_ZERO');assert.equal(calls,countBefore)
+senderFee='0';await assert.rejects(()=>svc.quote({...input,operationId:'fee_shortfall',debitUnits:'1000000'}),e=>e.failure.code==='MARKETPLACE_BANK_FEE_SHORTFALL'&&e.failure.details.estimatedShortfallUnits==='110000'&&e.failure.details.estimateOnly===true)
+assert.equal(store.requests.find(r=>r.operationId==='fee_shortfall').state,'failed')
+console.log('PASS structured commission/fee shortfall, exact integer estimate and durable retry without another provider order.')

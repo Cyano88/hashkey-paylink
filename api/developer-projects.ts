@@ -174,6 +174,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  marketplaceQuoteRead?:()=>Promise<import('./marketplace/bank-quote-service.js').BankQuoteRequests|undefined>
   marketplaceRead?:()=>Promise<import('./marketplace/repository.js').MarketplaceStore|undefined>
   receivingWallets?: typeof developerReceivingWallets
   removal?: typeof manageAppRemoval
@@ -681,7 +682,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           if(req.query?.environment&&req.query.environment!=='live')return res.status(400).json({ok:false,error:'Marketplace balances are live only.'})
           const sellerId=req.query?.sellerId
           if(sellerId!==undefined&&(typeof sellerId!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9:_.-]{1,159}$/.test(sellerId)))return res.status(400).json({ok:false,error:'Enter a valid seller reference.'})
-          return res.json({ok:true,...marketplacePortalBalances(await (dependencies.marketplaceRead??(()=>readDurableJson<import('./marketplace/repository.js').MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1')))(),project.id,sellerId as string|undefined)})
+          return res.json({ok:true,...marketplacePortalBalances(await (dependencies.marketplaceRead??(()=>readDurableJson<import('./marketplace/repository.js').MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1')))(),project.id,sellerId as string|undefined,await (dependencies.marketplaceQuoteRead??(()=>readDurableJson<import('./marketplace/bank-quote-service.js').BankQuoteRequests>('hashpaylink:marketplace-bank-quotes:v1')))())})
         }
         if (resource === 'activity' || resource === 'payments') {
           const projectId = clean(req.query?.projectId, 80)

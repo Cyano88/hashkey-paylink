@@ -40,6 +40,6 @@ export function validateMarketplaceBankQuote(input:MarketplaceBankQuote,now:numb
 }
 
 export function bankFeeDisclosure(q:MarketplaceBankQuote,settled?:boolean){
- return {...(q.exchangeRate?{exchangeRate:q.exchangeRate}:{}),quoteId:q.quoteId,asset:q.asset,currency:q.currency,feePayer:q.feePayer,feePolicy:q.feePolicy??'provider_only',quotedDebitUnits:q.debitUnits,conversionUnits:q.netUnits,providerFeeUnits:q.feeUnits,networkFeeUnits:q.networkFeeUnits??'0',fundingUnits:q.fundingUnits,ngnMinor:q.ngnMinor,expiresAt:q.expiresAt,
+ return {...(q.exchangeRate?{exchangeRate:q.exchangeRate}:{}),quoteId:q.quoteId,asset:q.asset,currency:q.currency,commissionUnits:'0',feePayer:q.feePayer,feePolicy:q.feePolicy??'provider_only',quotedDebitUnits:q.debitUnits,conversionUnits:q.netUnits,providerFeeUnits:q.feeUnits,networkFeeUnits:q.networkFeeUnits??'0',fundingUnits:q.fundingUnits,ngnMinor:q.ngnMinor,expiresAt:q.expiresAt,
   ...(settled===undefined?{}:{chargedProviderFeeUnits:settled?q.feeUnits:'0',chargedNetworkFeeUnits:settled?(q.networkFeeUnits??'0'):'0'})}
 }

@@ -1,3 +1,4 @@
+import {MarketplaceBankQuoteError} from '../api/marketplace/bank-readiness.ts'
 import {assertMarketplaceWithdrawalMinimum} from '../src/lib/marketplaceWithdrawalPolicy.ts'
 import assert from 'node:assert/strict'
 import express from 'express'
@@ -12,12 +13,13 @@ const auth=createMarketplacePrincipalResolver({env:()=>({MARKETPLACE_INSTRUCTION
 const repo=createMarketplaceRepository({read:async()=>structuredClone(store),mutate:async fn=>{store=fn(structuredClone(store));return structuredClone(store)}})
 for(const id of [projectId,'dev_99999999']){await repo.create({projectId:id,paymentId:'payment_one',network:'base',asset:'USDC',amount:'1',allocations:[{id:'seller_a',sellerId:'seller_a',beneficiaryId:'wallet_a',role:'seller',settlement:'wallet_usdc',amount:'1'}]},'draft_a');await repo.execute(id,'payment_one','fund_a',{type:'fund',network:'base',asset:'USDC',amountUnits:'1000000',evidenceId:'fixture:'+id})}
 const service=createMarketplaceInstructions({repository:repo,resolvePrincipal:auth,enabled:true})
-const app=express();app.use(express.json());app.use('/v1',createMarketplaceRouter({enabled:()=>enabled,authorize:auth,service:()=>{calls++;return {...service,createWalletQuote:async()=>assertMarketplaceWithdrawalMinimum('wallet','499999'),createPayment:async()=>{throw Error('provider secret should not escape')}}}}))
+const app=express();app.use(express.json());app.use('/v1',createMarketplaceRouter({enabled:()=>enabled,authorize:auth,service:()=>{calls++;return {...service,createWithdrawalQuote:async()=>{throw new MarketplaceBankQuoteError({code:'MARKETPLACE_BANK_FEE_SHORTFALL',httpStatus:400,message:'More balance is needed for fees.',details:{estimatedShortfallUnits:'20000',estimateOnly:true}})},createWalletQuote:async()=>assertMarketplaceWithdrawalMinimum('wallet','499999'),createPayment:async()=>{throw Error('provider secret should not escape')}}}}))
 const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port
 async function req(path,method='GET',body,key,credential=token){const r=await fetch(origin+'/v1'+path,{method,headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()}}
 try{
  assert.equal((await req('/payments/payment_one')).status,503);assert.equal(calls,0);enabled=true
  assert.equal((await req('/payments/payment_one','GET',null,null,'hpl_test_'+ 'a'.repeat(48))).status,401)
+ const rejectedQuote=await req('/withdrawal-quotes','POST',{});assert.equal(rejectedQuote.status,400);assert.equal(rejectedQuote.body.code,'MARKETPLACE_BANK_FEE_SHORTFALL');assert.equal(rejectedQuote.body.estimatedShortfallUnits,'20000');assert.equal(rejectedQuote.body.payoutSubmitted,false)
  let r=await req('/payments/payment_one');assert.equal(r.status,200);assert.equal(r.body.data.plan.projectId,projectId);assert.ok(!JSON.stringify(r.body).includes('fixture:'))
  const release={businessReference:'delivered_one',releases:[{allocationId:'seller_a',amount:'0.1'}]}
  assert.equal((await req('/payments/payment_one/releases','POST',release)).status,400)
