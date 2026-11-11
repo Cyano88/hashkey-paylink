@@ -722,8 +722,12 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
   return res.json({ ok: true, receipt })
 }
 
-/** Marketplace-only order transport. No POS lifecycle or inherited checkout commission. */
+/** Marketplace-only order transport. No POS lifecycle.
+ * Paycrest rejects explicit zero fixed/percentage fees. Omit overrides here;
+ * bank-quote-service and paycrest-quotes MUST reject nonzero profile commission
+ * before reservation or funding. Omitting a field is not a zero-fee guarantee.
+ */
 export async function createMarketplacePaycrestOrder(input:{reference:string;amount:string;refundAddress:string;bankCode:string;accountNumber:string;accountName:string}):Promise<unknown>{
  if(!/^[a-zA-Z0-9:_-]{1,90}$/.test(input.reference)||!isAddress(input.refundAddress)||! /^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(input.amount))throw Error('Invalid Marketplace provider order.')
- return paycrestFetch('/v2/sender/orders',{method:'POST',signal:AbortSignal.timeout(10000),body:JSON.stringify({amount:input.amount,amountIn:'crypto',senderFeePercent:'0',transactionFeePayer:'customer',reference:input.reference,source:{type:'crypto',currency:'USDC',network:'base',refundAddress:input.refundAddress},destination:{type:'fiat',currency:'NGN',recipient:{institution:input.bankCode,accountIdentifier:input.accountNumber,accountName:input.accountName,memo:'Marketplace withdrawal'}}})})
+ return paycrestFetch('/v2/sender/orders',{method:'POST',signal:AbortSignal.timeout(10000),body:JSON.stringify({amount:input.amount,amountIn:'crypto',transactionFeePayer:'customer',reference:input.reference,source:{type:'crypto',currency:'USDC',network:'base',refundAddress:input.refundAddress},destination:{type:'fiat',currency:'NGN',recipient:{institution:input.bankCode,accountIdentifier:input.accountNumber,accountName:input.accountName,memo:'Marketplace withdrawal'}}})})
 }
