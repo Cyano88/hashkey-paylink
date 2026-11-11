@@ -12,6 +12,7 @@ import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
   marketplaceName?: string
+  marketplaceDebitAmount?:string
   payerFees?:PayerCheckoutFeeEvidence
   marketplaceBankFees?:{quoteId:string;debitUnits:string;ngnPaidMinor:string;exchangeRate?:string;chargedCommissionUnits?:string;chargedProviderFeeUnits?:string;chargedNetworkFeeUnits?:string}
   marketplaceWalletFees?:MarketplaceWalletReceiptAmounts
@@ -306,16 +307,16 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       ...(receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees):[]),
       ...(receipt.pricing?[{label:'Order price',value:checkoutPriceLabel(receipt.pricing,'')},{label:'Paid with',value:compactReceiptAmount(receipt.amount,receipt.asset)+' '+receipt.asset},{label:'Exchange rate',value:'1 '+receipt.pricing.paymentAsset+' = '+receipt.pricing.rate+' NGN'}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
-      {label:'Merchant',value:receipt.recipient||'Merchant'},
+      {label:receipt.type==='money_in'?'Business':'Paid to',value:receipt.recipient||'Business'},
       ...(receipt.brandKind!=='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)}]:[]),
       {label:'Network',value:network},
-      ...(receipt.amountNgn&&receipt.fiatCurrency?[{label:'Merchant settlement',value:compactReceiptAmount(receipt.merchantSettlementAmount||receipt.amountNgn)+' '+receipt.fiatCurrency}]:[]),
+      ...(receipt.type==='money_in'&&receipt.amountNgn&&receipt.fiatCurrency?[{label:'Merchant settlement',value:compactReceiptAmount(receipt.merchantSettlementAmount||receipt.amountNgn)+' '+receipt.fiatCurrency}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:receipt.type==='money_in'?'From':'To',value:(receipt.type==='money_in'?receipt.payer:receipt.destination)||'-'}]:[]),
       ...(receipt.merchantFees&&receipt.type==='money_in'?[
         {label:'Order total',value:formatUnits(parseUnits(receipt.merchantFees.netAmount,18)+parseUnits(receipt.merchantFees.platformFee,18)+parseUnits(receipt.merchantFees.networkFee,18),18)+' '+receipt.asset},
         {label:'Fee',value:formatUnits(parseUnits(receipt.merchantFees.platformFee,18)+parseUnits(receipt.merchantFees.networkFee,18),18)+' '+receipt.asset},
         {label:'Net proceeds',value:receipt.merchantFees.netAmount+' '+receipt.asset},
-      ]:!receipt.merchantFees&&receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
+      ]:!receipt.payerFees&&!receipt.merchantFees&&receipt.feeAmount?[{label:'Fee',value:compactReceiptAmount(receipt.feeAmount,receipt.asset)+' '+receipt.asset}]:[]),
     ],
   }
   if (['marketplace-refund','marketplace-payout'].includes(receipt.source || '')) {
@@ -327,6 +328,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       {label:'From',value:receipt.payer || '-',mono:true},
       {label:'To',value:receipt.recipient || '-',mono:true},
       ...(receipt.feeAmount ? [{label:kind === 'Refund' ? 'Fee deducted' : 'Withdrawal fee',value:marketplaceReceiptAmount(receipt.feeAmount)+' '+(receipt.feeAsset || receipt.asset)}] : []),
+      ...(kind==='Payout'&&receipt.marketplaceDebitAmount?[{label:'Total balance debit',value:marketplaceReceiptAmount(receipt.marketplaceDebitAmount)+' USDC'}]:[]),
     ]}
   }
   if(['wallet-transfer','wallet-deposit','wallet-withdrawal'].includes(receipt.source||'')&&['money_in','money_out'].includes(receipt.type)){
@@ -421,7 +423,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       {label:'Transaction',value:receipt.txHash,mono:true},
     ],reference}
   }
-  if(receipt.source==='marketplace_bank'&&receipt.marketplaceBankFees){
+  if(['marketplace_bank','marketplace-bank'].includes(receipt.source||'')&&receipt.marketplaceBankFees){
     const f=receipt.marketplaceBankFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
     const minor=BigInt(f.ngnPaidMinor),ngn=(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0')+' NGN'
     return {variant,badge:'Marketplace bank withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[

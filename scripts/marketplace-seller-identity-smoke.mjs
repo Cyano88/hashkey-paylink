@@ -35,6 +35,11 @@ await assert.rejects(()=>service.verifyBank(request),/Basic/)
 kyc={...kyc,country:'NG',reference:''}
 assert.equal((await service.status('project_a','seller_a')).bankEligible,false)
 await assert.rejects(()=>service.verifyBank(request),/Basic/)
+const summary={enabled:true,frequency:'weekly',timeZone:'Africa/Lagos',startedAt:'2000-01-01',subscriberId:'attacker'}
+const saved=await service.reporting(secondToken,'owner_a',summary)
+assert.equal(saved.reporting.subscriberId,'owner_a');assert.equal(saved.reporting.startedAt,new Date(now).toISOString())
+await assert.rejects(()=>service.reporting(secondToken,'owner_b',summary),/invalid or expired/)
+await service.reporting(secondToken,'owner_a',{...summary,enabled:false});assert.equal(store.links[0].reporting.enabled,false)
 authorized=false
 await assert.rejects(()=>service.inspect(token,'owner_a'),/invalid or expired/)
 await assert.rejects(issue,/authorization/)

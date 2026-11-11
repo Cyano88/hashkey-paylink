@@ -17,6 +17,7 @@ export function createMarketplaceSellerRouter(){
    const user=await verifiedPrivyUser(req),token=String(req.headers['x-seller-session']??''),identity=marketplaceSellerIdentity(),action=req.body?.action
    if(action==='inspect'||action==='connect'){const v=marketplaceFields(req.body,action==='connect'?['action','consent']:['action']);const data=action==='connect'?await identity.connect(token,user.userId,v.consent===true):await identity.inspect(token,user.userId);const bankAccounts=data.connected?await bankDetails(await identity.scope(token,user.userId)):[];return res.json({ok:true,data:{...data,bankAccounts}})}
    const scope=await identity.scope(token,user.userId)
+   if(action==='reporting'){const v=marketplaceFields(req.body,['action','reporting']);const data=await identity.reporting(token,user.userId,v.reporting);return res.json({ok:true,data:{...data,bankAccounts:await bankDetails(scope)}})}
    if(action==='banks'){marketplaceFields(req.body,['action']);return res.json({ok:true,data:await listPaycrestInstitutions('NGN')})}
    if(action==='bank'){
     const v=marketplaceFields(req.body,['action','beneficiaryId','bankCode','accountNumber'])
@@ -26,7 +27,7 @@ export function createMarketplaceSellerRouter(){
     const details=(await bankDetails(scope)).find(item=>item.beneficiaryId===b.beneficiaryId);if(!details)throw Error('Verified bank details unavailable.');return res.json({ok:true,data:details})
    }
    return res.status(400).json({ok:false,error:'Invalid seller action.'})
-  }catch(error){const message=error instanceof Error?error.message:'';const safe=/^(Seller verification link has expired|Seller session|This seller|Consent is required|Seller identity replacement|Connect |Complete Nigerian Basic|Bank account name does not match|Use a resolved institution|Invalid bank account|Marketplace bank setup|Beneficiary version)/.test(message);return res.status(safe?400:503).json({ok:false,error:safe?message:'Seller setup could not be completed. Sign in again or retry shortly.'})}
+  }catch(error){const message=error instanceof Error?error.message:'';const safe=/^(Seller verification link has expired|Seller session|This seller|Consent is required|Seller identity replacement|Connect |Complete Nigerian Basic|Bank account name does not match|Use a resolved institution|Invalid bank account|Marketplace bank setup|Beneficiary version|Provide valid business summary|Choose daily or weekly business|Choose a valid summary timezone)/.test(message);return res.status(safe?400:503).json({ok:false,error:safe?message:'Seller setup could not be completed. Sign in again or retry shortly.'})}
  })
  return router
 }

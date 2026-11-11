@@ -110,7 +110,7 @@ import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } fro
 import { selectPocketCheckoutRoute, type PocketCheckoutNetwork, type PocketCheckoutRoute } from '../lib/pocketCheckoutRouting'
 import type { CirclePocketWallets } from '../pocket/models/pocketWallet'
 import { POCKET_ORIGIN, POCKET_ROUTES } from '../pocket/lib/pocketRoutes'
-import { type PaylinkReceipt, type ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
+import { paymentReceiptView, type PaylinkReceipt, type ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
 
 // Payment CTA marks are intentionally preserved while surrounding checkout
 // chrome uses the shared Pocket Heroicons layer.
@@ -4090,7 +4090,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
       type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
-    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={checkoutPriceLabel(hostedPricing,formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
+    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={receipt?.payerFees?paymentReceiptView(receipt).amount:checkoutPriceLabel(hostedPricing,formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
   }
 
   if (pocketScan?.native) {

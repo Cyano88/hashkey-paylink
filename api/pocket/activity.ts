@@ -245,6 +245,9 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
   return {
     ...(value.merchantNetAmount?{merchantNetAmount:value.merchantNetAmount}:{}),
     ...(value.merchantFees?{merchantFees:value.merchantFees}:{}),
+    ...(value.payerFees?{payerFees:value.payerFees}:{}),
+    ...(value.marketplaceDebitAmount?{marketplaceDebitAmount:value.marketplaceDebitAmount}:{}),
+    ...(value.marketplaceBankFees?{marketplaceBankFees:value.marketplaceBankFees}:{}),
     eventId: value.eventId,
     txHash: value.txHash,
     chain: value.chain,

@@ -60,6 +60,7 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
   if ((source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
   if (settlement === 'hosted_checkout') return row.direction === 'in' ? 'money_in' : 'money_out'
+  if (source === 'marketplace-bank') return 'money_out'
   if (source === 'xpay') return row.direction === 'in' ? 'money_in' : 'app_purchase'
   if (source === 'esim') return 'app_purchase'
   if (isOutgoingPosPurchase(row)) return 'app_purchase'
@@ -95,6 +96,7 @@ export function pocketBillTitle(category?: string): string {
 }
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
+  if (normalizedSource(row) === 'marketplace-bank') return 'Bank withdrawal'
   if (normalizedSource(row) === 'marketplace-refund') return 'Refund'
   if (normalizedSource(row) === 'marketplace-payout') return 'Payout'
   if(row.settlementType==='hosted_checkout')return 'Web payment '+(row.direction==='in'?'received':'sent')
@@ -138,7 +140,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     receiptId: row.receiptId || row.billReference || row.eventId,
     receiptHash: row.txHash || reference,
     title: pocketMovementTitle(row),
-    marketplaceName: ['marketplace-refund','marketplace-payout'].includes(source) ? row.merchantName || (row.contextLabel?.match(/^(.*) - (?:Refund|Payout)$/)?.[1]) : undefined,
+    marketplaceName: ['marketplace-refund','marketplace-payout','marketplace-bank'].includes(source) ? row.merchantName || (row.contextLabel?.match(/^(.*) - (?:Refund|Payout)$/)?.[1]) : undefined,
     status: pocketActivityStatus(row),
     bankSettlementStatus: source === 'bank-withdraw' || source === 'xpay' ? row.bankSettlementStatus || row.paycrestStatus : undefined,
     eventId: row.eventId,
@@ -149,6 +151,9 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     memo: row.memo,
     amount: row.amount,
     feeAmount: row.feeAmount,
+    payerFees: row.direction === 'out' ? row.payerFees : undefined,
+    marketplaceDebitAmount: row.marketplaceDebitAmount,
+    marketplaceBankFees: row.marketplaceBankFees,
     merchantFees: row.merchantFees,
     amountNgn: row.amountNgn,
     fiatCurrency: row.fiatCurrency,

@@ -26,7 +26,7 @@ assert.equal(marketplaceReceiptActivity(receipts,'0x'+'44'.repeat(20)).length,0)
 const raw={...rows[0],eventId:'raw',source:'wallet-deposit',memo:'USDC deposit',contextLabel:'From holding'}
 const merged=mergePocketActivityRows([raw],rows);assert.equal(merged.length,1);assert.equal(merged[0].source,'marketplace-refund')
 for(const change of [b=>b.refundExecutions[0].state='submitted',b=>b.refundExecutions[0].terminalEvidence.finalizedBlockNumber='99',b=>b.operations[0].status='unknown',b=>b.refundReservations[0].collection={...origin,payerWallet:seller}]){const copy=structuredClone(state);change(copy.books[0]);assert.equal(marketplaceSettlementReceipts(copy).filter(r=>r.kind==='refund').length,0)}
-const copy=marketplaceReceiptEmail(receipts[0]);assert.match(copy.text,/Fee deducted from refund: 0 USDC/);assert.match(copy.text,/Refund gas payer: Marketplace refund fee balance/)
+const copy=marketplaceReceiptEmail(receipts[0]);assert.match(copy.text,/Fee deducted from refund: 0 USDC/);assert.doesNotMatch(copy.text,/Refund gas payer|refund fee balance/)
 assert.ok(activeReceiptSettings({capabilities:['marketplace_payments'],operationalStatus:'active'}));assert.equal(activeReceiptSettings({capabilities:['marketplace_payments'],operationalStatus:'suspended'}),undefined)
 let outbox={jobs:{}},queued=0
 const outboxDeps={enabled:()=>true,from:()=> 'receipts@example.com',now:()=>3000,read:async()=>outbox,mutate:async fn=>outbox=fn(outbox)}

@@ -1098,7 +1098,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (settlementMode === 'ugx' && currentProject.settlementMode !== 'ugx') return res.status(403).json({ok:false,error:'Uganda mobile money settlement is coming soon. Choose stablecoins or Nigeria bank settlement.'})
         if(bscCheckout&&(currentCheckoutMode!=='human'||!capabilities.includes('hosted_checkout')))return res.status(400).json({ok:false,error:'BNB Chain acceptance requires human Checkout.'})
         let receiptEmails:ReceiptEmailSettings
-        try{receiptEmails=normalizeReceiptEmailSettings(req.body?.receiptEmails,currentProject.receiptEmails,dependencies.now().toISOString())}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
+        try{receiptEmails=normalizeReceiptEmailSettings(req.body?.receiptEmails,currentProject.receiptEmails,dependencies.now().toISOString(),identity.userId)}catch(error){return res.status(400).json({ok:false,error:(error as Error).message})}
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
         const networks = !routingRequired ? [] : requestedPaymentNetworks
         const defaultNetwork = !routingRequired ? 'arc' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
@@ -1173,7 +1173,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           if (capabilities.some(capability => !isSelectableDeveloperProduct(capability) && !effectiveProductCapabilities(latest).includes(capability))) throw Object.assign(new Error('This product is not open for new integrations.'), { status: 409 })
           if (isLocalSettlement(settlementMode) && latest.accountType !== 'individual' && latest.businessVerification?.status !== 'approved') throw Object.assign(Error('Business verification must be approved for local fiat.'),{status:403})
           const next: DeveloperProject = {
-            ...latest, receiptEmails:normalizeReceiptEmailSettings(req.body?.receiptEmails,latest.receiptEmails,dependencies.now().toISOString()), name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,
+            ...latest, receiptEmails:normalizeReceiptEmailSettings(req.body?.receiptEmails,latest.receiptEmails,dependencies.now().toISOString(),identity.userId), name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode, xlayerCheckout, bscCheckout,
             personalKycVerified: isLocalSettlement(settlementMode) && latest.accountType === 'individual' ? true : latest.personalKycVerified,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,

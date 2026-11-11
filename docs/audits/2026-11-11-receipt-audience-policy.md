@@ -1,0 +1,49 @@
+# Receipt audiences and business summaries
+
+Recovered owner direction: on 10 November at 06:35 UTC, the owner preferred a daily batch summary for developers. The follow-up explicitly retained individual buyer/seller settlement receipts. On 11 November the owner requested a careful review of payer, marketplace, seller/merchant, and withdrawal views. Daily/weekly reporting must not replace proof of an individual payment, refund, or completed withdrawal.
+
+| Viewer | Individual record | Email/reporting policy | Amounts belonging to this viewer |
+|---|---|---|---|
+| Buyer/payer | Payment and refund receipts | Verified purchaser email after confirmed payment; refund receipt after final refund | Order amount, fees actually paid by buyer, total paid; full refund received and any buyer deduction (currently zero) |
+| Ordinary Checkout merchant | Incoming payment and settlement records | Daily sales summary, weekly option; no copy of each buyer receipt | Gross sales, merchant-paid fees, net proceeds, settlement currency separately |
+| Marketplace operator | Project-level collections, allocations, releases, refunds, withdrawals | Daily business summary, weekly option; API/webhooks retain transaction-level events | Collected principal, seller allocations and platform allocations separately, liabilities and completed movements; platform allocation revenue is not the Hash PayLink withdrawal commission |
+| Marketplace seller | Own sales allocations/balance and completed wallet/bank withdrawal receipts | Own sales summary; completed withdrawals still receive an individual receipt | Own allocations and balances only; net received, commission/provider/network costs, and exact total balance debit |
+
+Rules:
+
+- Server-verified identity and project/seller scope determine recipients. A project owner's mailbox is never a fallback for an unidentified payer or seller.
+- Bank-account masking is display information, not an ownership proof. Bank history requires the current unambiguous seller identity link for the same project and seller.
+- Shared/emailed payer receipts must not turn into marketplace/seller views. Recipient views must not inherit payer-only fee breakdowns.
+- Keep USDC/USDT, chain-specific amounts and local-currency settlements separate. Do not add NGN receipts to USDC sales or treat a pending allocation as a completed payout.
+- Summaries are statements of a period, not new payment receipts. Preserve individual transaction/reference IDs and original confirmation timestamps.
+- Daily is the preferred reporting cadence; weekly must be an explicit preference. Summary enrollment, timezone, first period, no-activity behavior, retries and historical cutoff must be visible and tested before activating delivery.
+- Current individual receipts remain available in Activity/API; summarizing emails must not delete those records or weaken webhook-based fulfillment.
+
+## Confirmed gaps and work in progress
+
+1. Lost checkout-confirm responses left a paid native sheet Processing. Fixed and installed on Pixel; same transaction recovered without another charge.
+2. Reopened paid checkout used shortened receipt ID, producing a fallback timestamp/name. Full signed reference now hydrates the original receipt; actual Pixel showed the original 13:26 time and marketplace name.
+3. Native receipt rendering lacked the Marketplace payer-fee and withdrawal-fee fields present in the backend/web renderer. Bounded parity changes are in the original native source; parity fixtures pass. A final native build/install remains necessary after the audience audit.
+4. Checkout activity dropped payer-fee evidence. New projection and validation retain it only for the outgoing payer; total paid and exact treasury-leg deduplication have regression coverage.
+5. Seller bank payouts were absent from the wallet-only Marketplace activity lookup. New project/seller identity-scoped projection has wrong-owner, wrong-project, revoked and ambiguous-link regressions.
+6. Wallet payout Activity receipts omitted total balance debit. Added alongside net received and withdrawal fee.
+7. Business summaries were previously discussed but not implemented. Do not describe them as live until scheduler, scoped recipients, preferences and delivery checks pass.
+
+No new payment, payout, live receipt email or summary has been sent as part of this audit. Do not count local fixtures as live acceptance. The existing bank-payout/gas-coverage and webhook-configuration acceptance items remain open separately.
+
+## Implemented and checked on 11 November
+
+- Payer receipt and outgoing Activity retain verified buyer-paid fees and total paid. Incoming merchant records use their own net/fee evidence. Split on-chain fee legs are deduplicated using exact transaction, addresses, asset and amounts; unrelated transfers remain visible.
+- Public/shared payer receipts and newly prepared buyer emails omit merchant net-settlement accounting. `Paid to` displays the actual business/marketplace name without guessing its role from a fee policy. Historical frozen emailed PDFs remain immutable.
+- Seller wallet withdrawals show net received, withdrawal fee and total balance debit. Seller bank history requires one current project/seller identity link and displays NGN received separately from USDC debited, commission, provider and network fees. Refund receipts show the amount received and zero buyer deduction; internal marketplace gas funding belongs in the business summary.
+- Summary delivery is implemented for ordinary Checkout project owners, marketplace project owners and individually enrolled sellers. Daily is the suggested cadence; weekly covers Monday through Sunday. Enrollment defaults off and binds the authenticated subscriber on the server. It never uses an app owner's email as a payer/seller fallback.
+- Reports use closed calendar periods in the saved IANA timezone, with a 15-minute close grace. The first period starts at enrollment; frequency/timezone changes start a new enrollment period. Empty periods are skipped. Outages catch up one period per candidate per worker tick.
+- Checkout activity is recognized on its first durable verified payment observation, or first final local-settlement observation. This includes late reconciliation without counting validated and settled twice. Missing required canonical proof defers the period rather than emailing partial totals. Marketplace collection finality, allocations, refunds and withdrawals come from canonical accounting evidence. Current balances are explicitly a generation-time snapshot, not a fabricated historical closing balance. Assets and networks remain separate.
+- Operator statements separate customer principal, seller allocations, platform earnings, refund gas and withdrawal costs. Seller statements contain only their own allocations, balances, refunds and withdrawals. Platform allocation earnings are not Hash PayLink's withdrawal commission.
+- The existing durable leased email outbox provides dedupe and bounded retries. Summary scope, enrollment epoch, owner, seller link, opt-in and current verified email are checked again before sending. Transfer, revocation, ambiguity, suspension, opt-out and email change prevent delivery to the old recipient. No one was automatically enrolled and no live email was sent during testing.
+
+Validation: summary preference/timezone/DST/catch-up tests; scoped accounting report tests; guarded delivery, crash/deduplication and no-activity tests; seller-session authorization tests; payer/merchant receipt isolation and eight-network activity tests; native/web receipt parity; native source guard; browser receipt and summary settings at 320/390/1280 widths in light/dark; PDF rendering and visual inspection. Test outboxes only. Full source build and native build outcomes are recorded with the final release handoff.
+
+Pixel evidence: the installed receipt showed the original 11 November 13:26 payment time, correct marketplace name, order 0.05 USDC, processing 0.000125 USDC, collection network fee 0.004393 USDC and total paid 0.054518 USDC. Screenshot `output/playwright/pixel-receipt-details.png`. The success sheet was subsequently changed to use this same verified total; no repeat transaction is part of recovery.
+
+The earlier recovery deployment `dep-dbq64umk1f9s73dni0l0` is confirmed live at source `1dba7d8a396ac764a9a7adb6e629b59a4ab49baf`. This does not establish deployment of the broader receipt/summary patch; verify its own final commit and deployment separately.

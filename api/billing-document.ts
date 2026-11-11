@@ -57,7 +57,7 @@ export async function billingReceiptPdf(r:BillingReceipt):Promise<Buffer>{
   doc.moveTo(52,278).lineTo(560,278).strokeColor('#e5e7eb').stroke()
   const footer=()=>doc.fillColor('#667085').fontSize(10).text('Powered by Hash PayLink',52,728,{width:508,align:'center'})
   let y=308
-  for(const[label,value]of[...(r.payerFees?payerCheckoutFeeRows(r.amount,r.payerFees).map(row=>[row.label,row.value]):[]),...(r.pricing?[['Paid with',formatPocketDisplayAmount(r.amount)+' '+r.asset],['Exchange rate','1 '+r.pricing.paymentAsset+' = '+r.pricing.rate+' NGN']]:[]),['Merchant',r.merchant],['Type',webPaymentMethodLabel(r.paymentMethod)],['Network',r.network],['Description',r.description],...(r.settlement?[['Merchant settlement',formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency]]:[])]){
+  for(const[label,value]of[...(r.payerFees?payerCheckoutFeeRows(r.amount,r.payerFees).map(row=>[row.label,row.value]):[]),...(r.pricing?[['Paid with',formatPocketDisplayAmount(r.amount)+' '+r.asset],['Exchange rate','1 '+r.pricing.paymentAsset+' = '+r.pricing.rate+' NGN']]:[]),['Paid to',r.merchant],['Type',webPaymentMethodLabel(r.paymentMethod)],['Network',r.network],['Description',r.description],...(r.settlement?[['Merchant settlement',formatPocketDisplayAmount(r.settlement.amount)+' '+r.settlement.currency]]:[])]){
    const rowHeight=Math.max(42,doc.fontSize(11).heightOfString(value,{width:330})+18)
    if(y+rowHeight>680){footer();doc.addPage();y=60}
    doc.fillColor('#667085').fontSize(10).text(label.toUpperCase(),52,y,{width:150});doc.fillColor('#17181c').fontSize(11).text(value,230,y,{width:330,align:'right'});y+=rowHeight

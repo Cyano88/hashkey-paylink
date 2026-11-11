@@ -7,10 +7,11 @@ import {readStockCheckout,readStockCheckoutReceipt} from './hosted-stock-checkou
 import {billingReceiptPdf,receiptEmail,type BillingReceipt} from './billing-document.js'
 import {sendTransactionalEmail,type SendEmailInput} from './email-provider.js'
 const KEY='hashpaylink:checkout-receipt-emails:v1'
-type Job={id:string;input:SendEmailInput;state:'pending'|'sent'|'review'|'canceled';projectId?:string;createdAt:number;attempts:number;nextAt:number;firstAttemptAt?:number;lease?:string;leaseUntil?:number;providerId?:string}
+export type ReceiptSummaryGuard={projectId:string;ownerId:string;sellerId?:string;startedAt:string;frequency:'daily'|'weekly';timeZone:string}
+type Job={guard?:ReceiptSummaryGuard;id:string;input:SendEmailInput;state:'pending'|'sent'|'review'|'canceled';projectId?:string;createdAt:number;attempts:number;nextAt:number;firstAttemptAt?:number;lease?:string;leaseUntil?:number;providerId?:string}
 type Store={jobs:Record<string,Job>}
 const normalized=(s?:Store):Store=>({jobs:s?.jobs||{}})
-const defaults={enabled:()=>process.env.CHECKOUT_RECEIPT_EMAIL_ENABLED==='true'&&hasRenderDurableStore(),from:()=>process.env.RECEIPT_FROM_EMAIL||process.env.ALERT_FROM_EMAIL||'',now:Date.now,read:async()=>normalized(await readDurableJson<Store>(KEY)),mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(KEY,s=>fn(normalized(s))),send:sendTransactionalEmail,canSend:async(projectId:string)=>Boolean(await readDeveloperReceiptSettings(projectId))}
+const defaults={enabled:()=>process.env.CHECKOUT_RECEIPT_EMAIL_ENABLED==='true'&&hasRenderDurableStore(),from:()=>process.env.RECEIPT_FROM_EMAIL||process.env.ALERT_FROM_EMAIL||'',now:Date.now,read:async()=>normalized(await readDurableJson<Store>(KEY)),mutate:(fn:(s:Store)=>Store)=>mutateDurableJson<Store>(KEY,s=>fn(normalized(s))),send:sendTransactionalEmail,canSend:async(projectId:string,guard?:ReceiptSummaryGuard,to?:string)=>Boolean(await readDeveloperReceiptSettings(projectId))&&(!guard||await import('./receipt-business-summaries.js').then(m=>m.canDeliverReceiptSummary(guard,to||'')))}
 export async function queueCheckoutReceiptEmail(to:string,receipt:BillingReceipt,d=defaults){
  if(!d.enabled()||!d.from())return
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)||/\r|\n/.test(to)||to.length>254)throw Error('Verified purchaser email required.')
@@ -21,12 +22,13 @@ export async function queueCheckoutReceiptEmail(to:string,receipt:BillingReceipt
  await d.mutate(s=>{s.jobs[id]??={id,projectId:receipt.projectId,input,state:'pending',createdAt:d.now(),attempts:0,nextAt:d.now()};return s})
 }
 /** Reuses the durable, leased receipt outbox for other verified receipt types. */
-export async function queuePreparedReceiptEmail(receiptId:string,projectId:string,message:Omit<SendEmailInput,'fromEmail'|'idempotencyKey'>,d=defaults){
+export async function queuePreparedReceiptEmail(receiptId:string,projectId:string,message:Omit<SendEmailInput,'fromEmail'|'idempotencyKey'>,d=defaults,guard?:ReceiptSummaryGuard){
  if(!d.enabled()||!d.from())return
+ if(guard&&guard.projectId!==projectId)throw Error('Summary project mismatch.')
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(message.to)||/\r|\n/.test(message.to)||message.to.length>254)throw Error('Verified receipt email required.')
  const id=createHash('sha256').update(receiptId).digest('hex')
  const input={...message,fromEmail:d.from(),idempotencyKey:'checkout-receipt/'+id}
- await d.mutate(s=>{s.jobs[id]??={id,projectId,input,state:'pending',createdAt:d.now(),attempts:0,nextAt:d.now()};return s})
+ await d.mutate(s=>{s.jobs[id]??={id,projectId,input,...(guard?{guard}:{}),state:'pending',createdAt:d.now(),attempts:0,nextAt:d.now()};return s})
 }
 export async function drainCheckoutReceiptEmails(d=defaults){
  if(!d.enabled())return
@@ -37,7 +39,7 @@ export async function drainCheckoutReceiptEmails(d=defaults){
    if(j.firstAttemptAt!==undefined&&d.now()-j.firstAttemptAt>20*60*60_000){j.state='review';return s}
    j.firstAttemptAt??=d.now();j.lease=lease;j.leaseUntil=d.now()+60_000;j.attempts++;claimed=structuredClone(j);return s})
   if(!claimed)continue
-  if(claimed.projectId&&d.canSend&&!await d.canSend(claimed.projectId)){await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='canceled';j.leaseUntil=0}return s});continue}
+  if(claimed.projectId&&d.canSend&&!await d.canSend(claimed.projectId,claimed.guard,claimed.input.to)){await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='canceled';j.leaseUntil=0}return s});continue}
   try{const providerId=await d.send(claimed.input);await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='sent';j.providerId=providerId;j.leaseUntil=0}return s})}
   catch{await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.leaseUntil=0;j.nextAt=d.now()+Math.min(60*60_000,30_000*2**Math.min(j.attempts,7));if(j.attempts>=12)j.state='review'}return s})}
  }

@@ -1,10 +1,12 @@
 import { pocketActivityStatus } from './pocketReceipt'
+import {marketplaceFeeAmount} from '../../lib/marketplaceFeeDisplay'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
 
 /** Recorded local payments use their original settlement amount, never a live conversion. */
-export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol' | 'paycrestStatus' | 'refundAmount' | 'refundAsset'>): string {
+export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol' | 'paycrestStatus' | 'refundAmount' | 'refundAsset' | 'payerFees' | 'direction'>): string {
+  if(row.direction==='out'&&row.payerFees)return marketplaceFeeAmount(row.payerFees.totalUnits)+' USDC'
   if(row.source==='wallet-bridge'&&['refunded','reversed'].includes(row.paycrestStatus||'')&&row.refundAmount&&row.refundAsset)return row.refundAmount+' '+row.refundAsset
   const local = row.amountNgn !== undefined && row.amountNgn !== '' && Number.isFinite(Number(row.amountNgn))
   if (local && (row.source === 'bills' || row.source?.startsWith('bank-') || row.source === 'xpay' || !row.amount || !Number.isFinite(Number(row.amount)))) {

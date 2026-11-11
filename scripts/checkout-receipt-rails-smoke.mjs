@@ -16,10 +16,16 @@ assert.equal(checkoutReceipt({...base,payment:{...base.payment,network:'polygon'
 for(const mode of ['ngn','ugx'])for(const status of ['processing','failed','refunded','refunding','expired','settled','validated']){
  const r=checkoutReceipt({...base,settlement:{mode,amountNgn:'2000'},payout:{status}})
  assert.equal(r.status==='confirmed',['settled','validated'].includes(status));assert.equal(r.paymentMethod,'wallet');assert.equal(r.bankSettlementStatus,status)
- if(r.status==='confirmed')assert.equal(checkoutBillingReceipt(r).settlement.currency,mode.toUpperCase());else assert.throws(()=>checkoutBillingReceipt(r))
+ if(r.status==='confirmed')assert.equal(checkoutBillingReceipt(r).settlement,undefined,'payer email must not expose merchant net settlement');else assert.throws(()=>checkoutBillingReceipt(r))
 }
 const readers={checkout:async()=>base,stockReceipt:async()=>undefined,bscReceipt:async()=>null,registered:async()=>({source:'hosted-checkout',merchantId:id,chain:'base',txHash:'0xabc'})}
 assert.equal((await readCheckoutReceipt('v1.signed.alias',readers)).receiptId,id)
+const privateRecord={...base,settlement:{mode:'ngn',amountNgn:'2000',netAmountNgn:'1900'},payout:{status:'settled'},payment:{...base.payment,fees:{payer:'merchant',platformFee:'0.1',networkFee:'0',netAmount:'1.4'}}}
+const publicReceipt=await readCheckoutReceipt(id,{...readers,checkout:async()=>privateRecord})
+for(const field of ['merchantFees','merchantSettlementAmount','amountNgn','fiatCurrency','bankSettlementStatus'])assert.equal(publicReceipt[field],undefined,'buyer receipt must not expose '+field)
+assert.equal(publicReceipt.amount,'1.5');assert.equal(publicReceipt.status,'confirmed')
+assert.doesNotMatch(receiptEmail(checkoutBillingReceipt(checkoutReceipt(privateRecord))).text,/Merchant settlement/)
+
 assert.equal(await readCheckoutReceipt('v1.signed.alias',{...readers,registered:async()=>({source:'hosted-checkout',merchantId:id,chain:'polygon',txHash:'0xabc'})}),undefined)
 assert.equal(await readCheckoutReceipt('v1.signed.alias',{...readers,checkout:async()=>({...base,network:'solana',payment:{...base.payment,txHash:'AbC'}}),registered:async()=>({source:'hosted-checkout',merchantId:id,chain:'solana',txHash:'abc'})}),undefined)
 let store={contacts:{}},owned=true,record={...base,payment:undefined},email='verified@example.test'

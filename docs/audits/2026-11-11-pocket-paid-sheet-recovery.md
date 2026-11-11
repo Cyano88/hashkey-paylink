@@ -18,3 +18,9 @@ No duplicate checkout payment or bank payout was submitted during this fix. Bank
 
 Follow-up observed on the recovered receipt: its displayed time was the reopen time (13:57), not the server confirmation time (13:26:49). The fallback receipt uses Date.now; the public attempt receiptId is shortened while receiptUrl contains the full signed reference. Correct the receipt-reference hydration before calling receipt acceptance complete.
 
+
+## Follow-up verification
+
+The shortened-reference issue above is fixed: recovery uses the full signed reference from the server receipt URL, while retaining the shortened attempt ID only as a legacy fallback. The installed Pixel receipt now hydrates the original confirmation date and business name, with verified payer fees and exact total paid. The actual receipt showed 11 November 13:26, 0.05 USDC order + 0.000125 processing + 0.004393 collection network fee = 0.054518 USDC. The success sheet also uses the verified total when fee evidence is available.
+
+Render status was recovered: `dep-dbq64umk1f9s73dni0l0` is live for `1dba7d8a396ac764a9a7adb6e629b59a4ab49baf`, updated 12:47:14 UTC. The broader receipt/summary release still requires its own deployment verification. See `2026-11-11-receipt-audience-policy.md` for audience boundaries and reporting policy.

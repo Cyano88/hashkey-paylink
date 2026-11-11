@@ -1,4 +1,5 @@
 import { isPocketId } from './pocketId'
+import {validatePayerCheckoutFees, type PayerCheckoutFeeEvidence} from '../../lib/payerCheckoutFees'
 import type { PocketPaymentFunding } from './pocketPaymentFunding'
 import { normalizePayoutAccount, validPayoutCurrency } from './pocketFiatCorridors'
 import { pocketApiUrl } from './pocketRoutes'
@@ -169,12 +170,26 @@ export type PocketX402ActivationData = {
   replayed: boolean
 }
 
+function validPayerActivityFees(value:Record<string,unknown>):boolean {
+ if(value.direction!=='out'||value.settlementType!=='hosted_checkout'||value.assetSymbol!=='USDC')return false
+ try {validatePayerCheckoutFees(String(value.amount),value.payerFees as PayerCheckoutFeeEvidence);return true}catch{return false}
+}
+function validMarketplaceBankFees(value:unknown):boolean {
+ if(!isRecord(value)||typeof value.quoteId!=='string'||value.quoteId.length>160)return false
+ const keys=['debitUnits','ngnPaidMinor','chargedCommissionUnits','chargedProviderFeeUnits','chargedNetworkFeeUnits']
+ if(keys.some(k=>typeof value[k]!=='string'||!/^(0|[1-9]\d{0,23})$/.test(value[k] as string)))return false
+ if(value.exchangeRate!==undefined&&(typeof value.exchangeRate!=='string'||!/^\d{1,18}(?:\.\d{1,18})?$/.test(value.exchangeRate)))return false
+ return BigInt(value.debitUnits as string)>=['chargedCommissionUnits','chargedProviderFeeUnits','chargedNetworkFeeUnits'].reduce((n,k)=>n+BigInt(value[k] as string),0n)
+}
 function isMerchantFeeRecord(value:unknown):boolean {
  if(!isRecord(value))return false
  return value.payer==='merchant'&&(value.rounding===undefined||value.rounding==='provider-4dp')&&['platformFee','networkFee','netAmount'].every(key=>typeof value[key]==='string'&&/^\d{1,78}(?:\.\d{1,18})?$/.test(value[key] as string))
 }
 
 export type PocketActivityRow = {
+  payerFees?:PayerCheckoutFeeEvidence
+  marketplaceDebitAmount?:string
+  marketplaceBankFees?:import('../../lib/paymentReceiptPdf').PaylinkReceipt['marketplaceBankFees']
   merchantFees?:import('../../lib/merchantPaymentFees').MerchantPaymentFees
   merchantNetAmount?:string
   fundingOnly?: boolean
@@ -650,6 +665,9 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.serviceFeeAsset, 40)
     && (value.merchantNetAmount === undefined || typeof value.merchantNetAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.merchantNetAmount))
     && (value.merchantFees === undefined || isMerchantFeeRecord(value.merchantFees))
+    && (value.payerFees === undefined || validPayerActivityFees(value))
+    && (value.marketplaceDebitAmount === undefined || typeof value.marketplaceDebitAmount === 'string' && /^\d{1,18}(?:\.\d{1,6})?$/.test(value.marketplaceDebitAmount))
+    && (value.marketplaceBankFees === undefined || validMarketplaceBankFees(value.marketplaceBankFees))
     && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d{1,78}(?:\.\d{1,18})?$/.test(value.feeAmount))
     && (value.bridgeSettlementPending === undefined || typeof value.bridgeSettlementPending === 'boolean')
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')

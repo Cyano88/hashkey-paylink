@@ -37,7 +37,7 @@ export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined
   ...(local?{merchantSettlementAmount:local.netAmountNgn,amountNgn:local.amountNgn,fiatCurrency:local.mode==='ugx'?'UGX' as const:'NGN' as const,bankSettlementStatus:payoutStatus||'processing'}:{})}
 }
 const readers={checkout:readReceiptCheckout,stockReceipt:readStockCheckoutReceipt,bscReceipt:readBscCheckoutByReceipt,registered:findRegisteredPaymentReceipt}
-export async function readCheckoutReceipt(id:string,d=readers):Promise<PaylinkReceipt|undefined>{
+async function readCanonicalCheckoutReceipt(id:string,d=readers):Promise<PaylinkReceipt|undefined>{
  if(!/^[a-zA-Z0-9_.-]{8,1024}$/.test(id))return
  if(/^chk[xb]?_/.test(id)){const record=await d.checkout(id);return record?checkoutReceipt(record):undefined}
  const stock=await d.stockReceipt(id)
@@ -49,6 +49,15 @@ export async function readCheckoutReceipt(id:string,d=readers):Promise<PaylinkRe
  if(!receipt||receipt.chain!==registered.chain||(receipt.chain==='solana'?receipt.txHash!==registered.txHash:receipt.txHash.toLowerCase()!==registered.txHash.toLowerCase()))return
  return receipt
 }
+/** Public/shared receipt belongs to the payer. Business settlement accounting is private. */
+export function payerCheckoutReceipt(receipt:PaylinkReceipt):PaylinkReceipt{
+ const {merchantFees,merchantSettlementAmount,amountNgn,fiatCurrency,bankSettlementStatus,...payer}=receipt
+ return payer
+}
+export async function readCheckoutReceipt(id:string,d=readers):Promise<PaylinkReceipt|undefined>{
+ const receipt=await readCanonicalCheckoutReceipt(id,d)
+ return receipt?payerCheckoutReceipt(receipt):undefined
+}
 export function checkoutBillingReceipt(receipt:PaylinkReceipt,projectId?:string,settings?:ReceiptEmailSettings):BillingReceipt{
  if(receipt.status!=='confirmed')throw Error('A confirmed payment is required for a receipt.')
  const network=checkoutNetworkNames[receipt.chain]
@@ -56,5 +65,5 @@ export function checkoutBillingReceipt(receipt:PaylinkReceipt,projectId?:string,
  return {id:receipt.receiptId,projectId,merchant:receipt.recipient||receipt.brandName||'Merchant',merchantLogoUrl:receipt.brandImageUrl,
   ...(receipt.payerFees?{payerFees:receipt.payerFees}:{}),pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
   supportEmail:settings?.supportEmail,timeZone:settings?.timeZone||'UTC',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(receipt.receiptId),
-  ...(receipt.amountNgn&&receipt.fiatCurrency?{settlement:{amount:receipt.merchantSettlementAmount||receipt.amountNgn,currency:receipt.fiatCurrency}}:{})}
+  }
 }

@@ -3,6 +3,9 @@ import type { PocketPaymentFunding } from '../lib/pocketPaymentFunding'
 import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
 
 export type PocketActivityRow = {
+  payerFees?:import('../../lib/payerCheckoutFees').PayerCheckoutFeeEvidence
+  marketplaceDebitAmount?:string
+  marketplaceBankFees?:import('../../lib/paymentReceiptPdf').PaylinkReceipt['marketplaceBankFees']
   merchantFees?:MerchantPaymentFees
   merchantNetAmount?: string
   merchantName?: string

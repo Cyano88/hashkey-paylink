@@ -1,6 +1,8 @@
 import {isPocketBankActivityVisible} from './pocketBankActivityVisibility'
 import { EVM_PLATFORM_TREASURY, EVM_GAS_REIMBURSEMENT, SOLANA_PLATFORM_TREASURY, SOLANA_GAS_REIMBURSEMENT } from '../../lib/platformFees'
 import {merchantFeeTotal} from '../../lib/merchantPaymentFees'
+import {evmFeeTransfers} from '../../lib/platformFees'
+import {formatUnits} from 'viem'
 import type { PocketActivityReadData, PocketActivityRow } from './pocketSchemas'
 
 const transactionKey = (row: PocketActivityRow) => JSON.stringify([
@@ -70,6 +72,10 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
   for(const checkout of checkoutRows)for(const [key,row] of rows){
     if(row===checkout||!row.txHash||transactionKey(row)!==transactionKey(checkout)||row.direction!==checkout.direction)continue
     const address=(value:string)=>row.chain==='solana'?value:value.toLowerCase()
+    if(checkout.direction==='out'&&checkout.payerFees&&['wallet-withdrawal','wallet-transfer'].includes(row.source||'')
+      &&address(row.payer)===address(checkout.payer)&&(row.assetSymbol||'USDC')===checkout.assetSymbol
+      &&evmFeeTransfers(checkout.payerFees,BigInt(checkout.payerFees.platformFeeUnits),BigInt(checkout.payerFees.networkFeeUnits))
+        .some(f=>address(row.recipient||'')===address(f.recipient)&&decimalIdentity(row.amount)===decimalIdentity(formatUnits(f.units,6)))){rows.delete(key);continue}
     // A verified merchant split is already included in the customer's gross
     // order amount. Remove only its exact EVM treasury leg, never another send.
     if(checkout.direction==='out'&&checkout.merchantFees

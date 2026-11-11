@@ -5,6 +5,11 @@ import {receiptEmail,billingReceiptPdf} from '../api/billing-document.ts'
 import {paymentReceiptView} from '../src/lib/paymentReceiptPdf.ts'
 import {validatePayerCheckoutFees} from '../src/lib/payerCheckoutFees.ts'
 import {EVM_PLATFORM_TREASURY} from '../src/lib/platformFees.ts'
+import {checkoutActivityRows} from '../api/pocket/checkout-activity.ts'
+import {pocketActivityReceipt} from '../src/pocket/lib/pocketReceipt.ts'
+import {pocketActivityAmount} from '../src/pocket/lib/pocketActivityPresentation.ts'
+import {isPocketActivityRow} from '../src/pocket/lib/pocketSchemas.ts'
+import {mergePocketActivityRows} from '../src/pocket/lib/pocketActivitySnapshot.ts'
 let stored,queue=Promise.resolve()
 const now=Date.parse('2026-11-09T16:00:00Z')
 const deps={hasStore:()=>true,signingSecret:()=> 'fixture-signing-secret-at-least-32-characters',createId:()=> 'chk_marketplace12345678',now:()=>new Date(now),read:async()=>structuredClone(stored),mutate:async(_key,fn)=>{const job=queue.then(()=>{const next=fn(structuredClone(stored));stored=next;return structuredClone(next)});queue=job.catch(()=>{});return job},notify:async()=>({status:'sent'}),executions:{update:async()=>({id:'execution_a',state:'completed'}),create:async()=>({intent:{id:'execution_a',resourceId:'bound_checkout'}})}}
@@ -21,6 +26,20 @@ assert.equal(paid.payment.amount,'100') // allocation principal never becomes to
 assert.deepEqual((await markHostedCheckoutPaid({...input,payerFees:fees},deps)).payment,paid.payment)
 await assert.rejects(()=>markHostedCheckoutPaid({...input,payerFees:{...fees,quoteId:'quote_b'}},deps),/cannot change/)
 const receipt=checkoutReceipt(structuredClone(stored.checkouts[input.id])),view=paymentReceiptView(receipt),billing=checkoutBillingReceipt(receipt)
+const payerRow=checkoutActivityRows(paid,[input.payer])[0]
+assert.ok(isPocketActivityRow(payerRow))
+assert.deepEqual(payerRow.payerFees,fees)
+assert.equal(pocketActivityAmount(payerRow),'100.26 USDC')
+assert.equal(paymentReceiptView(pocketActivityReceipt(payerRow)).amount,'100.26 USDC')
+assert.equal(isPocketActivityRow({...payerRow,payerFees:{...fees,totalUnits:'100'}}),false)
+assert.equal(isPocketActivityRow({...payerRow,direction:'in'}),false)
+const merchantRow=checkoutActivityRows(paid,[paid.recipient])[0]
+assert.equal(merchantRow.payerFees,undefined)
+assert.equal(pocketActivityAmount(merchantRow),'100.00 USDC')
+const rawFee={...payerRow,eventId:'raw-fee',source:'wallet-withdrawal',settlementType:'wallet_transfer',payerFees:undefined,recipient:EVM_PLATFORM_TREASURY,amount:'0.26'}
+const unrelated={...rawFee,eventId:'unrelated',amount:'0.27'}
+const merged=mergePocketActivityRows([rawFee,unrelated],[payerRow])
+assert.equal(merged.length,2);assert.ok(merged.some(r=>r.eventId==='unrelated'));assert.ok(!merged.some(r=>r.eventId==='raw-fee'))
 assert.equal(view.amount,'100.26 USDC')
 for(const [label,value] of [['Order amount','100.00 USDC'],['Processing fee','0.25 USDC'],['Collection network fee','0.01 USDC'],['Total paid','100.26 USDC']])assert.equal(view.rows.find(r=>r.label===label).value,value)
 const email=receiptEmail(billing)

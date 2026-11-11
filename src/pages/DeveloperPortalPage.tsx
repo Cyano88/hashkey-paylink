@@ -565,7 +565,7 @@ function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, set
     </div>
 
     </div>
-    <div hidden={settingsSection!=='receipts'}><ReceiptEmailSettings value={draft.receiptEmails} onChange={receiptEmails=>setDraft({...draft,receiptEmails})} eligible={draft.checkoutMode==='human'&&draft.capabilities.includes('hosted_checkout')}/></div>
+    <div hidden={settingsSection!=='receipts'}><ReceiptEmailSettings value={draft.receiptEmails} onChange={receiptEmails=>setDraft({...draft,receiptEmails})} eligible={draft.checkoutMode==='human'&&draft.capabilities.some(cap=>['hosted_checkout','marketplace_payments'].includes(cap))}/></div>
     <div hidden={settingsSection!=='receiving'}>
     {settingsSection==='receiving' && draft.settlementMode!=='ugx' && <EnablePocketWallets wallets={receivingWallets} onReady={onWalletsReady} onBusy={onWalletBusy}/>}
     {routingRequired && <><div className="mt-7">
