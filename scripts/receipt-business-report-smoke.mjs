@@ -18,3 +18,10 @@ const pending=structuredClone(book);delete pending.collectionProof;delete pendin
 assert.equal(businessReceiptReport({...base,audience:'operator',marketplace:{books:[pending]},checkouts:[]}).activityCount,0,'unfinalized collection is not a sale or payout')
 const late=businessReceiptReport({...base,audience:'operator',from:2000,to:4000,generatedAt:5000});assert.equal(late.activityCount,0);assert.ok(late.metrics.every(m=>m.section==='current'))
 console.log('PASS audience scope, seller allocations, platform earnings, fee ownership, direct/marketplace deduplication, unfinalized exclusion, and generation-time balances.')
+
+const local={...direct,id:'chk_local',settlement:{mode:'ngn',amountNgn:'3000',netAmountNgn:'2900'},payout:{status:'settled'}}
+const localReport=businessReceiptReport({...base,audience:'operator',marketplace:{books:[]},checkouts:[{record:local,recordedAt:1000}]})
+assert.equal(amount(localReport,'Local settlement received'),'2900');assert.equal(amount(localReport,'Net checkout sales'),undefined,'local merchant did not receive the payer asset as a second net settlement')
+const missing=structuredClone(local);delete missing.settlement.netAmountNgn
+assert.throws(()=>businessReceiptReport({...base,audience:'operator',marketplace:{books:[]},checkouts:[{record:missing,recordedAt:1000}]}),/Local settlement amount/)
+console.log('PASS local currency settlement is not double-counted as net stablecoin proceeds; missing settlement proof defers reporting.')

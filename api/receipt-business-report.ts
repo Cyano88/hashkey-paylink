@@ -25,8 +25,10 @@ export function businessReceiptReport(input:BusinessReportInput):BusinessReport{
   add('Checkout sales',receipt.amount,receipt.asset,receipt.chain)
   const fees=receipt.merchantFees
   if(fees){add('Merchant-paid processing fees',fees.platformFee,receipt.asset,receipt.chain);add('Merchant-paid network fees',fees.networkFee,receipt.asset,receipt.chain)}
-  add('Net checkout sales',fees?.netAmount||receipt.amount,receipt.asset,receipt.chain)
-  if(receipt.fiatCurrency&&receipt.merchantSettlementAmount)add('Local settlement received',receipt.merchantSettlementAmount,receipt.fiatCurrency,receipt.chain)
+  if(receipt.fiatCurrency){
+   if(!receipt.merchantSettlementAmount)throw Error('Local settlement amount is unavailable for the summary.')
+   add('Local settlement received',receipt.merchantSettlementAmount,receipt.fiatCurrency,receipt.chain)
+  }else add('Net checkout sales',fees?.netAmount||receipt.amount,receipt.asset,receipt.chain)
  }
  for(const book of books){
   const final=!!book.fundingEvidence&&book.collectionProof?.evidenceId===book.fundingEvidence
