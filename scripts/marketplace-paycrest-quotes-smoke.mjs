@@ -35,3 +35,12 @@ for(const patch of [{senderFee:'0.029701'},{senderFeePercent:'0.31'},{senderFee:
 await assert.rejects(()=>verify({...commissioned,commissionUnits:'29699'}))
 await assert.rejects(()=>verify({...commissioned,commissionRateBps:31}))
 console.log('PASS accepted 0.3% commission is preserved; changed rate, fee, provider fee and disclosure rejected; legacy zero-fee terms unchanged.')
+
+const fixed={...commissioned,commissionMode:'fixed_units'}
+for(const percent of ['', '0.3', undefined]){data.senderFeePercent=percent;assert.deepEqual(await verify(fixed),fixed)}
+data.senderFee='0.029701';await assert.rejects(()=>verify(fixed),/commission/)
+data.senderFee='0.0297';data.senderFeePercent=''
+await assert.rejects(()=>verify(commissioned),/commission/)
+await assert.rejects(()=>verify({...fixed,commissionMode:'unknown'}),/mode/)
+await assert.rejects(()=>verify({...quote,commissionMode:'fixed_units'}),/mode/)
+console.log('PASS explicit fixed-fee quote mode preserves exact commission, rejects unknown modes and leaves historical percentage validation strict.')

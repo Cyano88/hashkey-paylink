@@ -5,3 +5,8 @@ for(const percent of ['0.3','0.30','0.300000'])assert.doesNotThrow(()=>assertMar
 for(const percent of [undefined,0.3,'0','0.31','3e-1','-0.3'])assert.throws(()=>assertMarketplaceBankCommission(1000000n,3000n,percent))
 assert.throws(()=>assertMarketplaceBankCommission(1000000n,3001n,'0.3'))
 console.log('PASS bank commission: integer precision, micro-unit rounding, exact approved percentage and amount; malformed or changed commission rejected.')
+
+assert.equal(marketplaceBankCommission(1050000n),3150n)
+for(const percent of ['',undefined,'0.3'])assert.doesNotThrow(()=>assertMarketplaceBankCommission(1050000n,3150n,percent,'fixed_units'))
+for(const fee of [0n,3149n,3151n,3200n])assert.throws(()=>assertMarketplaceBankCommission(1050000n,fee,'','fixed_units'))
+assert.throws(()=>marketplaceBankCommission(-1n))

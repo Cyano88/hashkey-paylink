@@ -37,7 +37,7 @@ export function createMarketplaceBankCustody(d:Dependencies){
   let providerEvidenceId='circle-revert:'+tx.id
   if(!reverted){
    const o=await d.readOrder(q.providerOrderId),bank=await d.bankDetails(q)
-   if(q.commissionUnits!==undefined)assertMarketplaceBankCommission(BigInt(q.netUnits),BigInt(providerUnits(o.senderFee)),o.senderFeePercent)
+   if(q.commissionUnits!==undefined)assertMarketplaceBankCommission(BigInt(q.netUnits),BigInt(providerUnits(o.senderFee)),o.senderFeePercent,q.commissionMode)
    if(o.id!==q.providerOrderId||o.source?.type!=='crypto'||o.source?.currency!=='USDC'||o.source?.network!=='base'||!same(o.source.refundAddress,q.refundAddress)||o.destination?.type!=='fiat'||o.destination?.currency!=='NGN'||o.destination.recipient?.institution!==bank.bankCode||o.destination.recipient?.accountIdentifier!==bank.accountNumber||o.destination.recipient?.accountName!==bank.accountName||o.providerAccount?.network!=='base'||o.providerAccount?.currency!=='USDC'||!same(o.providerAccount.receiveAddress,q.fundingAddress)||providerUnits(o.amount)!==q.netUnits||providerUnits(o.senderFee)!==(q.commissionUnits??'0')||BigInt(providerUnits(o.transactionFee))+BigInt(providerUnits(o.senderFee))!==BigInt(q.feeUnits)||o.rate!==q.exchangeRate)throw Error('Settled bank order terms changed.')
    // A refund/timeout/partial result cannot restore balances without an exact
    // canonical return transfer. Keep these reserved for reconciliation review.

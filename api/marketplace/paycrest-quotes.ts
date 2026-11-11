@@ -25,7 +25,7 @@ export function createMarketplacePaycrestQuoteVerifier(input:Dependencies){
   if(recipient.institution!==details.bankCode||recipient.accountIdentifier!==details.accountNumber||recipient.accountName!==details.accountName)throw Error('Paycrest bank destination changed.')
   if(typeof account.validUntil!=='string'||Date.parse(account.validUntil)!==quote.expiresAt)throw Error('Paycrest order expiry changed.')
   const principal=units(data.amount),senderFee=units(data.senderFee),providerFee=units(data.transactionFee),total=principal+senderFee+providerFee
-  if(quote.commissionUnits!==undefined){assertMarketplaceBankCommission(principal,senderFee,data.senderFeePercent);if(senderFee!==BigInt(quote.commissionUnits))throw Error('Paycrest accepted commission changed.')}
+  if(quote.commissionUnits!==undefined){assertMarketplaceBankCommission(principal,senderFee,data.senderFeePercent,quote.commissionMode);if(senderFee!==BigInt(quote.commissionUnits))throw Error('Paycrest accepted commission changed.')}
   else if(senderFee!==0n||data.senderFeePercent!==undefined&&units(data.senderFeePercent)!==0n)throw Error('Paycrest legacy commission changed.')
   if(principal!==BigInt(quote.netUnits)||providerFee+senderFee!==BigInt(quote.feeUnits)||total!==BigInt(quote.fundingUnits))throw Error('Paycrest funding amount or fees changed.')
   // If the provider supplies explicit funding totals, every one must agree.

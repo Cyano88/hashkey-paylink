@@ -9,7 +9,8 @@ import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
-import { isAddress } from 'viem'
+import { isAddress, parseUnits, formatUnits } from 'viem'
+import { marketplaceBankCommission } from './marketplace/bank-commission.js'
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from './render-durable-store.js'
 import { syncPosSettlementExecutionByResource } from './pocket/pos-payment-executions.js'
 
@@ -728,5 +729,7 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
  */
 export async function createMarketplacePaycrestOrder(input:{reference:string;amount:string;refundAddress:string;bankCode:string;accountNumber:string;accountName:string}):Promise<unknown>{
  if(!/^[a-zA-Z0-9:_-]{1,90}$/.test(input.reference)||!isAddress(input.refundAddress)||! /^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(input.amount))throw Error('Invalid Marketplace provider order.')
- return paycrestFetch('/v2/sender/orders',{method:'POST',signal:AbortSignal.timeout(10000),body:JSON.stringify({amount:input.amount,amountIn:'crypto',senderFeePercent:'0.3',transactionFeePayer:'customer',reference:input.reference,source:{type:'crypto',currency:'USDC',network:'base',refundAddress:input.refundAddress},destination:{type:'fiat',currency:'NGN',recipient:{institution:input.bankCode,accountIdentifier:input.accountNumber,accountName:input.accountName,memo:'Marketplace withdrawal'}}})})
+ // Request the exact 0.3% amount at USDC precision; percentage mode rounds
+ // 0.00315 to 0.0032. Never send both mutually exclusive fee parameters.
+ return paycrestFetch('/v2/sender/orders',{method:'POST',signal:AbortSignal.timeout(10000),body:JSON.stringify({amount:input.amount,amountIn:'crypto',senderFee:formatUnits(marketplaceBankCommission(parseUnits(input.amount,6)),6),transactionFeePayer:'customer',reference:input.reference,source:{type:'crypto',currency:'USDC',network:'base',refundAddress:input.refundAddress},destination:{type:'fiat',currency:'NGN',recipient:{institution:input.bankCode,accountIdentifier:input.accountNumber,accountName:input.accountName,memo:'Marketplace withdrawal'}}})})
 }
