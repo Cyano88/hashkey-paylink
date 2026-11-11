@@ -2,6 +2,7 @@ import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {cacheCheckoutConfirmationActivity} from '../pocket/lib/pocketCheckoutConfirmationActivity'
 import { useCheckoutExpiry, CheckoutExpired } from '../components/CheckoutExpiry'
 import useCheckoutActivityRefresh from '../pocket/hooks/useCheckoutActivityRefresh'
+import useHostedCheckoutRecovery from '../pocket/hooks/useHostedCheckoutRecovery'
 import {checkoutPriceLabel,type CheckoutPricing} from '../lib/checkoutPricing'
 import {checkoutFeeReviewChanged} from '../lib/checkoutFeeReview'
 import {prepareCheckoutReceiptContact} from '../lib/checkoutReceiptContact'
@@ -3473,6 +3474,18 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const browserPaymentFlow = !pocketScan && !isBankSendPayment
   const fullScreenHumanCheckout = browserPaymentFlow && !isPolymarketFunding && !isAgentOrWalletFunding
+  useHostedCheckoutRecovery({
+    enabled: isHostedCheckout && hostedConfirmationStatus !== 'verified' && Boolean(isConfirmed || txHash || circleEvmAcceptedPending),
+    checkoutId: hostedCheckoutId, attemptId: hostedAttemptId,
+    onPaid: attempt => {
+      ordinaryReceiptRegistered.current = true
+      setPaymentReceiptId(attempt.receiptId)
+      if (attempt.transaction && /^0x[a-fA-F0-9]{64}$/.test(attempt.transaction)) setManualTxHash(attempt.transaction as `0x${string}`)
+      setManualPayDetected(true)
+      setHostedConfirmationError('')
+      setHostedConfirmationStatus('verified')
+    },
+  })
   const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
   useCheckoutActivityRefresh({ verified: isHostedCheckout && pocketScanDelivered, paymentId: hostedCheckoutId, seeded:hostedActivitySeeded===`${privyUser?.id}:${hostedCheckoutId}`,
     authenticated: privyAuthenticated, userId: privyUser?.id, email: privyEmail, getAccessToken })
@@ -3787,7 +3800,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       }
     }
     if (hosted) {
-      setHostedConfirmationStatus('error')
+      setHostedConfirmationStatus(current => current === 'verified' ? current : 'error')
       setHostedConfirmationError(lastError || 'Checkout verification is still pending.')
     }
     // Ordinary pay-link receipt registration stays non-blocking after on-chain confirmation.
