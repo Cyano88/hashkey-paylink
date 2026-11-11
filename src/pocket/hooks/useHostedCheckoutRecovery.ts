@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 
 type PaidAttempt = { id: string; status: 'paid'; receiptId: string; transaction?: string }
+export function verifiedPaidCheckoutAttempt(body: any, checkoutId: string, attemptId: string): PaidAttempt | undefined {
+  const checkout = body?.checkout, attempt = checkout?.paymentAttempt
+  return body?.ok === true && checkout?.id === checkoutId && checkout?.status === 'paid' &&
+    Boolean(attemptId) && attempt?.id === attemptId && attempt?.status === 'paid' &&
+    typeof attempt.receiptId === 'string' && Boolean(attempt.receiptId) ? attempt : undefined
+}
 // Only the server-verified, exact attempt may recover a lost confirmation response.
 export default function useHostedCheckoutRecovery({ enabled, checkoutId, attemptId, onPaid }: {
   enabled: boolean; checkoutId: string; attemptId: string; onPaid: (attempt: PaidAttempt) => void
@@ -18,10 +24,8 @@ export default function useHostedCheckoutRecovery({ enabled, checkoutId, attempt
           cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
         })
         const body = await response.json()
-        const checkout = body?.checkout
-        const attempt = checkout?.paymentAttempt
-        if (!cancelled && response.ok && body?.ok && checkout?.id === checkoutId && checkout.status === 'paid' &&
-          attempt?.id === attemptId && attempt.status === 'paid' && typeof attempt.receiptId === 'string' && attempt.receiptId) {
+        const attempt = verifiedPaidCheckoutAttempt(body, checkoutId, attemptId)
+        if (!cancelled && response.ok && attempt) {
           callback.current(attempt)
           return
         }

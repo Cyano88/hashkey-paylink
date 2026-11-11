@@ -1,4 +1,5 @@
 import PocketCheckoutLoadingSheet from '../components/PocketCheckoutLoadingSheet'
+import {verifiedPaidCheckoutAttempt} from '../hooks/useHostedCheckoutRecovery'
 import PocketHostedCheckoutChoice from '../components/PocketHostedCheckoutChoice'
 import {isSelectedCheckoutPath,type CheckoutSelectionView} from '../../lib/checkoutSelection'
 import type {BscCheckoutView} from '../../pages/BscCheckoutPage'
@@ -51,10 +52,11 @@ export default function PocketScanPage() {
    }
    if(response.ok&&data.ok&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId||'')){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:scanState});return}
    if(!response.ok||data.ok!==true||typeof data.paymentUrl!=='string'||!data.paymentUrl.startsWith('/pay?'))throw Error(typeof data.error==='string'?data.error:'This checkout is unavailable.')
-   if(code.kind==='checkout'&&['paid','failed','expired'].includes(data.checkout?.status))throw Error('This checkout is already closed. Do not pay it again.')
+   if(code.kind==='checkout'&&['paid','failed','expired'].includes(data.checkout?.status)&&!verifiedPaidCheckoutAttempt(data,code.id,code.attempt))throw Error('This checkout is already closed. Do not pay it again.')
    const params=new URLSearchParams(data.paymentUrl.slice(5))
    if(code.kind==='pos'&&(params.get('merchant')!==code.id||params.get('src')!=='ngpos'))throw Error('Merchant verification did not match.')
    if(code.kind==='checkout'&&params.get('checkout')!==code.id)throw Error('Checkout verification did not match.')
+   if(code.kind==='checkout'&&data.checkout?.status==='paid'&&params.get('attempt')!==code.attempt)throw Error('Checkout verification did not match.')
    if(code.kind==='pos'){const unified=new URL(code.url).searchParams.get('xpay_checkout_id');if(unified)params.set('xpay_checkout_id',unified)}
    if(!controller.signal.aborted)setCheckout({params:params.toString(),merchant:data.merchantName||data.checkout?.merchantName||'Merchant checkout',settlement:data.settlement||data.checkout?.settlementMode||'USDC'})
   }catch(reason){if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Checkout could not be opened.')}
