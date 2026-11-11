@@ -23,3 +23,11 @@ Focused quote, transport, policy, provider-refresh, settlement/custody, receipt 
 Deployment verification and remaining developer portal work are recorded in the continuation below.
 
 Production Vite build verified with direct process exit code 0. Developer product-picker browser and project API adapter suites passed (Marketplace-only selection, access gating, owner scope and configuration persistence). No new end-to-end onboarding assertion is claimed from those component/API checks.
+
+## Deployed verification and portal continuation
+
+Render deploy dep-dbq1khp5efls739d6vc0 is live at source commit 14523bca6f750c161ddecc4b96acd423c2d7c968. The live developer page returned HTTP 200, served the 0.3% withdrawal-commission wording and recent-quote UI, and rejected unauthenticated balance access with HTTP 401. Production bank payout and worker flags remain false. No provider-profile settings or production activation switches were changed.
+
+Developer portal continuation: the full fresh-onboarding browser suite passed with the real project handler and fixture storage/authentication, covering personal/business setup, sandbox default and persistence, profile isolation and production app-type inheritance. Full console checks passed for draft creation, activation payload, grouped developer tools, unsaved-webhook protection, navigation and mobile/dark layouts. Receipt-settings save/round-trip checks passed at 320/390/1280; the mobile onboarding screenshot was reviewed. These establish tested UI/API behavior, not live OTP, KYC, webhook delivery or funded settlement acceptance.
+
+Outstanding financial acceptance: seller has only 1 USDC. A fresh quote and enough released balance for the 1 USDC net minimum plus commission/provider/gas fees are required before the bank canary. A 0.05 USDC additional checkout was offered, not created or paid. Do not treat the historical 0.027148 USDC shortfall estimate as a current executable quote. Further public Marketplace activation still requires the recorded operational/live acceptance criteria; the code correction does not itself authorize unattended rollout.
