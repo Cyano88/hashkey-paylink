@@ -12,8 +12,9 @@ import PocketGetApp from './PocketGetApp'
 import { Check, X, Undo2 } from './PocketIcons'
 
 export type PocketTransactionState = 'successful' | 'pending' | 'failed' | 'reversed'
-export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, embedded = false, children, detailsRows, statusAction }: {
-  embedded?: boolean; statusAction?: ReactNode; detailsRows?: Array<[string, ReactNode]>; statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
+export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, receiptPending = false, onDone, inline = false, embedded = false, children, detailsRows, statusAction }: {
+  embedded?: boolean; statusAction?: ReactNode; detailsRows?: Array<[string, ReactNode]>; statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receiptPending?: boolean
+  receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
 }) {
   const [viewReceipt, setViewReceipt] = useState(false)
   usePocketSuccessHaptic(state === 'successful')
@@ -42,8 +43,9 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
     <div data-pocket-status-core className="flex h-48 shrink-0 flex-col items-center pt-1 text-center" role="status" aria-live="polite">
       {state === 'successful' ? <span className="mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${state === 'pending' ? '' : state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}>{state === 'pending' ? <span aria-hidden="true" className="h-9 w-9 rounded-full border-2 border-gray-200 border-t-gray-500 animate-spin [animation-duration:1.5s] motion-reduce:animate-none dark:border-gray-700 dark:border-t-gray-300"/> : <Icon aria-hidden="true" className="h-9 w-9"/>}</span>}
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
-      {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
+      {!receiptPending && (usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
       <div className="mt-1 h-8 w-full shrink-0 overflow-y-auto text-xs leading-4 text-gray-500 dark:text-gray-400">
+        {receiptPending && <p role="status">Loading verified receipt...</p>}
         {usdcEquivalent && receipt && (localAmount ? <p>{usdcEquivalent}</p> : <PocketLocalEquivalent asset={receipt.asset === 'USDT' ? 'USDT' : 'USDC'} amount={receipt.payerFees?Number(receipt.payerFees.totalUnits)/1e6:Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
         {state !== 'successful' && detail && <p className="mx-auto max-w-sm">{detail}</p>}
       </div>

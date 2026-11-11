@@ -4087,10 +4087,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     const delivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || (isHostedLocalSettlement ? hostedConfirmationStatus === 'verified' : paycrestOrder?.status === 'settled'))
     const state = delivered ? 'successful' : isEvmReverted || isBasePaymasterFailed || (isSendError && !txHash) ? 'failed' : 'pending'
     const status = state === 'successful' ? 'confirmed' : state === 'failed' ? 'failed' : 'processing'
-    const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
+    const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash && !isHostedCheckout ? {
       type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
-    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} amount={receipt?.payerFees?paymentReceiptView(receipt).amount:checkoutPriceLabel(hostedPricing,formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
+    return <><PocketXPayCheckoutBackdrop/><PocketTransactionSheet title="Merchant payment" state={state} receiptPending={isHostedCheckout && state==='successful' && !paymentReceipt} amount={receipt?.payerFees?paymentReceiptView(receipt).amount:checkoutPriceLabel(hostedPricing,formatPocketAssetAmount(payableAmt,meta.asset)+' '+meta.asset)} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/></>
   }
 
   if (pocketScan?.native) {

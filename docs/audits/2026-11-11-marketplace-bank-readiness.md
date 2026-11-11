@@ -1,5 +1,7 @@
 # Marketplace bank withdrawal readiness - 2026-11-11
 
+> Historical checkpoint: the zero-commission requirement below was superseded by the owner. The current policy retains 0.3%; see [the commission correction](2026-11-11-marketplace-bank-commission.md). Do not use this older note to remove commission or request a zero-fee provider profile.
+
 ## Product behavior
 
 Available funds are released ledger balances, not proof that bank withdrawal is enabled. The developer portal now shows bank route availability and up to 10 recent failed quote checks, scoped to the authenticated app and optional seller filter. Failed checks show historical fee information, not actionable payout quotes. No account numbers, provider order IDs, ciphertext or raw provider errors are exposed.
