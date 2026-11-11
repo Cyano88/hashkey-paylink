@@ -24,3 +24,14 @@ assert.deepEqual(await verify(withGas),withGas)
 data.rate='1500.000001' // Same rounded NGN total must not conceal a changed accepted rate.
 await assert.rejects(()=>verify(withGas),/exchange rate changed/)
 console.log('PASS Paycrest funding excludes retained network fee; exact accepted rate is immutable even when NGN rounding is unchanged.')
+
+reset()
+const commissioned={...withGas,commissionUnits:'29700',commissionRateBps:30,feeUnits:'129700',fundingUnits:'10029700',debitUnits:'10039700'}
+data.senderFee='0.0297';data.senderFeePercent='0.3';data.providerAccount.amountToTransfer='10.0297'
+assert.deepEqual(await verify(commissioned),commissioned)
+for(const patch of [{senderFee:'0.029701'},{senderFeePercent:'0.31'},{senderFee:'0'},{transactionFee:'0.100001'}]){
+ const previous=structuredClone(data);Object.assign(data,patch);await assert.rejects(()=>verify(commissioned));data=previous
+}
+await assert.rejects(()=>verify({...commissioned,commissionUnits:'29699'}))
+await assert.rejects(()=>verify({...commissioned,commissionRateBps:31}))
+console.log('PASS accepted 0.3% commission is preserved; changed rate, fee, provider fee and disclosure rejected; legacy zero-fee terms unchanged.')

@@ -13,7 +13,7 @@ import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 export type PaylinkReceipt = {
   marketplaceName?: string
   payerFees?:PayerCheckoutFeeEvidence
-  marketplaceBankFees?:{quoteId:string;debitUnits:string;ngnPaidMinor:string;exchangeRate?:string;chargedProviderFeeUnits?:string;chargedNetworkFeeUnits?:string}
+  marketplaceBankFees?:{quoteId:string;debitUnits:string;ngnPaidMinor:string;exchangeRate?:string;chargedCommissionUnits?:string;chargedProviderFeeUnits?:string;chargedNetworkFeeUnits?:string}
   marketplaceWalletFees?:MarketplaceWalletReceiptAmounts
   merchantFees?:MerchantPaymentFees
   merchantSettlementAmount?:string
@@ -426,6 +426,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     const minor=BigInt(f.ngnPaidMinor),ngn=(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0')+' NGN'
     return {variant,badge:'Marketplace bank withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[
       {label:'Amount debited',value:display(f.debitUnits)},
+      {label:'Withdrawal commission',value:display(f.chargedCommissionUnits??'0')},
       {label:'Provider fee',value:display(f.chargedProviderFeeUnits??'0')},
       {label:'Network fee',value:display(f.chargedNetworkFeeUnits??'0')},
       {label:'Amount received',value:ngn},

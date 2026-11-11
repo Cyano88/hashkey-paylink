@@ -1,3 +1,4 @@
+import {assertMarketplaceBankCommission} from './bank-commission.js'
 import {getAddress,parseUnits} from 'viem'
 import {readPaycrestOrderSnapshot} from '../paycrest-pos.js'
 import {validateMarketplaceBankQuote,type MarketplaceBankQuote} from './bank-quotes.js'
@@ -9,10 +10,7 @@ function units(value:unknown,decimals=6){
  if(typeof value!=='string'||!new RegExp('^(0|[1-9]\\d{0,23})(?:\\.\\d{1,'+decimals+'})?$').test(value))throw Error('Paycrest quote amount is invalid.')
  return parseUnits(value,decimals)
 }
-/** Read-only refresh of an accepted quote, not permission to create or fund an
- * order. Hash PayLink's checkout fee has already been charged to the buyer;
- * a Marketplace off-ramp must not charge another sender fee implicitly.
- */
+/** Read-only refresh: accepted commission and fees are immutable. Legacy zero-fee quotes retain their original terms. */
 export function createMarketplacePaycrestQuoteVerifier(input:Dependencies){
  const d={...input,holding:structuredClone(input.holding),readOrder:input.readOrder??readPaycrestOrderSnapshot}
  return async(accepted:MarketplaceBankQuote)=>{
@@ -27,8 +25,9 @@ export function createMarketplacePaycrestQuoteVerifier(input:Dependencies){
   if(recipient.institution!==details.bankCode||recipient.accountIdentifier!==details.accountNumber||recipient.accountName!==details.accountName)throw Error('Paycrest bank destination changed.')
   if(typeof account.validUntil!=='string'||Date.parse(account.validUntil)!==quote.expiresAt)throw Error('Paycrest order expiry changed.')
   const principal=units(data.amount),senderFee=units(data.senderFee),providerFee=units(data.transactionFee),total=principal+senderFee+providerFee
-  if(senderFee!==0n||data.senderFeePercent!==undefined&&units(data.senderFeePercent)!==0n)throw Error('Marketplace payout must not duplicate the checkout platform fee.')
-  if(principal!==BigInt(quote.netUnits)||providerFee!==BigInt(quote.feeUnits)||total!==BigInt(quote.fundingUnits))throw Error('Paycrest funding amount or fees changed.')
+  if(quote.commissionUnits!==undefined){assertMarketplaceBankCommission(principal,senderFee,data.senderFeePercent);if(senderFee!==BigInt(quote.commissionUnits))throw Error('Paycrest accepted commission changed.')}
+  else if(senderFee!==0n||data.senderFeePercent!==undefined&&units(data.senderFeePercent)!==0n)throw Error('Paycrest legacy commission changed.')
+  if(principal!==BigInt(quote.netUnits)||providerFee+senderFee!==BigInt(quote.feeUnits)||total!==BigInt(quote.fundingUnits))throw Error('Paycrest funding amount or fees changed.')
   // If the provider supplies explicit funding totals, every one must agree.
   for(const explicit of [account.amountToTransfer,data.amountToPay,data.totalAmount,data.amountDue,source.amount])if(explicit!==undefined&&units(explicit)!==total)throw Error('Paycrest funding instructions conflict.')
   const rate=units(data.rate,18)

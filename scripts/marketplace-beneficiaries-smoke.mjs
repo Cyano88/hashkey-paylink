@@ -10,7 +10,7 @@ const deps={now:()=>now,read:async()=>structuredClone(stored),mutate:fn=>{
 let repo=createMarketplaceRepository(deps)
 const request={projectId:'project_a',sellerId:'seller_a',beneficiaryId:'wallet_v1',asset:'USDC',address:owner.address}
 const input={projectId:'project_a',paymentId:'payment_one',network:'base',asset:'USDC',amount:'1.5',allocations:[{id:'share_a',sellerId:'seller_a',role:'seller',amount:'1.5',settlement:'wallet_usdc',beneficiaryId:'wallet_v1'}]}
-await assert.rejects(()=>repo.createWithVerifiedWallets(input,'draft_one'),/verified wallet/)
+await assert.rejects(()=>repo.createWithVerifiedWallets(input,'draft_one'),/verified beneficiary/)
 await assert.rejects(()=>repo.beginWalletVerification({...request,address:'0x'+'00'.repeat(20)}),/Zero/)
 await assert.rejects(()=>repo.beginWalletVerification({...request,asset:'ETH'}),/Unsupported/)
 const old=await repo.beginWalletVerification(request)
