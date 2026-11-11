@@ -1,3 +1,4 @@
+import {payerCheckoutFeeRows} from '../../lib/payerCheckoutFees'
 import {localCurrencyAmount} from '../lib/pocketDisplayCurrency'
 import usePocketSuccessHaptic from '../hooks/usePocketSuccessHaptic'
 import PocketLocalEquivalent from './PocketLocalEquivalent'
@@ -28,9 +29,9 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const hasAction = state !== 'successful' && Children.toArray(statusAction).length > 0
   const canViewDetails = !receipt && Boolean(detailsRows?.length || Children.toArray(children).length)
   const canViewReceipt = Boolean(receipt)
-  const localAmount = receipt?.amountNgn && Number.isFinite(Number(receipt.amountNgn)) && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT')
+  const localAmount = !receipt?.payerFees && receipt?.amountNgn && Number.isFinite(Number(receipt.amountNgn)) && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT')
     ? localCurrencyAmount(Number(receipt.amountNgn),receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN') : undefined
-  const usdcEquivalent = receipt && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT') && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
+  const usdcEquivalent = receipt?.payerFees ? payerCheckoutFeeRows(receipt.amount,receipt.payerFees)[3].value : receipt && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT') && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
     ? `${formatPocketPaymentAmount(Number(receipt.amount))} ${receipt.asset || 'USDC'}` : undefined
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
   const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : Undo2
@@ -43,7 +44,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
       {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
       <div className="mt-1 h-8 w-full shrink-0 overflow-y-auto text-xs leading-4 text-gray-500 dark:text-gray-400">
-        {usdcEquivalent && receipt && (localAmount ? <p>{usdcEquivalent}</p> : <PocketLocalEquivalent asset={receipt.asset === 'USDT' ? 'USDT' : 'USDC'} amount={Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
+        {usdcEquivalent && receipt && (localAmount ? <p>{usdcEquivalent}</p> : <PocketLocalEquivalent asset={receipt.asset === 'USDT' ? 'USDT' : 'USDC'} amount={receipt.payerFees?Number(receipt.payerFees.totalUnits)/1e6:Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
         {state !== 'successful' && detail && <p className="mx-auto max-w-sm">{detail}</p>}
       </div>
     </div>
