@@ -37,7 +37,15 @@ assert.equal((await custody.reconcile(...refs)).status,'unknown');finalized=100n
 for(const status of ['initiated','processing','refunded','failed']){providerStatus=status;assert.equal((await custody.reconcile(...refs)).status,'unknown');assert.equal(stored.books[0].balances[0].reserved,'700000')}
 providerStatus='settled';badRecipient=true;await assert.rejects(()=>custody.reconcile(...refs),/exact finalized/);badRecipient=false;extra=true;await assert.rejects(()=>custody.reconcile(...refs),/exact finalized/);extra=false
 const goodRead=deps.readOrder;deps.readOrder=async()=>({...await goodRead(),senderFee:'0.004'});await assert.rejects(()=>custody.reconcile(...refs),/commission/);deps.readOrder=async()=>({...await goodRead(),transactionFee:'0.098'});await assert.rejects(()=>custody.reconcile(...refs),/terms changed/);deps.readOrder=goodRead;
+// A progress counter is not terminal evidence, and returns/review stay unresolved.
+for(const fields of [{status:'settling',percentSettled:'100'},{status:'settled',statusDetail:'under_review'},{status:'settled',amountReturned:'0.01'}]){
+ deps.readOrder=async()=>({...await goodRead(),...fields});assert.equal((await custody.reconcile(...refs)).status,'unknown');assert.equal(stored.books[0].bankEvents?.length||0,0)
+}
+// Real v2 response: settled with a zero progress counter. Reconcile once,
+// preserving every accepted term, and never submit another transfer.
+deps.readOrder=async()=>({...await goodRead(),percentSettled:'0'});
 assert.equal((await custody.reconcile(...refs)).status,'settled');assert.equal((await custody.reconcile(...refs)).changed,false);assert.equal(stored.books[0].bankEvents.length,1);assert.equal(stored.books[1].balances[0].reserved,'0')
+assert.equal(sends,1)
 const receipts=marketplaceSettlementReceipts(stored),bankReceipt=receipts.find(r=>r.settlement==='bank');assert.equal(bankReceipt.currency,'NGN');assert.equal(bankReceipt.amount,'1500');assert.equal(bankReceipt.sellerId,'seller_one');assert.match(marketplaceReceiptEmail(bankReceipt).subject,/1500 NGN/);assert.ok(marketplaceReceiptDetails(bankReceipt).some(([k])=>k==='Provider fee'));assert.ok(marketplaceReceiptDetails(bankReceipt).some(([k,v])=>k==='Withdrawal commission'&&v==='0.003 USDC'));assert.equal(JSON.stringify(bankReceipt).includes('0123456789'),false)
 stored=structuredClone(original);allowed=true;timeout=false;receiptStatus='reverted';providerState='FAILED';await custody.submit(...refs,'worker_revert');assert.equal((await custody.reconcile(...refs)).status,'failed');assert.equal(stored.books[0].balances[0].available,'700000');assert.equal(stored.books[1].balances[0].available,'700000')
 console.log('PASS bank custody: exact pooled funding, preflight blockers, ambiguity marker before send, no resend after timeout/restart/revocation, canonical finalized transfer, provider settlement, unresolved refunds stay reserved, reverted funding restores sources, one event (fixtures).')

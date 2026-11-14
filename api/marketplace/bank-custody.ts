@@ -42,7 +42,12 @@ export function createMarketplaceBankCustody(d:Dependencies){
    if(o.id!==q.providerOrderId||o.source?.type!=='crypto'||o.source?.currency!=='USDC'||o.source?.network!=='base'||!same(o.source.refundAddress,q.refundAddress)||o.destination?.type!=='fiat'||o.destination?.currency!=='NGN'||o.destination.recipient?.institution!==bank.bankCode||o.destination.recipient?.accountIdentifier!==bank.accountNumber||o.destination.recipient?.accountName!==bank.accountName||o.providerAccount?.network!=='base'||o.providerAccount?.currency!=='USDC'||!same(o.providerAccount.receiveAddress,q.fundingAddress)||providerUnits(o.amount)!==q.netUnits||providerUnits(o.senderFee)!==(q.commissionUnits??'0')||BigInt(providerUnits(o.transactionFee))+BigInt(providerUnits(o.senderFee))!==BigInt(q.feeUnits)||o.rate!==q.exchangeRate)throw Error('Settled bank order terms changed.')
    // A refund/timeout/partial result cannot restore balances without an exact
    // canonical return transfer. Keep these reserved for reconciliation review.
-   if(o.status!=='settled'||o.statusDetail==='under_review'||providerUnits(o.percentSettled)!=='100000000'||providerUnits(o.amountReturned)!=='0')return null
+   // Paycrest v2 defines settled as fully closed with fiat delivered. Its
+   // percentSettled counter can remain zero on completed offramps; it is not
+   // a second finality signal. Exact order terms and finalized funding above
+   // still bind this authenticated response to the accepted withdrawal.
+   // https://docs.paycrest.io/concepts/transaction-lifecycle
+   if(o.status!=='settled'||o.statusDetail==='under_review'||providerUnits(o.amountReturned)!=='0')return null
    providerEvidenceId='paycrest-settled:'+q.providerOrderId
   }
   const fundingEvidenceId='base:'+a.transactionHash+':'+(reverted?'reverted':exact[0].logIndex)
