@@ -1,4 +1,5 @@
 import {validatePayerCheckoutFees,type PayerCheckoutFeeEvidence} from '../src/lib/payerCheckoutFees.js'
+import {createHostedSettlementRefresh} from './hosted-settlement-refresh.js'
 import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
 import {checkoutPricingFields,type CheckoutPricing} from '../src/lib/checkoutPricing.js'
@@ -151,6 +152,7 @@ export type HostedCheckoutWebhookEvent = {
 type CheckoutStore = { checkouts: Record<string, CheckoutRecord>; idempotency: Record<string, string>; outbox?: HostedCheckoutWebhookEvent[] }
 
 type Dependencies = {
+  refreshSettlement?: (record:CheckoutRecord)=>Promise<void>
   cashPayer?:CheckoutCashPayer
   quotePricing?:typeof quoteCheckoutPricing
   expiryLimit?: () => number
@@ -202,6 +204,7 @@ export async function resolveHostedCheckoutPartnerPolicy(req: Pick<Request, 'hea
 }
 
 const defaults: Dependencies = {
+  refreshSettlement:createHostedSettlementRefresh({now:Date.now,read:async id=>(await import('./paycrest-pos.js')).getPaycrestPosOrder(id),refresh:async id=>(await import('./paycrest-pos.js')).refreshPaycrestOrderStatus(id)}),
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
   mutate: (key, update) => mutateWithDeveloperActivity<CheckoutStore>('checkout', key, update),
@@ -1027,7 +1030,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       const id = clean(req.query?.id, 80)
       if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)) return res.status(400).json({ ok: false, error: 'Invalid checkout id.' })
       const store = await dependencies.read(STORE_KEY)
-      const record = store?.checkouts?.[id]
+      let record = store?.checkouts?.[id]
       if (!record) return res.status(404).json({ ok: false, error: 'Checkout not found.' })
       if (!integrityValid(record, secret)) return res.status(409).json({ ok: false, error: 'Checkout integrity verification failed.' })
       const requestedAttemptId = clean(req.query?.attempt, 80)
@@ -1038,6 +1041,13 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         const policy = await dependencies.policy(req)
     if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
         if (!policy || policy.partnerId !== record.partnerId) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
+      }
+      if(record.payment?.status==='processing'&&record.settlement&&dependencies.refreshSettlement){
+        await dependencies.refreshSettlement(record)
+        const fresh=(await dependencies.read(STORE_KEY))?.checkouts[id]
+        if(fresh&&integrityValid(fresh,secret)&&fresh.partnerId===record.partnerId&&hostedCheckoutPaymentAttempt(fresh).id===hostedCheckoutPaymentAttempt(record).id)record=fresh
+      }
+      if (req.query?.purpose === 'status') {
         const expired = dependencies.now().getTime() >= Date.parse(record.expiresAt)
         if (expired && !record.payment) await expireHostedCheckoutExecution(record, dependencies.executions)
         return res.json({

@@ -536,7 +536,13 @@ assert.deepEqual(nairaNotifications.map(item => item.event), ['checkout.created'
 assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })).body.checkout.status, 'processing')
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'pending' }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'processing')
-await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'validated' }, nairaDependencies)
+let settlementRefreshes=0
+const refreshingDependencies={...nairaDependencies,refreshSettlement:async record=>{settlementRefreshes++;assert.equal(record.id,nairaCreated.body.checkoutId);await markHostedCheckoutNairaPayout({intentId:record.settlement.intentId,status:'validated'},nairaDependencies)}}
+assert.equal((await request(createHostedCheckoutsHandler({...refreshingDependencies,policy:()=>null}),'GET',{query:{id:nairaCreated.body.checkoutId,purpose:'status'}})).statusCode,401)
+assert.equal(settlementRefreshes,0)
+const refreshed=await request(createHostedCheckoutsHandler(refreshingDependencies),'GET',{query:{id:nairaCreated.body.checkoutId,attempt:nairaCreated.body.paymentAttemptId,purpose:'return'}})
+assert.equal(refreshed.body.checkout.status,'paid');assert.equal(settlementRefreshes,1)
+await request(createHostedCheckoutsHandler(refreshingDependencies),'GET',{query:{id:nairaCreated.body.checkoutId}});assert.equal(settlementRefreshes,1)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'paid')
 assert.equal((await executions.get('partner:dev_nairaproject', nairaExecution.id)).state, 'completed')
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].paymentAttempts[0].status, 'paid')
