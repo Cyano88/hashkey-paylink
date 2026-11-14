@@ -226,6 +226,17 @@ const selectedMulti = await request(handler, 'POST', {
 assert.equal(selectedMulti.statusCode, 200)
 assert.equal(selectedMulti.body.paymentAttempt.network, 'arbitrum')
 assert.equal(selectedMulti.body.paymentAttempt.recipient, undefined)
+const selectedRecord=store.checkouts[multiCreated.body.checkoutId]
+selectedRecord.paymentAttempts.at(-1).status='processing'
+const processingSnapshot=structuredClone(store)
+const sameRoute=()=>request(handler,'POST',{query:{id:multiCreated.body.checkoutId,attempt:multiCreated.body.paymentAttemptId,action:'select-network'},body:{network:'arbitrum'}})
+assert.equal((await sameRoute()).statusCode,200)
+assert.deepEqual(store,processingSnapshot,'Resuming the same route must not reset attempt or evidence')
+assert.equal((await request(handler,'POST',{query:{id:multiCreated.body.checkoutId,attempt:multiCreated.body.paymentAttemptId,action:'select-network'},body:{network:'base'}})).statusCode,409)
+assert.equal((await request(handler,'POST',{query:{id:multiCreated.body.checkoutId,attempt:'pat_'+'f'.repeat(24),action:'select-network'},body:{network:'arbitrum'}})).statusCode,409)
+selectedRecord.paymentAttempts.at(-1).status='failed'
+assert.equal((await sameRoute()).statusCode,409)
+selectedRecord.paymentAttempts.at(-1).status='pending'
 const selectedMultiLookup = await request(handler, 'GET', { query: { id: multiCreated.body.checkoutId, attempt: multiCreated.body.paymentAttemptId } })
 assert.equal(selectedMultiLookup.body.checkout.network, 'arbitrum')
 assert.match(selectedMultiLookup.body.paymentUrl, /n=arbitrum/)

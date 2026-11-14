@@ -424,10 +424,16 @@ export async function selectHostedCheckoutPaymentNetwork(input: {
     if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) throw new Error('Hosted checkout expired.')
     const currentAttempt = hostedCheckoutPaymentAttempt(record)
     if (currentAttempt.id !== attemptId) throw new Error('Payment attempt does not match this checkout.')
-    if (currentAttempt.status !== 'pending') throw new Error('Payment attempt has already started.')
     const option = hostedCheckoutPaymentOption(record, network)
     if (!option) throw new Error('Hosted checkout payment network is not available.')
     if (currentAttempt.network && currentAttempt.network !== option.network) throw new Error('Payment attempt is already locked to another network.')
+    // Preparing a local-currency payout marks the attempt processing before
+    // signing. Reaffirming that exact route must not restart or reset it.
+    if (currentAttempt.status === 'processing' && currentAttempt.network === option.network && currentAttempt.recipient === option.recipient) {
+      selected = currentAttempt
+      return safe
+    }
+    if (currentAttempt.status !== 'pending') throw new Error('Payment attempt has already started.')
     const paymentAttempts = updateCurrentPaymentAttempt(record, attempt => ({
       ...attempt,
       network: option.network,
