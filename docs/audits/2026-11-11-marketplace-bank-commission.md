@@ -74,3 +74,12 @@ Source 05980c393d69a1c3e8accf149a801161da7018c2 is confirmed live in deploy dep-
 Outstanding product decision: the fixed seller fee currently must cover every refreshed gas estimate. Even a small increase blocks execution despite external sponsorship and the separately approved 0.01 USDC maximum gas envelope. The owner has been asked whether to keep mandatory requoting or allow Hash PayLink to absorb a difference within that cap while holding the accepted seller debit fixed. No such economics change has been implemented, no cap raised, and Circle policy is unchanged. Do not keep creating canary orders until this choice is resolved.
 
 Final live safety read at 2026-11-14T21:27:26.472Z verified the two test sources have 1.05 USDC available, zero reserved and zero paid. Every bank attempt is expired/unsigned with no Circle transfer binding, transaction hash or submission marker. Public payout and worker flags remain false.
+
+
+## Owner-approved gas pricing policy (14 November)
+
+The owner approved bounded gas absorption after reviewing fee responsibility and seller consent. Accepted seller debit, NGN payout and receipt charges stay fixed. Hash PayLink can absorb an estimated gas increase while total gas stays at or below 0.01 USDC. If a seller has explicitly accepted a higher network fee in a replacement quote, that accepted amount may cover a higher cost; it does not raise the platform absorption allowance. A further increase above both limits requires another approved quote. The 0.3% commission is unchanged.
+
+Current sponsorship evidence and the configured operational maximum remain mandatory and independent. The new policy never raises Circle limits or operator-approved coverage automatically. A higher replacement quote is executable only within those independently configured limits. Already-submitted/ambiguous transfers are reconciled, never repriced, cancelled or blindly resent.
+
+Implementation records the quoted fee, refreshed estimate, estimated platform absorption, coverage reference and zero additional seller debit on the execution attempt before signing. These are estimates, not claims of final provider billing. Seller receipts continue to use immutable accepted charges. Changed Paycrest fees or exchange rate require a fresh quote. Before submission, that explicit quote-refresh error invokes the existing cancellation guard to restore source balances; authenticated payment status exposes quoteRequired/approvalRequired. The cancellation guard refuses any attempt with submission evidence.

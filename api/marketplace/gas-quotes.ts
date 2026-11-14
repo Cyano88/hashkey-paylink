@@ -10,6 +10,7 @@ import type {RefundFeeQuote} from './fee-reserve.js'
 
 type Dependencies={config:CircleTreasuryConfig;now?:()=>number;maximumFeeUnits:string;providerSurchargeBps:number;
  estimate?:ReturnType<typeof createCircleDeveloperTreasuryClient>['estimateUsdcTransfer'];rate?:()=>Promise<bigint>}
+export class MarketplaceGasLimitError extends Error {constructor(){super('Network fee exceeds the permitted quote limit.')}}
 /** Quotes only. A successful estimate is not proof of Gas Station sponsorship.
  * Callers separately verify provider coverage before submission. */
 export function createMarketplaceGasQuotes(input:Dependencies){
@@ -21,7 +22,7 @@ export function createMarketplaceGasQuotes(input:Dependencies){
   const [gas,conversion]=await Promise.all([estimate({destinationAddress:address,amount:formatUnits(BigInt(amountUnits),6),tokenAddress:BASE_STABLECOINS.USDC.address}),rate()])
   if(now()<started||now()-started>15000||gas.asset!=='ETH'||gas.blockchain!=='BASE')throw Error('Gas estimate became stale or changed route.')
   const raw=nativeFeeToUsdcUnits(gas.networkFee,conversion),fee=(raw*BigInt(10000+input.providerSurchargeBps)+9999n)/10000n
-  if(fee>BigInt(input.maximumFeeUnits))throw Error('Network fee exceeds the permitted quote limit.')
+  if(fee>BigInt(input.maximumFeeUnits))throw new MarketplaceGasLimitError()
   return fee
  }
  return {networkFee,

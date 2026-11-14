@@ -1,3 +1,4 @@
+import type {BankGasApproval} from './bank-gas-policy.js'
 import {currentWithdrawalBeneficiary} from './withdrawal-plan.js'
 import {checkWithdrawalSources} from './withdrawal-accounting.js'
 import {applyPayoutResult} from './withdrawal-accounting.js'
@@ -8,9 +9,9 @@ import {validateMarketplaceBankQuote,type MarketplaceBankQuote} from './bank-quo
 import {applyMarketplaceCommand,type MarketplaceBook} from './accounting.js'
 import type {MarketplaceStore} from './repository.js'
 
-export type BankExecution={circleTransfer?:{walletId:string;refId:string;transactionId?:string};operationId:string;attemptId:string;workerId:string;claimToken:string;claimedAt:number;leaseUntil:number;state:'claimed'|'expired'|'submitting'|'submitted'|'unknown'|'settled'|'failed';submissionStartedAt?:number;transactionHash?:string}
+export type BankExecution={gasApproval?:BankGasApproval;circleTransfer?:{walletId:string;refId:string;transactionId?:string};operationId:string;attemptId:string;workerId:string;claimToken:string;claimedAt:number;leaseUntil:number;state:'claimed'|'expired'|'submitting'|'submitted'|'unknown'|'settled'|'failed';submissionStartedAt?:number;transactionHash?:string}
 type Dependencies={read:()=>Promise<MarketplaceStore|undefined>;mutate:(fn:(store:MarketplaceStore)=>MarketplaceStore)=>Promise<MarketplaceStore>;now:()=>number;
- preflightBankExecution?:(quote:MarketplaceBankQuote)=>Promise<{quote:MarketplaceBankQuote;holdingApproved:boolean;authorizationActive:boolean}>}
+ preflightBankExecution?:(quote:MarketplaceBankQuote)=>Promise<{quote:MarketplaceBankQuote;holdingApproved:boolean;authorizationActive:boolean;gasApproval?:BankGasApproval}>}
 function locate(store:MarketplaceStore|undefined,projectId:string,paymentId:string,operationId:string){
  for(const id of [projectId,paymentId,operationId])marketplaceReference(id)
  const book=store?.books.find(b=>b.plan.projectId===projectId&&b.plan.paymentId===paymentId)
@@ -70,6 +71,7 @@ export function createMarketplaceBankExecution(dependencies:Dependencies){
     // JSONB reorders object keys. Compare every value (including ordered sources)
     // rather than serialization order; actual accepted-term changes still fail.
     if(!isDeepStrictEqual(reservation.quote,expected))throw Error('Accepted payout changed during preflight.')
+    if(check.gasApproval){if(check.gasApproval.quoteId!==expected.quoteId||check.gasApproval.quotedNetworkFeeUnits!==expected.networkFeeUnits||check.gasApproval.additionalSellerDebitUnits!=='0')throw Error('Gas approval does not match accepted charges.');attempt.gasApproval=structuredClone(check.gasApproval)}
     attempt.state='submitting';attempt.submissionStartedAt=now
     // Durable ambiguity marker is committed BEFORE an external signing/submission call.
     const next=applyPayoutResult(s,book,projectId,'exec-submit:'+attempt.attemptId,operationId,'unknown','exec-attempt:'+attempt.attemptId)

@@ -1,3 +1,4 @@
+import {bankRequoteRequired} from './bank-gas-policy.js'
 import {assertMarketplaceBankCommission} from './bank-commission.js'
 import {getAddress,parseUnits} from 'viem'
 import {readPaycrestOrderSnapshot} from '../paycrest-pos.js'
@@ -27,11 +28,11 @@ export function createMarketplacePaycrestQuoteVerifier(input:Dependencies){
   const principal=units(data.amount),senderFee=units(data.senderFee),providerFee=units(data.transactionFee),total=principal+senderFee+providerFee
   if(quote.commissionUnits!==undefined){assertMarketplaceBankCommission(principal,senderFee,data.senderFeePercent,quote.commissionMode);if(senderFee!==BigInt(quote.commissionUnits))throw Error('Paycrest accepted commission changed.')}
   else if(senderFee!==0n||data.senderFeePercent!==undefined&&units(data.senderFeePercent)!==0n)throw Error('Paycrest legacy commission changed.')
-  if(principal!==BigInt(quote.netUnits)||providerFee+senderFee!==BigInt(quote.feeUnits)||total!==BigInt(quote.fundingUnits))throw Error('Paycrest funding amount or fees changed.')
+  if(principal!==BigInt(quote.netUnits)||providerFee+senderFee!==BigInt(quote.feeUnits)||total!==BigInt(quote.fundingUnits))throw bankRequoteRequired('Paycrest funding amount or fees changed.')
   // If the provider supplies explicit funding totals, every one must agree.
   for(const explicit of [account.amountToTransfer,data.amountToPay,data.totalAmount,data.amountDue,source.amount])if(explicit!==undefined&&units(explicit)!==total)throw Error('Paycrest funding instructions conflict.')
   const rate=units(data.rate,18)
-  if(quote.exchangeRate!==undefined&&rate!==units(quote.exchangeRate,18))throw Error('Paycrest exchange rate changed.')
+  if(quote.exchangeRate!==undefined&&rate!==units(quote.exchangeRate,18))throw bankRequoteRequired('Paycrest exchange rate changed.')
   if(rate<=0n||(principal*rate+5n*10n**21n)/10n**22n!==BigInt(quote.ngnMinor))throw Error('Paycrest NGN quote amount changed.')
   for(const field of ['amountPaid','amountReturned','percentSettled'] as const)if(data[field]!==undefined&&units(data[field])!==0n)throw Error('Paycrest order already has payment activity.')
   for(const field of ['txHash','transactionHash','depositTxHash'] as const)if(data[field])throw Error('Paycrest order already has a transaction reference.')
