@@ -3,8 +3,10 @@ import {createMarketplaceRepository} from '../api/marketplace/repository.ts'
 import {createMarketplaceBankVerifier} from '../api/marketplace/bank-beneficiaries.ts'
 import {BASE_STABLECOINS} from '../src/lib/baseStablecoins.ts'
 let stored,queue=Promise.resolve(),now=1000000,quotes=new Map(),preflight=async quote=>({quote,holdingApproved:true,authorizationActive:true})
+// PostgreSQL JSONB does not preserve object insertion order. Keep arrays ordered.
+const databaseJson=v=>Array.isArray(v)?v.map(databaseJson):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,databaseJson(v[k])])):v
 const verifier=createMarketplaceBankVerifier({key:Buffer.alloc(32,11),keyId:'test_key',verifyAccount:async()=> 'Test Seller',verifyOwnership:async request=>({...request,verified:true,evidenceId:'test_ownership'})})
-const deps={now:()=>now,verifyBank:verifier.verify,resolveBankQuote:async({quoteId})=>structuredClone(quotes.get(quoteId)||null),preflightBankExecution:quote=>preflight(quote),read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{const next=fn(structuredClone(stored||{books:[],drafts:[]}));stored=next;return structuredClone(next)});queue=job.catch(()=>{});return job}}
+const deps={now:()=>now,verifyBank:verifier.verify,resolveBankQuote:async({quoteId})=>structuredClone(quotes.get(quoteId)||null),preflightBankExecution:quote=>preflight(quote),read:async()=>structuredClone(stored),mutate:fn=>{const job=queue.then(()=>{const next=fn(structuredClone(stored||{books:[],drafts:[]}));stored=databaseJson(next);return structuredClone(stored)});queue=job.catch(()=>{});return job}}
 let repo=createMarketplaceRepository(deps)
 await repo.registerBank({projectId:'project_a',sellerId:'seller_a',beneficiaryId:'bank_a',bankCode:'TESTBANK',accountNumber:'0123456789'})
 async function reserve(id){
@@ -36,6 +38,10 @@ await assert.rejects(()=>repo.bankExecution.beginSubmission(...refs,second.claim
 preflight=async quote=>{now+=5001;return {quote,holdingApproved:true,authorizationActive:true}}
 await assert.rejects(()=>repo.bankExecution.beginSubmission(...refs,second.claimToken),/stale/)
 assert.equal((await repo.get(...refs.slice(0,2))).operations[0].status,'reserved')
+preflight=async quote=>{stored.books.find(b=>b.plan.paymentId===refs[1]).bankReservations[0].quote.maximumFeeUnits='200001';return {quote,holdingApproved:true,authorizationActive:true}}
+await assert.rejects(()=>repo.bankExecution.beginSubmission(...refs,second.claimToken),/Accepted payout changed/)
+assert.equal((await repo.bankExecution.get(...refs)).state,'claimed')
+stored.books.find(b=>b.plan.paymentId===refs[1]).bankReservations[0].quote.maximumFeeUnits='200000'
 preflight=async quote=>({quote,holdingApproved:true,authorizationActive:true})
 const submit=await Promise.allSettled([1,2].map(()=>repo.bankExecution.beginSubmission(...refs,second.claimToken)))
 assert.equal(submit.filter(r=>r.status==='fulfilled').length,1)

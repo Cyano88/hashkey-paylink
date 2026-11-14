@@ -2,6 +2,7 @@ import {currentWithdrawalBeneficiary} from './withdrawal-plan.js'
 import {checkWithdrawalSources} from './withdrawal-accounting.js'
 import {applyPayoutResult} from './withdrawal-accounting.js'
 import {randomUUID} from 'node:crypto'
+import {isDeepStrictEqual} from 'node:util'
 import {marketplaceReference} from './beneficiaries.js'
 import {validateMarketplaceBankQuote,type MarketplaceBankQuote} from './bank-quotes.js'
 import {applyMarketplaceCommand,type MarketplaceBook} from './accounting.js'
@@ -59,14 +60,16 @@ export function createMarketplaceBankExecution(dependencies:Dependencies){
    // Adapter must refresh actual provider status, holding revision and payout authority.
    const check=await d.preflightBankExecution(structuredClone(expected))
    const refreshed=validateMarketplaceBankQuote(check.quote,d.now())
-   if(check.holdingApproved!==true||check.authorizationActive!==true||JSON.stringify(refreshed)!==JSON.stringify(expected))throw Error('Bank execution preflight no longer matches the accepted payout.')
+   if(check.holdingApproved!==true||check.authorizationActive!==true||!isDeepStrictEqual(refreshed,expected))throw Error('Bank execution preflight no longer matches the accepted payout.')
    const store=await d.mutate(s=>{
     const {book,operation,reservation}=locate(s,projectId,paymentId,operationId),now=d.now()
     const attempt=claimed(book,operationId,claimToken,now)
     if(now<started||now-started>5000)throw Error('Bank execution preflight became stale; refresh before submission.')
     if(operation.status!=='reserved')throw Error('Payout requires reconciliation before submission.')
     validateMarketplaceBankQuote(reservation.quote,now);eligible(s,book,reservation.quote)
-    if(JSON.stringify(reservation.quote)!==JSON.stringify(expected))throw Error('Accepted payout changed during preflight.')
+    // JSONB reorders object keys. Compare every value (including ordered sources)
+    // rather than serialization order; actual accepted-term changes still fail.
+    if(!isDeepStrictEqual(reservation.quote,expected))throw Error('Accepted payout changed during preflight.')
     attempt.state='submitting';attempt.submissionStartedAt=now
     // Durable ambiguity marker is committed BEFORE an external signing/submission call.
     const next=applyPayoutResult(s,book,projectId,'exec-submit:'+attempt.attemptId,operationId,'unknown','exec-attempt:'+attempt.attemptId)

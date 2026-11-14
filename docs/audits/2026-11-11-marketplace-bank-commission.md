@@ -49,3 +49,21 @@ Validation: commission, request transport, quote construction, provider refresh,
 
 
 Fresh live quote 802442bb-9c70-4964-909b-430fff5b8869 (operation internal_bank_acceptance_20261111_03) passed full provider readback and exact budget validation: debit 1.05 USDC, conversion 1.022883, commission 0.003069, provider fee 0.02, network fee 0.004048, funding 1.045952, rate 1390.82, payout NGN 1422.65, verified bank ending 9696. Two finalized payment sources remain unchanged, with no reservations or operations. No payout has been submitted. Quote expiry is provider-controlled; revalidate before any funding and never reuse an expired quote.
+
+
+## 14 November resumption
+
+Render deploy dep-dbq9ea8m7kps738q1ts0 is confirmed live at source 7733a5b7be9049f134fc3d218e53a82f2b4a3305 (live since 11 November 16:33:21 UTC). On resumption both payment sources retained 1.05 USDC available, zero reservations and no execution attempts. The old quote and sponsorship approval window had expired. The configured holding SCA and finalized sponsorship proof were reverified, and the internal project-only coverage record renewed for one hour without changing Circle policy or production worker flags.
+
+A fresh quote c89f44e0-3abf-48cf-ade6-312b52d97b83 accepted debit 1.05 USDC, conversion 1.023358, 0.003070 commission, 0.020000 provider fee, 0.003572 network fee and NGN 1433.39 to the verified bank ending 9696. Direct diagnostic samples showed fluctuating HIGH-tier gas estimates; independent later samples were 0.003543 and 0.003535 USDC, below the quote. A local reservation then passed its preliminary checks, but the final five-second preflight freshness check rejected before submission. No signing call or Circle transfer binding was created.
+
+The same deployed code was tested beside the database using isolated Render jobs. This avoided altering the five-second check or granting SSH access. The hosted attempt reached the gas guard in approximately 0.6 seconds, then rejected an estimate above the locked quote. Three bounded unsigned preflight checks also rejected gas coverage; no signed transfer was retried. Normal authenticated cancellation cancelled operation internal_bank_acceptance_20261114_01 and restored exactly 1.05 USDC available, zero reserved. Production bank payout/worker flags stayed false throughout.
+
+A final bounded hosted test creates and executes a new quote in one process to avoid local-to-hosted delay. It is scoped to the same two sources, seller, verified bank and 1.05 USDC maximum debit, rechecks current credential authority, and uses normal quote/reservation/custody functions. Any unsigned failure is cancelled through the normal cancellation guard; ambiguous/submitted attempts cannot be cancelled or blindly retried. Record its actual result below before claiming bank settlement.
+
+Portal readback on 14 November confirms Lunchroom remains active with NGN settlement, its existing webhook URL/receiver secret, one active key and seven accepted historical webhook events. This is configuration verification, not fresh NGN settlement acceptance.
+
+
+The fresh hosted test (operation internal_bank_acceptance_20261114_02, quote 4e6d3f6b-6320-4aae-8a7b-6c6a74e37ab5) passed quote/gas preflight but exposed an actual persistence bug: BankExecution compared serialized quote objects, so PostgreSQL JSONB key ordering falsely triggered "Accepted payout changed during preflight." Read-only inspection proved isDeepStrictEqual(stored, validated) true, JSON.stringify equality false, and zero changed value fields. The attempt remained unsigned, and the job's normal cancellation restored its funds.
+
+BankExecution now uses structural deep equality for refreshed and transaction-locked quotes. Every value remains checked, including array/source order; only object key insertion order is ignored. The execution regression now reorders all persisted object keys to mimic JSONB. It failed before the correction and passes afterward, including a real maximum-fee change injected during preflight that still rejects. Custody and accumulated-source/receipt suites also passed. No freshness, sponsorship, fee or authorization guard was weakened.
