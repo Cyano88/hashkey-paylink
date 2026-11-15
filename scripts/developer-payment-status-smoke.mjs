@@ -14,6 +14,16 @@ assert.equal(paymentStatus({...group,product:'checkout'},{...checkout,payment:{s
 assert.equal(paymentStatus({...group,product:'checkout'},{...checkout,payment:{status:'paid',referenceType:'evm_tx_hash'}},undefined,now).status,'paid')
 assert.equal(paymentStatus({...group,product:'checkout'},{...checkout,paymentAttempts:[{status:'failed'}]},undefined,now).status,'pending','An abandoned attempt without a transaction is not a failed payment')
 assert.equal(paymentStatus(group,{...checkout,expiresAt:'2026-10-26T12:00:00Z',paymentAttempts:[{status:'processing'}]},undefined,now).status,'processing','Expiry cannot hide an in-flight payment')
+const checkoutGroup={...group,product:'checkout',recordId:checkout.id}
+const expiredExecution={ownerId:'partner:'+checkout.partnerId,resourceId:checkout.id,kind:'hosted_checkout',state:'expired',failureCode:'CHECKOUT_EXPIRED'}
+const preparedExpired={...checkout,expiresAt:'2026-10-26T12:00:00Z',paymentAttempts:[{status:'processing'}],execution:expiredExecution}
+assert.equal(paymentStatus(checkoutGroup,preparedExpired,undefined,now).status,'expired','Verified unfunded expiry overrides a provider-preparation label')
+for(const execution of [undefined,{...expiredExecution,ownerId:'partner:other'},{...expiredExecution,resourceId:'other'},{...expiredExecution,kind:'service_funding'},{...expiredExecution,state:'submitted'},{...expiredExecution,state:'needs_review'},{...expiredExecution,failureCode:'OTHER'},{...expiredExecution,transactionHash:'0xsubmitted'}])assert.equal(paymentStatus(checkoutGroup,{...preparedExpired,execution},undefined,now).status,'processing')
+assert.equal(paymentStatus(checkoutGroup,{...preparedExpired,paymentAttempts:[{status:'processing',transaction:'0xsubmitted'}]},undefined,now).status,'processing')
+assert.equal(paymentStatus(checkoutGroup,{...preparedExpired,payment:{status:'processing',txHash:'0xsubmitted'}},undefined,now).status,'processing')
+assert.equal(paymentStatus(checkoutGroup,{...preparedExpired,payment:{status:'paid',referenceType:'evm_tx_hash'}},undefined,now).status,'paid')
+for(const event of [{event:'payment.processing',details:{}},{event:'checkout.updated',details:{transactionHash:'0xsubmitted'}}])assert.equal(paymentStatus({...checkoutGroup,events:[event]},preparedExpired,undefined,now).status,'processing')
+assert.equal(paymentStatus(group,preparedExpired,undefined,now).status,'processing','Account funding remains a separate status flow')
 assert.throws(()=>paymentPageQuery({projectId:'dev_paymenttest123',cursor:'bad'}),{status:400})
 console.log('PASS evidence-based statuses, expiry, in-flight protection, cancellation and cursor validation.')
 const fees={payer:'merchant',platformFee:'0.0125',networkFee:'0.01',netAmount:'4.9775'}

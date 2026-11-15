@@ -5,6 +5,7 @@ import {queryDurablePostgres} from './render-durable-store.js'
 import {readVerifiedCheckoutActivityRecords} from './hosted-checkouts.js'
 import {readVerifiedFundingActivityRecords} from './polymarket-funding-checkouts.js'
 import {paymentStatus,type PaymentGroup,type StatusCheckout} from './developer-payment-status.js'
+import {paymentExecutionRepository} from './pocket/payment-execution-intents.js'
 export function paymentPageQuery(input:{projectId:string;cursor?:string;recordId?:string;limit?:number}){
  const fail=()=>{throw Object.assign(Error('Invalid payment list request.'),{status:400})}
  if(!/^dev_[a-z0-9]{8,64}$/i.test(input.projectId)||input.recordId&&!/^[a-zA-Z0-9_-]{1,100}$/.test(input.recordId))fail()
@@ -29,6 +30,20 @@ export async function listDeveloperPayments(input:Parameters<typeof paymentPageQ
  const funding=await readVerifiedFundingActivityRecords(rows.filter(r=>r.product==='funding').map(r=>r.recordId),input.projectId)
  const ids=[...new Set(rows.map(r=>r.product==='checkout'?r.recordId:funding.get(r.recordId)?.checkoutId??r.events.find(e=>e.details.checkoutId)?.details.checkoutId).filter((id):id is string=>Boolean(id)))]
  const checkouts=new Map<string,StatusCheckout>(await readVerifiedCheckoutActivityRecords(ids,input.projectId))
+ const expiryCandidates=new Set(rows.filter(row=>{
+  const checkout=checkouts.get(row.recordId)
+  return row.product==='checkout'&&checkout&&!checkout.payment&&Date.parse(checkout.expiresAt)<=Date.now()&&checkout.paymentAttempts?.at(-1)?.status==='processing'
+ }).map(row=>row.recordId))
+ if(expiryCandidates.size){
+  try{
+   // One owner-scoped read; newest execution wins if historical duplicates exist.
+   for(const execution of await paymentExecutionRepository.listOwned(`partner:${input.projectId}`,['hosted_checkout'])){
+    if(!execution.resourceId||!expiryCandidates.delete(execution.resourceId))continue
+    const checkout=checkouts.get(execution.resourceId)!
+    checkouts.set(execution.resourceId,{...checkout,execution})
+   }
+  }catch{ /* Preserve conservative processing status if evidence is unavailable. */ }
+ }
  await Promise.all(ids.filter(id=>isBscCheckoutId(id)||isStockCheckoutId(id)).map(async id=>{
   const record=isBscCheckoutId(id)?await readBscCheckout(id,true):await readStockCheckout(id,true)
   if(record?.partnerId===input.projectId)checkouts.set(id,record)

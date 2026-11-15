@@ -1,8 +1,9 @@
 import type {MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import type {CheckoutRecord} from './hosted-checkouts.js'
+import type {PaymentExecutionIntent} from './pocket/payment-execution-intents.js'
 export type PaymentEvent={event:string;occurredAt:string;details:Record<string,string>}
 export type PaymentGroup={recordId:string;product:'checkout'|'funding';createdAt:string;updatedAt:string;events:PaymentEvent[]}
-export type StatusCheckout=Pick<CheckoutRecord,'amount'|'expiresAt'|'paymentAttempts'|'settlement'|'payout'>&{payment?:{fees?:MerchantPaymentFees;status:string;referenceType?:string;txHash?:string}}
+export type StatusCheckout=Pick<CheckoutRecord,'amount'|'expiresAt'|'paymentAttempts'|'settlement'|'payout'>&{partnerId?:string;execution?:PaymentExecutionIntent;payment?:{fees?:MerchantPaymentFees;status:string;referenceType?:string;txHash?:string}}
 type Funding={checkoutId:string;amount:string;expiresAt:string;observation?:{status:string;paymentStatus:string;bridgeStatus:string;observedAt:string}}
 export function paymentStatus(group:PaymentGroup,checkout?:StatusCheckout,funding?:Funding,now=Date.now()){
  const events=group.events??[],latest=[...events].reverse(),details=latest.find(e=>e.details.amount)?.details??{}
@@ -13,9 +14,19 @@ export function paymentStatus(group:PaymentGroup,checkout?:StatusCheckout,fundin
  const refunded=checkout?.payout?.status==='refunded'||has(['payout.refunded','funding.refunded'])
  const funded=funding?.observation?.status==='funded'||has(['funding.funded'])
  const paid=checkout?.payment?.status==='paid'&&checkout.payment.referenceType!=='circle_gateway_transfer'
+ const execution=checkout?.execution
+ // Provider preparation can mark an attempt processing before any payment. Only
+ // authoritative, owner-bound expiry evidence may override that stale label.
+ const expiredUnsubmitted=group.product==='checkout'&&checkout&&!checkout.payment&&Date.parse(checkout.expiresAt)<=now
+  &&execution?.ownerId===`partner:${checkout.partnerId}`&&execution.resourceId===group.recordId&&execution.kind==='hosted_checkout'
+  &&execution.state==='expired'&&execution.failureCode==='CHECKOUT_EXPIRED'&&!execution.transactionHash
+  &&!checkout.paymentAttempts?.some(a=>a.transaction||a.status==='paid')
+  &&!has(['payment.gateway_accepted','checkout.payment_accepted','payment.processing','checkout.processing','payment.paid','checkout.paid'])
+  &&!events.some(e=>e.details.txHash||e.details.paymentTransaction||e.details.bridgeTransaction||e.details.transaction||e.details.transactionHash)
  if(refunded){status='refunded';note='The provider reported a refund.'}
  else if(group.product==='funding'&&funded){status='paid';note='Account funded.'}
  else if(group.product==='checkout'&&(paid||has(['payment.paid'])||checkout?.payout?.status==='delivered')){status='paid';note=checkout?.settlement?(checkout.payout?.status==='delivered'?'Bank payout delivered.':'Payment received; bank payout '+(checkout.payout?.status??'pending')+'.'):'Payment confirmed.'}
+ else if(expiredUnsubmitted){status='expired';note='The payment window closed before payment was submitted.'}
  else if(checkout?.payment?.status==='processing'||checkout?.payment?.status==='paid'||attempt?.status==='processing'||attempt?.status==='paid'||(group.product==='funding'&&(funding?.observation?.paymentStatus==='paid'||has(['funding.bridging','payment.paid','checkout.paid'])))) {status='processing';note=group.product==='funding'?'Payment received; account funding is in progress.':'Payment confirmation is in progress.'}
  else if(checkout){
   if(Date.parse(checkout.expiresAt)<=now){status='expired';note='The payment window has closed.'}
