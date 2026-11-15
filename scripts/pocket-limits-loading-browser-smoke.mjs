@@ -10,5 +10,11 @@ try{const p=await b.newPage({viewport:{width:390,height:844}});await p.route('ht
  await p.evaluate(()=>{for(const r of window.pending)r.resolve(Response.json({ok:true,level:'none',dailyLimitUsd:0}));window.pending=[]});await p.getByText('Advanced verified',{exact:true}).waitFor({state:'detached'});assert.equal(await p.getByText('Basic verified',{exact:true}).count(),0)
  await p.evaluate(()=>window.show('account-b',undefined));await p.getByRole('region',{name:'Spending limit categories'}).waitFor();assert.equal(await p.getByText(/verified$/).count(),0)
  await p.evaluate(()=>window.show('account-b',undefined,'airtime'));await p.getByRole('status',{name:'Loading country limits',exact:true}).waitFor();assert.equal(await p.getByRole('status',{name:"Loading today's usage",exact:true}).innerText(),'');assert(!/Loading/i.test(await p.locator('body').innerText()));assert.equal(await p.locator('[aria-label="Loading country limits"] .animate-pulse').count(),4)
- console.log('PASS immediate confirmed badges before response, server revocation, account remount isolation and shimmer-only usage/provider loading.')
+ for(const [view,label] of [['purchases','Loading purchase allowance'],['transfers','Loading transfer allowance']]){
+  await p.evaluate(view=>{window.pending=[];window.show('account-'+view,{kycLevel:'advanced',kycCountry:'NG'},view)},view)
+  await p.getByRole('status',{name:label,exact:true}).waitFor();assert.equal(await p.locator('[aria-label="'+label+'"] .pocket-shimmer').count(),5);assert(!/Loading|Bank route capacity/.test(await p.locator('body').innerText()))
+  await p.evaluate(()=>{for(const r of window.pending)r.resolve(Response.json({ok:true,level:'advanced',dailyLimitUsd:7000,usedUsd:123,remainingUsd:6877}));window.pending=[]})
+  await p.getByText('USD 123.00 used',{exact:true}).waitFor();await p.getByText('USD 6,877.00 left',{exact:true}).waitFor()
+ }
+ console.log('PASS immediate confirmed badges, server revocation, account isolation, complete purchase/transfer shimmers and live usage totals.')
 }finally{await b.close()}
