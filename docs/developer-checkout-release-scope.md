@@ -54,6 +54,8 @@ Business details, receiving accounts and branding have separate settings views.
 Polymarket-only projects cannot choose local bank settlement. Unsaved settings
 and webhook edits are preserved when navigation confirmation is dismissed.
 
-## Marketplace Payments foundation (9 November 2026)
+## Marketplace Payments registration (15 November 2026)
 
-Marketplace Payments is now catalogued as a third, disabled option under development. It cannot be selected for new projects or enabled on existing projects, and grants no production permissions. See marketplace-payments-contract.md for Base USDC/USDT wallet settlement, USDC-funded NGN bank settlement, accounting boundaries and remaining activation work. No public marketplace money endpoint is enabled.
+Marketplace Payments is selectable as an early-access product. Builders save their app and request whitelist review from Products. Registration records intent; it grants no payment execution permissions. Whitelist approval, project eligibility and runtime activation remain separate gates. See marketplace-payments-contract.md and marketplace-api-operations.md for settlement boundaries and activation requirements. A completed internal bank withdrawal does not establish general external availability.
+
+Customer payment receipts are automatic when verified recipient email and confirmed settlement requirements are met. Business and seller sales summaries are a separate opt-in setting with daily or weekly periods and a reporting timezone. Each summary is scoped to its recipient; it is not a copy of every customer's receipt. Completed withdrawal and refund receipts remain individual records.

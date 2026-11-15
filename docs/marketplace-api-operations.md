@@ -24,7 +24,9 @@ Only USDC on Base with verified wallet settlement is exposed. Amounts are decima
 | GET `/sellers/:sellerId/balance` | Project-scoped seller balances. |
 | GET `/refund-fees` | Project-scoped refund-fee balance. |
 
-The withdrawing party pays the disclosed withdrawal fee. The buyer receives approved refund principal intact; refund gas is separately charged to the marketplace's funded fee balance. Receipt emails are optional and currently limited to verified linked Pocket recipients. External marketplaces should use authenticated status and signed webhooks to provide their own customer notifications. There is no developer-email fallback and no daily developer summary yet.
+The withdrawing party pays the disclosed withdrawal fee. The buyer receives approved refund principal intact; refund gas is separately charged to the marketplace's funded fee balance. Individual receipt emails require the enabled delivery service and a verified eligible recipient: completed withdrawals belong to the seller and refunds to the buyer. There is no developer-email fallback. External marketplaces should use authenticated status and signed webhooks for fulfillment.
+
+Businesses and sellers can separately opt into daily or weekly sales summaries with a reporting timezone. Reports start at enrollment, arrive after the period closes and skip periods without activity. Business reports separate collections, seller allocations and platform earnings; seller reports contain only that seller's activity. Ownership, current email, opt-out and revocation are rechecked before delivery. These summaries do not replace individual withdrawal or refund records. Browser and delivery-fixture checks are not proof of production inbox arrival.
 
 ## Runtime gates and gas coverage
 
