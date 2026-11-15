@@ -13,3 +13,11 @@
 - Limits browser checks cover seven categories, 320/390px widths, aligned badges, country shimmers and navigation.
 - Refresh browser checks cover arrow-to-ring, reduced motion, short pull, retreat, cancellation, horizontal gestures and scroll-to-top.
 - No real identity verification or payment was submitted for these checks. Production preflight, deployment and Pixel results are recorded below when completed.
+
+## Release evidence
+- Production read-only Smile preflight returned PASSPORT and NATIONAL_ID. This verifies permitted document selection, not completion of a real customer identity job.
+- Commit 27c9a898cbb784e907f4045c3d0bf52bb2441901 deployed live through dep-dbt3luoae00c739iuk00 at 2026-11-15T23:11:36.827767Z.
+- Updated debug APK installed in place on the connected Pixel, preserving app data.
+- Pixel badge right edges: 359.4285889px and 359.4285812px; both 20px high. UTC footer visible.
+- Pixel refresh: 40px indicator, pull arrow, animated ring and completion all passed. Browser checks additionally cover cancellation and reduced motion. Actual ring screenshot visually reviewed.
+- Pixel country details passed for NGN and UGX on Online/QR and Personal, including loaded flags, live values, no overflow and Back. Detail screenshots visually reviewed.
