@@ -5,7 +5,7 @@ const number=String.raw`[+\-\u2212]?(?:<|~)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?
 const suffix=new RegExp(String.raw`(?<![\w.])(${number})\s+(${codes})(?!\w)`,'gi')
 const prefix=new RegExp(String.raw`(?<![\w.])([+\-\u2212])?(${codes})\s+(${number}|[\u2014\u2013*]+)(?![\w.])`,'gi')
 export function currencyFirst(label:string):string {
- return label.replace(new RegExp(String.raw`\u20a6\s*(${number})`,'g'),'NGN $1').replace(suffix,(_,amount:string,code:string)=>code+' '+amount).replace(prefix,(_,sign:string,code:string,amount:string)=>code+' '+(sign||'')+amount)
+ return label.replace(new RegExp(String.raw`\u20a6\s*(${number})`,'g'),'NGN $1').replace(suffix,(_,amount:string,code:string)=>code+' '+amount).replace(prefix,(_,sign:string,code:string,amount:string)=>(sign||amount.match(/^[+\-\u2212]/)?.[0]||'')+code+' '+amount.replace(/^[+\-\u2212]/,''))
 }
 export function moneyParts(label:string):Array<{text:string;currency?:boolean}>{
  const value=currencyFirst(label),pattern=new RegExp(String.raw`(?<![\w.])(${codes})(?=\s+(?:${number}|[\u2014\u2013*]+)(?![\w.]))`,'gi'),parts:Array<{text:string;currency?:boolean}>=[]
