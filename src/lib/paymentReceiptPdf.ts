@@ -431,11 +431,10 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       {label:'Withdrawal commission',value:display(f.chargedCommissionUnits??'0')},
       {label:'Provider fee',value:display(f.chargedProviderFeeUnits??'0')},
       {label:'Network fee',value:display(f.chargedNetworkFeeUnits??'0')},
-      {label:'Amount received',value:ngn},
       ...(f.exchangeRate?[{label:'Quoted exchange rate',value:f.exchangeRate+' NGN per USDC'}]:[]),
       {label:'Recipient',value:receipt.recipient||'-'},
       {label:'Quote reference',value:f.quoteId,mono:true},
-      {label:'Funding transaction',value:receipt.txHash,mono:true},
+      ...(receipt.txHash && receipt.txHash !== reference ? [{label:'Funding transaction',value:receipt.txHash,mono:true}] : []),
     ],reference}
   }
   const settlement = String(receipt.settlementType || '').toLowerCase()
