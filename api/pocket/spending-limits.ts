@@ -68,7 +68,11 @@ export default async function pocketSpendingLimitsHandler(
     return res.status(405).json({ ok: false, error: "Method not allowed." });
   try {
     await verifiedPrivyUser(req);
-    return res.json({ ok: true, bankPayout: await readBankPayoutLimit() });
+    const country = req.query?.country;
+    if (country !== undefined && country !== 'NG' && country !== 'UG') return res.status(400).json({ok:false,error:'Unsupported payout country.'});
+    const currency = country === 'UG' ? 'UGX' : 'NGN';
+    const capacity = await readBankPayoutLimit(currency);
+    return res.json({ ok: true, bankPayout: capacity, ...(country ? {countryLimits:{country,currency,availableMaximum:Math.floor(capacity.ngnEquivalent*100)/100,asOf:capacity.asOf,estimated:true,network:'base',asset:'USDC'}} : {}) });
   } catch (reason) {
     const status =
       reason && typeof reason === "object" && "status" in reason
