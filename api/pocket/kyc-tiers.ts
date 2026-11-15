@@ -10,7 +10,7 @@ export function basicKycJob(jobs:any[]) {
 export function advancedBasicJob(j:any,jobs:any[]) {
  if(j.country==='UG')return undefined
  if(j.tierPolicy===NIN_FIRST_POLICY){
-  if(j.tier!=='advanced'||j.method!=='bvn')return undefined
+  if(j.tier!=='advanced'||!['bvn','government_id'].includes(j.method))return undefined
   return jobs.find(b=>b.id===j.basicJobId&&b.tierPolicy===NIN_FIRST_POLICY&&isBasicKycJob(b)&&b.status==='passed'&&b.environment===j.environment&&b.identityMatch)
  }
  if(j.tierPolicy||!['nin','government_id'].includes(j.method))return undefined

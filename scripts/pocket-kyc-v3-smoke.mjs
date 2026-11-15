@@ -75,10 +75,24 @@ const raw=JSON.stringify([...state.values.values()]);assert.equal(raw.includes('
 // New accounts: NIN Basic, identity-bound BVN Advanced; old accounts above stay valid.
 const fresh=await request('nin-first',{action:'start',consent:true});assert.equal(fresh.code,200);assert.equal(fresh.body.verification.method,'nin');assert.equal(fresh.body.canChangeMethod,false)
 assert.equal(job(fresh.body.jobId).tier,'basic');await deliver(event(fresh));
-const basicStatus=await request('nin-first',{action:'status'});assert.equal(basicStatus.body.level,'basic');assert.equal(basicStatus.body.paymentLevel,'basic');assert.equal(basicStatus.body.workflow.basicMethod,'nin');assert.equal(basicStatus.body.workflow.bvnPassed,false);assert.equal(basicStatus.body.workflow.needsAdditional,true);assert.deepEqual(basicStatus.body.workflow.methods,['bvn'])
-assert.equal((await request('nin-first',{action:'start',consent:true,method:'government_id'})).code,409)
+const basicStatus=await request('nin-first',{action:'status'});assert.equal(basicStatus.body.level,'basic');assert.equal(basicStatus.body.paymentLevel,'basic');assert.equal(basicStatus.body.workflow.basicMethod,'nin');assert.equal(basicStatus.body.workflow.bvnPassed,false);assert.equal(basicStatus.body.workflow.needsAdditional,true);assert.deepEqual(basicStatus.body.workflow.methods,['bvn','government_id'])
+assert.equal((await request('nin-first',{action:'start',consent:true,method:'nin'})).code,409)
 const advanced=await request('nin-first',{action:'start',consent:true,method:'bvn'});assert.equal(advanced.code,200);assert.equal(job(advanced.body.jobId).basicJobId,fresh.body.jobId);await deliver(event(advanced));assert.equal((await request('nin-first',{action:'status'})).body.level,'advanced');assert.equal(await m.requireV3ProductionKyc('nin-first'),'Test Person')
 const freshMismatch=await request('nin-mismatch',{action:'start',consent:true});await deliver(event(freshMismatch));const wrongBvn=await request('nin-mismatch',{action:'start',consent:true,method:'bvn'});await deliver(event(wrongBvn,{name:'Other Person'}));const mismatchStatus=await request('nin-mismatch',{action:'status'});assert.equal(mismatchStatus.body.level,'basic');assert.equal(mismatchStatus.body.failureReason,'identity_mismatch')
+// NIN-first document upgrade preserves Basic binding and method-switch safety.
+for(const mismatch of [false,true]){
+ const owner='nin-document-'+mismatch
+ const first=await request(owner,{action:'start',consent:true});await deliver(event(first))
+ const initial=await request(owner,{action:'start',consent:true,method:'bvn'})
+ assert.equal(initial.body.canChangeMethod,true)
+ assert.equal((await request(owner,{action:'change_method',jobId:initial.body.jobId})).body.level,'basic')
+ const document=await request(owner,{action:'start',consent:true,method:'government_id'})
+ assert.equal(document.code,200);assert.equal(document.body.verification.product,'doc_verification')
+ assert.equal(job(document.body.jobId).basicJobId,first.body.jobId)
+ await deliver(event(document,mismatch?{name:'Other Person'}:{}))
+ assert.equal((await request(owner,{action:'status'})).body.level,mismatch?'basic':'advanced')
+}
+console.log('PASS NIN-first document upgrades, identity mismatch denial and BVN-to-document switching.')
 console.log('PASS NIN-first Basic, BVN-bound Advanced, fresh BVN bypass rejection, cross-identity denial and historical BVN-first compatibility.')
 console.log('PASS method entitlement preflight, durable consent, stable identity match after provider key rotation, missing-callback replay, untrusted hint isolation, permanent errors, and V3 auth, bound token policy and callback proof, owner isolation, duplicate prevention, recovery, signed callback plus provider truth, replay, two-step identity matching, sandbox isolation, billing errors, and no raw ID/DOB persistence.')
 

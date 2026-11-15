@@ -1,0 +1,9 @@
+# Advanced document restoration — 2026-11-15
+
+Basic Nigeria remains NIN number plus selfie. NIN-first Advanced now accepts BVN or government ID document verification, both bound to the passed Basic record and matching identity digest. The web and native panels expose both choices and dispatch the chosen method. Unsubmitted Advanced sessions can change methods; submitted/review sessions remain protected. Historical BVN-first and Uganda flows stay intact.
+
+Provider checks: production service configuration reports document codes BANK_ACCOUNT, BVN, BVN_MFA, NATIONAL_ID, NIN_V2, PASSPORT, TIN. The public Nigeria V3 supported_documents catalogue uses IDENTITY_CARD, PASSPORT, DRIVERS_LICENSE and other capture codes. The current hosted V12 document SDK filters id_selection by exact catalogue code. The existing intersection therefore currently permits PASSPORT only for our configured requested types. No invented NATIONAL_ID/NIN_V2-to-IDENTITY_CARD alias or entitlement bypass was introduced.
+
+NIN slip/card document support remains unresolved for this account/integration. Smile's public supported-documents page lists Nigerian NIN slips, but that alone does not confirm the correct hosted V3 account mapping. Provider confirmation/configuration is needed before claiming the NIN upload is available. No identity submissions or paid verification jobs were made during capability checks; no credentials were logged.
+
+Validation: V3 regression includes NIN-first document approval, identity mismatch rejection, Basic binding and BVN-to-document switching. Transfer allowance regression passes. Browser regression verifies new BVN/document selection and selected method dispatch as well as historical recovery. Targeted native TypeScript diagnostics pass. Release status must be recorded separately; source/test completion is not live completion.

@@ -35,7 +35,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   const [state, setState] = useState<KycState | null>(null)
   const [submittedSheet, setSubmittedSheet] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [additionalMethod, setAdditionalMethod] = useState<'nin' | 'government_id'>(()=>surface==='developer' && new URLSearchParams(window.location.search).get('verificationMethod')==='government_id'?'government_id':'nin')
+  const [additionalMethod, setAdditionalMethod] = useState<'bvn' | 'nin' | 'government_id'>(()=>surface==='developer' && new URLSearchParams(window.location.search).get('verificationMethod')==='government_id'?'government_id':'nin')
   const [selectedLevel,setSelectedLevel]=useState<'basic'|'advanced'>(()=>initialLevel==='advanced'||new URLSearchParams(window.location.search).get('level')==='advanced'?'advanced':'basic')
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
@@ -106,7 +106,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
     try {
       await loadSmile()
       if (!mounted.current) return
-      const session = await api(state?.canCorrectNames ? 'correct_names' : state?.canResume ? 'resume' : 'start', state?.canCorrectNames ? state.jobId : undefined, state?.canResume ? state.verification?.method : (state?.workflow?.basicPassed ?? state?.workflow?.bvnPassed) && selectedLevel==='advanced' ? (state?.workflow?.methods.includes('bvn')?'bvn':additionalMethod) : country==='UG'?'national_id':state?.workflow?.basicMethod||'nin')
+      const session = await api(state?.canCorrectNames ? 'correct_names' : state?.canResume ? 'resume' : 'start', state?.canCorrectNames ? state.jobId : undefined, state?.canResume ? state.verification?.method : (state?.workflow?.basicPassed ?? state?.workflow?.bvnPassed) && selectedLevel==='advanced' ? (selectedAdditionalMethod) : country==='UG'?'national_id':state?.workflow?.basicMethod||'nin')
       if (!mounted.current) return
       if (!session.verification || session.verification.provider !== 'smile') throw new Error(TEMPORARY_ERROR)
       setState(session)
@@ -141,6 +141,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
   useEffect(()=>{if(state?.jobId && (state.verification?.country==='NG'||state.verification?.country==='UG')){setCountry(state.verification.country);savePocketCountry(email,state.verification.country)}},[state?.jobId,state?.verification?.country,email])
   const basicPassed=Boolean(state?.workflow?.basicPassed ?? state?.workflow?.bvnPassed)
   const bvnAdvanced=state?.workflow?.methods.includes('bvn') ?? true
+  const selectedAdditionalMethod=state?.workflow?.methods.includes(additionalMethod)?additionalMethod:bvnAdvanced?'bvn':'nin'
   const basicMethod=state?.workflow?.basicMethod||(state?.jobId?'bvn':'nin')
   const needsAdditional = Boolean(state?.workflow?.needsAdditional) && selectedLevel==='advanced'
   useEffect(() => { setConsent(false) }, [needsAdditional,selectedLevel])
@@ -162,23 +163,23 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
       <div aria-label="Verification levels" className="space-y-3">
         <button type="button" onClick={()=>setSelectedLevel('basic')} className={`w-full rounded-2xl border p-4 text-left ${selectedLevel==='basic'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>{country==='UG'?'Identity verification':'Basic'}</span>{basicPassed&&<Check aria-label="Basic complete" className="h-4 w-4 text-green-600"/>}</span>
-          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{country==='UG'?'National ID details':basicMethod==='nin'?'NIN + selfie':'BVN + selfie'}{surface==='pocket'&&<> · {limitDisplay.fromUsd(dailyAllowance)} daily{limitDisplay.secondary(dailyAllowance) && <small className="mt-1 block">{limitDisplay.secondary(dailyAllowance)}</small>}</>}</span>
+          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{country==='UG'?'National ID details':basicMethod==='nin'?'NIN number + selfie':'BVN + selfie'}{surface==='pocket'&&<> · {limitDisplay.fromUsd(dailyAllowance)} daily{limitDisplay.secondary(dailyAllowance) && <small className="mt-1 block">{limitDisplay.secondary(dailyAllowance)}</small>}</>}</span>
         </button>
         {country==='NG' && surface!=='checkout' && <button type="button" disabled={!basicPassed} onClick={()=>setSelectedLevel('advanced')} className={`w-full rounded-2xl border p-4 text-left disabled:opacity-50 ${selectedLevel==='advanced'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>Advanced</span>{complete&&<Check aria-label="Advanced complete" className="h-4 w-4 text-green-600"/>}</span>
-          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':surface==='developer'?bvnAdvanced?'BVN + selfie':'NIN or government ID + selfie':<>{bvnAdvanced?'BVN + selfie':'NIN or government ID'} / {limitDisplay.fromUsd(state.advancedDailyLimitUsd||PERSONAL_BANK_DAILY_USD.advanced)} daily</>}</span>
+          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':surface==='developer'?bvnAdvanced?'BVN or government ID + selfie':'NIN or government ID + selfie':<>{bvnAdvanced?'BVN or government ID + selfie':'NIN or government ID'} / {limitDisplay.fromUsd(state.advancedDailyLimitUsd||PERSONAL_BANK_DAILY_USD.advanced)} daily</>}</span>
         </button>}
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400">{surface==='developer'?'Available payment routes and limits are checked separately for your account.':'Verify once for bank transfers, XPay and the developer portal.'}</p>
       {guidance?<div role="status" className="space-y-1"><p className="text-sm font-medium">{guidance.title}</p><p className="text-sm leading-6 text-gray-500 dark:text-gray-400">{guidance.message}</p></div>:passed?<p role="status" className="text-sm text-green-700 dark:text-green-400">{state.environment==='sandbox'?'Sandbox test completed':country==='UG'?'Verification complete':complete?'Advanced verification complete':'Basic verification complete'}</p>:null}
-      {needsAdditional && !bvnAdvanced && <fieldset disabled={busy} className="space-y-2">
+      {needsAdditional && <fieldset disabled={busy} className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Choose how to verify</legend>
-        {([{ value: 'nin', title: 'NIN', description: 'Verify your National Identification Number and take a selfie.' }, { value: 'government_id', title: 'Government ID', description: 'Use an available government-issued ID and take a selfie.' }] as const).map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 dark:border-white/10">
-          <input type="radio" name="identity-method" value={option.value} checked={additionalMethod === option.value} onChange={() => { setAdditionalMethod(option.value); setConsent(false) }} className="mt-1 h-4 w-4" />
+        {([{ value: 'bvn', title: 'BVN', description: 'Verify your Bank Verification Number and take a selfie.' }, { value: 'nin', title: 'NIN', description: 'Verify your National Identification Number and take a selfie.' }, { value: 'government_id', title: 'Government ID', description: 'Use an available government-issued ID and take a selfie.' }] as const).filter(option=>state.workflow?.methods.includes(option.value)).map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 dark:border-white/10">
+          <input type="radio" name="identity-method" value={option.value} checked={selectedAdditionalMethod === option.value} onChange={() => { setAdditionalMethod(option.value); setConsent(false) }} className="mt-1 h-4 w-4" />
           <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{option.description}</span></span>
         </label>)}
       </fieldset>}
-      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff sessionToken={phoneSessionToken} level={selectedLevel} country={country} method={bvnAdvanced?'bvn':additionalMethod} open={phoneOpen} onOpenChange={setPhoneOpen} />}
+      {surface==='developer' && retryable && !busy && !providerVisible && new URLSearchParams(window.location.search).get('continueOnPhone')!=='1' && <VerificationPhoneHandoff sessionToken={phoneSessionToken} level={selectedLevel} country={country} method={selectedLevel==='advanced'?selectedAdditionalMethod:basicMethod==='bvn'?'bvn':'nin'} open={phoneOpen} onOpenChange={setPhoneOpen} />}
       {retryable && !phoneOpen && <>
         {country==='UG' && <div className="space-y-4">
           <p className="text-xs text-gray-500">Checks your National ID details. No selfie is required.</p>
@@ -186,7 +187,7 @@ export default function PocketKycPanel({ getAccessToken, email = '', surface = '
         </div>}
         {country==='NG' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Enter your first, middle and last names as shown on your ID.</p>}
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />{country==='UG'?'I agree to share my National ID details with Smile ID for verification.':'I agree to share my identity details and selfie with Smile ID for verification.'}</label>
-        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className={`${actionClass} w-full px-4 py-3.5`}>{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? bvnAdvanced ? 'Verify BVN' : additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : country==='UG'?'Verify identity':'Verify Basic'}</button>
+        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className={`${actionClass} w-full px-4 py-3.5`}>{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? selectedAdditionalMethod === 'bvn' ? 'Verify BVN' : selectedAdditionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : country==='UG'?'Verify identity':'Verify Basic'}</button>
       </>}
       {selectedLevel==='advanced' && state.canChangeMethod && !providerVisible && !phoneOpen && <button type="button" disabled={busy || retryAt > 0} onClick={()=>void changeMethod()} className="block w-full py-3 text-center text-sm font-semibold disabled:opacity-50">Change verification method</button>}
       {(guidance?.action === 'support') && <a href={supportHref} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
