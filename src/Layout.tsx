@@ -1,3 +1,4 @@
+import {BrandAttribution} from './components/BrandAttribution'
 import { useCallback, useEffect, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
@@ -549,35 +550,7 @@ export default function Layout() {
       >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
-              {isPayPage ? (
-                <span className="polydesk-powered-footer">
-                  <span>Powered by</span>
-                  <strong>Circle</strong>
-                </span>
-              ) : isPolyDeskSurface ? (
-                <span className="polydesk-powered-footer">
-                  <span>Powered by</span>
-                  <strong>Hash PayLink</strong>
-                </span>
-              ) : isAgentProfilePage ? (
-                <>
-                  Agent payments on{' '}
-                  {agentNetworks.map((item, i, arr) => (
-                    <span key={item.label}>
-                      <a href={item.explorerUrl} target="_blank" rel="noopener noreferrer"
-                        className="font-medium text-gray-500 underline-offset-2 hover:underline transition-colors">
-                        {item.label}
-                      </a>
-                      {i < arr.length - 1 && ' · '}
-                    </span>
-                  ))}
-                </>
-              ) : (
-                <span className="polydesk-powered-footer">
-                  <span>Powered by</span>
-                  <strong>Circle USDC</strong>
-                </span>
-              )}
+              <BrandAttribution />
             </p>
           </div>
         </footer>

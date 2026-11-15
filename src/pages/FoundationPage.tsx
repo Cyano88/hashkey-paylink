@@ -1,3 +1,4 @@
+import {BrandAttribution} from '../components/BrandAttribution'
 import { Link } from 'react-router-dom'
 import { Activity, ArrowLeftRight, ArrowRight, KeyRound, Menu, Radio, ShieldCheck, TrendingUp, Wallet, Webhook, X } from 'lucide-react'
 import Lenis from 'lenis'
@@ -1637,6 +1638,7 @@ export default function FoundationPage() {
           </div>
           <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6 text-xs text-slate-500">
             <p>&copy; {new Date().getFullYear()} Hash Technologies Limited</p>
+            <BrandAttribution />
             <div className="flex gap-5"><Link to="/docs/terms" className="hover:text-black">Terms</Link><Link to="/docs/privacy" className="hover:text-black">Privacy</Link><Link to="/docs/api" className="hover:text-black">Documentation</Link></div>
           </div>
         </footer>

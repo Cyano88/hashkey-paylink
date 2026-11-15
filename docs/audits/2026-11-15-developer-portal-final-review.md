@@ -38,3 +38,10 @@ Release f7ec5234e became live on Render at 2026-11-15T10:02:12.827799Z (dep-dbso
 
 
 Final native build passed and installed with SHA-256 F2C2339F7132125A3561E7A007145098D0BB3AD1A1A5C98F31B8E788E17B9E5D. Pixel verification of the existing payer receipt showed 1.500004 USDC, Wallet payment, Successful, and no repeated Date row. The existing withdrawal showed 1,433.19 NGN, Seller earnings, exact debit/commission/provider/network fees, and the shared bank icon. Final screenshots are local under output/playwright/pixel-receipt-final.png. Both source and native precision builds passed. Final web precision commit: 8dea85b4a; deployment dep-dbso7j0n74is73ael9og.
+
+
+## Approved footer wording
+
+The owner selected exactly "Powered by Hash PayLink" followed by "Global payments with stablecoins." Shared brand constants and attribution component now cover product/checkouts, receipts, share sheets, summary/email/PDF documents and Pocket's image/PDF exports. Pocket login uses only the tagline beneath the existing Pocket brand. Technical provider badges remain provider attribution. The native guard's additional footer-only files were reviewed and recorded in native-release/brand-footer-review-20261115.json; its baseline remains intact.
+
+Validation includes focused TypeScript, login/OTP themes, checkout receipt widths/themes, scoped email/PDF fixtures, bank image/PDF export footer assertions, and checkout interaction regression. The weekly PDF remained one page with the approved footer, and the login preview was visually inspected. No auth/session/payment behavior or email subscription preferences were changed.

@@ -1,3 +1,4 @@
+import {paymentTagline as receiptTagline} from '../src/lib/brandCopy.js'
 import PDFDocument from 'pdfkit'
 import {createRequire} from 'node:module'
 import {readFile} from 'node:fs/promises'
@@ -6,7 +7,7 @@ import {receiptIconPaths,type ReceiptIconKind} from '../src/lib/receiptIdentity.
 
 export type ReceiptSection={title?:string;rows:Array<readonly [string,string]>}
 export type ReceiptPresentation={brandName:string;logoUrl?:string;icon?:ReceiptIconKind;title:string;headline:string;amount?:string;amountLabel?:string;date?:string;sections:ReceiptSection[];reference?:string;url?:string;linkLabel?:string;supportEmail?:string;note?:string}
-export const receiptTagline='Global payments, powered by stablecoins.'
+export {receiptTagline}
 export const receiptFallbackLogo='https://app.hashpaylink.com/hash-logo-transparent.png'
 const esc=(s:string)=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
 const https=(s?:string)=>{try{const u=new URL(s||'');return u.protocol==='https:'&&!u.username&&!u.password?u.toString():undefined}catch{return}}

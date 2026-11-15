@@ -1,3 +1,4 @@
+import {BrandAttribution} from './BrandAttribution'
 import PocketBottomSheet from '../pocket/components/PocketBottomSheet'
 import { CheckCheck, Copy, Mail, MessageCircle, Send, X } from '../pocket/components/PocketIcons'
 import { cn } from '../lib/utils'
@@ -108,7 +109,7 @@ export default function PayLinkShareSheet({
         </div>
 
         {!pocket && <p className="mt-5 text-center text-[11px] font-medium text-gray-400">
-          Powered by Hash PayLink
+          <BrandAttribution />
         </p>}
       </div>
   )

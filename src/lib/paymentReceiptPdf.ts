@@ -1,3 +1,4 @@
+import {poweredByHashPayLink,paymentTagline} from './brandCopy'
 import {receiptIconKind,receiptIconPaths,receiptMoney} from './receiptIdentity'
 import {payerCheckoutFeeRows,type PayerCheckoutFeeEvidence} from './payerCheckoutFees'
 import {formatUnits,parseUnits} from 'viem'
@@ -636,8 +637,10 @@ function drawReceiptCanvas(
   ctx.setLineDash([])
   ctx.fillStyle = '#9ca3af'
   ctx.font = `600 10px ${sans}`
-  const footer = 'Powered by Hash PayLink'
-  ctx.fillText(footer, (width - ctx.measureText(footer).width) / 2, 746)
+  const footer = poweredByHashPayLink
+  ctx.fillText(footer, (width - ctx.measureText(footer).width) / 2, 736)
+  ctx.font = `400 9px ${sans}`
+  ctx.fillText(paymentTagline, (width - ctx.measureText(paymentTagline).width) / 2, 750)
   if(brand.kind==='pocket'){
     ctx.fillStyle='#f5f5f7';ctx.fillRect(0,height-12,width,12)
     for(let x=10;x<width;x+=20){ctx.beginPath();ctx.arc(x,height-12,6,0,Math.PI*2);ctx.fill()}

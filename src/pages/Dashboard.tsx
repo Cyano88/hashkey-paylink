@@ -851,7 +851,7 @@ export default function Dashboard() {
     <div class="line"></div>
     ${[...view.rows, { label: 'Reference ID', value: view.reference }].map(item => `<div class="row"><span class="label">${escapeHtml(item.label)}</span><span class="value">${escapeHtml(short(item.value))}</span></div>`).join('')}
     <div class="line"></div>
-    <div class="foot">Verified payment record<br />Powered by Circle USDC</div>
+    <div class="foot">Verified payment record<br />Powered by Hash PayLink<br />Global payments with stablecoins.</div>
   </main>
   <script>
     window.addEventListener('load', () => {

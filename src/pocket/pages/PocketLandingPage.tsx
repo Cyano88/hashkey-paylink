@@ -1,3 +1,4 @@
+import {paymentTagline} from '../../lib/brandCopy'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CPurseIcon } from '../components/CPurseIcon'
@@ -101,7 +102,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
             <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
               <PocketAuthBrand markRef={heroLogoRef} />
               <h1 className="mx-auto mt-6 max-w-sm text-[26px] font-bold leading-[1.25] tracking-normal sm:text-4xl">
-                Your stablecoins<br />can do more.
+                {paymentTagline}
               </h1>
             </div>
           </section>

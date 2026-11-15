@@ -1,3 +1,4 @@
+import {BrandAttribution} from './BrandAttribution'
 import {ReceiptTypeIcon} from '../pocket/components/ReceiptTypeIcon'
 import {PocketPaymentMethodIcon} from '../pocket/components/PocketWebPaymentIdentity'
 import CheckoutReceiptDetails from './CheckoutReceiptDetails'
@@ -136,7 +137,7 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
         <p className="mt-1 break-all font-mono text-[10px] font-semibold leading-5 text-gray-600 dark:text-gray-300">{view.reference}</p>
       </div>
 
-      <footer className="mt-auto pt-2 text-center text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</footer>
+      <footer className="mt-auto pt-2 text-center text-[10px] font-semibold text-gray-400"><BrandAttribution /></footer>
     </article>
   )
 }
