@@ -26,9 +26,9 @@ await assert.rejects(allowance('personal',{...bank,source:'bank-withdraw'},false
 await allowance('refund',bank,false);records=[{...bank,status:'failed'}]
 await assert.rejects(allowance('refund',qr('uncertain','4000'),false),e=>e.code==='CHECKOUT_DAILY_LIMIT')
 records=[{...bank,status:'refunded'}];await allowance('refund',qr('after-refund','7000'),false)
-now=Date.parse('2026-11-15T23:00:00Z');await allowance('buyer',qr('next-day','7000'),false)
+now=Date.parse('2026-11-16T00:00:00Z');await allowance('buyer',qr('next-day','7000'),false)
 const quote={id:'quote-1',checkoutId:'pos_restaurant',purpose:'payment',mode:'net',exemption:'none',asset:'USDC',chain:'solana',amountUnits:'1500000',recipient:'AbCd',walletAddress:'XyZ'}
 assert.equal(qrFeeAllowanceOrder(quote).amount_usdc,'1.5')
 assert.notEqual(qrFeeAllowanceOrder(quote).intent_id,qrFeeAllowanceOrder({...quote,id:'quote-2'}).intent_id)
 assert.throws(()=>qrFeeAllowanceOrder({...quote,purpose:'wallet-send'}))
-console.log('PASS shared online/QR cap, cross-rail concurrency, bank capacity, stock USD valuation, immutable amount binding, Basic KYC, 120 harmless previews, retries, refunds, separate personal transfers and Lagos reset.')
+console.log('PASS shared online/QR cap, cross-rail concurrency, bank capacity, stock USD valuation, immutable amount binding, Basic KYC, 120 harmless previews, retries, refunds, separate personal transfers and UTC reset.')

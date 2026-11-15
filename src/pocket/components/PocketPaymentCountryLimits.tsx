@@ -18,9 +18,9 @@ export default function PocketPaymentCountryLimits({purchases,getAccessToken}:{p
  },[country,retry])
  return <section aria-label="Country payment availability" className="mt-6 space-y-4 border-t border-gray-100 pt-5 dark:border-white/10">
   <PocketCountrySelect ariaLabel="Country" value={country} onChange={setCountry} options={[{value:'NG',label:'Nigeria'},{value:'UG',label:'Uganda'}]}/>
-  <p className="text-xs text-gray-500">{purchases?'Available per payment':'Available per transfer'}</p>
-  {error?<button type="button" onClick={()=>setRetry(n=>n+1)} className="min-h-10 text-xs font-medium">Could not refresh availability. Try again.</button>:!data?<div role="status" aria-label="Loading country availability" className="flex items-center justify-between gap-4 py-4"><PocketSkeletonBar className="h-4 w-24"/><PocketSkeletonBar className="h-4 w-32"/></div>:<div className="flex flex-wrap items-baseline justify-between gap-3 py-3"><p className="text-sm font-medium">{country==='NG'?'Bank transfer':purchases?'QR mobile money':'Mobile money'}</p><p className="text-sm font-medium"><span className="text-xs font-normal text-gray-500">Up to </span><MoneyAmount currency={data.currency} amount={data.availableMaximum.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}/></p></div>}
-  <p className="text-[11px] leading-5 text-gray-500">Current local payout capacity. Your remaining allowance and final quote apply.</p>
-  {purchases&&country==='UG'&&<p className="text-[11px] leading-5 text-gray-500">Online UGX checkout is not available yet.</p>}
+  <p className="text-xs text-gray-500">{purchases?'Maximum per payment':'Maximum per transfer'}</p>
+  {error?<button type="button" onClick={()=>setRetry(n=>n+1)} className="min-h-10 text-xs font-medium">Could not load limits. Try again.</button>:!data?<div role="status" aria-label="Loading country availability" className="flex items-center justify-between gap-4 py-4"><PocketSkeletonBar className="h-4 w-24"/><PocketSkeletonBar className="h-4 w-32"/></div>:<div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-4 py-4"><p className="text-sm font-medium">{country==='NG'?'Bank transfer':purchases?'QR mobile money':'Mobile money'}</p><p className="text-right text-sm font-medium"><MoneyAmount currency={data.currency} amount={data.availableMaximum.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}/></p></div>}
+  <p className="text-[11px] leading-5 text-gray-500">Limits are subject to change.</p>
+  {purchases&&country==='UG'&&<p className="text-[11px] leading-5 text-gray-500">Online payments in Uganda are not available yet.</p>}
  </section>
 }

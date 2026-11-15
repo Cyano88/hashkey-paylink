@@ -49,13 +49,17 @@ export async function assertSmileV3Policy(config:SmileConfig,policy:{country?:st
  if(!['NG','UG'].includes(country))throw v3Failure('Unsupported verification country.',400)
  const requested=policy.idSelection[country] || []
  const token=await smileV3Token(config)
- const [response,documents]=await Promise.all([
+ const [response,documents,legacyDocuments]=await Promise.all([
   fetch(host(config)+'/v3/services/config',{headers:{'SmileID-Token':token,'SmileID-Partner-ID':config.partnerId,'SmileID-Source-SDK':'hosted_web','SmileID-Source-SDK-Version':'12.0.4',Accept:'application/json'},signal:AbortSignal.timeout(15000)}).then(json),
   policy.product==='doc_verification'?fetch(host(config)+'/v3/services/supported_documents?country_code='+country,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)}).then(json):Promise.resolve(null),
+  policy.product==='doc_verification'?fetch(host(config)+'/v1/services?locale=en-GB',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)}).then(json).catch(()=>null):Promise.resolve(null),
  ])
  const allowed=response.idSelection?.[policy.product]?.[country]
  const documentTypes=documents?.valid_documents?.find((item:{country?:{code?:string}})=>item.country?.code===country)?.id_types?.map((item:{code?:string})=>item.code)
- const selected=requested.filter(id=>Array.isArray(allowed)&&allowed.includes(id)&&(!documents||Array.isArray(documentTypes)&&documentTypes.includes(id)))
+ // V12 explicitly supports legacy document codes through this same catalogue.
+ // Preserve the provider code; never alias NIN_V2 (number lookup) to a document.
+ const legacyTypes=legacyDocuments?.hosted_web?.doc_verification?.[country]?.id_types
+ const selected=requested.filter(id=>Array.isArray(allowed)&&allowed.includes(id)&&(!documents||Array.isArray(documentTypes)&&documentTypes.includes(id)||typeof legacyTypes?.[id]?.label==='string'&&legacyTypes[id].label.trim().length>0))
  if(!selected.length||policy.product!=='doc_verification'&&selected.length!==requested.length)throw v3Failure(country==='UG'?'Uganda identity verification is not available yet. Please try again once it is enabled.':'This verification is not available yet. Please contact Pocket support.',503,'KYC_METHOD_UNAVAILABLE',false)
  return selected
 }

@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
 import { useLocation, useNavigationType } from 'react-router-dom'
 import PocketBottomNav, { type PocketNavTab } from './PocketBottomNav'
-import { Loader2 } from './PocketIcons'
+import PocketRefreshIndicator from './PocketRefreshIndicator'
 import PocketKycPrompt from './PocketKycPrompt'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { refreshPocketData } from '../lib/pocketRefresh'
@@ -278,9 +278,7 @@ export default function PocketRouteShell({
             }}
           >
             <div data-pocket-refresh-indicator role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={!refreshEnabled || (!refreshing && (!refreshEligible.current || pullDistance < REFRESH_REVEAL_THRESHOLD))} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center" style={{ opacity: refreshEnabled && (refreshing || (refreshEligible.current && pullDistance >= REFRESH_REVEAL_THRESHOLD)) ? 1 : 0, transform: `translateY(${pullDistance - 48}px)`, transition: pullDragging ? 'none' : 'transform 200ms ease-out, opacity 150ms ease-out' }}>
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#121212] dark:text-gray-300 dark:ring-white/10">
-                {refreshing ? <Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms' }} /> : <svg aria-hidden="true" className="h-6 w-6 -rotate-90" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" pathLength="100" strokeDasharray={`${Math.min(1, pullDistance / REFRESH_THRESHOLD) * 90} 100`} /></svg>}
-              </span>
+              <PocketRefreshIndicator refreshing={refreshing} progress={pullDistance / REFRESH_THRESHOLD}/>
             </div>
             <div
               key={locationKey}

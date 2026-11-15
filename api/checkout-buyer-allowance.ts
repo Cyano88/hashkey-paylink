@@ -1,3 +1,4 @@
+import {ALLOWANCE_DAY_POLICY,allowanceDay,currentAllowanceCharge} from '../src/lib/allowanceDay.js'
 import {createHash} from 'node:crypto'
 import {readDurableJson,mutateDurableJson} from './render-durable-store.js'
 import {getDurablePaycrestPosOrders,type PaycrestOrderRecord} from './paycrest-pos.js'
@@ -7,9 +8,9 @@ import {readPocketBankPayoutLimit} from './pocket/spending-limits.js'
 import {PURCHASE_DAILY_USD} from '../src/lib/purchaseLimits.js'
 export const CHECKOUT_DAILY_USD = PURCHASE_DAILY_USD
 export type CheckoutAllowanceOrder=Pick<PaycrestOrderRecord,'source'|'intent_id'|'paycrest_order_id'|'merchant_id'|'receive_address'|'refund_address'|'amount_usdc'|'amount_ngn'|'fiat_currency'> & {allowanceRail?:'wallet';walletNetwork?:string;purchaseBinding?:string}
-type Charge={id:string;provider:string;binding:string;units:number;day:string;state:'reserved'|'refunded'}
+type Charge={dayPolicy?:string;id:string;provider:string;binding:string;units:number;day:string;state:'reserved'|'refunded'}
 export type CheckoutBuyerLedger={charges:Charge[]}
-const day=(now:number)=>new Date(now+3600000).toISOString().slice(0,10)
+const day=allowanceDay
 export const checkoutBuyerLedgerKey=(owner:string)=>'hashpaylink:checkout-buyer-allowance:v1:'+createHash('sha256').update(owner).digest('hex')
 export function checkoutPaymentExecutionKey(walletId:string,order:PaycrestOrderRecord){
  const hash=createHash('sha256').update(JSON.stringify(['hosted-checkout-payment:v1',walletId,order.intent_id,order.paycrest_order_id])).digest('hex')
@@ -34,10 +35,10 @@ export function reserveCheckoutBuyer(ledger:CheckoutBuyerLedger|undefined,input:
  if(previous?.state==='refunded')return fail('CHECKOUT_LIMIT_BINDING','This payment was refunded. Start a new checkout.',409)
  // Repeated signing/approval requests must not spend the allowance twice.
  if(previous)return current
- const used=current.charges.filter(c=>c.day===today&&c.state==='reserved').reduce((sum,c)=>sum+c.units,0)
- if(used+amount>dailyUnits)return fail('CHECKOUT_DAILY_LIMIT',`Your remaining purchase allowance today is ${display(Math.max(0,dailyUnits-used))}. Online and QR purchases share this allowance. It resets at midnight, Lagos time.`)
+ const used=current.charges.filter(c=>currentAllowanceCharge(c,now)&&c.state==='reserved').reduce((sum,c)=>sum+c.units,0)
+ if(used+amount>dailyUnits)return fail('CHECKOUT_DAILY_LIMIT',`Your remaining purchase allowance today is ${display(Math.max(0,dailyUnits-used))}. Online and QR purchases share this allowance. It resets at 00:00 UTC.`)
  if(amount>transferUnits)return fail('CHECKOUT_TRANSFER_LIMIT',`This payment exceeds the current payout capacity of ${display(transferUnits)}. Choose another payment method.`)
- const charge:Charge={id:order.intent_id,provider:order.paycrest_order_id,binding,units:amount,day:today,state:'reserved'}
+ const charge:Charge={id:order.intent_id,provider:order.paycrest_order_id,binding,units:amount,day:today,dayPolicy:ALLOWANCE_DAY_POLICY,state:'reserved'}
  return {charges:[...current.charges.filter(c=>c.id!==order.intent_id),charge]}
 }
 
@@ -59,12 +60,12 @@ export function createCheckoutBuyerAllowance(deps=defaults){
   }
   const key=checkoutBuyerLedgerKey(owner),now=deps.now()
   const ledger=await deps.read(key)
-  const candidates=ledger?.charges.filter(c=>c.day===day(now)&&c.state==='reserved'&&!c.provider.startsWith('wallet:'))||[]
+  const candidates=ledger?.charges.filter(c=>currentAllowanceCharge(c,now)&&c.state==='reserved'&&!c.provider.startsWith('wallet:'))||[]
   const orders=candidates.length?await deps.orders(candidates.map(c=>c.id)):[]
   // Only provider-confirmed refunds restore allowance. Unknown failures and
   // cancelled approval dialogs can still settle, so keep their reservations.
   const refunded=candidates.filter(c=>orders.some(o=>o.intent_id===c.id&&o.paycrest_order_id===c.provider&&['hosted-checkout','ngpos'].includes(o.source||'')&&o.status.toLowerCase()==='refunded'))
-  const next=(current:CheckoutBuyerLedger|undefined)=>reserveCheckoutBuyer(current?{charges:current.charges.map(c=>refunded.some(r=>r.id===c.id&&r.provider===c.provider&&r.binding===c.binding&&r.day===c.day)?{...c,state:'refunded' as const}:c)}:undefined,{order,dailyUnits,transferUnits,now})
+  const next=(current:CheckoutBuyerLedger|undefined)=>reserveCheckoutBuyer(current?{charges:current.charges.map(c=>refunded.some(r=>r.id===c.id&&r.provider===c.provider&&r.binding===c.binding&&r.day===c.day)?{...c,state:'refunded' as const}:c)}:undefined,{order,dailyUnits,transferUnits,now:deps.now()})
   if(checkOnly){next(ledger);return}
   await deps.mutate(key,next)
  }

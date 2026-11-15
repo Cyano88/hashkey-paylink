@@ -1,3 +1,4 @@
+import {ALLOWANCE_DAY_POLICY,currentAllowanceTimestamp,nextAllowanceReset} from '../../src/lib/allowanceDay.js'
 import {BILL_LIMITS_USD} from '../../src/lib/billLimits.js'
 import {billAsset} from './bills-asset.js'
 import {assertInternationalBill, type InternationalBill} from '../vtpass-international.js'
@@ -79,6 +80,7 @@ export type PocketBillsIntent = {
   refundConfirmedAt: number
   refundLastCheckedAt: number
   failureReason: string
+  allowanceDayPolicy?: string
   createdAt: number
   updatedAt: number
 }
@@ -205,27 +207,6 @@ function canonicalDecimal(value: unknown, decimals: number, label: string) {
 function decimalToMinor(value: string, decimals: number) {
   const [whole, fraction = ''] = value.split('.')
   return (BigInt(whole) * (10n ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, '0'))).toString()
-}
-
-function lagosDateParts(timestamp: number) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(timestamp))
-  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(item => item.type === type)?.value || 0)
-  return { year: part('year'), month: part('month'), day: part('day') }
-}
-
-function lagosDay(timestamp: number) {
-  const { year, month, day } = lagosDateParts(timestamp)
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
-function nextLagosMidnight(timestamp: number) {
-  const { year, month, day } = lagosDateParts(timestamp)
-  return Date.UTC(year, month - 1, day + 1) - 60 * 60_000
 }
 
 function reservesDailyLimit(intent: PocketBillsIntent, timestamp: number) {
@@ -431,9 +412,8 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         return { intent: existing, created: false }
       }
 
-      const day = lagosDay(createdAt)
       const usedMinor = Object.values(store.intents).reduce((totals, intent) => {
-        if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day || !reservesDailyLimit(intent, createdAt)) return totals
+        if (intent.ownerId !== ownerId || !currentAllowanceTimestamp(intent, createdAt) || !reservesDailyLimit(intent, createdAt)) return totals
         const bucket = intent.category === 'airtime' ? 'airtime' : 'other'
         totals[bucket] += BigInt(decimalToMinor(intent.billAmountUsdc || intent.amountUsdc, 6))
         return totals
@@ -499,6 +479,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         refundLastCheckedAt: 0,
         failureReason: '',
         createdAt,
+        allowanceDayPolicy: ALLOWANCE_DAY_POLICY,
         updatedAt: createdAt,
       }
       store.intents[id] = intent
@@ -588,16 +569,15 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const ownerId = cleanText(ownerIdInput, 200)
     if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
     const timestamp = now()
-    const day = lagosDay(timestamp)
     const store = await read()
     const usedMinor = Object.values(store.intents).reduce((totals, intent) => {
-      if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day || !reservesDailyLimit(intent, timestamp)) return totals
+      if (intent.ownerId !== ownerId || !currentAllowanceTimestamp(intent, timestamp) || !reservesDailyLimit(intent, timestamp)) return totals
       totals[intent.category === 'airtime' ? 'airtime' : 'other'] += BigInt(decimalToMinor(intent.billAmountUsdc || intent.amountUsdc, 6))
       return totals
     }, { airtime: 0n, other: 0n })
     const asUsd = (minor: bigint) => Number(minor) / 1_000_000
     return {
-      resetAt: nextLagosMidnight(timestamp),
+      resetAt: nextAllowanceReset(timestamp),
       limitCurrency: 'USD' as const,
       airtime: {
         perPaymentUsd: BILL_LIMITS_USD.airtimePerPayment,

@@ -24,6 +24,6 @@ assert.equal(parallel.filter(r=>r.status==='fulfilled').length,1,'Concurrent mer
 records=[{...one,status:'failed'}];await assert.rejects(allowance(buyer,order('after-fail','3000'),false),e=>e.code==='CHECKOUT_DAILY_LIMIT')
 records=[{...one,status:'refunded'}];await allowance(buyer,order('after-refund','3000'),false)
 assert.equal(ledgers.get(checkoutBuyerLedgerKey(buyer)).charges[0].state,'refunded')
-now=Date.parse('2026-11-01T23:00:00Z');await allowance(buyer,order('next-day','5000'),false)
+now=Date.parse('2026-11-02T00:00:00Z');await allowance(buyer,order('next-day','5000'),false)
 cap=4000;await assert.rejects(allowance('newbuyer',order('lower-cap','5000')),e=>e.code==='CHECKOUT_TRANSFER_LIMIT')
-console.log('PASS basic KYC, live capacity, NGN/UGX, per-buyer cross-merchant atomic quota, concurrency, retry binding, confirmed refunds, unavailable capacity and Lagos-day reset.')
+console.log('PASS basic KYC, live capacity, NGN/UGX, per-buyer cross-merchant atomic quota, concurrency, retry binding, confirmed refunds, unavailable capacity and UTC-day reset.')

@@ -20,13 +20,13 @@ export default function PocketBillCountryLimits({category,getAccessToken}:{categ
  const money=(value:number)=> <MoneyAmount currency={data?.currency??(country==='NG'?'NGN':'UGX')} amount={value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}/>
  return <div className="mt-6 space-y-4 border-t border-gray-100 pt-5 dark:border-white/10">
   {category==='airtime'||category==='data'?<PocketCountrySelect ariaLabel="Country" value={country} onChange={setCountry} options={[{value:'NG',label:'Nigeria'},{value:'UG',label:'Uganda'}]}/>:<div className="flex items-center gap-3 text-sm font-semibold"><PocketCountryFlag code="NG"/>Nigeria</div>}
-  <p className="text-xs text-gray-500">Available per payment</p>
-  {error?<button type="button" onClick={()=>setRetry(n=>n+1)} className="min-h-10 text-xs font-medium">Could not refresh limits. Try again.</button>:!data?<div role="status" aria-label="Loading country limits" className="divide-y divide-gray-100 dark:divide-white/10">{Array.from({length:category==='airtime'?4:3},(_,index)=><div key={index} aria-hidden="true" className="flex animate-pulse items-start justify-between gap-4 py-4"><span className="mt-1 h-4 w-20 rounded bg-gray-200/70 dark:bg-white/10"/><span className="space-y-2"><span className="block h-4 w-28 rounded bg-gray-200/70 dark:bg-white/10"/><span className="ml-auto block h-3 w-24 rounded bg-gray-200/70 dark:bg-white/10"/></span></div>)}</div>:null}
-  {data&&!error&&<div className="divide-y divide-gray-100 dark:divide-white/10">{data.services.length?data.services.map(row=><div key={row.id} className="flex items-start justify-between gap-4 py-4">
+  <p className="text-xs text-gray-500">Maximum per payment</p>
+  {error?<button type="button" onClick={()=>setRetry(n=>n+1)} className="min-h-10 text-xs font-medium">Could not load limits. Try again.</button>:!data?<div role="status" aria-label="Loading country limits" className="divide-y divide-gray-100 dark:divide-white/10">{Array.from({length:category==='airtime'?4:3},(_,index)=><div key={index} aria-hidden="true" className="flex animate-pulse items-start justify-between gap-4 py-4"><span className="mt-1 h-4 w-20 rounded bg-gray-200/70 dark:bg-white/10"/><span className="space-y-2"><span className="block h-4 w-28 rounded bg-gray-200/70 dark:bg-white/10"/><span className="ml-auto block h-3 w-24 rounded bg-gray-200/70 dark:bg-white/10"/></span></div>)}</div>:null}
+  {data&&!error&&<div className="divide-y divide-gray-100 dark:divide-white/10">{data.services.length?data.services.map(row=><div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 py-4">
    <p className="min-w-0 flex-1 text-sm font-medium">{row.name.replace(/\s+(Airtime VTU|Airtime|Data|Subscription|Payment)$/i,'')}</p><div className="shrink-0 text-right">
-   <p className="text-sm font-medium">{row.available?<>{money(row.availableMaximum)}</>:'No payment available'}</p>
+   <p className="text-sm font-medium">{row.available?<>{money(row.availableMaximum)}</>:'Not available right now'}</p>
    {row.minimum!==null&&<p className="mt-1 text-xs text-gray-500">{row.planPriced?'Plans from ':'Minimum '}{money(row.minimum)}</p>}
-  </div></div>):<p className="text-xs text-gray-500">No supported products are currently available.</p>}</div>}
+  </div></div>):<p className="text-xs text-gray-500">No services available right now.</p>}</div>}
 
  </div>
 }

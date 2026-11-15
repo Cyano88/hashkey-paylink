@@ -17,7 +17,7 @@ export function v3Policy(method:Method,country:'NG'|'UG'='NG'){
  if(country==='UG'&& !['government_id','national_id'].includes(method))throw fail('Choose a Ugandan government ID.',400)
  if(method==='national_id'){if(country!=='UG')throw fail('Choose a supported verification method.',400);return {country,countryName:'Uganda',provider:'smile',policyVersion:'ug-smile-basic-v2',method,product:'basic_kyc',apiProduct:'basic_kyc',idSelection:{[country]:['NATIONAL_ID_NO_PHOTO']} as Record<string,string[]>,consentRequired:{[country]:[]},previewBVNMFA:false}}
  const document=method==='government_id'
- const types=document?['PASSPORT','DRIVERS_LICENSE','IDENTITY_CARD']:[method==='bvn'?'BVN':'NIN_V2']
+ const types=document?['PASSPORT','DRIVERS_LICENSE','IDENTITY_CARD',...(country==='NG'?['NATIONAL_ID']:[])]:[method==='bvn'?'BVN':'NIN_V2']
  return{country,countryName:country==='UG'?'Uganda':'Nigeria',provider:'smile',policyVersion:country.toLowerCase()+'-smile-'+method+'-api-v3',method,product:document?'doc_verification':'biometric_kyc',apiProduct:document?'document_verification':'biometric_kyc',idSelection:{[country]:types} as Record<string,string[]>,consentRequired:{[country]:[]},previewBVNMFA:false}
 }
 function jobPolicy(j?:Job){const policy=v3Policy(j?.method||'nin',j?.country||'NG');if(j?.idTypes)policy.idSelection[policy.country]=j.idTypes;else if(j?.method==='government_id'&&!j.country)policy.idSelection.NG=['PASSPORT','DRIVERS_LICENSE','NATIONAL_ID'];return policy}

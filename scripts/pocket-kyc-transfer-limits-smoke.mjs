@@ -45,7 +45,7 @@ await reserve('advanced','6980');await assert.rejects(reserve('advanced-over','1
 // FX/currency changes do not rewrite a reserved USD value; changing a quote is a new payment.
 await assert.rejects(api.reservePocketBankAllowance(owner,{id:'advanced',amount:String(6980*1500),currency:'NGN',usdc:'6979'}),e=>e.code==='KYC_LIMIT_BINDING')
 const other='legacy';state.values.set(kycKey(other),{jobs:[basic]})
-state.values.set(ledgerKey(other),{charges:[{id:'old',day:api.nigeriaDay(Date.now()),amount:3000000,state:'reserved',createdAt:Date.now(),providerOrderId:'provider',binding:JSON.stringify(['NGN','30000'])}]})
+state.values.set(ledgerKey(other),{charges:[{id:'old',day:api.utcAllowanceDay(Date.now()),amount:3000000,state:'reserved',createdAt:Date.now(),providerOrderId:'provider',binding:JSON.stringify(['NGN','30000'])}]})
 state.orders.set('old',{status:'settled',amount_usdc:'20',paycrest_order_id:'provider',tx_hash:'confirmed'})
 state.orders.set('old',{status:'settled',amount_usdc:'20',paycrest_order_id:'different-provider',tx_hash:'confirmed'})
 await assert.rejects(api.pocketTransferAllowance(other),e=>e.code==='KYC_LIMIT_UNAVAILABLE','Mismatched provider evidence cannot revalue legacy usage')
@@ -59,8 +59,8 @@ state.capacity=10
 await assert.rejects(api.reservePocketBankAllowance(other,{id:'capacity',amount:'30000',currency:'NGN',usdc:'20'},true),e=>e.code==='KYC_TRANSFER_CAPACITY')
 state.capacity=30
 await api.reservePocketBankAllowance(other,{id:'capacity',amount:'30000',currency:'NGN',usdc:'20'},true)
-const before=Date.parse('2026-09-29T22:59:59Z'),after=Date.parse('2026-09-29T23:00:00Z')
-assert.equal(api.nigeriaDay(before),'2026-09-29');assert.equal(api.nigeriaDay(after),'2026-09-30')
+const before=Date.parse('2026-09-29T23:59:59Z'),after=Date.parse('2026-09-30T00:00:00Z')
+assert.equal(api.utcAllowanceDay(before),'2026-09-29');assert.equal(api.utcAllowanceDay(after),'2026-09-30')
 let ledger=api.reserveAllowance(undefined,{id:'day1',amount:7500000,usdUnits:50000000,level:'basic',now:before})
 ledger=api.reserveAllowance(ledger,{id:'day2',amount:7000000,usdUnits:50000000,level:'basic',now:after});assert.equal(ledger.charges.length,2)
 // Existing Uganda verification mapping is preserved; cross-currency spending shares one account ledger.
@@ -71,4 +71,4 @@ const ugOwner='uganda';state.values.set(kycKey(ugOwner),{jobs:[ugBasic]})
 await api.reservePocketBankAllowance(ugOwner,{id:'ugx',amount:'74000',currency:'UGX',usdc:'20'})
 await api.reservePocketBankAllowance(ugOwner,{id:'ngn',amount:'30000',currency:'NGN',usdc:'20'})
 assert.equal((await api.pocketTransferAllowance(ugOwner)).remainingUsd,6960)
-console.log('PASS Basic USD 50 / Advanced USD 7000, verified tiers, atomic reservations, upgrade continuity, retry binding, frozen provider valuation, legacy migration, dynamic capacity, refunds, cross-currency totals and Lagos reset.')
+console.log('PASS Basic USD 50 / Advanced USD 7000, verified tiers, atomic reservations, upgrade continuity, retry binding, frozen provider valuation, legacy migration, dynamic capacity, refunds, cross-currency totals and UTC reset.')
