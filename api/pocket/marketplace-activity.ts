@@ -28,8 +28,8 @@ export function marketplaceBankReceiptActivity(receipts:MarketplaceSettlementRec
   const active=links.filter(l=>l.projectId===r.projectId&&l.sellerId===r.sellerId&&!l.revokedAt)
   return active.length===1&&active[0].owner===owner
  }).map(r=>({eventId:r.id,txHash:r.transactionHash,chain:'base',payer:r.sender,recipient:r.recipient,
-  merchantName:r.marketplaceName,memo:'Bank withdrawal',contextLabel:(r.marketplaceName||'Marketplace')+' - Bank withdrawal',
-  activityLabel:'Bank withdrawal',amount:r.debitAmount,assetSymbol:'USDC',amountNgn:r.amount,fiatCurrency:'NGN',ts:r.settledAt,
+  merchantName:r.marketplaceName,memo:'Withdrawal',contextLabel:(r.marketplaceName||'Marketplace')+' - Withdrawal',
+  activityLabel:'Withdrawal',amount:r.debitAmount,assetSymbol:'USDC',amountNgn:r.amount,fiatCurrency:'NGN',ts:r.settledAt,
   source:'marketplace_bank',settlementType:'marketplace_bank',direction:'out',paycrestStatus:'confirmed',destination:r.recipient,
   marketplaceBankFees:r.bankFees,
  }))

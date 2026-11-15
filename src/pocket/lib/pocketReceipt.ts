@@ -96,7 +96,7 @@ export function pocketBillTitle(category?: string): string {
 }
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
-  if (normalizedSource(row) === 'marketplace-bank') return 'Bank withdrawal'
+  if (normalizedSource(row) === 'marketplace-bank') return 'Withdrawal'
   if (normalizedSource(row) === 'marketplace-refund') return 'Refund'
   if (normalizedSource(row) === 'marketplace-payout') return 'Payout'
   if(row.settlementType==='hosted_checkout')return 'Web payment '+(row.direction==='in'?'received':'sent')

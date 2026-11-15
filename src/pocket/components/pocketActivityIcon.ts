@@ -18,6 +18,7 @@ function EurcActivityLogo({ className }: { className?: string }) {
 export function pocketActivityIcon(row: PocketActivityRow) {
   if(row.source==='hosted_checkout'||row.settlementType==='hosted_checkout')return row.paymentMethod==='card'?CreditCard:row.paymentMethod==='bank_transfer'?Landmark:Wallet
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
+  if (source === 'marketplace-bank') return Landmark
   if (source === 'gift') return GiftIcon
   if (source === 'esim') return Wifi
   if (isOutgoingPosPurchase(row)) return Store

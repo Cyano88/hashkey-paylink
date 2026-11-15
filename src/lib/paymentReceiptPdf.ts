@@ -426,7 +426,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   if(['marketplace_bank','marketplace-bank'].includes(receipt.source||'')&&receipt.marketplaceBankFees){
     const f=receipt.marketplaceBankFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
     const minor=BigInt(f.ngnPaidMinor),ngn=(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0')+' NGN'
-    return {variant,badge:'Marketplace bank withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[
+    return {variant,badge:'Marketplace withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[
       {label:'Amount debited',value:display(f.debitUnits)},
       {label:'Withdrawal commission',value:display(f.chargedCommissionUnits??'0')},
       {label:'Provider fee',value:display(f.chargedProviderFeeUnits??'0')},
