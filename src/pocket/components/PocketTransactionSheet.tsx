@@ -1,3 +1,4 @@
+import {PocketSkeletonBar} from './PocketContentSkeletons'
 import {MoneyText} from '../../components/MoneyText'
 import {payerCheckoutFeeRows} from '../../lib/payerCheckoutFees'
 import {localCurrencyAmount} from '../lib/pocketDisplayCurrency'
@@ -46,7 +47,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
       {!receiptPending && (usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums"><MoneyText>{localAmount || usdcEquivalent || amount}</MoneyText></p>}
       <div className="mt-1 h-8 w-full shrink-0 overflow-y-auto text-xs leading-4 text-gray-500 dark:text-gray-400">
-        {receiptPending && <p role="status">Loading verified receipt...</p>}
+        {receiptPending && <div role="status" aria-label="Loading verified receipt" aria-busy="true" className="pt-1"><PocketSkeletonBar className="mx-auto h-3 w-36"/></div>}
         {usdcEquivalent && receipt && (localAmount ? <p><MoneyText>{usdcEquivalent}</MoneyText></p> : <PocketLocalEquivalent asset={receipt.asset === 'USDT' ? 'USDT' : 'USDC'} amount={receipt.payerFees?Number(receipt.payerFees.totalUnits)/1e6:Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
         {state !== 'successful' && detail && <p className="mx-auto max-w-sm">{detail}</p>}
       </div>

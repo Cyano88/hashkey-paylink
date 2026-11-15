@@ -1,3 +1,4 @@
+import {PocketSkeletonBar} from '../../components/PocketContentSkeletons'
 import {useMemo,useState} from 'react'
 import PocketArcTokenPicker from '../../components/PocketArcTokenPicker'
 import usePocketStockQuotes from '../../hooks/usePocketStockQuotes'
@@ -13,9 +14,9 @@ export default function PocketGiftStockPicker({assets,value,snapshot,balancesLoa
   const allowed=new Map(assets.map(a=>[a.token.toLowerCase(),a]))
   return stockPickerTokens(snapshot).filter(t=>allowed.has(t.address.toLowerCase())).map(t=>{
    const key=t.address.toLowerCase(),quote=quotes.displayQuotes[key],stale=quote&&!quotes.quotes[key]
-   return {...t,decimals:allowed.get(key)!.decimals,priceLabel:quote?dollars(quote.usd)+' each'+(stale?' (last known)':''):quotes.busy?'Loading price...':'Price unavailable',holdingLabel:t.balance===null?'Holding unavailable':formatStockQuantity(t.balance)+' held',holdingValueLabel:t.balance!==null&&quote?'~ '+dollars(Number(t.balance)*quote.usd)+(stale||balanceStale?' (last known)':''):undefined}
+   return {...t,decimals:allowed.get(key)!.decimals,priceLoading:!quote&&quotes.busy,priceLabel:quote?dollars(quote.usd)+' each'+(stale?' (last known)':''):quotes.busy?undefined:'Price unavailable',holdingLabel:t.balance===null?'Holding unavailable':formatStockQuantity(t.balance)+' held',holdingValueLabel:t.balance!==null&&quote?'~ '+dollars(Number(t.balance)*quote.usd)+(stale||balanceStale?' (last known)':''):undefined}
   })
  },[assets,snapshot,quotes.displayQuotes,quotes.quotes,quotes.busy,balanceStale])
  const selected=tokens.find(t=>t.address.toLowerCase()===value.toLowerCase())
- return <><PocketArcTokenPicker label="Gift stock" value={value} excluded="" tokens={tokens} networkLabel="X Layer" clean initialLimit={30} resultLimit={30} balancesLoading={balancesLoading} onVisibleTokensChange={setVisible} onChange={t=>onChange(t.address)} discover={async()=>{throw Error('Choose a supported gift stock.')}}/>{selected&&<div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-gray-500 dark:text-gray-400"><span>{balancesLoading?'Loading holding...':selected.holdingLabel}{balanceStale?' (last known)':''}</span><span>{selected.priceLabel}</span></div>}</>
+ return <><PocketArcTokenPicker label="Gift stock" value={value} excluded="" tokens={tokens} networkLabel="X Layer" clean initialLimit={30} resultLimit={30} balancesLoading={balancesLoading} onVisibleTokensChange={setVisible} onChange={t=>onChange(t.address)} discover={async()=>{throw Error('Choose a supported gift stock.')}}/>{selected&&<div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-gray-500 dark:text-gray-400"><span>{balancesLoading?<PocketSkeletonBar className="h-3 w-24"/>:selected.holdingLabel}{balanceStale?' (last known)':''}</span><span>{selected.priceLoading?<PocketSkeletonBar className="h-3 w-20"/>:selected.priceLabel}</span></div>}</>
 }

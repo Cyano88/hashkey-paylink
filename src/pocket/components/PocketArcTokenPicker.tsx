@@ -5,7 +5,7 @@ import { Check, ChevronDown, Search } from './PocketIcons'
 import { XMarkIcon as X } from '@heroicons/react/24/outline'
 import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 
-export type ArcPickerToken = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string; logoURI?: string; priceLabel?: string; holdingLabel?: string; holdingValueLabel?: string }
+export type ArcPickerToken = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string; logoURI?: string; priceLoading?: boolean; priceLabel?: string; holdingLabel?: string; holdingValueLabel?: string }
 function TokenImage({ token, small = false }: { token: ArcPickerToken; small?: boolean }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [token.logoURI])
@@ -74,7 +74,7 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
         <div className="min-h-0 overflow-y-auto overscroll-contain">
           {[...listed, ...(found ? [found] : [])].map(token => <button type="button" key={token.address} onClick={() => select(token)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5">
             <TokenImage token={token} />
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{token.symbol}</span><span className="block truncate text-xs text-gray-500 dark:text-gray-400">{token.name}</span>{token.priceLabel&&<span className="block text-xs text-gray-500 dark:text-gray-400">{token.priceLabel}</span>}{normalized.startsWith('0x') && <span className="block break-all text-[10px] text-gray-500 dark:text-gray-400">{token.address}</span>}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{token.symbol}</span><span className="block truncate text-xs text-gray-500 dark:text-gray-400">{token.name}</span>{token.priceLoading?<PocketSkeletonBar className="mt-1 h-3 w-20"/>:token.priceLabel&&<span className="block text-xs text-gray-500 dark:text-gray-400">{token.priceLabel}</span>}{normalized.startsWith('0x') && <span className="block break-all text-[10px] text-gray-500 dark:text-gray-400">{token.address}</span>}</span>
             {balancesLoading ? <PocketSkeletonBar className="h-3 w-14" /> : <span className="max-w-36 text-right text-xs tabular-nums"><span className="block">{token.holdingLabel ?? token.balance ?? 'Unavailable'}</span>{token.holdingValueLabel&&<span className="mt-1 block text-gray-500 dark:text-gray-400">{token.holdingValueLabel}</span>}</span>}{token.address.toLowerCase() === value.toLowerCase() && <Check className="h-4 w-4 shrink-0" />}
           </button>)}
           {normalized&&filtered.length>resultLimit&&<p className="py-3 text-xs text-gray-500">Refine your search to see more stocks.</p>}
