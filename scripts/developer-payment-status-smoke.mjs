@@ -24,6 +24,10 @@ assert.equal(paymentStatus(checkoutGroup,{...preparedExpired,payment:{status:'pr
 assert.equal(paymentStatus(checkoutGroup,{...preparedExpired,payment:{status:'paid',referenceType:'evm_tx_hash'}},undefined,now).status,'paid')
 for(const event of [{event:'payment.processing',details:{}},{event:'checkout.updated',details:{transactionHash:'0xsubmitted'}}])assert.equal(paymentStatus({...checkoutGroup,events:[event]},preparedExpired,undefined,now).status,'processing')
 assert.equal(paymentStatus(group,preparedExpired,undefined,now).status,'processing','Account funding remains a separate status flow')
+const localPrepared={...preparedExpired,settlement:{provider:'paycrest',mode:'ngn'}}
+const localEvents=[{event:'checkout.processing',details:{evidence:'checkout_record'}},{event:'payout.initiated',details:{orderId:'provider-preparation'}}]
+assert.equal(paymentStatus({...checkoutGroup,events:localEvents},localPrepared,undefined,now).status,'expired','Paycrest preparation observations are not evidence of submission')
+assert.equal(paymentStatus({...checkoutGroup,events:[...localEvents,{event:'payment.processing',details:{txHash:'0xsubmitted'}}]},localPrepared,undefined,now).status,'processing')
 assert.throws(()=>paymentPageQuery({projectId:'dev_paymenttest123',cursor:'bad'}),{status:400})
 console.log('PASS evidence-based statuses, expiry, in-flight protection, cancellation and cursor validation.')
 const fees={payer:'merchant',platformFee:'0.0125',networkFee:'0.01',netAmount:'4.9775'}

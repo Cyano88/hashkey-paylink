@@ -21,7 +21,8 @@ export function paymentStatus(group:PaymentGroup,checkout?:StatusCheckout,fundin
   &&execution?.ownerId===`partner:${checkout.partnerId}`&&execution.resourceId===group.recordId&&execution.kind==='hosted_checkout'
   &&execution.state==='expired'&&execution.failureCode==='CHECKOUT_EXPIRED'&&!execution.transactionHash
   &&!checkout.paymentAttempts?.some(a=>a.transaction||a.status==='paid')
-  &&!has(['payment.gateway_accepted','checkout.payment_accepted','payment.processing','checkout.processing','payment.paid','checkout.paid'])
+  &&!has(['payment.gateway_accepted','checkout.payment_accepted','payment.paid','checkout.paid'])
+  &&!(has(['payment.processing','checkout.processing'])&&checkout.settlement?.provider!=='paycrest')
   &&!events.some(e=>e.details.txHash||e.details.paymentTransaction||e.details.bridgeTransaction||e.details.transaction||e.details.transactionHash)
  if(refunded){status='refunded';note='The provider reported a refund.'}
  else if(group.product==='funding'&&funded){status='paid';note='Account funded.'}
