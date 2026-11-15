@@ -14,6 +14,6 @@ export function validatePayerCheckoutFees(amount:string,f:PayerCheckoutFeeEviden
  return {...(f.feeRoutingVersion?{feeRoutingVersion:f.feeRoutingVersion}:{}),quoteId:f.quoteId,treasuryAddress,platformFeeUnits:f.platformFeeUnits,networkFeeUnits:f.networkFeeUnits,treasuryUnits:f.treasuryUnits,totalUnits:f.totalUnits}
 }
 export function payerCheckoutFeeRows(amount:string,f:PayerCheckoutFeeEvidence){
- const fees=validatePayerCheckoutFees(amount,f),display=(units:string)=>marketplaceFeeAmount(units)+' USDC'
+ const fees=validatePayerCheckoutFees(amount,f),display=(units:string)=>'USDC '+marketplaceFeeAmount(units)
  return [{label:'Order amount',value:display(parseUnits(amount,6).toString())},{label:'Processing fee',value:display(fees.platformFeeUnits)},{label:'Collection network fee',value:display(fees.networkFeeUnits)},{label:'Total paid',value:display(fees.totalUnits)}]
 }

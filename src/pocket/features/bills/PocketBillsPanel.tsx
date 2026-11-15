@@ -70,8 +70,8 @@ function dataServiceLabel(name: string) {
 function money(value: string, currency = 'NGN') {
   const amount = Number(value)
   return Number.isFinite(amount)
-    ? new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount)
-    : '₦0'
+    ? new Intl.NumberFormat('en-NG', { style: 'currency',currencyDisplay:'code', currency, maximumFractionDigits: 2 }).format(amount)
+    : currency+' 0.00'
 }
 
 function SignInCard() {

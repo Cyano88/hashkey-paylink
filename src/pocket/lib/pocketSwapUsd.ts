@@ -10,5 +10,5 @@ export function formatSwapOutputUsd(amount:string,price:unknown):string|undefine
  if(!unit||!Number.isFinite(quantity)||quantity<=0)return
  const usd=quantity*unit
  if(!Number.isFinite(usd)||usd<=0)return
- return usd<0.01?'≈ <$0.01 USD':'≈ '+new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(usd)+' USD'
+ return usd<0.01?'≈ USD <0.01':'≈ '+new Intl.NumberFormat('en-US',{style:'currency',currencyDisplay:'code',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(usd)
 }

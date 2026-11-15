@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from './MoneyText'
 import {RefreshButton} from './SupportConversation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
@@ -104,7 +105,7 @@ export default function PocketTransactionOperationsPanel({canReconcile=false}:{c
       return <article key={item.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#111216]">
         <button type="button" onClick={() => setExpanded(open ? '' : item.id)} aria-expanded={open} className="flex w-full items-center gap-3 p-4 text-left">
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.state === 'needs_review' ? 'bg-amber-500' : 'bg-blue-500'}`} />
-          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{LABELS[item.kind] || item.kind.replace(/_/g, ' ')}</span><span className="mt-1 block text-[11px] text-gray-500">{item.amount} {item.asset} on {item.sourceNetwork} to {item.settlementNetwork}</span></span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{LABELS[item.kind] || item.kind.replace(/_/g, ' ')}</span><span className="mt-1 block text-[11px] text-gray-500"><MoneyAmount currency={item.asset} amount={item.amount}/> on {item.sourceNetwork} to {item.settlementNetwork}</span></span>
           <span className="text-right"><span className="block text-[10px] font-bold uppercase tracking-wide text-gray-500">{item.state.replace(/_/g, ' ')}</span><span className="mt-1 flex items-center justify-end gap-1 text-[10px] text-gray-400"><Clock3 className="h-3 w-3" />{elapsed(item.pendingForMs)}</span></span>
           {open ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
         </button>

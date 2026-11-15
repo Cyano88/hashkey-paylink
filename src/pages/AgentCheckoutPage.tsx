@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
@@ -314,7 +315,7 @@ export default function AgentCheckoutPage() {
           </div>
           <h1 className="mt-2 text-xl font-bold tracking-[-0.035em] text-gray-950 dark:text-white">{checkout.title}</h1>
           {checkout.description && <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400">{checkout.description}</p>}
-          <p className="mt-4 text-3xl font-bold tracking-[-0.05em] text-gray-950 dark:text-white">{checkout.amount} <span className="text-base text-gray-400">USDC</span></p>
+          <p className="mt-4 text-3xl font-bold tracking-[-0.05em] text-gray-950 dark:text-white"><MoneyAmount currency="USDC" amount={checkout.amount}/></p>
           <div className="mt-2 flex items-center justify-center gap-2 text-[10px] font-semibold text-gray-400">
             <span>{network}</span><span>·</span><span>Circle Gateway x402</span>
           </div>
@@ -391,7 +392,7 @@ export default function AgentCheckoutPage() {
                   <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{walletAddress.slice(0, 8)}...{walletAddress.slice(-6)}</span>
                 </span>
                 <span className="text-right">
-                  <span className="block text-xs font-bold tabular-nums text-gray-900 dark:text-white">{formatPocketDisplayAmount(x402.snapshot?.gatewayBalance || '0')} USDC</span>
+                  <span className="block text-xs font-bold tabular-nums text-gray-900 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(x402.snapshot?.gatewayBalance || '0')}/></span>
                   <span className="block text-[9px] font-semibold text-gray-400">App Pay</span>
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 text-gray-400 transition-transform group-open:rotate-180" />
@@ -399,11 +400,11 @@ export default function AgentCheckoutPage() {
               <div className="mt-3 border-t border-gray-200 pt-2.5 dark:border-white/10">
                 <div className="flex items-center justify-between gap-4 py-2">
                   <span className="text-xs text-gray-500 dark:text-gray-400">USDC balance</span>
-                  <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white">{formatPocketDisplayAmount(x402.snapshot?.walletBalance || '0')} USDC</span>
+                  <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(x402.snapshot?.walletBalance || '0')}/></span>
                 </div>
                 <div className="flex items-center justify-between gap-4 border-t border-gray-100 py-2 dark:border-white/[0.07]">
                   <span className="text-xs text-gray-500 dark:text-gray-400">App Pay balance</span>
-                  <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white">{formatPocketDisplayAmount(x402.snapshot?.gatewayBalance || '0')} USDC</span>
+                  <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(x402.snapshot?.gatewayBalance || '0')}/></span>
                 </div>
                 <button type="button" onClick={() => void copyWalletAddress()} className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white text-[11px] font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
                   {walletCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}

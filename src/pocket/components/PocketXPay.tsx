@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import PocketCheckoutMethodChange from './PocketCheckoutMethodChange'
 import {checkoutPriceLabel} from '../../lib/checkoutPricing'
 import {CheckoutFooter,HashPayLinkCheckoutBrand} from '../../components/CheckoutChrome'
@@ -174,7 +175,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange,payment
   {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface fullScreen={checkout} title={review?"Confirm payment":"Pay "+(merchant?.name||'XPay')} onClose={()=>{if(review&&payment?.status==='ready'){setPayment(null);setReview(null);setError('')}else close()}} showCloseButton dismissible={!busy&&!wallet.busy} dismissOnBackdrop={false}><div className={review?undefined:"min-h-72"}>
    <CheckoutCountdown seconds={checkoutSeconds}/>
    {!review&&<h2 className="mb-5 text-center text-base font-semibold">{payment?.merchantName||merchant?.name||'XPay'}</h2>}
-   {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
+   {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400"><MoneyAmount currency={payment.symbol} amount={formatStockQuantity(payment.amount)}/></p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
     <PocketConfirmationDetails amount={formatStockQuantity(payment.amount)+' '+payment.symbol} equivalent={'$'+payment.usd+' USD'} rows={[
       ['Merchant',payment.merchantName],['Network','X Layer'],...(payment.feePayer==='merchant'?[]:[['Fee',stockTransferGasLabel(review, fee => formatStockQuantity(stockQuantity(fee,18)))]] as [string,string][]),
     ]}/>

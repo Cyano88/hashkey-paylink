@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../../components/MoneyText'
 import { useRef, useState } from 'react'
 import { TrashIcon, InboxArrowDownIcon } from '@heroicons/react/24/outline'
 import PocketBottomSheet from '../../components/PocketBottomSheet'
@@ -32,7 +33,7 @@ export default function PocketRequestHistory({requests,rows,busy,error,onRefresh
     <button type="button" aria-label={item.title+', '+item.status} style={{transform:revealed===item.id?'translateX(-64px)':'translateX(0)',touchAction:'pan-y'}} className="relative flex w-full items-center gap-3 bg-white py-4 text-left transition-transform dark:bg-black" onTouchStart={event=>{touch.current={x:event.touches[0].clientX,y:event.touches[0].clientY};swiped.current=false}} onTouchEnd={event=>{const dx=event.changedTouches[0].clientX-touch.current.x,dy=event.changedTouches[0].clientY-touch.current.y;if(canCancel&&Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)){swiped.current=true;setRevealed(dx<0?item.id:'')}}} onKeyDown={event=>{if(canCancel&&event.key==='Delete'){setActionError('');setCancel(item)}}} onClick={()=>{if(swiped.current){swiped.current=false;return}if(revealed){setRevealed('');return}setSelected(item.id)}}>
      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><InboxArrowDownIcon className="h-5 w-5"/></span>
      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.title}</span><span className="mt-1 block truncate text-xs text-gray-500">{item.direction==='incoming'?'From '+item.senderName:'To '+item.recipientName}</span></span>
-     <span className="text-right"><span className="block text-xs font-semibold">{item.amount} USDC</span><span className="mt-1 block text-[10px] capitalize text-gray-500">{item.status==='pending'?'Awaiting response':item.status==='accepted'?'Awaiting payment':item.status==='paid'?'Successful':item.status}</span></span>
+     <span className="text-right"><span className="block text-xs font-semibold"><MoneyAmount currency="USDC" amount={item.amount}/></span><span className="mt-1 block text-[10px] capitalize text-gray-500">{item.status==='pending'?'Awaiting response':item.status==='accepted'?'Awaiting payment':item.status==='paid'?'Successful':item.status}</span></span>
     </button>
    </div>
   })}

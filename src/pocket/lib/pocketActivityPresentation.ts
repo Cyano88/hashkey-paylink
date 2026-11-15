@@ -1,3 +1,4 @@
+import {currencyFirst} from '../../lib/moneyPresentation'
 import { pocketActivityStatus } from './pocketReceipt'
 import {marketplaceFeeAmount} from '../../lib/marketplaceFeeDisplay'
 import type { PocketActivityRow } from '../models/pocketActivity'
@@ -5,7 +6,8 @@ import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
 
 /** Recorded local payments use their original settlement amount, never a live conversion. */
-export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol' | 'paycrestStatus' | 'refundAmount' | 'refundAsset' | 'payerFees' | 'direction'>): string {
+export function pocketActivityAmount(row:Parameters<typeof rawPocketActivityAmount>[0]):string{return currencyFirst(rawPocketActivityAmount(row))}
+function rawPocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol' | 'paycrestStatus' | 'refundAmount' | 'refundAsset' | 'payerFees' | 'direction'>): string {
   if(row.direction==='out'&&row.payerFees)return marketplaceFeeAmount(row.payerFees.totalUnits)+' USDC'
   if(row.source==='wallet-bridge'&&['refunded','reversed'].includes(row.paycrestStatus||'')&&row.refundAmount&&row.refundAsset)return row.refundAmount+' '+row.refundAsset
   const local = row.amountNgn !== undefined && row.amountNgn !== '' && Number.isFinite(Number(row.amountNgn))

@@ -40,7 +40,7 @@ export function statementSignedAmount(row: PocketActivityRow) {
 }
 export function statementLocalAmount(row: PocketActivityRow) {
  if (!row.amountNgn || !/^\d+(?:\.\d+)?$/.test(row.amountNgn)) return ''
- return (row.fiatCurrency === 'UGX' ? 'USh ' : '\u20a6') + Number(row.amountNgn).toLocaleString('en-US',{maximumFractionDigits:2})
+ return (row.fiatCurrency || 'NGN')+' ' + Number(row.amountNgn).toLocaleString('en-US',{maximumFractionDigits:2})
 }
 
 // Confirmed USDC movements only. Never sum different assets or infer ledger balances.

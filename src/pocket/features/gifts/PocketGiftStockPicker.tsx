@@ -5,7 +5,7 @@ import {stockPickerTokens} from '../../lib/pocketStockPickerTokens'
 import {formatStockQuantity} from '../../lib/pocketStockDisplay'
 import type {StockBalanceSnapshot} from '../../lib/pocketXStocksWallet'
 import type {MultiGiftAsset} from './pocketMultiGift'
-const dollars=(value:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(value)
+const dollars=(value:number)=>new Intl.NumberFormat('en-US',{style:'currency',currencyDisplay:'code',currency:'USD',maximumFractionDigits:2}).format(value)
 export default function PocketGiftStockPicker({assets,value,snapshot,balancesLoading=false,balanceStale=false,onChange}:{assets:readonly MultiGiftAsset[];value:string;snapshot?:StockBalanceSnapshot|null;balancesLoading?:boolean;balanceStale?:boolean;onChange(token:string):void}){
  const [visible,setVisible]=useState<string[]>([])
  const quotes=usePocketStockQuotes([...visible,value].filter(Boolean))

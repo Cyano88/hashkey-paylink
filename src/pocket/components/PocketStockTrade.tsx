@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import { pocketPricingMessage } from '../lib/pocketPricingMessage'
 import PocketFundingAction from './PocketFundingAction'
 import {fundingShortfall,amountExceedsBalance} from '../lib/pocketFundingShortfall'
@@ -90,13 +91,13 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
         <div><p className="mb-2 text-xs text-gray-500">From</p>{picker('From asset', from, to, false, t => setFrom(t.address))}</div>
         <div><p className="mb-2 text-xs text-gray-500">To</p>{fixedOutputAsset?<p className="py-3 text-sm font-semibold">{tokenOut.symbol}</p>:picker('To asset', to, from, false, t => setTo(t.address))}</div>
       </div>}
-      <p className="mb-2 text-[11px] text-gray-400">{wallet.balanceStale ? 'Last known' : 'Available'} - {tokens.find(t => t.address === tokenIn.address)?.balance == null ? '\u2014' : formatStockQuantity(tokens.find(t => t.address === tokenIn.address)!.balance!)} {tokenIn.symbol}</p>
+      <p className="mb-2 text-[11px] text-gray-400">{wallet.balanceStale ? 'Last known' : 'Available'} - <MoneyAmount currency={tokenIn.symbol} amount={tokens.find(t => t.address === tokenIn.address)?.balance == null ? '\u2014' : formatStockQuantity(tokens.find(t => t.address === tokenIn.address)!.balance!)}/></p>
       <label className="mb-2 block text-[11px] text-gray-400">Amount in {tokenIn.symbol}<input className={field} disabled={busy} inputMode="decimal" value={amount} onChange={e => {setAmount(e.target.value);if(!busy)setProgress({stage:'idle',prepared:false,submitted:false})}} placeholder="0.00" /></label>
       <div aria-live="polite" className={(current || quoting ? "mb-3 " : "") + "space-y-1 text-[11px] leading-5 text-gray-400"}>
         {current ? <>
-          <p className="text-sm font-semibold leading-6 text-gray-700 dark:text-gray-200">Est. {formatStockQuantity(current.quote.expectedOut)} {tokenOut.symbol}</p>
+          <p className="text-sm font-semibold leading-6 text-gray-700 dark:text-gray-200">Est. <MoneyAmount currency={tokenOut.symbol} amount={formatStockQuantity(current.quote.expectedOut)}/></p>
           <details><summary className="cursor-pointer">Fees - about {formatStockQuantity(current.quote.gasFee)} OKB network</summary>
-            <p>Minimum {current.quote.minimumOut} {tokenOut.symbol} - 0.5% slippage</p>
+            <p>Minimum <MoneyAmount currency={tokenOut.symbol} amount={current.quote.minimumOut}/> - 0.5% slippage</p>
             {current.quote.positiveSlippageFee && <p>OKX retains price improvement above the expected amount, capped at {current.quote.positiveSlippageFee.capPercent}% of output.</p>}
           </details>
         </> : quoting ? <div role="status" aria-label="Getting estimate" className="space-y-2 py-1"><PocketSkeletonBar className="h-3 w-36" /><PocketSkeletonBar className="h-2.5 w-24" /></div> : null}

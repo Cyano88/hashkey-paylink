@@ -29,22 +29,22 @@ const receipt=checkoutReceipt(structuredClone(stored.checkouts[input.id])),view=
 const payerRow=checkoutActivityRows(paid,[input.payer])[0]
 assert.ok(isPocketActivityRow(payerRow))
 assert.deepEqual(payerRow.payerFees,fees)
-assert.equal(pocketActivityAmount(payerRow),'100.26 USDC')
-assert.equal(paymentReceiptView(pocketActivityReceipt(payerRow)).amount,'100.26 USDC')
+assert.equal(pocketActivityAmount(payerRow),'USDC 100.26')
+assert.equal(paymentReceiptView(pocketActivityReceipt(payerRow)).amount,'USDC 100.26')
 assert.equal(isPocketActivityRow({...payerRow,payerFees:{...fees,totalUnits:'100'}}),false)
 assert.equal(isPocketActivityRow({...payerRow,direction:'in'}),false)
 const merchantRow=checkoutActivityRows(paid,[paid.recipient])[0]
 assert.equal(merchantRow.payerFees,undefined)
-assert.equal(pocketActivityAmount(merchantRow),'100.00 USDC')
+assert.equal(pocketActivityAmount(merchantRow),'USDC 100.00')
 const rawFee={...payerRow,eventId:'raw-fee',source:'wallet-withdrawal',settlementType:'wallet_transfer',payerFees:undefined,recipient:EVM_PLATFORM_TREASURY,amount:'0.26'}
 const unrelated={...rawFee,eventId:'unrelated',amount:'0.27'}
 const merged=mergePocketActivityRows([rawFee,unrelated],[payerRow])
 assert.equal(merged.length,2);assert.ok(merged.some(r=>r.eventId==='unrelated'));assert.ok(!merged.some(r=>r.eventId==='raw-fee'))
-assert.equal(view.amount,'100.26 USDC')
-for(const [label,value] of [['Order amount','100.00 USDC'],['Processing fee','0.25 USDC'],['Collection network fee','0.01 USDC']])assert.equal(view.rows.find(r=>r.label===label).value,value)
+assert.equal(view.amount,'USDC 100.26')
+for(const [label,value] of [['Order amount','USDC 100.00'],['Processing fee','USDC 0.25'],['Collection network fee','USDC 0.01']])assert.equal(view.rows.find(r=>r.label===label).value,value)
 assert.equal(view.rows.filter(r=>r.label==='Total paid').length,0,'headline already shows total paid')
 const email=receiptEmail(billing)
-for(const value of ['100.26 USDC','0.25 USDC','0.01 USDC','Collection network fee']){assert.ok(email.text.includes(value));assert.ok(email.html.includes(value))}
+for(const value of ['USDC 100.26','USDC 0.25','USDC 0.01','Collection network fee']){assert.ok(email.text.includes(value));assert.ok(email.html.replace(/<[^>]*>/g,'').includes(value))}
 const pdf=await billingReceiptPdf(billing);assert.ok(pdf.length>1000);assert.equal(pdf.subarray(0,4).toString(),'%PDF')
 assert.throws(()=>validatePayerCheckoutFees('100',{...fees,networkFeeUnits:'-1'}))
 assert.throws(()=>validatePayerCheckoutFees('100',{...fees,treasuryUnits:'250000'}))

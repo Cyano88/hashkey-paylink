@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {useParams,useSearchParams} from 'react-router-dom'
 import {usePrivy} from '@privy-io/react-auth'
@@ -181,10 +182,10 @@ function Connected({agreementId,returnTo}:{agreementId:string;returnTo?:string})
       <h1 className='mt-3 break-words text-2xl font-semibold tracking-tight'>{agreement.terms.title}</h1>
       <p className='mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-500'>{agreement.terms.description}</p>
       <p className='mt-3 text-xs text-gray-500'>You are the {reply.role==='customer'?'buyer':'seller'} · Arc mainnet</p>
-      <div className='mt-5 rounded-2xl bg-gray-50 p-5 dark:bg-white/5'><p className='text-xs text-gray-500'>Agreed payment</p><p className='mt-1 text-3xl font-semibold'>{agreement.terms.amount} <span className='text-base text-gray-500'>USDC</span></p></div>
+      <div className='mt-5 rounded-2xl bg-gray-50 p-5 dark:bg-white/5'><p className='text-xs text-gray-500'>Agreed payment</p><p className='mt-1 text-3xl font-semibold'><MoneyAmount currency="USDC" amount={agreement.terms.amount}/></p></div>
       <dl className='mt-5 space-y-3 text-sm'>
-        <div className='flex justify-between gap-4'><dt>Item price</dt><dd>{agreement.terms.trade.price} USDC</dd></div>
-        <div className='flex justify-between gap-4'><dt>Delivery fee</dt><dd>{agreement.terms.trade.deliveryFee} USDC</dd></div>
+        <div className='flex justify-between gap-4'><dt>Item price</dt><dd><MoneyAmount currency="USDC" amount={agreement.terms.trade.price}/></dd></div>
+        <div className='flex justify-between gap-4'><dt>Delivery fee</dt><dd><MoneyAmount currency="USDC" amount={agreement.terms.trade.deliveryFee}/></dd></div>
         <div><dt className='text-gray-500'>Handover</dt><dd>{agreement.terms.trade.handover} · {agreement.terms.trade.location}</dd></div>
         {agreement.terms.trade.carrier&&<div><dt className='text-gray-500'>Carrier</dt><dd>{agreement.terms.trade.carrier}</dd></div>}
         <div><dt className='text-gray-500'>Delivery windows</dt><dd>Dispatch within {agreement.terms.trade.dispatchDays} days · Delivery within {agreement.terms.trade.deliveryDays} days · {agreement.terms.trade.inspectionHours} hours to inspect</dd></div>

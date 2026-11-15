@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import { useEffect, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
@@ -120,7 +121,7 @@ export default function PaymentActivityPanel({ projectId }: { projectId: string 
             <span className="mt-1 block break-all text-xs text-gray-500">{event.recordId}</span>
             <time className="mt-1 block text-xs text-gray-500" dateTime={event.occurredAt}>{new Date(event.occurredAt).toLocaleString()}</time>
           </span>
-          {event.details.amount && <span className="max-w-24 break-words text-right text-xs font-medium">{event.details.amount} {event.details.asset}</span>}
+          {event.details.amount && <span className="max-w-24 break-words text-right text-xs font-medium"><MoneyAmount currency={event.details.asset} amount={event.details.amount}/></span>}
           <ChevronRightIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
         </summary>
         <dl className="mt-4 space-y-3 rounded-xl bg-gray-50 p-4 text-sm dark:bg-white/5">

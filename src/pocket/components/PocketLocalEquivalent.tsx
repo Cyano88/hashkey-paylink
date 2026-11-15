@@ -1,3 +1,4 @@
+import {MoneyText} from '../../components/MoneyText'
 import PocketAmountShimmer from './PocketAmountShimmer'
 import usePocketDisplayCurrency from '../hooks/usePocketDisplayCurrency'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
@@ -9,6 +10,6 @@ export default function PocketLocalEquivalent({ amount, asset = 'USDC', recorded
  if (currency === 'USDC') return null
  if (!hasRecordedAmount && (!Number.isFinite(amount) || amount <= 0 || (!fx.quote && !fx.loading))) return null
  return <span className={'block min-h-4 leading-4 ' + className}>
-   {hasRecordedAmount ? localCurrencyAmount(Number(recordedAmount), recordedCurrency) : fx.quote ? <>~ {localCurrencyAmount(amount * fx.quote.rate, currency)}</> : <PocketAmountShimmer label="Loading local equivalent" />}
+   {hasRecordedAmount ? <MoneyText>{localCurrencyAmount(Number(recordedAmount), recordedCurrency)}</MoneyText> : fx.quote ? <MoneyText>{'~ '+localCurrencyAmount(amount * fx.quote.rate, currency)}</MoneyText> : <PocketAmountShimmer label="Loading local equivalent" />}
  </span>
 }

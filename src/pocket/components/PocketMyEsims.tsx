@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 ﻿import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import PocketBottomSheet from './PocketBottomSheet'
@@ -61,7 +62,7 @@ export default function PocketMyEsims({ catalog, initialOrderId, onClose }: { ca
     {error && <p role="status" className="mt-4 text-sm text-gray-500">{error}</p>}
   </PocketBottomSheet>
   return <PocketBottomSheet title="My eSIMs" onClose={onClose}>
-    {!orders && !error ? <div className="space-y-4"><PocketSkeletonBar className="h-16 w-full" /><PocketSkeletonBar className="h-16 w-full" /></div> : orders?.length ? <div className="divide-y divide-gray-100 dark:divide-[#262626]">{orders.map(item => <button key={item.id} className="flex min-h-20 w-full items-center justify-between gap-4 py-4 text-left" onClick={() => { setError(''); setSelected(item) }}><span><span className="block text-sm font-semibold">{title(item)}</span><span className="mt-1 block text-xs text-gray-500">{pocketEsimStatus(item.state).label}</span></span><span className="whitespace-nowrap text-sm">{Number(item.state === 'refunded' ? item.price.total : (item.totalDebit || item.price.total)).toFixed(2)} {item.asset}</span></button>)}</div> : !error && <p className="py-8 text-center text-sm text-gray-500">Your eSIMs will appear here.</p>}
+    {!orders && !error ? <div className="space-y-4"><PocketSkeletonBar className="h-16 w-full" /><PocketSkeletonBar className="h-16 w-full" /></div> : orders?.length ? <div className="divide-y divide-gray-100 dark:divide-[#262626]">{orders.map(item => <button key={item.id} className="flex min-h-20 w-full items-center justify-between gap-4 py-4 text-left" onClick={() => { setError(''); setSelected(item) }}><span><span className="block text-sm font-semibold">{title(item)}</span><span className="mt-1 block text-xs text-gray-500">{pocketEsimStatus(item.state).label}</span></span><span className="whitespace-nowrap text-sm"><MoneyAmount currency={item.asset} amount={Number(item.state === 'refunded' ? item.price.total : (item.totalDebit || item.price.total)).toFixed(2)}/></span></button>)}</div> : !error && <p className="py-8 text-center text-sm text-gray-500">Your eSIMs will appear here.</p>}
     {error && <><p role="status" className="my-4 text-sm text-gray-500">{error}</p><button className="pocket-cta-primary w-full" onClick={() => setRetry(value => value + 1)}>Try again</button></>}
   </PocketBottomSheet>
 }

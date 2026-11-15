@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import {useEffect,useRef,useState} from 'react'
 import PocketBottomSheet from './PocketBottomSheet'
@@ -28,7 +29,7 @@ export default function PocketHostedCheckoutChoice({checkout,onSelected,onClose,
  }
  return <PocketBottomSheet quietBackdrop title={methods?'Payment methods':cash?'Cash balance':'Stablecoins'} layer={initialMethods?95:85} onClose={onClose} onBack={methods?(onBack||(()=>setMethods(false))):initialMethods?()=>setMethods(true):undefined} showCloseButton dismissOnBackdrop={false} dismissible={!busy}>
   <h2 className="mb-3 text-center text-base font-semibold">{methods?'Payment methods':checkout.merchantName}</h2>
-  {!methods&&<><p className="text-center text-2xl font-semibold">{checkoutPriceLabel(checkout.currency?{currency:checkout.currency,amount:checkout.amount}:undefined,checkout.amount+' '+(choice?.asset||''))}</p><CheckoutCountdown seconds={seconds}/></>}
+  {!methods&&<><p className="text-center text-2xl font-semibold"><MoneyText>{checkoutPriceLabel(checkout.currency?{currency:checkout.currency,amount:checkout.amount}:undefined,checkout.amount+' '+(choice?.asset||''))}</MoneyText></p><CheckoutCountdown seconds={seconds}/></>}
   {expired?<p role="alert" className="my-5 text-center text-sm text-gray-500">Payment session expired. Start a new checkout.</p>:methods?<CheckoutPaymentMethods stablecoinsEnabled={checkout.paymentMethods?.includes('stablecoins')!==false&&available.length>0} onStablecoins={()=>{setCash(false);setMethods(false);setError('')}} onCash={checkout.paymentMethods?.includes('cash_balance')?()=>{setCash(true);setMethods(false);setError('')}:undefined}/>:<>
    <div className="mt-5 space-y-4">{cash?<div className="flex min-h-14 items-center justify-between rounded-xl border border-gray-100 px-3.5 dark:border-white/15"><span className="text-sm text-gray-500">Pay with</span><span className="text-sm font-semibold">Cash balance</span></div>:<>
     <div><p className="mb-2 text-xs text-gray-500">Network</p><PocketSelect ariaLabel="Payment network" showNetworkBalances={false} value={choice?.network||''} options={networks.map(value=>({value,label:names[value]||value}))} disabled={busy} onChange={network=>{setChoice(available.find(o=>o.network===network)!);setError('')}} layer={105}/></div>

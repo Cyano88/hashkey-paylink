@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../../components/MoneyText'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from '../../components/PocketIcons'
 import { cn, truncateAddress } from '../../../lib/utils'
@@ -15,7 +16,7 @@ function initialBalanceCurrency(): PocketBalanceCurrency {
 
 function formatNaira(value: number) {
   return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
+    style: 'currency',currencyDisplay:'code',
     currency: 'NGN',
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
@@ -103,7 +104,7 @@ export default function PocketHomeOverview({
               {balanceCurrency === 'USDC'
                 ? <>{formatPocketDisplayAmount(globalBalance)} <span className="text-sm font-semibold tracking-normal text-gray-500 dark:text-gray-400">USDC</span></>
                 : nairaBalance === null
-                  ? '₦—'
+                  ? 'NGN —'
                   : formatNaira(nairaBalance)}
             </p>
             {balanceCurrency === 'NGN' ? (
@@ -193,7 +194,7 @@ export default function PocketHomeOverview({
                   {network.comingSoon ? (
                     <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Coming soon</p>
                   ) : (
-                    <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(row?.balance ?? 0)} <span className="text-[10px] font-semibold tracking-normal text-gray-500 dark:text-gray-400">USDC</span></p>
+                    <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(row?.balance ?? 0)}/></p>
                   )}
                   {showStatus ? (
                     <p className={cn('mt-0.5 text-[9px] font-black uppercase tracking-wider', row?.status === 'error' && wallet?.address ? 'text-amber-500' : 'text-blue-500')}>

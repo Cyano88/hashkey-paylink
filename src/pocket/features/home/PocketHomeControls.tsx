@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../../components/MoneyText'
 import { PocketQuoteSkeleton } from '../../components/PocketContentSkeletons'
 import { useState } from 'react'
 import { ArrowRight, Wallet } from 'lucide-react'
@@ -245,7 +246,7 @@ export default function PocketHomeControls({
         <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-[#262626] dark:from-[#15161a] dark:to-[#101115]">
           <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-[#121212]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
-            <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selectedBalance)} <span className="text-[10px] font-semibold tracking-normal text-gray-500 dark:text-gray-400">USDC</span></span>
+            <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(selectedBalance)}/></span>
           </div>
           {selectedAddress ? (
             <>
@@ -327,7 +328,7 @@ export default function PocketHomeControls({
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-[#121212]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
-            <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selectedBalance)} <span className="text-[10px] font-semibold tracking-normal text-gray-500 dark:text-gray-400">USDC</span></span>
+            <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(selectedBalance)}/></span>
           </div>
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
@@ -340,9 +341,9 @@ export default function PocketHomeControls({
             <PocketQuoteSkeleton label="Updating bridge amount" />
           ) : bridgeQuote ? (
             <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-[#262626] dark:bg-[#121212]">
-              <div className="flex justify-between gap-3"><span className="text-gray-500">You receive</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.receive)} USDC</span></div>
-              <div className="flex justify-between gap-3"><span className="text-gray-500">Circle + destination fee</span><span className="font-medium tabular-nums tracking-[-0.02em] text-gray-700 dark:text-gray-200">{formatPocketDisplayAmount(bridgeQuote.fee)} USDC</span></div>
-              <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total from {selectedNetworkLabel}</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.total)} USDC</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-500">You receive</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(bridgeQuote.receive)}/></span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-500">Circle + destination fee</span><span className="font-medium tabular-nums tracking-[-0.02em] text-gray-700 dark:text-gray-200"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(bridgeQuote.fee)}/></span></div>
+              <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total from {selectedNetworkLabel}</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white"><MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(bridgeQuote.total)}/></span></div>
             </div>
           ) : null}
           <PocketSlideAction
@@ -374,7 +375,7 @@ export default function PocketHomeControls({
                     <span className="mt-0.5 block truncate text-[10px] font-medium capitalize text-gray-500 dark:text-gray-400">{item.chain}{item.contextLabel ? ` · ${item.contextLabel}` : ''}</span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-gray-100">{deposit ? '+' : bridge ? '' : '-'}{formatPocketDisplayAmount(Number(item.amount))} USDC</span>
+                    <span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-gray-100">{deposit ? '+' : bridge ? '' : '-'}<MoneyAmount currency="USDC" amount={formatPocketDisplayAmount(Number(item.amount))}/></span>
                     <span className="mt-0.5 block text-[9px] font-semibold text-gray-500 dark:text-gray-400">{new Date(item.ts).toLocaleDateString()}</span>
                   </span>
                 </div>

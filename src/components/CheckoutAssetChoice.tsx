@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from './MoneyText'
 import {usePrivy} from '@privy-io/react-auth'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {checkoutPriceLabel} from '../lib/checkoutPricing'
@@ -24,7 +25,7 @@ export default function CheckoutAssetChoice({checkout,returnUrl,mode='web',cash=
  return <div className="mx-auto w-full max-w-md py-6"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#101114]">
   {!busy&&<button type="button" onClick={()=>navigate('/pay/c/'+checkout.id)} className="mb-4 min-h-11 text-sm font-medium">Back</button>}
   <CheckoutMerchant name={checkout.merchantName} logo={checkout.brandImageUrl}/>
-  <h1 className="mt-5 text-center text-3xl font-semibold">{checkoutPriceLabel(checkout.currency?{currency:checkout.currency,amount:checkout.amount}:undefined,checkout.amount+' '+(choice?.asset||''))}</h1>
+  <h1 className="mt-5 text-center text-3xl font-semibold"><MoneyText>{checkoutPriceLabel(checkout.currency?{currency:checkout.currency,amount:checkout.amount}:undefined,checkout.amount+' '+(choice?.asset||''))}</MoneyText></h1>
   {checkout.title&&<p className="mt-2 text-center text-sm text-gray-500">{checkout.title}</p>}
   <CheckoutCountdown seconds={seconds}/>
   {cash?<div className="mt-7"><h2 className="text-sm font-semibold">Cash balance</h2><p className="mt-2 text-sm text-gray-500">Use your Pocket cash balance. You can top up before paying.</p>{!ready?<div aria-label="Restoring session" className="mt-4 h-20 animate-pulse rounded bg-gray-100"/>:!authenticated?<PocketEmailLogin context="checkout"/>:null}</div>:<fieldset disabled={busy||!!checkout.preparingOption||!!checkout.selected&&!checkout.canChange} className="mt-7 space-y-4">

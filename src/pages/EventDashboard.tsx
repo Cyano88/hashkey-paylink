@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -367,7 +368,7 @@ export default function EventDashboard() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
             </span>
-            <span className="font-semibold">${t.amount} received</span>
+            <span className="font-semibold"><MoneyAmount currency="USD" amount={t.amount}/> received</span>
             <span className="font-mono text-emerald-300 text-xs">…{t.addr.slice(-4)}</span>
           </div>
         ))}
@@ -428,8 +429,7 @@ export default function EventDashboard() {
               </span>
             </div>
             <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-gray-900">
-              {balanceLoading ? '$--.----' : `$${fmtBalance(globalBalance)}`}
-              <span className="ml-2 text-sm font-semibold text-gray-400">USDC</span>
+              <MoneyAmount currency="USDC" amount={balanceLoading ? '$--.----' : `$${fmtBalance(globalBalance)}`}/>
             </p>
           </div>
           <button
@@ -453,7 +453,7 @@ export default function EventDashboard() {
                     row.status === 'ok' ? 'bg-emerald-500' : row.status === 'error' ? 'bg-amber-500' : 'bg-gray-300',
                   )} />
                 </div>
-                <p className="mt-1 font-mono text-sm font-bold text-gray-900">${fmtBalance(row.balance)}</p>
+                <p className="mt-1 font-mono text-sm font-bold text-gray-900"><MoneyAmount currency="USD" amount={fmtBalance(row.balance)}/></p>
                 {row.error && <p className="mt-1 text-[10px] leading-snug text-amber-600">{row.error}</p>}
               </div>
             ))}
@@ -485,7 +485,7 @@ export default function EventDashboard() {
             </div>
             <p className={cn('text-4xl font-bold transition-colors duration-500',
               counterFlash ? 'text-emerald-600' : 'text-gray-900')}>
-              ${total.toFixed(2)}
+              <MoneyAmount currency="USD" amount={total.toFixed(2)}/>
             </p>
             <p className="text-[10px] text-gray-400 mt-0.5">USDC</p>
           </div>
@@ -570,7 +570,7 @@ export default function EventDashboard() {
                       </>
                     ) : (
                       <>
-                        <p className="text-sm font-semibold text-gray-900">${parseFloat(p.amount || '0').toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-gray-900"><MoneyAmount currency="USD" amount={parseFloat(p.amount || '0').toFixed(2)}/></p>
                         <p className="text-[10px] capitalize text-gray-400">{p.chain || '—'}</p>
                       </>
                     )}

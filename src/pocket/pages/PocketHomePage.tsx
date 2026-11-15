@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import PocketAmountShimmer from '../components/PocketAmountShimmer'
 import PocketActivityList from '../components/PocketActivityList'
 import { savePocketDisplayCurrency, formatPocketFiatAmount } from '../lib/pocketDisplayCurrency'
@@ -85,7 +86,7 @@ export default function PocketHomePage() {
             </button>
           </div></div>
           <div className="mt-1.5">
-            {!balanceVisible || balancesVisible ? <p className="min-w-0 text-[clamp(2rem,10vw,2.75rem)] font-semibold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-total-amount>{balanceVisible ? formatPocketDollarAmount(displayTotal) : hidden}</span>{balanceVisible && <span className="ml-2 text-xs font-medium tracking-normal opacity-60">USD</span>}</span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
+            {!balanceVisible || balancesVisible ? <p className="min-w-0 text-[clamp(2rem,10vw,2.75rem)] font-semibold tabular-nums tracking-tight"><span className="relative inline-block"><span data-pocket-total-amount>{balanceVisible ? <MoneyAmount currency="USD" amount={formatPocketDollarAmount(displayTotal)}/> : hidden}</span></span></p> : <span role="status" aria-label="Loading balances" className="mx-auto block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
           <div className="mt-2 flex h-8 items-center justify-center">
             {balanceVisible && <button type="button" aria-label="Change display currency" aria-haspopup="dialog" aria-expanded={currencyOpen} onClick={() => setCurrencyOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/10 px-4 text-xs font-medium tabular-nums transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 dark:bg-gray-950/[0.07] dark:hover:bg-gray-950/10">

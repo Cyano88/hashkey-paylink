@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from './MoneyText'
 import { useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import {
@@ -407,7 +408,7 @@ function AgreementDetail({
       <div className="mt-6 rounded-2xl bg-gray-50 p-5 dark:bg-white/[0.045]">
         <p className="text-[11px] font-medium text-gray-400">Protected amount</p>
         <p className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-gray-950 dark:text-white">
-          {agreement.amount || '—'} <span className="text-sm tracking-normal text-gray-400">USDC</span>
+          <MoneyAmount currency="USDC" amount={agreement.amount || '—'}/>
         </p>
         <div className="mt-5 grid grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-white/8 sm:grid-cols-4">
           <Detail label="Released" value={agreement.chain ? `${usdc(agreement.chain.releasedUsdcUnits)} USDC` : '—'} />

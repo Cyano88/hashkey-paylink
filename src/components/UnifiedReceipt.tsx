@@ -1,3 +1,4 @@
+import {MoneyText} from './MoneyText'
 import {BrandAttribution} from './BrandAttribution'
 import {ReceiptTypeIcon} from '../pocket/components/ReceiptTypeIcon'
 import {PocketPaymentMethodIcon} from '../pocket/components/PocketWebPaymentIdentity'
@@ -111,14 +112,14 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
       <section className="mt-5">
         <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
         {view.amountLabel && <p className="mt-3 text-xs text-gray-500">{view.amountLabel}</p>}
-        <p className="mt-3 break-words text-[30px] font-bold tracking-normal">{view.amount}</p>
+        <p className="mt-3 break-words text-[30px] font-bold tracking-normal"><MoneyText>{view.amount}</MoneyText></p>
       </section>
 
       <dl className="mt-3 border-t border-gray-100 pt-0.5 dark:border-white/10">
         {view.rows.map(row => (
           <div key={row.label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-5 py-1.5">
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{row.label}</dt>
-            <dd className={`min-w-0 break-words text-right text-[11px] font-semibold leading-5 text-gray-700 dark:text-gray-200 ${row.mono ? 'font-mono' : ''}`}>{row.value || '-'}</dd>
+            <dd className={`min-w-0 break-words text-right text-[11px] font-semibold leading-5 text-gray-700 dark:text-gray-200 ${row.mono ? 'font-mono' : ''}`}><MoneyText>{row.value || '-'}</MoneyText></dd>
           </div>
         ))}
       </dl>
@@ -150,12 +151,12 @@ function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkRecei
         <ReceiptWatermark receipt={receipt}/>
         <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
         {view.amountLabel && <p className="mt-4 text-xs text-gray-500">{view.amountLabel}</p>}
-        <p className="mt-8 text-[32px] font-bold tracking-normal text-gray-950 dark:text-white">{view.amount}</p>
+        <p className="mt-8 text-[32px] font-bold tracking-normal text-gray-950 dark:text-white"><MoneyText>{view.amount}</MoneyText></p>
         <dl className="mt-7 divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/10 dark:border-white/10">
           {[...view.rows, { label: 'Status', value: receipt.status || 'confirmed' }].map(row => (
             <div key={row.label} className="flex items-start justify-between gap-5 py-3.5">
               <dt className="text-[11px] font-medium text-gray-400">{row.label}</dt>
-              <dd className="max-w-[66%] break-words text-right text-[11px] font-semibold leading-5 text-gray-700 dark:text-gray-200">{row.value || '-'}</dd>
+              <dd className="max-w-[66%] break-words text-right text-[11px] font-semibold leading-5 text-gray-700 dark:text-gray-200"><MoneyText>{row.value || '-'}</MoneyText></dd>
             </div>
           ))}
         </dl>

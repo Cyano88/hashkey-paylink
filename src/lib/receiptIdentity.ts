@@ -9,8 +9,4 @@ export function receiptIconKind(r:{source?:string;settlementType?:string;payment
  return 'wallet'
 }
 /** Decimal strings stay exact. Currency labels are data, never inferred from a symbol. */
-export function receiptMoney(amount:string,currency:string){
- if(!/^-?\d+(?:\.\d+)?$/.test(amount))return amount+' '+currency
- const [integer,fraction='']=amount.split('.'),decimals=fraction.replace(/0+$/,'').padEnd(2,'0')
- return integer.replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+decimals+' '+currency
-}
+export {exactMoney as receiptMoney} from './moneyPresentation'

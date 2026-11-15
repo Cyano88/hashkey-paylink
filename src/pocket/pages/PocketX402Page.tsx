@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -63,9 +64,9 @@ export default function PocketX402Page() {
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Available for app payments</p>
               <p className="mt-1 text-2xl font-semibold tabular-nums tracking-[-0.025em] text-gray-950 dark:text-white">
-                {x402.snapshot?.gatewayBalance !== undefined
+                <MoneyAmount currency="USDC" amount={x402.snapshot?.gatewayBalance !== undefined
                   ? formatPocketDisplayAmount(x402.snapshot.gatewayBalance)
-                  : sessionChecking ? '—' : '0.00'} <span className="text-sm font-bold text-gray-400">USDC</span>
+                  : sessionChecking ? '—' : '0.00'}/>
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
                 <span className={cn(

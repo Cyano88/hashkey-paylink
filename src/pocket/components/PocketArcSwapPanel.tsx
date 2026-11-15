@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import PocketAmountKeypad from './PocketAmountKeypad'
 import PocketExchangeLayout from './PocketExchangeLayout'
 import {beginPocketOperation,endPocketOperation,trackPocketOperation,migratePocketOperations} from '../lib/pocketOperationRecovery'
@@ -188,7 +189,7 @@ export default function PocketArcSwapPanel(props: Props) {
   const selected = tokens.find(token => token.address.toLowerCase() === tokenIn.toLowerCase())
   return <section className="flex min-h-0 flex-1 flex-col gap-3 bg-transparent">
     {pending && props.request ? <div className="space-y-4">
-      <div className="flex justify-between text-sm"><span>{formatPocketDisplayAmount(pending.quote.amount)} {pending.quote.tokenIn.symbol}</span><span>{pending.quote.tokenOut.symbol}</span></div>
+      <div className="flex justify-between text-sm"><span><MoneyAmount currency={pending.quote.tokenIn.symbol} amount={formatPocketDisplayAmount(pending.quote.amount)}/></span><span>{pending.quote.tokenOut.symbol}</span></div>
       <button type="button" className="pocket-cta-primary w-full" disabled={busy||checkingStatus} aria-busy={checkingStatus} onClick={()=>{setError('');setCheckingStatus(true);void prepare().then(()=>check(pending)).catch(reason=>setError(reason.message)).finally(()=>setCheckingStatus(false))}}>
         {checkingStatus&&<Loader2 className="h-4 w-4 animate-spin"/>}
         <span>{checkingStatus?'Checking swap':pending.txHash?'Update swap':'Verify previous swap'}</span>
@@ -206,9 +207,9 @@ export default function PocketArcSwapPanel(props: Props) {
       {selected?.balanceStatus === 'wallet_required' && <button type="button" onClick={() => void props.ensureWallet().then(() => load()).catch(reason => setError(reason.message))} className="text-xs font-bold text-blue-600">Open Arc wallet</button>}
 
       {quoted && <div className="space-y-1 text-xs">
-        <p>You receive: <b>{formatPocketDisplayAmount(quoted.quote.expectedOut)} {quoted.quote.tokenOut.symbol}</b></p>
-        <details><summary className="cursor-pointer">Fees and minimum received</summary><p>Minimum received: <b>{formatPocketDisplayAmount(quoted.quote.minimumOut)} {quoted.quote.tokenOut.symbol}</b></p>
-        {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: {formatPocketDisplayAmount(fee.amount)} {fee.symbol}{fee.included ? ' (included)' : ''}</p>)}
+        <p>You receive: <b><MoneyAmount currency={quoted.quote.tokenOut.symbol} amount={formatPocketDisplayAmount(quoted.quote.expectedOut)}/></b></p>
+        <details><summary className="cursor-pointer">Fees and minimum received</summary><p>Minimum received: <b><MoneyAmount currency={quoted.quote.tokenOut.symbol} amount={formatPocketDisplayAmount(quoted.quote.minimumOut)}/></b></p>
+        {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: <MoneyAmount currency={fee.symbol} amount={formatPocketDisplayAmount(fee.amount)}/>{fee.included ? ' (included)' : ''}</p>)}
         <p>Network fee: Covered by Pocket</p></details>
       </div>}
       {error && !quoted && pairReady && amountValid && <button type="button" onClick={() => setQuoteRefresh(value => value + 1)} className="text-xs font-bold text-blue-600">Try price again</button>}

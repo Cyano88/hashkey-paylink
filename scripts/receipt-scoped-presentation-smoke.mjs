@@ -11,7 +11,7 @@ const tx='0x'+'a'.repeat(64),wallet='0x'+'1'.repeat(40)
 const payer={id:'chk_receipt_visual_fixture',merchant:'Example Market',description:'Example Market order 123456',amount:'1.500004',asset:'USDC',network:'Base',paidAt:'2026-11-15T10:30:00Z',timeZone:'Africa/Lagos',paymentMethod:'wallet',receiptUrl:'https://app.hashpaylink.com/receipt/fixture'}
 const funding={id:'funding_fixture',partnerId:'project',checkoutId:'chk_funding_fixture',targetWallet:wallet,depositAddress:wallet,amount:'1.500004',observation:{status:'funded',bridgeStatus:'complete',network:'base',paymentTransaction:tx,bridgeTransaction:tx,observedAt:payer.paidAt}}
 const checkout={id:funding.checkoutId,partnerId:'project',merchantName:'Example Market',title:'Account funding',amount:funding.amount,asset:'USDC',network:'base',recipient:wallet,createdAt:payer.paidAt,providerFunding:{requestId:funding.id,targetWallet:wallet,depositAddress:wallet},payment:{status:'paid',txHash:tx,payer:wallet,amount:funding.amount,confirmedAt:payer.paidAt}}
-assert.equal(paymentReceiptView({...checkoutReceipt({...checkout,providerFunding:undefined}),amount:'1.500004'}).amount,'1.500004 USDC')
+assert.equal(paymentReceiptView({...checkoutReceipt({...checkout,providerFunding:undefined}),amount:'1.500004'}).amount,'USDC 1.500004')
 assert.equal(checkoutReceipt(checkout).status,'pending')
 assert.equal(checkoutReceipt(checkout,funding).status,'confirmed')
 for(const patch of [{partnerId:'other'},{checkoutId:'other'},{amount:'2'},{targetWallet:'0x'+'2'.repeat(40)},{observation:{...funding.observation,bridgeStatus:'pending'}},{observation:{...funding.observation,paymentTransaction:'0x'+'b'.repeat(64)}}])assert.equal(checkoutReceipt(checkout,{...funding,...patch}).status,'pending')
@@ -23,7 +23,7 @@ assert.equal(businessReceiptReport({...reportInput,audience:'seller',sellerId:'s
 assert.equal(businessReceiptReport({...reportInput,from:2000,to:2500}).activityCount,0)
 assert.throws(()=>businessReceiptReport({...reportInput,fundings:[{record:{...funding,observation:{...funding.observation,bridgeTransaction:'invalid'}},recordedAt:1500}]}),/requires review/)
 for(const currency of ['NGN','UGX','KES','GHS']){const html=receiptEmail({...payer,pricing:{amount:'2103.26',currency,rate:'1402.17',paymentAsset:'USDC'},settlement:{amount:'1999',currency}}).html;assert(html.includes(currency));assert(!html.includes('1999'));assert(!html.includes('Merchant settlement'))}
-assert.equal(receiptMoney('999999999999999.000001','USDC'),'999,999,999,999,999.000001 USDC')
+assert.equal(receiptMoney('999999999999999.000001','USDC'),'USDC 999,999,999,999,999.000001')
 assert.equal(receiptIconKind({source:'hosted_checkout',paymentMethod:'wallet',settlementType:'instant_fiat'}),'wallet')
 assert.equal(receiptIconKind({source:'marketplace-refund'}),'refund');assert.equal(receiptIconKind({source:'marketplace-bank'}),'bank_transfer')
 assert.equal(billingReceiptPresentation({...payer,purpose:'funding'}).amountLabel,'Amount paid')

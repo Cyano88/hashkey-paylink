@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import PocketIncomingRequestSheet from './PocketIncomingRequestSheet'
 import {RequestMoney} from './PocketIcons'
 ﻿import {isIncomingPocketRequest} from '../lib/pocketInboxPolicy'
@@ -30,7 +31,7 @@ export default function PocketStockNotifications({history=false}:{history?:boole
   }catch(e){setActionError(e instanceof Error?e.message:'Could not respond. Try again.')}finally{setActionBusy('')}
  }
  return <div className="space-y-2">{busy&&!inbox?<PocketNotificationsSkeleton/>:<>
- {inbox?.requests.filter(r=>history||isIncomingPocketRequest(r)).map(r=><article key={r.id} className="py-3"><button disabled={!isIncomingPocketRequest(r)} onClick={()=>{setActionError('');setSelectedId(r.id)}} className="flex w-full items-center gap-3 text-left"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] dark:bg-white/[0.08]"><RequestMoney className="h-4 w-4"/></span><span><span className="block text-xs font-bold">{r.direction==='incoming'?'Request from ID:'+r.senderPocketId:'Requested from ID:'+r.payerPocketId}</span><span className="mt-1 block text-[11px] text-gray-500">{formatStockQuantity(r.amount)} {r.symbol}</span></span></button></article>)}
+ {inbox?.requests.filter(r=>history||isIncomingPocketRequest(r)).map(r=><article key={r.id} className="py-3"><button disabled={!isIncomingPocketRequest(r)} onClick={()=>{setActionError('');setSelectedId(r.id)}} className="flex w-full items-center gap-3 text-left"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] dark:bg-white/[0.08]"><RequestMoney className="h-4 w-4"/></span><span><span className="block text-xs font-bold">{r.direction==='incoming'?'Request from ID:'+r.senderPocketId:'Requested from ID:'+r.payerPocketId}</span><span className="mt-1 block text-[11px] text-gray-500"><MoneyAmount currency={r.symbol} amount={formatStockQuantity(r.amount)}/></span></span></button></article>)}
  {inbox&&!inbox.requests.some(r=>history||isIncomingPocketRequest(r))&&<p className="py-12 text-center text-xs text-gray-400">{history?'No requests yet.':'No stock notifications yet.'}</p>}
  </>}{error&&<p role="alert" className="text-xs text-red-500">{error}</p>}{selected&&<PocketIncomingRequestSheet title="Stock request" amount={formatStockQuantity(selected.amount)+' '+selected.symbol} sender={'ID:'+selected.senderPocketId} canDecline={selected.status==='pending'} busy={Boolean(actionBusy)} error={actionError} onPay={()=>void respond('pay')} onDecline={()=>void respond('decline')} onClose={()=>setSelectedId('')}/>}</div>
 }

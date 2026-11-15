@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 /**
  * Recipient Settlement Dashboard - /dashboard?e=0x...
  *
@@ -1041,7 +1042,7 @@ export default function Dashboard() {
                       'mt-1 font-mono text-base font-bold',
                       active ? 'text-white dark:text-gray-950' : 'text-gray-900 dark:text-gray-50',
                     )}>
-                      {fmtNgnAmount(localCategoryTotals[tab.key])}
+                      <MoneyText>{fmtNgnAmount(localCategoryTotals[tab.key])}</MoneyText>
                     </p>
                     <p className={cn(
                       'mt-1 text-[11px] leading-snug',

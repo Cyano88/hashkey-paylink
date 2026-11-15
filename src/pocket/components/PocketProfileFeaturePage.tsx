@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import {readPocketCountry,savePocketCountry,currencyForPocketCountry} from '../lib/pocketCountryPreference'
 import {pocketApiUrl} from '../lib/pocketRoutes'
 import PocketAmountShimmer from './PocketAmountShimmer'
@@ -77,7 +78,7 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
     <div className='mt-5 space-y-3'>
       {bank && <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
         <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Bank payout</p>
-        <p className='mt-2 text-2xl font-black'>{new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)} USDC</p>
+        <p className='mt-2 text-2xl font-black'><MoneyAmount currency="USDC" amount={new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)}/></p>
         <PocketLocalEquivalent amount={bank.maxUsdc} />
         <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Per-transfer limit. Your verification limit also applies.</p>
       </article>}

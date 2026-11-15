@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {cacheCheckoutConfirmationActivity} from '../pocket/lib/pocketCheckoutConfirmationActivity'
 import { useCheckoutExpiry, CheckoutExpired } from '../components/CheckoutExpiry'
@@ -4286,7 +4287,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
               {recipientAmt != null ? (
                 <>
                   <span className={cn('font-semibold', isUnder ? 'text-amber-700' : 'text-gray-900')}>
-                    {formatPaymentAmountDisplay(recipientAmt, meta.decimals)} {meta.asset}
+                    <MoneyAmount currency={meta.asset} amount={formatPaymentAmountDisplay(recipientAmt, meta.decimals)}/>
                   </span>
                   {!isPolymarketFunding && (
                     <>
@@ -4313,7 +4314,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
               ) : (
                 <>
                   <span className="font-semibold text-gray-900">
-                    {formatAmount(effectiveAmt, meta.decimals)} {meta.asset}
+                    <MoneyAmount currency={meta.asset} amount={formatAmount(effectiveAmt, meta.decimals)}/>
                   </span>
                   {!isPolymarketFunding && (
                     <>
@@ -4635,7 +4636,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
               </div>
               <h2 className="mt-5 text-xl font-black tracking-tight text-gray-950 dark:text-white">Funded</h2>
               <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                {formatAmount(receivedAmount != null ? formatUnits(receivedAmount, meta.decimals) : effectiveAmt, meta.decimals)} {meta.asset}
+                <MoneyAmount currency={meta.asset} amount={formatAmount(receivedAmount != null ? formatUnits(receivedAmount, meta.decimals) : effectiveAmt, meta.decimals)}/>
               </p>
             </div>
           ) : walletFundingConfirming ? (
@@ -4786,8 +4787,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
               ) : (
                 <div className="flex justify-center">
                   <span className="relative text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">
-                    {formatAmount(payableAmt, meta.decimals)}
-                    <span className="absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap text-xl font-semibold text-gray-400 dark:text-gray-300">{meta.asset}</span>
+                    <MoneyAmount currency={meta.asset} amount={formatAmount(payableAmt, meta.decimals)}/>
                   </span>
                 </div>
               )}
@@ -4800,8 +4800,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                     </>
                   ) : bankSendDisplayUsdc ? (
                     <span className="text-[11px] text-gray-400">
-                      ≈ {formatAmount(bankSendDisplayUsdc, 6)} USDC
-                    </span>
+                      ≈ <MoneyAmount currency="USDC" amount={formatAmount(bankSendDisplayUsdc, 6)}/></span>
                   ) : null}
                 </div>
               )}
@@ -4844,11 +4843,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
               return (
                 <div className="mt-2 flex items-center justify-center gap-1">
                   {usdcOut ? (
-                    <span className="text-[11px] text-gray-400">You will pay ≈ {usdcOut} USDC</span>
+                    <span className="text-[11px] text-gray-400">You will pay ≈ <MoneyAmount currency="USDC" amount={usdcOut}/></span>
                   ) : rate ? (
                     <span className="text-[11px] text-gray-400">
-                      1 {fxCurrency} = {(1 / rate).toFixed(6).replace(/\.?0+$/, '')} USDC
-                    </span>
+                      1 {fxCurrency} = <MoneyAmount currency="USDC" amount={(1 / rate).toFixed(6).replace(/\.?0+$/, '')}/></span>
                   ) : null}
                 </div>
               )
@@ -4907,8 +4905,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
         <div className={cn(isNgPosPaycrestOfframp ? 'space-y-2 px-4 pb-4 pt-3' : 'space-y-3 p-4')}>
           {paymentQuoteNeeded && <div className="space-y-1 text-center text-[11px] font-medium text-slate-500">
             {displayedPaymentQuote ? <>
-              {!merchantPaidFees && <p>Fee: {formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits) + BigInt(displayedPaymentQuote.quote.networkFeeUnits), 6)} USDC</p>}
-              <p className="font-semibold text-gray-900 dark:text-white">Total: {formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits), 6)} USDC</p>
+              {!merchantPaidFees && <p>Fee: <MoneyAmount currency="USDC" amount={formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits) + BigInt(displayedPaymentQuote.quote.networkFeeUnits), 6)}/></p>}
+              <p className="font-semibold text-gray-900 dark:text-white">Total: <MoneyAmount currency="USDC" amount={formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits), 6)}/></p>
             </> : paymentQuoteLoading ? <div role="status" aria-label="Calculating fees" className="mx-auto h-10 w-44 animate-pulse rounded bg-slate-100 dark:bg-white/10" /> : null}
             {paymentQuoteError && <p>{paymentQuoteError} <button type="button" className="underline" onClick={() => setFeeQuoteRefresh(value => value + 1)}>Retry</button></p>}
           </div>}
@@ -4916,7 +4914,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           {isHostedCheckout ? (
             (!paymentQuoteNeeded && feeAmount > 0 && effectiveAmt) ? (
               <div className="space-y-1 text-center text-[11px] font-medium text-slate-400">
-                {feeAmount > 0 && effectiveAmt && <p>Fee {formatAmount(feeAmount.toString(), 6)} {meta.asset}</p>}
+                {feeAmount > 0 && effectiveAmt && <p>Fee <MoneyAmount currency={meta.asset} amount={formatAmount(feeAmount.toString(), 6)}/></p>}
 
               </div>
             ) : null
@@ -4983,7 +4981,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                 </div>
                 {paycrestOrder?.amount_usdc && (
                   <span className="shrink-0 text-right">
-                    <span className="block text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">{formatAmount(paycrestOrder.amount_usdc, meta.decimals)} USDC</span>
+                    <span className="block text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200"><MoneyAmount currency="USDC" amount={formatAmount(paycrestOrder.amount_usdc, meta.decimals)}/></span>
                     <span className="mt-0.5 block text-[10px] text-gray-400">Ready to pay</span>
                   </span>
                 )}

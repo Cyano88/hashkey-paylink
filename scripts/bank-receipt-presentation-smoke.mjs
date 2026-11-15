@@ -16,5 +16,5 @@ assert.equal(paymentReceiptView({...receipt,memo:'Lunch contribution'}).rows.fin
 const web=paymentReceiptView({...receipt,source:'hosted_checkout',settlementType:'hosted_checkout',title:'Web payment',asset:'USDT',amount:'1.5'})
 assert.equal(web.badge,'Web payment')
 assert.equal(web.rows.find(row=>row.label==='Type').value,'Wallet payment')
-assert.equal(web.amount,'1.50 USDT')
+assert.equal(web.amount,'USDT 1.50')
 console.log('PASS bank receipt labels, clean narration, stable reference, and wallet-funded web payment with fiat settlement.')

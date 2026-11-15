@@ -1,3 +1,4 @@
+import {currencyFirst,moneyParts} from './moneyPresentation'
 import {poweredByHashPayLink,paymentTagline} from './brandCopy'
 import {receiptIconKind,receiptIconPaths,receiptMoney} from './receiptIdentity'
 import {payerCheckoutFeeRows,type PayerCheckoutFeeEvidence} from './payerCheckoutFees'
@@ -296,6 +297,10 @@ function electricityProviderBadge(provider?: string) {
 }
 
 export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView {
+ const view=rawPaymentReceiptView(receipt)
+ return {...view,amount:currencyFirst(view.amount),rows:view.rows.map(row=>({...row,value:currencyFirst(row.value)}))}
+}
+function rawPaymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView {
   const variant = receipt.variant === 'bills' || receipt.source === 'bills' || String(receipt.settlementType || '').startsWith('bill_payment') ? 'bills' : 'general'
   const networkKey = receiptChainKey(receipt.chain)
   const network = networkKey === 'xlayer' ? 'X Layer' : networkKey ? CHAIN_META[networkKey].label : titleCase(receipt.chain || 'Network unavailable')
@@ -348,7 +353,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   if(['wallet-transfer','wallet-deposit','wallet-withdrawal'].includes(receipt.source||'')&&['money_in','money_out'].includes(receipt.type)){
     const incoming=receipt.type==='money_in'
     const narration=receipt.narration||receipt.memo||''
-    const normalized=(value:string)=>value.toLowerCase().replace(/\s/g,'')
+    const normalized=(value:string)=>currencyFirst(value).toLowerCase().replace(/\s/g,'')
     const automatic=new Set(['','Incoming','Outgoing','Transfer','Wallet transfer',receipt.title||'',receipt.asset+' received',receipt.asset+' sent',...([receipt.amount,compactReceiptAmount(receipt.amount,receipt.asset)].flatMap(value=>[value+' '+receipt.asset,value+' '+receipt.asset+' received',value+' '+receipt.asset+' sent',value+' '+receipt.asset+' received on '+network+'.',value+' '+receipt.asset+' sent on '+network+'.']))].map(normalized))
     return {variant:'general',badge:incoming?'Incoming':'Outgoing',amount,timestamp:fmtTime(receipt.createdAt),reference,rows:[
       {label:'Type',value:'Wallet payment'},
@@ -696,12 +701,24 @@ function drawBadge(ctx: CanvasRenderingContext2D, text: string, bg: string, fg: 
   ctx.fillText(clipCanvasText(ctx, text, 88), x + 10, y + 17)
 }
 
+function drawMoneyText(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,maxWidth:number,right=false){
+ const parts=moneyParts(text);if(!parts.some(p=>p.currency))return false
+ const original=ctx.font,size=Number(original.match(/([\d.]+)px/)?.[1]||12)
+ const font=(small:boolean,scale=1)=>original.replace(/[\d.]+px/,((small?Math.max(10,size*.72):size)*scale)+'px')
+ let width=0;for(const p of parts){ctx.font=font(!!p.currency);width+=ctx.measureText(p.text).width}
+ const scale=Math.min(1,maxWidth/Math.max(1,width));let at=right?x-width*scale:x
+ for(const p of parts){ctx.font=font(!!p.currency,scale);ctx.fillText(p.text,at,y);at+=ctx.measureText(p.text).width}
+ ctx.font=original;return true
+}
+
 function drawRightText(ctx: CanvasRenderingContext2D, text: string, right: number, y: number, maxWidth: number) {
+  if(drawMoneyText(ctx,text,right,y,maxWidth,true))return
   const clipped = clipCanvasText(ctx, text, maxWidth)
   ctx.fillText(clipped, right - ctx.measureText(clipped).width, y)
 }
 
 function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) {
+  if(drawMoneyText(ctx,text,x,y,maxWidth))return
   let line = ''
   for (const word of text.split(/\s+/)) {
     const next = line ? `${line} ${word}` : word

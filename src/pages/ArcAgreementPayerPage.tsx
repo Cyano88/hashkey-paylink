@@ -1,3 +1,4 @@
+import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRightIcon, ArrowTopRightOnSquareIcon, BanknotesIcon, CheckIcon, ClipboardIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 import { useParams } from 'react-router-dom'
@@ -727,7 +728,7 @@ export default function ArcAgreementPayerPage() {
               <div className="rounded-2xl bg-[#F6F7F9] p-5 dark:bg-white/[0.055]">
                 <p className="text-[11px] font-medium text-gray-400">Agreement amount</p>
                 <p className="mt-1 text-[30px] font-semibold tracking-[-0.04em] text-gray-950 dark:text-white">
-                  {agreement.amount} <span className="text-base tracking-normal text-gray-400">USDC</span>
+                  <MoneyAmount currency="USDC" amount={agreement.amount}/>
                 </p>
                 <div className="mt-5 grid grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-white/8">
                   <Detail label="Release" value={releaseLabel(agreement)} />
