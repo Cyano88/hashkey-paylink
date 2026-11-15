@@ -1,15 +1,17 @@
+import {notifyPocketKycRequirement} from '../lib/pocketKycAccess'
 // Memory-only, bounded, credential-scoped reads. Never retry a payment mutation.
 type Entry = { value?: unknown; freshUntil: number; retryAt: number; failures: number; error?: Error; pending?: Promise<unknown> }
 const readers = new Map<string, Entry>()
 export async function stockApiResponse(response: Response): Promise<any> {
  const data = await response.json().catch(() => null)
  if (!response.ok || !data || data.ok !== true) {
+  notifyPocketKycRequirement(data)
   const temporary = response.status === 429 || response.status >= 500 || !data
   const message = temporary ? 'This service is temporarily unavailable. Please try again shortly.' : typeof data.error === 'string' ? data.error : 'The request could not be completed.'
   const header = response.headers.get('Retry-After')
   const seconds = header ? Number(header) : NaN
   const retryMs = header ? (Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now()) : 0
-  throw Object.assign(Error(message), { status: response.status, retryMs: Math.max(0, Number.isFinite(retryMs) ? retryMs : 0) })
+  throw Object.assign(Error(message), { code:data?.code, status: response.status, retryMs: Math.max(0, Number.isFinite(retryMs) ? retryMs : 0) })
  }
  return data
 }

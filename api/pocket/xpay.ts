@@ -150,7 +150,6 @@ export default async function handler(req:Request,res:Response){
     const prior=Object.values(s.payments).find(p=>p.owner===owner&&p.key===key)
     if(prior){if(prior.checkoutId!==checkoutId||prior.merchantId!==id||prior.token!==token||(!m.fixedAmount&&prior.usd!==usd)||prior.payer.toLowerCase()!==payer.toLowerCase())fail('Payment details changed.',409);payment=prior;return}
     if(Object.values(s.payments).some(p=>p.owner===owner&&p.status==='submitted'))fail('Your previous XPay payment needs confirmation. Open XPay to check it.',409)
-    if(Object.values(s.payments).filter(p=>p.owner===owner&&p.createdAt>now-86400000).length>=100)fail('Daily payment limit reached.',429)
     const current=s.merchants[id]||(isStockCheckoutId(id)?m:undefined);if(!current||current.deletedAt||current.updatedAt!==m.updatedAt)fail('Merchant settings changed. Review again.',409)
     if(isStockCheckoutId(id)&&Object.values(s.payments).some(p=>p.merchantId===id&&['submitted','paid'].includes(p.status)))fail('This checkout already has a payment in progress.',409)
     payment={id:randomUUID(),...(Object.hasOwn(xLayerFeeAssets,asset.symbol)?{feePayer:'merchant' as const}:{}),checkoutId,key,owner,...(receiptEmail?{receiptEmail}:{}),merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd:m.fixedAmount?(Number(m.fixedAmount)*price.usd).toFixed(2):usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:Math.min(now+5*60_000,m.expiresAt||Infinity)}
@@ -167,6 +166,11 @@ export default async function handler(req:Request,res:Response){
    const head=await stockNoticeClient.getBlock();if(Date.now()-Number(head.timestamp)*1000>60000)fail('X Layer unavailable.',503)
    const virtual=await checkoutMerchant(p.merchantId)
    if(isStockCheckoutId(p.merchantId)){await (await import('../checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(owner,{id:p.merchantId,network:'xlayer',asset:p.symbol,amount:p.amount,recipient:p.recipient,payer:p.payer},false);await (await import('../checkout-selection.js')).claimCheckoutSelectionPayment(p.merchantId)}
+   else {
+    const merchant=s.merchants[p.merchantId]
+    if(p.status!=='ready'||p.expiresAt<=Date.now()||!merchant||merchant.deletedAt||!merchant.tokens.includes(p.token)||merchant.wallet.toLowerCase()!==p.recipient.toLowerCase())fail('This payment needs a new review.',409)
+    await (await import('../qr-purchase-allowance.js')).reserveQrWalletAllowance(owner,{id:p.id,merchantId:p.merchantId,network:'xlayer',asset:p.symbol,amount:p.amount,usdAmount:p.usd,recipient:p.recipient,payer:p.payer})
+   }
    const updated=await mutate(s=>{const p=s.payments[id],m=s.merchants[p.merchantId]||virtual;if(p.status!=='ready'||p.expiresAt<=Date.now())fail('This payment needs a new review or is already submitted.',409);if(!m||m.deletedAt||!m.tokens.includes(p.token)||m.wallet.toLowerCase()!==p.recipient.toLowerCase())fail('Merchant settings changed. Review again.',409);if(Object.values(s.payments).some(other=>other.id!==id&&other.owner===owner&&other.status==='submitted'))fail('An earlier payment needs confirmation.',409);if(isStockCheckoutId(p.merchantId)&&Object.values(s.payments).some(other=>other.id!==id&&other.merchantId===p.merchantId&&['submitted','paid'].includes(other.status)))fail('This checkout already has a payment in progress.',409);p.status='submitted';p.authorizedBlock=String(head.number);p.authorizedAt=Date.now();p.updatedAt=Date.now()})
    return res.json({ok:true,payment:publicPayment(updated.payments[id])})
   }
@@ -177,7 +181,7 @@ export default async function handler(req:Request,res:Response){
   }else if(action!=='status')fail('Unsupported XPay action.')
   const payment=await observe((await read()).payments[id])
   return res.json({ok:true,payment:publicPayment(payment)})
- }catch(reason){const e=reason as Error&{status?:number};return res.status(e.status||503).json({ok:false,error:e.status?e.message:'XPay is temporarily unavailable. Your submitted payment will not be sent again.'})}
+ }catch(reason){const e=reason as Error&{status?:number;code?:string};return res.status(e.status||503).json({ok:false,...(e.code?.startsWith('KYC_')||e.code?.startsWith('CHECKOUT_')?{code:e.code}:{}),error:e.status?e.message:'XPay is temporarily unavailable. Your submitted payment will not be sent again.'})}
 }
 
 let draining=false,drainOffset=0

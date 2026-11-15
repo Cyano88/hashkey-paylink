@@ -4,7 +4,7 @@ import PocketKycPanel from '../pocket/components/PocketKycPanel'
 
 export function checkoutVerificationLevel(error:unknown):'basic'|'advanced'|null {
  const code=(error as {code?:string})?.code
- return code==='KYC_BASIC_REQUIRED'?'basic':code==='KYC_ADVANCED_REQUIRED'?'advanced':null
+ return (code==='KYC_BASIC_REQUIRED'||code==='KYC_PURCHASE_REQUIRED')?'basic':code==='KYC_ADVANCED_REQUIRED'?'advanced':null
 }
 
 export default function CheckoutVerification({email,level,expired,onBack,onContinue}:{email:string;level:'basic'|'advanced';expired:boolean;onBack:()=>void;onContinue:()=>Promise<void>}){

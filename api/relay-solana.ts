@@ -285,6 +285,7 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
     const isWithdraw = mode === 'withdraw'
     const feeRaw = isWithdraw || mode === 'send' ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
     const binding = { checkoutId, purpose: mode === 'send' ? 'wallet-send' as const : 'payment' as const, asset, chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: feeMode==='net'?'net' as const:'gross' as const }
+    let qrOwner:string|undefined
     let accepted:ReturnType<typeof verifyPaymentFeeQuote>|undefined
     if(!isWithdraw&&!quoteOnly){try{accepted=verifyPaymentFeeQuote(feeQuoteToken||'',binding)}catch(error){res.status(409).json({ok:false,error:(error as Error).message});return}}
     const routing:FeeRouting=accepted??{feeRoutingVersion:2}
@@ -318,11 +319,12 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
         res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
       }
-      if(checkoutId?.startsWith('chk_')){
+      if(checkoutId?.startsWith('chk_')||checkoutId?.startsWith('pos_')){
         const {verifiedPrivyUser,readCircleLink,circleLinkKey}=await import('./privy-circle-link.js')
         const identity=await verifiedPrivyUser(req),link=await readCircleLink(circleLinkKey(identity.userId,'solana','payment'))
         if(!link||link.privyUserId!==identity.userId||link.circleWalletAddress!==fromPubkey.toBase58())throw Object.assign(Error('Use your verified Pocket payment wallet.'),{status:403})
-        await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(identity.userId,{id:checkoutId,network:'solana',asset,amount,recipient:to!,payer:from!},false)
+        if(checkoutId.startsWith('pos_')){qrOwner=identity.userId;await (await import('./qr-purchase-allowance.js')).reserveQrFeeAllowance(identity.userId,accepted)}
+        else await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(identity.userId,{id:checkoutId,network:'solana',asset,amount,recipient:to!,payer:from!},false)
       }
       await rememberMerchantFeeQuote(feeQuoteToken!,accepted)
       if(accepted.mode==='net'){gasRecoveryRaw=BigInt(accepted.networkFeeUnits)}
@@ -345,7 +347,7 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
     tx.partialSign(relayer)
 
     const serialised = tx.serialize({ requireAllSignatures: false })
-    res.json({
+    const result={
       ok: true, asset,
       tx: Buffer.from(serialised).toString('base64'),
       lastValidBlockHeight,
@@ -354,9 +356,10 @@ async function buildSolanaTransaction(req: Request, res: Response): Promise<void
       recipientAmount: formatUsdc(recipientRaw),
       gasRecoveryAmount: formatUsdc(gasRecoveryRaw),
       ataRecoveryApplied: createsRecipientAta,
-    })
+    }
+    res.json(qrOwner&&accepted?await (await import('./qr-solana-build.js')).rememberQrSolanaBuild(qrOwner,accepted.id,result):result)
   } catch (err) {
-    res.status((err as Error & {status?:number}).status || 500).json({ ok: false, error: (err as Error).message })
+    res.status((err as Error & {status?:number}).status || 500).json({ ok: false, error: (err as Error).message, ...((err as {code?:string}).code?{code:(err as {code?:string}).code}:{}) })
   }
 }
 

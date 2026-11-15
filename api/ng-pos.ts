@@ -1364,9 +1364,11 @@ export default async function handler(req: Request, res: Response) {
       if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '',true)
       if (!existing && merchant && await isPosRetired(merchant.merchant_id)) return res.status(410).json({ok:false,error:'This collection is closed.'})
       const payerIdentity=await verifiedPrivyUser(req)
-      await requirePocketBasicKyc(payerIdentity.userId)
-      if(existing?.source==='hosted-checkout')await checkCheckoutBuyerAllowance(payerIdentity.userId,existing,true)
-      else if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc,token:baseStablecoin(intent.source_token)},true)
+      if(existing?.source==='hosted-checkout'||existing?.source==='ngpos'||intent?.source==='pos'){
+        try{await requirePocketBasicKyc(payerIdentity.userId)}catch(error){if((error as {code?:string}).code==='KYC_BASIC_REQUIRED')throw Object.assign(Error('Complete Basic verification for online and QR purchases.'),{status:403,code:'KYC_PURCHASE_REQUIRED'});throw error}
+      }else await requirePocketBasicKyc(payerIdentity.userId)
+      if(existing&&['hosted-checkout','ngpos'].includes(existing.source||''))await checkCheckoutBuyerAllowance(payerIdentity.userId,existing,true)
+      else if(intent&&intent.source!=='pos')await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc,token:baseStablecoin(intent.source_token)},true)
       if (existing && !ensurePayable) {
         const execution = await syncOwnedPosExecution(existing)
         return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
@@ -1411,6 +1413,7 @@ export default async function handler(req: Request, res: Response) {
         memo: payerName.slice(0, 40) || 'Hash PayLink',
         referenceSuffix: existing ? createHash('sha256').update(existing.paycrest_order_id).digest('hex').slice(0, 10) : undefined,
       })
+      if(order.source==='ngpos')await checkCheckoutBuyerAllowance(payerIdentity.userId,order,true)
       schedulePaycrestOrderReconciliation(order.intent_id)
       const execution = await syncOwnedPosExecution(order)
       return res.json({ ok: true, order, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })

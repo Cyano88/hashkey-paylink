@@ -2510,8 +2510,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           checkoutId:feeCheckoutId,
         }),
       })
-      const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
-      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw new Error(buildData.error ?? 'Failed to build transaction') }
+      const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string; code?:string }>(buildRes, 'Solana build')
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { notifyPocketKycRequirement(buildData); if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw Object.assign(new Error(buildData.error ?? 'Failed to build transaction'),{code:buildData.code}) }
 
       if(pocketScan||(isHostedCheckout&&privyAuthenticated))await approveCurrentCheckout()
       const signedB64 = await signCircleSolanaTransaction({
@@ -2662,8 +2662,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           checkoutId:feeCheckoutId,
         }),
       })
-      const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
-      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw new Error(buildData.error ?? 'Failed to build transaction') }
+      const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string; code?:string }>(buildRes, 'Solana build')
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { notifyPocketKycRequirement(buildData); if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw Object.assign(new Error(buildData.error ?? 'Failed to build transaction'),{code:buildData.code}) }
 
       const { Transaction } = await import('@solana/web3.js')
       const txBytes = Uint8Array.from(atob(buildData.tx), c => c.charCodeAt(0))

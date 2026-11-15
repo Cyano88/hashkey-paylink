@@ -1,3 +1,4 @@
+import {PURCHASE_DAILY_USD} from '../../lib/purchaseLimits'
 import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import {readPocketCountry,savePocketCountry,currencyForPocketCountry} from '../lib/pocketCountryPreference'
 import {pocketApiUrl} from '../lib/pocketRoutes'
@@ -76,6 +77,11 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
   return <section className='pt-10'>
     <p className='text-xs leading-5 text-gray-500 dark:text-gray-400'>Your Pocket limits</p>
     <div className='mt-5 space-y-3'>
+      <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
+        <h2 className='text-sm font-black'>Online and QR purchases</h2>
+        <p className='mt-2 text-2xl font-black'><MoneyAmount currency="USD" amount={PURCHASE_DAILY_USD.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}/><span className='ml-2 text-xs font-normal'>equivalent daily</span></p>
+        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Basic verification required. Shared across merchants, online checkout and physical QR payments. Bank-settled purchases also depend on current payout capacity. Personal bank transfers and withdrawals have a separate allowance.</p>
+      </article>
       {bank && <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
         <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Bank payout</p>
         <p className='mt-2 text-2xl font-black'><MoneyAmount currency="USDC" amount={new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)}/></p>

@@ -13,8 +13,9 @@ const params={feeBps:'0',asset:'USDC',payoutIntentId:'checkout1',chain:'base',re
 await verify(params);assert.equal(calls[0][0],'checkout');assert.equal(calls[0][1],'actual-buyer');assert.equal(calls[0][3],true)
 await verify(params,false);assert.equal(calls[1][3],false)
 owned=false;await assert.rejects(verify(params,false),/wallet could not be verified/);assert.equal(calls.length,2);owned=true
+order={...order,source:'ngpos'};await verify(params,false);assert.equal(calls.at(-1)[0],'checkout');
 order={...order,source:'bank-withdraw'};await verify(params,false);assert.equal(calls.at(-1)[0],'pocket')
 await assert.rejects(verify({...params,totalUnits:'1'},false),/does not match/)
-assert.ok(source.indexOf("verifiedPayoutExemption({ ...params, feeBps: '0' },false)")<source.indexOf('let paymentIdempotencyKey=idempotencyKey'))
+assert.ok(source.indexOf("verifiedPayoutExemption({ ...params, feeBps: '0' },false)")<source.indexOf('let paymentIdempotencyKey='))
 assert.match(source,/idempotencyKey:paymentIdempotencyKey/)
 console.log('PASS hosted quotes and executions use buyer quota, wallet ownership precedes reservation, mismatched amounts fail, Pocket withdrawals retain their own quota, and hosted signing uses a server-bound retry key.')

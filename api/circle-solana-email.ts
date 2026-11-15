@@ -398,7 +398,7 @@ async function verifiedPayoutExemption(params: Record<string, string>, checkOnly
     || order.receive_address.toLowerCase() !== params.recipient.toLowerCase()
     || order.refund_address.toLowerCase() !== params.walletAddress.toLowerCase()
     || parseUnits(order.amount_usdc, 6).toString() !== params.totalUnits) throw Object.assign(new Error('Payout fee exemption does not match this payment.'), { status: 400 })
-  if(order.source==='hosted-checkout'){
+  if(['hosted-checkout','ngpos'].includes(order.source||'')){
     // Prove wallet ownership before reading or reserving another buyer's quota.
     const wallet=await readCircleUserWallet(params.userToken,'base',params.walletId)
     if(!wallet?.address||wallet.address.toLowerCase()!==params.walletAddress.toLowerCase())throw Object.assign(Error('Your wallet could not be verified.'),{status:403})
@@ -406,7 +406,7 @@ async function verifiedPayoutExemption(params: Record<string, string>, checkOnly
     if(!link?.privyUserId)throw Object.assign(Error('Sign in to continue.'),{status:401})
     const {checkCheckoutBuyerAllowance}=await import('./checkout-buyer-allowance.js')
     await checkCheckoutBuyerAllowance(link.privyUserId,order,checkOnly,checkCapacity)
-  }else if(['bank-withdraw','bank-receive','ngpos'].includes(order.source||'')){
+  }else if(['bank-withdraw','bank-receive'].includes(order.source||'')){
     const link=await findPaymentCircleLinkByWallet(params.walletId,params.walletAddress)
     if(!link?.privyUserId)throw Object.assign(Error('Sign in to continue.'),{status:401})
     const {reservePocketBankAllowance}=await import('./pocket/transfer-allowance.js')
@@ -918,17 +918,18 @@ export default async function handler(req: Request, res: Response) {
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: `Insufficient ${asset} to cover the amount and fees. Try a lower amount.` })
       await assertMerchantFeeBinding(quote)
-      if(quote.checkoutId?.startsWith('chk_')&&quote.exemption!=='verified-payout'){
+      if((quote.checkoutId?.startsWith('chk_')||quote.checkoutId?.startsWith('pos_'))&&quote.exemption!=='verified-payout'){
         const owned=await readCircleUserWallet(userToken,chain, walletId)
         const link=await findPaymentCircleLinkByWallet(walletId,walletAddress)
         if(!owned?.address||owned.address.toLowerCase()!==walletAddress.toLowerCase()||!link?.privyUserId)throw Object.assign(Error('Use your verified Pocket payment wallet.'),{status:403})
-        await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(link.privyUserId,{id:quote.checkoutId,network:chain,asset,amount:formatUnits(BigInt(quote.amountUnits),6),recipient,payer:walletAddress},false)
+        if(quote.checkoutId.startsWith('pos_'))await (await import('./qr-purchase-allowance.js')).reserveQrFeeAllowance(link.privyUserId,quote)
+        else await (await import('./checkout-wallet-allowance.js')).checkCheckoutWalletAllowance(link.privyUserId,{id:quote.checkoutId,network:chain,asset,amount:formatUnits(BigInt(quote.amountUnits),6),recipient,payer:walletAddress},false)
       }
       await rememberMerchantFeeQuote(params.feeQuoteToken,quote)
       const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.platformFeeUnits), BigInt(quote.networkFeeUnits), quote, asset)
 
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },false)
-      let paymentIdempotencyKey=idempotencyKey
+      let paymentIdempotencyKey=quote.checkoutId?.startsWith('pos_')?quote.id:idempotencyKey
       if(quote.exemption==='verified-payout'){
         const {getPaycrestPosOrder}=await import('./paycrest-pos.js')
         const order=await getPaycrestPosOrder(params.payoutIntentId)

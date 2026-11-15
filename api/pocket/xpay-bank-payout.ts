@@ -42,7 +42,7 @@ export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUse
  const bank=await validateXPayBankChoice(input.checkoutId,input.merchantId,input.symbol)
  const [link,payer]=await Promise.all([readCircleLink(circleLinkKey(identity.userId,'base')),localCurrencyProfileRepository.ensure({...identity,email:identity.email})])
  if(!link||link.circleBlockchain!=='BASE')fail('Open your Base wallet in Pocket before paying.')
- if(!['basic','advanced'].includes(payer.profile.kycLevel||'')&&payer.profile.nameStatus!=='kyc_verified')fail('Complete identity verification in Pocket before paying.')
+ if(!['basic','advanced'].includes(payer.profile.kycLevel||'')&&payer.profile.nameStatus!=='kyc_verified')throw Object.assign(Error('Complete Basic verification for online and QR purchases.'),{status:403,code:'KYC_PURCHASE_REQUIRED'})
  const payerName=payer.profile.resolvedName||payer.profile.declaredName
  if(!payerName)fail('Add your full name for payment records before paying.')
  const q=await invoke(req,{action:'quote',merchant_id:bank.id,settlement_type:'INSTANT_FIAT',network:'base',amount_currency:bank.currency,amount:input.fiatAmount,xpay_checkout_id:input.checkoutId})
@@ -51,7 +51,7 @@ export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUse
  if(order.merchant_fees)validateMerchantPaymentFees(order.amount_usdc,order.merchant_fees,6);else assertXPaySenderFee(order.raw)
  return {intentId:order.intent_id,merchantId:bank.id,merchantName:bank.name,currency:bank.currency as 'NGN'|'UGX',fiatAmount:order.amount_ngn,fundingUnits:String(parseUnits(order.amount_usdc,6)),recipient:getAddress(order.receive_address),wallet:getAddress(link.circleWalletAddress),walletId:link.circleWalletId,expiresAt,providerOrderId:order.paycrest_order_id,bankName:order.bank_name,bankLast4:order.bank_last4}
 }
-export async function checkXPayPayout(quote:XPayPayoutQuote,owner?:string){const order=await getPaycrestPosOrder(quote.intentId);if(!order)fail('Bank order is unavailable.');assertXPayPayoutPayable(order,quote);if(owner){const {reservePocketBankAllowance}=await import('./transfer-allowance.js');await reservePocketBankAllowance(owner,{id:order.intent_id,amount:order.amount_ngn,currency:order.fiat_currency||'NGN',usdc:order.amount_usdc,providerOrderId:order.paycrest_order_id})};return order}
+export async function checkXPayPayout(quote:XPayPayoutQuote,owner?:string){const order=await getPaycrestPosOrder(quote.intentId);if(!order)fail('Bank order is unavailable.');assertXPayPayoutPayable(order,quote);if(owner){const {checkCheckoutBuyerAllowance}=await import('../checkout-buyer-allowance.js');await checkCheckoutBuyerAllowance(owner,order,false)};return order}
 export function xpayPayoutCall(quote:XPayPayoutQuote){return encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[[{target:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[quote.recipient,BigInt(quote.fundingUnits)]})}]]})}
 export async function confirmXPayPayout(quote:XPayPayoutQuote,hash:string){
  const order=await getPaycrestPosOrder(quote.intentId)

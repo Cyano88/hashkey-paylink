@@ -16,7 +16,7 @@ await assert.rejects(allowance(buyer,{...one,amount_usdc:'5001'},false),e=>e.cod
 await assert.rejects(allowance('small',order('too-big','6992.000001')),e=>e.code==='CHECKOUT_TRANSFER_LIMIT')
 await assert.rejects(allowance('uganda',order('ug','2001','merchant','UGX')),e=>e.code==='CHECKOUT_TRANSFER_LIMIT')
 await allowance('uganda',order('ug-ok','2000','merchant','UGX'),false)
-kyc=false;await assert.rejects(allowance('unverified',one),e=>e.code==='KYC_BASIC_REQUIRED');kyc=true
+kyc=false;await assert.rejects(allowance('unverified',one),e=>e.code==='KYC_PURCHASE_REQUIRED');kyc=true
 outage=true;await assert.rejects(allowance(buyer,one),e=>e.code==='CHECKOUT_LIMIT_UNAVAILABLE');outage=false
 await assert.rejects(allowance(buyer,{...one,source:'bank-withdraw'}),e=>e.code==='CHECKOUT_LIMIT_BINDING')
 const parallel=await Promise.allSettled([allowance('racer',order('r1','4000'),false),allowance('racer',order('r2','4000','merchant2'),false)])

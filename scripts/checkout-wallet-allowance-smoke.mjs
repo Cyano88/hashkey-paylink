@@ -8,7 +8,7 @@ for(const network of ['base','arc','arbitrum','ethereum','polygon','solana','bsc
  const a=wallet(network,'1.000000000000000001');assert.equal(a.amount_usdc,'1.000001');
  await allowance('owner-'+network,a,false);await allowance('owner-'+network,a,false);assert.equal(store.get(checkoutBuyerLedgerKey('owner-'+network)).charges.length,1)
 }
-verified=false;await assert.rejects(allowance('new',wallet('base','1')),e=>e.code==='KYC_BASIC_REQUIRED');verified=true;
+verified=false;await assert.rejects(allowance('new',wallet('base','1')),e=>e.code==='KYC_PURCHASE_REQUIRED');verified=true;
 const bank={source:'hosted-checkout',intent_id:'bank-order',paycrest_order_id:'provider-1',merchant_id:'merchant',receive_address:'bank-provider',refund_address:'payer',amount_usdc:'4000',amount_ngn:'5475000',fiat_currency:'NGN'};
 const mixed=await Promise.allSettled([allowance('same-pocket-identity',bank,false),allowance('same-pocket-identity',wallet('bsc','4000','chkb_123456789012345678901234','USDT'),false)]);assert.equal(mixed.filter(r=>r.status==='fulfilled').length,1);
 await assert.rejects(allowance('same-pocket-identity',wallet('solana','3000.000001','chk_other123'),false),e=>e.code==='CHECKOUT_DAILY_LIMIT');

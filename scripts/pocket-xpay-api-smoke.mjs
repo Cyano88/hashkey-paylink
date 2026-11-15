@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
+'../qr-purchase-allowance.js':`export const reserveQrWalletAllowance=async(owner,input)=>{globalThis.fixture.allowances??=[];globalThis.fixture.allowances.push({owner,...input})}`,
 '../checkout-wallet-allowance.js':`export const checkCheckoutWalletAllowance=async()=>{}`,
 '../checkout-selection.js':`export const claimCheckoutSelectionPayment=async()=>{}`,
 '../developer-receipt-settings.js':`export const readDeveloperReceiptSettings=async()=>globalThis.fixture.emailEnabled?{enabled:true}:undefined`,
@@ -148,3 +149,5 @@ for(const [symbol,{address,decimals}]of Object.entries(xLayerFeeAssets)){
  assert.equal(verifyXPayTransfer(p,{status:'success',logs:[log(to,gross),logs[1]]},stamp),false)
 }
 console.log('PASS all four X Layer stablecoins require exact merchant net and full fee proof.')
+
+assert.ok(fixture.allowances.some(a=>a.owner==='payer'&&a.network==='xlayer'&&a.asset==='NVDAx'&&a.usdAmount===body.usd&&Number(a.amount)===Number(body.usd)/200),'Ordinary stock QR authorizations must reserve their USD purchase value');
