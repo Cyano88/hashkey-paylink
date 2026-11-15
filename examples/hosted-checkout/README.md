@@ -8,13 +8,13 @@ Start at https://docs.hashpaylink.com/docs/getting-started. It explains setup, b
 - `verifyWebhook(rawBody, signature, webhookSecret)` — validate the original request bytes and five-minute timestamp window.
 - `readOrderPayment(order, apiKey)` — read the saved checkout ID, verify exact amount and allowed asset/network, and return paid status and available receipt metadata.
 
-- `recoverOrderPayment(order, apiKey, orders)` � verify status and call the same atomic confirmation adapter when a webhook or browser return was missed.
+- `recoverOrderPayment(order, apiKey, orders)` - verify status and call the same atomic confirmation adapter when a webhook or browser return was missed.
 
 Use a Node.js runtime with built-in `fetch` and `AbortSignal.timeout`. Keep API keys and the separate webhook signing secret in your backend secret manager.
 
 ## Your order database
 
-Persist `id`, customer ownership, `attemptKey`, `description`, decimal-string `amount`, `returnUrl`, `acceptedAssets`, `acceptedNetworks`, `checkoutId`, `checkoutUrl`, status, receipt/payment evidence and fulfillment status. Calculate the price on the server. Keep one unique attempt key for all retries of the same request. Save the checkout ID before returning its URL to the browser.
+Persist `id`, customer ownership, `attemptKey`, `description`, decimal-string `amount`, `returnUrl`, `acceptedAssets`, `acceptedNetworks`, `checkoutId`, `checkoutUrl`, status, receipt/payment evidence and fulfillment status. Calculate the price on the server. For a Nigerian Business profile, also persist `currency: "NGN"` and the NGN catalog price; checkout supplies the stablecoin quote. Match the saved order price and quoted payment separately from merchant net settlement. Keep one unique attempt key for all retries of the same request. Save the checkout ID before returning its URL to the browser.
 
 Implement `findByCheckoutId(id)` using a unique indexed checkout ID. Selection webhooks identify your parent ID in `data.checkoutSessionId`; direct checkout webhooks use `data.checkoutId`.
 
@@ -34,6 +34,6 @@ This tests the actual helper code with fixtures; it moves no funds. A funded hum
 
 ## Current boundaries
 
-The guide covers fixed one-time wallet payments. Automatic receipt emails currently cover enabled X Layer checkout with a verified purchaser email. The merchant handles products, taxes, customer support, refunds and fulfillment. Cards, automatic subscriptions and subscription invoices are outside this example. Local bank/mobile-money onboarding remains pending its flow audit, AML policy, daily limits and provider approval; no default daily allowance is implied.
+The guide covers fixed one-time wallet payments. Automatic payer receipt emails cover supported human hosted-checkout networks when the verified purchaser email and confirmed payment are bound to the same checkout. Local settlement must be confirmed where applicable. Merchant daily/weekly summaries are separate and opt-in. The merchant handles products, taxes, customer support, refunds and fulfillment. Cards, automatic subscriptions and subscription invoices are outside this example. Local bank/mobile-money onboarding remains pending its flow audit, AML policy, daily limits and provider approval; no default daily allowance is implied.
 
 Recovery uses a stable `status:CHECKOUT_ID` local evidence record. Deduplicate delivery by order ID across both webhook and recovery events. Implement `listDuePaymentChecks({limit})` and `deferPaymentCheck(orderId, error)` for bounded scheduled retries. Accepted asset/network arrays validate results; they do not override the project options offered by selection checkout.

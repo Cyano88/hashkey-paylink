@@ -1,17 +1,27 @@
 # Customer receipt emails
 
-Project owners configure **Setup → Receipts & support** in the developer console and save changes. Set the monitored merchant support email and receipt timezone, then enable customer receipts. Messages use the merchant name via Hash PayLink, the saved merchant logo, and the support address as Reply-To. The verified platform sender remains server-managed.
+## Developer setup
 
-Initial coverage is human hosted X Layer stablecoin checkout with a Privy-verified purchaser email. Other chains, card payments and subscriptions are outside this release. Enabling does not backfill older payments. A payment must be prepared after the current enable timestamp and subsequently confirmed. Public request bodies cannot supply the email recipient, and public payment responses do not expose it.
+Open **Settings > Receipts & support** in the developer console. Save a monitored merchant support email and receipt timezone. Customer receipts are automatic for eligible confirmed payments; there is no merchant opt-out. The platform manages the verified sender. Messages use the merchant name via Hash PayLink, its saved branding, and the support address as Reply-To when configured.
 
-Deployment requires a durable store, RESEND_API_KEY, RECEIPT_FROM_EMAIL (or ALERT_FROM_EMAIL), and CHECKOUT_RECEIPT_EMAIL_ENABLED=true. Project settings default to disabled. The existing reconciliation interval prepares emails from canonical paid receipts and drains the durable hashpaylink:checkout-receipt-emails:v1 outbox. Each frozen payload includes a searchable PDF and web receipt link. PNG/JPEG merchant logos are fetched through public HTTPS with pinned DNS and bounded size; unsupported or unavailable images fall back to merchant text.
+Daily or weekly merchant summaries are a separate opt-in, with their own reporting timezone. They go to the verified owner account, not the purchaser. Marketplace operator and seller summaries are scoped separately; account-funding activity is not reported as sales. Summaries do not replace payer receipts.
 
-Delivery uses receipt-based idempotency, atomic leases and bounded retries. An uncertain send older than 20 hours or 12 failed attempts requires review rather than automatic replay. Disabling a project cancels pending emails. A sent job means provider acceptance; inbox delivery needs separate evidence. Support and timezone edits affect newly prepared messages; an already queued payload remains unchanged for safe retries.
+## Payment and audience requirements
 
-Validation: receipt-email-settings-smoke, developer-projects-adapter-smoke, pocket-xpay-api-smoke, checkout-receipt-email-smoke, checkout-receipt-reconciliation-smoke, receipt-email-presentation-smoke, developer-receipts-browser-smoke. Browser coverage includes saving settings at mobile/desktop widths, light/dark presentation and overflow checks. PDF visual inspection confirms a single page and actual merchant logo. Production Vite build passed. Broader TypeScript checking has existing repository errors; the new receipt modules have no remaining diagnostics.
+Coverage follows supported human hosted-checkout networks, including the current Circle routes and activated X Layer/BNB routes. A purchaser must have a verified email bound to the exact checkout and paying wallet. Public request bodies cannot choose the recipient. Canonical payment confirmation is required; local settlement or account-funding delivery must also be confirmed where applicable. Customers without that verified binding are not automatically emailed.
 
-Lunchroom was enabled through its authenticated developer dashboard with the merchant-supplied support address and Lagos timezone; all three values persisted after reload. The subsequent user-approved order #2CC3DA was confirmed paid for 1.50 USDT on X Layer. Automatic inbox delivery remains a separate verification step.
+Payer receipts show the customer's order/payment information, not merchant net proceeds or seller fees. Withdrawal receipts belong to the withdrawing operator or seller. Match order fulfillment to authenticated payment evidence, not the email, return URL, or merchant bank-credit amount.
 
-Receipt email presentation follows the phone reference inspected on 29 October: merchant logo, payment summary card, a separate table with the canonical checkout description and right-aligned amounts, Total and Amount paid, one Download receipt action, support outside the card, and a muted centered Powered by Hash PayLink footer. There is no invoice action for these one-time payments. The shared web receipt retains Back navigation.
+Eligibility and activation cutoffs prevent historical backfill. Suspending or removing a project suppresses delivery. Support, timezone, branding and presentation updates affect newly prepared messages; an existing queued payload and its PDF remain frozen for safe retries.
 
-The email link requests `/api/receipt?id=<receipt-id>&format=pdf`. It returns an attachment with `application/pdf`, never an HTML receipt page. A canonical confirmed checkout receipt is required. When the original emailed PDF exists in the outbox, the endpoint serves those exact bytes; otherwise it renders the confirmed receipt. The download never exposes outbox recipient or delivery metadata. Already-sent email bodies and frozen PDF attachments are not rewritten by presentation updates.
+## Delivery and PDF behavior
+
+Production requires a durable store, the configured transactional email provider and verified sender, and the platform receipt-email feature enabled. Reconciliation prepares canonical receipts and drains the durable receipt outbox. Developers do not need to send a second customer receipt.
+
+Each email includes a PDF attachment and one **View receipt** link. The web receipt exposes PDF download through `/api/receipt?id=RECEIPT_ID&format=pdf` on app.hashpaylink.com. A canonical confirmed receipt is required. When the original emailed PDF exists, download serves those exact bytes; otherwise it renders the confirmed receipt. Public responses do not expose recipient or delivery metadata.
+
+Delivery uses receipt-based idempotency, atomic leases and bounded retries. An uncertain send older than 20 hours or 12 failed attempts requires review instead of automatic replay. A sent outbox job establishes provider acceptance, not inbox placement. Do not mark an order paid or fulfilled from email delivery.
+
+## Verification evidence
+
+Receipt settings, checkout reconciliation, payer/funding binding, marketplace audience isolation, summary policy/delivery and browser layout fixtures cover these contracts. Existing Lunchroom acceptance verifies a paid Base USDC checkout with an NGN order, delivered signed webhook and canonical payer receipt. Owner-approved, clearly labelled preview emails with PDF attachments were accepted by the provider without creating transactions. The current send-only provider key cannot retrieve delivery status; inbox placement is not claimed from API acceptance.

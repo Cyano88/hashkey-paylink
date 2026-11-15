@@ -22,6 +22,12 @@ try{const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.p
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Expanded example overflow')
   if(width===390&&!dark)await page.screenshot({path:'output/playwright/builder-guide-mobile.png'})
   await page.goto(base+'/console');await page.getByRole('heading',{name:'Connect your app'}).waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Console overflow');assert.equal(await page.getByRole('heading',{name:'1. Server only'}).count(),1);assert.equal(await page.getByRole('heading',{name:'2. Browser only'}).count(),1)
+  const serverCode=await page.locator('pre').first().innerText()
+  for(const currency of ['NGN',null]){
+   const sent=await page.evaluate(async({code,currency})=>{let captured;const order={description:'Fixture order',amount:currency?'2000.00':'1.50',attemptKey:'order:fixture:1',...(currency?{currency}:{})};const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;await new AsyncFunction('order','process','fetch',code)(order,{env:{HASHPAYLINK_API_KEY:'fixture-only'}},async(url,options)=>{captured={url,body:JSON.parse(options.body),idempotency:options.headers['Idempotency-Key']};return {ok:true,json:async()=>({ok:true,checkoutId:'chks_'+'a'.repeat(24),checkoutUrl:'/pay/c/chks_'+'a'.repeat(24)})}});return captured},{code:serverCode,currency})
+   assert.equal(sent.body.currency,currency||undefined);assert.equal(sent.body.amount,currency?'2000.00':'1.50');assert.equal(sent.idempotency,'order:fixture:1');assert.equal(sent.body.paymentSelection,'stablecoins')
+  }
+
  }
  await page.goto(base+'/docs');await page.getByRole('link',{name:'Integrate hosted checkout'}).click();await page.getByRole('heading',{name:'Accept your first payment'}).waitFor()
  const routes=['/docs','/docs/getting-started','/docs/api','/docs/funding','/docs/pocket','/docs/pocket/pay','/docs/pocket/transfers','/docs/pocket/exchange','/docs/pocket/stocks','/docs/pocket/earn','/docs/pocket/esim','/docs/pocket/local-payments','/docs/pocket/gifts','/docs/pocket/collect','/docs/pocket/account','/docs/environment','/docs/security','/docs/compliance','/docs/terms','/docs/privacy','/docs/account-deletion'];
@@ -35,7 +41,7 @@ try{const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.p
  for(const old of ['/docs/0g-storage','/docs/0g-storage/agent-verify','/docs/access-mode/api','/docs/chains/arc','/docs/multi-payer','/docs/payment-links','/docs/streampay']){await page.goto(base+old);await page.waitForURL(base+'/docs');await page.getByRole('heading',{name:'Build your business on Hash PayLink'}).waitFor();}
  await page.goto(base+'/docs/sdk');await page.getByRole('heading',{name:'Accept your first payment',exact:true}).waitFor();
  await page.goto(base+'/docs/api');assert(!/Arc Agreements|0G verification|Legacy compatibility|Solana relay|Agent wallet path/.test(await page.locator('main').innerText()));
- await page.goto(base+'/docs/compliance');assert((await page.locator('main').innerText()).includes('New-builder onboarding remains on hold'));
+ await page.goto(base+'/docs/compliance');assert((await page.locator('main').innerText()).includes('Business review, saved settings and payment-route activation are separate steps'));
  await page.goto(base+'/docs/pocket/stocks');assert((await page.locator('main').innerText()).includes('free transfers are not available'));
  await page.goto(base+'/docs/pocket/earn');assert((await page.locator('main').innerText()).includes('Services → Earn'));
  await page.goto(base+'/docs/pocket/esim');assert((await page.locator('main').innerText()).includes('My eSIMs'));
