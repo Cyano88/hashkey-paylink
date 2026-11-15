@@ -4,6 +4,7 @@ type RateLimitOptions = {
   windowMs: number
   max: number
   name: string
+  key?: (req: Request) => string
 }
 
 const MAX_BUCKETS_PER_LIMITER = 10_000
@@ -17,12 +18,12 @@ function clientKey(req: Request): string {
   return (req.ip || req.socket.remoteAddress || 'unknown').trim()
 }
 
-export function rateLimit({ windowMs, max, name }: RateLimitOptions) {
+export function rateLimit({ windowMs, max, name, key: identify = clientKey }: RateLimitOptions) {
   const buckets = new Map<string, Bucket>()
 
   return function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
     const now = Date.now()
-    const key = `${name}:${clientKey(req)}`
+    const key = `${name}:${identify(req)}`
     const current = buckets.get(key)
 
     res.setHeader('RateLimit-Limit', max.toString())

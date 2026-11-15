@@ -1,3 +1,4 @@
+import {createQrRateLimit} from './api/pocket/qr-rate-limit.js'
 import {createMarketplaceSellerRouter} from './api/marketplace/seller-http.js'
 import {createMarketplaceOperationsHandler} from './api/marketplace/operations.js'
 import {createMarketplaceRouter} from './api/marketplace/http.js'
@@ -302,6 +303,7 @@ app.use('/api', (req, res, next) => {
   next()
 })
 
+const qrLimiter = createQrRateLimit()
 const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
 const exchangeLimiter = createExchangeRateLimit(strictLimiter)
 const circleEmailOtpLimiter = rateLimit({ name: 'circle-email-otp', windowMs: 10 * 60_000, max: 5 })
@@ -345,7 +347,7 @@ app.post('/api/evm-read/:network', readLimiter, evmReadHandler)
 app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 // ── Solana relay ──────────────────────────────────────────────────────────────
-app.post('/api/solana-build-tx',       relayLimiter, buildSolanaTx)
+app.post('/api/solana-build-tx', (req,res,next)=>(String(req.body?.checkoutId||'').startsWith('pos_')?qrLimiter:relayLimiter)(req,res,next), buildSolanaTx)
 app.post('/api/solana-relay',          relayLimiter, relaySolanaTx)
 app.get('/api/solana-vault',           readLimiter, getSolanaVaultAddress)
 app.post('/api/solana-sweep',          relayLimiter, sweepSolanaVault)
@@ -363,7 +365,7 @@ app.post('/api/polymarket-order',       strictLimiter, polymarketOrderHandler)
 app.all('/api/polymarket-portfolio',    readLimiter,   polymarketPortfolioHandler)
 app.post('/api/polymarket-relayer-builder-signer', strictLimiter, polymarketRelayerBuilderSignerHandler)
 app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHandler)
-app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
+app.all('/api/ng-pos', (req,res,next)=>(req.method==='GET'||['quote','createOfframpOrder'].includes(req.body?.action)?qrLimiter:strictLimiter)(req,res,next), ngPosHandler)
 app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
 app.all('/api/pocket/profile',           strictLimiter, pocketProfileHandler)
 app.delete('/api/pocket/account',         strictLimiter, pocketAccountHandler)
@@ -418,9 +420,9 @@ app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler
 app.all('/api/pocket/bridge',            exchangeLimiter, pocketBridgeHandler)
 app.all('/api/pocket/cross-bridge', exchangeLimiter, pocketCrossBridgeHandler)
 app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
-app.post('/api/pocket/xpay/bank', (req,res,next)=>(['list','status'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketXPayBankHandler)
-app.all('/api/pocket/xpay', (req,res,next)=>(req.method==='GET'||['mine','history'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketUnifiedXPayHandler)
-app.all('/api/pocket/xstocks/xpay', (req,res,next) => (req.method === 'POST' && ['mine','merchant','status'].includes(req.body?.action) ? readLimiter : strictLimiter)(req,res,next), pocketXPayHandler)
+app.post('/api/pocket/xpay/bank', qrLimiter, pocketXPayBankHandler)
+app.all('/api/pocket/xpay', qrLimiter, pocketUnifiedXPayHandler)
+app.all('/api/pocket/xstocks/xpay', qrLimiter, pocketXPayHandler)
 app.all('/api/pocket/earn/earnings', readLimiter, pocketEarnEarningsHandler)
 app.all('/api/pocket/xstocks/notifications', (req,res,next) => (req.method === 'GET' ? readLimiter : strictLimiter)(req,res,next), pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
