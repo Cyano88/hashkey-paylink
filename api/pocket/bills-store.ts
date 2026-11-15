@@ -1,3 +1,4 @@
+import {BILL_LIMITS_USD} from '../../src/lib/billLimits.js'
 import {billAsset} from './bills-asset.js'
 import {assertInternationalBill, type InternationalBill} from '../vtpass-international.js'
 import { formatUnits, isAddress, parseUnits } from 'viem'
@@ -206,10 +207,6 @@ function decimalToMinor(value: string, decimals: number) {
   return (BigInt(whole) * (10n ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, '0'))).toString()
 }
 
-function ngnPolicyMinor(value: number) {
-  return BigInt(Math.round(value * 100))
-}
-
 function lagosDateParts(timestamp: number) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Africa/Lagos',
@@ -415,8 +412,8 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
     const amountMinor = BigInt(amountNgnMinor)
     if (amountMinor <= 0n) throw new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.')
-    if (category === 'airtime' && amountMinor > ngnPolicyMinor(config.airtimeMaxNgn)) {
-      throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Airtime is limited to NGN ${config.airtimeMaxNgn.toLocaleString('en-NG')} per payment.`)
+    if (category === 'airtime' && BigInt(decimalToMinor(billAmountUsdc, 6)) > BigInt(BILL_LIMITS_USD.airtimePerPayment) * 1_000_000n) {
+      throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Airtime is limited to USD ${BILL_LIMITS_USD.airtimePerPayment} equivalent per payment. Country and network limits also apply.`)
     }
 
     // Idempotency follows the user's semantic request. Server-generated quote
@@ -438,12 +435,12 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       const usedMinor = Object.values(store.intents).reduce((totals, intent) => {
         if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day || !reservesDailyLimit(intent, createdAt)) return totals
         const bucket = intent.category === 'airtime' ? 'airtime' : 'other'
-        totals[bucket] += BigInt(intent.amountNgnMinor)
+        totals[bucket] += BigInt(decimalToMinor(intent.billAmountUsdc || intent.amountUsdc, 6))
         return totals
       }, { airtime: 0n, other: 0n })
       const bucket = category === 'airtime' ? 'airtime' : 'other'
-      const dailyLimitMinor = ngnPolicyMinor(bucket === 'airtime' ? config.airtimeDailyLimitNgn : config.otherBillsDailyLimitNgn)
-      if (usedMinor[bucket] + amountMinor > dailyLimitMinor) {
+      const dailyLimitMinor = BigInt(bucket === 'airtime' ? BILL_LIMITS_USD.airtimeDaily : BILL_LIMITS_USD.otherBillsDaily) * 1_000_000n
+      if (usedMinor[bucket] + BigInt(decimalToMinor(billAmountUsdc, 6)) > dailyLimitMinor) {
         throw new PocketBillsStoreError(
           'BILLS_DAILY_LIMIT_EXCEEDED',
           bucket === 'airtime' ? 'Daily airtime limit reached.' : 'Daily Bills limit reached.',
@@ -595,22 +592,23 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const store = await read()
     const usedMinor = Object.values(store.intents).reduce((totals, intent) => {
       if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day || !reservesDailyLimit(intent, timestamp)) return totals
-      totals[intent.category === 'airtime' ? 'airtime' : 'other'] += BigInt(intent.amountNgnMinor)
+      totals[intent.category === 'airtime' ? 'airtime' : 'other'] += BigInt(decimalToMinor(intent.billAmountUsdc || intent.amountUsdc, 6))
       return totals
     }, { airtime: 0n, other: 0n })
-    const asNgn = (minor: bigint) => Number(minor) / 100
+    const asUsd = (minor: bigint) => Number(minor) / 1_000_000
     return {
       resetAt: nextLagosMidnight(timestamp),
+      limitCurrency: 'USD' as const,
       airtime: {
-        perPaymentNgn: config.airtimeMaxNgn,
-        dailyLimitNgn: config.airtimeDailyLimitNgn,
-        usedTodayNgn: asNgn(usedMinor.airtime),
-        remainingTodayNgn: Math.max(0, config.airtimeDailyLimitNgn - asNgn(usedMinor.airtime)),
+        perPaymentUsd: BILL_LIMITS_USD.airtimePerPayment,
+        dailyLimitUsd: BILL_LIMITS_USD.airtimeDaily,
+        usedTodayUsd: asUsd(usedMinor.airtime),
+        remainingTodayUsd: Math.max(0, BILL_LIMITS_USD.airtimeDaily - asUsd(usedMinor.airtime)),
       },
       otherBills: {
-        dailyLimitNgn: config.otherBillsDailyLimitNgn,
-        usedTodayNgn: asNgn(usedMinor.other),
-        remainingTodayNgn: Math.max(0, config.otherBillsDailyLimitNgn - asNgn(usedMinor.other)),
+        dailyLimitUsd: BILL_LIMITS_USD.otherBillsDaily,
+        usedTodayUsd: asUsd(usedMinor.other),
+        remainingTodayUsd: Math.max(0, BILL_LIMITS_USD.otherBillsDaily - asUsd(usedMinor.other)),
       },
     }
   }

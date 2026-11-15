@@ -1,3 +1,4 @@
+import {ESIM_PER_ORDER_USD} from '../../src/lib/billLimits.js'
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
 import { isAddress } from 'viem'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
@@ -92,7 +93,7 @@ export function createEsimOrderService(options: {
         return item
       }
       const [price, payer] = await Promise.all([options.catalog.price(input.packageCode, input.days, options.policy), options.readPayer(input.ownerId)])
-      if (Number(price.public.total) > (options.maxTotal ?? 500)) return fail('ESIM_LIMIT_EXCEEDED')
+      if (Number(price.public.total) > (options.maxTotal ?? ESIM_PER_ORDER_USD)) return fail('ESIM_LIMIT_EXCEEDED')
       if (!isAddress(payer) || payer.toLowerCase() === options.treasury.toLowerCase()) return fail('ESIM_WALLET_UNAVAILABLE')
       return mutate(data => {
         const previous = data.requests[requestKey] && owned(data, input.ownerId, data.requests[requestKey])

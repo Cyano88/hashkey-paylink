@@ -1,3 +1,4 @@
+import {readBillCountryLimits} from './bill-country-limits.js'
 import {billAsset, billToken, usdtBillsAllowed, usdtBillsCanaryQuoteAllowed} from './bills-asset.js'
 import {billDestination,normalizeUgandaPhone} from '../../src/pocket/lib/pocketBillCountry.js'
 import {internationalOperator,priceInternationalBill,type InternationalBill} from '../vtpass-international.js'
@@ -588,6 +589,12 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: `catalog:${category}`, windowMs: 60_000, max: 20 })
       const serviceId = cleanText(req.query?.service_id, 40).toLowerCase()
       const services = await servicesForCategory(dependencies.provider, category, country)
+      if (req.query?.limits === 'true') {
+        const [fx,usage]=await Promise.all([dependencies.readFxQuote('1','USDC'),dependencies.store.readLimitUsage(identity.userId)])
+        if(fx.stale||fx.expiresAt<=dependencies.now()||fx.currency!=='NGN'||(fx.asset??'USDC')!=='USDC')throw new PocketBillsStoreError('BILLS_INVALID_QUOTE','Current limits are unavailable. Try again.',503)
+        const remainingUsd=category==='airtime'?usage.airtime.remainingTodayUsd:usage.otherBills.remainingTodayUsd
+        return respond.success({limits:await readBillCountryLimits({country,category,services,provider:dependencies.provider,ngnPerUsd:fx.rate,remainingUsd,now:dependencies.now()})})
+      }
       if (!serviceId) {
         return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name, minimumAmount:service.minimumAmount, maximumAmount:service.maximumAmount, ...(service.imageUrl?{imageUrl:service.imageUrl}:{}) })) })
       }
