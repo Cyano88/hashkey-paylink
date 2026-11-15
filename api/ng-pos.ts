@@ -1524,10 +1524,10 @@ export default async function handler(req: Request, res: Response) {
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })
   } catch (err) {
-    const error = err as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number }
+    const error = err as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number;remainingUsd?:number;dailyLimitUsd?:number }
     const providerUnavailable = isPaycrestAmountUnavailable(error)
     const message = providerUnavailable ? 'Bank payout is unavailable for this amount. Try a different amount. Your money has not moved.' : error.message || 'XPay request failed'
-    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('CHECKOUT_')?{code:error.code}:{}), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
+    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('CHECKOUT_')?{code:error.code}:{}), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn,remainingUsd:error.remainingUsd,dailyLimitUsd:error.dailyLimitUsd}:{}) })
   }
 }
 

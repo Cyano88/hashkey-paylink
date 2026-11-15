@@ -155,7 +155,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
 }
 
 function circleError(res: Response, err: unknown) {
-  const e = err as Error & { status?: number; code?: number | string; remainingNgn?:number; dailyLimitNgn?:number; body?: CircleResponse }
+  const e = err as Error & { status?: number; code?: number | string; remainingNgn?:number; dailyLimitNgn?:number;remainingUsd?:number;dailyLimitUsd?:number; body?: CircleResponse }
   if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'Arc Mainnet email wallet is not configured') {
     return res.status(503).json({ ok: false, error: e.message })
   }
@@ -171,7 +171,7 @@ function circleError(res: Response, err: unknown) {
     code: e.code ?? e.body?.code,
     error: e.body?.message ?? e.body?.error ?? e.message ?? 'Circle request failed',
     detail,
-    ...(String(e.code).startsWith('KYC_')?{remainingNgn:e.remainingNgn,dailyLimitNgn:e.dailyLimitNgn}:{}),
+    ...(String(e.code).startsWith('KYC_')?{remainingNgn:e.remainingNgn,dailyLimitNgn:e.dailyLimitNgn,remainingUsd:e.remainingUsd,dailyLimitUsd:e.dailyLimitUsd}:{}),
   })
 }
 

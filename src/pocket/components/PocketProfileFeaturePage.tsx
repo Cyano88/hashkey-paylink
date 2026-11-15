@@ -1,12 +1,8 @@
-import {PURCHASE_DAILY_USD} from '../../lib/purchaseLimits'
+import PocketLimitsPanel from './PocketLimitsPanel'
 import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import {readPocketCountry,savePocketCountry,currencyForPocketCountry} from '../lib/pocketCountryPreference'
 import {pocketApiUrl} from '../lib/pocketRoutes'
 import PocketAmountShimmer from './PocketAmountShimmer'
-import type { ReactNode } from 'react'
-import usePocketLimitDisplay from '../hooks/usePocketLimitDisplay'
-import PocketLocalEquivalent from './PocketLocalEquivalent'
-import PocketTransferAllowanceView from './PocketTransferAllowanceView'
 import PocketKycPanel from './PocketKycPanel'
 import PocketFlowHeader from './PocketFlowHeader'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
@@ -49,52 +45,6 @@ function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePoc
         <p className='mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>{fx.quote?.stale ? 'Last confirmed rate. A fresh quote is requested before payment.' : 'Estimated rate for 10 USDC. The final rate is shown before you confirm.'}</p>
         <button type='button' onClick={() => void fx.refresh()} disabled={fx.busy} className='pocket-cta-secondary mt-5 w-full'>Refresh rate</button>
       </div>
-    </div>
-  </section>
-}
-
-function LimitProgress({ title, used, limit, detail }: { title: string; used: number | null; limit: number; detail: ReactNode }) {
-  const display = usePocketLimitDisplay()
-  const percent = used !== null && limit > 0 ? Math.min(100, Math.max(0, used / limit * 100)) : 0
-  return <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
-    <div className='flex items-start justify-between gap-4'>
-      <div><h2 className='text-sm font-black'>{title}</h2><p className='mt-1 text-[11px] text-gray-500 dark:text-gray-400'>{detail}</p></div>
-      <strong className='shrink-0 text-xs'>{display.usdc(limit)} daily{display.secondary(limit) && <small className="mt-1 block text-right font-normal text-gray-500">{display.secondary(limit)}</small>}</strong>
-    </div>
-    <div className='mt-5 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10'><div className='h-full rounded-full bg-blue-600 transition-[width]' style={{ width: `${percent}%` }} /></div>
-    <div className='mt-3 flex justify-between text-[11px]'>
-      {used === null
-        ? <span role='status' aria-label="Loading today's usage" className='block h-3 w-full animate-pulse rounded bg-gray-200 motion-reduce:animate-none dark:bg-white/10' />
-        : <><span className='font-bold'>{display.usdc(used)} used</span><span className='text-gray-400'>{display.usdc(Math.max(0, limit - used))} remaining</span></>}
-    </div>
-  </article>
-}
-
-function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBillsLimitUsage | null; bank: PocketBankPayoutLimit | null; busy: boolean; error: string; onRefresh(): void }) {
-  const display = usePocketLimitDisplay()
-  const airtime = usage?.airtime ?? { perPaymentNgn: 50_000, dailyLimitNgn: 200_000, usedTodayNgn: null }
-  const otherBills = usage?.otherBills ?? { dailyLimitNgn: 1_000_000, usedTodayNgn: null }
-  return <section className='pt-10'>
-    <p className='text-xs leading-5 text-gray-500 dark:text-gray-400'>Your Pocket limits</p>
-    <div className='mt-5 space-y-3'>
-      <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
-        <h2 className='text-sm font-black'>Online and QR purchases</h2>
-        <p className='mt-2 text-2xl font-black'><MoneyAmount currency="USD" amount={PURCHASE_DAILY_USD.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}/><span className='ml-2 text-xs font-normal'>equivalent daily</span></p>
-        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Basic verification required. Shared across merchants, online checkout and physical QR payments. Bank-settled purchases also depend on current payout capacity. Personal bank transfers and withdrawals have a separate allowance.</p>
-      </article>
-      {bank && <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
-        <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Bank payout</p>
-        <p className='mt-2 text-2xl font-black'><MoneyAmount currency="USDC" amount={new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)}/></p>
-        <PocketLocalEquivalent amount={bank.maxUsdc} />
-        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Per-transfer limit. Your verification limit also applies.</p>
-      </article>}
-      <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={<>Up to {display.usdc(airtime.perPaymentNgn)} per payment</>} />
-      <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />
-      <p className='px-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Resets daily at midnight, Lagos time. Product-specific limits may be lower.</p>
-      {!usage && !busy && error && <div className='rounded-[20px] bg-gray-50 p-4 dark:bg-[#121212]'>
-        <p className='text-xs font-bold text-gray-600 dark:text-gray-300'>{error || `Today's usage could not be refreshed.`}</p>
-        <button type='button' onClick={onRefresh} className='mt-3 min-h-9 rounded-full border border-gray-200 px-4 text-[11px] font-black dark:border-[#262626]'>Try again</button>
-      </div>}
     </div>
   </section>
 }
@@ -271,8 +221,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
       {feature === 'kyc' && <PocketKycPanel key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={value=>{currencyChosen.current=true;setCurrency(value)}} />}
-      {feature === 'limits' && <PocketTransferAllowanceView getAccessToken={getAccessToken} />}
-      {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
+      {feature === 'limits' && <PocketLimitsPanel getAccessToken={getAccessToken} usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}
       {feature === 'security' && <SecurityPanel stocks={stocks} email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}
     </main>

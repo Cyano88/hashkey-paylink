@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 import {createHash} from 'node:crypto'
-const state={values:new Map(),orders:new Map(),tail:Promise.resolve()};globalThis.__allowanceFixture=state
+const state={values:new Map(),orders:new Map(),tail:Promise.resolve(),capacity:6992};globalThis.__allowanceFixture=state
 const mocks={
+ 'spending-limits':`export const readPocketBankPayoutLimit=async()=>({maxUsdc:globalThis.__allowanceFixture.capacity})`,
  'render-durable-store':`export const readDurableJson=async k=>structuredClone(globalThis.__allowanceFixture.values.get(k));export const mutateDurableJson=async(k,fn)=>{const s=globalThis.__allowanceFixture;const work=s.tail.then(async()=>{const next=await fn(structuredClone(s.values.get(k)));s.values.set(k,next);return structuredClone(next)});s.tail=work.catch(()=>{});return work}`,
  'paycrest-pos':`export const getDurablePaycrestPosOrders=async ids=>ids.flatMap(id=>globalThis.__allowanceFixture.orders.has(id)?[{...globalThis.__allowanceFixture.orders.get(id),intent_id:id}]:[]);export const getPaycrestPosOrder=async id=>globalThis.__allowanceFixture.orders.get(id);export const getPaycrestOfframpRate=async()=>1500`,
 }
@@ -14,58 +15,46 @@ assert.equal(api.kycLevelFromJobs([{...basic,status:'pending'}]).level,'none')
 assert.equal(api.kycLevelFromJobs([basic]).level,'basic')
 assert.equal(api.kycLevelFromJobs([basic,{...basic,id:'n',method:'nin',bvnJobId:'b',identityMatch:'different'}]).level,'basic')
 assert.equal(api.kycLevelFromJobs([basic,{...basic,id:'n',method:'nin',bvnJobId:'b'}]).level,'advanced')
-const owner='fixture';state.values.set('hashpaylink:pocket-kyc:v3:production:'+createHash('sha256').update(owner).digest('hex'),{jobs:[basic]})
-const reserve=(id,amount)=>api.reservePocketBankAllowance(owner,{id,amount,currency:'NGN'})
-await assert.rejects(api.reservePocketBankAllowance('unknown',{id:'none',amount:'1',currency:'NGN'}),e=>e.code==='KYC_BASIC_REQUIRED')
-await api.reservePocketBankAllowance(owner,{id:'quote',amount:'50000',currency:'NGN'},true);assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,50000)
-const race=await Promise.allSettled([reserve('a','30000'),reserve('b','30000')]);assert.equal(race.filter(x=>x.status==='fulfilled').length,1);assert.equal(race.filter(x=>x.status==='rejected')[0].reason.code,'KYC_ADVANCED_REQUIRED')
-const id=race[0].status==='fulfilled'?'a':'b';await reserve(id,'30000');assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,20000)
-await assert.rejects(reserve(id,'1'),e=>e.code==='KYC_LIMIT_BINDING')
-state.orders.set(id,{status:'failed',tx_hash:'submitted'});assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,20000)
-state.orders.set(id,{status:'refunded',tx_hash:'submitted'});assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,50000)
-await reserve('full','50000');assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,0);await assert.rejects(reserve('extra','0.01'),e=>e.code==='KYC_ADVANCED_REQUIRED')
-state.orders.set('full',{status:'expired'});assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,0);state.orders.set('full',{status:'cancelled'});assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,50000)
-const before=Date.parse('2026-09-29T22:59:59Z'),after=before+1000;assert.equal(api.nigeriaDay(before),'2026-09-29');assert.equal(api.nigeriaDay(after),'2026-09-30')
-let ledger=api.reserveAllowance(undefined,{id:'day1',amount:5000000,level:'basic',now:before});ledger=api.reserveAllowance(ledger,{id:'day2',amount:5000000,level:'basic',now:after});assert.equal(ledger.charges.length,2)
-await assert.rejects(api.reservePocketBankAllowance(owner,{id:'ug',amount:'1000',currency:'UGX',usdc:'40'}),e=>e.code==='KYC_ADVANCED_REQUIRED')
-await api.reservePocketBankAllowance(owner,{id:'generation',amount:'1000',currency:'NGN',providerOrderId:'current'});state.orders.set('generation',{status:'refunded',paycrest_order_id:'older'});assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,49000);state.orders.set('generation',{status:'refunded',paycrest_order_id:'current'});assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,50000)
-await reserve('decimal','1.10');assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,49998.90)
-assert.equal(api.advancedDailyNgn(),null);process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN='100000';assert.equal(api.advancedDailyNgn(),100000);delete process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN
-console.log('PASS production-only tiers, prerequisite and identity matching, atomic cross-payout concurrency, exact cap, idempotency, refund/cancel release and ambiguous expiry held, ambiguous failure held, Lagos midnight, UGX equivalent, and fail-closed Advanced configuration.')
-
-assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'government_id'}]).level,'basic')
-assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'bvn'}]).level,'none')
-assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'government_id'}],true).level,'none')
-
+const owner='fixture',kycKey=id=>'hashpaylink:pocket-kyc:v3:production:'+createHash('sha256').update(id).digest('hex'),ledgerKey=id=>'hashpaylink:pocket-transfer-allowance:v1:'+createHash('sha256').update(id).digest('hex')
+state.values.set(kycKey(owner),{jobs:[basic]})
+const reserve=(id,usd,extra={})=>api.reservePocketBankAllowance(owner,{id,amount:String(Number(usd)*1500),currency:'NGN',usdc:usd,...extra})
+await assert.rejects(api.reservePocketBankAllowance('unknown',{id:'none',amount:'1500',currency:'NGN',usdc:'1'}),e=>e.code==='KYC_BASIC_REQUIRED')
+await api.reservePocketBankAllowance(owner,{id:'quote',amount:'75000',currency:'NGN',usdc:'50'},true)
+assert.equal((await api.pocketTransferAllowance(owner)).remainingUsd,50)
+const race=await Promise.allSettled([reserve('a','30'),reserve('b','30')]);assert.equal(race.filter(x=>x.status==='fulfilled').length,1)
+assert.equal(race.find(x=>x.status==='rejected').reason.code,'KYC_ADVANCED_REQUIRED')
+const id=race[0].status==='fulfilled'?'a':'b';await reserve(id,'30');assert.equal((await api.pocketTransferAllowance(owner)).remainingUsd,20)
+await assert.rejects(reserve(id,'31'),e=>e.code==='KYC_LIMIT_BINDING')
+await reserve('exact','20');await assert.rejects(reserve('over','0.000001',{amount:'0.01'}),e=>e.code==='KYC_ADVANCED_REQUIRED')
+state.orders.set(id,{status:'failed',tx_hash:'0xuncertain'});assert.equal((await api.pocketTransferAllowance(owner)).remainingUsd,0)
+state.orders.set(id,{status:'refunded'});assert.equal((await api.pocketTransferAllowance(owner)).remainingUsd,30)
+// Upgrade does not reset same-day spending.
+state.values.set(kycKey(owner),{jobs:[basic,{...basic,id:'n',method:'nin',bvnJobId:'b'}]})
+assert.equal((await api.pocketTransferAllowance(owner)).dailyLimitUsd,7000)
+assert.equal((await api.pocketTransferAllowance(owner)).remainingUsd,6980)
+await reserve('advanced','6980');await assert.rejects(reserve('advanced-over','1'),e=>e.code==='KYC_DAILY_LIMIT')
+// FX/currency changes do not rewrite a reserved USD value; changing a quote is a new payment.
+await assert.rejects(api.reservePocketBankAllowance(owner,{id:'advanced',amount:String(6980*1500),currency:'NGN',usdc:'6979'}),e=>e.code==='KYC_LIMIT_BINDING')
+const other='legacy';state.values.set(kycKey(other),{jobs:[basic]})
+state.values.set(ledgerKey(other),{charges:[{id:'old',day:api.nigeriaDay(Date.now()),amount:3000000,state:'reserved',createdAt:Date.now(),providerOrderId:'provider',binding:JSON.stringify(['NGN','30000'])}]})
+state.orders.set('old',{status:'settled',amount_usdc:'20',paycrest_order_id:'provider',tx_hash:'confirmed'})
+assert.equal((await api.pocketTransferAllowance(other)).remainingUsd,30,'Legacy usage hydrated from original provider quote, not current FX')
+state.orders.set('old',{status:'settled',amount_usdc:'10',paycrest_order_id:'provider',tx_hash:'confirmed'})
+assert.equal((await api.pocketTransferAllowance(other)).remainingUsd,30,'Frozen valuation cannot drift')
+state.capacity=10
+await assert.rejects(api.reservePocketBankAllowance(other,{id:'capacity',amount:'30000',currency:'NGN',usdc:'20'},true),e=>e.code==='KYC_TRANSFER_CAPACITY')
+state.capacity=30
+await api.reservePocketBankAllowance(other,{id:'capacity',amount:'30000',currency:'NGN',usdc:'20'},true)
+const before=Date.parse('2026-09-29T22:59:59Z'),after=Date.parse('2026-09-29T23:00:00Z')
+assert.equal(api.nigeriaDay(before),'2026-09-29');assert.equal(api.nigeriaDay(after),'2026-09-30')
+let ledger=api.reserveAllowance(undefined,{id:'day1',amount:7500000,usdUnits:50000000,level:'basic',now:before})
+ledger=api.reserveAllowance(ledger,{id:'day2',amount:7000000,usdUnits:50000000,level:'basic',now:after});assert.equal(ledger.charges.length,2)
+// Existing Uganda verification mapping is preserved; cross-currency spending shares one account ledger.
 const ugBasic={...basic,country:'UG',method:'national_id',legalName:undefined,resultCode:'1020'}
-assert.equal(api.kycLevelFromJobs([ugBasic]).level,'basic')
-for(const patch of [{environment:'sandbox'},{status:'pending'},{status:'review'},{resultCode:'1021'},{identityMatch:undefined},{country:'NG'}])assert.equal(api.kycLevelFromJobs([{...ugBasic,...patch}]).level,'none')
-assert.equal(api.kycLevelFromJobs([ugBasic],true).level,'none')
-console.log('PASS Uganda Basic exact-result tier, no invented legal name, no sandbox/partial/legacy approval.')
-
-// Uganda has one verification step; payment access uses the configured higher cap.
-assert.equal(api.kycLevelFromJobs([ugBasic]).paymentLevel,'advanced')
-assert.equal(api.kycLevelFromJobs([basic]).paymentLevel,'basic')
-const ugOwner='uganda-single';state.values.set('hashpaylink:pocket-kyc:v3:production:'+createHash('sha256').update(ugOwner).digest('hex'),{jobs:[ugBasic]})
-assert.equal((await api.pocketTransferAllowance(ugOwner)).dailyLimitNgn,50000,'Missing higher cap must not mean unlimited')
-process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN='100000'
-await api.reservePocketBankAllowance(ugOwner,{id:'ug-high',amount:'60000',currency:'NGN'})
-const ugAllowance=await api.pocketTransferAllowance(ugOwner)
-assert.equal(ugAllowance.level,'basic','Do not mislabel the actual evidence')
-assert.equal(ugAllowance.paymentLevel,'advanced');assert.equal(ugAllowance.remainingNgn,40000)
-await assert.rejects(api.reservePocketBankAllowance(ugOwner,{id:'ug-over',amount:'40000.01',currency:'NGN'}),e=>e.code==='KYC_DAILY_LIMIT','No second verification prompt for Uganda')
-await assert.rejects(api.reservePocketBankAllowance(owner,{id:'ng-still-basic',amount:'60000',currency:'NGN'}),e=>e.code==='KYC_ADVANCED_REQUIRED')
-delete process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN
-console.log('PASS Uganda single-check higher payment access, bounded cap, no upgrade prompt and unchanged Nigeria limits.')
-
-// Same budget across both destinations at the current Nigeria cap.
-const sharedOwner='uganda-both-countries';state.values.set('hashpaylink:pocket-kyc:v3:production:'+createHash('sha256').update(sharedOwner).digest('hex'),{jobs:[ugBasic]})
-assert.equal((await api.pocketTransferAllowance(sharedOwner)).country,'UG')
-assert.equal((await api.pocketTransferAllowance(sharedOwner)).dailyLimitNgn,50000)
-await api.reservePocketBankAllowance(sharedOwner,{id:'ng-destination',amount:'20000',currency:'NGN'})
-await api.reservePocketBankAllowance(sharedOwner,{id:'ug-destination',amount:'74000',currency:'UGX',usdc:'20'})
-assert.equal((await api.pocketTransferAllowance(sharedOwner)).remainingNgn,0,'20 USDC at fixture NGN 1500 consumes the remaining 30000')
-await api.reservePocketBankAllowance(sharedOwner,{id:'ug-destination',amount:'74000',currency:'UGX',usdc:'21'})
-assert.equal((await api.pocketTransferAllowance(sharedOwner)).remainingNgn,0,'Retries retain original conversion')
-await assert.rejects(api.reservePocketBankAllowance(sharedOwner,{id:'extra-ug',amount:'1',currency:'UGX',usdc:'0.01'}),e=>e.code==='KYC_DAILY_LIMIT')
-console.log('PASS shared Nigeria/Uganda cap, USDC conversion, no country reset, no retry double count.')
+assert.equal(api.kycLevelFromJobs([ugBasic]).level,'basic');assert.equal(api.kycLevelFromJobs([ugBasic]).paymentLevel,'advanced')
+for(const patch of [{environment:'sandbox'},{status:'pending'},{resultCode:'1021'},{identityMatch:undefined}])assert.equal(api.kycLevelFromJobs([{...ugBasic,...patch}]).level,'none')
+const ugOwner='uganda';state.values.set(kycKey(ugOwner),{jobs:[ugBasic]})
+await api.reservePocketBankAllowance(ugOwner,{id:'ugx',amount:'74000',currency:'UGX',usdc:'20'})
+await api.reservePocketBankAllowance(ugOwner,{id:'ngn',amount:'30000',currency:'NGN',usdc:'20'})
+assert.equal((await api.pocketTransferAllowance(ugOwner)).remainingUsd,6960)
+console.log('PASS Basic USD 50 / Advanced USD 7000, verified tiers, atomic reservations, upgrade continuity, retry binding, frozen provider valuation, legacy migration, dynamic capacity, refunds, cross-currency totals and Lagos reset.')

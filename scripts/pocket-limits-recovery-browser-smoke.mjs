@@ -15,7 +15,7 @@ try{
  await page.route('**/*',r=>r.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('https://fixture.invalid')
  await page.evaluate(()=>{window.timers=[];const original=window.setTimeout;window.setTimeout=(fn,delay,...args)=>{window.timers.push({fn,delay});return original(fn,delay,...args)}})
  await page.addScriptTag({content:bundle.outputFiles[0].text})
- await page.getByText('Reconnecting to update your usage.',{exact:true}).waitFor();await page.getByText('Bank payout',{exact:true}).waitFor()
+ await page.getByText('Reconnecting to update your usage.',{exact:true}).waitFor();await page.getByText('Bank route capacity',{exact:true}).waitFor()
  await page.getByText('Online and QR purchases',{exact:true}).waitFor();await page.getByText('Personal bank transfers',{exact:true}).waitFor();
  assert.equal(await page.getByText("Today's usage is unavailable",{exact:true}).count(),0)
  assert.equal(await page.getByRole('status',{name:"Loading today's usage",exact:true}).count(),2)
