@@ -498,7 +498,8 @@ export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
   const brand = paymentReceiptBrand(receipt)
   const logo = brand.imageUrl ? await loadImage(brand.imageUrl) : null
   const watermarkLogo = brand.kind === 'pocket' ? await loadImage('/brand/usdc-circle-logo.png') : null
-  drawReceiptCanvas(ctx, receipt, width, height, logo, watermarkLogo)
+  const footerLogo = await loadImage('/hash-logo-transparent.png')
+  drawReceiptCanvas(ctx, receipt, width, height, logo, watermarkLogo, footerLogo)
   return new Promise<string>((resolve) => canvas.toBlob(blob => {
     if (!blob) return resolve('')
     const reader = new FileReader()
@@ -536,6 +537,7 @@ function drawReceiptCanvas(
   height: number,
   logo: HTMLImageElement | null,
   watermarkLogo: HTMLImageElement | null,
+  footerLogo: HTMLImageElement | null,
 ) {
   const view = paymentReceiptView(receipt)
   const brand = paymentReceiptBrand(receipt)
@@ -643,7 +645,9 @@ function drawReceiptCanvas(
   ctx.fillStyle = '#9ca3af'
   ctx.font = `600 10px ${sans}`
   const footer = poweredByHashPayLink
-  ctx.fillText(footer, (width - ctx.measureText(footer).width) / 2, 736)
+  const footerIconWidth=footerLogo?24:0, footerX=(width-ctx.measureText(footer).width-footerIconWidth)/2
+  if(footerLogo)drawContainedImage(ctx,footerLogo,footerX,736 - 16,24,24)
+  ctx.fillText(footer, footerX+footerIconWidth, 736)
   ctx.font = `400 9px ${sans}`
   ctx.fillText(paymentTagline, (width - ctx.measureText(paymentTagline).width) / 2, 750)
   if(brand.kind==='pocket'){
