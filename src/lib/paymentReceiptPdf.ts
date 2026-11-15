@@ -315,7 +315,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     ]
   }
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
-    variant:'general',badge:'Web payment',amount:receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees)[3].value:checkoutPriceLabel(receipt.pricing,`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`),timestamp:fmtTime(receipt.createdAt),reference,
+    variant:'general',badge:'Web payment',amount:receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees)[3].value:checkoutPriceLabel(receipt.pricing,receiptMoney(receipt.amount,receipt.asset)),timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
       ...(receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees).slice(0,-1):[]),
       ...(receipt.pricing?[{label:'Paid with',value:compactReceiptAmount(receipt.amount,receipt.asset)+' '+receipt.asset},{label:'Exchange rate',value:'1 '+receipt.pricing.paymentAsset+' = '+receipt.pricing.rate+' '+receipt.pricing.currency}]:[]),
@@ -437,7 +437,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   }
   if(['marketplace_bank','marketplace-bank'].includes(receipt.source||'')&&receipt.marketplaceBankFees){
     const f=receipt.marketplaceBankFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
-    const minor=BigInt(f.ngnPaidMinor),ngn=(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0')+' NGN'
+    const minor=BigInt(f.ngnPaidMinor),ngn=receiptMoney((minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0'),'NGN')
     return {variant,badge:'Marketplace withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[
       ...(receipt.receiptAudience==='seller'||receipt.receiptAudience==='marketplace'?[{label:'Balance source',value:receipt.receiptAudience==='seller'?'Seller earnings':'Platform earnings'}]:[]),
       {label:'Amount debited',value:display(f.debitUnits)},

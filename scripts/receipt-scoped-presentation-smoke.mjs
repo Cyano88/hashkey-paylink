@@ -5,11 +5,13 @@ import {businessReceiptReport} from '../api/receipt-business-report.ts'
 import {businessSummaryEmail,businessSummaryPdf} from '../api/receipt-business-summary-document.ts'
 import {marketplaceReceiptEmail,marketplaceReceiptPdf} from '../api/marketplace/receipt-document.ts'
 import {checkoutReceipt} from '../api/checkout-receipts.ts'
+import {paymentReceiptView} from '../src/lib/paymentReceiptPdf.ts'
 import {receiptIconKind,receiptMoney} from '../src/lib/receiptIdentity.ts'
 const tx='0x'+'a'.repeat(64),wallet='0x'+'1'.repeat(40)
 const payer={id:'chk_receipt_visual_fixture',merchant:'Example Market',description:'Example Market order 123456',amount:'1.500004',asset:'USDC',network:'Base',paidAt:'2026-11-15T10:30:00Z',timeZone:'Africa/Lagos',paymentMethod:'wallet',receiptUrl:'https://app.hashpaylink.com/receipt/fixture'}
 const funding={id:'funding_fixture',partnerId:'project',checkoutId:'chk_funding_fixture',targetWallet:wallet,depositAddress:wallet,amount:'1.500004',observation:{status:'funded',bridgeStatus:'complete',network:'base',paymentTransaction:tx,bridgeTransaction:tx,observedAt:payer.paidAt}}
 const checkout={id:funding.checkoutId,partnerId:'project',merchantName:'Example Market',title:'Account funding',amount:funding.amount,asset:'USDC',network:'base',recipient:wallet,createdAt:payer.paidAt,providerFunding:{requestId:funding.id,targetWallet:wallet,depositAddress:wallet},payment:{status:'paid',txHash:tx,payer:wallet,amount:funding.amount,confirmedAt:payer.paidAt}}
+assert.equal(paymentReceiptView({...checkoutReceipt({...checkout,providerFunding:undefined}),amount:'1.500004'}).amount,'1.500004 USDC')
 assert.equal(checkoutReceipt(checkout).status,'pending')
 assert.equal(checkoutReceipt(checkout,funding).status,'confirmed')
 for(const patch of [{partnerId:'other'},{checkoutId:'other'},{amount:'2'},{targetWallet:'0x'+'2'.repeat(40)},{observation:{...funding.observation,bridgeStatus:'pending'}},{observation:{...funding.observation,paymentTransaction:'0x'+'b'.repeat(64)}}])assert.equal(checkoutReceipt(checkout,{...funding,...patch}).status,'pending')
