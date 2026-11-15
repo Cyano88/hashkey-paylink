@@ -1,4 +1,5 @@
-import PocketLimitsPanel from './PocketLimitsPanel'
+import PocketLimitsPanel,{LIMIT_PAGES,pocketLimitPage,type PocketLimitPage} from './PocketLimitsPanel'
+import {useLocation,useNavigate} from 'react-router-dom'
 import {MoneyText,MoneyAmount} from '../../components/MoneyText'
 import {readPocketCountry,savePocketCountry,currencyForPocketCountry} from '../lib/pocketCountryPreference'
 import {pocketApiUrl} from '../lib/pocketRoutes'
@@ -214,14 +215,16 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
     return () => { cancelled = true; limitsEpoch.current++; limitsPending.current = null; clearTimeout(timer); unregister(); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
   }, [feature, email, refreshLimits])
 
-  const title = feature === 'kyc' ? 'Identity verification' : feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
-  return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
+  const limitLocation=useLocation(),limitNavigate=useNavigate(),selectedLimit=feature==='limits'?pocketLimitPage(new URLSearchParams(limitLocation.search).get('limit')):null
+  const selectLimit=(view:PocketLimitPage|null)=>{const query=new URLSearchParams(limitLocation.search);if(view)query.set('limit',view);else query.delete('limit');limitNavigate({pathname:limitLocation.pathname,search:query.toString()},{replace:!view})}
+  const title = feature === 'kyc' ? 'Identity verification' : feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? selectedLimit?LIMIT_PAGES[selectedLimit]:'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
+  return <div key={selectedLimit||feature} className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]'>
-      <PocketFlowHeader title={title} onBack={onBack} centered />
+      <PocketFlowHeader title={title} onBack={selectedLimit?()=>selectLimit(null):onBack} centered />
       {feature === 'kyc' && <PocketKycPanel key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={value=>{currencyChosen.current=true;setCurrency(value)}} />}
-      {feature === 'limits' && <PocketLimitsPanel getAccessToken={getAccessToken} usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
+      {feature === 'limits' && <PocketLimitsPanel key={email} view={selectedLimit} onSelect={selectLimit} getAccessToken={getAccessToken} usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}
       {feature === 'security' && <SecurityPanel stocks={stocks} email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}
     </main>

@@ -23,3 +23,13 @@ Limits API uses USD fields; older NGN-only limit readers must update. Legacy NGN
 ## Validation
 
 New deterministic tests cover exact micro-unit ceilings, concurrency, preserved quote values, fee separation, shared NG/UG spending, combined other-bill spending, Lagos reset, provider bounds, fresh FX, Uganda supplier conversion and exhausted allowance. Existing bill store, handler, client, meter and Uganda provider tests passed. Browser checks cover Basic/Advanced green badges, selected USD/NGN/UGX, Nigeria/UGX detail selection, 320/390 widths and light/dark layouts. Focused web/native TypeScript checks passed. Native build and live Pixel verification follow release below.
+
+## Owner correction: dedicated pages and fixed USD display
+
+The initial implementation f86df5e9e deployed as dep-dbt0brjl550s739m7b00, live at 2026-11-15T19:26:09Z. The matching native build was installed with data preserved. Authenticated Pixel checks confirmed Nigeria airtime, Uganda airtime/data, Nigeria data/electricity and disabled Kenya. No payment was made. The native client retains its distinct recent-recipient history helper.
+
+The owner rejected inline expanded cards and selected-balance-currency conversion. The revised UI follows the existing Bills list: seven simple icon rows, each opening its own route-backed detail page. Policy values stay in USD regardless of the balance currency. Only country/provider detail amounts use NGN or UGX. Data, TV and electricity rows explicitly share the same daily allowance. The previous selected-currency and inline-expansion descriptions above are historical and superseded.
+
+Verified state is read from the authenticated server response. A passed Advanced account also shows Basic verified for merchant purchases, rather than the old plain requirement label. Both badges use the same emerald styling. No verified badge is inferred from local preference or an unavailable server. The existing Uganda effective allowance does not relabel Basic identity evidence as Advanced identity.
+
+Revised browser checks cover the real profile page, seven-row menu, separate detail-page navigation, header and Android back, Basic and Advanced badges, fixed USD under all balance preferences, country restrictions and mobile layouts. No bill policy or provider ceiling changed in this presentation revision.

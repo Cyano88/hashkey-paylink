@@ -1,42 +1,34 @@
-import {useState,type ReactNode} from 'react'
 import {BILL_LIMITS_USD,ESIM_PER_ORDER_USD} from '../../lib/billLimits'
-import PocketBillCountryLimits from './PocketBillCountryLimits'
 import {PURCHASE_DAILY_USD} from '../../lib/purchaseLimits'
 import usePocketLimitDisplay from '../hooks/usePocketLimitDisplay'
+import usePocketVerifiedLevel from '../hooks/usePocketVerifiedLevel'
 import type {PocketBillsLimitUsage} from '../api/pocketBillsClient'
 import type {PocketBankPayoutLimit} from '../api/pocketSpendingLimitsClient'
 import PocketTransferAllowanceView from './PocketTransferAllowanceView'
+import PocketBillCountryLimits from './PocketBillCountryLimits'
+import {Phone,Wifi,Tv,Lightbulb,ChevronRight,Store,Landmark,Globe} from './PocketIcons'
 
-export const limitCardClass='rounded-3xl bg-white p-5 dark:bg-[#0D0D0D]'
-function BillLimit({title,detail,used,limit,airtime,getAccessToken}:{title:string;detail:ReactNode;used:number|null;limit:number;airtime:boolean;getAccessToken:()=>Promise<string|null>}){
- const [open,setOpen]=useState(false),display=usePocketLimitDisplay(),remaining=used===null?null:Math.max(0,limit-used)
- return <article className={limitCardClass}>
-  <h3 className="text-sm font-semibold">{title}</h3>
-  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{detail}</p>
-  <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><span className="text-xl font-semibold tracking-tight">{display.fromUsd(limit)}</span><span className="text-xs text-gray-500">Daily allowance</span></div>
-  <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10" aria-hidden="true"><div className="h-full rounded-full bg-blue-600" style={{width:used===null?'0%':Math.min(100,Math.max(0,used/limit*100))+'%'}}/></div>
-  {remaining===null?<div role="status" aria-label="Loading today's usage" className="mt-3 h-4 w-40 animate-pulse rounded bg-gray-100 dark:bg-white/10"/>:<div className="mt-3 flex flex-wrap justify-between gap-2 text-xs"><span className="text-gray-500">{display.fromUsd(used!)} used</span><span className="font-medium">{display.fromUsd(remaining)} left</span></div>}
-  <button type="button" aria-expanded={open} onClick={()=>setOpen(v=>!v)} className="mt-4 min-h-10 w-full text-left text-xs font-semibold">{open?'Hide country limits':'View country limits'} <span aria-hidden="true">{open?'−':'+'}</span></button>
-  {open&&<PocketBillCountryLimits airtime={airtime} getAccessToken={getAccessToken}/>}
- </article>
-}
-export default function PocketLimitsPanel({usage,bank,busy,error,onRefresh,getAccessToken}:{usage:PocketBillsLimitUsage|null;bank:PocketBankPayoutLimit|null;busy:boolean;error:string;onRefresh:()=>void;getAccessToken:()=>Promise<string|null>}){
- const display=usePocketLimitDisplay(),airtime=usage?.airtime??{perPaymentUsd:BILL_LIMITS_USD.airtimePerPayment,dailyLimitUsd:BILL_LIMITS_USD.airtimeDaily,usedTodayUsd:null},bills=usage?.otherBills??{dailyLimitUsd:BILL_LIMITS_USD.otherBillsDaily,usedTodayUsd:null}
- return <section className="space-y-5 pt-5 pb-4">
-  <div className="flex items-center justify-between gap-3 px-1"><p className="text-xs text-gray-500 dark:text-gray-400">Resets at midnight · Lagos time</p><span className="rounded-full bg-gray-200/60 px-3 py-1 text-[11px] font-semibold dark:bg-white/10">{display.currency}</span></div>
-  <article className={limitCardClass}>
-   <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">Online and QR purchases</h2><span className="text-[11px] text-gray-500">Basic verification</span></div>
-   <p className="mt-4 text-[28px] font-semibold tracking-tight">{display.fromUsd(PURCHASE_DAILY_USD)}</p>
-   <p className="mt-1 text-xs text-gray-500">Daily purchase allowance</p>
-   <p className="mt-4 border-t border-gray-100 pt-3 text-xs leading-5 text-gray-500 dark:border-white/10 dark:text-gray-400">One allowance across online stores and physical QR payments. Separate from personal transfers.</p>
-  </article>
-  <PocketTransferAllowanceView getAccessToken={getAccessToken} bank={bank}/>
-  <div className="space-y-3"><h2 className="px-1 text-[11px] font-semibold uppercase tracking-widest text-gray-500">Bill payments</h2>
-   <BillLimit title="Airtime" detail={<>Up to {display.fromUsd(airtime.perPaymentUsd)} per payment · Country and network limits apply</>} airtime={true} getAccessToken={getAccessToken} used={airtime.usedTodayUsd} limit={airtime.dailyLimitUsd}/>
-   <BillLimit title="Data, TV and electricity" detail="One shared allowance across services and countries" airtime={false} getAccessToken={getAccessToken} used={bills.usedTodayUsd} limit={bills.dailyLimitUsd}/>
-  </div>
-  <article className={limitCardClass}><h2 className="text-sm font-semibold">Travel eSIM</h2><p className="mt-4 text-xl font-semibold">{display.fromUsd(ESIM_PER_ORDER_USD)}</p><p className="mt-1 text-xs text-gray-500">Per order · Network fees shown separately</p><p className="mt-4 text-xs leading-5 text-gray-500">One plan per order. Separate from bill and bank-transfer allowances. No BVN verification required.</p></article>
-  {error&&<div className="flex items-center justify-between gap-3 px-1 text-xs text-gray-500"><span>{error}</span><button disabled={busy} onClick={onRefresh} className="min-h-10 shrink-0 font-semibold text-gray-950 dark:text-white">Refresh</button></div>}
-  <p className="px-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Converted amounts are estimates and refresh with provider rates. Country, provider and product limits may be lower. Your final quote is checked before payment.</p>
+export const LIMIT_PAGES={purchases:'Online and QR purchases',transfers:'Personal bank transfers',airtime:'Airtime',data:'Data',tv:'TV',electricity:'Electricity',esim:'Travel eSIM'} as const
+export type PocketLimitPage=keyof typeof LIMIT_PAGES
+export function pocketLimitPage(value:string|null):PocketLimitPage|null{return value&&Object.prototype.hasOwnProperty.call(LIMIT_PAGES,value)?value as PocketLimitPage:null}
+const actions=[{id:'purchases',Icon:Store},{id:'transfers',Icon:Landmark},{id:'airtime',Icon:Phone},{id:'data',Icon:Wifi},{id:'tv',Icon:Tv},{id:'electricity',Icon:Lightbulb},{id:'esim',Icon:Globe}] as const
+const verifiedClass='inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300'
+export default function PocketLimitsPanel({view=null,onSelect,usage,bank,busy,error,onRefresh,getAccessToken}:{view?:PocketLimitPage|null;onSelect:(view:PocketLimitPage)=>void;usage:PocketBillsLimitUsage|null;bank:PocketBankPayoutLimit|null;busy:boolean;error:string;onRefresh:()=>void;getAccessToken:()=>Promise<string|null>}){
+ const display=usePocketLimitDisplay(),verification=usePocketVerifiedLevel(getAccessToken),level=verification?.level,verified=level==='basic'||level==='advanced'
+ const badge=(id:string)=>verified&&(id==='purchases'||id==='transfers')?<span className={verifiedClass}>{id==='transfers'&&level==='advanced'?'Advanced verified':'Basic verified'}</span>:null
+ if(!view)return <section aria-label="Spending limit categories" className="mt-4 divide-y divide-gray-100 dark:divide-[#262626]">{actions.map(({id,Icon})=><button key={id} type="button" onClick={()=>onSelect(id)} className="flex min-h-20 w-full items-center gap-4 px-1 py-4 text-left transition active:scale-[0.99]">
+  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-700 dark:bg-[#121212] dark:text-gray-200"><Icon className="h-5 w-5"/></span>
+  <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-gray-950 dark:text-white">{LIMIT_PAGES[id]}</span><span className="mt-1 block text-xs text-gray-500">{id==='transfers'?verification?<>{display.fromUsd(verification.dailyLimitUsd)} daily</>:'Verification allowance':<>{display.fromUsd(id==='purchases'?PURCHASE_DAILY_USD:id==='airtime'?BILL_LIMITS_USD.airtimeDaily:id==='esim'?ESIM_PER_ORDER_USD:BILL_LIMITS_USD.otherBillsDaily)} {id==='esim'?'per order':['data','tv','electricity'].includes(id)?'shared daily':'daily'}</>}</span>{verified&&(id==='purchases'||id==='transfers')&&<span className="mt-2 block">{badge(id)}</span>}</span>
+  <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"/>
+ </button>)}</section>
+ if(view==='transfers')return <div className="pt-6"><PocketTransferAllowanceView getAccessToken={getAccessToken} bank={bank}/></div>
+ if(view==='purchases'||view==='esim')return <section className="pt-8">{view==='purchases'&&badge(view)}<p className="mt-4 text-3xl font-semibold tracking-tight">{display.fromUsd(view==='purchases'?PURCHASE_DAILY_USD:ESIM_PER_ORDER_USD)}</p><p className="mt-2 text-xs text-gray-500">{view==='purchases'?'Daily allowance':'Per order'}</p><p className="mt-6 text-sm leading-6 text-gray-500">{view==='purchases'?`One allowance across online stores and QR payments. ${verified?'':'Basic verification required. '}Resets at midnight, Lagos time.`:'One plan per order. No BVN verification required. Network fees are shown separately.'}</p></section>
+ const airtime=view==='airtime',bucket=airtime?usage?.airtime:usage?.otherBills,limit=bucket?.dailyLimitUsd??(airtime?BILL_LIMITS_USD.airtimeDaily:BILL_LIMITS_USD.otherBillsDaily)
+ return <section className="pt-8">
+  <p className="text-3xl font-semibold tracking-tight">{display.fromUsd(limit)}</p><p className="mt-2 text-xs text-gray-500">{airtime?'Daily allowance across countries':'Shared daily across data, TV and electricity'}</p>
+  <div className="mt-4 flex flex-wrap justify-between gap-2 text-xs text-gray-500">{bucket?<><span>{display.fromUsd(bucket.usedTodayUsd)} used</span><span>{display.fromUsd(bucket.remainingTodayUsd)} left</span></>:<span role="status" aria-label="Loading today's usage">Loading usage…</span>}</div>
+  {airtime&&<p className="mt-3 text-xs text-gray-500">Up to {display.fromUsd(BILL_LIMITS_USD.airtimePerPayment)} per payment</p>}
+  {error&&<button disabled={busy} onClick={onRefresh} className="mt-3 min-h-10 text-xs text-gray-500">Refresh usage</button>}
+  <PocketBillCountryLimits key={view} category={view} getAccessToken={getAccessToken}/>
  </section>
 }
