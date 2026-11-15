@@ -1,0 +1,11 @@
+# Remaining gap closeout
+
+Native checkout passed resetEmail to an unsupported PocketEmailLogin prop. The existing mocked PIN-reset browser regression reproduced the missing reset heading before the fix. Targeted native parity now supports the same-account OTP request with disableSignup, one send in StrictMode, inline checkout context, read-only recovery email, invalid-code recovery and retained checkout URL. Normal native login styling was preserved; light/dark login and OTP regression passes. The legacy Object.hasOwn call was replaced with equivalent hasOwnProperty.call for the configured native library target.
+
+Focused native TypeScript now passes for all 62 selected files including PocketEmailLogin, resolving both previously reported diagnostics. Original-source guard, production source build and Android assembly pass. Final APK SHA-256 B96DD5EA40495AC2DBF44AE6443165CB007EFF8F7C5455B24F3ECB3FA7E31BE3 installed without clearing app data. Pixel Playwright confirmed authenticated home restoration and the existing successful payer receipt at USDC 1.500004. Live PIN reset was not triggered; OTP calls in regression tests were mocked. The native changes and hashes are recorded in native-release/checkout-recovery-review-20261115.json in the native workspace.
+
+Authenticated production portal was reloaded onto the current deployment. Receipt/summary settings, marketplace balances, and integration setup rendered with no alerts. Currency-code spans were verified after reload. Summary opt-in remains off; bank withdrawal rollout gates remain unchanged. Production email-readiness read confirmed receipts enabled with sender, provider and identity configuration present; credentials were not printed.
+
+Fresh-account fixture with real handlers, project-adapter/activation/access boundaries, and receipt-settings save round-trip/browser layouts pass. These do not represent a new real-account OTP signup. No project settings, keys, payments or email preferences were mutated.
+
+Inbox delivery verification remains pending explicit owner approval to send one labelled test receipt with its PDF. Prepared receipt templates/PDFs and provider configuration are verified; no test email has been sent and inbox delivery is not claimed.
