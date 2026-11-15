@@ -15,3 +15,7 @@
 - Updated a stale browser-test policy assertion to match the existing separation of business review, saved settings, and route activation.
 
 No new transaction or email was sent. No native, payment-processing, receipt-rendering, summary-setting, or public route-gate changes were made. Existing Lunchroom evidence verifies this integration path; it does not certify every payment rail or public activation.
+
+## Deployment
+
+Commit `2ffd49756117f0aa6ac5d406c7e1901642bd64ed` deployed as `dep-dbsrgk6i0phs73dup7rg`, live at 2026-11-15T13:54:13.42177Z. After reloading the authenticated developer dashboard, targeted Playwright checks confirmed the published snippet forwards currency. The live getting-started page passed checks for automatic receipts, separate summaries, and net NGN settlement. No credentials were printed. A transient browser timeout during the service switch cleared after the deployment became live.
