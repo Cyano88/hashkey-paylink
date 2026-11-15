@@ -146,7 +146,7 @@ export default function PocketProfilePage() {
       </section>
     </main>
   </div>
-  if (feature) return <PocketProfileFeaturePage stocks={stocks} feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => signOut(true)} />
+  if (feature) return <PocketProfileFeaturePage key={email} verifiedProfile={profile.profile?.email.toLowerCase()===email.toLowerCase()?profile.profile:undefined} stocks={stocks} feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => signOut(true)} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white">
     <main className="mx-auto flex min-h-full w-full max-w-[462px] flex-col px-4 pb-[calc(7.5rem+var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
       <PocketFlowHeader centered title="Profile" hideBack={!editing} onBack={() => editing ? setEditing(false) : returnHome()} />

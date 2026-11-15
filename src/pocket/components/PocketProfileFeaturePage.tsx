@@ -145,7 +145,7 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
   </section>
 }
 
-export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined, stocks = false }: { stocks?: boolean; feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
+export default function PocketProfileFeaturePage({ verifiedProfile, feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined, stocks = false }: { verifiedProfile?:import('../hooks/usePocketVerifiedLevel').VerifiedProfile; stocks?: boolean; feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
   const [currency, setCurrency] = useState<string>(()=>currencyForPocketCountry(readPocketCountry(email)))
   const currencyChosen=useRef(false)
   const countryToken=useRef(getAccessToken);countryToken.current=getAccessToken
@@ -224,7 +224,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
       {feature === 'kyc' && <PocketKycPanel key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={value=>{currencyChosen.current=true;setCurrency(value)}} />}
-      {feature === 'limits' && <PocketLimitsPanel key={email} view={selectedLimit} onSelect={selectLimit} getAccessToken={getAccessToken} usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
+      {feature === 'limits' && <PocketLimitsPanel verifiedProfile={verifiedProfile} key={email} view={selectedLimit} onSelect={selectLimit} getAccessToken={getAccessToken} usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}
       {feature === 'security' && <SecurityPanel stocks={stocks} email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}
     </main>

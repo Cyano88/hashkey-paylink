@@ -5,7 +5,7 @@ import {pocketApiUrl,POCKET_BASE_PATH,POCKET_ROUTES} from '../lib/pocketRoutes'
 import {PERSONAL_BANK_DAILY_USD} from '../../lib/purchaseLimits'
 import type {PocketBankPayoutLimit} from '../api/pocketSpendingLimitsClient'
 type Allowance={level:string;paymentLevel?:string;dailyLimitUsd:number;remainingUsd:number}
-export default function PocketTransferAllowanceView({getAccessToken,bank}:{getAccessToken:()=>Promise<string|null>;bank?:PocketBankPayoutLimit|null}) {
+export default function PocketTransferAllowanceView({verifiedLevel,getAccessToken,bank}:{verifiedLevel?:'none'|'basic'|'advanced';getAccessToken:()=>Promise<string|null>;bank?:PocketBankPayoutLimit|null}) {
  const reader=useRef(getAccessToken);reader.current=getAccessToken
  const [data,setData]=useState<Allowance|null>(null),[error,setError]=useState(false),[retry,setRetry]=useState(0),navigate=useNavigate(),display=usePocketLimitDisplay()
  useEffect(()=>{let active=true;const controller=new AbortController();setError(false)
@@ -13,9 +13,9 @@ export default function PocketTransferAllowanceView({getAccessToken,bank}:{getAc
   void read();const refresh=()=>{if(document.visibilityState==='visible')void read()},timer=setInterval(refresh,30000);window.addEventListener('online',refresh)
   return()=>{active=false;controller.abort();clearInterval(timer);window.removeEventListener('online',refresh)}
  },[retry])
- const advanced=(data?.paymentLevel||data?.level)==='advanced',verified=data?.level&&data.level!=='none'
+ const badgeLevel=data?.level??verifiedLevel,advanced=(data?.paymentLevel||data?.level)==='advanced',verified=badgeLevel&&badgeLevel!=='none'
  return <article>
-  <div className="flex items-center justify-between gap-3">{data&&<span className={'rounded-full px-2.5 py-1 text-[10px] font-semibold '+(verified?'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300':'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300')}>{data.level==='advanced'?'Advanced verified':verified?'Basic verified':'Verification needed'}</span>}</div>
+  <div className="flex items-center justify-between gap-3">{badgeLevel&&<span className={'rounded-full px-2.5 py-1 text-[10px] font-semibold '+(verified?'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300':'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300')}>{badgeLevel==='advanced'?'Advanced verified':verified?'Basic verified':'Verification needed'}</span>}</div>
   {data?<><p className="mt-4 text-[28px] font-semibold tracking-tight">{display.fromUsd(data.dailyLimitUsd)}</p><p className="mt-1 text-xs text-gray-500">Daily allowance</p>
    <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10" aria-hidden="true"><div className="h-full rounded-full bg-blue-600" style={{width:(data.dailyLimitUsd?Math.max(0,Math.min(100,(data.dailyLimitUsd-data.remainingUsd)/data.dailyLimitUsd*100)):0)+'%'}}/></div>
    <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-gray-500"><span>{display.fromUsd(data.dailyLimitUsd-data.remainingUsd)} used</span><span>{display.fromUsd(data.remainingUsd)} left</span></div>
