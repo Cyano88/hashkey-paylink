@@ -12,11 +12,12 @@ try{const p=await b.newPage({viewport:{width:390,height:844}});await p.route('ht
  await p.evaluate(()=>window.show('account-b',undefined,'airtime'));await p.getByRole('status',{name:'Loading country limits',exact:true}).waitFor();assert.equal(await p.getByRole('status',{name:"Loading today's usage",exact:true}).innerText(),'');assert(!/Loading/i.test(await p.locator('body').innerText()));assert.equal(await p.locator('[aria-label="Loading country limits"] .animate-pulse').count(),4)
  for(const [view,label] of [['purchases','Loading purchase allowance'],['transfers','Loading transfer allowance']]){
   await p.evaluate(view=>{window.pending=[];window.show('account-'+view,{kycLevel:'advanced',kycCountry:'NG'},view)},view)
-  await p.getByRole('status',{name:label,exact:true}).waitFor();assert.equal(await p.locator('[aria-label="'+label+'"] .pocket-shimmer').count(),5);assert(!/Loading|Bank route capacity/.test(await p.locator('body').innerText()))
+  await p.getByRole('status',{name:label,exact:true}).waitFor();assert.equal(await p.getByRole('region',{name:view==='purchases'?'Online and QR purchases':'Personal bank transfers',exact:true}).locator('.pocket-shimmer').count(),3);assert(!/Loading|Bank route capacity|Available per transfer|Daily allowance|Shared online and QR allowance|Separate from online/.test(await p.locator('body').innerText()))
   await p.evaluate(()=>{for(const r of window.pending)r.resolve(Response.json({ok:true,level:'advanced',dailyLimitUsd:7000,usedUsd:123,remainingUsd:6877}));window.pending=[]})
   const card=p.getByRole('region',{name:view==='purchases'?'Online and QR purchases':'Personal bank transfers',exact:true});await card.getByText('USD 123.00 used',{exact:true}).waitFor();await card.getByText('USD 6,877.00 left',{exact:true}).waitFor();assert.equal(await p.getByRole('button',{name:/^(Online and QR purchases|Personal bank transfers)/}).count(),0);assert.equal(await p.evaluate(view=>window.parseLimit(view),view),null)
  }
  await p.getByRole('button',{name:/^Airtime/}).click();assert.equal(await p.evaluate(()=>window.selected),'airtime');for(const width of [320,390]){await p.setViewportSize({width,height:844});assert(await p.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth))}
- console.log('PASS inline allowance cards, legacy detail link normalization, service navigation and responsive layout.');
+ await p.screenshot({path:'.codex-temp/compact-limits-browser.png',fullPage:true});
+ console.log('PASS inline allowance rows, legacy detail link normalization, service navigation and responsive layout.');
  console.log('PASS immediate confirmed badges, server revocation, account isolation, complete purchase/transfer shimmers and live usage totals.')
 }finally{await b.close()}
