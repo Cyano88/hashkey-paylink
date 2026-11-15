@@ -98,7 +98,7 @@ export function pocketBillTitle(category?: string): string {
 export function pocketMovementTitle(row: PocketActivityRow): string {
   if (normalizedSource(row) === 'marketplace-bank') return 'Withdrawal'
   if (normalizedSource(row) === 'marketplace-refund') return 'Refund'
-  if (normalizedSource(row) === 'marketplace-payout') return 'Payout'
+  if (normalizedSource(row) === 'marketplace-payout') return 'Withdrawal'
   if(row.settlementType==='hosted_checkout')return 'Web payment '+(row.direction==='in'?'received':'sent')
   if (normalizedSource(row) === 'esim') return pocketActivityStatus(row) === 'refunded' ? 'eSIM refunded' : 'eSIM purchase'
   if (normalizedSource(row) === 'wallet-bridge') return (row.assetSymbol || 'USDC') + ' bridge'
@@ -153,10 +153,11 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     feeAmount: row.feeAmount,
     payerFees: row.direction === 'out' ? row.payerFees : undefined,
     marketplaceDebitAmount: row.marketplaceDebitAmount,
+    receiptAudience: row.receiptAudience || (row.settlementType==='hosted_checkout'?(row.direction==='in'?'merchant':'payer'):undefined),
     marketplaceBankFees: row.marketplaceBankFees,
-    merchantFees: row.merchantFees,
-    amountNgn: row.amountNgn,
-    fiatCurrency: row.fiatCurrency,
+    merchantFees: row.direction==='in'?row.merchantFees:undefined,
+    amountNgn: row.settlementType==='hosted_checkout'&&row.direction!=='in'?undefined:row.amountNgn,
+    fiatCurrency: row.settlementType==='hosted_checkout'&&row.direction!=='in'?undefined:row.fiatCurrency,
     asset: row.assetSymbol || 'USDC',
     createdAt: row.ts,
     source,

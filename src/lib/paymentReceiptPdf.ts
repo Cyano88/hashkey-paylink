@@ -1,3 +1,4 @@
+import {receiptIconKind,receiptIconPaths,receiptMoney} from './receiptIdentity'
 import {payerCheckoutFeeRows,type PayerCheckoutFeeEvidence} from './payerCheckoutFees'
 import {formatUnits,parseUnits} from 'viem'
 import {marketplaceFeeAmount,type MarketplaceWalletReceiptAmounts} from './marketplaceFeeDisplay'
@@ -11,6 +12,9 @@ import { CHAIN_META, type ChainKey } from './chains'
 import {formatPocketDisplayAmount} from '../pocket/lib/pocketMoney'
 
 export type PaylinkReceipt = {
+  fundingDetails?:{account:string;requestId:string;deliveryTransaction?:string}
+  receiptAudience?:'payer'|'merchant'|'seller'|'marketplace'
+
   marketplaceName?: string
   marketplaceDebitAmount?:string
   payerFees?:PayerCheckoutFeeEvidence
@@ -44,7 +48,7 @@ export type PaylinkReceipt = {
   merchantId?: string
   bankSettlementStatus?: string
   settlementType?: string
-  fiatCurrency?: 'NGN' | 'UGX'
+  fiatCurrency?: string
   amountNgn?: string
   variant?: 'general' | 'bills'
   providerName?: string
@@ -75,6 +79,7 @@ export type PaylinkReceipt = {
 export type UnifiedReceiptRow = { label: string; value: string; mono?: boolean }
 
 export type UnifiedReceiptView = {
+  amountLabel?: string
   variant: 'general' | 'bills'
   badge: string
   amount: string
@@ -293,19 +298,27 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const variant = receipt.variant === 'bills' || receipt.source === 'bills' || String(receipt.settlementType || '').startsWith('bill_payment') ? 'bills' : 'general'
   const networkKey = receiptChainKey(receipt.chain)
   const network = networkKey === 'xlayer' ? 'X Layer' : networkKey ? CHAIN_META[networkKey].label : titleCase(receipt.chain || 'Network unavailable')
-  const localAmount = receipt.fiatCurrency === 'UGX' && receipt.amountNgn && Number.isFinite(Number(receipt.amountNgn)) ? 'UGX ' + Number(receipt.amountNgn).toLocaleString('en-UG', { maximumFractionDigits: 2 }) : formatNgn(receipt.amountNgn)
+  const localAmount = receipt.amountNgn ? receiptMoney(receipt.amountNgn,receipt.fiatCurrency||'NGN') : ''
   const pocketUsdc = paymentReceiptBrand(receipt).kind === 'pocket' && receipt.asset === 'USDC' && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
   const bankPayout = ['bank-withdraw', 'bank-receive', 'bank-send'].includes(receipt.source || '') || String(receipt.settlementType || '').toLowerCase() === 'instant_fiat'
   const pocketLocalPayment = paymentReceiptBrand(receipt).kind === 'pocket' && (bankPayout || variant === 'bills')
-  const bankLocalAmount = (bankPayout || pocketLocalPayment) && localAmount ? `${Number(receipt.amountNgn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN'}` : ''
+  const bankLocalAmount = (bankPayout || pocketLocalPayment) && localAmount ? receiptMoney(receipt.amountNgn!,receipt.fiatCurrency||'NGN') : ''
   const amount = bankLocalAmount || (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
+  if(receipt.source==='polymarket-funding'||receipt.settlementType==='service_funding'||receipt.settlementType==='polymarket_bridge')return {
+    variant:'general',badge:'Polymarket funding',amountLabel:'Amount paid',amount:receiptMoney(receipt.amount,receipt.asset),timestamp:fmtTime(receipt.createdAt),reference,rows:[
+      {label:'Payment method',value:webPaymentMethodLabel(receipt.paymentMethod)},
+      {label:'Network',value:network},
+      {label:'Destination',value:receipt.fundingDetails?.account||receipt.destination||'Polymarket account'},
+      ...(receipt.fundingDetails?.deliveryTransaction?[{label:'Delivery transaction',value:receipt.fundingDetails.deliveryTransaction,mono:true}]:[]),
+    ]
+  }
   if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')return {
     variant:'general',badge:'Web payment',amount:receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees)[3].value:checkoutPriceLabel(receipt.pricing,`${compactReceiptAmount(receipt.amount, receipt.asset)} ${receipt.asset}`),timestamp:fmtTime(receipt.createdAt),reference,
     rows:[
-      ...(receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees):[]),
-      ...(receipt.pricing?[{label:'Order price',value:checkoutPriceLabel(receipt.pricing,'')},{label:'Paid with',value:compactReceiptAmount(receipt.amount,receipt.asset)+' '+receipt.asset},{label:'Exchange rate',value:'1 '+receipt.pricing.paymentAsset+' = '+receipt.pricing.rate+' NGN'}]:[]),
+      ...(receipt.payerFees?payerCheckoutFeeRows(receipt.amount,receipt.payerFees).slice(0,-1):[]),
+      ...(receipt.pricing?[{label:'Paid with',value:compactReceiptAmount(receipt.amount,receipt.asset)+' '+receipt.asset},{label:'Exchange rate',value:'1 '+receipt.pricing.paymentAsset+' = '+receipt.pricing.rate+' '+receipt.pricing.currency}]:[]),
       ...(receipt.brandKind==='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)},{label:'Direction',value:receipt.type==='money_in'?'Received':'Sent'}]:[]),
       {label:receipt.type==='money_in'?'Business':'Paid to',value:receipt.recipient||'Business'},
       ...(receipt.brandKind!=='pocket'?[{label:'Type',value:webPaymentMethodLabel(receipt.paymentMethod)}]:[]),
@@ -320,15 +333,15 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     ],
   }
   if (['marketplace-refund','marketplace-payout'].includes(receipt.source || '')) {
-    const kind = receipt.source === 'marketplace-refund' ? 'Refund' : 'Payout'
+    const kind = receipt.source === 'marketplace-refund' ? 'Refund' : 'Withdrawal'
     return {variant:'general',badge:kind,amount:marketplaceReceiptAmount(receipt.amount)+' '+receipt.asset,timestamp:fmtTime(receipt.createdAt),reference,rows:[
-      {label:'Type',value:kind},
       ...(receipt.marketplaceName ? [{label:'Marketplace',value:receipt.marketplaceName}] : []),
+      ...(receipt.receiptAudience==='seller'||receipt.receiptAudience==='marketplace'?[{label:'Balance source',value:receipt.receiptAudience==='seller'?'Seller earnings':'Platform earnings'}]:[]),
       {label:'Network',value:network},
       {label:'From',value:receipt.payer || '-',mono:true},
       {label:'To',value:receipt.recipient || '-',mono:true},
       ...(receipt.feeAmount ? [{label:kind === 'Refund' ? 'Fee deducted' : 'Withdrawal fee',value:marketplaceReceiptAmount(receipt.feeAmount)+' '+(receipt.feeAsset || receipt.asset)}] : []),
-      ...(kind==='Payout'&&receipt.marketplaceDebitAmount?[{label:'Total balance debit',value:marketplaceReceiptAmount(receipt.marketplaceDebitAmount)+' USDC'}]:[]),
+      ...(kind==='Withdrawal'&&receipt.marketplaceDebitAmount?[{label:'Total balance debit',value:marketplaceReceiptAmount(receipt.marketplaceDebitAmount)+' USDC'}]:[]),
     ]}
   }
   if(['wallet-transfer','wallet-deposit','wallet-withdrawal'].includes(receipt.source||'')&&['money_in','money_out'].includes(receipt.type)){
@@ -413,20 +426,20 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   if(receipt.source==='marketplace_wallet'&&receipt.marketplaceWalletFees){
     const f=receipt.marketplaceWalletFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
     return {variant,badge:'Marketplace withdrawal',amount:display(f.recipientUnits),timestamp:fmtTime(receipt.createdAt),rows:[
+      ...(receipt.receiptAudience==='seller'||receipt.receiptAudience==='marketplace'?[{label:'Balance source',value:receipt.receiptAudience==='seller'?'Seller earnings':'Platform earnings'}]:[]),
       {label:'Amount debited',value:display(f.debitUnits)},
       {label:'Network fee',value:display(f.networkFeeUnits)},
-      {label:'Amount received',value:display(f.recipientUnits)},
       {label:'Network',value:'Base'},
       {label:'Recipient',value:receipt.recipient||'-',mono:true},
-      {label:'Fee policy',value:'Fixed quote; charged only on success'},
       {label:'Quote reference',value:f.quoteId,mono:true},
-      {label:'Transaction',value:receipt.txHash,mono:true},
+      ...(receipt.txHash!==reference?[{label:'Transaction',value:receipt.txHash,mono:true}]:[]),
     ],reference}
   }
   if(['marketplace_bank','marketplace-bank'].includes(receipt.source||'')&&receipt.marketplaceBankFees){
     const f=receipt.marketplaceBankFees,display=(v:string)=>marketplaceFeeAmount(v)+' USDC'
     const minor=BigInt(f.ngnPaidMinor),ngn=(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0')+' NGN'
     return {variant,badge:'Marketplace withdrawal',amount:ngn,timestamp:fmtTime(receipt.createdAt),rows:[
+      ...(receipt.receiptAudience==='seller'||receipt.receiptAudience==='marketplace'?[{label:'Balance source',value:receipt.receiptAudience==='seller'?'Seller earnings':'Platform earnings'}]:[]),
       {label:'Amount debited',value:display(f.debitUnits)},
       {label:'Withdrawal commission',value:display(f.chargedCommissionUnits??'0')},
       {label:'Provider fee',value:display(f.chargedProviderFeeUnits??'0')},
@@ -554,7 +567,7 @@ function drawReceiptCanvas(
   ctx.font = `700 17px ${sans}`
   const brandX = brand.kind === 'partner' && !logo ? 52 : 104
   if (!wordmark) ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
-  if(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout'){ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;if(!receipt.paymentMethod||receipt.paymentMethod==='wallet'){ctx.fillStyle=ctx.strokeStyle;ctx.fill(new Path2D(pocketPaymentMethodPaths.wallet))}else{ctx.stroke(new Path2D(pocketPaymentMethodPaths[receipt.paymentMethod]))};ctx.restore()}
+  {const icon=receiptIconKind(receipt);ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;if(icon==='wallet'){ctx.fillStyle=ctx.strokeStyle;ctx.fill(new Path2D(receiptIconPaths.wallet))}else ctx.stroke(new Path2D(receiptIconPaths[icon]));ctx.restore()}
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)
@@ -585,6 +598,7 @@ function drawReceiptCanvas(
 
   ctx.fillStyle = '#111827'
   ctx.font = `700 36px ${sans}`
+  if(view.amountLabel){ctx.font='14px Arial';drawText(ctx,view.amountLabel,52,218,508,18)}
   drawText(ctx, view.amount, 52, 238, 508, 42)
 
   ctx.strokeStyle = '#e5e7eb'

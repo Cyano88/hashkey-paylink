@@ -1,3 +1,4 @@
+import {ReceiptTypeIcon} from '../pocket/components/ReceiptTypeIcon'
 import {PocketPaymentMethodIcon} from '../pocket/components/PocketWebPaymentIdentity'
 import CheckoutReceiptDetails from './CheckoutReceiptDetails'
 import PocketReceiptReport from '../pocket/components/PocketReceiptReport'
@@ -75,7 +76,7 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
   if (brand.imageUrl && !failed) {
     return <img src={brand.imageUrl} alt="" onError={() => setFailed(true)} className={`object-contain ${className}`} />
   }
-  if (brand.kind === 'partner') return null
+  if (brand.kind === 'partner') return <img src="/hash-logo-transparent.png" alt="Hash PayLink" className={`object-contain ${className}`} />
   return (
     <span className={`flex items-center justify-center rounded-xl bg-gray-950 text-[10px] font-bold text-white dark:bg-white dark:text-gray-950 ${className}`}>
       {brand.name.slice(0, 2).toUpperCase()}
@@ -103,11 +104,12 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
           <BrandMark receipt={receipt} className="h-9 w-9 shrink-0" />
           <span className="truncate text-sm font-bold tracking-[-0.02em]">{brand.name}</span>
         </span>
-        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:bg-white/10 dark:text-gray-300">{(receipt.source==='hosted_checkout'||receipt.settlementType==='hosted_checkout')&&<PocketPaymentMethodIcon method={receipt.paymentMethod} className="mr-1 inline-block h-4 w-4"/>}{view.badge}</span>
+        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:bg-white/10 dark:text-gray-300">{<ReceiptTypeIcon receipt={receipt} className="mr-1 inline-block h-4 w-4"/>}{view.badge}</span>
       </header>
 
       <section className="mt-5">
         <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
+        {view.amountLabel && <p className="mt-3 text-xs text-gray-500">{view.amountLabel}</p>}
         <p className="mt-3 break-words text-[30px] font-bold tracking-normal">{view.amount}</p>
       </section>
 
@@ -146,6 +148,7 @@ function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkRecei
       <div className="relative isolate overflow-hidden rounded-[28px] bg-white p-5 shadow-sm dark:bg-[#111216]">
         <ReceiptWatermark receipt={receipt}/>
         <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
+        {view.amountLabel && <p className="mt-4 text-xs text-gray-500">{view.amountLabel}</p>}
         <p className="mt-8 text-[32px] font-bold tracking-normal text-gray-950 dark:text-white">{view.amount}</p>
         <dl className="mt-7 divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/10 dark:border-white/10">
           {[...view.rows, { label: 'Status', value: receipt.status || 'confirmed' }].map(row => (

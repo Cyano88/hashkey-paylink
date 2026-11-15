@@ -6,7 +6,7 @@ import type {MarketplaceStore} from '../marketplace/repository.js'
 import type {PocketActivityRow} from '../../src/pocket/lib/pocketSchemas.js'
 import type {SellerIdentityStore} from '../marketplace/seller-identity.js'
 export function marketplaceReceiptActivity(rows:MarketplaceSettlementReceipt[],wallet:string):PocketActivityRow[]{
- return rows.filter(r=>r.settlement!=='bank'&&r.recipient.toLowerCase()===wallet.toLowerCase()).map(r=>({eventId:r.id,txHash:r.transactionHash,chain:'base',payer:r.sender,recipient:r.recipient,merchantName:r.marketplaceName,memo:r.marketplaceName?r.marketplaceName+' - '+(r.kind==='refund'?'Refund':'Payout'):(r.kind==='refund'?'Marketplace refund':'Marketplace payout'),contextLabel:r.marketplaceName?r.marketplaceName+' - '+(r.kind==='refund'?'Refund':'Payout'):(r.kind==='refund'?'Marketplace refund':'Marketplace payout'),activityLabel:r.kind==='refund'?'Refund received':'Payout received',amount:r.amount,assetSymbol:'USDC',ts:r.settledAt,source:'marketplace-'+r.kind,settlementType:'wallet_transfer',direction:'in',paycrestStatus:'confirmed',...(r.kind==='payout'?{marketplaceDebitAmount:r.debitAmount}:{}),feeAmount:r.kind==='refund'?'0':r.networkFee,feeAsset:'USDC',destination:r.recipient}))
+ return rows.filter(r=>r.settlement!=='bank'&&r.recipient.toLowerCase()===wallet.toLowerCase()).map(r=>({eventId:r.id,txHash:r.transactionHash,chain:'base',payer:r.sender,recipient:r.recipient,merchantName:r.marketplaceName,memo:r.marketplaceName?r.marketplaceName+' - '+(r.kind==='refund'?'Refund':'Payout'):(r.kind==='refund'?'Marketplace refund':'Marketplace payout'),contextLabel:r.marketplaceName?r.marketplaceName+' - '+(r.kind==='refund'?'Refund':'Payout'):(r.kind==='refund'?'Marketplace refund':'Marketplace payout'),activityLabel:r.kind==='refund'?'Refund received':'Payout received',amount:r.amount,assetSymbol:'USDC',ts:r.settledAt,receiptAudience:r.kind==='refund'?'payer':r.allocationRole==='platform'?'marketplace':r.allocationRole==='seller'?'seller':undefined,source:'marketplace-'+r.kind,settlementType:'wallet_transfer',direction:'in',paycrestStatus:'confirmed',...(r.kind==='payout'?{marketplaceDebitAmount:r.debitAmount}:{}),feeAmount:r.kind==='refund'?'0':r.networkFee,feeAsset:'USDC',destination:r.recipient}))
 }
 export async function readPocketMarketplaceActivity(owner:string){
  const link=await readCircleLink(circleLinkKey(owner,'base','payment'))
@@ -31,6 +31,6 @@ export function marketplaceBankReceiptActivity(receipts:MarketplaceSettlementRec
   merchantName:r.marketplaceName,memo:'Withdrawal',contextLabel:(r.marketplaceName||'Marketplace')+' - Withdrawal',
   activityLabel:'Withdrawal',amount:r.debitAmount,assetSymbol:'USDC',amountNgn:r.amount,fiatCurrency:'NGN',ts:r.settledAt,
   source:'marketplace_bank',settlementType:'marketplace_bank',direction:'out',paycrestStatus:'confirmed',destination:r.recipient,
-  marketplaceBankFees:r.bankFees,
+  receiptAudience:r.allocationRole==='platform'?'marketplace':r.allocationRole==='seller'?'seller':undefined,marketplaceBankFees:r.bankFees,
  }))
 }

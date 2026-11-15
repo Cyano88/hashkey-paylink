@@ -1,5 +1,5 @@
 import {readReceiptContacts} from './checkout-receipt-contact.js'
-import {readReceiptCheckout,checkoutReceipt,checkoutBillingReceipt} from './checkout-receipts.js'
+import {readReceiptCheckout,checkoutReceipt,checkoutBillingReceipt,fundingAwareCheckoutReceipt} from './checkout-receipts.js'
 import{readDeveloperReceiptSettings}from'./developer-receipt-settings.js'
 import {createHash,randomUUID} from 'node:crypto'
 import {hasRenderDurableStore,readDurableJson,mutateDurableJson} from './render-durable-store.js'
@@ -65,13 +65,13 @@ export async function reconcileCheckoutReceiptEmails(){
  await drainCheckoutReceiptEmails()
 }
 
-const contactDefaults={contacts:readReceiptContacts,checkout:readReceiptCheckout,settings:readDeveloperReceiptSettings,queue:queueCheckoutReceiptEmail}
+const contactDefaults={receipt:fundingAwareCheckoutReceipt,contacts:readReceiptContacts,checkout:readReceiptCheckout,settings:readDeveloperReceiptSettings,queue:queueCheckoutReceiptEmail}
 export async function reconcileReceiptContacts(d=contactDefaults){
  for(const contact of Object.values(await d.contacts())){
   try{
    const record=await d.checkout(contact.checkoutId)
    if(!record||record.partnerId!==contact.projectId)continue
-   const receipt=checkoutReceipt(record),settings=await d.settings(record.partnerId)
+   const receipt=d.receipt?await d.receipt(record):checkoutReceipt(record),settings=await d.settings(record.partnerId)
    if(!receipt||receipt.status!=='confirmed'||!settings||contact.createdAt<Date.parse(settings.enabledAt!)||Date.parse(record.createdAt)<Date.parse(settings.enabledAt!))continue
    if(receipt.chain!==contact.network||(receipt.chain==='solana'?receipt.payer!==contact.payer:receipt.payer.toLowerCase()!==contact.payer.toLowerCase()))continue
    await d.queue(contact.email,checkoutBillingReceipt(receipt,record.partnerId,settings))

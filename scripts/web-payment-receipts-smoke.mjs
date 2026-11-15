@@ -11,7 +11,7 @@ for(const direction of ['in','out']){
  const row=pocketStockNoticeActivity(enriched,direction==='in'?p.recipient:p.payer)[0],receipt=pocketActivityReceipt(row),view=paymentReceiptView(receipt)
  assert.equal(row.merchantImageUrl,p.merchantImageUrl);assert.equal(row.merchantName,'Lunchroom');assert.equal(row.paymentMethod,'wallet')
  assert.equal(receipt.type,direction==='in'?'money_in':'money_out');assert.equal(view.badge,'Web payment');assert.equal(view.rows.find(r=>r.label==='Direction').value,direction==='in'?'Received':'Sent');assert.equal(view.amount,'1.50 USDT');assert.equal(view.reference,p.id)
- assert.equal(view.rows.find(r=>r.label==='Merchant').value,'Lunchroom');assert.equal(view.rows.find(r=>r.label===(direction==='in'?'From':'To')).value,direction==='in'?p.payer:p.recipient)
+ assert.equal(view.rows.find(r=>r.label===(direction==='in'?'Business':'Paid to')).value,'Lunchroom');assert.equal(view.rows.find(r=>r.label===(direction==='in'?'From':'To')).value,direction==='in'?p.payer:p.recipient)
  assert(!view.rows.some(r=>['Destination','Amount & narration','Fee'].includes(r.label)))
  for(const patch of [{status:'submitted'},{owner:'stranger',merchantOwner:'stranger'},{amount:'2'},{token:'wrong'},{payer:'wrong'},{recipient:'wrong'},{hash:'wrong'},{merchantId:'direct-xpay'}])assert.equal(withWebPaymentDetails([n],owner,[{...p,...patch}])[0].webPayment,undefined)
  assert.equal(withWebPaymentDetails([n],'stranger',[p])[0].webPayment,undefined)

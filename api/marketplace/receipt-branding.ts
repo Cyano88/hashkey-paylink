@@ -8,3 +8,8 @@ export async function marketplaceReceiptNames():Promise<Record<string,string>>{
   return name?[[id,name]]:[]
  }))
 }
+
+export async function marketplaceReceiptBrands():Promise<Record<string,{logoUrl?:string}>>{
+ const store=await readDurableJson<{projects:Record<string,{brandImageUrl?:string}>}>((process.env.DEVELOPER_PROJECT_STORE_KEY??'hashpaylink:developer-projects:v1').trim())
+ return Object.fromEntries(Object.entries(store?.projects||{}).map(([id,p])=>[id,{logoUrl:p.brandImageUrl}]))
+}

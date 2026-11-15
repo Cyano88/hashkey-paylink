@@ -11,7 +11,7 @@ assert.equal(view.rows.find(r=>r.label==='Fee deducted').value,'0.00 USDC')
 assert.equal(pocketActivityReceipt({...row,merchantName:undefined}).marketplaceName,'Example Store','existing server context remains supported')
 assert.equal(pocketActivityReceipt({...row,merchantName:undefined,contextLabel:'Marketplace refund'}).marketplaceName,undefined)
 const payout=paymentReceiptView(pocketActivityReceipt({...row,source:'marketplace-payout',amount:'0.016403',feeAmount:'0.003597',contextLabel:'Example Store - Payout'}))
-assert.equal(payout.badge,'Payout');assert.ok(payout.rows.some(r=>r.label==='Withdrawal fee'))
+assert.equal(payout.badge,'Withdrawal');assert.ok(payout.rows.some(r=>r.label==='Withdrawal fee'))
 const generic={...receipt,source:'custom-transfer',marketplaceName:undefined}
 assert.ok(!paymentReceiptView(generic).rows.some(r=>r.label==='Destination'),'duplicate generic destination omitted')
 assert.ok(paymentReceiptView({...generic,destination:'Other destination'}).rows.some(r=>r.label==='Destination'),'distinct destination retained')

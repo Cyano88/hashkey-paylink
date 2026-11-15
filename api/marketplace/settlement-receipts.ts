@@ -4,7 +4,7 @@ import {formatUnits,getAddress} from 'viem'
 import type {MarketplaceStore} from './repository.js'
 import {marketplaceBankReceipt} from './bank-receipt.js'
 import {marketplaceWalletReceipt} from './wallet-receipt.js'
-export type MarketplaceSettlementReceipt={allocationRole?:'seller'|'platform';bankFees?:PaylinkReceipt['marketplaceBankFees'];settlement?:'bank';sellerId?:string;currency?:'NGN';providerFee?:string;commission?:string;id:string;projectId:string;marketplaceName?:string;paymentId:string;kind:'refund'|'payout';recipient:string;sender:string;amount:string;debitAmount:string;networkFee:string;feePayer:'marketplace'|'seller'|'platform';transactionHash:string;settledAt:number}
+export type MarketplaceSettlementReceipt={asset?:string;network?:string;marketplaceLogoUrl?:string;supportEmail?:string;timeZone?:string;allocationRole?:'seller'|'platform';bankFees?:PaylinkReceipt['marketplaceBankFees'];settlement?:'bank';sellerId?:string;currency?:string;providerFee?:string;commission?:string;id:string;projectId:string;marketplaceName?:string;paymentId:string;kind:'refund'|'payout';recipient:string;sender:string;amount:string;debitAmount:string;networkFee:string;feePayer:'marketplace'|'seller'|'platform';transactionHash:string;settledAt:number}
 const hash=/^0x[0-9a-f]{64}$/i
 /** Read-only projection from finalized accounting evidence. Never a send instruction. */
 export function marketplaceSettlementReceipts(store:MarketplaceStore|undefined):MarketplaceSettlementReceipt[]{

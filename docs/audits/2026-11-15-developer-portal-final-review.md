@@ -23,3 +23,12 @@ Updated stale release/operations documentation: Marketplace is selectable for ea
 The previously completed real Lunchroom cash-balance NGN checkout, signed webhook, merchant order, Pocket activity and successful receipt remain documented in 2026-11-15-lunchroom-pixel-acceptance.md. The internal Marketplace bank withdrawal also completed. Receipt polish is deployed in 44ed5f81e and 9c1197a22 and installed on Pixel: matching bank icons, Marketplace withdrawal title, received amount shown once and a transaction row only when distinct from the receipt reference.
 
 This review found no new failing product behavior in the checked portal flows. It does not establish all payment rails, production summary inbox delivery or general external Marketplace activation. Those must not be inferred from local fixture passes or the single controlled live payment.
+
+
+## Authenticated follow-up and receipt presentation
+
+Authenticated Chrome review subsequently verified Lunchroom preferences and Marketplace balances. Summaries remain off; no subscription preferences were changed. Live bank quote/execution gates remain off. An expired, unsubmitted Lunchroom attempt incorrectly displayed Processing; commits b3ff6a9c8 and a9cf24d4e corrected the evidence-bound status projection. The live refresh showed that attempt Expired while the completed order remained Paid. No payment or ledger mutation was needed.
+
+The receipt presentation follow-up introduces shared payment icons and email/PDF hierarchy, recipient-specific details, configurable daily/weekly activity summaries, explicit current-balance timestamps, and separate currency totals. Funding summaries are distinct from sales; funding receipts require bound payment and completed delivery evidence. Payer documents omit merchant settlement data. Existing frozen attachments and email deduplication are retained. No historical mail is resent.
+
+Local verification: focused TypeScript (57 files), web source build, receipt policy, all eight checkout networks, email/PDF/idempotency checks, Marketplace audience and notification checks, summary policy/delivery/browser tests, and scoped funding/currency/icon fixtures. Four generated PDFs were rendered and inspected; an extra footer page was fixed. The four example emails were checked at 320/390/1280 pixels with no horizontal overflow. These are local fixtures, not inbox delivery or additional live payments.

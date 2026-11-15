@@ -1,19 +1,13 @@
-import PDFDocument from 'pdfkit'
-import type {MarketplaceSettlementReceipt} from './settlement-receipts.js'
-const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
+﻿import type {MarketplaceSettlementReceipt} from './settlement-receipts.js'
+import {receiptPresentationEmail,receiptPresentationPdf,type ReceiptPresentation} from '../receipt-presentation.js'
+import {receiptMoney} from '../../src/lib/receiptIdentity.js'
 export function marketplaceReceiptDetails(r:MarketplaceSettlementReceipt){
- return [...(r.marketplaceName?[['Marketplace',r.marketplaceName]]:[]),['Status','Completed'],['Amount received',r.amount+' '+(r.currency??'USDC')],...(r.kind==='payout'?[...(r.settlement==='bank'?[['Withdrawal commission',(r.commission??'0')+' USDC'],['Provider fee',(r.providerFee??'0')+' USDC'],['Network fee',r.networkFee+' USDC']]:[['Withdrawal fee',r.networkFee+' USDC']]),['Total balance debit',r.debitAmount+' USDC']]:[['Fee deducted from refund','0 USDC']]),['Network','Base'],[r.settlement==='bank'?'Bank account':'Recipient wallet',r.recipient],['Date',new Date(r.settledAt).toISOString()],['Transaction',r.transactionHash],['Receipt reference',r.id]]
+ const asset=r.asset||'USDC',money=(value:string)=>receiptMoney(value,asset)
+ return [...(r.marketplaceName?[['Marketplace',r.marketplaceName]]:[]),...(r.kind==='payout'?[...(r.allocationRole?[['Balance source',r.allocationRole==='platform'?'Platform earnings':'Seller earnings']]:[]),['Amount debited',money(r.debitAmount)],...(r.settlement==='bank'?[['Withdrawal commission',money(r.commission??'0')],['Provider fee',money(r.providerFee??'0')],['Network fee',money(r.networkFee)]]:[['Withdrawal fee',money(r.networkFee)]])]:[['Fee deducted from refund',money('0')]]),['Payment type',r.kind==='refund'?'Refund':r.settlement==='bank'?'Bank withdrawal':'Wallet withdrawal'],['Network',r.network||'Base'],[r.settlement==='bank'?'Recipient':'Recipient wallet',r.recipient]]
 }
-export function marketplaceReceiptEmail(r:MarketplaceSettlementReceipt){
- const title=r.kind==='refund'?'Marketplace refund receipt':'Marketplace payout receipt',details=marketplaceReceiptDetails(r),url='https://basescan.org/tx/'+r.transactionHash
- return {subject:(r.marketplaceName?r.marketplaceName+' - '+(r.kind==='refund'?'Refund receipt':'Payout receipt'):title)+' - '+r.amount+' '+(r.currency??'USDC'),text:title+'\n\n'+details.map(([k,v])=>k+': '+v).join('\n')+'\n\nView transaction: '+url+'\nYour PDF receipt is attached.\n\nHash PayLink',html:'<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17181c"><main style="max-width:560px;margin:auto;padding:24px"><p>Hash PayLink</p><h1>'+esc(title)+'</h1><h2>'+esc(r.amount)+' '+(r.currency??'USDC')+' received</h2><table style="width:100%;font-size:14px">'+details.map(([k,v])=>'<tr><td style="padding:8px;vertical-align:top">'+esc(k)+'</td><td style="padding:8px;overflow-wrap:anywhere">'+esc(v)+'</td></tr>').join('')+'</table><p><a href="'+url+'">View transaction</a></p><p>Your PDF receipt is attached.</p></main></body></html>'}
+export function marketplaceReceiptPresentation(r:MarketplaceSettlementReceipt):ReceiptPresentation{
+ const refund=r.kind==='refund',title=refund?'Marketplace refund':'Marketplace withdrawal'
+ return {brandName:r.marketplaceName||'Hash PayLink',logoUrl:r.marketplaceLogoUrl,icon:refund?'refund':r.settlement==='bank'?'bank_transfer':'wallet',title,headline:refund?'Your refund was received':'Your withdrawal was received',amount:receiptMoney(r.amount,r.currency||r.asset||'USDC'),date:new Intl.DateTimeFormat('en-GB',{timeZone:r.timeZone||'UTC',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(r.settledAt),sections:[{title:'Transaction details',rows:marketplaceReceiptDetails(r) as Array<[string,string]>}],reference:r.id,url:'https://app.hashpaylink.com/home/activity',linkLabel:'View in Pocket',supportEmail:r.supportEmail}
 }
-export function marketplaceReceiptPdf(r:MarketplaceSettlementReceipt):Promise<Buffer>{
- return new Promise((resolve,reject)=>{
-  const doc=new PDFDocument({size:'A4',margin:48}),chunks:Buffer[]=[]
-  doc.on('data',chunk=>chunks.push(chunk));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject)
-  doc.fontSize(16).text('Hash PayLink').moveDown().fontSize(24).text(r.kind==='refund'?'Marketplace refund':'Marketplace payout').moveDown().fontSize(30).text(r.amount+' '+(r.currency??'USDC')).fontSize(12).text('Received successfully').moveDown(2)
-  for(const[label,value]of marketplaceReceiptDetails(r)){doc.fontSize(9).fillColor('#667085').text(label.toUpperCase()).moveDown(0.25);doc.fontSize(11).fillColor('#17181c').text(value,{width:490}).moveDown(0.8)}
-  doc.end()
- })
-}
+export function marketplaceReceiptEmail(r:MarketplaceSettlementReceipt){return {subject:(r.marketplaceName||'Hash PayLink')+' - '+(r.kind==='refund'?'Refund receipt':'Withdrawal receipt'),...receiptPresentationEmail(marketplaceReceiptPresentation(r))}}
+export function marketplaceReceiptPdf(r:MarketplaceSettlementReceipt):Promise<Buffer>{const view=marketplaceReceiptPresentation(r);return receiptPresentationPdf({...view,sections:[...view.sections,{title:'Transaction reference',rows:[['Transaction',r.transactionHash],...(r.bankFees?.quoteId?[['Quote reference',r.bankFees.quoteId] as [string,string]]:[])]}]})}

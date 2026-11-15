@@ -7,6 +7,7 @@ import {findRegisteredPaymentReceipt} from './event-registry.js'
 import type {BillingReceipt} from './billing-document.js'
 import type {ReceiptEmailSettings} from '../src/lib/receiptEmailSettings.js'
 
+export type FundingReceiptEvidence={id:string;partnerId:string;checkoutId:string;targetWallet:string;depositAddress:string;amount:string;observation?:{status:string;bridgeStatus:string;paymentTransaction?:string;bridgeTransaction?:string;observedAt:string}}
 export type ReceiptCheckout = CheckoutRecord | StockCheckout | BscCheckout
 export const checkoutNetworkNames:Record<string,string>={base:'Base',arc:'Arc',arbitrum:'Arbitrum',ethereum:'Ethereum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain'}
 export async function readReceiptCheckout(id:string):Promise<ReceiptCheckout|null>{
@@ -15,12 +16,18 @@ export async function readReceiptCheckout(id:string):Promise<ReceiptCheckout|nul
  return readVerifiedHostedCheckoutRecord(id,{allowExpiredForReconciliation:true})
 }
 /** Only integrity-checked server records may enter this adapter. Settlement is not the payer's method. */
-export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined{
+export function checkoutReceipt(record:ReceiptCheckout,funding?:FundingReceiptEvidence):PaylinkReceipt|undefined{
  const p=record.payment
  if(!p||record.checkoutMode==='agentic')return
  if('feePayer' in record&&record.feePayer==='payer'&&(!('payerFees' in p)||!p.payerFees))return
  const network=p.network||record.network
  if(!checkoutNetworkNames[network]||!Number.isFinite(Date.parse(p.confirmedAt)))return
+ if('providerFunding' in record&&record.providerFunding){
+  const route=record.providerFunding,observation=funding?.observation
+  const bound=funding?.id===route.requestId&&funding.partnerId===record.partnerId&&funding.checkoutId===record.id&&funding.targetWallet.toLowerCase()===route.targetWallet.toLowerCase()&&funding.depositAddress.toLowerCase()===route.depositAddress.toLowerCase()&&funding.amount===record.amount
+  const delivered=p.status==='paid'&&bound&&observation?.status==='funded'&&observation.bridgeStatus==='complete'&&observation.paymentTransaction?.toLowerCase()===p.txHash.toLowerCase()&&/^0x[a-f0-9]{64}$/i.test(observation.bridgeTransaction||'')
+  return {type:'money_out',receiptId:record.id,receiptHash:p.txHash,eventId:record.id,txHash:p.txHash,title:'Polymarket funding',status:p.status==='failed'?'failed':delivered?'confirmed':'pending',chain:network,payer:p.payer,memo:record.title,amount:p.amount,asset:record.asset||'USDC',createdAt:Date.parse(p.confirmedAt),paymentMethod:'wallet',source:'polymarket-funding',settlementType:'service_funding',merchantId:record.id,recipient:'Polymarket',destination:route.targetWallet,referenceId:record.id,brandName:record.merchantName,brandImageUrl:record.brandImageUrl,brandKind:'partner',fundingDetails:{account:route.targetWallet,requestId:route.requestId,...(delivered?{deliveryTransaction:observation!.bridgeTransaction}: {})}}
+ }
  const local='settlement' in record?record.settlement:undefined
  const delivered=!local||('payout' in record&&['validated','settled'].includes(record.payout?.status||''))
  const payoutStatus='payout' in record?record.payout?.status:undefined
@@ -36,16 +43,21 @@ export function checkoutReceipt(record:ReceiptCheckout):PaylinkReceipt|undefined
   referenceId:receiptId,brandName:record.merchantName,brandImageUrl:record.brandImageUrl,brandKind:'partner',
   ...(local?{merchantSettlementAmount:local.netAmountNgn,amountNgn:local.amountNgn,fiatCurrency:local.mode==='ugx'?'UGX' as const:'NGN' as const,bankSettlementStatus:payoutStatus||'processing'}:{})}
 }
-const readers={checkout:readReceiptCheckout,stockReceipt:readStockCheckoutReceipt,bscReceipt:readBscCheckoutByReceipt,registered:findRegisteredPaymentReceipt}
+export async function fundingAwareCheckoutReceipt(record:ReceiptCheckout){
+ const funding='providerFunding' in record&&record.providerFunding?await import('./polymarket-funding-checkouts.js').then(m=>m.readVerifiedFundingActivityRecords([record.providerFunding!.requestId],record.partnerId)).then(records=>records.get(record.providerFunding!.requestId)):undefined
+ return checkoutReceipt(record,funding)
+}
+const readers={receipt:fundingAwareCheckoutReceipt,checkout:readReceiptCheckout,stockReceipt:readStockCheckoutReceipt,bscReceipt:readBscCheckoutByReceipt,registered:findRegisteredPaymentReceipt}
 async function readCanonicalCheckoutReceipt(id:string,d=readers):Promise<PaylinkReceipt|undefined>{
  if(!/^[a-zA-Z0-9_.-]{8,1024}$/.test(id))return
- if(/^chk[xb]?_/.test(id)){const record=await d.checkout(id);return record?checkoutReceipt(record):undefined}
+ const convert=(record:ReceiptCheckout)=>d.receipt?d.receipt(record):checkoutReceipt(record)
+ if(/^chk[xb]?_/.test(id)){const record=await d.checkout(id);return record?await convert(record):undefined}
  const stock=await d.stockReceipt(id)
- if(stock?.merchantId){const record=await d.checkout(stock.merchantId);return record?checkoutReceipt(record):undefined}
- const bsc=await d.bscReceipt(id);if(bsc)return checkoutReceipt(bsc)
+ if(stock?.merchantId){const record=await d.checkout(stock.merchantId);return record?await convert(record):undefined}
+ const bsc=await d.bscReceipt(id);if(bsc)return convert(bsc)
  const registered=await d.registered(id)
  if(registered?.source!=='hosted-checkout'||!registered.merchantId)return
- const record=await d.checkout(registered.merchantId),receipt=record?checkoutReceipt(record):undefined
+ const record=await d.checkout(registered.merchantId),receipt=record?await convert(record):undefined
  if(!receipt||receipt.chain!==registered.chain||(receipt.chain==='solana'?receipt.txHash!==registered.txHash:receipt.txHash.toLowerCase()!==registered.txHash.toLowerCase()))return
  return receipt
 }
@@ -62,8 +74,8 @@ export function checkoutBillingReceipt(receipt:PaylinkReceipt,projectId?:string,
  if(receipt.status!=='confirmed')throw Error('A confirmed payment is required for a receipt.')
  const network=checkoutNetworkNames[receipt.chain]
  if(!network)throw Error('Receipt network is unavailable.')
- return {id:receipt.receiptId,projectId,merchant:receipt.recipient||receipt.brandName||'Merchant',merchantLogoUrl:receipt.brandImageUrl,
-  ...(receipt.payerFees?{payerFees:receipt.payerFees}:{}),pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
+ return {id:receipt.receiptId,projectId,merchant:receipt.brandName||receipt.recipient||'Merchant',merchantLogoUrl:receipt.brandImageUrl,
+  ...(receipt.source==='polymarket-funding'?{purpose:'funding' as const,fundingAccount:receipt.fundingDetails?.account}:{}),...(receipt.payerFees?{payerFees:receipt.payerFees}:{}),pricing:receipt.pricing,description:receipt.memo,amount:receipt.amount,asset:receipt.asset,network,paymentMethod:receipt.paymentMethod||'wallet',paidAt:new Date(receipt.createdAt).toISOString(),
   supportEmail:settings?.supportEmail,timeZone:settings?.timeZone||'UTC',receiptUrl:'https://app.hashpaylink.com/receipt/'+encodeURIComponent(receipt.receiptId),
   }
 }

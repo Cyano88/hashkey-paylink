@@ -4,6 +4,7 @@ import {readDurableJson,mutateDurableJson,queryDurablePostgres,hasRenderDurableS
 import {activeReceiptSettings} from './developer-receipt-settings.js'
 import {ensureDeveloperActivitySchema} from './developer-activity-store.js'
 import {readReceiptCheckout,checkoutReceipt,type ReceiptCheckout} from './checkout-receipts.js'
+import {readVerifiedFundingActivityRecords} from './polymarket-funding-checkouts.js'
 import {readVerifiedCheckoutActivityRecords} from './hosted-checkouts.js'
 import {queuePreparedReceiptEmail,type ReceiptSummaryGuard} from './checkout-receipt-emails.js'
 import {nextReceiptSummaryPeriod} from './receipt-summary-periods.js'
@@ -14,9 +15,9 @@ import type {ReceiptEmailSettings} from '../src/lib/receiptEmailSettings.js'
 import type {SellerIdentityStore} from './marketplace/seller-identity.js'
 import type {MarketplaceStore} from './marketplace/repository.js'
 
-type Project={ownerId:string;name:string;receiptEmails?:ReceiptEmailSettings;removal?:unknown;operationalStatus?:string;checkoutMode?:string;capabilities?:string[]}
+type Project={brandImageUrl?:string;ownerId:string;name:string;receiptEmails?:ReceiptEmailSettings;removal?:unknown;operationalStatus?:string;checkoutMode?:string;capabilities?:string[]}
 type State={projects:Record<string,Project>;links:SellerIdentityStore['links']}
-type Candidate={projectId:string;ownerId:string;sellerId?:string;name:string;preferences:BusinessSummaryPreferences}
+type Candidate={brandImageUrl?:string;projectId:string;ownerId:string;sellerId?:string;name:string;preferences:BusinessSummaryPreferences}
 type Cursors={ends:Record<string,number>}
 const KEY='hashpaylink:receipt-business-summaries:v1'
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -34,7 +35,7 @@ async function verifiedEmail(owner:string){
 export function businessSummaryCandidates(s:State):Candidate[]{
  const result:Candidate[]=[]
  const add=(projectId:string,p:Project,ownerId:string,preferences?:BusinessSummaryPreferences,sellerId?:string)=>{
-  if(preferences?.enabled&&preferences.subscriberId===ownerId&&Number.isFinite(Date.parse(preferences.startedAt||'')))result.push({projectId,name:p.name,ownerId,preferences,...(sellerId?{sellerId}:{})})
+  if(preferences?.enabled&&preferences.subscriberId===ownerId&&Number.isFinite(Date.parse(preferences.startedAt||'')))result.push({projectId,name:p.name,brandImageUrl:p.brandImageUrl,ownerId,preferences,...(sellerId?{sellerId}:{})})
  }
  for(const [id,p] of Object.entries(s.projects)){
   if(!activeReceiptSettings(p))continue
@@ -79,9 +80,15 @@ async function checkouts(projectId:string,from:number,to:number):Promise<Array<{
  }
  return result
 }
+async function fundings(projectId:string,from:number,to:number){
+ await ensureDeveloperActivitySchema()
+ const result=await queryDurablePostgres<{id:string;recordedAt:Date}>(`select record_id as id,min(recorded_at) as "recordedAt" from developer_activity_events where project_id=$1 and environment='live' and product='funding' and event='funding.funded' group by record_id having min(recorded_at)>=$2 and min(recorded_at)<$3`,[projectId,new Date(from),new Date(to)])
+ const records=await readVerifiedFundingActivityRecords(result.rows.map(r=>r.id),projectId)
+ return result.rows.map(row=>{const record=records.get(row.id);if(!record)throw Error('Funding summary evidence unavailable.');return {record,recordedAt:new Date(row.recordedAt).getTime()}})
+}
 const defaults={enabled:()=>hasRenderDurableStore()&&process.env.CHECKOUT_RECEIPT_EMAIL_ENABLED==='true'&&!!(process.env.RECEIPT_FROM_EMAIL||process.env.ALERT_FROM_EMAIL),now:Date.now,state,email:verifiedEmail,
  read:async()=>await readDurableJson<Cursors>(KEY)??{ends:{}},mutate:(fn:(s:Cursors)=>Cursors)=>mutateDurableJson<Cursors>(KEY,s=>fn(s??{ends:{}})),
- marketplace:()=>readDurableJson<MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1'),checkouts,pdf:businessSummaryPdf,
+ marketplace:()=>readDurableJson<MarketplaceStore>('hashpaylink:marketplace-accounting-foundation:v1'),checkouts,fundings,pdf:businessSummaryPdf,
  queue:async(id:string,projectId:string,message:Parameters<typeof queuePreparedReceiptEmail>[2],guard:ReceiptSummaryGuard)=>queuePreparedReceiptEmail(id,projectId,message,undefined,guard)}
 let running=false
 export async function reconcileBusinessReceiptSummaries(d=defaults){
@@ -96,7 +103,7 @@ export async function reconcileBusinessReceiptSummaries(d=defaults){
    const guard=guardFor(c),key=digest(guard),period=nextReceiptSummaryPeriod(c.preferences,now,cursors.ends[key]);if(!period)continue
    try{
     const records=c.sellerId?[]:await d.checkouts(c.projectId,period.from,period.to)
-    const report=businessReceiptReport({...period,projectId:c.projectId,name:c.name,audience:c.sellerId?'seller':'operator',sellerId:c.sellerId,generatedAt:now,marketplace,checkouts:records})
+    const report=businessReceiptReport({...period,projectId:c.projectId,name:c.name,brandImageUrl:c.brandImageUrl,audience:c.sellerId?'seller':'operator',sellerId:c.sellerId,generatedAt:now,marketplace,checkouts:records,fundings:!c.sellerId&&d.fundings?await d.fundings(c.projectId,period.from,period.to):[]})
     if(report.activityCount){
      const to=await d.email(c.ownerId);if(!to)continue
      const pdf=await d.pdf(report),id='business-summary-'+key+'-'+period.to

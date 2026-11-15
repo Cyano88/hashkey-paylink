@@ -1,9 +1,10 @@
 import {formatUnits,parseUnits} from 'viem'
+import type {FundingReceiptEvidence} from './checkout-receipts.js'
 import {checkoutReceipt,type ReceiptCheckout} from './checkout-receipts.js'
 import {marketplaceSettlementReceipts} from './marketplace/settlement-receipts.js'
 import type {MarketplaceStore} from './marketplace/repository.js'
-export type BusinessReportInput={projectId:string;name:string;audience:'operator'|'seller';sellerId?:string;from:number;to:number;generatedAt:number;timeZone:string;frequency:'daily'|'weekly';marketplace?:MarketplaceStore;checkouts:Array<{record:ReceiptCheckout;recordedAt:number}>}
-export type BusinessReport=Omit<BusinessReportInput,'marketplace'|'checkouts'>&{activityCount:number;pendingOperations:number;metrics:Array<{section:'period'|'current';label:string;amount:string;asset:string;network:string}>}
+export type BusinessReportInput={fundings?:Array<{record:FundingReceiptEvidence&{observation?:FundingReceiptEvidence['observation']&{network?:string}};recordedAt:number}>;brandImageUrl?:string;projectId:string;name:string;audience:'operator'|'seller';sellerId?:string;from:number;to:number;generatedAt:number;timeZone:string;frequency:'daily'|'weekly';marketplace?:MarketplaceStore;checkouts:Array<{record:ReceiptCheckout;recordedAt:number}>}
+export type BusinessReport=Omit<BusinessReportInput,'marketplace'|'checkouts'|'fundings'>&{activityCount:number;pendingOperations:number;metrics:Array<{section:'period'|'current';label:string;amount:string;asset:string;network:string}>}
 /** Report only canonical verified outcomes. Current balances are explicitly a
  * generation-time snapshot, not an invented historical balance at period end. */
 export function businessReceiptReport(input:BusinessReportInput):BusinessReport{
@@ -15,6 +16,11 @@ export function businessReceiptReport(input:BusinessReportInput):BusinessReport{
   const key=JSON.stringify([section,label,asset,network]),row=buckets.get(key)||{section,label,asset,network,units:0n};row.units+=parseUnits(value,18);buckets.set(key,row)
  }
  const inPeriod=(time:number)=>Number.isFinite(time)&&time>=input.from&&time<input.to
+ if(input.audience==='operator')for(const {record,recordedAt} of input.fundings||[]){
+  if(record.partnerId!==input.projectId||!inPeriod(recordedAt)||events.has('funding:'+record.id))continue
+  if(!record.observation?.network||record.observation?.status!=='funded'||record.observation.bridgeStatus!=='complete'||!/^0x[a-f0-9]{64}$/i.test(record.observation.paymentTransaction||'')||!/^0x[a-f0-9]{64}$/i.test(record.observation.bridgeTransaction||''))throw Error('Funding summary outcome requires review.')
+  events.add('funding:'+record.id);add('Account funding processed (not sales)',record.amount,'USDC',record.observation.network)
+ }
  const books=input.marketplace?.books.filter(b=>b.plan.projectId===input.projectId)??[]
  const bound=new Set(books.map(b=>b.collectionCheckout?.checkoutId).filter(Boolean))
  if(input.audience==='operator')for(const {record,recordedAt} of input.checkouts){
@@ -69,6 +75,6 @@ export function businessReceiptReport(input:BusinessReportInput):BusinessReport{
   if(r.settlement==='bank'){add(prefix+'withdrawal commission',r.commission||'0');add(prefix+'withdrawal provider fees',r.providerFee||'0')}
   add(prefix+'withdrawal network fees',r.networkFee)
  }
- const {marketplace:_,checkouts:__,...context}=input
+ const {marketplace:_,checkouts:__,fundings:___,...context}=input
  return {...context,activityCount:events.size,pendingOperations:pending.size,metrics:[...buckets.values()].map(({units,...r})=>({...r,amount:formatUnits(units,18)}))}
 }
