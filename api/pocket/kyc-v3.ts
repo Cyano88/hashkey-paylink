@@ -1,3 +1,4 @@
+import {NIN_FIRST_POLICY,isBasicKycJob,basicKycJob,advancedKycJob,advancedBasicJob} from './kyc-tiers.js'
 import {PERSONAL_BANK_DAILY_USD} from '../../src/lib/purchaseLimits.js'
 import {ugandaBasicInput,submitUgandaBasic,ugandaBasicResult} from './smile-uganda-basic.js'
 import {BASIC_DAILY_NGN,advancedDailyNgn,kycLevelFromJobs} from './kyc-level.js'
@@ -8,7 +9,7 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {smileConfig,type SmileConfig,type SmileEnvironment} from './smile-provider.js'
 import {smileV3Token,smileV3Status,smileV3Replay,assertSmileV3Policy,smileIdentityMatchKey,validV3Signature,v3Failure as fail} from './smile-v3.js'
 type Method='bvn'|'nin'|'government_id'|'national_id'
-type Job={cancelledAt?:number;declaredName?:string;userId?:string;resultCode?:string;country?:'NG'|'UG';supersededBy?:string;replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;firstName?:string;lastName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
+type Job={tierPolicy?:string;tier?:'basic'|'advanced';basicJobId?:string;cancelledAt?:number;declaredName?:string;userId?:string;resultCode?:string;country?:'NG'|'UG';supersededBy?:string;replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;firstName?:string;lastName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
 type Store={jobs:Job[]}
 const key=(owner:string,environment:SmileEnvironment)=>'hashpaylink:pocket-kyc:v3:'+environment+':'+createHash('sha256').update(owner).digest('hex')
 const indexKey=(id:string)=>'hashpaylink:pocket-kyc-job:v3:'+id
@@ -19,14 +20,14 @@ export function v3Policy(method:Method,country:'NG'|'UG'='NG'){
  const types=document?['PASSPORT','DRIVERS_LICENSE','IDENTITY_CARD']:[method==='bvn'?'BVN':'NIN_V2']
  return{country,countryName:country==='UG'?'Uganda':'Nigeria',provider:'smile',policyVersion:country.toLowerCase()+'-smile-'+method+'-api-v3',method,product:document?'doc_verification':'biometric_kyc',apiProduct:document?'document_verification':'biometric_kyc',idSelection:{[country]:types} as Record<string,string[]>,consentRequired:{[country]:[]},previewBVNMFA:false}
 }
-function jobPolicy(j?:Job){const policy=v3Policy(j?.method||'bvn',j?.country||'NG');if(j?.idTypes)policy.idSelection[policy.country]=j.idTypes;else if(j?.method==='government_id'&&!j.country)policy.idSelection.NG=['PASSPORT','DRIVERS_LICENSE','NATIONAL_ID'];return policy}
-const isBasic=(j:Job)=>j.country==='UG'?['government_id','national_id'].includes(j.method):j.method==='bvn'
-const bvn=(jobs:Job[])=>jobs.find(j=>isBasic(j)&&j.status==='passed'&&j.identityMatch)
-const complete=(jobs:Job[])=>jobs.find(j=>j.country!=='UG'&&j.method!=='bvn'&&j.status==='passed'&&j.identityMatch&&jobs.some(b=>b.id===j.bvnJobId&&b.method==='bvn'&&b.status==='passed'&&b.identityMatch===j.identityMatch))
-const correctable=(j?:Job)=>j?.method==='bvn'&&j.status==='review'&&j.failureReason==='submitted_name_mismatch'&&!j.supersededBy
+function jobPolicy(j?:Job){const policy=v3Policy(j?.method||'nin',j?.country||'NG');if(j?.idTypes)policy.idSelection[policy.country]=j.idTypes;else if(j?.method==='government_id'&&!j.country)policy.idSelection.NG=['PASSPORT','DRIVERS_LICENSE','NATIONAL_ID'];return policy}
+const isBasic=isBasicKycJob
+const bvn=(jobs:Job[])=>basicKycJob(jobs) as Job|undefined
+const complete=(jobs:Job[])=>advancedKycJob(jobs) as Job|undefined
+const correctable=(j?:Job)=>!!j&&['bvn','nin'].includes(j.method)&&j.status==='review'&&j.failureReason==='submitted_name_mismatch'&&!j.supersededBy
 const resumable=(j?:Job)=>!!j&&!j.cancelledAt&&j.method!=='national_id'&&!j.providerJobId&&!j.uploadReportedAt&&['pending','review'].includes(j.status)
-const changeable=(j?:Job)=>!!j&&resumable(j)&&j.status==='pending'&&(j.country||'NG')==='NG'&&['nin','government_id'].includes(j.method)&&!j.submissionHint
-function publicFlow(jobs:Job[],environment:SmileEnvironment){const j=jobs.at(-1),first=bvn(jobs),done=complete(jobs);return{environment,apiVersion:3,paymentLevel:environment==='production'?(kycLevelFromJobs(jobs).paymentLevel||'none'):'none',basicDailyLimitNgn:BASIC_DAILY_NGN,advancedDailyLimitNgn:advancedDailyNgn(),advancedDailyLimitUsd:PERSONAL_BANK_DAILY_USD.advanced,basicDailyLimitUsd:PERSONAL_BANK_DAILY_USD.basic,level:environment==='production'?(done?'advanced':first?'basic':'none'):'none',status:j?.status||'not_started',jobId:j?.id||null,verification:jobPolicy(j),verified:environment==='production'&&!!done,canResume:resumable(j),canChangeMethod:changeable(j),canCorrectNames:correctable(j),uploadReported:!!j?.uploadReportedAt,failureReason:j?.failureReason||null,workflow:{basicPassed:!!first,bvnPassed:!!first&&first.method==='bvn',complete:!!done,needsAdditional:first?.country!=='UG'&&!!first&&!done&&(!j||j.method==='bvn'||j.status==='failed'),methods:first?.country==='UG'?[]:['nin','government_id']}}}
+const changeable=(j?:Job)=>!!j&&!j.tierPolicy&&resumable(j)&&j.status==='pending'&&(j.country||'NG')==='NG'&&['nin','government_id'].includes(j.method)&&!j.submissionHint
+function publicFlow(jobs:Job[],environment:SmileEnvironment){const j=jobs.at(-1),first=bvn(jobs),done=complete(jobs);return{environment,apiVersion:3,paymentLevel:environment==='production'?(kycLevelFromJobs(jobs).paymentLevel||'none'):'none',basicDailyLimitNgn:BASIC_DAILY_NGN,advancedDailyLimitNgn:advancedDailyNgn(),advancedDailyLimitUsd:PERSONAL_BANK_DAILY_USD.advanced,basicDailyLimitUsd:PERSONAL_BANK_DAILY_USD.basic,level:environment==='production'?(done?'advanced':first?'basic':'none'):'none',status:j?.status||'not_started',jobId:j?.id||null,verification:jobPolicy(j),verified:environment==='production'&&!!done,canResume:resumable(j),canChangeMethod:changeable(j),canCorrectNames:correctable(j),uploadReported:!!j?.uploadReportedAt,failureReason:j?.failureReason||null,workflow:{basicMethod:first?.method||(j&&!j.tierPolicy?'bvn':'nin'),basicPassed:!!first,bvnPassed:!!first&&first.method==='bvn',complete:!!done,needsAdditional:first?.country!=='UG'&&!!first&&!done&&(!j||isBasic(j)||j.status==='failed'),methods:first?.country==='UG'?[]:first&&!first.tierPolicy?['nin','government_id']:['bvn']}}}
 export async function requireV3ProductionKyc(owner:string){const r=await readDurableJson<Store>(key(owner,'production'));const j=complete(r?.jobs||[]);if(!j?.legalName)throw fail('Complete identity verification before setting up your XPay.',403);return j.legalName}
 function evidence(config:SmileConfig,fields:Record<string,unknown>){
  const legalName=String(fields.full_name||[fields.first_name,fields.other_names,fields.last_name].filter(x=>typeof x==='string').join(' ')).replace(/\s+/g,' ').trim().slice(0,160)
@@ -91,7 +92,7 @@ export default async function pocketKycV3(req:Request,res:Response){
   if(latest && (latest.country||'NG')!==country && (latest.status!=='failed'||latest.uploadReportedAt))throw fail('Finish your existing verification before changing country.',409)
   if(action==='start'&&latest?.status==='failed'&&!['session_failed','provider_error','session_cancelled'].includes(latest.failureReason||''))throw fail('Contact support to review your verification before trying again.',409)
   if(action==='correct_names'&&(!correctable(latest)||req.body.jobId!==latest?.id))throw fail('This verification is not eligible for name correction.',409)
-  const method=action==='correct_names'?'bvn':action==='resume'?latest?.method:req.body.method||(country==='UG'?'national_id':'bvn')
+  const method=action==='correct_names'?latest?.method:action==='resume'?latest?.method:req.body.method||(country==='UG'?'national_id':'nin')
   if(!['bvn','nin','government_id','national_id'].includes(method))throw fail('Choose a supported verification method.',400)
   if(action==='resume'&&(!resumable(latest)||req.body.method!==undefined&&req.body.method!==method))throw fail('Check progress before continuing verification.',409)
   const basicInput=method==='national_id'?ugandaBasicInput(req.body.identity):undefined
@@ -105,9 +106,16 @@ export default async function pocketKycV3(req:Request,res:Response){
   await mutateDurableJson<Store>(k,r=>{const jobs=r?.jobs||[];if(action==='start'||action==='correct_names'){
    const correction=action==='correct_names'?jobs.find(j=>j.id===latest?.id):undefined
    if(action==='correct_names'&&!correctable(correction))throw fail('This verification was already updated.',409)
-   if(jobs.some(j=>['pending','review'].includes(j.status)&&!(action==='correct_names'&&j.id===correction?.id))||complete(jobs)||(method==='bvn'||country==='UG')&&bvn(jobs))throw fail('Check your existing verification before starting another.',409)
+   if(jobs.some(j=>['pending','review'].includes(j.status)&&!(action==='correct_names'&&j.id===correction?.id))||complete(jobs)||country==='UG'&&bvn(jobs))throw fail('Check your existing verification before starting another.',409)
    if(jobs.filter(j=>Date.now()-j.createdAt<86400000).length>=5)throw fail('Daily verification attempt limit reached. Try again tomorrow.',429)
-   if(country==='NG'&&method!=='bvn'){const first=bvn(jobs);if(!first)throw fail('Complete BVN verification first.',409);candidate.bvnJobId=first.id}
+   if(country==='NG'){
+    const first=bvn(jobs)
+    if(correction){candidate.tierPolicy=correction.tierPolicy;candidate.tier=correction.tier;candidate.basicJobId=correction.basicJobId;candidate.bvnJobId=correction.bvnJobId}
+    else if(!first&&latest&&!latest.tierPolicy&&latest.method==='bvn'&&method==='bvn'&&latest.status==='failed'){/* Preserve retry of an existing BVN-first session. */}
+    else if(!first){if(method!=='nin')throw fail('Complete NIN verification for Basic first.',409);candidate.tierPolicy=NIN_FIRST_POLICY;candidate.tier='basic'}
+    else if(first.tierPolicy===NIN_FIRST_POLICY){if(method!=='bvn')throw fail('Use BVN to complete Advanced verification.',409);candidate.tierPolicy=NIN_FIRST_POLICY;candidate.tier='advanced';candidate.basicJobId=first.id}
+    else{if(!['nin','government_id'].includes(method))throw fail('Your BVN is already verified. Add NIN or government ID for Advanced.',409);candidate.bvnJobId=first.id}
+   }
    if(correction){correction.supersededBy=candidate.id;correction.status='failed';correction.failureReason='superseded_name_correction'}
    candidate.sessionAt=Date.now();candidate.consent={granted:true,grantedAt:new Date().toISOString(),noticeVersion:'pocket-smile-2026-09-24',privacyPolicyUrl:'https://app.hashpaylink.com/docs/privacy'};return{jobs:[...jobs,candidate]}
   }const j=jobs.find(x=>x.id===candidate.id);if(!resumable(j)||Date.now()-(j!.sessionAt||0)<20000)throw fail('Your verification is already opening. Please wait.',409);j!.sessionAt=Date.now();j!.idTypes=policy.idSelection[policy.country];j!.consent={granted:true,grantedAt:new Date().toISOString(),noticeVersion:'pocket-smile-2026-09-24',privacyPolicyUrl:'https://app.hashpaylink.com/docs/privacy'};return{jobs}})
@@ -157,7 +165,7 @@ export async function pocketKycV3Callback(req:Request,res:Response){
    if(j.status==='passed'&&approved&&j.identityMatch===identity.identityMatch){j.firstName=String(fields.first_name||'').trim();j.lastName=String(fields.last_name||'').trim()}
    if(['passed','failed'].includes(j.status)&&j.providerJobId)return current!
    j.providerJobId=providerJobId;j.providerUserId=providerUserId;j.providerStatus=body.status;j.checkedAt=Date.now();j.uploadReportedAt||=Date.now()
-   const first=current!.jobs.find(x=>x.id===j.bvnJobId&&x.status==='passed'&&x.method==='bvn')
+   const first=advancedBasicJob(j,current!.jobs)
    const pairMatches=isBasic(j)||!!first?.identityMatch&&first.identityMatch===identity.identityMatch
    j.status=approved&&pairMatches?'passed':['block','error'].includes(body.status)?'failed':'review'
    if(approved){j.legalName=identity.legalName;j.identityMatch=identity.identityMatch;j.firstName=String(fields.first_name||'').trim();j.lastName=String(fields.last_name||'').trim()}

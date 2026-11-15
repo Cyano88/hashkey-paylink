@@ -10,6 +10,15 @@ const mocks={
 await build({stdin:{contents:"export * from './api/pocket/transfer-allowance';export * from './api/pocket/kyc-level'",loader:'ts',resolveDir:process.cwd()},outfile:'.codex-temp/kyc-allowance-fixture.cjs',bundle:true,platform:'node',format:'cjs',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/.*/},a=>{const k=Object.keys(mocks).find(k=>a.path.endsWith('/'+k+'.js'));return k?{path:k,namespace:'fixture'}:undefined});b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
 const m=await import('../.codex-temp/kyc-allowance-fixture.cjs'),api=m.default
 const basic={id:'b',method:'bvn',environment:'production',status:'passed',identityMatch:'match',legalName:'Fixture User'}
+const ninBasic={...basic,id:'nin-basic',method:'nin',tierPolicy:'ng-nin-first-v1',tier:'basic'}
+const bvnAdvanced={...basic,id:'bvn-advanced',tierPolicy:'ng-nin-first-v1',tier:'advanced',basicJobId:ninBasic.id}
+assert.equal(api.kycLevelFromJobs([ninBasic]).level,'basic')
+assert.equal(api.kycLevelFromJobs([{...ninBasic,environment:'sandbox'}]).level,'none')
+assert.equal(api.kycLevelFromJobs([{...ninBasic,tierPolicy:undefined}]).level,'none','Historical unpaired NIN cannot become Basic')
+assert.equal(api.kycLevelFromJobs([bvnAdvanced]).level,'none','Advanced BVN is never standalone Basic')
+assert.equal(api.kycLevelFromJobs([ninBasic,bvnAdvanced]).level,'advanced')
+assert.equal(api.kycLevelFromJobs([ninBasic,{...bvnAdvanced,identityMatch:'other'}]).level,'basic')
+assert.equal(api.kycLevelFromJobs([ninBasic,{...bvnAdvanced,environment:'sandbox'}]).level,'basic')
 assert.equal(api.kycLevelFromJobs([{...basic,environment:'sandbox'}]).level,'none')
 assert.equal(api.kycLevelFromJobs([{...basic,status:'pending'}]).level,'none')
 assert.equal(api.kycLevelFromJobs([basic]).level,'basic')

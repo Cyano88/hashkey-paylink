@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 
-export function verificationPhoneUrl(location: string, level: 'basic' | 'advanced', country: 'NG' | 'UG', method: 'nin' | 'government_id' = 'nin') {
+export function verificationPhoneUrl(location: string, level: 'basic' | 'advanced', country: 'NG' | 'UG', method: 'bvn' | 'nin' | 'government_id' = 'nin') {
   const current = new URL(location)
   const link = new URL(current.pathname, current.origin)
   for (const key of ['project', 'profile']) {
@@ -18,7 +18,7 @@ export function verificationPhoneUrl(location: string, level: 'basic' | 'advance
 }
 
 export default function VerificationPhoneHandoff({ level, country, method, open, onOpenChange, sessionToken }: {
-  sessionToken?: string; level: 'basic' | 'advanced'; country: 'NG' | 'UG'; method: 'nin' | 'government_id'; open: boolean; onOpenChange: (open: boolean) => void
+  sessionToken?: string; level: 'basic' | 'advanced'; country: 'NG' | 'UG'; method: 'bvn' | 'nin' | 'government_id'; open: boolean; onOpenChange: (open: boolean) => void
 }) {
   const [copyStatus, setCopyStatus] = useState('')
   const link = verificationPhoneUrl(window.location.href, level, country, method) + (sessionToken ? '#token=' + encodeURIComponent(sessionToken) : '')

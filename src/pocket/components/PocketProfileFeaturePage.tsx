@@ -216,7 +216,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
   }, [feature, email, refreshLimits])
 
   const limitLocation=useLocation(),limitNavigate=useNavigate(),selectedLimit=feature==='limits'?pocketLimitPage(new URLSearchParams(limitLocation.search).get('limit')):null
-  const selectLimit=(view:PocketLimitPage|null)=>{const query=new URLSearchParams(limitLocation.search);if(view)query.set('limit',view);else query.delete('limit');limitNavigate({pathname:limitLocation.pathname,search:query.toString()},{replace:!view})}
+  const selectLimit=(view:PocketLimitPage|null)=>{if(!view&&limitLocation.state?.pocketLimitFrom){limitNavigate(-1);return}const query=new URLSearchParams(limitLocation.search);if(view)query.set('limit',view);else query.delete('limit');limitNavigate({pathname:limitLocation.pathname,search:query.toString()},{replace:!view,state:view?{...limitLocation.state,pocketLimitFrom:true}:null})}
   const title = feature === 'kyc' ? 'Identity verification' : feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? selectedLimit?LIMIT_PAGES[selectedLimit]:'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div key={selectedLimit||feature} className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]'>

@@ -22,13 +22,14 @@ export default function PocketLimitsPanel({view=null,onSelect,usage,bank,busy,er
   <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"/>
  </button>)}</section>
  if(view==='transfers')return <div className="pt-6"><PocketTransferAllowanceView getAccessToken={getAccessToken} bank={bank}/></div>
- if(view==='purchases'||view==='esim')return <section className="pt-8">{view==='purchases'&&badge(view)}<p className="mt-4 text-3xl font-semibold tracking-tight">{display.fromUsd(view==='purchases'?PURCHASE_DAILY_USD:ESIM_PER_ORDER_USD)}</p><p className="mt-2 text-xs text-gray-500">{view==='purchases'?'Daily allowance':'Per order'}</p><p className="mt-6 text-sm leading-6 text-gray-500">{view==='purchases'?`One allowance across online stores and QR payments. ${verified?'':'Basic verification required. '}Resets at midnight, Lagos time.`:'One plan per order. No BVN verification required. Network fees are shown separately.'}</p></section>
+ if(view==='purchases'||view==='esim')return <section className="pt-8">{view==='purchases'&&badge(view)}<p className="mt-4 text-3xl font-semibold tracking-tight">{display.fromUsd(view==='purchases'?PURCHASE_DAILY_USD:ESIM_PER_ORDER_USD)}</p><p className="mt-2 text-xs text-gray-500">{view==='purchases'?'Daily allowance':'Per order'}</p><p className="mt-6 text-sm leading-6 text-gray-500">{view==='purchases'?`One allowance across online stores and QR payments. ${verified?'':'Basic verification required. '}Resets at midnight, Lagos time.`:'One plan per order. No local identity verification required. Network fees are shown separately.'}</p></section>
  const airtime=view==='airtime',bucket=airtime?usage?.airtime:usage?.otherBills,limit=bucket?.dailyLimitUsd??(airtime?BILL_LIMITS_USD.airtimeDaily:BILL_LIMITS_USD.otherBillsDaily)
  return <section className="pt-8">
-  <p className="text-3xl font-semibold tracking-tight">{display.fromUsd(limit)}</p><p className="mt-2 text-xs text-gray-500">{airtime?'Daily allowance across countries':'Shared daily across data, TV and electricity'}</p>
+  <p className="text-3xl font-semibold tracking-tight">{display.fromUsd(limit)}</p><p className="mt-2 text-xs text-gray-500">{airtime?'Daily allowance':'Shared daily allowance'}</p>
   <div className="mt-4 flex flex-wrap justify-between gap-2 text-xs text-gray-500">{bucket?<><span>{display.fromUsd(bucket.usedTodayUsd)} used</span><span>{display.fromUsd(bucket.remainingTodayUsd)} left</span></>:<span role="status" aria-label="Loading today's usage">Loading usage…</span>}</div>
   {airtime&&<p className="mt-3 text-xs text-gray-500">Up to {display.fromUsd(BILL_LIMITS_USD.airtimePerPayment)} per payment</p>}
   {error&&<button disabled={busy} onClick={onRefresh} className="mt-3 min-h-10 text-xs text-gray-500">Refresh usage</button>}
+  {!airtime&&<p className="mt-3 text-xs text-gray-500">Shared across data, TV and electricity.</p>}
   <PocketBillCountryLimits key={view} category={view} getAccessToken={getAccessToken}/>
  </section>
 }

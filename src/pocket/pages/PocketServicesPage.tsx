@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
-import { QrCode, Receipt, Wifi, ChevronRight } from '../components/PocketIcons'
+import { QrCode, Receipt, Globe, ChevronRight } from '../components/PocketIcons'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { xpayOrigin } from '../lib/pocketXPayNavigation'
 
@@ -12,7 +12,7 @@ export default function PocketServicesPage() {
   const items = [
     { title: 'XPay', Icon: QrCode, path: POCKET_ROUTES.xpay },
     { title: 'Bills', Icon: Receipt, path: POCKET_ROUTES.bills },
-    { title: 'eSIM', Icon: Wifi, path: POCKET_ROUTES.esim },
+    { title: 'Travel eSIM', Icon: Globe, path: POCKET_ROUTES.esim },
   ]
   return <PocketRouteShell active="services" rail={origin} refreshEnabled={false} onSelect={tab => open(tab === 'profile' ? POCKET_ROUTES.profile : POCKET_ROUTES.home)}>
     <PocketFlowHeader title="Services" centered hideBack />

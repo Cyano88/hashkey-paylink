@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {build} from 'esbuild'
-import {createHmac} from 'node:crypto'
+import {createHmac,createHash} from 'node:crypto'
 process.env.SMILE_PARTNER_ID='fixture';process.env.SMILE_API_KEY='fixture-secret';process.env.SMILE_ENVIRONMENT='sandbox';process.env.POCKET_KYC_IDENTITY_MATCH_KEY='fixture-secret'
 const state={values:new Map(),tail:Promise.resolve(),calls:[],result:null,tokenFailure:0,restricted:false,statusFailure:false};globalThis.__kycV3Fixture=state
 const mocks={
@@ -15,11 +15,16 @@ const job=id=>[...state.values.values()].flatMap(v=>v.jobs||[]).find(j=>j.id===i
 let sequence=0
 function event(start,{name='Test Person',dob='1990-02-03',status='clear',product,fields={},fraud=false}={}){const j=job(start.body.jobId),providerId=j.providerJobId||'job_'+String(++sequence).padStart(26,'0'),userId='user_fixture';state.result={status,job_id:providerId,user_id:userId};const timestamp=new Date().toISOString(),signature=createHmac('sha256',process.env.SMILE_API_KEY).update(timestamp).update('fixture').update('sid_request').digest('base64');return{body:{status,product:product||m.v3Policy(j.method).apiProduct,partner_params:{internal_reference:j.id},id_fields:{full_name:name,date_of_birth:dob,...j.method==='government_id'?{country:'NG',id_type:'PASSPORT'}:{},...fields},antifraud:{summary:{fraud_detected:fraud}}},headers:{'response-timestamp':timestamp,'response-signature':signature,'job-id':providerId,'user-id':userId},query:{reference:j.id,proof:j.callbackProof}}}
 const deliver=e=>request('',e.body,e.headers,e.query,true)
-const start=(owner,method='bvn')=>request(owner,{action:'start',consent:true,method})
+// Historical BVN-first records must keep their original retry and upgrade path.
+const start=(owner,method='bvn')=>{
+ const key='hashpaylink:pocket-kyc:v3:'+process.env.SMILE_ENVIRONMENT+':'+createHash('sha256').update(owner).digest('hex')
+ if(method==='bvn'&&!state.values.has(key))state.values.set(key,{jobs:[{id:'legacy-'+owner,method:'bvn',environment:process.env.SMILE_ENVIRONMENT,status:'failed',failureReason:'session_failed',createdAt:0}]})
+ return request(owner,{action:'start',consent:true,method})
+}
 assert.equal((await request('',{action:'start',consent:true})).code,401)
 assert.equal((await request('alice',{action:'start'})).code,400)
 assert.equal((await request('alice',{action:'start',consent:true,country:'KE'})).code,409)
-assert.equal((await start('no-bvn','nin')).code,409)
+assert.equal((await request('fresh-bvn',{action:'start',consent:true,method:'bvn'})).code,409)
 state.restricted=true;const unavailable=await start('no-entitlement');assert.equal(unavailable.body.code,'KYC_METHOD_UNAVAILABLE');assert.equal(unavailable.body.retryable,false);assert.equal([...state.values.values()].some(v=>v.jobs?.some(j=>j.id===unavailable.body.jobId)),false);state.restricted=false;
 const starts=await Promise.all([start('alice'),start('alice')]);assert.deepEqual(starts.map(x=>x.code).sort(),[200,409]);const first=starts.find(x=>x.code===200)
 assert.equal(job(first.body.jobId).consent.granted,true);assert.equal(job(first.body.jobId).consent.noticeVersion,'pocket-smile-2026-09-24');assert.ok(Date.parse(job(first.body.jobId).consent.grantedAt));assert.equal(first.body.verification.idSelection.NG[0],'BVN');assert.equal(first.body.apiVersion,3)
@@ -67,6 +72,14 @@ const reviewBasic=await start('switch-review');await deliver(event(reviewBasic))
 console.log('PASS method switching preserves Basic, rejects foreign owners and retired callbacks, and cannot discard submitted/review checks.');
 process.env.SMILE_ENVIRONMENT='production';assert.equal((await start('production')).code,503);process.env.SMILE_PRODUCTION_ENABLED='true';delete process.env.POCKET_KYC_IDENTITY_MATCH_KEY;assert.equal((await start('missing-match-key')).body.code,'KYC_MATCH_KEY_REQUIRED');process.env.POCKET_KYC_IDENTITY_MATCH_KEY='fixture-secret';assert.equal((await request('alice',{action:'status'})).body.status,'not_started');const prod=await start('production');await deliver(event(prod));process.env.SMILE_API_KEY='rotated-provider-key';const prodDoc=await start('production','government_id');await deliver(event(prodDoc));assert.equal((await request('production',{action:'status'})).body.verified,true);assert.equal(await m.requireV3ProductionKyc('production'),'Test Person')
 const raw=JSON.stringify([...state.values.values()]);assert.equal(raw.includes('1990-02-03'),false);assert.equal(raw.includes('id_number'),false)
+// New accounts: NIN Basic, identity-bound BVN Advanced; old accounts above stay valid.
+const fresh=await request('nin-first',{action:'start',consent:true});assert.equal(fresh.code,200);assert.equal(fresh.body.verification.method,'nin');assert.equal(fresh.body.canChangeMethod,false)
+assert.equal(job(fresh.body.jobId).tier,'basic');await deliver(event(fresh));
+const basicStatus=await request('nin-first',{action:'status'});assert.equal(basicStatus.body.level,'basic');assert.equal(basicStatus.body.paymentLevel,'basic');assert.equal(basicStatus.body.workflow.basicMethod,'nin');assert.equal(basicStatus.body.workflow.bvnPassed,false);assert.equal(basicStatus.body.workflow.needsAdditional,true);assert.deepEqual(basicStatus.body.workflow.methods,['bvn'])
+assert.equal((await request('nin-first',{action:'start',consent:true,method:'government_id'})).code,409)
+const advanced=await request('nin-first',{action:'start',consent:true,method:'bvn'});assert.equal(advanced.code,200);assert.equal(job(advanced.body.jobId).basicJobId,fresh.body.jobId);await deliver(event(advanced));assert.equal((await request('nin-first',{action:'status'})).body.level,'advanced');assert.equal(await m.requireV3ProductionKyc('nin-first'),'Test Person')
+const freshMismatch=await request('nin-mismatch',{action:'start',consent:true});await deliver(event(freshMismatch));const wrongBvn=await request('nin-mismatch',{action:'start',consent:true,method:'bvn'});await deliver(event(wrongBvn,{name:'Other Person'}));const mismatchStatus=await request('nin-mismatch',{action:'status'});assert.equal(mismatchStatus.body.level,'basic');assert.equal(mismatchStatus.body.failureReason,'identity_mismatch')
+console.log('PASS NIN-first Basic, BVN-bound Advanced, fresh BVN bypass rejection, cross-identity denial and historical BVN-first compatibility.')
 console.log('PASS method entitlement preflight, durable consent, stable identity match after provider key rotation, missing-callback replay, untrusted hint isolation, permanent errors, and V3 auth, bound token policy and callback proof, owner isolation, duplicate prevention, recovery, signed callback plus provider truth, replay, two-step identity matching, sandbox isolation, billing errors, and no raw ID/DOB persistence.')
 
 const ugUnavailable=await request('uganda-no-access',{action:'start',country:'UG',method:'government_id',consent:true})

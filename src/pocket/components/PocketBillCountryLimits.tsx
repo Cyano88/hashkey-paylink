@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react'
 import {MoneyAmount} from '../../components/MoneyText'
 import {POCKET_API} from '../lib/pocketSchemas'
-import PocketSelect from './PocketSelect'
+import PocketCountrySelect from './PocketCountrySelect'
+import PocketCountryFlag from './PocketCountryFlag'
 
 type Row={id:string;name:string;minimum:number|null;providerMaximum:number|null;availableMaximum:number;available:boolean;planPriced:boolean}
 type Details={country:'NG'|'UG';currency:'NGN'|'UGX';category:string;services:Row[]}
@@ -18,13 +19,13 @@ export default function PocketBillCountryLimits({category,getAccessToken}:{categ
  },[country,category,retry])
  const money=(value:number)=> <MoneyAmount currency={data?.currency??(country==='NG'?'NGN':'UGX')} amount={value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}/>
  return <div className="mt-6 space-y-4 border-t border-gray-100 pt-5 dark:border-white/10">
-  <PocketSelect ariaLabel="Country" value={country} onChange={setCountry} options={[{value:'NG',label:'Nigeria · NGN'},{value:'UG',label:category==='tv'||category==='electricity'?'Uganda · Unavailable':'Uganda · UGX',disabled:category==='tv'||category==='electricity'},{value:'KE',label:'Kenya · Coming soon',disabled:true}]}/>
+  {category==='airtime'||category==='data'?<PocketCountrySelect ariaLabel="Country" value={country} onChange={setCountry} options={[{value:'NG',label:'Nigeria'},{value:'UG',label:'Uganda'}]}/>:<div className="flex items-center gap-3 text-sm font-semibold"><PocketCountryFlag code="NG"/>Nigeria</div>}
   {error?<button type="button" onClick={()=>setRetry(n=>n+1)} className="min-h-10 text-xs font-medium">Could not refresh limits. Try again.</button>:!data?<p role="status" className="text-xs text-gray-500">Loading country limits…</p>:null}
-  {data&&!error&&<div className="divide-y divide-gray-100 dark:divide-white/10">{data.services.length?data.services.map(row=><div key={row.id} className="py-4">
-   <p className="text-sm font-semibold">{row.name}</p>
-   <p className="mt-2 text-sm">{row.available?<>Up to {money(row.availableMaximum)}</>:'No payment available'}</p>
+  {data&&!error&&<div className="divide-y divide-gray-100 dark:divide-white/10">{data.services.length?data.services.map(row=><div key={row.id} className="flex items-start justify-between gap-4 py-4">
+   <p className="min-w-0 flex-1 text-sm font-medium">{row.name.replace(/\s+(Airtime VTU|Airtime|Data|Subscription|Payment)$/i,'')}</p><div className="shrink-0 text-right">
+   <p className="text-sm font-medium">{row.available?<>{money(row.availableMaximum)}</>:'No payment available'}</p>
    {row.minimum!==null&&<p className="mt-1 text-xs text-gray-500">{row.planPriced?'Plans from ':'Minimum '}{money(row.minimum)}</p>}
-  </div>):<p className="text-xs text-gray-500">No supported products are currently available.</p>}</div>}
-  <p className="text-[11px] leading-5 text-gray-500">Available amounts include provider limits and your remaining allowance. {category==='electricity'?'Your meter may have a lower limit. ':category==='data'||category==='tv'?'Available plans may cost less. ':''}Final quote applies.</p>
+  </div></div>):<p className="text-xs text-gray-500">No supported products are currently available.</p>}</div>}
+  <p className="text-[11px] leading-5 text-gray-500">Maximums reflect your remaining allowance and provider limits. {category==='electricity'?'Your meter may have a lower limit. ':category==='data'||category==='tv'?'Available plans may cost less. ':''}Final quote applies.</p>
  </div>
 }

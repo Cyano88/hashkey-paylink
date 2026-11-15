@@ -36,12 +36,14 @@ export default function PocketProfilePage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-  const [feature, setFeature] = useState<PocketProfileFeature | null>(() => {
-    const requested = new URLSearchParams(window.location.search).get('feature')
-    if (stocks && requested !== 'security' && requested !== 'kyc') return null
-    return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' || requested === 'wallet-setup' || requested === 'kyc' ? requested : null
-  })
-  useEffect(() => { if (new URLSearchParams(location.search).get('feature') === 'kyc') setFeature('kyc') }, [location.search])
+  const requestedFeature = new URLSearchParams(location.search).get('feature')
+  const feature: PocketProfileFeature | null = (!stocks || requestedFeature==='security'||requestedFeature==='kyc') && ['rates','limits','notifications','security','wallet-setup','kyc'].includes(requestedFeature||'') ? requestedFeature as PocketProfileFeature : null
+  const setFeature = (next: PocketProfileFeature | null) => {
+    if(!next && location.state?.pocketProfileFrom){navigate(-1);return}
+    const query=new URLSearchParams(location.search);query.delete('limit');query.delete('level')
+    if(next)query.set('feature',next);else query.delete('feature')
+    navigate({pathname:location.pathname,search:query.toString()},{replace:!next,state:next?{pocketProfileFrom:true}:null})
+  }
   const visitedKyc = useRef(false)
   useEffect(() => {
     if (feature === 'kyc') { visitedKyc.current = true; return }
@@ -69,8 +71,8 @@ export default function PocketProfilePage() {
         rawEvent.preventDefault()
         if (!deleteBusy) setDeleteOpen(false)
       } else if (feature) {
-        rawEvent.preventDefault()
-        setFeature(null)
+        // The visible feature header owns Back, including nested limit pages.
+        return
 
       } else if (editing) {
         rawEvent.preventDefault()
@@ -162,7 +164,7 @@ export default function PocketProfilePage() {
           {!stocks && <div className="flex min-h-16 items-center gap-3 rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-xs font-medium text-gray-500 dark:text-gray-400">Appearance</span><span className="mt-1 block text-sm font-semibold">Light or dark theme</span></span><PocketThemeToggle /></div>}
 
           {!stocks && <button type='button' onClick={() => setFeature('rates')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><TrendingUp className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-xs font-medium text-gray-500 dark:text-gray-400'>Rates</span><span className='mt-1 block text-sm font-semibold'>USDC to local currency</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>}
-          {!stocks && <button type='button' onClick={() => setFeature('limits')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><Banknote className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-xs font-medium text-gray-500 dark:text-gray-400'>Spending limits</span><span className='mt-1 block text-sm font-semibold'>Bank, Bills, and USDC limits</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>}
+          {!stocks && <button type='button' onClick={() => setFeature('limits')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><Banknote className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-xs font-medium text-gray-500 dark:text-gray-400'>Spending limits</span><span className='mt-1 block text-sm font-semibold'>Purchases, transfers and bills</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>}
           <button type='button' onClick={() => stocks ? navigate(xStockPath('notifications')) : setFeature('notifications')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><Bell className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-xs font-medium text-gray-500 dark:text-gray-400'>Notifications</span><span className='mt-1 block text-sm font-semibold'>Alerts and Pocket updates</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>
           <button type='button' onClick={() => setFeature('security')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><Lock className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-xs font-medium text-gray-500 dark:text-gray-400'>Payment security</span><span className='mt-1 block text-sm font-semibold'>PIN, fingerprint, or face</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>
           {quickApprovalAvailable && <button type="button" onClick={() => void toggleQuickApproval()} disabled={quickApprovalBusy} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm disabled:opacity-60 dark:bg-[#0D0D0D] dark:shadow-none">
