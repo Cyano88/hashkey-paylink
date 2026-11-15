@@ -26,3 +26,7 @@ Web source build completed in 3m17s with dependency/chunk warnings (PowerShell s
 ## Next XPay scope
 
 Keep terminal identity and accepted payment options separate from adapters for source assets/networks, conversions and merchant settlement. The purchase policy belongs above those adapters. Expansion to another network or payment type still requires a verified adapter, not a renamed UI option. Preserve existing terminal IDs, payment recovery and receipts when restructuring.
+
+## Deployment
+
+Commit `c2a0b5fa47aff1cfe5e964d5b4140c98b256f9c9` deployed as `dep-dbst7sek1f9s73a7rimg`, live at 2026-11-15T15:52:34.43484Z. The production build passed. Targeted Playwright checks of the published compliance page confirmed the shared USD 7,000 online/QR allowance, separate personal-transfer/bill allowances and dynamic bank capacity. No live spend was made to exercise the ceiling. Pixel installation remains pending because ADB detected no connected device.
