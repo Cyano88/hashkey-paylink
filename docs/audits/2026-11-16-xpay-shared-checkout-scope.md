@@ -126,3 +126,8 @@ This section supersedes the acceptance sheet layout above.
 - Saving uses the existing Pocket Loader2 ring before Saving…, matching the app's CTA order. The icon/text wrapper has no placeholder background. Browser and focused diagnostics passed after this correction.
 - Final client correction 89b10469273c36f34068bdabea0bb323a2eb986f is live in deployment dep-dbtedcuk1f9s73cb85qg. Full web/native builds and Android assembleDebug passed; final APK installed with data preserved. Fresh authenticated Pixel read again confirmed terminal version 1, all eight saved USDC networks and no editor error, without another save.
 - A harmless aborted public-config read on the actual Pixel returned AbortError / "The operation was aborted.", confirming the native timeout shape is covered by the new reconciliation branch. The real save was confirmed separately through server-backed settings; no payment was made.
+
+## Corrupted saving-label character
+- The owner's reported question-mark glyph was real. Pixel inspection returned Saving followed by Unicode U+FFFD, with code points [83,97,118,105,110,103,65533]. The ring was already before the text and rotating; the label itself contained a corrupted ellipsis. The earlier browser assertion also contained U+FFFD and therefore incorrectly passed.
+- Replaced the label with plain ASCII Saving. The regression now asserts exact numeric code points [83,97,118,105,110,103], avoiding a shared malformed expected string. The real Pixel inspection opened and cancelled the settings PIN prompt, with zero configuration writes.
+- Corrected browser regression passed at 320/390px in light/dark themes. Device verification of the replacement build follows below.
