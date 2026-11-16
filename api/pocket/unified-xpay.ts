@@ -1,4 +1,5 @@
 import {isValidSolanaAddress} from '../../src/lib/solanaAddress.js'
+import {normalizeXPayAcceptance,reconcileXPayAcceptance,xpayAcceptedDestinations} from '../../src/pocket/lib/xpayAcceptance.js'
 import {isAddress} from 'viem'
 import {requirePocketBasicKyc} from './kyc-level.js'
 import {xpayStockHistory,xpayStockTotals} from '../../src/pocket/lib/pocketXPayStockHistory.js'
@@ -20,7 +21,8 @@ async function publicCheckout(c:Record):Promise<XPayCheckout>{
  if(!c.destinationIds.length)throw Object.assign(Error('This terminal is not accepting payments yet.'),{status:409})
  const destinations=validateXPayDestinations(c.destinationIds,current)
  if(destinations.some((d,i)=>d.revision!==c.revisions[i]))throw Object.assign(Error('Receiving options changed. Reopen this terminal before paying.'),{status:409})
- return {id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,destinations}
+ const acceptance=normalizeXPayAcceptance(c.acceptance,destinations)
+ return {id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,acceptance,destinations:xpayAcceptedDestinations(destinations,acceptance)}
 }
 export default async function handler(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store')
@@ -45,7 +47,7 @@ export default async function handler(req:Request,res:Response){
    const records=(await read()).checkouts
    const proofs=Object.assign({},...await Promise.all([ownedPosSetupKeys(owner),ownedStockSetupKeys(owner)]))
    const standaloneIds=destinations.filter(d=>!records.some(c=>c.destinationIds.includes(d.id)||c.pastDestinations?.some(p=>p.id===d.id)||c.setupKeys?.some(k=>k.key===proofs[d.id]))).map(d=>d.id)
-   const checkouts=records.filter(c=>c.owner===owner&&!c.deletedAt).map(c=>({id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,destinations:c.destinationIds.flatMap(id=>destinations.filter(d=>d.id===id))}))
+   const checkouts=records.filter(c=>c.owner===owner&&!c.deletedAt).map(c=>({id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,acceptance:c.acceptance,destinations:c.destinationIds.flatMap(id=>destinations.filter(d=>d.id===id))}))
    return res.json({ok:true,destinations,checkouts,standaloneIds})
   }
   if(b.action==='history'){
@@ -102,8 +104,10 @@ export default async function handler(req:Request,res:Response){
   if(b.action==='configure'){
    const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)
    if(!c)return res.status(404).json({ok:false,error:'Terminal not found.'})
+   if(b.version!==(c.version||0))return res.status(409).json({ok:false,error:'This terminal changed. Reopen it before saving.'})
    const destinations=await available(owner)
    const selected=Array.isArray(b.destinationIds)&&b.destinationIds.length===0?[]:validateXPayDestinations(b.destinationIds,destinations)
+   const acceptance=b.acceptance===undefined?reconcileXPayAcceptance(c.acceptance,selected):normalizeXPayAcceptance(b.acceptance,selected)
    const proofs=await Promise.all(selected.map(d=>d.kind==='xstocks'?ownedStockSetupKey(owner,d.id):ownedPosSetupKey(owner,d.id)))
    if(!await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval']||''),owner))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
    let saved:Record|undefined
@@ -118,9 +122,9 @@ export default async function handler(req:Request,res:Response){
     }
     live.pastDestinations=[...(live.pastDestinations||[]),...live.destinationIds.map((id,i)=>({id,revision:live.revisions[i]}))].filter((d,i,all)=>all.findIndex(p=>p.id===d.id&&p.revision===d.revision)===i)
     live.setupKeys=live.setupKeys?.filter(k=>!proofs.includes(k.key))
-    live.destinationIds=selected.map(d=>d.id);live.revisions=selected.map(d=>d.revision);live.version=(live.version||0)+1;saved=live;return s
+    live.destinationIds=selected.map(d=>d.id);live.revisions=selected.map(d=>d.revision);live.acceptance=acceptance;live.version=(live.version||0)+1;saved=live;return s
    })
-   return res.json({ok:true,checkout:{id:saved!.id,name:saved!.name,createdAt:saved!.createdAt,version:saved!.version,destinations:selected}})
+   return res.json({ok:true,checkout:{id:saved!.id,name:saved!.name,createdAt:saved!.createdAt,version:saved!.version,acceptance:saved!.acceptance,destinations:selected}})
   }
   if(b.action==='delete'){
    const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)

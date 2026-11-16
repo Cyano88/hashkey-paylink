@@ -1,4 +1,4 @@
-# XPay shared checkout audit and implementation scope — 2026-11-16
+# XPay shared checkout audit and implementation scope â€” 2026-11-16
 
 ## Accepted product structure
 One merchant QR opens the shared payment journey. Pocket is preferred; a web checkout remains available. A single Open Pocket action offers Get Pocket only after an unsuccessful handoff. The merchant identity and payment context remain visible. Creator acceptance, payer funding source and merchant settlement are separate concepts.
@@ -33,6 +33,23 @@ Reusable terminals accept a customer-entered amount; fixed orders bind their amo
 3. Creator network/asset and cash controls; payer source-first UI, fixed/reusable amount handling, consistent receipt branding and audience.
 4. Shared web/app entry and explicit fallback; test app installed, missing, disabled app links, return after installation and expired sessions.
 5. API/browser regression plus Pixel creator/payer walkthrough before deployment. A new live money test must be distinguished from fixtures; deferred real document KYC stays out of this work.
+
+
+## Acceptance configuration implementation
+- Added versioned acceptance with explicit destination ID, receiving revision, network and asset. The API intersects settings with verified owned destinations and executable capabilities. No caller-supplied recipient is accepted.
+- Creator Accepted payments sheet saves through existing PIN approval and optimistic version checks. Each receiving destination must retain an executable option. Cash is visibly coming soon and cannot be enabled through a crafted request.
+- Public terminal reads expose only accepted networks. The POS quote path additionally enforces the saved route on the server.
+- Clients that omit acceptance retain previous restrictions. Receiving revision changes do not silently enable new networks. Existing terminal IDs, legacy stock behavior and historical recovery remain intact.
+- This slice retains existing USDC execution capability. The shared checkout session adapter, cross-method payment locking, additional assets, receipt/history mapping and app handoff remain unfinished.
+- Targeted native source mirrored, including the missing shared checkout catalogue dependency. No APK installation, production terminal mutation or deployment for this slice.
+
+### Acceptance checks
+- API fixtures passed: ownership, PIN, stale versions, duplicate/foreign/stale routes, unsupported assets/cash, old-client preservation, public network filtering, server route guard and historical recovery.
+- Acceptance migration regression passed, including revision changes and removed networks without silent widening.
+- Browser component test passed at 320/390px light/dark, with real network icons: nonempty selection, duplicate save prevention, shimmer, disabled cash and retryable save failure. Screenshots inspected.
+- Existing shared online/QR allowance, native payment resolution and inline wallet setup regressions passed.
+- Focused diagnostics passed for 24 main and 32 native files; not full-repository checks.
+- Broader pocket-unified-xpay-browser-smoke.mjs could not bundle: its browser dependency graph includes Node crypto/stream through jsonwebtoken. No UI assertions ran in that test. Integrated page and Pixel checks remain required.
 
 ## Validation of the first implementation
 - Real scanner plus shared chooser browser fixture passed at 320px/390px in light and dark themes: methodless QR, merchant/amount context, cash and network/asset selection, disabled future methods, duplicate-click protection, Back, unavailable method rejection, existing-child resume and expiry.

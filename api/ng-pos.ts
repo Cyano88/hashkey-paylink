@@ -7,7 +7,7 @@ import {checkCheckoutBuyerAllowance} from './checkout-buyer-allowance.js'
 import {reservePocketBankAllowance} from './pocket/transfer-allowance.js'
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
 import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
-import {legacyXPayTerminal,assertUnifiedXPayDestination,ownsTerminalSetupKey} from './pocket/unified-xpay-store.js'
+import {legacyXPayTerminal,assertUnifiedXPayDestination,assertUnifiedXPayPaymentRoute,ownsTerminalSetupKey} from './pocket/unified-xpay-store.js'
 import type {XPayHistoryEntry} from '../src/pocket/lib/pocketUnifiedXPay.js'
 import { normalizePayoutAccount, pocketFiatCurrency, validPayoutCurrency } from '../src/pocket/lib/pocketFiatCorridors.js'
 import { pocketBankStatus } from '../src/pocket/lib/pocketBankStatus.js'
@@ -1232,6 +1232,7 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Bank settlement is not configured for this merchant.' })
       }
       const network = requestedNetwork(body.network, merchant)
+      if(body.xpay_checkout_id)await assertUnifiedXPayPaymentRoute(body.xpay_checkout_id,merchantId,merchant.updated_at,network,'USDC')
       if (settlementType === 'INSTANT_FIAT' && network !== 'base') {
         return res.status(400).json({ ok: false, error: 'Local payout currently supports Base USDC only.' })
       }

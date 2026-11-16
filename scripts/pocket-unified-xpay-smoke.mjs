@@ -9,8 +9,8 @@ const mocks={
 '../ng-pos.js':`export const createNgPosMerchant=async(req,body,wallets)=>{fixture.created={body,wallets};return {merchant:{merchant_id:'usdc-1',supported_networks:body.supported_networks,network_wallets:wallets}}};export const ownedPosSetupKeys=async()=>fixture.keys||{};export const ownedPosSetupKey=async(owner,id)=>fixture.keys?.[id];export const ownsPocketPosQr=async(owner,id)=>owner==='merchant'&&id==='bank-1';export const listPocketUnifiedXPayPosPayments=async(owner,id)=>fixture.payments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayPosDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind!=='xstocks'):[]`,
 './xpay.js':`export const ownedStockSetupKeys=async()=>fixture.keys||{};export const ownedStockSetupKey=async(owner,id)=>fixture.keys?.[id];export const listPocketUnifiedXPayStockPayments=async(owner,id)=>fixture.stockPayments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayStockDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='xstocks'):[]`,
 './payment-security.js':`export const consumePocketPaymentApproval=async()=>{const yes=fixture.approval;fixture.approval=false;return yes}`}
-await build({stdin:{contents:"export {default} from './api/pocket/unified-xpay';export {assertUnifiedXPayDestination,legacyXPayTerminal} from './api/pocket/unified-xpay-store'",resolveDir:process.cwd(),loader:'ts'},outfile:'.codex-temp/unified-xpay-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
-const {default:handler,assertUnifiedXPayDestination,legacyXPayTerminal}=await import('../.codex-temp/unified-xpay-test.mjs')
+await build({stdin:{contents:"export {default} from './api/pocket/unified-xpay';export {assertUnifiedXPayDestination,assertUnifiedXPayPaymentRoute,legacyXPayTerminal} from './api/pocket/unified-xpay-store'",resolveDir:process.cwd(),loader:'ts'},outfile:'.codex-temp/unified-xpay-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
+const {default:handler,assertUnifiedXPayDestination,assertUnifiedXPayPaymentRoute,legacyXPayTerminal}=await import('../.codex-temp/unified-xpay-test.mjs')
 const call=async(body,expected=200,get=false)=>{let status=200,result;await handler({method:get?'GET':'POST',body,query:body,headers:{}},{setHeader(){},status(s){status=s;return this},json(b){result=b},sendStatus(s){status=s}});assert.equal(status,expected,JSON.stringify(result));return result}
 const input={action:'create',key:'fixture-key-00000001',name:'Shop A'}
 await call({...input,destinationIds:['bank-1','stocks-1']},400)
@@ -82,3 +82,37 @@ await call({action:'setup-usdc',key:extraKey,networks:['solana']});assert.equal(
 await call({action:'setup-usdc',key:extraKey,networks:['base','arbitrum','arc','ethereum','polygon','solana']});assert.equal(Object.keys(fixture.created.wallets).length,6);
 fixture.links['merchant:solana'].circleWalletAddress='not-a-wallet';await call({action:'setup-usdc',key:extraKey,networks:['solana']},409);
 console.log('PASS six receiving networks, Solana-only configuration, and invalid Solana wallet rejection.');
+
+// Acceptance settings are owned, revision-bound and guarded by the same PIN and
+// optimistic version as receiving settings. Old clients must not widen them.
+const routes=attached.checkout.acceptance.routes;
+assert.equal(routes.length,2);
+const acceptance={version:1,cashBalance:false,routes:routes.filter(r=>r.network==='arbitrum')};
+await call({...config(stable.id,1,['usdc-1']),acceptance},403);
+fixture.approval=true;
+const narrowed=(await call({...config(stable.id,1,['usdc-1']),acceptance})).checkout;
+assert.equal(narrowed.version,2);
+assert.deepEqual((await call({id:stable.id},200,true)).checkout.destinations[0].networks,['arbitrum']);
+fixture.approval=true;
+await call({...config(stable.id,1,['usdc-1']),acceptance},409);
+for(const invalid of [
+ {...acceptance,cashBalance:true},
+ {...acceptance,version:2},
+ {...acceptance,routes:[{...routes[0],asset:'USDT'}]},
+ {...acceptance,routes:[{...routes[0],destinationId:'bank-1'}]},
+ {...acceptance,routes:[{...routes[0],revision:'old'}]},
+ {...acceptance,routes:[routes[0],routes[0]]},
+ {...acceptance,routes:[]},
+ {...acceptance,recipient:'0x'+'9'.repeat(40)},
+])await call({...config(stable.id,2,['usdc-1']),acceptance:invalid},400);
+fixture.approval=true;
+await call(config(stable.id,2,['usdc-1']));
+assert.deepEqual((await call({id:stable.id},200,true)).checkout.destinations[0].networks,['arbitrum']);
+assert.deepEqual((await call({action:'mine'})).checkouts.find(c=>c.id===stable.id).acceptance,acceptance);
+console.log('PASS explicit acceptance rejects unsupported routes and cash, preserves old-client restrictions, enforces PIN/version, and projects only selected networks.');
+
+await assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','1','arbitrum','USDC');
+await assert.rejects(assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','1','base','USDC'),/no longer available/);
+await assert.rejects(assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','1','arbitrum','USDT'),/no longer available/);
+await assert.rejects(assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','wrong','arbitrum','USDC'),/Receiving options changed/);
+console.log('PASS server payment route guard rejects disabled networks, unsupported assets and stale receiving revisions.');

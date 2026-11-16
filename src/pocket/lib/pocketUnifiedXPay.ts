@@ -1,5 +1,5 @@
 export type XPayDestination = {id:string;name:string;kind:'bank'|'stablecoins'|'xstocks';currency:string;assets:string[];networks?:string[];revision:string}
-export type XPayCheckout = {id:string;name:string;destinations:XPayDestination[];createdAt:number;version?:number;deletedAt?:number}
+export type XPayCheckout = {id:string;name:string;destinations:XPayDestination[];createdAt:number;version?:number;deletedAt?:number;acceptance?:import('./xpayAcceptance.js').XPayAcceptance}
 export function validateXPayDestinations(ids:unknown, available:XPayDestination[]) {
  if(!Array.isArray(ids)||!ids.length||ids.length>3||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length)throw Object.assign(Error('Choose your receiving options.'),{status:400})
  const selected=ids.map(id=>available.find(d=>d.id===id))

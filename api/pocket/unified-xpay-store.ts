@@ -4,6 +4,13 @@ export const UNIFIED_XPAY_KEY='pocket:unified-xpay:v1'
 export type UnifiedXPayRecord=Omit<XPayCheckout,'destinations'>&{owner:string;destinationIds:string[];revisions:string[];key:string;version?:number;setupKeys?:Array<{key:string;kind:string}>;pastDestinations?:Array<{id:string;revision:string}>;legacyDestinationIds?:string[]}
 export type UnifiedXPayStore={checkouts:UnifiedXPayRecord[]}
 export const readUnifiedXPayStore=async()=>await readDurableJson<UnifiedXPayStore>(UNIFIED_XPAY_KEY)||{checkouts:[]}
+export async function assertUnifiedXPayPaymentRoute(id:unknown,destinationId:string,revision:string,network:string,asset:string){
+ const checkout=await assertUnifiedXPayDestination(id,destinationId,revision)
+ // Missing acceptance is the legacy configuration, still checked by its merchant
+ // adapter. Explicit acceptance must never fall back to those wider defaults.
+ if(checkout.acceptance&&!checkout.acceptance.routes.some(r=>r.destinationId===destinationId&&r.revision===revision&&r.network===network&&r.asset===asset))throw Object.assign(Error('This payment option is no longer available. Reopen the QR.'),{status:409})
+ return checkout
+}
 export async function assertUnifiedXPayDestination(id:unknown,destinationId:string,revision?:string,allowDeleted=false){
  if(typeof id!=='string'||!/^xp_[0-9a-f-]{36}$/.test(id))throw Object.assign(Error('Invalid XPay QR.'),{status:400})
  const checkout=(await readUnifiedXPayStore()).checkouts.find(c=>c.id===id&&(allowDeleted||!c.deletedAt))
