@@ -1558,6 +1558,12 @@ export async function listPocketBankRecipients(ownerId: string) {
 }
 
 /** Owned, active XPay destinations only; never return bank details or arbitrary redirects. */
+export async function readPocketXPayReceivingAccount(owner:string,id:string) {
+ const merchant=(await readStore()).merchants[id]
+ if(!merchant||merchant.owner_id!==owner||merchant.source!=='pos'||merchant.payout_preference!=='INSTANT_FIAT'||!merchant.encrypted_bank_details||await isPosRetired(id))throw ngPosRequestError(404,'Receiving account not found.')
+ const bank=decryptBankDetails(merchant.encrypted_bank_details)
+ return {currency:pocketFiatCurrency(merchant.country),bankName:merchant.bank_name||bank.bank_code,accountNumber:bank.account_number,accountName:bank.account_name}
+}
 export async function listPocketXPayPosDestinations(owner:string) {
  const [store,retired]=await Promise.all([readStore(),readPosRetirements()])
  return Object.values(store.merchants).filter(m=>m.owner_id===owner&&m.source==='pos'&&!retired[m.merchant_id]&&m.settlement_enabled&&m.kyc_status!=='RESTRICTED').flatMap(m=>{

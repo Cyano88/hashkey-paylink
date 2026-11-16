@@ -81,3 +81,9 @@ This section supersedes the acceptance sheet layout above.
 - Device testing made no payment, saved no acceptance changes and changed no receiving account. Entering Receive fiat created the existing setup reference only.
 - Production readiness checks returned JSON: public-config 200/ok and an unknown QR 404 with the expected unavailable message. These are readiness checks, not a live-money execution test.
 - Shared checkout session integration, additional stablecoin assets and cash-balance execution remain subsequent work; this deployment does not enable those unfinished routes.
+
+## Saved fiat receiving account
+- Receive fiat reopens an owner-only read view with currency, bank/provider, account number and account name. The edit icon opens replacement setup; viewing creates no setup record. Back from editing returns to the saved account.
+- Account details are read through authenticated terminal ownership and active destination checks, never added to public QR responses. Existing server approval and version checks protect replacement; the old account stays active until approved configuration succeeds.
+- Browser regression at 320/390 light/dark passes view/edit/back, cancellation preserving the old account, and approved replacement immediately showing the newly saved account. API regression rejects foreign-terminal reads and replacement without approval and confirms public QR responses omit account details.
+- Focused source diagnostics passed. Web and native Vite builds completed successfully; PowerShell reported stderr warnings as NativeCommandError despite the completed builds. Native lineage passed.

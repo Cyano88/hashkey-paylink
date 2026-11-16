@@ -10,7 +10,7 @@ import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
 import {circleLinkKey,readCircleLink,verifiedPrivyUser} from '../privy-circle-link.js'
 import {mutateDurableJson} from '../render-durable-store.js'
-import {createNgPosMerchant,ownedPosSetupKeys,ownedPosSetupKey,ownsPocketPosQr,listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
+import {readPocketXPayReceivingAccount,createNgPosMerchant,ownedPosSetupKeys,ownedPosSetupKey,ownsPocketPosQr,listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
 import {ownedStockSetupKeys,ownedStockSetupKey,listPocketXPayStockDestinations,listPocketUnifiedXPayStockPayments} from './xpay.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {validateXPayDestinations,type XPayCheckout,type XPayDestination} from '../../src/pocket/lib/pocketUnifiedXPay.js'
@@ -43,6 +43,13 @@ export default async function handler(req:Request,res:Response){
    if(!id||!await ownsPocketPosQr(owner,id))return res.status(404).json({ok:false,error:'QR not found.'})
    if(!await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval']||''),owner))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
    return res.json({ok:true,deletedAt:await retirePosQr(owner,id)})
+  }
+  if(b.action==='receiving-account'){
+   const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)
+   if(!c)return res.status(404).json({ok:false,error:'Terminal not found.'})
+   const bank=(await available(owner)).find(d=>d.kind==='bank'&&c.destinationIds.includes(d.id))
+   if(!bank)return res.status(404).json({ok:false,error:'Receiving account not found.'})
+   return res.json({ok:true,account:await readPocketXPayReceivingAccount(owner,bank.id)})
   }
   if(b.action==='mine'){
    const destinations=await available(owner)
