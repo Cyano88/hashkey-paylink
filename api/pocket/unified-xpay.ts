@@ -1,3 +1,6 @@
+import {prepareXPayHostedPayment,readXPayHostedHistory} from './xpay-hosted-payment.js'
+import {listXPayHostedDestinations,xpayHostedEnabled} from './xpay-hosted-destinations.js'
+import {configureXPayCoin,validateXPayCoinNetworks} from './xpay-coin-configuration.js'
 import {isValidSolanaAddress} from '../../src/lib/solanaAddress.js'
 import {normalizeXPayAcceptance,reconcileXPayAcceptance,xpayAcceptedDestinations} from '../../src/pocket/lib/xpayAcceptance.js'
 import {isAddress} from 'viem'
@@ -14,16 +17,16 @@ import {readPocketXPayReceivingAccount,createNgPosMerchant,ownedPosSetupKeys,own
 import {ownedStockSetupKeys,ownedStockSetupKey,listPocketXPayStockDestinations,listPocketUnifiedXPayStockPayments} from './xpay.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {validateXPayDestinations,type XPayCheckout,type XPayDestination} from '../../src/pocket/lib/pocketUnifiedXPay.js'
-const available=async(owner:string):Promise<XPayDestination[]> => (await Promise.all([listPocketXPayPosDestinations(owner),listPocketXPayStockDestinations(owner)])).flat()
+const available=async(owner:string):Promise<XPayDestination[]> => (await Promise.all([listPocketXPayPosDestinations(owner),listPocketXPayStockDestinations(owner),listXPayHostedDestinations(owner)])).flat()
 async function publicCheckout(c:Record):Promise<XPayCheckout>{
  const current=await available(c.owner)
  // Do not silently change a checkout when an underlying receiving setup changes.
  if(!c.destinationIds.length)throw Object.assign(Error('This terminal is not accepting payments yet.'),{status:409})
- const activeIds=c.destinationIds.filter(id=>current.find(d=>d.id===id)?.kind!=='xstocks')
+ const activeIds=c.destinationIds.filter(id=>{const d=current.find(d=>d.id===id);return d?.kind!=='xstocks'&&(!d?.adapter||xpayHostedEnabled(d.adapter))})
  if(!activeIds.length)throw Object.assign(Error('This terminal is not accepting payments yet.'),{status:409})
  const destinations=validateXPayDestinations(activeIds,current)
  if(destinations.some(d=>d.revision!==c.revisions[c.destinationIds.indexOf(d.id)]))throw Object.assign(Error('Receiving options changed. Reopen this terminal before paying.'),{status:409})
- const acceptance=normalizeXPayAcceptance(c.acceptance,destinations)
+ const acceptance=normalizeXPayAcceptance(c.acceptance?{...c.acceptance,routes:c.acceptance.routes.filter(r=>activeIds.includes(r.destinationId))}:undefined,destinations)
  return {id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,acceptance,destinations:xpayAcceptedDestinations(destinations,acceptance)}
 }
 export default async function handler(req:Request,res:Response){
@@ -44,6 +47,16 @@ export default async function handler(req:Request,res:Response){
    if(!await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval']||''),owner))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
    return res.json({ok:true,deletedAt:await retirePosQr(owner,id)})
   }
+  if(b.action==='prepare-hosted')return res.json(await prepareXPayHostedPayment(req,owner,b))
+  if(b.action==='configure-coin'){
+   const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)
+   if(!c)return res.status(404).json({ok:false,error:'Terminal not found.'})
+   if(b.version!==(c.version||0))return res.status(409).json({ok:false,error:'This terminal changed. Reopen it before saving.'})
+   const input=validateXPayCoinNetworks(b.asset,b.networks)
+   if(!await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval']||''),owner))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
+   const current=(await available(owner)).filter(d=>c.destinationIds.includes(d.id))
+   return res.json({ok:true,checkout:await configureXPayCoin(req,c,current,input)})
+  }
   if(b.action==='receiving-account'){
    const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner&&!c.deletedAt)
    if(!c)return res.status(404).json({ok:false,error:'Terminal not found.'})
@@ -55,20 +68,21 @@ export default async function handler(req:Request,res:Response){
    const destinations=await available(owner)
    const records=(await read()).checkouts
    const proofs=Object.assign({},...await Promise.all([ownedPosSetupKeys(owner),ownedStockSetupKeys(owner)]))
-   const standaloneIds=destinations.filter(d=>!records.some(c=>c.destinationIds.includes(d.id)||c.pastDestinations?.some(p=>p.id===d.id)||c.setupKeys?.some(k=>k.key===proofs[d.id]))).map(d=>d.id)
+   const standaloneIds=destinations.filter(d=>!d.adapter&&!records.some(c=>c.destinationIds.includes(d.id)||c.pastDestinations?.some(p=>p.id===d.id)||c.setupKeys?.some(k=>k.key===proofs[d.id]))).map(d=>d.id)
    const checkouts=records.filter(c=>c.owner===owner&&!c.deletedAt).map(c=>({id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,acceptance:c.acceptance,destinations:c.destinationIds.flatMap(id=>destinations.filter(d=>d.id===id))}))
-   return res.json({ok:true,destinations,checkouts,standaloneIds})
+   return res.json({ok:true,destinations,checkouts,standaloneIds,hostedNetworks:['xlayer','bsc'].filter(xpayHostedEnabled)})
   }
   if(b.action==='history'){
    const c=b.id?(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner):undefined
    if(b.id&&!c)return res.status(404).json({ok:false,error:'QR not found.'})
-   const payments=(await Promise.all([listPocketUnifiedXPayPosPayments(owner,c?.id,c?.legacyDestinationIds),listPocketUnifiedXPayStockPayments(owner,c?.id,c?.legacyDestinationIds)])).flat().sort((a,b)=>b.createdAt-a.createdAt)
+   const payments=(await Promise.all([listPocketUnifiedXPayPosPayments(owner,c?.id,c?.legacyDestinationIds),listPocketUnifiedXPayStockPayments(owner,c?.id,c?.legacyDestinationIds),readXPayHostedHistory(owner,c?.id)])).flat().sort((a,b)=>b.createdAt-a.createdAt)
    const scoped=b.rail==='xstocks'?xpayStockHistory(payments):b.rail==='stablecoins'?payments.filter(p=>p.rail==='stablecoins'):payments
    return res.json({ok:true,payments:scoped.slice(0,200),stockTotals:xpayStockTotals(scoped)})
   }
   if(b.action==='create'||b.action==='adopt'){
    const adopting=b.action==='adopt',destinations=adopting?await available(owner):[]
    const destination=adopting?destinations.find(d=>d.id===b.destinationId):undefined
+   if(adopting&&destination?.adapter)return res.status(409).json({ok:false,error:'Configure this network inside its business terminal.'})
    if(adopting&&destination?.kind==='xstocks')return res.status(409).json({ok:false,error:'Stock QR payments are no longer supported.'})
    if(adopting&&!destination)return res.status(404).json({ok:false,error:'Terminal not found.'})
    const name=adopting?destination!.name:String(b.name||'').trim(),key=adopting?'adopt-'+destination!.id:String(b.key||'')

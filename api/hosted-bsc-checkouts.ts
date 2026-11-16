@@ -1,3 +1,4 @@
+import {parseXPayHostedPartner,assertXPayHostedRoute} from './pocket/xpay-hosted-destinations.js'
 import {checkoutRailEnabled} from './checkout-rail-rollout.js'
 import {validateMerchantPaymentFees,type MerchantPaymentFees} from '../src/lib/merchantPaymentFees.js'
 import {validateCheckoutCurrency,quoteCheckoutPricing} from './checkout-pricing.js'
@@ -166,7 +167,7 @@ export async function settleBscCheckout(input: { id: string; token: string; unit
     if (r.payment && r.payment.txHash !== input.hash) fail('Checkout already paid.', 409)
     if (Object.values(s.checkouts).some(other => other.id !== r.id && other.payment?.txHash === input.hash)) fail('Transfer already used.', 409)
     r.payment ??= { ...(input.fees?{fees:input.fees}:{}), status: 'paid', txHash: input.hash, payer: input.payer, amount: r.amount, network: 'bsc', confirmedAt: input.confirmedAt, receiptId: input.paymentId }
-    s.outbox[r.id] ??= { checkoutId: r.id, attempts: 0, nextAttemptAt: d.now() }
+    if(!parseXPayHostedPartner(r.partnerId))s.outbox[r.id] ??= { checkoutId: r.id, attempts: 0, nextAttemptAt: d.now() }
     record = r; return s
   })
   let intent = await ensureBscCheckoutExecution(record!, d)
@@ -194,7 +195,7 @@ export default createHostedBscCheckoutsHandler()
 export async function assertBscCheckoutPayable(r:BscCheckout,swap=false){
  if(!isBscCheckoutAsset(r.token.address))fail('This checkout asset is no longer accepted. Ask the business for a stablecoin payment link.',409)
  if(swap)fail('Swap in Pocket before paying.',403)
- if(!defaults.enabled(r.partnerId)||r.payment||Date.parse(r.expiresAt)<=Date.now()||!await resolveBscCheckoutProjectEnabled(r.partnerId,r.recipient,r.token.address))fail('This checkout is not accepting new payments.',409)
+ if(parseXPayHostedPartner(r.partnerId)){if(r.payment||Date.parse(r.expiresAt)<=Date.now())fail('This checkout is not accepting new payments.',409);await assertXPayHostedRoute(r.partnerId,'bsc',r.recipient,r.token.address)}else if(!defaults.enabled(r.partnerId)||r.payment||Date.parse(r.expiresAt)<=Date.now()||!await resolveBscCheckoutProjectEnabled(r.partnerId,r.recipient,r.token.address))fail('This checkout is not accepting new payments.',409)
  if(swap&&!r.swapEnabled)fail('Swap is not enabled for this checkout.',403)
 }
 

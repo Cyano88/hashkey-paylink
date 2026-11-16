@@ -1,3 +1,4 @@
+import {checkoutStablecoin} from '../../lib/checkoutStablecoins.js'
 import {acceptedCheckoutAssets} from '../../lib/checkoutAcceptance.js'
 import type {XPayDestination} from './pocketUnifiedXPay.js'
 
@@ -14,7 +15,7 @@ export function xpayAvailableRoutes(destinations:XPayDestination[]):XPayAccepted
   if(d.kind==='xstocks')return []
   const networks=d.kind==='bank'?['base']:d.networks||[]
   return networks.flatMap(network=>d.assets.filter(asset=>
-   asset==='USDC'&&acceptedCheckoutAssets(network).includes(asset)
+   d.adapter?network===d.adapter&&!!checkoutStablecoin(network,asset):asset==='USDC'&&acceptedCheckoutAssets(network).includes(asset)
   ).map(asset=>({destinationId:d.id,revision:d.revision,network,asset})))
  })
 }

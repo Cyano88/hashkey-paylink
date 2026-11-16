@@ -7,6 +7,7 @@ export function activeReceiptSettings(project?:Project){
  return {...defaultReceiptEmailSettings,...project.receiptEmails,enabled:true}
 }
 export async function readDeveloperReceiptSettings(projectId:string){
+ if(projectId.startsWith('xpay:')){const {xpayHostedPartnerExists}=await import('./pocket/xpay-hosted-destinations.js');return await xpayHostedPartnerExists(projectId)?{...defaultReceiptEmailSettings}:undefined}
  const store=await readDurableJson<{projects:Record<string,Project>}>((process.env.DEVELOPER_PROJECT_STORE_KEY??'hashpaylink:developer-projects:v1').trim())
  return activeReceiptSettings(store?.projects?.[projectId])
 }

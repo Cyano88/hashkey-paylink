@@ -3,6 +3,9 @@ fs.mkdirSync('.codex-temp',{recursive:true})
 const bank={id:'bank-1',name:'Fixture',kind:'bank',currency:'NGN',assets:['USDC'],revision:'1'}, stocks={id:'stocks-1',name:'Fixture',kind:'xstocks',currency:'USD',assets:['NVDAx','AAPLx'],revision:'1'}
 globalThis.fixture={owner:'merchant',destinations:[bank,stocks],approval:false}
 const mocks={
+'./xpay-hosted-destinations.js':`export const listXPayHostedDestinations=async()=>[];export const xpayHostedEnabled=()=>false`,
+'./xpay-coin-configuration.js':`export const configureXPayCoin=async()=>{throw Error('Use hosted integration fixture')};export const validateXPayCoinNetworks=()=>{throw Error('Use hosted integration fixture')}`,
+'./xpay-hosted-payment.js':`export const prepareXPayHostedPayment=async()=>{throw Error('Use hosted integration fixture')};export const readXPayHostedHistory=async()=>[]`,
 './kyc-level.js':`export const requirePocketBasicKyc=async()=>{if(!fixture.kyc)throw Object.assign(Error('Complete Basic verification.'),{status:403,code:'KYC_BASIC_REQUIRED'})}`,
 '../privy-circle-link.js':`export const circleLinkKey=(owner,network)=>owner+':'+network;export const readCircleLink=async key=>fixture.links?.[key];export const verifiedPrivyUser=async()=>{if(!fixture.owner)throw Object.assign(Error('Sign in'),{status:401});return{userId:fixture.owner}}`,
 '../render-durable-store.js':`const stores=new Map();fixture.stores=stores;export const readDurableJson=async(k)=>structuredClone(stores.get(k));export const mutateDurableJson=async(k,fn)=>{const store=fn(structuredClone(stores.get(k)));stores.set(k,store);return structuredClone(store)}`,

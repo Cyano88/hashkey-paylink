@@ -1,3 +1,4 @@
+import {parseXPayHostedPartner} from './xpay-hosted-destinations.js'
 import type {Request,Response} from 'express'
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto'
 import {formatUnits,parseUnits} from 'viem'
@@ -77,13 +78,13 @@ export function createBscPaymentService(overrides:Partial<typeof dependencies>={
    if(action==='pending')return res.json({ok:true,operations:(await operations.list(binding)).map(response)})
    if(!enabled())return unavailable()
    if(action==='balance'){
-    const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)
+    const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();if(parseXPayHostedPartner(c.partnerId)&&c.ownerId===identity.userId)throw Error('You cannot pay your own QR.');await d.assertPayable(c)
     if(c.asset!=='USDC'&&c.asset!=='USDT')return unavailable()
     const display=await d.display(wallet.address)
     return res.json({ok:true,balanceUnits:String(display.units[c.asset]),observedAt:display.observedAt,address:wallet.address,fundingBufferUnits:'0'})
    }
    if(action==='quote'){
-    const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();await d.assertPayable(c)
+    const c=await d.readCheckout(String(req.body.checkoutId));if(!c)return unavailable();if(parseXPayHostedPartner(c.partnerId)&&c.ownerId===identity.userId)throw Error('You cannot pay your own QR.');await d.assertPayable(c)
     if(c.asset!=='USDC'&&c.asset!=='USDT')return unavailable()
     const now=Date.now(),q:BscPaymentQuote={feeRoutingVersion:2,version:2,chainId:56,id:randomUUID(),checkoutId:c.id,...binding,asset:c.asset,recipient:c.recipient as `0x${string}`,amountUnits:parseUnits(c.amount,18).toString(),reimbursementUnits:'1',issuedAt:now,expiresAt:Math.min(now+30000,Date.parse(c.expiresAt))}
     const fee=await estimate(q);q.reimbursementUnits=fee.feeUnits;q.expiresAt=fee.expiresAt
