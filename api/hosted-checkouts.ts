@@ -218,6 +218,7 @@ const defaults: Dependencies = {
 }
 
 function enqueueWebhook(store: CheckoutStore, partnerId: string, event: string, data: Record<string, unknown>, now: Date) {
+  if(partnerId.startsWith('xpay:'))return store
   const createdAt = now.toISOString()
   const item: HostedCheckoutWebhookEvent = {
     id: `evt_${randomUUID().replace(/-/g, '').slice(0, 20)}`,
@@ -483,6 +484,10 @@ export async function readVerifiedHostedCheckoutRecord(id: string, options: { al
   const record = store?.checkouts?.[normalizedId]
   if (!record || !integrityValid(record, secret)) return null
   if (!options.allowExpiredForReconciliation && defaults.now().getTime() >= Date.parse(record.expiresAt)) return null
+  if(!options.allowExpiredForReconciliation&&record.partnerId.startsWith('xpay:')){
+    const {assertXPayHostedRoute}=await import('./pocket/xpay-hosted-destinations.js')
+    await assertXPayHostedRoute(record.partnerId,record.network as import('./pocket/xpay-hosted-destinations.js').XPayHostedNetwork,record.recipient,record.asset||'USDC')
+  }
   return { ...record }
 }
 
@@ -979,7 +984,8 @@ async function invokeCheckoutHandler(handler:(req:Request,res:Response)=>unknown
   return result
 }
 
-export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
+export function createHostedCheckoutsHandler(overrides: Partial<Dependencies> = {}) {
+  const dependencies:Dependencies={...defaults,...overrides}
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
     if(req.method==='GET'&&req.query?.purpose==='selection'){const {checkoutSelectionNavigation}=await import('./checkout-selection.js');return res.json({ok:true,selection:await checkoutSelectionNavigation(String(req.query.id||''))})}
     if(isCheckoutSelection(req.query?.id)||req.body?.paymentSelection==='stablecoins') {

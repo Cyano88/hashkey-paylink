@@ -8,13 +8,12 @@ import {validateXPayDestinations,type XPayDestination} from '../../src/pocket/li
 import {circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {createNgPosMerchant,listPocketXPayPosDestinations} from '../ng-pos.js'
 import {mutateDurableJson} from '../render-durable-store.js'
-import {readBscWallet} from './bsc-wallet.js'
 import {UNIFIED_XPAY_KEY,type UnifiedXPayRecord,type UnifiedXPayStore} from './unified-xpay-store.js'
-import {saveXPayHostedDestination,xpayHostedEnabled,type XPayHostedNetwork} from './xpay-hosted-destinations.js'
+import {saveXPayHostedDestination,xpayHostedEnabled,xpayReceivingWallet,XPAY_HOSTED_NETWORKS} from './xpay-hosted-destinations.js'
 const circleNetworks=['base','arc','arbitrum','solana','ethereum','polygon']
 export function validateXPayCoinNetworks(asset:unknown,networks:unknown):{asset:string;networks:string[]}{
- if(typeof asset!=='string'||!['USDC','USDT','USDe','USDG'].includes(asset)||!Array.isArray(networks)||networks.length>8||new Set(networks).size!==networks.length||networks.some(n=>typeof n!=='string'||!checkoutStablecoin(n,asset)||(circleNetworks.includes(n)&&asset!=='USDC')))throw Object.assign(Error('Choose supported networks for this stablecoin.'),{status:400})
- if(networks.some(n=>!circleNetworks.includes(n)&&!xpayHostedEnabled(n)))throw Object.assign(Error('This network is not available for QR payments yet.'),{status:409})
+ if(typeof asset!=='string'||!['USDC','USDT','USDe','USDG'].includes(asset)||!Array.isArray(networks)||networks.length>8||new Set(networks).size!==networks.length||networks.some(n=>typeof n!=='string'||!checkoutStablecoin(n,asset)))throw Object.assign(Error('Choose supported networks for this stablecoin.'),{status:400})
+ if(networks.some(n=>(asset!=='USDC'||!circleNetworks.includes(n))&&!xpayHostedEnabled(n)))throw Object.assign(Error('This network is not available for QR payments yet.'),{status:409})
  return {asset,networks:[...networks].sort()}
 }
 export async function configureXPayCoin(req:Request,c:UnifiedXPayRecord,current:XPayDestination[],input:{asset:string;networks:string[]}){
@@ -36,13 +35,14 @@ export async function configureXPayCoin(req:Request,c:UnifiedXPayRecord,current:
    }
   }
  }
- for(const network of ['xlayer','bsc'] as XPayHostedNetwork[]){
+ for(const network of XPAY_HOSTED_NETWORKS){
+  if(circleNetworks.includes(network)&&asset==='USDC')continue
   const old=next.find(d=>d.adapter===network)
   const previous=old?(c.acceptance?.routes.filter(r=>r.destinationId===old.id).map(r=>r.asset)||old.assets):[]
   const assets=[...new Set([...previous.filter(a=>a!==asset),...(networks.includes(network)?[asset]:[])])].sort()
   if(JSON.stringify(assets)===JSON.stringify([...previous].sort()))continue
   next=next.filter(d=>d!==old)
-  if(assets.length){const wallet=await readBscWallet(c.owner);if(!wallet)throw Object.assign(Error('Open your '+(network==='bsc'?'BNB Chain':'X Layer')+' wallet before enabling it.'),{status:409});next.push(await saveXPayHostedDestination({owner:c.owner,terminalId:c.id,name:c.name,network,recipient:wallet.address,assets}))}
+  if(assets.length){const wallet=await xpayReceivingWallet(c.owner,network);if(!wallet)throw Object.assign(Error('Open your '+(network==='bsc'?'BNB Chain':network==='xlayer'?'X Layer':network)+' wallet before enabling it.'),{status:409});next.push(await saveXPayHostedDestination({owner:c.owner,terminalId:c.id,name:c.name,network,recipient:wallet.address,assets}))}
  }
  if(next.length)validateXPayDestinations(next.map(d=>d.id),next)
  const acceptance=reconcileXPayAcceptance(c.acceptance,next)

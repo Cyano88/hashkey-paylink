@@ -16,4 +16,10 @@ export function checkoutWalletAllowanceOrder(spend:CheckoutWalletSpend){
  return order
 }
 
-export async function checkCheckoutWalletAllowance(owner:string,spend:CheckoutWalletSpend,checkOnly=true){await checkCheckoutBuyerAllowance(owner,checkoutWalletAllowanceOrder(spend),checkOnly)}
+export async function checkCheckoutWalletAllowance(owner:string,spend:CheckoutWalletSpend,checkOnly=true){
+ if(spend.id.startsWith('chk_')){
+  const c=await (await import('./hosted-checkouts.js')).readVerifiedHostedCheckoutRecord(spend.id)
+  if(c?.partnerId.startsWith('xpay:')){const {parseXPayHostedPartner}=await import('./pocket/xpay-hosted-destinations.js');const p=parseXPayHostedPartner(c.partnerId);const terminal=(await (await import('./pocket/unified-xpay-store.js')).readUnifiedXPayStore()).checkouts.find(t=>t.id===p?.terminalId);if(!terminal||terminal.owner===owner)throw Error('You cannot pay your own QR.')}
+ }
+ await checkCheckoutBuyerAllowance(owner,checkoutWalletAllowanceOrder(spend),checkOnly)
+}

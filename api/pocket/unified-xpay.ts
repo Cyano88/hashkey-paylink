@@ -1,5 +1,5 @@
 import {prepareXPayHostedPayment,readXPayHostedHistory} from './xpay-hosted-payment.js'
-import {listXPayHostedDestinations,xpayHostedEnabled} from './xpay-hosted-destinations.js'
+import {listXPayHostedDestinations,xpayHostedEnabled,XPAY_HOSTED_NETWORKS} from './xpay-hosted-destinations.js'
 import {configureXPayCoin,validateXPayCoinNetworks} from './xpay-coin-configuration.js'
 import {isValidSolanaAddress} from '../../src/lib/solanaAddress.js'
 import {normalizeXPayAcceptance,reconcileXPayAcceptance,xpayAcceptedDestinations} from '../../src/pocket/lib/xpayAcceptance.js'
@@ -70,7 +70,7 @@ export default async function handler(req:Request,res:Response){
    const proofs=Object.assign({},...await Promise.all([ownedPosSetupKeys(owner),ownedStockSetupKeys(owner)]))
    const standaloneIds=destinations.filter(d=>!d.adapter&&!records.some(c=>c.destinationIds.includes(d.id)||c.pastDestinations?.some(p=>p.id===d.id)||c.setupKeys?.some(k=>k.key===proofs[d.id]))).map(d=>d.id)
    const checkouts=records.filter(c=>c.owner===owner&&!c.deletedAt).map(c=>({id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,acceptance:c.acceptance,destinations:c.destinationIds.flatMap(id=>destinations.filter(d=>d.id===id))}))
-   return res.json({ok:true,destinations,checkouts,standaloneIds,hostedNetworks:['xlayer','bsc'].filter(xpayHostedEnabled)})
+   return res.json({ok:true,destinations,checkouts,standaloneIds,hostedNetworks:XPAY_HOSTED_NETWORKS.filter(xpayHostedEnabled)})
   }
   if(b.action==='history'){
    const c=b.id?(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner):undefined
