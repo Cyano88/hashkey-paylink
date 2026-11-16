@@ -26,3 +26,6 @@
 - Completed Basic/Advanced cards now show their daily allowance and completion check, without historical method instructions. Developer/checkout surfaces show completion wording where no allowance is displayed.
 - Unfinished verification retains its actual permitted method, including existing BVN-first sessions; no verification records, permissions or routing changed.
 - Advanced instructions consistently include the selfie and use the same separator as Basic.
+- Existing KYC browser regression and changed-file diagnostics passed. Android build passed and was installed in place.
+- Pixel screenshot and DOM checks confirmed both completion ticks, allowance-only summaries, Advanced complete and no overflow. No identity job was submitted.
+- Follow-up commit c6bb73facda2a7dd7e0a675e1b10f11d7c7aa2c2 is live via dep-dbt6m9m1egvs73fiteeg (2026-11-16T02:37:39.190073Z).
