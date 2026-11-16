@@ -74,3 +74,10 @@ This section supersedes the acceptance sheet layout above.
 - New stock QR setup, adoption/configuration and payment preparation are blocked on the server. Public terminal choices exclude the retired stock destination. Existing ready/submitted payment recovery, confirmation and receipts remain available; shared developer hosted X Layer execution remains separate.
 - Updated regression covers real page, route shell, PIN gate and approval request with provider boundaries mocked: PIN cancel makes no configuration request, duplicate clicks produce one save, invalid empty network selections are blocked, bank funding is preserved, errors sit above fixed CTA, fiat setup returns correctly, and no stocks option appears. Passed at 320/390 light/dark.
 - New stock QR retirement regression passes new-request rejection, immutable old-payment replay, confirmation/history and separate hosted checkout/fee-proof checks. Shared online/QR allowance and scan-first chooser regressions still pass.
+
+### Deployment and device verification
+- Source commit a5fb4685eb049175588f4baa0f58424e901f3a42 is live in deployment dep-dbtbmht6e07s73c0pmc0. Full web and native Android builds passed; the debug APK was installed on the connected Pixel with app data preserved.
+- Actual Pixel walkthrough passed: normal Accepted payments page, six disabled upcoming methods, six stablecoin network choices, fixed Save above bottom navigation, Receive fiat currency/account setup and Android Back. All three device screenshots were visually inspected; no horizontal overflow was found.
+- Device testing made no payment, saved no acceptance changes and changed no receiving account. Entering Receive fiat created the existing setup reference only.
+- Production readiness checks returned JSON: public-config 200/ok and an unknown QR 404 with the expected unavailable message. These are readiness checks, not a live-money execution test.
+- Shared checkout session integration, additional stablecoin assets and cash-balance execution remain subsequent work; this deployment does not enable those unfinished routes.
