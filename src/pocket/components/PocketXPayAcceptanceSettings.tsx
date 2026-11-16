@@ -15,7 +15,7 @@ export default function PocketXPayAcceptanceSettings({checkout,draft,onSave,netw
  const walletRoutes=available.filter(r=>!bankIds.has(r.destinationId))
  const [selected,setSelected]=useState(()=>walletRoutes.filter(r=>!(draft||checkout.acceptance)||(draft||checkout.acceptance)!.routes.some(p=>p.destinationId===r.destinationId&&p.network===r.network&&p.asset===r.asset)))
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),saving=useRef(false)
- const choices=walletRoutes.length?walletRoutes:bankRoutes
+ const choices=walletRoutes
  const valid=checkout.destinations.every(d=>d.kind!=='stablecoins'||selected.some(r=>r.destinationId===d.id))
  return <div className="flex min-h-0 flex-1 flex-col gap-4">
   <div aria-label="Accepted payment options" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
