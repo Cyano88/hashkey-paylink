@@ -26,11 +26,11 @@ export async function disablePocketPaymentBiometrics(email: string) {
   localStorage.setItem(ENABLED_KEY, 'false')
   await NativeBiometric.deleteCredentials({ server: server(email) }).catch(() => undefined)
 }
-export async function readPocketPinWithBiometrics(email: string) {
+export async function readPocketPinWithBiometrics(email: string, purpose?:'settings') {
   if (!pocketPaymentBiometricsEnabled()) return null
   const credentials = await NativeBiometric.getSecureCredentials({
-    server: server(email), title: 'Approve payment', subtitle: 'Hash PayLink Pocket',
-    description: 'Confirm this payment with fingerprint or face.', negativeButtonText: 'Use Pocket PIN',
+    server: server(email), title: purpose==='settings'?'Save changes':'Approve payment', subtitle: 'Hash PayLink Pocket',
+    description: purpose==='settings'?'Confirm these changes with fingerprint or face.':'Confirm this payment with fingerprint or face.', negativeButtonText: 'Use Pocket PIN',
   })
   if (credentials.username !== email.trim().toLowerCase() || !credentials.password.startsWith(PIN_PREFIX)) throw new Error('Payment approval needs to be set up again.')
   const pin = credentials.password.slice(PIN_PREFIX.length)

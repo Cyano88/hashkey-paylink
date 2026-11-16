@@ -5,7 +5,7 @@ globalThis.fixture={owner:'merchant',destinations:[bank,stocks],approval:false}
 const mocks={
 './kyc-level.js':`export const requirePocketBasicKyc=async()=>{if(!fixture.kyc)throw Object.assign(Error('Complete Basic verification.'),{status:403,code:'KYC_BASIC_REQUIRED'})}`,
 '../privy-circle-link.js':`export const circleLinkKey=(owner,network)=>owner+':'+network;export const readCircleLink=async key=>fixture.links?.[key];export const verifiedPrivyUser=async()=>{if(!fixture.owner)throw Object.assign(Error('Sign in'),{status:401});return{userId:fixture.owner}}`,
-'../render-durable-store.js':`const stores=new Map();export const readDurableJson=async(k)=>structuredClone(stores.get(k));export const mutateDurableJson=async(k,fn)=>{const store=fn(structuredClone(stores.get(k)));stores.set(k,store);return structuredClone(store)}`,
+'../render-durable-store.js':`const stores=new Map();fixture.stores=stores;export const readDurableJson=async(k)=>structuredClone(stores.get(k));export const mutateDurableJson=async(k,fn)=>{const store=fn(structuredClone(stores.get(k)));stores.set(k,store);return structuredClone(store)}`,
 '../ng-pos.js':`export const createNgPosMerchant=async(req,body,wallets)=>{fixture.created={body,wallets};return {merchant:{merchant_id:'usdc-1',supported_networks:body.supported_networks,network_wallets:wallets}}};export const ownedPosSetupKeys=async()=>fixture.keys||{};export const ownedPosSetupKey=async(owner,id)=>fixture.keys?.[id];export const ownsPocketPosQr=async(owner,id)=>owner==='merchant'&&id==='bank-1';export const listPocketUnifiedXPayPosPayments=async(owner,id)=>fixture.payments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayPosDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind!=='xstocks'):[]`,
 './xpay.js':`export const ownedStockSetupKeys=async()=>fixture.keys||{};export const ownedStockSetupKey=async(owner,id)=>fixture.keys?.[id];export const listPocketUnifiedXPayStockPayments=async(owner,id)=>fixture.stockPayments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayStockDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='xstocks'):[]`,
 './payment-security.js':`export const consumePocketPaymentApproval=async()=>{const yes=fixture.approval;fixture.approval=false;return yes}`}
@@ -17,8 +17,8 @@ await call({...input,destinationIds:['bank-1','stocks-1']},400)
 const a=(await call(input)).checkout;assert.equal(a.destinations.length,0);assert.equal((await call(input)).checkout.id,a.id)
 await call({...input,name:'Changed'},409);await call({id:a.id},409,true)
 const b=(await call({...input,key:'fixture-key-00000002',name:'Shop B'})).checkout
-const gatedSetup=await call({action:'begin-setup',id:a.id,kind:'bank'},403);assert.equal(gatedSetup.code,'KYC_BASIC_REQUIRED');await call({action:'begin-setup',id:b.id,kind:'wallet'});fixture.kyc=true;
-const setupA=await call({action:'begin-setup',id:a.id,kind:'bank'}),setupB=await call({action:'begin-setup',id:b.id,kind:'wallet'})
+const gatedSetup=await call({action:'begin-setup',id:a.id,kind:'bank'},403);assert.equal(gatedSetup.code,'KYC_BASIC_REQUIRED');await call({action:'begin-setup',id:b.id,kind:'wallet'},409);fixture.kyc=true;
+const setupA=await call({action:'begin-setup',id:a.id,kind:'bank'}),setupB={key:'legacy-stock-setup'}
 fixture.keys={'bank-1':setupA.key,'stocks-1':setupB.key}
 const config=(id,version,destinationIds)=>({action:'configure',id,version,destinationIds})
 await call(config(a.id,0,['bank-1']),403)
@@ -26,14 +26,14 @@ fixture.approval=true;await call(config(a.id,0,['stocks-1']),409)
 fixture.approval=true;const configured=(await call(config(a.id,0,['bank-1']))).checkout;assert.equal(configured.id,a.id);assert.equal(configured.version,1)
 fixture.approval=true;await call(config(b.id,0,['bank-1']),409)
 await call({action:'adopt',destinationId:'stocks-1'},409)
-fixture.approval=true;await call(config(b.id,0,['stocks-1']))
+fixture.approval=true;await call(config(b.id,0,['stocks-1']),409);const oldTerminal=fixture.stores.get('pocket:unified-xpay:v1').checkouts.find(c=>c.id===b.id);Object.assign(oldTerminal,{destinationIds:['stocks-1'],revisions:['1'],version:1})
 assert.equal((await call({id:a.id},200,true)).checkout.destinations[0].id,'bank-1')
-assert.equal((await call({id:b.id},200,true)).checkout.destinations[0].id,'stocks-1')
+await call({id:b.id},409,true)
 fixture.approval=true;await call(config(a.id,0,[]),409)
 const newBank={...bank,id:'bank-new',revision:'2'};fixture.destinations.push(newBank)
 const replacement=await call({action:'begin-setup',id:a.id,kind:'bank'});fixture.keys['bank-new']=replacement.key
 fixture.approval=true;const changed=(await call(config(a.id,1,['bank-new']))).checkout;assert.equal(changed.id,a.id)
-assert.equal((await call({id:b.id},200,true)).checkout.destinations[0].id,'stocks-1')
+await call({id:b.id},409,true)
 await assert.rejects(assertUnifiedXPayDestination(a.id,'bank-1','1'),/not available/)
 await assertUnifiedXPayDestination(a.id,'bank-1','1',true)
 await assert.rejects(assertUnifiedXPayDestination(a.id,'bank-1','wrong',true),/not available/)
@@ -116,3 +116,9 @@ await assert.rejects(assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','1','base'
 await assert.rejects(assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','1','arbitrum','USDT'),/no longer available/);
 await assert.rejects(assertUnifiedXPayPaymentRoute(stable.id,'usdc-1','wrong','arbitrum','USDC'),/Receiving options changed/);
 console.log('PASS server payment route guard rejects disabled networks, unsupported assets and stale receiving revisions.');
+
+const mixed=fixture.stores.get('pocket:unified-xpay:v1').checkouts.find(c=>c.id===stable.id);
+fixture.destinations.push({...stocks,id:'retired-mixed-stock',revision:'changed'});mixed.destinationIds.push('retired-mixed-stock');mixed.revisions.push('old');
+const activePublic=(await call({id:stable.id},200,true)).checkout;
+assert.equal(activePublic.destinations.length,1);assert.equal(activePublic.destinations[0].kind,'stablecoins');
+console.log('PASS retired stock revision cannot block the terminal surviving stablecoin route.');

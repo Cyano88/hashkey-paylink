@@ -102,19 +102,7 @@ export default async function handler(req:Request,res:Response){
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId,b=req.body||{},action=b.action
-  if(action==='merchant-save'){
-   const wallet=String(b.wallet||'');await verifyStockWalletOwner(owner,wallet)
-   const tokens=Array.isArray(b.tokens)?[...new Set<string>(b.tokens.map((t:unknown)=>String(t).toLowerCase()))]:[]
-   if(!tokens.length||tokens.length>3||tokens.some(t=>!supported.has(t)))fail('Select up to 3 supported assets.')
-   const name=String(b.name||'').trim();if(!name||name.length>60||/[\u0000-\u001f<>]/.test(name))fail('Enter a merchant name, up to 60 characters.')
-   const profile=await localCurrencyProfileRepository.ensure(identity)
-   const createKey=b.create&&b.key?String(b.key):undefined
-   if(createKey&&!/^[a-zA-Z0-9-]{16,80}$/.test(createKey))fail('Invalid receiving setup reference.')
-   const dedicatedSetup=!!createKey&&await ownsTerminalSetupKey(owner,createKey,'wallet')
-   let savedId=''
-   const s=await mutate(s=>{const existing=b.id?s.merchants[String(b.id)]:b.create?(createKey?Object.values(s.merchants).find(m=>m.owner===owner&&m.createKey===createKey):undefined):Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt);if(b.id&&(!existing||existing.owner!==owner||existing.deletedAt))fail('Link not found.',404);if(!existing&&!dedicatedSetup)fail('Create a business terminal in XPay, then enable stock receiving.',409);if(!existing&&!dedicatedSetup&&Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).length>=20)fail('You can have up to 20 active links.');if(existing&&createKey){if(existing.deletedAt||existing.wallet!==wallet||existing.name!==name||JSON.stringify(existing.tokens)!==JSON.stringify(tokens))fail('Receiving setup changed. Start again.',409);savedId=existing.id;return}const id=existing?.id||randomUUID();savedId=id;s.merchants[id]={id,owner,createKey,pocketId:profile.profile.pocketId,name,wallet,tokens,updatedAt:Date.now()}})
-   return res.json({ok:true,merchant:publicMerchant(s.merchants[savedId])})
-  }
+  if(action==='merchant-save')return res.status(409).json({ok:false,error:'Stock QR payments are no longer supported.'})
   if(action==='merchant-delete'){
    const id=String(b.id||''),current=(await read()).merchants[id]
    if(!current||current.owner!==owner||current.deletedAt)fail('Link not found.',404)
@@ -134,6 +122,12 @@ export default async function handler(req:Request,res:Response){
    const payer=String(b.wallet||'');await verifyStockWalletOwner(owner,payer)
    const id=String(b.id||''),token=String(b.token||'').toLowerCase(),usd=String(b.usd||''),key=String(b.key||'')
    if(!/^[a-zA-Z0-9-]{16,80}$/.test(key))fail('Invalid payment reference.')
+   if(!isStockCheckoutId(id)){
+    const prior=Object.values((await read()).payments).find(p=>p.owner===owner&&p.key===key)
+    if(!prior)fail('Stock QR payments are no longer supported.',409)
+    if(prior.checkoutId!==(b.checkoutId?String(b.checkoutId):undefined)||prior.merchantId!==id||prior.token!==token||prior.usd!==usd||prior.payer.toLowerCase()!==payer.toLowerCase())fail('Payment details changed.',409)
+    return res.json({ok:true,payment:publicPayment(prior)})
+   }
    const s=await read(),m=s.merchants[id]||await checkoutMerchant(id);if(!m||m.deletedAt||!m.tokens.includes(token))fail('Choose an asset accepted by this merchant.')
    const checkoutId=b.checkoutId?String(b.checkoutId):undefined
    if(!checkoutId&&await legacyXPayTerminal(id,m.createKey))fail('Reopen this QR to use the business terminal.',409)

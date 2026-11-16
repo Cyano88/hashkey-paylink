@@ -19,8 +19,10 @@ async function publicCheckout(c:Record):Promise<XPayCheckout>{
  const current=await available(c.owner)
  // Do not silently change a checkout when an underlying receiving setup changes.
  if(!c.destinationIds.length)throw Object.assign(Error('This terminal is not accepting payments yet.'),{status:409})
- const destinations=validateXPayDestinations(c.destinationIds,current)
- if(destinations.some((d,i)=>d.revision!==c.revisions[i]))throw Object.assign(Error('Receiving options changed. Reopen this terminal before paying.'),{status:409})
+ const activeIds=c.destinationIds.filter(id=>current.find(d=>d.id===id)?.kind!=='xstocks')
+ if(!activeIds.length)throw Object.assign(Error('This terminal is not accepting payments yet.'),{status:409})
+ const destinations=validateXPayDestinations(activeIds,current)
+ if(destinations.some(d=>d.revision!==c.revisions[c.destinationIds.indexOf(d.id)]))throw Object.assign(Error('Receiving options changed. Reopen this terminal before paying.'),{status:409})
  const acceptance=normalizeXPayAcceptance(c.acceptance,destinations)
  return {id:c.id,name:c.name,createdAt:c.createdAt,version:c.version||0,acceptance,destinations:xpayAcceptedDestinations(destinations,acceptance)}
 }
@@ -60,6 +62,7 @@ export default async function handler(req:Request,res:Response){
   if(b.action==='create'||b.action==='adopt'){
    const adopting=b.action==='adopt',destinations=adopting?await available(owner):[]
    const destination=adopting?destinations.find(d=>d.id===b.destinationId):undefined
+   if(adopting&&destination?.kind==='xstocks')return res.status(409).json({ok:false,error:'Stock QR payments are no longer supported.'})
    if(adopting&&!destination)return res.status(404).json({ok:false,error:'Terminal not found.'})
    const name=adopting?destination!.name:String(b.name||'').trim(),key=adopting?'adopt-'+destination!.id:String(b.key||'')
    if(!name||name.length>60||/[<>\u0000-\u001f]/.test(name)||(!adopting&&!/^[a-zA-Z0-9-]{16,80}$/.test(key)))return res.status(400).json({ok:false,error:'Enter a business name.'})
@@ -77,6 +80,7 @@ export default async function handler(req:Request,res:Response){
    return res.json({ok:true,checkout:{id:checkout!.id,name:checkout!.name,createdAt:checkout!.createdAt,version:checkout!.version||0,destinations:checkout!.destinationIds.flatMap(id=>active.filter(d=>d.id===id))}})
   }
   if(b.action==='begin-setup'){
+   if(b.kind==='wallet')return res.status(409).json({ok:false,error:'Stock QR payments are no longer supported.'})
    if(b.kind==='bank')await requirePocketBasicKyc(owner)
    if(!['bank','wallet','stablecoins'].includes(b.kind))return res.status(400).json({ok:false,error:'Choose a receiving option.'})
    let key=''
@@ -107,6 +111,7 @@ export default async function handler(req:Request,res:Response){
    if(b.version!==(c.version||0))return res.status(409).json({ok:false,error:'This terminal changed. Reopen it before saving.'})
    const destinations=await available(owner)
    const selected=Array.isArray(b.destinationIds)&&b.destinationIds.length===0?[]:validateXPayDestinations(b.destinationIds,destinations)
+   if(selected.some(d=>d.kind==='xstocks'))return res.status(409).json({ok:false,error:'Stock QR payments are no longer supported.'})
    const acceptance=b.acceptance===undefined?reconcileXPayAcceptance(c.acceptance,selected):normalizeXPayAcceptance(b.acceptance,selected)
    const proofs=await Promise.all(selected.map(d=>d.kind==='xstocks'?ownedStockSetupKey(owner,d.id):ownedPosSetupKey(owner,d.id)))
    if(!await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval']||''),owner))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})

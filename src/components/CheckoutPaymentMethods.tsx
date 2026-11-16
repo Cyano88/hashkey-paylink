@@ -19,19 +19,24 @@ export default function CheckoutPaymentMethods({children,onStablecoins,onCash,st
     <ChevronRightIcon aria-hidden="true" className="h-5 w-5 shrink-0"/>
    </button>}
    {onCash&&<button type="button" onClick={onCash} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5"><span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><BuildingLibraryIcon className="h-7 w-7"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Cash balance</span><span className="mt-0.5 block text-xs text-gray-500">Pay from Pocket</span></span><ChevronRightIcon aria-hidden="true" className="h-5 w-5"/></button>}
-   {([
+   <CheckoutUpcomingMethods/>
+
+  </div>
+ </section>
+}
+
+export function CheckoutUpcomingMethods({plain=false}:{plain?:boolean}) {
+ return <div className="divide-y divide-gray-100 dark:divide-white/10">{([
     {name:'Card',Icon:CreditCardIcon},
     {name:'Google Pay',src:'/brand/payments/google-pay.svg'},
     {name:'Apple Pay',src:'/brand/payments/apple-pay.svg'},
     {name:'WalletConnect Pay',src:'/brand/payments/walletconnect-pay.svg'},
     {name:'Bank transfer',Icon:BuildingLibraryIcon},
-   ]).map(({name,src,Icon})=><button key={name} type="button" disabled aria-label={`${name} — Coming soon`} className="flex min-h-16 w-full cursor-not-allowed items-center gap-3 px-4 py-3 text-left">
+   ]).map(({name,src,Icon})=><button key={name} type="button" disabled aria-label={`${name} — Coming soon`} className={"flex min-h-16 w-full cursor-not-allowed items-center gap-3 py-3 text-left "+(plain?"":"px-4")}>
     <span aria-hidden="true" className={'flex h-10 w-14 shrink-0 items-center justify-center '+(src?'rounded-lg bg-white':'text-gray-500 dark:text-gray-400')}>
      {src?<img src={src} alt="" className="h-7 w-10 object-contain"/>:Icon?<Icon className="h-7 w-7"/>:null}
     </span>
     <span className="min-w-0 flex-1 text-sm font-medium text-gray-600 dark:text-gray-300">{name}</span>
     <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-600 dark:bg-white/10 dark:text-gray-400">Coming soon</span>
-   </button>)}
-  </div>
- </section>
+   </button>)}</div>
 }

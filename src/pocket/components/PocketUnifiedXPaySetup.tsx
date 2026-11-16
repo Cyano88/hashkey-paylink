@@ -21,10 +21,10 @@ export function XPayBankSetup({name,onCreated,setupKey}:Props){
  const finish=async(id:string)=>{setLinkBusy(true);setLinkError('');try{await callback.current(id)}catch(e){setLinkError(e instanceof Error?e.message:'Could not attach the receiving account. Try again.')}finally{setLinkBusy(false)}}
  useEffect(()=>{if(!initialized.current){initialized.current=true;pos.controller.actions.setMerchantName(name)}},[name,pos.controller.actions])
  useEffect(()=>{const id=pos.merchant?.merchant_id;if(id&&reported.current!==id){reported.current=id;void finish(id)}},[pos.merchant?.merchant_id])
- if(pos.merchant?.merchant_id)return <div className="space-y-4"><p className="text-xs text-gray-500">{linkError||'Adding receiving account...'}</p>{linkError&&<button className="pocket-cta-primary w-full shrink-0" disabled={linkBusy} onClick={()=>void finish(pos.merchant!.merchant_id)}>Try again</button>}</div>
+ if(pos.merchant?.merchant_id)return <div className="space-y-4">{linkError?<p role="alert" className="text-xs text-red-500">{linkError}</p>:<div role="status" aria-label="Saving receiving account" className="h-16 animate-pulse rounded-xl bg-gray-100 dark:bg-white/10"/>}{linkError&&<button className="pocket-cta-primary w-full shrink-0" disabled={linkBusy} onClick={()=>void finish(pos.merchant!.merchant_id)}>Try again</button>}</div>
  if(!profile.loaded&&!profile.profile)return <PocketRecentActivitySkeleton/>
  if(!verifiedName)return <PocketIdentityGate/>
- return <PocketPosSetupPanel controller={pos.controller} showName={false} networkOptions={[{key:'base',label:'Base'}]} instantBankPayout bankInstitutions={pos.institutions} bankInstitutionsBusy={pos.institutionsBusy} bankCode={pos.bankCode} bankAccount={pos.bankAccount} bankAccountName={pos.bankAccountName} bankVerified={pos.bankVerified} bankVerifyBusy={pos.bankVerifyBusy} error={pos.error}/>
+ return <PocketPosSetupPanel payoutCurrencyLabel="Currency" controller={pos.controller} showName={false} networkOptions={[{key:'base',label:'Base'}]} instantBankPayout bankInstitutions={pos.institutions} bankInstitutionsBusy={pos.institutionsBusy} bankCode={pos.bankCode} bankAccount={pos.bankAccount} bankAccountName={pos.bankAccountName} bankVerified={pos.bankVerified} bankVerifyBusy={pos.bankVerifyBusy} error={pos.error}/>
 }
 export function XPayWalletSetup({name,onCreated,setupKey,reservedAssets=[],initialAssets=[],stocksOnly=false}:Props&{reservedAssets?:string[];initialAssets?:string[];stocksOnly?:boolean}){
  const wallet=usePocketStockWallet(),{getAccessToken}=usePocketIdentity()

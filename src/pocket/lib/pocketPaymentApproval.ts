@@ -6,6 +6,9 @@ let paymentPreparer: (() => Promise<void>) | null = null
 export const POCKET_PAYMENT_APPROVAL_EVENT = 'pocket:payment-approval-request'
 export const POCKET_PAYMENT_APPROVAL_DISMISSED_EVENT = 'pocket:payment-approval-dismissed'
 export const POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT = 'pocket:payment-approval-cancelled'
+export function pocketApprovalCancelled(purpose?:'settings') {
+  return Object.assign(new Error(purpose==='settings'?'Changes were not saved.':'Payment approval was cancelled.'),{code:'POCKET_APPROVAL_CANCELLED'})
+}
 
 export function setPocketPaymentApproval(token: string, expiresAt: number, authorization: string) {
   approvalToken = token
@@ -38,7 +41,7 @@ export async function preparePocketPaymentApproval() {
   await paymentPreparer?.()
 }
 
-export function requestPocketPaymentApproval(options: { expiresAt?: number; signal?: AbortSignal } = {}) {
+export function requestPocketPaymentApproval(options: { expiresAt?: number; signal?: AbortSignal; purpose?:'settings' } = {}) {
   return new Promise<void>((resolve, reject) => {
     let settled = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -51,8 +54,8 @@ export function requestPocketPaymentApproval(options: { expiresAt?: number; sign
       reject(error)
     }
     const check = () => { if (!isActive()) dismiss(new Error('Checkout expired. Start a new checkout.')) }
-    const cancel = () => dismiss(new Error('Payment approval was cancelled.'))
-    const detail = { isActive,
+    const cancel = () => dismiss(pocketApprovalCancelled(options.purpose))
+    const detail = { isActive, purpose:options.purpose,
       resolve: () => { if (!isActive()) { check(); return }; settled = true; cleanup(); resolve() },
       reject: (reason?: unknown) => { if (settled) return; settled = true; cleanup(); reject(reason) },
     }
