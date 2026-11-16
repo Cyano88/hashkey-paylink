@@ -137,3 +137,6 @@ This section supersedes the acceptance sheet layout above.
 - Coin-network Save is disabled when selected networks equal the saved set, enabled after a change, and disabled again when the original selection is restored. This applies to any saved subset, not only the all-enabled case. Newly selected options remain saveable until saved.
 - Accepted payments uses the same unchanged-selection rule for its Save CTA. The legacy Done navigation action remains available. Existing disabled-button styling supplies the greyed-out appearance.
 - Browser regression passed unchanged, edited and reverted states alongside the existing save, PIN cancellation, failure/retry and exact Saving-label checks at 320/390 light/dark.
+
+- Source 92cf539111dc69093939764b5ac82fdf3dfbc5a5 is live in deployment dep-dbtenc9srm7s73b32i80. Web/native builds and Android packaging passed; installed with app data preserved. Fresh authenticated Pixel read confirmed version 5, eight saved USDC networks and no editor errors.
+- Pixel regression passed unchangedDisabled, changeEnabled and revertDisabled; disabled opacity 0.45. Exact ASCII Saving, ringBeforeText true, animation spin. PIN prompt cancelled, zero configuration writes, original selections restored.
