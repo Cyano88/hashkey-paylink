@@ -9,8 +9,8 @@ export function parsePocketScanCode(raw: string): PocketScanCode {
   if (url.protocol !== 'https:' || !hosts.has(url.hostname) || url.username || url.password || url.port || url.hash) throw Error('This QR is not a supported Hash PayLink checkout.')
   const keys = [...url.searchParams.keys()]
   if (new Set(keys).size !== keys.length) throw Error('This checkout link has conflicting details.')
-  const unified = /^\/xpay\/checkout\/(xp_[0-9a-f-]{36})\/?$/.exec(url.pathname)
-  if(unified&&!keys.length)return {kind:'unified-xpay',id:unified[1],url:url.href}
+  const unified = /^\/(?:xpay\/checkout|open\/checkout)\/(xp_[0-9a-f-]{36})\/?$/.exec(url.pathname)
+  if(unified&&keys.every(k=>k==='method')&&(!keys.length||['cash_balance','stablecoins'].includes(url.searchParams.get('method')||'')))return {kind:'unified-xpay',id:unified[1],url:url.href}
   const xpay = /^\/xpay\/([0-9a-f-]{36}|chkx_[a-f0-9]{24})\/?$/.exec(url.pathname)
   if (xpay && !keys.length) return {kind:'xpay',id:xpay[1],url:url.href}
   const checkout = /^\/(?:pay\/c|open\/checkout)\/(chk_[A-Za-z0-9]{8,40}|chk[bxs]_[a-f0-9]{24})\/?$/.exec(url.pathname)
@@ -26,5 +26,5 @@ export function parsePocketScanCode(raw: string): PocketScanCode {
   return {kind:'pos',id,url:url.href}
 }
 export function pocketScanDestination(raw: string) {
-  try { const code=parsePocketScanCode(raw);return code.kind==='funding'?code.path:code.kind==='unified-xpay' ? '/xpay/checkout/'+code.id : code.kind==='xpay' ? '/xstocks/xpay?merchant='+encodeURIComponent(code.id) : '/home/scan?code='+encodeURIComponent(code.url) } catch { return '' }
+  try { const code=parsePocketScanCode(raw);return code.kind==='funding'?code.path:code.kind==='unified-xpay' ? '/xpay/checkout/'+code.id+new URL(code.url).search : code.kind==='xpay' ? '/xstocks/xpay?merchant='+encodeURIComponent(code.id) : '/home/scan?code='+encodeURIComponent(code.url) } catch { return '' }
 }

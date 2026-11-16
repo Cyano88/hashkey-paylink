@@ -385,8 +385,10 @@ export async function createPaycrestOfframpOrder(input: {
   source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'hosted-checkout'
   memo?: string
   referenceSuffix?: string
+  paymentExpiresAt?: string
   unifiedXPay?: boolean
 }) {
+  if(input.paymentExpiresAt&&(!Number.isFinite(Date.parse(input.paymentExpiresAt))||Date.parse(input.paymentExpiresAt)<=Date.now()))throw Object.assign(Error('Payment session expired. Reopen the QR to start again.'),{status:410})
   const token = baseStablecoin(input.token)
   if (token === 'USDT') {
     if (!usdtPayoutAllowed({wallet:input.payerWallet,account:input.accountNumber,bankCode:input.bankCode,amount:input.amountNgn})) throw Error('USDT bank payouts are not available yet.')
@@ -460,7 +462,7 @@ export async function createPaycrestOfframpOrder(input: {
     payer_name: input.payerName || input.memo,
     source: input.source,
     status: firstText(data?.status, 'initiated'),
-    valid_until: firstText(providerAccount.validUntil, providerAccount.valid_until),
+    valid_until: input.paymentExpiresAt ? new Date(Math.min(Date.parse(input.paymentExpiresAt),Date.parse(firstText(providerAccount.validUntil, providerAccount.valid_until))||Infinity)).toISOString() : firstText(providerAccount.validUntil, providerAccount.valid_until),
     bank_name: input.bankName,
     bank_last4: input.accountNumber.slice(-4),
     bank_account_name: input.accountName,

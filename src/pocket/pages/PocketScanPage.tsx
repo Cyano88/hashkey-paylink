@@ -29,7 +29,7 @@ export default function PocketScanPage() {
   try {
    const code=parsePocketScanCode(raw)
    if(code.kind==='funding'){navigate(POCKET_BASE_PATH+code.path,{replace:true});return}
-   if(code.kind==='unified-xpay'){navigate('/xpay/checkout/'+code.id,{replace:true,state:scanState});return}
+   if(code.kind==='unified-xpay'){navigate('/xpay/checkout/'+code.id+new URL(code.url).search,{replace:true,state:scanState});return}
    if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true,state:scanState});return}
    const path=code.kind==='pos'?'/api/ng-pos?view=pocket-scan&merchant_id='+encodeURIComponent(code.id)+'&code='+encodeURIComponent(code.url):'/api/v2/checkouts?id='+encodeURIComponent(code.id)+'&attempt='+encodeURIComponent(code.attempt)
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})

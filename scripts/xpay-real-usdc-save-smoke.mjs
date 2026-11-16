@@ -46,6 +46,13 @@ const x=terminal.destinations.find(d=>d.adapter==='xlayer'),b=terminal.destinati
 const request={action:'prepare-hosted',id:terminal.id,destinationId:x.id,revision:x.revision,asset:'USDe',amount:'2.5',key:'fixture-payment-00000001'}
 await call(request,403);fixture.owner='payer';fixture.kyc=false;await call(request,403);fixture.kyc=true
 const child=await call(request);assert(/^chkx_/.test(child.checkoutId));assert.equal((await call(request)).checkoutId,child.checkoutId);await call({...request,amount:'3'},409);await call({...request,destinationId:b.id,revision:b.revision,asset:'USDC'},409);await call({...request,revision:'tampered',key:'fixture-payment-00000002'},409)
+const circleDestination=terminal.destinations.find(d=>d.kind==='stablecoins'&&!d.adapter)
+for(const network of circleDestination.networks){
+ const prepared=await call({action:'prepare-hosted',id:terminal.id,destinationId:circleDestination.id,revision:circleDestination.revision,network,asset:'USDC',amount:'2.5',key:'fixture-legacy-'+network+'-000001'})
+ const record=await m.readVerifiedHostedCheckoutRecord(prepared.checkoutId)
+ assert.equal(record.network,network);assert.equal(record.asset||'USDC','USDC');assert.equal(Date.parse(record.expiresAt)-Date.parse(record.createdAt),900000)
+ assert.match(record.returnUrl,/^https:\/\/app\.hashpaylink\.com\/xpay\/checkout\//)
+}
 for(const asset of ['USDC','USDT','USDG']){const other=await call({...request,asset,key:'fixture-xlayer-'+asset+'-000001'});assert.equal((await m.readStockCheckout(other.checkoutId)).asset,asset)}
 const stock=await m.readStockCheckout(child.checkoutId);assert.equal(stock.recipient,wallet);assert.equal(stock.ownerId,'merchant');assert.equal(stock.token.decimals,18);await m.assertStockCheckoutPayable(stock)
 const bchild=await call({...request,destinationId:b.id,revision:b.revision,asset:'USDC',key:'fixture-payment-00000003',recipient:payer});const bc=await m.readBscCheckout(bchild.checkoutId);assert.equal(bc.recipient,wallet);assert.equal(bc.token.decimals,18);await m.assertBscCheckoutPayable(bc)

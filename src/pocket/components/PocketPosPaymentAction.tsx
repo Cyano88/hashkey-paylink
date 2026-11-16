@@ -1,4 +1,5 @@
 import PocketFundingAction from './PocketFundingAction'
+import {CheckoutFooter,HashPayLinkCheckoutBrand} from '../../components/CheckoutChrome'
 import PocketXPayCheckoutBackdrop from './PocketXPayCheckoutBackdrop'
 import { useState, type ComponentProps } from 'react'
 import SlideAction from '../../components/SlideAction'
@@ -19,9 +20,10 @@ export default function PocketPosPaymentAction({ pocket, fullScreenReview = fals
       {busy ? action.labels?.[action.status] || 'Processing' : action.disabled ? action.labels?.disabled || 'Complete payment details' : 'Review payment'}
     </button>)}
     {open && <>{pocket && <PocketXPayCheckoutBackdrop/>}<PocketBottomSheet fullScreen={fullScreenReview} desktopCentered={webReview} title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!busy} onClose={() => {setOpen(false);onReviewClose?.()}}>
-      {webReview && <p className="mb-5 text-center text-sm font-semibold">Confirm payment</p>}
+      {webReview && <><HashPayLinkCheckoutBrand/><p className="mb-5 text-center text-sm font-semibold">Confirm payment</p></>}
       <PocketConfirmationDetails amount={amount} equivalent={equivalent} rows={rows} />
       <div className="mt-5">{wrap(<PocketSlideAction {...action} plain approvalRequired={false} onPrepare={async () => {}} labels={{ ...action.labels, idle: 'Confirm payment' }} onConfirm={() => { if (pocket) setOpen(false); action.onConfirm() }} />)}</div>
+      {webReview&&<CheckoutFooter/>}
     </PocketBottomSheet></>}
   </>
 }

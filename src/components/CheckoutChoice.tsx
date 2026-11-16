@@ -1,3 +1,4 @@
+import {qrCheckoutHandoff} from '../lib/qrCheckoutHandoff'
 import {CheckoutCountdown,CheckoutExpired,useCheckoutExpiry,checkoutSecondsLeft} from './CheckoutExpiry'
 import CheckoutMerchant from './CheckoutMerchant'
 import {CheckoutFooter,HashPayLinkCheckoutBrand} from './CheckoutChrome'
@@ -20,7 +21,7 @@ export default function CheckoutChoice({cashOnly=false,initialCash=false,stablec
  const changeStep=(next:boolean)=>{focusNavigation.current=true;setStablecoins(next);setOpened(false);if(opened)onHandoffChange?.(cash,false)}
  const [storeUrl,setStoreUrl]=useState('')
  useEffect(()=>{const controller=new AbortController();void fetch('/api/pocket/checkout-config',{signal:controller.signal}).then(r=>r.ok?r.json():null).then(data=>setStoreUrl(pocketStoreUrl(data?.playStoreUrl))).catch(()=>{});return()=>controller.abort()},[])
- const handoff=onPocket?null:checkoutHandoff(id,attempt,cash)
+ const handoff=onPocket?null:id.startsWith('xp_')?qrCheckoutHandoff(id,cash):checkoutHandoff(id,attempt,cash)
  const seconds=useCheckoutExpiry(expiresAt)
  if(seconds===0)return <CheckoutExpired returnUrl={returnUrl} merchant={merchant} brandImageUrl={brandImageUrl}/>
  const android=/Android/i.test(navigator.userAgent)

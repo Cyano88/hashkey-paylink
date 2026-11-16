@@ -1,3 +1,4 @@
+import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {MoneyText,MoneyAmount} from '../components/MoneyText'
 import {formatPocketAssetAmount} from '../pocket/lib/pocketAmountDisplay'
 import {cacheCheckoutConfirmationActivity} from '../pocket/lib/pocketCheckoutConfirmationActivity'
@@ -99,7 +100,7 @@ import { PRIVY_AUTH_ENABLED, PRIVY_APP_ID } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import CheckoutSteps from '../components/CheckoutSteps'
-import { CheckoutTrustLine as CheckoutPoweredByLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
+import { CheckoutFooter as CheckoutPoweredByLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import { type SlideActionStatus } from '../components/SlideAction'
 import { PocketPillMark } from '../pocket/components/CPurseIcon'
@@ -552,10 +553,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Flexible amount (payer-entered) ──────────────────────────────────────
-  const [flexAmt,     setFlexAmt]     = useState('')
+  const [flexAmt,     setFlexAmt]     = useState(()=>initParams.get('qr_amount')||'')
   const [flexMemo,    setFlexMemo]    = useState('')
   const [fxInputMode, setFxInputMode] = useState<'usdc' | 'local'>('usdc')
-  const [localAmt,    setLocalAmt]    = useState('')
+  const [localAmt,    setLocalAmt]    = useState(()=>initParams.get('qr_amount')||'')
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [addrCopied,        setAddrCopied]        = useState(false)
@@ -700,7 +701,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const [bankSendStatus, setBankSendStatus] = useState<'idle' | 'waiting' | 'pending' | 'settled' | 'expired' | 'refunding' | 'error'>('idle')
   const [bankSendQuote, setBankSendQuote] = useState<BankSendQuote | null>(null)
   const [bankSendQuoteBusy, setBankSendQuoteBusy] = useState(false)
-  const requiresAttendeeName = !isHostedCheckout && (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
+  const requiresAttendeeName = !isHostedCheckout && (isEventMode || (isNgPosPayment && !ngPosUnifiedXPayId)) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
 
   useEffect(() => {
     if (!isHostedCheckout) return
@@ -1125,7 +1126,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && isSupportedEvmPayChain(chain)
   const usePrivyCircleSolanaCheckout = PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay && chain === 'solana'
   const showLegacyCircleEmailPay = !PRIVY_AUTH_ENABLED && showCircleEmailPay
-  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && (!!pocketScan || isHostedCheckout || !hasExternalPrivyEvmWallet)
+  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && (!!pocketScan || isHostedCheckout || Boolean(ngPosUnifiedXPayId) || !hasExternalPrivyEvmWallet)
   const showPrivyCircleSolanaEmailPay = usePrivyCircleSolanaCheckout && privyAuthenticated
   const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
   const showCircleSolanaEmailBridgePay = (!PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay) || showPrivyCircleSolanaEmailPay
@@ -2868,7 +2869,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
           refund_address: session.wallet.address,
           payer_wallet: session.wallet.address,
           payer_email: (showPrivyCircleEmailPay ? privyEmail : circleEmail).trim(),
-          payer_name: attendeeName.trim(),
+          ...(ngPosUnifiedXPayId&&isNgPosPaycrestOfframp?{paymentMethod:'cash_balance'}:{payer_name:attendeeName.trim()}),
         }),
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string; code?: string }
@@ -4048,7 +4049,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
   if (!isValidParams) {
     return (
       <>
-      {!pocketScan && (fullScreenHumanCheckout ? <p className="mb-8 text-center text-sm font-bold">Pay with Pocket</p> : <HashPayLinkCheckoutBrand />)}
+      {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div className="mx-auto max-w-md animate-fade-in">
         <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-card">
           <div className="bg-red-50 p-8 text-center">
@@ -4113,7 +4114,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     }
     const nativeBusy = isWalletPending || isConfirming || Boolean(txHash) || circleEvmAcceptedPending || pocketMovePayBusy
     const ready = Boolean(displayedPaymentQuote) && !paymentQuoteLoading && !paymentAmountBlocked && !pocketCheckoutRouting && !pocketMovePayWaiting && !pocketMovePayRetryBlocked && !pocketRouteInsufficient && !circleEvmWalletChecking && !circleSolanaWalletChecking
-    return <PocketMerchantPaymentForm checkoutId={isHostedCheckout?hostedCheckoutId:undefined} merchant={pocketScan.merchantName || memo || 'Merchant'} network={chain} networkLabel={consumerNetworkName}
+    return <PocketMerchantPaymentForm expiresAt={isHostedCheckout?hostedExpiresAt:paycrestOrder?.valid_until} checkoutId={isHostedCheckout?hostedCheckoutId:undefined} merchant={pocketScan.merchantName || memo || 'Merchant'} network={chain} networkLabel={consumerNetworkName}
       amount={isFlex ? (fxInputMode === 'local' ? localAmt : flexAmt) : effectiveAmt} currency={isFlex && fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset} fixedAmount={!isFlex}
       onAmountChange={value=>{if(isNgPosPaycrestOfframp)setPaycrestOrder(null);if(fxInputMode==='local')setLocalAmt(value);else setFlexAmt(value);setCirclePasskeyError(null);setCircleSolanaError(null)}} requiresName={requiresAttendeeName} name={attendeeName} onNameChange={setAttendeeName}
       paymentAmount={formatPocketAssetAmount(payableAmt || '0',meta.asset)+' '+meta.asset} rows={pocketPosReviewRows} funding={pocketFunding}
@@ -4136,9 +4137,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     /></>
   }
 
-  if (browserPaymentFlow && isHostedCheckout && !isPolymarketFunding && !isAgentOrWalletFunding) {
+  if (browserPaymentFlow && (isHostedCheckout || isNgPosPayment&&Boolean(ngPosUnifiedXPayId)) && !isPolymarketFunding && !isAgentOrWalletFunding) {
     if (hostedIntentStatus==='error'&&/checkout expired/i.test(hostedIntentError))return <CheckoutExpired returnUrl={hostedReturnUrl} merchant={expiredBrand.name||hostedMerchantName} brandImageUrl={expiredBrand.logo||hostedMerchantLogo}/>
-    if (hostedIntentStatus !== 'verified') return <div className="mx-auto max-w-md py-8">{hostedIntentError ? <p role="alert">{hostedIntentError}</p> : <div aria-label="Verifying checkout" className="h-72 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}</div>
+    if (isHostedCheckout && hostedIntentStatus !== 'verified') return <div className="mx-auto max-w-md py-8">{hostedIntentError ? <p role="alert">{hostedIntentError}</p> : <div aria-label="Verifying checkout" className="h-72 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5"/>}</div>
     const solanaCheckout = chain === 'solana'
     const walletReady = solanaCheckout ? Boolean(circleSolanaSession?.wallet.address) : circleEvmWalletUnlocked && !!circleSmartAccount && circleEvmEmailSession?.wallet.address.toLowerCase() === circleSmartAccount.toLowerCase() && !paycrestNeedsPreparation
     const quote = displayedPaymentQuote?.quote
@@ -4181,10 +4182,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
       if (isNgPosPaycrestOfframp && !await prepareNgPosPaycrestOrder(session,true)) throw Error('Could not prepare this payment. Please try again.')
       setFeeQuoteRefresh(value=>value+1)
     }
-    return <BrowserCheckoutCard onChoose={()=>navigate('/pay/c/'+hostedCheckoutId+'?'+new URLSearchParams({attempt:hostedAttemptId,choose:'1'}))} pricing={hostedPricing} expiresAt={hostedExpiresAt} returnUrl={hostedReturnUrl} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${formatPocketAssetAmount(shortfall,checkoutAsset)} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={hostedCheckoutId} attempt={hostedAttemptId} merchant={hostedMerchantName || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
+    return <BrowserCheckoutCard onChoose={()=>navigate(isHostedCheckout?'/pay/c/'+hostedCheckoutId+'?'+new URLSearchParams({attempt:hostedAttemptId,choose:'1'}):'/xpay/checkout/'+ngPosUnifiedXPayId)} pricing={hostedPricing} expiresAt={isHostedCheckout?hostedExpiresAt:paycrestOrder?.valid_until} returnUrl={isHostedCheckout?hostedReturnUrl:'https://app.hashpaylink.com/xpay/checkout/'+ngPosUnifiedXPayId} quoteLoading={paymentQuoteLoading} fundingHint={shortfall&&!quote?`Add at least ${formatPocketAssetAmount(shortfall,checkoutAsset)} ${checkoutAsset}. Final fees are checked after funds arrive.`:undefined} brandImageUrl={hostedMerchantLogo} asset={checkoutAsset} id={isHostedCheckout?hostedCheckoutId:ngPosUnifiedXPayId} attempt={hostedAttemptId} merchant={hostedMerchantName || memo || 'Merchant'} title={hostedCheckoutTitle || memo || ''}
       nameInput={requiresAttendeeName?{value:attendeeName,onChange:setAttendeeName}:undefined}
-      amountInput={isFlex?{value:isHostedLocalSettlement?localAmt:flexAmt,currency:isHostedLocalSettlement?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
-      amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isHostedLocalSettlement ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={hostedCash}
+      amountInput={isFlex?{value:isNgPosPaycrestOfframp?localAmt:flexAmt,currency:isNgPosPaycrestOfframp?posFiatCurrency:checkoutAsset,onChange:value=>{if(isNgPosPaycrestOfframp){setPaycrestOrder(null);setLocalAmt(value)}else setFlexAmt(value);setCirclePasskeyError(null)}}:undefined}
+      amount={hostedPricing ? `${payableAmt||'0'} ${checkoutAsset}` : isNgPosPaycrestOfframp ? `${posFiatCurrency} ${isFlex?localAmt||'0':ngPosAmountNgn}` : `${effectiveAmt||'0'} ${checkoutAsset}`} fiat={hostedCash||isNgPosPaycrestOfframp}
       authenticated={privyAuthenticated} email={privyEmail} signOut={logout} network={chain} networks={availableChains.map(value=>({value,label:value==='arc'?'Arc':CHAIN_META[value].label}))}
       onNetwork={value=>{if(availableChains.includes(value as typeof chain))setChain(value as typeof chain)}}
       walletReady={walletReady} address={walletReady?(solanaCheckout?circleSolanaSession!.wallet.address:circleEvmEmailSession!.wallet.address):''} balance={balance===null?null:formatUnits(balance,6)} shortfall={shortfall}
@@ -4247,7 +4248,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
 
     return (
       <>
-      {!pocketScan && (fullScreenHumanCheckout ? <p className="mb-8 text-center text-sm font-bold">Pay with Pocket</p> : <HashPayLinkCheckoutBrand />)}
+      {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div className="mx-auto max-w-md animate-scale-in">
         {!pocketScan && showNativePocketBack && (
           <a
@@ -4589,7 +4590,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
     <div className={fullScreenHumanCheckout ? "fixed inset-0 z-[60] overflow-y-auto bg-white px-5 py-8 text-gray-950 dark:bg-black dark:text-white [&>div]:mx-auto [&>div]:max-w-md" : "mx-auto max-w-md animate-slide-up"}>
       <PocketKycPrompt />
       {collectionError && <p role="alert" className="mb-4 rounded-2xl bg-gray-100 p-4 text-sm dark:bg-black">{collectionError}</p>}
-      {!pocketScan && (fullScreenHumanCheckout ? <p className="mb-8 text-center text-sm font-bold">Pay with Pocket</p> : <HashPayLinkCheckoutBrand />)}
+      {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div
         className={fullScreenHumanCheckout ? "overflow-visible bg-white dark:bg-black" : "overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"}
         style={browserPaymentFlow ? { boxShadow: 'none' } : { boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
@@ -4695,7 +4696,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   placeholder="0.00"
                   value={fxInputMode === 'local' ? localAmt : flexAmt}
                   onChange={e => fxInputMode === 'local' ? setLocalAmt(e.target.value) : setFlexAmt(e.target.value)}
-                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-b-2 border-gray-300 dark:border-white/30 focus:border-gray-500 dark:focus:border-white/60 outline-none"
+                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-0 rounded-lg focus-visible:ring-2 focus-visible:ring-gray-300 outline-none"
                 />
                 <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 dark:text-gray-300 whitespace-nowrap">
                   {fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset}
@@ -5766,10 +5767,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
             )}>
-              <PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
+              {isNgPosPayment&&!pocketScan?<div className="w-full"><PocketEmailLogin context="checkout"/></div>:<PrivyConnectButton className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
                 <Wallet className="h-4 w-4" />
                 Sign in to pay
-              </PrivyConnectButton>
+              </PrivyConnectButton>}
               <CheckoutTrustLine />
             </div>
           ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (

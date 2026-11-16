@@ -1,3 +1,4 @@
+import ExternalRedirect from '../surfaces/ExternalRedirect'
 import PocketGiftRouteLoading from './features/gifts/PocketGiftRouteLoading'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
@@ -26,7 +27,7 @@ export default function PocketHostApp() {
           <Route path="gifts/claim" element={<Suspense fallback={<PocketGiftRouteLoading kind="claim"/>}><PocketGiftClaimEntryPage/></Suspense>}/>
           <Route path="request/:code" element={<Suspense fallback={<main aria-busy="true" aria-label="Opening payment request" className="mx-auto flex min-h-[100dvh] max-w-md flex-col bg-[#F5F5F7] px-6 pt-[calc(var(--pocket-safe-top)+1rem)] dark:bg-black"><h1 className="py-4 text-center text-base font-semibold">Payment request</h1><div className="flex flex-1 flex-col justify-center gap-4"><div className="pocket-shimmer mx-auto h-4 w-28 rounded bg-gray-200 dark:bg-white/10"/><div className="pocket-shimmer mx-auto h-10 w-44 rounded bg-gray-200 dark:bg-white/10"/></div></main>}><PocketRequestLinkPage/></Suspense>}/>
           <Route path="gift/:giftId" element={<Suspense fallback={<PocketGiftRouteLoading kind="preview"/>}><PocketGiftPage/></Suspense>} />
-          {!isPocketNativeRuntime() && <Route path="xpay/checkout/:checkoutId" element={<Suspense fallback={null}><UnifiedXPayCheckout publicCheckout /></Suspense>} />}
+          {!isPocketNativeRuntime() && <Route path="xpay/checkout/:checkoutId" element={<Suspense fallback={null}><ExternalRedirect origin="https://app.hashpaylink.com" /></Suspense>} />}
           {!isPocketNativeRuntime() && <Route path="xpay/:merchantId" element={<Suspense fallback={null}><XPayCheckout /></Suspense>} />}
           <Route path="docs/terms" element={<Suspense fallback={null}><PocketLegalDocumentPage document="terms" /></Suspense>} />
           <Route path="docs/privacy" element={<Suspense fallback={null}><PocketLegalDocumentPage document="privacy" /></Suspense>} />

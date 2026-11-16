@@ -1,3 +1,4 @@
+import {verifiedQrCheckoutPayer} from './pocket/qr-checkout-payer.js'
 import {merchantFeeTotal} from '../src/lib/merchantPaymentFees.js'
 import {isPocketBankActivityVisible} from '../src/pocket/lib/pocketBankActivityVisibility.js'
 import { baseStablecoin, type BaseStablecoin } from '../src/lib/baseStablecoins.js'
@@ -1268,7 +1269,7 @@ export default async function handler(req: Request, res: Response) {
           fx_rate_ngn_per_usdc: rate.toFixed(2),
           source: intentSource,
           created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+          expires_at: new Date(Date.now() + (body.xpay_checkout_id ? 15 : 10) * 60_000).toISOString(),
         }
         if (intentSource === 'pos' && merchant.owner_id) {
           const execution = await preparePosSettlementExecution({
@@ -1296,7 +1297,7 @@ export default async function handler(req: Request, res: Response) {
           amount_usdc: amountUsdcText,
           fx_rate_ngn_per_usdc: rate.toFixed(2),
           fx_source: source,
-          expires_at: new Date(Date.now() + (settlementType === 'INSTANT_FIAT' ? 10 * 60_000 : 60_000)).toISOString(),
+          expires_at: new Date(Date.now() + (settlementType === 'INSTANT_FIAT' ? (body.xpay_checkout_id ? 15 : 10) * 60_000 : 60_000)).toISOString(),
           pay_url: buildPayUrl(req, merchant, network, amountUsdcText, amountNgn.toFixed(2), settlementType, body.client_origin, intentId, merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'),
           fiat_execution_ready: fiatExecutionReady,
           offramp_provider: settlementType === 'INSTANT_FIAT' ? 'paycrest' : undefined,
@@ -1352,20 +1353,21 @@ export default async function handler(req: Request, res: Response) {
       const refundAddress = cleanText(body.refund_address, '') as `0x${string}`
       const payerEmail = cleanText(body.payer_email, '')
       const payerWallet = cleanText(body.payer_wallet, '') as `0x${string}`
-      const payerName = cleanText(body.payer_name, '')
+      let payerName = cleanText(body.payer_name, '')
       if (!intentId || !isAddress(refundAddress)) return res.status(400).json({ ok: false, error: 'Circle wallet is required before creating naira settlement.' })
       let existing = await getPaycrestPosOrder(intentId)
       // Hosted checkout already created this payout server-side. Restoring it does
       // not collect another payer name; authentication and KYC still run below.
-      if (!payerName && existing?.source !== 'hosted-checkout') return res.status(400).json({ ok: false, error: 'Payer name is required before creating naira settlement.' })
       const ensurePayable = body.ensure_payable === true
       const store = await readStore()
       const intent = store.intents?.[intentId]
       const merchant = intent ? store.merchants[intent.merchant_id] : undefined
+      if(!intent?.xpay_checkout_id&&!payerName&&existing?.source!=='hosted-checkout')return res.status(400).json({ok:false,error:'Payer name is required before creating naira settlement.'})
       if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '',true)
       if (!existing && merchant && await isPosRetired(merchant.merchant_id)) return res.status(410).json({ok:false,error:'This collection is closed.'})
       const payerIdentity=await verifiedPrivyUser(req)
-      if(existing?.source==='hosted-checkout'||existing?.source==='ngpos'||intent?.source==='pos'){
+      if(intent?.xpay_checkout_id)payerName=await verifiedQrCheckoutPayer(req,payerIdentity.userId,refundAddress,payerWallet,Boolean(existing))
+      else if(existing?.source==='hosted-checkout'||existing?.source==='ngpos'||intent?.source==='pos'){
         try{await requirePocketBasicKyc(payerIdentity.userId)}catch(error){if((error as {code?:string}).code==='KYC_BASIC_REQUIRED')throw Object.assign(Error('Complete Basic verification for online and QR purchases.'),{status:403,code:'KYC_PURCHASE_REQUIRED'});throw error}
       }else await requirePocketBasicKyc(payerIdentity.userId)
       if(existing&&['hosted-checkout','ngpos'].includes(existing.source||''))await checkCheckoutBuyerAllowance(payerIdentity.userId,existing,true)
@@ -1389,6 +1391,7 @@ export default async function handler(req: Request, res: Response) {
           return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
         }
       }
+      if (intent?.xpay_checkout_id&&Date.parse(intent.expires_at)<=Date.now())return res.status(410).json({ok:false,error:'Payment session expired. Reopen the QR to start again.'})
       if (!intent) return res.status(404).json({ ok: false, error: 'XPay settlement intent expired. Start this payment again.' })
       if (!existing && new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'XPay settlement intent expired. Start this payment again.' })
       if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
@@ -1402,6 +1405,7 @@ export default async function handler(req: Request, res: Response) {
         estimatedAmountUsdc: intent.estimated_amount_usdc,
         token: baseStablecoin(intent.source_token),
         unifiedXPay: Boolean(intent.xpay_checkout_id),
+        paymentExpiresAt: intent.xpay_checkout_id ? intent.expires_at : undefined,
         bankCode,
         accountNumber: bank.account_number,
         accountName: bank.account_name,

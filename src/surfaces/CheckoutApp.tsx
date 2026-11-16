@@ -1,3 +1,4 @@
+import {qrCheckoutHandoff} from '../lib/qrCheckoutHandoff'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import {checkoutHandoff} from '../lib/checkoutHandoff'
@@ -5,7 +6,7 @@ import { SolanaProvider } from '../lib/SolanaContext'
 import SurfaceLayout from './SurfaceLayout'
 import ExternalRedirect from './ExternalRedirect'
 const PublicPosCheckoutPage = lazy(() => import('../pages/PublicPosCheckoutPage'))
-const UnifiedXPayCheckout = lazy(() => import('../pocket/pages/PocketUnifiedXPayPage'))
+const UnifiedXPayCheckout = lazy(() => import('../pages/QrCheckoutEntry'))
 const XPayCheckout = lazy(() => import('../pocket/pages/PocketXPayCheckoutPage'))
 const PocketOrderCheckoutPage = lazy(() => import('../pages/PocketOrderCheckoutPage'))
 const FoodDemoPage = lazy(() => import('../pages/FoodDemoPage'))
@@ -28,6 +29,7 @@ function CheckoutHome() {
 }
 function PocketCheckoutFallback() {
   const {checkoutId=''}=useParams(),location=useLocation()
+  if(checkoutId.startsWith('xp_')){try{return <Navigate replace to={qrCheckoutHandoff(checkoutId,new URLSearchParams(location.search).get('method')==='cash_balance').fallback}/>}catch{return <CheckoutHome/>}}
   try{return <Navigate replace to={checkoutHandoff(checkoutId,new URLSearchParams(location.search).get('attempt')||'',new URLSearchParams(location.search).get('method')==='cash_balance').fallback}/>}
   catch{return <CheckoutHome/>}
 }
@@ -43,7 +45,7 @@ export default function CheckoutApp() {
     <Route element={<SurfaceLayout />}>
       <Route index element={<CheckoutHome />} />
       <Route path="pos/ng" element={<PublicPosCheckoutPage />} />
-      <Route path="xpay/checkout/:checkoutId" element={<UnifiedXPayCheckout publicCheckout />} />
+      <Route path="xpay/checkout/:checkoutId" element={<UnifiedXPayCheckout />} />
       <Route path="xpay/:merchantId" element={<XPayCheckout />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />

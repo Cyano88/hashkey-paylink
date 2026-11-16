@@ -1,3 +1,4 @@
+import {CheckoutCountdown,useCheckoutExpiry,checkoutSecondsLeft} from '../../components/CheckoutExpiry'
 import {useLayoutEffect,useRef,useState,type ComponentProps} from 'react'
 import PocketCheckoutMethodChange from './PocketCheckoutMethodChange'
 import PocketBottomSheet from './PocketBottomSheet'
@@ -7,6 +8,7 @@ import PocketFundingAction from './PocketFundingAction'
 import PocketSlideAction from './PocketSlideAction'
 
 type Props = ComponentProps<typeof PocketCheckoutFields> & {
+  expiresAt?: string
   checkoutId?: string
   merchant: string
   paymentAmount: string
@@ -19,19 +21,22 @@ type Props = ComponentProps<typeof PocketCheckoutFields> & {
   confirm: () => Promise<void>
   onClose: () => void
 }
-export default function PocketMerchantPaymentForm({checkoutId,merchant,paymentAmount,rows,funding,error,ready,busy,prepare,confirm,onClose,...fields}:Props){
+export default function PocketMerchantPaymentForm({expiresAt,checkoutId,merchant,paymentAmount,rows,funding,error,ready,busy,prepare,confirm,onClose,...fields}:Props){
  const [review,setReview]=useState(false),[preparing,setPreparing]=useState(false),[localError,setLocalError]=useState('')
  const [prepared,setPrepared]=useState(false)
+ const seconds=useCheckoutExpiry(expiresAt)
  const lock=useRef(false)
- const run=async(action:()=>Promise<void>)=>{if(lock.current)return;lock.current=true;setPreparing(true);setLocalError('');try{await action()}catch(e){setLocalError(e instanceof Error?e.message:'Please try again.')}finally{lock.current=false;setPreparing(false)}}
+ const run=async(action:()=>Promise<void>)=>{if(lock.current)return;lock.current=true;setPreparing(true);setLocalError('');try{if(checkoutSecondsLeft(expiresAt)===0)throw Error('Payment session expired. Reopen the QR to start again.');await action()}catch(e){setLocalError(e instanceof Error?e.message:'Please try again.')}finally{lock.current=false;setPreparing(false)}}
  const prepareReview=async()=>{setPrepared(false);await prepare();setPrepared(true)}
  const waiting=preparing||(prepared&&!ready&&!error&&!localError&&!funding.asset)
  const disabled=busy||waiting
  useLayoutEffect(()=>{if(prepared&&ready&&!preparing){setReview(true)}},[prepared,ready,preparing])
  const valid=/^\d+(?:\.\d{1,6})?$/.test(fields.amount)&&Number(fields.amount)>0&&(!fields.requiresName||!!fields.name.trim())
  const message=localError||error
+ if(seconds===0&&!busy)return <PocketBottomSheet title="Payment session expired" onClose={onClose} showCloseButton><p className="text-center text-sm text-gray-500">Reopen the QR to start a new payment.</p><button className="pocket-cta-primary mt-5 w-full" onClick={onClose}>Done</button></PocketBottomSheet>
  return <PocketBottomSheet quietBackdrop title={review?'Confirm payment':'Pay '+merchant} showCloseButton dismissOnBackdrop={false} dismissible={!disabled} onClose={onClose} onBack={review?()=>{setReview(false);setPrepared(false)}:undefined}>
   {review?<PocketConfirmationDetails amount={paymentAmount} rows={rows}/>:<><h2 className="mb-5 text-center text-base font-semibold">{merchant}</h2><PocketCheckoutFields {...fields}/></>}
+  <CheckoutCountdown seconds={seconds}/>
   {message&&!funding.asset&&<p role="alert" className="mt-4 text-center text-xs text-gray-500">{message}</p>}
   <div className="mt-5"><PocketFundingAction {...funding} locked={disabled||funding.locked}>
    {review?<>

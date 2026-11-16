@@ -29,6 +29,13 @@ try{
   assert.equal(order.amount_usdc,source==='bank-withdraw'?'0.753875':'0.732075','Merchant customer total stays fixed; personal withdrawals retain their original policy')
   if(source!=='bank-withdraw'){assert.equal(order.merchant_fees.platformFee,'0.0018');assert.equal(order.merchant_fees.netAmount,'0.710275');assert.equal(order.merchant_fees.networkFee,'0.02')}
  }
+ const earlier=new Date(Date.now()+300000).toISOString()
+ const short=await createPaycrestOfframpOrder({...input,intentId:'qr-short',source:'ngpos',unifiedXPay:true,paymentExpiresAt:earlier,memo:'VERIFIED PAYER'})
+ assert.equal(short.valid_until,earlier);assert.equal(payload.destination.recipient.memo,'VERIFIED PAYER')
+ const later=new Date(Date.now()+900000).toISOString()
+ const providerShort=await createPaycrestOfframpOrder({...input,intentId:'qr-provider-short',source:'ngpos',unifiedXPay:true,paymentExpiresAt:later})
+ assert(Date.parse(providerShort.valid_until)<Date.parse(later),'Provider deadline must win when earlier than 15 minutes')
+ await assert.rejects(createPaycrestOfframpOrder({...input,intentId:'qr-expired',source:'ngpos',unifiedXPay:true,paymentExpiresAt:new Date(Date.now()-1000).toISOString()}),/Payment session expired/)
  forceNetFee=true
  for(const source of ['bank-withdraw','hosted-checkout'])await assert.rejects(createPaycrestOfframpOrder({...input,intentId:'bad-'+source,source}),/bank fee could not be verified|bank settlement quote changed/)
  console.log('PASS actual NG/UG bank, hosted local settlement and XPay requests separate personal withdrawals from merchant-paid fees, bind provider funding totals, and reject changed fee responses; no real orders created.')

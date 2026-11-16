@@ -1,4 +1,4 @@
-export type XPayDestination = {adapter?:'xlayer'|'bsc'|'base'|'arbitrum'|'solana'|'ethereum'|'polygon';id:string;name:string;kind:'bank'|'stablecoins'|'xstocks';currency:string;assets:string[];networks?:string[];revision:string}
+export type XPayDestination = {adapter?:'arc'|'xlayer'|'bsc'|'base'|'arbitrum'|'solana'|'ethereum'|'polygon';id:string;name:string;kind:'bank'|'stablecoins'|'xstocks';currency:string;assets:string[];networks?:string[];revision:string}
 export type XPayCheckout = {id:string;name:string;destinations:XPayDestination[];createdAt:number;version?:number;deletedAt?:number;acceptance?:import('./xpayAcceptance.js').XPayAcceptance}
 export function validateXPayDestinations(ids:unknown, available:XPayDestination[]) {
  if(!Array.isArray(ids)||!ids.length||ids.length>9||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length)throw Object.assign(Error('Choose your receiving options.'),{status:400})
