@@ -131,3 +131,9 @@ This section supersedes the acceptance sheet layout above.
 - The owner's reported question-mark glyph was real. Pixel inspection returned Saving followed by Unicode U+FFFD, with code points [83,97,118,105,110,103,65533]. The ring was already before the text and rotating; the label itself contained a corrupted ellipsis. The earlier browser assertion also contained U+FFFD and therefore incorrectly passed.
 - Replaced the label with plain ASCII Saving. The regression now asserts exact numeric code points [83,97,118,105,110,103], avoiding a shared malformed expected string. The real Pixel inspection opened and cancelled the settings PIN prompt, with zero configuration writes.
 - Corrected browser regression passed at 320/390px in light/dark themes. Device verification of the replacement build follows below.
+- Corrected label f4d924eae6b9847d6585b28e829ccd2891fdfcbb is live in deployment dep-dbtejinf3r2c73b24u9g. Full web/native builds and Android packaging passed. Installed Pixel result was exactly text Saving with code points [83,97,118,105,110,103], ringBeforeText true and animation spin. PIN cancellation produced zero configuration writes; all eight saved USDC networks remained checked.
+
+## Save only when settings change
+- Coin-network Save is disabled when selected networks equal the saved set, enabled after a change, and disabled again when the original selection is restored. This applies to any saved subset, not only the all-enabled case. Newly selected options remain saveable until saved.
+- Accepted payments uses the same unchanged-selection rule for its Save CTA. The legacy Done navigation action remains available. Existing disabled-button styling supplies the greyed-out appearance.
+- Browser regression passed unchanged, edited and reverted states alongside the existing save, PIN cancellation, failure/retry and exact Saving-label checks at 320/390 light/dark.

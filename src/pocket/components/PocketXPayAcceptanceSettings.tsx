@@ -19,6 +19,8 @@ export default function PocketXPayAcceptanceSettings({asset='USDC',checkout,draf
  const choices=walletRoutes.filter(r=>r.asset===asset)
  const pending=xpayCoinNetworks(asset).filter(network=>!choices.some(r=>r.network===network))
  const currentDraft=():XPayAcceptance=>({version:1,cashBalance:false,routes:[...selected,...bankRoutes]})
+ const routeKeys=(routes:XPayAcceptance['routes'])=>JSON.stringify(routes.map(r=>JSON.stringify([r.destinationId,r.revision,r.network,r.asset])).sort())
+ const dirty=routeKeys([...selected,...bankRoutes])!==routeKeys(checkout.acceptance?.routes||available)
  const valid=checkout.destinations.every(d=>d.kind!=='stablecoins'||selected.some(r=>r.destinationId===d.id))
  return <div className="flex min-h-0 flex-1 flex-col gap-4">
   <div aria-label="Accepted payment options" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -44,9 +46,9 @@ export default function PocketXPayAcceptanceSettings({asset='USDC',checkout,draf
   </div>
   <div className="shrink-0 space-y-3">
    {error&&<p role="alert" className="text-center text-xs text-red-500">{error}</p>}
-   <button className="pocket-cta-primary w-full" disabled={busy||!valid} onClick={async()=>{
+   <button className="pocket-cta-primary w-full" disabled={busy||!valid||(!networkMode&&!dirty)} onClick={async()=>{
     if(networkMode){onBackNetworks(currentDraft());return}
-    if(saving.current)return;saving.current=true;setBusy(true);setError('')
+    if(saving.current||!dirty)return;saving.current=true;setBusy(true);setError('')
     try{await onSave(normalizeXPayAcceptance({version:1,cashBalance:false,routes:[...selected,...bankRoutes]},checkout.destinations))}
     catch(e){if((e as {code?:string})?.code!=='POCKET_APPROVAL_CANCELLED')setError(e instanceof Error?e.message:'Could not save payment options.')}
     finally{saving.current=false;setBusy(false)}
