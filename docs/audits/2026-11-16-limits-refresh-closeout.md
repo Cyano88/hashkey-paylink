@@ -21,3 +21,8 @@
 - Pixel badge right edges: 359.4285889px and 359.4285812px; both 20px high. UTC footer visible.
 - Pixel refresh: 40px indicator, pull arrow, animated ring and completion all passed. Browser checks additionally cover cancellation and reduced motion. Actual ring screenshot visually reviewed.
 - Pixel country details passed for NGN and UGX on Online/QR and Personal, including loaded flags, live values, no overflow and Back. Detail screenshots visually reviewed.
+
+## Completed KYC cards follow-up
+- Completed Basic/Advanced cards now show their daily allowance and completion check, without historical method instructions. Developer/checkout surfaces show completion wording where no allowance is displayed.
+- Unfinished verification retains its actual permitted method, including existing BVN-first sessions; no verification records, permissions or routing changed.
+- Advanced instructions consistently include the selfie and use the same separator as Basic.
