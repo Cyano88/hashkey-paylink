@@ -11,12 +11,13 @@ export default function PocketXPayAcceptanceSettings({checkout,onSave}:{checkout
  const has=(destinationId:string,network:string,asset:string)=>selected.some(r=>r.destinationId===destinationId&&r.network===network&&r.asset===asset)
  const valid=checkout.destinations.every(d=>d.kind==='xstocks'||selected.some(r=>r.destinationId===d.id))
  return <div className="space-y-5">
+  <h2 className="text-center text-base font-semibold">Accepted payments</h2>
   <p className="text-sm text-gray-500">Choose what customers can pay with.</p>
   {checkout.destinations.filter(d=>d.kind!=='xstocks').map(d=><fieldset key={d.id} className="space-y-2">
    <legend className="mb-2 text-xs font-semibold text-gray-500">{d.kind==='bank'?'Receive '+d.currency:'Receive stablecoins'}</legend>
    {available.filter(r=>r.destinationId===d.id).map(r=><label key={r.network+':'+r.asset} className="flex min-h-16 items-center gap-3 rounded-2xl border border-gray-200 px-4 dark:border-[#262626]">
     <PocketNetworkMark network={r.network}/><span className="flex-1"><span className="block text-sm font-semibold">{r.asset}</span><span className="text-xs text-gray-500">{names[r.network]||r.network}</span></span>
-    <input type="checkbox" aria-label={'Accept '+r.asset+' on '+names[r.network]+(d.kind==='bank'?' for '+d.currency:'')} disabled={busy} checked={has(r.destinationId,r.network,r.asset)} onChange={e=>setSelected(old=>e.target.checked?[...old,r]:old.filter(p=>p.destinationId!==r.destinationId||p.network!==r.network||p.asset!==r.asset))}/>
+    <input type="checkbox" className="h-4 w-4 accent-black dark:accent-white" aria-label={'Accept '+r.asset+' on '+names[r.network]+(d.kind==='bank'?' for '+d.currency:'')} disabled={busy} checked={has(r.destinationId,r.network,r.asset)} onChange={e=>setSelected(old=>e.target.checked?[...old,r]:old.filter(p=>p.destinationId!==r.destinationId||p.network!==r.network||p.asset!==r.asset))}/>
    </label>)}
   </fieldset>)}
   <div aria-label="Cash balance coming soon" className="flex min-h-14 items-center justify-between text-sm text-gray-500"><span>Cash balance</span><span className="text-xs">Coming soon</span></div>

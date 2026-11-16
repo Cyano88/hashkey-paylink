@@ -58,3 +58,8 @@ Reusable terminals accept a customer-entered amount; fixed orders bind their amo
 - Focused web diagnostics passed (18 files); native diagnostics passed (29 files). Mobile screenshots inspected.
 - These are source and isolated fixture results. This initial slice is committed for continued implementation, not yet deployed or installed on Pixel. No payment or production terminal was created or changed.
 - Merchant onboarding verification is distinct from payer Basic KYC. Existing guidance about wallet-only merchant activation before merchant verification must not be interpreted as a payer purchase-limit exemption.
+
+## Integrated verification follow-up
+- Added xpay-acceptance-integration-browser-smoke.mjs using the real XPay page, settings component, route shell and bottom sheet, with authentication and unrelated money-execution boundaries mocked. Passed six-network layout, native Back, Close, Escape, PIN header, duplicate-save prevention, saved-choice reopening, save failure and return to QR at 320/390 light/dark. No live payments or configuration writes.
+- Fixed the missing visible settings heading and aligned checkboxes with Pocket colors; mirrored into native source.
+- Full production web source build passed. Native lineage verification initially caught the reviewed XPay type file missing from the allowlist; the exact changed/new acceptance files were added to the native source policy. Android build passed; final rebuild includes the heading correction.
