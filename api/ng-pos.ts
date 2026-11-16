@@ -790,7 +790,7 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
     const replay = existingMerchant.creation_response ?? { ok: true, merchant: await publicMerchant(existingMerchant) }
     return { ...replay, replayed: true }
   }
-  if(preference!=='INSTANT_FIAT'||!await ownsTerminalSetupKey(ownerId,idempotencyKey,'bank'))throw ngPosRequestError(409,'Set up receiving accounts inside XPay.')
+  if(preference==='INSTANT_FIAT'?!await ownsTerminalSetupKey(ownerId,idempotencyKey,'bank'):!verifiedNetworkWallets||!await ownsTerminalSetupKey(ownerId,idempotencyKey,'stablecoins'))throw ngPosRequestError(409,'Set up receiving accounts inside XPay.')
   let ownerEmail = cleanText(body.owner_email, '').toLowerCase()
   if (session.email && ownerEmail && session.email !== ownerEmail) {
     throw ngPosRequestError(403, 'Signed-in email does not match this payout profile.')

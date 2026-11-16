@@ -1,3 +1,4 @@
+import PocketSavingIndicator from './PocketSavingIndicator'
 import {xpayCoinNetworks,xpayCoinExecutable,XPAY_NETWORK_NAMES as names,type XPayCoin} from '../lib/xpayStablecoinOptions'
 import {useRef,useState} from 'react'
 import {CircleStackIcon,BuildingLibraryIcon,ChevronRightIcon} from '@heroicons/react/24/outline'
@@ -49,7 +50,7 @@ export default function PocketXPayAcceptanceSettings({asset='USDC',checkout,draf
     try{await onSave(normalizeXPayAcceptance({version:1,cashBalance:false,routes:[...selected,...bankRoutes]},checkout.destinations))}
     catch(e){if((e as {code?:string})?.code!=='POCKET_APPROVAL_CANCELLED')setError(e instanceof Error?e.message:'Could not save payment options.')}
     finally{saving.current=false;setBusy(false)}
-   }}>{busy?<span role="status" aria-label="Saving payment options" className="mx-auto block h-4 w-24 animate-pulse rounded bg-current opacity-25"/>:networkMode?'Done':'Save changes'}</button>
+   }}>{busy?<PocketSavingIndicator label="Saving payment options"/>:networkMode?'Done':'Save changes'}</button>
   </div>
  </div>
 }
