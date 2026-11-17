@@ -536,7 +536,7 @@ function ReviewPanel({ action, currentUserId, reviewNote, busy, onReviewNote, on
             value={reviewNote}
             onChange={event => onReviewNote(event.target.value)}
             placeholder="Independent review note"
-            className="mt-4 h-20 w-full resize-none rounded-xl border border-amber-200 bg-white px-3 py-3 text-sm text-gray-950 outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-amber-400/20 dark:bg-black/10 dark:text-white"
+            className="mt-4 h-20 w-full resize-none rounded-xl border border-amber-200 bg-white px-3 py-3 text-sm text-gray-950 outline-none   dark:border-amber-400/20 dark:bg-black/10 dark:text-white"
           />
           <button
             type="button"
@@ -610,7 +610,7 @@ function RequestPanel({ mode, evidenceReference, busy, onEvidenceReference, onCa
         value={evidenceReference}
         onChange={event => onEvidenceReference(event.target.value)}
         placeholder={mode === 'release' ? 'Evidence reference' : 'Cancellation reason reference'}
-        className="mt-4 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+        className="mt-4 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none focus:bg-white   dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
       />
       <p className="mt-2 text-[11px] leading-5 text-gray-400">Hash PayLink creates the immutable evidence fingerprint automatically.</p>
       <div className="mt-3 grid grid-cols-2 gap-2">

@@ -444,10 +444,6 @@ html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-s
   background-color: #2a2a2a;
 }
 
-/* Focus border overrides for flex inputs */
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .focus\:border-gray-500:focus { border-color: #555555; }
-html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) .focus\:border-gray-400:focus { border-color: #444444; }
-
 html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) input::placeholder,
 html.dark:not(:has([data-pocket-colour-scope='stablecoins'], [data-pocket-gift-surface], [data-foundation-colour-scope])) textarea::placeholder { color: #555555; }
 
@@ -1119,7 +1115,6 @@ html[data-pocket-runtime='native'] body:has([data-pocket-sheet])::before {
 .pocket-cta-secondary { background: transparent; color: var(--pocket-action-bg); border: 1px solid var(--pocket-control-border); }
 .pocket-cta-primary:enabled:hover { background: var(--pocket-action-hover); }
 .pocket-cta-primary:disabled, .pocket-cta-secondary:disabled { opacity: .45; cursor: not-allowed; }
-.pocket-cta-primary:focus-visible, .pocket-cta-secondary:focus-visible { outline: 2px solid var(--pocket-focus); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .pocket-cta-primary, .pocket-cta-secondary { transition: none; } }
 
 }

@@ -159,7 +159,7 @@ export function PocketPosSetupPanel({
         <div className="pocket-pos-identity grid gap-5"><PocketPayoutCountry label={payoutCurrencyLabel} value={controller.draft.country || 'NG'} onChange={controller.actions.selectCountry} />
         <label hidden={!showName} className="block">
           <span className="text-xs text-gray-500 dark:text-gray-400">Terminal name</span>
-          <input aria-label="Terminal name" value={controller.draft.merchantName} onChange={event=>controller.actions.setMerchantName(event.target.value)} placeholder="Store name" className="mt-2 min-h-14 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#0D0D0D] dark:placeholder:text-gray-600" />
+          <input aria-label="Terminal name" value={controller.draft.merchantName} onChange={event=>controller.actions.setMerchantName(event.target.value)} placeholder="Store name" className="mt-2 min-h-14 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none  dark:border-[#262626] dark:bg-[#0D0D0D] dark:placeholder:text-gray-600" />
         </label></div>
         {instantBankPayout && <section aria-label="Payout account">
           <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{controller.draft.country === 'UG' ? 'Receive payments in your mobile money account.' : 'Receive payments in your bank account.'}</p>

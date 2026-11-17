@@ -98,7 +98,7 @@ function StreamConfirmSheet({
     };
   }, [close]);
   return createPortal(
-    <div
+    <div data-hpl-focus-scope
       className="stream-confirm-backdrop fixed inset-0 z-[180] flex items-end justify-center bg-black/45 backdrop-blur-sm sm:items-center sm:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) close(false);

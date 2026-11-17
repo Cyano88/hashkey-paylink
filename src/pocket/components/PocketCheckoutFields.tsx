@@ -31,7 +31,7 @@ export default function PocketCheckoutFields({ network, networkLabel, amount, cu
     </label>
     {requiresName && <label className="block">
       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Your name</span>
-      <input required type="text" autoComplete="name" value={name} onChange={event => onNameChange(event.target.value)} maxLength={60} placeholder="Enter your name" className="mt-2 min-h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212]" />
+      <input required type="text" autoComplete="name" value={name} onChange={event => onNameChange(event.target.value)} maxLength={60} placeholder="Enter your name" className="mt-2 min-h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none  dark:border-[#262626] dark:bg-[#121212]" />
     </label>}
   </section>
 }

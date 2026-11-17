@@ -137,7 +137,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
   if (step === 'code') {
     const inline = context === 'developer' || context === 'checkout'
     const verification = (
-    <div data-pocket-auth={context==='pocket'?'true':undefined} data-pocket-auth-surface={context==='pocket'?true:undefined} role={inline ? 'region' : 'dialog'} aria-modal={inline ? undefined : true} aria-label="Verify your email" className={inline ? 'w-full min-w-0 text-gray-950 dark:text-white' : 'fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950'}>
+    <div data-hpl-focus-scope data-pocket-auth={context==='pocket'?'true':undefined} data-pocket-auth-surface={context==='pocket'?true:undefined} role={inline ? 'region' : 'dialog'} aria-modal={inline ? undefined : true} aria-label="Verify your email" className={inline ? 'w-full min-w-0 text-gray-950 dark:text-white' : 'fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950'}>
       {!inline && <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 !bg-white !text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">
         <ArrowLeftIcon className="h-5 w-5" />
       </button>}
@@ -206,7 +206,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange, res
       <label className="sr-only" htmlFor={emailInputId}>Email address</label>
       <div className="relative">
         <EnvelopeIcon className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} readOnly={Boolean(resetEmail)} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="you@example.com" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
+        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} readOnly={Boolean(resetEmail)} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="you@example.com" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition    disabled:opacity-60" />
       </div>
       {error && <p role="alert" className="px-3 text-center text-xs font-semibold text-red-600">{error}</p>}
       <button type="submit" disabled={busy || !email.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">

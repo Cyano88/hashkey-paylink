@@ -140,9 +140,9 @@ export default function PocketMobileNumberInput({
       <div
         className={cn(
           'flex min-h-[52px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
-          'border-gray-200 focus-within:border-gray-400 focus-within:ring-4 focus-within:ring-blue-500/10',
-          'dark:border-[#262626] dark:bg-[#121212] dark:focus-within:border-gray-400/50',
-          invalidNumber && 'border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10 dark:border-red-400/40',
+          'border-gray-200   ',
+          'dark:border-[#262626] dark:bg-[#121212] ',
+          invalidNumber && 'border-red-300   dark:border-red-400/40',
         )}
       >
         <button type="button" aria-label={`Select ${category} network`} aria-haspopup="dialog" disabled={disabled || loading || options.length === 0} onClick={() => setNetworkOpen(true)} className="relative flex h-[50px] w-[72px] shrink-0 items-center gap-2 border-r border-gray-200 px-2.5 disabled:opacity-50 dark:border-[#262626]">
@@ -172,7 +172,7 @@ export default function PocketMobileNumberInput({
             disabled={disabled}
             onClick={() => void pickContact()}
             aria-label="Choose a phone number from contacts"
-            className="mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 disabled:opacity-50 dark:hover:bg-white/[0.06] dark:hover:text-white"
+            className="mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-800    disabled:opacity-50 dark:hover:bg-white/[0.06] dark:hover:text-white"
           >
             <ContactRound className="h-[19px] w-[19px]" />
           </button>

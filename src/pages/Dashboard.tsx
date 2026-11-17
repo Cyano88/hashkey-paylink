@@ -1193,7 +1193,7 @@ export default function Dashboard() {
                 <select
                   value={dateFilter}
                   onChange={event => setDateFilter(event.target.value as DateFilter)}
-                  className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all hover:bg-gray-50 focus:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                  className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all hover:bg-gray-50  dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
                 >
                   <option value="today">Today</option>
                   <option value="yesterday">Yesterday</option>
@@ -1206,7 +1206,7 @@ export default function Dashboard() {
                     type="date"
                     value={customDate}
                     onChange={event => setCustomDate(event.target.value)}
-                    className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all focus:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-gray-300"
+                    className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all  dark:border-white/10 dark:bg-white/5 dark:text-gray-300"
                   />
                 )}
               </>
@@ -1237,7 +1237,7 @@ export default function Dashboard() {
                   <select
                     value={contextFilter}
                     onChange={event => setContextFilter(event.target.value)}
-                    className="h-8 max-w-[190px] rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all hover:bg-gray-50 focus:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+                    className="h-8 max-w-[190px] rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 outline-none transition-all hover:bg-gray-50  dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
                     aria-label="Filter by payment context"
                   >
                     <option value="all">All contexts</option>

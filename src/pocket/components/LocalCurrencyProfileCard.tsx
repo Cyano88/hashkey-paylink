@@ -157,7 +157,7 @@ export function LocalCurrencyProfileCard({
             value={draft.firstName}
             onChange={event => onDraftChange({ ...draft, firstName: event.target.value })}
             placeholder="First name"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300  dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 "
           />
         </label>
         <label className="block">
@@ -166,7 +166,7 @@ export function LocalCurrencyProfileCard({
             value={draft.lastName}
             onChange={event => onDraftChange({ ...draft, lastName: event.target.value })}
             placeholder="Last name"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300  dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 "
           />
         </label>
       </div>

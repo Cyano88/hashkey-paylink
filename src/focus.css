@@ -1,0 +1,16 @@
+/* App-owned controls only: provider dialogs outside these roots keep their UI.
+ * Validation borders and selected-state rings are not focus decorations. */
+:root { --hpl-focus-color: #374151; }
+:root.dark { --hpl-focus-color: #d1d5db; }
+html[data-input-modality] :is(#root, [data-pocket-sheet], [data-hpl-focus-scope]) :is(input, textarea, select, button, a, summary, [contenteditable='true'], [tabindex]):focus {
+  outline: none !important;
+}
+html[data-input-modality='keyboard'] :is(#root, [data-pocket-sheet], [data-hpl-focus-scope]) :is(input, textarea, select, button, a, summary, [contenteditable='true'], [tabindex]):focus:not([tabindex='-1']):not(.sr-only) {
+  outline: 2px solid var(--hpl-focus-color) !important;
+  outline-offset: 2px;
+}
+/* Hidden file/choice controls expose focus on their visible container. */
+html[data-input-modality='keyboard'] :is(#root, [data-pocket-sheet], [data-hpl-focus-scope]) :is(label, .verification-upload):has(> input.sr-only:focus) {
+  outline: 2px solid var(--hpl-focus-color);
+  outline-offset: 2px;
+}

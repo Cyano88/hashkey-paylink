@@ -4,7 +4,7 @@ import ProductPicker from './ProductPicker'
 import { isSelectableDeveloperProduct, type ProductCapability } from '../lib/developerProducts'
 
 export type CreateProjectForm = { accountType?: 'individual'|'business'; name: string; website: string; useCase: string; checkoutMode: 'human'; capabilities: ProductCapability[] }
-const inputClass = 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/5 dark:text-white'
+const inputClass = 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none    dark:border-white/10 dark:bg-white/5 dark:text-white'
 
 export default function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, embedded = false, emptyAccount = false, profileName }: {
   profileName?:string; form: CreateProjectForm; setForm: Dispatch<SetStateAction<CreateProjectForm>>; busy: boolean; error: string;

@@ -13,7 +13,7 @@ export default function ProductPicker({mode,value,onChange,disabled=false,compac
           const selected=value.includes(option.capability)
           return <button type="button" role="checkbox" aria-checked={selected} disabled={disabled||!isSelectableDeveloperProduct(option.capability)} key={option.capability}
             onClick={()=>{if(!isSelectableDeveloperProduct(option.capability))return;const next=selected?value.filter(v=>v!==option.capability):[...value,option.capability];if(next.some(isSelectableDeveloperProduct))onChange(next)}}
-            className="disabled:cursor-not-allowed flex min-h-20 w-full items-center gap-3 border-b border-gray-100 p-4 text-left last:border-b-0 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:border-white/10 dark:hover:bg-white/5">
+            className="disabled:cursor-not-allowed flex min-h-20 w-full items-center gap-3 border-b border-gray-100 p-4 text-left last:border-b-0 hover:bg-gray-50    dark:border-white/10 dark:hover:bg-white/5">
             <span className={'grid h-5 w-5 shrink-0 place-items-center rounded-md border '+(selected?'border-blue-600 bg-blue-600 text-white':'border-gray-300 dark:border-gray-600')}>{selected&&<Check className="h-3 w-3"/>}</span>
             <span><span className="block text-sm font-semibold">{option.title}{option.capability==='marketplace_payments'&&<span className="ml-2 text-xs font-normal text-gray-500">Early access</span>}</span><span className="mt-1 block text-xs leading-5 text-gray-500">{option.detail}</span></span>
           </button>

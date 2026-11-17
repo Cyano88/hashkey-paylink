@@ -1094,7 +1094,7 @@ function ActiveAgreementPanel({
               onChange={event => onIssueText(event.target.value)}
               maxLength={300}
               placeholder="What needs to be fixed?"
-              className="h-20 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+              className="h-20 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-950 outline-none  dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" disabled={busy} onClick={() => onIssueMode(false)} className="h-10 rounded-full bg-gray-100 text-xs font-semibold text-gray-700 disabled:opacity-50 dark:bg-white/8 dark:text-gray-200">Cancel</button>

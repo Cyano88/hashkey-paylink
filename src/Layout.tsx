@@ -409,7 +409,7 @@ export default function Layout() {
 
             </>
           ) : (
-          <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
+          <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 ">
             {isPolyDeskSurface ? (
               <span className="flex h-8 w-8 items-center justify-center text-gray-900 transition-transform group-hover:scale-105 dark:text-white">
                 <PolymarketMark className="h-5 w-5" />

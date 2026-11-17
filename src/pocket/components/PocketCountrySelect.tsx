@@ -19,7 +19,7 @@ export default function PocketCountrySelect({ value, options, onChange, disabled
   const [open, setOpen] = useState(false)
   useEffect(() => { if (disabled) setOpen(false) }, [disabled])
   return <>
-    <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled || !options.length} onClick={() => setOpen(true)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-950 outline-none focus-visible:ring-2 focus-visible:ring-gray-400 disabled:opacity-50 dark:border-[#262626] dark:bg-[#121212] dark:text-white">
+    <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled || !options.length} onClick={() => setOpen(true)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-950 outline-none   disabled:opacity-50 dark:border-[#262626] dark:bg-[#121212] dark:text-white">
       <CountryFlag value={value} /><span className="flex-1">{options.find(option => option.value === value)?.label || 'Select country'}</span>
       <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
     </button>

@@ -64,7 +64,7 @@ export function PrivyLoginProvider({ children }: { children: ReactNode }) {
     {/* Keep payment state mounted while removing it from keyboard navigation. */}
     <div style={{ display: visible ? 'none' : 'contents' }}>{children}</div>
     {visible && createPortal(
-      <div className="fixed inset-0 z-[140] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">
+      <div data-hpl-focus-scope className="fixed inset-0 z-[140] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">
         <button type="button" onClick={() => setOpen(false)} aria-label="Back to previous page" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-950 shadow-sm"><ArrowLeftIcon className="h-5 w-5" /></button>
         <main ref={screen} aria-label={'Sign in to ' + product} className="mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-16">
           <p className="text-center text-sm font-bold">{product}</p>

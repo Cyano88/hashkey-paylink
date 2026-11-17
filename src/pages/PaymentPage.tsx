@@ -4696,7 +4696,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   placeholder="0.00"
                   value={fxInputMode === 'local' ? localAmt : flexAmt}
                   onChange={e => fxInputMode === 'local' ? setLocalAmt(e.target.value) : setFlexAmt(e.target.value)}
-                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-0 rounded-lg focus-visible:ring-2 focus-visible:ring-gray-300 outline-none"
+                  className="w-40 text-center text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white bg-transparent border-0 rounded-lg   outline-none"
                 />
                 <span className="absolute left-full top-1/2 -translate-y-1/2 pl-2 text-xl font-semibold text-gray-400 dark:text-gray-300 whitespace-nowrap">
                   {fxInputMode === 'local' ? flexLocalCurrencyLabel : meta.asset}
@@ -4866,7 +4866,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                       {' · '}1 USDC = {rate.toFixed(2)} {fxCurrency}
                     </span>
                     {fxSrc === 'live' && (
-                      <button onClick={refreshFxRate} title="Refresh rate" className="text-gray-300 hover:text-gray-500 transition-colors focus:outline-none">
+                      <button onClick={refreshFxRate} title="Refresh rate" className="text-gray-300 hover:text-gray-500 transition-colors ">
                         <RefreshCw className="h-2.5 w-2.5" />
                       </button>
                     )}
@@ -5013,7 +5013,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                     onChange={(event) => setLocalAmt(event.target.value.replace(/[^\d.]/g, ''))}
                     inputMode="decimal"
                     placeholder="Enter amount"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]"
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all  focus:bg-white   dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]"
                   />
                 </div>
               )}
@@ -5050,7 +5050,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                         }}
                         inputMode="numeric"
                         placeholder="10 digits"
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition-all  focus:bg-white   dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                       />
                     </label>
                   </div>
@@ -5231,7 +5231,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: PocketPaymentContext }
                   className={`w-full rounded-xl border px-4 py-3 text-sm placeholder:text-gray-400 transition-all ${
                     paid
                       ? 'border-emerald-200 bg-emerald-50/60 text-emerald-800 cursor-not-allowed'
-                      : 'border-gray-200 bg-gray-50/60 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100'
+                      : 'border-gray-200 bg-gray-50/60  focus:bg-white   '
                   }`}
                 />
                 {!paid && !isNgPosPayment && (

@@ -1,3 +1,5 @@
+import { installInputModality } from './lib/inputModality'
+import './focus.css'
 import PocketBootFallback from './pocket/components/PocketBootFallback'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import React, { lazy, Suspense, useMemo, type ReactNode } from 'react'
@@ -27,6 +29,8 @@ import { installPocketNativeFetch } from './pocket/lib/pocketNativeFetch'
 import { resolveAppSurface } from './lib/appSurface'
 
 const WalletProviders = lazy(() => import('./lib/WalletProviders'))
+
+installInputModality()
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
 if (isPocketNativeRuntime()) document.documentElement.dataset.pocketRuntime = 'native'

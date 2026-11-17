@@ -26,7 +26,7 @@ export default function CheckoutChoice({cashOnly=false,initialCash=false,stablec
  if(seconds===0)return <CheckoutExpired returnUrl={returnUrl} merchant={merchant} brandImageUrl={brandImageUrl}/>
  const android=/Android/i.test(navigator.userAgent)
  return <div className="mx-auto w-full max-w-md"><HashPayLinkCheckoutBrand/><section className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-950 dark:border-white/10 dark:bg-[#101114] dark:text-white sm:p-8">
-  <div ref={backNavigation}>{stablecoins&&!cashOnly&&<button type="button" onClick={()=>changeStep(false)} className="mb-3 inline-flex min-h-11 items-center gap-2 rounded-lg pr-3 text-sm font-medium text-gray-600 hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:text-gray-400 dark:hover:text-white"><ArrowLeftIcon aria-hidden="true" className="h-4 w-4"/>Back</button>}</div>
+  <div ref={backNavigation}>{stablecoins&&!cashOnly&&<button type="button" onClick={()=>changeStep(false)} className="mb-3 inline-flex min-h-11 items-center gap-2 rounded-lg pr-3 text-sm font-medium text-gray-600 hover:text-gray-950     dark:text-gray-400 dark:hover:text-white"><ArrowLeftIcon aria-hidden="true" className="h-4 w-4"/>Back</button>}</div>
   <CheckoutMerchant name={merchant} logo={brandImageUrl}/>
   <h1 className="mt-4 break-words text-center text-3xl font-semibold tracking-tight">{amount || 'Payment request'}</h1>
   {title&&<p className="mt-2 text-center text-sm text-gray-500">{title}</p>}

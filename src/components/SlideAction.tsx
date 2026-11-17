@@ -100,7 +100,7 @@ export default function SlideAction({
         setProgress(0)
       }}
       className={cn(
-        'relative isolate h-14 select-none overflow-hidden rounded-full bg-gray-950 p-1.5 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] outline-none ring-offset-2 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white dark:text-gray-950 dark:ring-offset-[#111216]',
+        'relative isolate h-14 select-none overflow-hidden rounded-full bg-gray-950 p-1.5 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] outline-none ring-offset-2 transition-all   dark:bg-white dark:text-gray-950 dark:ring-offset-[#111216]',
         disabled && status === 'idle' && 'cursor-not-allowed opacity-45',
         !disabled && status === 'idle' && 'cursor-grab active:cursor-grabbing',
         status === 'successful' && 'bg-emerald-600 dark:bg-emerald-500 dark:text-white',

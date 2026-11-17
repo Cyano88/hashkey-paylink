@@ -113,7 +113,7 @@ function editableProjectState(project:Project) {
 }
 
 function fieldClass() {
-  return 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-blue-400/50 dark:focus:bg-white/[0.07]'
+  return 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none transition  focus:bg-white   dark:border-white/10 dark:bg-white/[0.05] dark:text-white  dark:focus:bg-white/[0.07]'
 }
 
 export default function DeveloperPortalPage() {
@@ -464,7 +464,7 @@ export default function DeveloperPortalPage() {
         </div>
       </aside>
       <div className="min-w-0 px-5 py-7 sm:px-9 sm:py-10 lg:px-12">
-        <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout} profileSwitcher={<ProfileSwitcher profiles={builderProfiles} active={activeProfile} disabled={busy} onSelect={selectProfile} onCreate={createBusinessProfile}/>}/></div></div>
+        <div className="mb-6 flex items-center justify-between gap-4">{!accountView && !creatingNew && active && <button type="button" onClick={openApps} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-gray-500 transition hover:text-gray-950    dark:hover:text-white"><ArrowLeft size={16}/>Back to apps</button>}<div className="ml-auto"><AccountMenu onLogout={logout} profileSwitcher={<ProfileSwitcher profiles={builderProfiles} active={activeProfile} disabled={busy} onSelect={selectProfile} onCreate={createBusinessProfile}/>}/></div></div>
         {!sandbox && !accountView && !creatingNew && !active?.removal && subnav && <nav aria-label={parent==='products'?'Payments navigation':'Developer tools'} className="mb-8 flex gap-6 overflow-x-auto border-b border-gray-200 dark:border-white/10">{subnav.map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setTab(value)} aria-current={tab===value?'page':undefined} className={cn('min-h-11 shrink-0 border-b-2 px-1 text-sm font-medium',tab===value?'border-gray-950 text-gray-950 dark:border-white dark:text-white':'border-transparent text-gray-500')}>{label}</button>)}</nav>}
         <p className="mb-4 flex items-center gap-2 text-xs font-medium text-gray-500">{activeProfile.type==='business'?<Building2 size={14}/>:<UserRound size={14}/>}<span>{activeProfile.type==='business'?activeProfile.name+' \u00b7 Business':'Personal profile'}</span></p>
         <BuilderCountryPanel key={activeProfile.id} profile={activeProfile} busy={busy} onSave={(country,name)=>activeProfile.needsSetup?createBusinessProfile(name||'',activeProfile.id,country):saveProfileCountry(country,activeProfile.type==='individual'?name:undefined)}/>

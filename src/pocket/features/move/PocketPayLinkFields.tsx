@@ -50,10 +50,10 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
               onChange={event => onAmountChange(event.target.value)}
               className={cn(
                 'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 pr-28 text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                'placeholder:text-gray-400 transition-all focus:bg-white   dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                 dirty && !valid
-                  ? 'border-red-300 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                  : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-[#262626] dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
+                  ? 'border-red-300  dark:border-red-400/40 dark:text-red-300 '
+                  : 'border-gray-200   dark:border-[#262626] dark:text-gray-100  ',
               )}
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] font-semibold text-gray-500 dark:text-gray-400">{naira ? '\u20a6' : 'USDC'}</span>
@@ -89,7 +89,7 @@ export function PocketPaymentNoteField({ value, onChange, label = 'Payment note'
         value={value}
         maxLength={100}
         onChange={event => onChange(event.target.value)}
-        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-blue-400/40 dark:focus:bg-white/[0.06] dark:focus:ring-blue-400/10"
+        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm placeholder:text-gray-400 transition-all  focus:bg-white    dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100 dark:placeholder:text-gray-600  dark:focus:bg-white/[0.06] "
       />
     </fieldset>
   )

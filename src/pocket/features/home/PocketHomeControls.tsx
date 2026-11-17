@@ -258,7 +258,7 @@ export default function PocketHomeControls({
                   onFocus={() => { if (withdrawStatus === 'successful') onWithdrawAddressChange('') }}
                   onChange={event => onWithdrawAddressChange(event.target.value.trim())}
                   placeholder={selectedNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
-                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition  dark:border-[#262626] dark:bg-[#121212] dark:text-white"
                 />
               </label>
               <label className="block">
@@ -271,7 +271,7 @@ export default function PocketHomeControls({
                     onFocus={() => { if (withdrawStatus === 'successful') onWithdrawAmountChange('') }}
                     onChange={event => onWithdrawAmountChange(event.target.value)}
                     placeholder="0.00"
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white"
+                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition  dark:border-[#262626] dark:bg-[#121212] dark:text-white"
                   />
                   <button type="button" onClick={onWithdrawMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-[#262626] dark:text-gray-200">Max</button>
                 </span>
@@ -333,7 +333,7 @@ export default function PocketHomeControls({
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
             <span className="mt-1 flex gap-2">
-              <input type="text" inputMode="decimal" value={bridgeAmount} onFocus={() => { if (bridgeStatus === 'successful') onBridgeAmountChange('') }} onChange={event => onBridgeAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white" />
+              <input type="text" inputMode="decimal" value={bridgeAmount} onFocus={() => { if (bridgeStatus === 'successful') onBridgeAmountChange('') }} onChange={event => onBridgeAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition  dark:border-[#262626] dark:bg-[#121212] dark:text-white" />
               <button type="button" onClick={onBridgeMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-[#262626] dark:text-gray-200">Max</button>
             </span>
           </label>

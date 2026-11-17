@@ -53,7 +53,6 @@ html.dark [data-pocket-sheet] { background-color: #121212; color: #fff; }
 .dark .pocket-mode-pill { background:#171717; border-color:#262626; }
 .dark .pocket-mode-thumb { background:#fafafa; }
 .dark .pocket-mode-pill button[aria-pressed="true"] { color:#09090b; }
-.pocket-mode-pill button:focus-visible { outline:2px solid #3b82f6; outline-offset:3px; }
 @media(max-width:360px) { .pocket-mode-pill { width:160px; } .pocket-header-id button { font-size:9px; } }
 
 .pocket-mode-curtain { position:fixed; inset:0; z-index:120; display:grid; place-items:center; overflow:hidden; background:#F5F5F7; color:#030712; animation:pocket-curtain-out 2200ms linear both; }

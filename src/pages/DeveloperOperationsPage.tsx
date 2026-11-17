@@ -431,7 +431,7 @@ function ArcPilotControl({ project, busy, limits, setLimits, reason, setReason, 
 }
 
 function PilotField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="space-y-1.5"><span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{label}</span><input value={value} onChange={event => onChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-950 outline-none focus:border-blue-400 dark:border-white/10 dark:bg-black/20 dark:text-white" /></label>
+  return <label className="space-y-1.5"><span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{label}</span><input value={value} onChange={event => onChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-950 outline-none  dark:border-white/10 dark:bg-black/20 dark:text-white" /></label>
 }
 
 function OperationsControl({ project, busy, reason, setReason, onOperate }: {
@@ -469,7 +469,7 @@ function OperationsControl({ project, busy, reason, setReason, onOperate }: {
       value={reason}
       onChange={event => setReason(event.target.value)}
       placeholder="Required operational reason"
-      className="mt-4 h-24 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-950 outline-none transition focus:border-red-300 focus:bg-white focus:ring-4 focus:ring-red-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+      className="mt-4 h-24 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-950 outline-none transition  focus:bg-white   dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
     />
     <button type="button" disabled={busy || reason.trim().length < 8} onClick={() => void onOperate('admin-suspend')} className="mt-3 flex h-10 items-center justify-center gap-2 rounded-full border border-red-200 px-5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-40 dark:border-red-400/20 dark:text-red-300 dark:hover:bg-red-400/10">
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />} Suspend access

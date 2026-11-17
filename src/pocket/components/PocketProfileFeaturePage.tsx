@@ -73,15 +73,18 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
   const [confirmPin, setConfirmPin] = useState('')
   const [biometrics, setBiometrics] = useState(pocketPaymentBiometricsEnabled)
   const [biometricsAvailable, setBiometricsAvailable] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<'pin' | 'biometrics' | 'reconnect' | 'reset' | null>(null)
+  const actionLock = useRef(false)
+  const busy = pending !== null
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   useEffect(() => { void pocketPaymentBiometricsAvailable().then(setBiometricsAvailable) }, [])
   const clean = (value: string) => value.replace(/\D/g, '').slice(0, 6)
   const changePin = async () => {
+    if (actionLock.current) return
     if (!/^(?:\d{4}|\d{6})$/.test(currentPin) || !/^\d{4}$/.test(newPin)) return setError('Enter your current PIN and a new four-digit PIN.')
     if (newPin !== confirmPin) return setError('The new PINs do not match.')
-    setBusy(true); setError(''); setNotice('')
+    actionLock.current = true; setPending('pin'); setError(''); setNotice('')
     try {
       await updatePocketPaymentSecurity(getAccessToken, { action: 'change', currentPin, newPin })
       setCurrentPin(''); setNewPin(''); setConfirmPin(''); setNotice('Pocket PIN changed.'); window.dispatchEvent(new Event('pocket:pin-changed'))
@@ -94,10 +97,11 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
         }
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not changed.') }
-    finally { setBusy(false) }
+    finally { actionLock.current = false; setPending(null) }
   }
   const toggleBiometrics = async () => {
-    setBusy(true); setError(''); setNotice('')
+    if (actionLock.current) return
+    actionLock.current = true; setPending('biometrics'); setError(''); setNotice('')
     try {
       if (biometrics) {
         await disablePocketPaymentBiometrics(email); setBiometrics(false); setNotice('Payments will use your Pocket PIN.')
@@ -108,39 +112,41 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
         setBiometrics(true); setBiometricPin(''); setNotice('Fingerprint or face enabled for payments.')
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Payment approval was not changed.') }
-    finally { setBusy(false) }
+    finally { actionLock.current = false; setPending(null) }
   }
   const reconnectWallet = async () => {
-    setBusy(true); setError(''); setNotice('')
+    if (actionLock.current) return
+    actionLock.current = true; setPending('reconnect'); setError(''); setNotice('')
     try {
       await reconnectPocketBaseWallet({ authenticated: true, email, getAccessToken })
       setNotice('Circle wallet session reconnected on this phone.')
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Circle wallet was not reconnected.') }
-    finally { setBusy(false) }
+    finally { actionLock.current = false; setPending(null) }
   }
   const resetPin = async () => {
-    setBusy(true); setError(''); setNotice('')
+    if (actionLock.current) return
+    actionLock.current = true; setPending('reset'); setError(''); setNotice('')
     try { await onResetPin() }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN reset could not start.') }
-    finally { setBusy(false) }
+    finally { actionLock.current = false; setPending(null) }
   }
-  const inputClass = 'mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-center text-base font-black tracking-[0.25em] outline-none focus:ring-2 focus:ring-blue-500 dark:bg-[#121212]'
+  const inputClass = cn('mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-center text-base font-black tracking-[0.25em] placeholder:tracking-normal placeholder:font-medium outline-none dark:bg-[#121212]')
   return <section className='pt-8 space-y-4'>
     <p className='px-1 text-xs leading-5 text-gray-500 dark:text-gray-400'>One Pocket PIN and fingerprint or face setup for Stablecoins and XStocks.</p>
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
-      <div className='flex items-center gap-3'><span className='min-w-0 flex-1'><strong className='block text-sm'>Fingerprint or face</strong><span className='mt-1 block text-xs text-gray-500 dark:text-gray-400'>{biometrics ? 'Used first for payment approval' : 'Payments use your Pocket PIN'}</span></span>{biometricsAvailable && <label className={cn('relative h-7 w-12 cursor-pointer rounded-full transition-colors', busy && 'pointer-events-none opacity-50', biometrics ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><input type='checkbox' role='switch' aria-label='Fingerprint or face' checked={biometrics} onChange={() => void toggleBiometrics()} disabled={busy} className='peer sr-only' /><span className={cn('pointer-events-none absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', biometrics ? 'translate-x-6' : 'translate-x-1')} /></label>}</div>
-      {!biometrics && biometricsAvailable && <><label className='mt-4 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400'>Current PIN</label><input value={biometricPin} onChange={event => setBiometricPin(clean(event.target.value))} inputMode='numeric' type='password' className={inputClass} /></>}
+      <div className='flex items-center gap-3'><span className='min-w-0 flex-1'><strong className='block text-sm'>Fingerprint or face</strong><span className='mt-1 block text-xs text-gray-500 dark:text-gray-400'>{pending === 'biometrics' ? <span role='status' className='inline-flex items-center gap-2'><Loader2 aria-hidden='true' className='h-4 w-4 animate-spin' />Updating</span> : biometrics ? 'Used first for payment approval' : 'Payments use your Pocket PIN'}</span></span>{biometricsAvailable && <label className={cn('relative h-7 w-12 cursor-pointer rounded-full transition-colors', busy && 'pointer-events-none opacity-50', biometrics ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><input type='checkbox' role='switch' aria-label='Fingerprint or face' aria-busy={pending === 'biometrics'} checked={biometrics} onChange={() => void toggleBiometrics()} disabled={busy} className='peer sr-only' /><span className={cn('pointer-events-none absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', biometrics ? 'translate-x-6' : 'translate-x-1')} /></label>}</div>
+      {!biometrics && biometricsAvailable && <><label htmlFor='pocket-biometric-pin' className='mt-4 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400'>Current PIN</label><input id='pocket-biometric-pin' disabled={busy} value={biometricPin} onChange={event => setBiometricPin(clean(event.target.value))} inputMode='numeric' type='password' className={inputClass} /></>}
     </article>
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
       <strong className='text-sm'>Change PIN</strong>
-      <input value={currentPin} onChange={event => setCurrentPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Current PIN' aria-label='Current Pocket PIN' className={inputClass} />
-      <input value={newPin} onChange={event => setNewPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='New four-digit PIN' aria-label='New Pocket PIN' className={inputClass} />
-      <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
-      <button type='button' onClick={() => void changePin()} disabled={busy || ![4,6].includes(currentPin.length) || newPin.length !== 4 || confirmPin.length !== 4} className='pocket-cta-primary mt-4 w-full'>Change PIN</button>
+      <input disabled={busy} value={currentPin} onChange={event => setCurrentPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Current PIN' aria-label='Current Pocket PIN' className={inputClass} />
+      <input disabled={busy} value={newPin} onChange={event => setNewPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='New four-digit PIN' aria-label='New Pocket PIN' className={inputClass} />
+      <input disabled={busy} value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
+      <button type='button' onClick={() => void changePin()} disabled={busy || ![4,6].includes(currentPin.length) || newPin.length !== 4 || confirmPin.length !== 4} aria-busy={pending === 'pin'} className='pocket-cta-primary mt-4 w-full'>{pending === 'pin' ? <><Loader2 aria-hidden='true' className='mr-2 h-4 w-4 animate-spin' />Changing PIN</> : 'Change PIN'}</button>
     </article>
-    {!stocks && <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='pocket-cta-secondary w-full'>{busy ? 'Updating security' : 'Reconnect Circle wallet'}</button>}
-    {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
-    <button type='button' onClick={() => void resetPin()} disabled={busy} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 disabled:opacity-50 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
+    {!stocks && <button type='button' onClick={() => void reconnectWallet()} disabled={busy} aria-busy={pending === 'reconnect'} className='pocket-cta-secondary w-full'>{pending === 'reconnect' ? <><Loader2 aria-hidden='true' className='mr-2 h-4 w-4 animate-spin' />Reconnecting</> : 'Reconnect Circle wallet'}</button>}
+    {error && <p role='alert' className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p role='status' className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
+    <button type='button' onClick={() => void resetPin()} disabled={busy} aria-busy={pending === 'reset'} className='inline-flex items-center justify-center min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 disabled:opacity-50 dark:border-red-400/20 dark:text-red-300'>{pending === 'reset' ? <><Loader2 aria-hidden='true' className='mr-2 h-4 w-4 animate-spin' />Starting reset</> : 'Forgot or reset PIN'}</button>
     <p className='px-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Reset signs you out first so your email identity can be verified again.</p>
   </section>
 }

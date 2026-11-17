@@ -225,7 +225,7 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
   }
 
   return createPortal(
-    <div data-pocket-receipt={brand.kind === 'pocket' || undefined} className="fixed inset-x-0 bottom-0 z-[140] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-black dark:text-white" style={{ top: 0, paddingTop: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
+    <div data-hpl-focus-scope data-pocket-receipt={brand.kind === 'pocket' || undefined} className="fixed inset-x-0 bottom-0 z-[140] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-black dark:text-white" style={{ top: 0, paddingTop: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
       <div className="z-10 shrink-0 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-black">
         <div className="mx-auto grid h-14 max-w-lg grid-cols-[48px_1fr_48px] items-center">
           {checkoutReceipt ? <button type="button" onClick={onClose} aria-label="Back" className="inline-flex h-11 w-11 items-center justify-center rounded-full"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : <span className="h-10 w-12" />}
