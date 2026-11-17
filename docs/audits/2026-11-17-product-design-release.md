@@ -24,3 +24,15 @@ Render reports deployment `dep-dbu2ja68bjmc73a537k0` live as of 2026-11-17 10:22
 
 Limits: authenticated developer/admin settings were verified with synthetic browser fixtures, not the unavailable signed-in Chrome profile. Real payment completion and email inbox delivery were not exercised by this release check. Native-only fixes remain installed on Pixel but are not a Play Store release.
 
+
+## Admin verification follow-up release
+
+Source commit: `600f24f9d`. Deployment: `dep-dbu3k967bikc73874cd0`.
+
+Production source build and full TypeScript check passed. Fresh generated dist verification passed (525 assets; generated files not committed). Scoped admin action browser suite and existing review regression passed before commit. Only the reviewed component, document-label helper, browser test and audit note were committed and pushed.
+
+Signed-in onojacyano follow-up: application read succeeded without changing review/access state. Profile/app navigation worked with Playwright's animation-stability check bypassed; ordinary click testing is still blocked by hidden-tab rendering. Production Business details Save passed unchanged/edit/revert checks with the temporary edit restored and never saved. Activity summary toggle on/off exposed a separate false-dirty issue: Save stays enabled after restoring the original checkbox. Reload discarded that draft; no subscription was saved. The nested summary defaults are not normalized in editableProjectState. This is a follow-up, not included in this admin-only release.
+
+Receiving-account screenshot was not accepted as evidence of that tab: it still showed Business details. Full live settings visual sign-off remains open. Theme restored to light. No keys exposed or created, payments sent, documents downloaded or production settings saved.
+
+Render reports this follow-up live at 2026-11-17 11:32:48 UTC. Post-deploy public health, both app/portal entry modules and all five unchanged receipt assets passed. The production-referenced lazy-loaded OperationsWorkspacePage and verificationTypes modules contain the new readable owner/document labels and action-specific busy feedback. Initial local-filename/hash probe was unsuitable because the server build has different chunk names; verification followed production's module references instead. No claim of byte-for-byte identity with the local bundle.
