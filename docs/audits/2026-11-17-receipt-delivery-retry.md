@@ -9,3 +9,8 @@ Verification now runs within per-job error handling. The provider replay window 
 Validation: new fixture regression passed for temporary lookup failure, continuation to another recipient, retry beyond 20 hours without a prior provider attempt, and expired-lease recovery. Existing summary delivery and checkout email regressions passed, including audience separation, revocation, durable deduplication, concurrent workers and uncertain provider replay limits. Changed-file TypeScript diagnostics passed. No real email or payment was sent by these tests.
 
 Deployment verification will be recorded separately. Actual summary inbox delivery and external marketplace activation remain unverified live acceptance steps.
+
+## Production verification
+- Source commit `51cd8e15077ea8dae7b62d1e38f312bc5299011d` is live in Render deployment `dep-dbtva3qfngtc73abd4eg`.
+- Public `/api/health` returned `ok: true`, with Pocket configured, database available and healthy after rollout. Temporary update-stage 502 responses cleared.
+- No native app rebuild was needed. Tests did not send real emails; production inbox delivery is not inferred from deployment health.
