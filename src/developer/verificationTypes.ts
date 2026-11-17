@@ -11,3 +11,12 @@ export function emptyBusinessOwner():BusinessOwner{return {id:crypto.randomUUID(
 // Default merchant evidence; review may request additional policy documents.
 export const requiredCompanyDocumentSlots=['incorporation','articles','business-address'] as const
 export function isRequiredBusinessDocument(slot:string){return (requiredCompanyDocumentSlots as readonly string[]).includes(slot)||slot.startsWith('owner-id:')||slot.startsWith('owner-address:')}
+
+export function verificationDocumentLabel(slot:string,owners:BusinessOwner[]=[]):string{
+ const company=businessDocumentSlots.find(([key])=>key===slot)
+ if(company)return company[1]
+ const kind=slot.startsWith('owner-id:')?'Government-issued ID':slot.startsWith('owner-address:')?'Proof of residential address':null
+ if(!kind)return 'Supporting document'
+ const owner=owners.find(person=>person.id===slot.slice(slot.indexOf(':')+1))
+ return owner?.fullName.trim()?`${owner.fullName.trim()} — ${kind}`:kind
+}
