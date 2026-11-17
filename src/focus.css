@@ -10,7 +10,9 @@ html[data-input-modality='keyboard'] :is(#root, [data-pocket-sheet], [data-hpl-f
   outline-offset: 2px;
 }
 /* Hidden file/choice controls expose focus on their visible container. */
-html[data-input-modality='keyboard'] :is(#root, [data-pocket-sheet], [data-hpl-focus-scope]) :is(label, .verification-upload):has(> input.sr-only:focus) {
+html[data-input-modality='keyboard'] :is(#root, [data-pocket-sheet], [data-hpl-focus-scope]) :is(label, span, div):has(> input:is(.sr-only, .opacity-0):focus) {
   outline: 2px solid var(--hpl-focus-color);
   outline-offset: 2px;
 }
+
+html[data-input-modality='keyboard'] #root .food-assets label:focus-within { outline: 2px solid var(--hpl-focus-color); outline-offset: 2px; }
