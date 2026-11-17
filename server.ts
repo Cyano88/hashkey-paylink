@@ -564,6 +564,18 @@ app.get('/.well-known/apple-app-site-association', (_req, res) => {
     },
   })
 })
+app.get('/', (req, res, next) => {
+  const forwardedHost = req.headers['x-forwarded-host'] ?? req.headers.host ?? ''
+  const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)
+    .split(',')[0]
+    .split(':')[0]
+    .trim()
+    .toLowerCase()
+  if (host !== 'grant.hashpaylink.com') return next()
+  res.setHeader('Cache-Control', 'no-cache')
+  return res.sendFile(join(__dirname, 'dist', 'pitch', 'index.html'))
+})
+
 
 app.get(['/pitch', '/pitch/'], (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache')
