@@ -37,10 +37,16 @@ export async function drainCheckoutReceiptEmails(d=defaults){
   await d.mutate(s=>{const j=s.jobs[item.id];if(!j||j.state!=='pending'||j.nextAt>d.now()||(j.leaseUntil||0)>d.now())return s
    // Resend keeps idempotency for 24h. Never replay an uncertain request beyond that window.
    if(j.firstAttemptAt!==undefined&&d.now()-j.firstAttemptAt>20*60*60_000){j.state='review';return s}
-   j.firstAttemptAt??=d.now();j.lease=lease;j.leaseUntil=d.now()+60_000;j.attempts++;claimed=structuredClone(j);return s})
+   j.lease=lease;j.leaseUntil=d.now()+60_000;j.attempts++;claimed=structuredClone(j);return s})
   if(!claimed)continue
-  if(claimed.projectId&&d.canSend&&!await d.canSend(claimed.projectId,claimed.guard,claimed.input.to)){await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='canceled';j.leaseUntil=0}return s});continue}
-  try{const providerId=await d.send(claimed.input);await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='sent';j.providerId=providerId;j.leaseUntil=0}return s})}
+  try{
+   if(claimed.projectId&&d.canSend&&!await d.canSend(claimed.projectId,claimed.guard,claimed.input.to)){await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='canceled';j.leaseUntil=0}return s});continue}
+   // Start the provider replay window only when a provider request can occur.
+   // A slow identity lookup must not send after another worker took the lease.
+   let ready=false
+   await d.mutate(s=>{const j=s.jobs[item.id];if(j?.state==='pending'&&j.lease===lease&&j.leaseUntil!>d.now()){j.firstAttemptAt??=d.now();ready=true}return s})
+   if(!ready)continue
+   const providerId=await d.send(claimed.input);await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.state='sent';j.providerId=providerId;j.leaseUntil=0}return s})}
   catch{await d.mutate(s=>{const j=s.jobs[item.id];if(j.lease===lease){j.leaseUntil=0;j.nextAt=d.now()+Math.min(60*60_000,30_000*2**Math.min(j.attempts,7));if(j.attempts>=12)j.state='review'}return s})}
  }
 }
