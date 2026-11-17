@@ -44,3 +44,15 @@ Source: `1fd05d7f5`. Deployment: `dep-dbu3qumk1f9s73a8bg60`.
 Fixes false unsaved changes when default activity summary settings are materialized and restored. UI comparison now uses visible preferences and the form defaults, excluding enrollment metadata. No subscription/API changes. Browser regressions passed for omitted and enrolled preferences, all three summary controls, concurrent independent edits, and Back without discard. Existing settings/webhook failure/retry/save tests passed. Production build and generated-asset verification passed. Full typecheck was not rerun for this narrow follow-up; the immediately preceding admin release passed it.
 
 Render reports summary fix live at 2026-11-17 11:46:48 UTC. Public health, app/portal modules and unchanged receipt assets passed. Reloaded the signed-in onojacyano portal and verified via DOM-dispatched UI clicks: initial Save disabled, toggled Save enabled, restored Save disabled, original summary preference restored. Back returned to Apps with zero open dialogs. No Save action or subscription write performed. Physical click/visual verification remains limited by Chrome's hidden-tab/no-frame state; these are live form-state checks, not a normal mouse-interaction pass.
+
+## Shared focus behavior release
+
+Source commits: `3a0968bed` and final `e430867f9`. Render deployment `dep-dbu5p7jalhtc73frjbi0` reports live at 2026-11-17 14:02:53 UTC.
+
+App-owned Pocket, checkout, developer/admin and portal controls share clean pointer/touch focus and a neutral two-pixel keyboard outline. Validation and selected-state borders remain intact. Hidden upload/date controls expose keyboard focus through their visible container; provider-owned interfaces remain outside the policy.
+
+Shared-focus browser regressions passed at mobile/desktop widths in light/dark themes, including hidden controls, validation/selection preservation and provider scope isolation. Security action regressions passed. Main and native source builds, Capacitor sync and Android debug assembly passed; full TypeScript check was not rerun for this presentation follow-up.
+
+Final debug APK installed successfully on Pixel without clearing app data. Real WebView checks passed touch, Tab and return-to-touch behavior in both themes; dark keyboard screenshot inspected. Light theme restored. No PIN or security setting changed, no payment submitted. This is a local debug install, not a Play Store release.
+
+During web service replacement, public requests returned HTTP 502. After final deployment became live, public health, both application entry modules and all five unchanged receipt token assets passed. Verification followed production HTML asset references and confirmed the shared CSS, modality controller and final hidden-date focus rule on app.hashpaylink.com and developer.hashpaylink.com. This final web check verifies delivered assets, not an exhaustive live walkthrough of every screen.
