@@ -15,6 +15,7 @@ import {productionVerificationAllows} from '../lib/developerAccess'
 import BuilderQuickstart from '../developer/BuilderQuickstart'
 import ReceiptEmailSettings from '../developer/ReceiptEmailSettings'
 import {defaultReceiptEmailSettings,type ReceiptEmailSettings as ReceiptEmailPreferences}from'../lib/receiptEmailSettings'
+import {defaultBusinessSummaryPreferences} from '../lib/businessSummaryPreferences'
 import BscCheckoutSettings from '../developer/BscCheckoutSettings'
 import type {BscCheckoutConfig} from '../lib/bscCheckoutConfig'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
@@ -104,7 +105,11 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
 
 function editableProjectState(project:Project) {
   const fields:Array<keyof Project>=['name','website','brandImageUrl','receiptEmails','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout','bscCheckout']
-  return JSON.stringify(fields.map(field=>field==='receiptEmails'?{...defaultReceiptEmailSettings,...project.receiptEmails,enabled:true}:project[field]))
+  const receipt={...defaultReceiptEmailSettings,...project.receiptEmails}
+  const summary={...defaultBusinessSummaryPreferences,...receipt.businessSummary}
+  // Compare visible preferences, not enrollment metadata or omitted defaults.
+  const receiptPreferences={supportEmail:receipt.supportEmail,timeZone:receipt.timeZone,businessSummary:{enabled:summary.enabled,frequency:summary.frequency,timeZone:summary.timeZone}}
+  return JSON.stringify(fields.map(field=>field==='receiptEmails'?receiptPreferences:project[field]))
 }
 
 function fieldClass() {
