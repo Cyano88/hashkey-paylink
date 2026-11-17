@@ -2,7 +2,7 @@ import BusinessPaymentAccess,{type PaymentAccess} from './BusinessPaymentAccess'
 import {useEffect,useRef,useState} from 'react'
 import {usePrivy} from '@privy-io/react-auth'
 import {verificationLabels,type BusinessApplication,type BusinessVerification,type VerificationDocument} from '../developer/verificationTypes'
-export default function BusinessVerificationReview({projectId,workspaceId}:{projectId:string;workspaceId:string}){
+export default function BusinessVerificationReview({projectId,workspaceId,showPaymentAccess=true}:{projectId:string;workspaceId:string;showPaymentAccess?:boolean}){
  const {getAccessToken}=usePrivy()
  const [verification,setVerification]=useState<BusinessVerification>(),[application,setApplication]=useState<BusinessApplication>(),[opened,setOpened]=useState(false)
  const [access,setAccess]=useState<PaymentAccess>()
@@ -25,7 +25,7 @@ export default function BusinessVerificationReview({projectId,workspaceId}:{proj
     <div className="flex flex-wrap gap-3">{(verification.status==='submitted'?['approved','changes_requested','rejected']:['changes_requested']).map(decision=><button key={decision} type="button" disabled={decision==='approved'?(!checked||!reference.trim()):feedback.trim().length<10} className="developer-primary" onClick={()=>void run('admin-verification-review',{decision,revision:verification.revision,feedback,smileReference:reference,checksComplete:checked})}>{({approved:'Approve business',changes_requested:'Request changes',rejected:'Reject application'} as Record<string,string>)[decision]}</button>)}</div>
    </fieldset>}
    {verification.feedback&&<p className="text-sm text-gray-500">{verification.feedback}</p>}
-   {access&&<BusinessPaymentAccess key={projectId+access.operationalStatus} access={access} busy={busy} onChange={changeAccess}/>}
+   {showPaymentAccess&&access&&<BusinessPaymentAccess key={projectId+access.operationalStatus} access={access} busy={busy} onChange={changeAccess}/>}
    <details><summary className="cursor-pointer text-sm">Review history</summary><div className="mt-3 space-y-3">{history.map((h,i)=><p key={i} className="break-all text-xs text-gray-500">{h.action} · {h.actor} · {new Date(h.at).toLocaleString()}{h.smileReference?' · '+h.smileReference:''}</p>)}</div></details>
   </div>}
   {error&&<p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}

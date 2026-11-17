@@ -302,7 +302,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]">
-                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span>
+                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'NGN'}</span>
                   <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
                 </span>
               </label>
@@ -325,7 +325,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {view === 'electricity' && (
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
-                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]"><span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'\u20a6'}</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
+                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#121212]"><span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{bills.country==='UG'?'UGX':'NGN'}</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
 
               </label>
             )}

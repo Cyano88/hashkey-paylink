@@ -18,7 +18,7 @@ export function billingReceiptPresentation(r:BillingReceipt):ReceiptPresentation
  rows.push(['Payment method',webPaymentMethodLabel(r.paymentMethod)],['Network',r.network])
  if(funding&&r.fundingAccount)rows.push(['Funded account',r.fundingAccount])
  // This is the payer's document. Merchant net settlement is never disclosed here.
- return {brandName:r.merchant,logoUrl:r.merchantLogoUrl,icon:r.paymentMethod,title:funding?'Account funding receipt':'Payment receipt',headline:funding?'Your Polymarket account was funded':r.merchant+' received your payment',amount:receiptAmount(r),amountLabel:funding?'Amount paid':undefined,date:receiptPaidDate(r),sections:[{title:'Transaction details',rows}],reference:r.id,url:r.receiptUrl,linkLabel:'View receipt',supportEmail:r.supportEmail}
+ return {brandName:r.merchant,logoUrl:r.merchantLogoUrl,icon:r.paymentMethod,asset:r.asset,title:funding?'Account funding receipt':'Payment receipt',headline:funding?'Your Polymarket account was funded':r.merchant+' received your payment',amount:receiptAmount(r),amountLabel:funding?'Amount paid':undefined,date:receiptPaidDate(r),sections:[{title:'Transaction details',rows}],reference:r.id,url:r.receiptUrl,linkLabel:'View receipt',supportEmail:r.supportEmail}
 }
 export function receiptEmail(r:BillingReceipt){return {subject:(r.purpose==='funding'?'Funding receipt from ':'Receipt from ')+r.merchant,...receiptPresentationEmail(billingReceiptPresentation(r))}}
 export function billingReceiptPdf(r:BillingReceipt):Promise<Buffer>{return receiptPresentationPdf(billingReceiptPresentation(r))}

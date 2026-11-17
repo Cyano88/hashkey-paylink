@@ -33,3 +33,14 @@ const cases=[['payer',receiptEmail(payer),()=>billingReceiptPdf(payer)],['fundin
 await mkdir('output/receipt-preview',{recursive:true})
 for(const[name,email,pdf]of cases){assert(email.html.includes('Global payments with stablecoins.'));await writeFile('output/receipt-preview/'+name+'.html',email.html);const buffer=await pdf();assert(buffer.subarray(0,4).equals(Buffer.from('%PDF')));await writeFile('output/receipt-preview/'+name+'.pdf',buffer)}
 console.log('PASS funding delivery binding, role isolation, period boundaries, exact amounts, future currency rendering, icon parity and four HTML/PDF fixtures. No emails sent.')
+
+const {receiptTokenLogo}=await import('../src/lib/receiptIdentity.ts')
+for(const asset of ['USDC','USDT','USDe','USDG','EURC']){
+ const logo=receiptTokenLogo({source:'hosted_checkout',asset})
+ assert(logo)
+ assert(receiptEmail({...payer,asset}).html.includes(logo))
+ const pdf=await billingReceiptPdf({...payer,asset});assert(pdf.subarray(0,4).equals(Buffer.from('%PDF')))
+ for(const receipt of [{asset,paymentMethod:'bank_transfer',source:'hosted_checkout'},{asset,source:'marketplace-bank'},{asset,source:'marketplace-refund'},{asset,cashFunding:true}])assert.equal(receiptTokenLogo(receipt),undefined)
+}
+assert.equal(receiptTokenLogo({asset:'https://example.com/icon.png'}),undefined)
+console.log('PASS token identity parity, unknown asset fallback and bank/refund/cash exclusions.')

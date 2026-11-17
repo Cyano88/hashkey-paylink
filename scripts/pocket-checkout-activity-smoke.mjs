@@ -27,9 +27,11 @@ for(const rows of [[raw,out,treasury,otherFee],[treasury,otherFee,out,raw]]){
  assert.equal(merged.find(r=>r.source==='hosted_checkout').feeAmount,'0')
  assert.ok(merged.some(r=>r.eventId==='unrelated-fee'))
 }
-assert.deepEqual(pocketActivityReceipt(out).merchantFees,feeRecord.payment.fees)
+assert.equal(pocketActivityReceipt(out).merchantFees,undefined)
+assert.deepEqual(pocketActivityReceipt(incoming).merchantFees,feeRecord.payment.fees)
 console.log('PASS merchant-paid order gross, merchant net and fee totals with raw net transfer deduplication.')
 
-const merchantView=paymentReceiptView(pocketActivityReceipt(incoming));assert.equal(merchantView.rows.find(r=>r.label==='Order total').value,'1.43 USDC');assert.equal(merchantView.rows.find(r=>r.label==='Net proceeds').value,'1.414895 USDC')
-assert(!paymentReceiptView(pocketActivityReceipt(out)).rows.some(r=>r.label.includes('fee')||r.label==='Fee'))
+const merchantView=paymentReceiptView(pocketActivityReceipt(incoming));assert.equal(merchantView.rows.find(r=>r.label==='Order total').value,'USDC 1.43');assert.equal(merchantView.rows.find(r=>r.label==='Net proceeds').value,'USDC 1.414895')
+assert.equal(paymentReceiptView(pocketActivityReceipt(out)).rows.find(r=>r.label==='Fee')?.value,'USDC 0.00')
+assert(!paymentReceiptView(pocketActivityReceipt(out)).rows.some(r=>r.label==='Net proceeds'||r.label==='Order total'))
 assert.equal(isPocketActivityRow({...out,merchantFees:{payer:'merchant',platformFee:'bad',networkFee:'0',netAmount:'1'}}),false)

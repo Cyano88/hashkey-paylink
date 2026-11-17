@@ -367,7 +367,7 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, canMan
       </div>
     </section>
 
-    {canManage && project.accountType!=='individual' && <BusinessVerificationReview key={project.id+project.updatedAt} projectId={project.id} workspaceId={workspaceId}/>}
+    {canManage && project.accountType!=='individual' && <BusinessVerificationReview key={project.id+project.updatedAt} projectId={project.id} workspaceId={workspaceId} showPaymentAccess={false}/>}
     <details className="mt-6 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-semibold">Integration details</summary><div className="mt-4 space-y-2">
       <RouteRow label="Payment flow" value={project.checkoutMode==='agentic'?'Agentic x402':'Hosted checkout'}/>
       <RouteRow label="API keys" value={`${activeKeys.length} active`}/>

@@ -1,6 +1,6 @@
 import {currencyFirst,moneyParts} from './moneyPresentation'
 import {poweredByHashPayLink,paymentTagline} from './brandCopy'
-import {receiptIconKind,receiptIconPaths,receiptMoney} from './receiptIdentity'
+import {receiptIconKind,receiptIconPaths,receiptMoney,receiptTokenLogo} from './receiptIdentity'
 import {payerCheckoutFeeRows,type PayerCheckoutFeeEvidence} from './payerCheckoutFees'
 import {formatUnits,parseUnits} from 'viem'
 import {marketplaceFeeAmount,type MarketplaceWalletReceiptAmounts} from './marketplaceFeeDisplay'
@@ -498,7 +498,7 @@ export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
   const brand = paymentReceiptBrand(receipt)
   const logo = brand.imageUrl ? await loadImage(brand.imageUrl) : null
   const watermarkLogo = brand.kind === 'pocket' ? await loadImage('/brand/usdc-circle-logo.png') : null
-  drawReceiptCanvas(ctx, receipt, width, height, logo, watermarkLogo)
+  await drawReceiptCanvas(ctx, receipt, width, height, logo, watermarkLogo)
   return new Promise<string>((resolve) => canvas.toBlob(blob => {
     if (!blob) return resolve('')
     const reader = new FileReader()
@@ -529,7 +529,7 @@ function loadImage(src: string) {
   })
 }
 
-function drawReceiptCanvas(
+async function drawReceiptCanvas(
   ctx: CanvasRenderingContext2D,
   receipt: PaylinkReceipt,
   width: number,
@@ -573,7 +573,7 @@ function drawReceiptCanvas(
   ctx.font = `700 17px ${sans}`
   const brandX = brand.kind === 'partner' && !logo ? 52 : 104
   if (!wordmark) ctx.fillText(clipCanvasText(ctx, brand.name, 420 - brandX), brandX, 72)
-  {const icon=receiptIconKind(receipt);ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;if(icon==='wallet'){ctx.fillStyle=ctx.strokeStyle;ctx.fill(new Path2D(receiptIconPaths.wallet))}else ctx.stroke(new Path2D(receiptIconPaths[icon]));ctx.restore()}
+  {const tokenPath=receiptTokenLogo(receipt),tokenLogo=tokenPath?await loadImage(tokenPath):null;const icon=receiptIconKind(receipt);ctx.save();ctx.translate(408,55);ctx.strokeStyle='#374151';ctx.lineWidth=1.5;if(tokenLogo){ctx.drawImage(tokenLogo,0,0,24,24)}else if(icon==='wallet'){ctx.fillStyle=ctx.strokeStyle;ctx.fill(new Path2D(receiptIconPaths.wallet))}else ctx.stroke(new Path2D(receiptIconPaths[icon]));ctx.restore()}
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)

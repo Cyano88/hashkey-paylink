@@ -1,12 +1,13 @@
+import StablecoinPaymentIcon from './StablecoinPaymentIcon'
 import type {ReactNode} from 'react'
-import {CircleStackIcon, CreditCardIcon, BuildingLibraryIcon, CheckIcon, ChevronRightIcon} from '@heroicons/react/24/outline'
+import {WalletIcon, CreditCardIcon, BuildingLibraryIcon, CheckIcon, ChevronRightIcon} from '@heroicons/react/24/outline'
 
 /** Presentation only: upcoming rails cannot select a route or initiate payment. */
 export default function CheckoutPaymentMethods({children,onStablecoins,onCash,stablecoinsEnabled=true}:{stablecoinsEnabled?:boolean;children?:ReactNode;onStablecoins?:()=>void;onCash?:()=>void}) {
  return <section aria-label="Payment methods" className="space-y-3">
   {stablecoinsEnabled&&!onStablecoins&&<div className="overflow-hidden rounded-2xl border border-gray-950 dark:border-white/60">
    <div className="flex min-h-16 items-center gap-3 px-4 py-3">
-    <span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><CircleStackIcon className="h-7 w-7"/></span>
+    <span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><StablecoinPaymentIcon className="h-7 w-7"/></span>
     <div className="min-w-0 flex-1"><p className="text-sm font-semibold">Stablecoins</p><p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Pay from your wallet</p></div>
     <CheckIcon aria-label="Selected payment method" className="h-5 w-5 shrink-0"/>
    </div>
@@ -14,11 +15,11 @@ export default function CheckoutPaymentMethods({children,onStablecoins,onCash,st
   </div>}
   <div className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 dark:divide-white/10 dark:border-white/15">
    {stablecoinsEnabled&&onStablecoins&&<button type="button" onClick={onStablecoins} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500 dark:hover:bg-white/5">
-    <span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><CircleStackIcon className="h-7 w-7"/></span>
+    <span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><StablecoinPaymentIcon className="h-7 w-7"/></span>
     <span className="min-w-0 flex-1 text-sm font-semibold">Stablecoins</span>
     <ChevronRightIcon aria-hidden="true" className="h-5 w-5 shrink-0"/>
    </button>}
-   {onCash&&<button type="button" onClick={onCash} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5"><span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><BuildingLibraryIcon className="h-7 w-7"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Cash balance</span><span className="mt-0.5 block text-xs text-gray-500">Pay from Pocket</span></span><ChevronRightIcon aria-hidden="true" className="h-5 w-5"/></button>}
+   {onCash&&<button type="button" onClick={onCash} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5"><span aria-hidden="true" className="flex h-10 w-14 shrink-0 items-center justify-center"><WalletIcon className="h-7 w-7"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Cash balance</span><span className="mt-0.5 block text-xs text-gray-500">Pay from Pocket</span></span><ChevronRightIcon aria-hidden="true" className="h-5 w-5"/></button>}
    <CheckoutUpcomingMethods/>
 
   </div>

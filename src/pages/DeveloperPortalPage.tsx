@@ -14,7 +14,7 @@ import SandboxPanel from '../developer/SandboxPanel'
 import {productionVerificationAllows} from '../lib/developerAccess'
 import BuilderQuickstart from '../developer/BuilderQuickstart'
 import ReceiptEmailSettings from '../developer/ReceiptEmailSettings'
-import type{ReceiptEmailSettings as ReceiptEmailPreferences}from'../lib/receiptEmailSettings'
+import {defaultReceiptEmailSettings,type ReceiptEmailSettings as ReceiptEmailPreferences}from'../lib/receiptEmailSettings'
 import BscCheckoutSettings from '../developer/BscCheckoutSettings'
 import type {BscCheckoutConfig} from '../lib/bscCheckoutConfig'
 import DeveloperLoadingSkeleton from '../components/DeveloperLoadingSkeleton'
@@ -104,7 +104,7 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
 
 function editableProjectState(project:Project) {
   const fields:Array<keyof Project>=['name','website','brandImageUrl','receiptEmails','useCase','capabilities','settlementMode','networks','defaultNetwork','recipients','refundAddress','allowedOrigins','webhookUrl','acceptedAssets','checkoutDefaultNetwork','bankCode','bankAccountNumber','bankAccountName','bankName','xlayerCheckout','bscCheckout']
-  return JSON.stringify(fields.map(field=>project[field]))
+  return JSON.stringify(fields.map(field=>field==='receiptEmails'?{...defaultReceiptEmailSettings,...project.receiptEmails,enabled:true}:project[field]))
 }
 
 function fieldClass() {
@@ -118,6 +118,7 @@ export default function DeveloperPortalPage() {
   const loadGeneration = useRef(0)
   const creatingProject = useRef(false)
   const savingProject = useRef(false)
+  const [projectSaving,setProjectSaving]=useState(false)
   const [receivingWallets, setReceivingWallets] = useState<Record<string,string>>({})
   const [allProjects, setProjects] = useState<Project[]>([])
   const [builderProfiles,setBuilderProfiles]=useState<BuilderProfile[]>([PERSONAL_PROFILE])
@@ -332,6 +333,7 @@ export default function DeveloperPortalPage() {
   async function saveProject(value = draft) {
     if (!value || savingProject.current) return
     savingProject.current=true
+    setProjectSaving(true)
     const draft = value
     const generation = loadGeneration.current
     setBusy(true); setError(''); setNotice('')
@@ -355,7 +357,7 @@ export default function DeveloperPortalPage() {
         ? 'Configuration saved. The project remains suspended.'
         : data.project.settlementStatus === 'ready' ? 'Project settings saved.' : 'Configuration saved. Setup is still required.')
     } catch (reason) { if(generation===loadGeneration.current)setError(reason instanceof Error && reason.name==='TimeoutError' ? 'Saving took longer than expected. Reload to check whether your changes were saved.' : reason instanceof Error ? reason.message : 'Configuration could not be saved.') }
-    finally { savingProject.current=false;setBusy(false) }
+    finally { savingProject.current=false;setProjectSaving(false);setBusy(false) }
   }
 
   async function createKey(environment: 'test' | 'live') {
@@ -469,10 +471,10 @@ export default function DeveloperPortalPage() {
               {active && tab === 'products' && <><ProductsPanel project={active} onConfigure={() => setTab('setup')} /><MarketplaceAccessRequest key={(user?.id??'')+':'+active.id} projectId={active.id}/></>}
               {active && tab === 'marketplace' && <MarketplaceBalancesPanel key={(user?.id??'')+':'+active.id} projectId={active.id} />}
               {active && tab === 'activity' && <PaymentActivityPanel key={active.id} projectId={active.id} />}
-              {active && draft && tab === 'setup' && <><SetupPanel onWalletsReady={setReceivingWallets} onWalletBusy={setBusy} error={error} notice={notice} receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
+              {active && draft && tab === 'setup' && <><SetupPanel dirty={editableProjectState(draft)!==editableProjectState(active)} saving={projectSaving} onWalletsReady={setReceivingWallets} onWalletBusy={setBusy} error={error} notice={notice} receivingWallets={receivingWallets} draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={() => void saveProject()} /><DirectoryProfile key={active.id} projectId={active.id} profile={active.directoryProfile} appDirty={editableProjectState(draft)!==editableProjectState(active)} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/><RemoveAppPanel key={active.id+':remove'} projectId={active.id} name={active.name} dirty={hasUnsavedChanges()} onBusy={setBusy} onRemoved={appRemoved}/></>}
               {active && tab === 'verification' && (!builderProfileReady(activeProfile) ? <p className="text-sm text-gray-500">Complete your profile name and country above to continue verification.</p> : active.accountType === 'individual' ? <PersonalVerificationPanel /> : <BusinessVerificationPanel key={active.id} profileCountry={activeProfile.country} projectId={active.id} onDirty={setVerificationDirty} onBusy={setBusy} onChanged={()=>void loadProjects()}/>) }
               {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey?.projectId === active.id ? newKey : null} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
-              {active && draft && tab === 'webhooks' && <WebhookPanel draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
+              {active && draft && tab === 'webhooks' && <WebhookPanel saving={projectSaving} draft={{ ...active, webhookUrl }} setDraft={value => setWebhookUrl(value.webhookUrl)} newSecret={newWebhookSecret?.projectId === active.id ? newWebhookSecret.value : ''} busy={busy} onSave={() => void saveProject({ ...active, webhookUrl })} onRotate={rotateWebhookSecret} savedUrl={active.webhookUrl} />}
               {active && tab === 'quickstart' && <><QuickstartPanel project={active} /><details className="mt-8 border-t border-gray-200 pt-5 dark:border-white/10"><summary className="cursor-pointer text-sm font-medium">Command-line tools</summary><CliGuide projectId={active.id} /></details><details className="mt-6 text-sm text-gray-500"><summary className="cursor-pointer">Coming soon</summary><ComingSoonProducts/></details></>}
             </>}
           {!creatingNew && tab !== 'setup' && error && <Message tone="error">{error}</Message>}
@@ -488,7 +490,7 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
   return <ProductPicker mode={checkoutMode} value={value} onChange={onChange}/>
 }
 
-function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, setDraft, institutions, institutionsLoading, busy, onSave, error, notice }: { onWalletsReady:(wallets:Record<string,string>)=>void; onWalletBusy:(busy:boolean)=>void; receivingWallets: Record<string,string>; draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void; error?:string; notice?:string }) {
+function SetupPanel({ dirty, saving, onWalletsReady, onWalletBusy, receivingWallets, draft, setDraft, institutions, institutionsLoading, busy, onSave, error, notice }: { dirty:boolean; saving:boolean; onWalletsReady:(wallets:Record<string,string>)=>void; onWalletBusy:(busy:boolean)=>void; receivingWallets: Record<string,string>; draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void; error?:string; notice?:string }) {
   const [settingsSection, setSettingsSection] = useState<'general'|'receiving'|'branding'|'receipts'>('general')
   const [settingsError, setSettingsError] = useState('')
 
@@ -623,7 +625,7 @@ function SetupPanel({ onWalletsReady, onWalletBusy, receivingWallets, draft, set
     {settingsError && <p role="alert" className="mt-4 text-sm text-red-600">{settingsError}</p>}
     {error && <Message tone="error">{error}</Message>}
     {notice && <Message tone="success">{notice}</Message>}
-    <button type="button" disabled={busy} onClick={submitSettings} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {settingsSection==='general'&&draft.settlementStatus!=='ready'?'Continue to receiving accounts':'Save changes'}</button>
+    <button type="button" disabled={busy||(!dirty&&!(settingsSection==='general'&&draft.settlementStatus!=='ready'))} aria-busy={saving} onClick={submitSettings} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {saving?'Saving\u2026':settingsSection==='general'&&draft.settlementStatus!=='ready'?'Continue to receiving accounts':'Save changes'}</button>
   </fieldset>
 }
 
@@ -657,7 +659,7 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
   </div>
 }
 
-function WebhookPanel({ draft, setDraft, newSecret, busy, onSave, onRotate, savedUrl }: { draft: Project; setDraft: (project: Project) => void; newSecret: string; busy: boolean; onSave: () => void; onRotate: () => void; savedUrl: string }) {
+function WebhookPanel({ saving, draft, setDraft, newSecret, busy, onSave, onRotate, savedUrl }: { saving:boolean; draft: Project; setDraft: (project: Project) => void; newSecret: string; busy: boolean; onSave: () => void; onRotate: () => void; savedUrl: string }) {
   const webhookEvents = [
     'checkout.created',
     'payment.processing',
@@ -673,7 +675,7 @@ function WebhookPanel({ draft, setDraft, newSecret, busy, onSave, onRotate, save
   ]
   return <div><PanelHeader eyebrow="Events" title="Webhooks" copy="Receive signed payment updates on your backend. Never fulfill from a browser redirect alone." />
     <Field label="Webhook URL" className="mt-7"><input className={fieldClass()} value={draft.webhookUrl} onChange={event => setDraft({ ...draft, webhookUrl: event.target.value })} placeholder="https://api.yourplatform.com/webhooks/hashpaylink" /></Field>
-    <button type="button" disabled={busy} onClick={onSave} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.05]">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Save changes</button>
+    <button type="button" disabled={busy||draft.webhookUrl===savedUrl} aria-busy={saving} onClick={onSave} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.05]">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {saving?'Saving\u2026':'Save changes'}</button>
     {newSecret && <SecretReveal label="Copy this signing secret now" value={newSecret} />}
     <button type="button" disabled={busy || !savedUrl || draft.webhookUrl !== savedUrl} onClick={onRotate} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gray-950 text-xs font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950"><RotateCw className="h-4 w-4" /> {draft.webhookConfigured ? 'Rotate signing secret' : 'Create signing secret'}</button>
     <div className="mt-6 grid gap-2 sm:grid-cols-2">{webhookEvents.map(event => <div key={event} className="rounded-xl border border-gray-200 px-3 py-2 font-mono text-xs text-gray-500 dark:border-white/10 dark:text-gray-400">{event}</div>)}</div>

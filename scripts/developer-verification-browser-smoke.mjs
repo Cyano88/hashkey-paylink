@@ -42,7 +42,13 @@ try {
  for(const input of await page.locator('input[type=file]').all()){ await input.setInputFiles(file);await page.getByText('Document uploaded.',{exact:true}).waitFor()}
  await page.getByRole('button',{name:'Continue',exact:true}).click()
  await page.getByRole('checkbox').check()
+ await page.evaluate(()=>{const original=window.fetch;window.fetch=async(p,o)=>{if(typeof o?.body==='string'&&JSON.parse(o.body).action==='verification-submit')await new Promise(r=>window.releaseSubmission=r);return original(p,o)}})
  await page.getByRole('button',{name:'Submit for review',exact:true}).click()
+ await page.waitForFunction(()=>typeof window.releaseSubmission==='function')
+ const submitting=page.getByRole('button',{name:'Submitting\u2026',exact:true})
+ assert(await submitting.isDisabled());assert.equal(await submitting.getAttribute('aria-busy'),'true');assert.equal(await submitting.locator('.animate-spin').count(),1)
+ assert(await page.getByRole('button',{name:'Save draft',exact:true}).isDisabled())
+ await page.evaluate(()=>window.releaseSubmission())
  await page.getByRole('heading',{name:'We’re reviewing your application',exact:true}).waitFor()
  assert.equal(await page.locator('input[type=file]').count(),0)
  await page.getByRole('button',{name:'Developers',exact:true}).click()

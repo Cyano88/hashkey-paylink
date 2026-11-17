@@ -1,0 +1,27 @@
+﻿import assert from 'node:assert/strict'
+const {chromium}=await import('file:///C:/Users/USER/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/playwright/index.mjs')
+const browser=await chromium.launch({channel:'chrome',headless:true})
+try{for(const width of [320,390])for(const dark of [false,true]){
+ const page=await browser.newPage({viewport:{width,height:844}})
+ await page.goto('http://127.0.0.1:4319/?verification&section=verification')
+ await page.getByLabel('Legal company name',{exact:true}).fill('Example pending draft')
+ await page.evaluate(dark=>{document.documentElement.classList.toggle('dark',dark);const original=window.fetch;window.saveCount=0;window.fetch=async(p,o)=>{if(o?.body&&typeof o.body==='string'&&JSON.parse(o.body).action==='verification-save'){window.saveCount++;await new Promise(r=>window.releaseSave=r);if(window.failSave)return Response.json({ok:false,error:'Please retry saving your draft.'},{status:503})}return original(p,o)}},dark)
+ const save=page.getByRole('button',{name:'Save draft',exact:true})
+ await save.evaluate(b=>{b.click();b.click()})
+ await page.waitForFunction(()=>typeof window.releaseSave==='function')
+ const pending=page.getByRole('button',{name:'Saving…',exact:true})
+ assert(await pending.isDisabled());assert.equal(await pending.getAttribute('aria-busy'),'true');assert.equal(await pending.locator('.animate-spin').count(),1)
+ assert(await page.getByRole('button',{name:'Continue',exact:true}).isDisabled())
+ assert.equal(await page.evaluate(()=>window.saveCount),1)
+ await page.locator('.verification-actions').scrollIntoViewIfNeeded()
+ const actions=await page.locator('.verification-actions button').all(),support=await page.getByRole('button',{name:'Open support chat',exact:true}).boundingBox()
+ for(const button of actions){const b=await button.boundingBox();assert(!support||b.x+b.width<=support.x||b.y+b.height<=support.y||b.y>=support.y+support.height,'Support must not overlap an action')}
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
+ await page.screenshot({path:`output/playwright/verification-saving-${width}-${dark?'dark':'light'}.png`})
+ await page.evaluate(()=>{window.failSave=true;window.releaseSave()})
+ await page.getByRole('alert').filter({hasText:'Please retry saving your draft.'}).waitFor()
+ assert.equal(await page.getByLabel('Legal company name',{exact:true}).inputValue(),'Example pending draft')
+ assert(await save.isEnabled())
+ await page.evaluate(()=>window.failSave=false);await save.click();await page.evaluate(()=>window.releaseSave());await page.getByText('Draft saved.',{exact:true}).waitFor()
+ await page.close()
+}console.log('PASS draft action identity, spinner, double-click lock, support clearance, retained input on failure and retry in both themes at 320/390px.')}finally{await browser.close()}

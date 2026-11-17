@@ -14,6 +14,7 @@ try {
  assert.equal(await approve.isDisabled(),false)
  await approve.click()
  await page.getByText('Verified',{exact:true}).waitFor()
+ assert.equal(await page.getByText('Payment access',{exact:true}).count(),1,'App details must expose one payment access section')
  await page.getByText('Review history',{exact:true}).click()
  await page.getByText(/approved.*SMILE-EXAMPLE-123/).waitFor()
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)

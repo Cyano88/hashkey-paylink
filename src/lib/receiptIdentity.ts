@@ -10,3 +10,9 @@ export function receiptIconKind(r:{source?:string;settlementType?:string;payment
 }
 /** Decimal strings stay exact. Currency labels are data, never inferred from a symbol. */
 export {exactMoney as receiptMoney} from './moneyPresentation'
+
+const receiptTokenLogos:Record<string,string>={USDC:'/brand/receipt-token-usdc.png',USDT:'/brand/receipt-token-usdt.png',USDE:'/brand/receipt-token-usde.png',USDG:'/brand/receipt-token-usdg.png',EURC:'/brand/receipt-token-eurc.png'}
+/** The paid asset identifies wallet payments, never a bank destination or refund. */
+export function receiptTokenLogo(r:Parameters<typeof receiptIconKind>[0]&{asset?:string;cashFunding?:boolean}):string|undefined{
+ return !r.cashFunding&&receiptIconKind(r)==='wallet'?receiptTokenLogos[(r.asset||'').toUpperCase()]:undefined
+}

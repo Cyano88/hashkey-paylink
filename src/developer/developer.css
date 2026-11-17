@@ -161,3 +161,6 @@
 .developer-surface .pocket-support-input:focus-visible { outline: none; box-shadow: none; }
 .developer-surface .pocket-support-input-wrap:focus-within { outline: 2px solid #909095; outline-offset: 2px; }
 .dark .developer-surface .pocket-support-input-wrap:focus-within { outline-color: #a1a1a6; }
+
+/* Keep verification actions clear of the fixed support launcher on phones. */
+@media (max-width: 639px) { .verification-actions { padding-right:64px; } }
