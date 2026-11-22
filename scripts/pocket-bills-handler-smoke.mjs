@@ -498,8 +498,8 @@ console.log('Pocket Bills handler smoke test passed: auth, quotes, reserve, exac
 // Uganda delivery value must never be mistaken for the provider's NGN charge.
 now += 61_000
 const ugProvider={...provider,
- listUgandaOperators:async()=>[{serviceId:'ug-246',name:'Uganda Airtel',minimumAmount:null,maximumAmount:null,imageUrl:'https://vtpass.com/resources/images/operators/6.png'}],
- listUgandaVariations:async(_operator,type)=>[{variationCode:type==='1'?'3028':'5200',name:type==='1'?'Enter flexible amount':'Daily 30MB Mobile Data',fixedPrice:type==='4',amount:250,minimum:50,maximum:500000,rate:0.3962,chargedAmount:99.03}],
+ listInternationalOperators:async country=>[{serviceId:`${country.toLowerCase()}-246`,name:country==='KE'?'Kenya Airtel':'Uganda Airtel',minimumAmount:null,maximumAmount:null,imageUrl:'https://vtpass.com/resources/images/operators/6.png'}],
+ listInternationalVariations:async(_country,_operator,type)=>[{variationCode:type==='1'?'3028':'5200',name:type==='1'?'Enter flexible amount':'Daily 30MB Mobile Data',fixedPrice:type==='4',amount:250,minimum:50,maximum:500000,rate:0.3962,chargedAmount:99.03}],
  purchaseInternational:async input=>{ugPurchases++;assert.equal(input.international.deliveryAmount,'1000.00');assert.equal(input.phone,'256700000000');assert.equal(input.email,'owner@example.com');return{...providerResult(input,'delivered'),recipient:input.phone,amountNgn:396.2}}
 }
 let ugPurchases=0

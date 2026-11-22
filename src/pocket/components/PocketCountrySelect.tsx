@@ -4,7 +4,7 @@ import { ChevronDown } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
 function CountryFlag({ value }: { value: string }) {
-  const src = value === 'NG' ? '/brand/countries/ng.svg' : value === 'UG' ? '/brand/countries/ug.svg' : undefined
+  const src = value === 'NG' ? '/brand/countries/ng.svg' : value === 'UG' ? '/brand/countries/ug.svg' : value === 'KE' ? '/brand/countries/ke.svg' : undefined
   return src ? <img src={src} alt="" aria-hidden="true" width={28} height={21} className="h-[21px] w-7 shrink-0 rounded-sm object-cover ring-1 ring-black/10 dark:ring-white/15" /> : null
 }
 

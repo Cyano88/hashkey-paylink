@@ -1,5 +1,5 @@
 import {positiveBillLimit} from '../lib/pocketBillLimits'
-import type {PocketBillCountry} from '../lib/pocketBillCountry'
+import {billLocalCurrency, isInternationalBillCountry, type InternationalBillCountry, type InternationalBillCurrency, type PocketBillCountry} from '../lib/pocketBillCountry'
 import { pocketApiUrl } from '../lib/pocketRoutes'
 import { POCKET_API, createPocketIdempotencyKey } from '../lib/pocketSchemas'
 
@@ -21,7 +21,7 @@ export type PocketBillIntentState =
 
 export type PocketBillIntent = {
   asset?: 'USDC' | 'USDT'
-  international?: {country:'UG';deliveryCurrency:'UGX';deliveryAmount:string}
+  international?: {country:InternationalBillCountry;deliveryCurrency:InternationalBillCurrency;deliveryAmount:string}
   id: string
   requestId: string
   state: PocketBillIntentState
@@ -102,7 +102,7 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     throw new PocketBillsApiError('Bill-payment response was invalid.')
   }
   return {
-    ...(record(intent.international).country === 'UG' && record(intent.international).deliveryCurrency === 'UGX' ? {international:{country:'UG' as const,deliveryCurrency:'UGX' as const,deliveryAmount:text(record(intent.international).deliveryAmount)}} : {}),
+    ...(() => { const country=record(intent.international).country; const currency=record(intent.international).deliveryCurrency; return (country==='UG'||country==='KE')&&currency===billLocalCurrency(country)?{international:{country,deliveryCurrency:currency,deliveryAmount:text(record(intent.international).deliveryAmount)}}:{} })(),
     ...(intent.asset === 'USDT' ? {asset:'USDT' as const} : {}),
     id: text(intent.id),
     requestId: text(intent.requestId),
@@ -266,13 +266,13 @@ export async function quotePocketAirtime(input: {
     accessToken: input.accessToken,
     idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('airtime-quote'),
     fetcher: input.fetcher,
-    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), ...(input.country==='UG'?{country:'UG',amount_local:input.amountNgn}:{}), service_id: input.serviceId, phone: input.phone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet },
+    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), ...(input.country && isInternationalBillCountry(input.country)?{country:input.country,amount_local:input.amountNgn}:{}), service_id: input.serviceId, phone: input.phone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet },
   })
   return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }
 
 export type PocketDataService = { serviceId: string; name: string; imageUrl?:string; minimumAmount?:number|null; maximumAmount?:number|null }
-export type PocketDataVariation = { fixedPrice?:boolean; amountLocal?:string; currency?:'NGN'|'UGX'; minimum?:number; maximum?:number; variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
+export type PocketDataVariation = { fixedPrice?:boolean; amountLocal?:string; currency?:'NGN'|'UGX'|'KES'; minimum?:number; maximum?:number; variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
 export type PocketBillService = PocketDataService
 export type PocketBillVariation = PocketDataVariation
 
@@ -283,7 +283,7 @@ export async function readPocketDataCatalog(input: {
   category?: 'airtime' | 'data' | 'tv' | 'electricity'
   fetcher?: typeof fetch
 }) {
-  const params = new URLSearchParams({ ...(input.country==='UG'?{country:'UG'}:{}), category: input.category ?? 'data' })
+  const params = new URLSearchParams({ ...(input.country && isInternationalBillCountry(input.country)?{country:input.country}:{}), category: input.category ?? 'data' })
   if (input.serviceId) params.set('service_id', input.serviceId)
   const query = `?${params.toString()}`
   const response = await (input.fetcher ?? fetch)(`${POCKET_API.billsCatalog}${query}`, {
@@ -300,7 +300,7 @@ export async function readPocketDataCatalog(input: {
   const variations = Array.isArray(data.variations) ? data.variations.flatMap(value => {
     const item = record(value)
     return text(item.variationCode) && text(item.name) && text(item.amountNgn)
-      ? [{ ...(item.currency==='UGX'?{amountLocal:text(item.amountLocal),currency:'UGX' as const,fixedPrice:typeof item.fixedPrice==='boolean'?item.fixedPrice:undefined,minimum:positiveBillLimit(item.minimum)??undefined,maximum:positiveBillLimit(item.maximum)??undefined}:{}), variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
+      ? [{ ...(item.currency==='UGX'||item.currency==='KES'?{amountLocal:text(item.amountLocal),currency:item.currency as InternationalBillCurrency,fixedPrice:typeof item.fixedPrice==='boolean'?item.fixedPrice:undefined,minimum:positiveBillLimit(item.minimum)??undefined,maximum:positiveBillLimit(item.maximum)??undefined}:{}), variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
       : []
   }) : []
   if (input.serviceId ? input.category !== 'electricity' && !variations.length : !services.length) {
@@ -364,7 +364,7 @@ export async function quotePocketData(input: {
     accessToken: input.accessToken,
     idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('data-quote'),
     fetcher: input.fetcher,
-    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), ...(input.country==='UG'?{country:'UG'}:{}), category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
+    body: { ...(input.asset === 'USDT' ? {asset:input.asset} : {}), ...(input.country && isInternationalBillCountry(input.country)?{country:input.country}:{}), category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
   })
   return { intent: matchingBillQuote(data.intent, input.asset), replayed: data.replayed === true }
 }

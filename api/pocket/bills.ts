@@ -1,6 +1,6 @@
 import {readBillCountryLimits} from './bill-country-limits.js'
 import {billAsset, billToken, usdtBillsAllowed, usdtBillsCanaryQuoteAllowed} from './bills-asset.js'
-import {billDestination,normalizeUgandaPhone} from '../../src/pocket/lib/pocketBillCountry.js'
+import {billDestination,normalizeInternationalBillPhone,billLocalCurrency,isInternationalBillCountry} from '../../src/pocket/lib/pocketBillCountry.js'
 import {internationalOperator,priceInternationalBill,type InternationalBill} from '../vtpass-international.js'
 import { randomUUID } from 'node:crypto'
 import type { Request, Response } from 'express'
@@ -84,9 +84,9 @@ function normalizeBillerCode(value: unknown, category: 'tv' | 'electricity') {
 }
 
 async function servicesForCategory(provider: VtpassClient, category: BillsCategory, country = 'NG') {
-  if (country === 'UG') {
-    if (category !== 'airtime' && category !== 'data') throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.',400)
-    return provider.listUgandaOperators(category === 'data' ? '4' : '1')
+  if (country !== 'NG') {
+    if (category !== 'airtime' && category !== 'data') throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','Only airtime and mobile data are currently available outside Nigeria.',400)
+    return provider.listInternationalOperators(country, category === 'data' ? '4' : '1')
   }
   if (category === 'data') {
     const services = await provider.listDataServices()
@@ -317,18 +317,18 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       if (asset === 'USDT' && !usdtBillsAllowed(String(req.body?.payer_wallet || ''), process.env, dependencies.now())) throw new PocketBillsStoreError('BILLS_ASSET_DISABLED', 'USDT bill payments are not enabled yet.', 503)
       const category = normalizeCategory(req.body?.category)
       const country = billDestination(req.body?.country)
-      if (country === 'UG' && !['airtime','data'].includes(category)) throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.')
+      if (isInternationalBillCountry(country) && !['airtime','data'].includes(category)) throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','Only airtime and mobile data are currently available outside Nigeria.',400)
       if (!dependencies.config.liveCategories.includes(category)) {
         return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_DISABLED', `${categoryLabel(category)} is not enabled for this VTpass account.`, 503))
       }
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
-      const phone = country === 'UG' ? normalizeUgandaPhone(String(req.body?.phone || '')) : category === 'data' ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
+      const phone = isInternationalBillCountry(country) ? normalizeInternationalBillPhone(country, String(req.body?.phone || '')) : category === 'data' ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
         : category === 'tv' || category === 'electricity' ? normalizeBillerCode(req.body?.phone, category)
           : normalizeNigerianPhone(req.body?.phone)
       const contactPhone = category === 'tv' || category === 'electricity' ? normalizeNigerianPhone(req.body?.contact_phone) : ''
       let amountNgn = canonicalNgn(req.body?.amount_ngn)
       const payerWallet = cleanText(req.body?.payer_wallet, 80)
-      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : country === 'UG' ? 'Enter a valid Ugandan mobile number.' : category === 'data' ? 'Enter a valid Nigerian phone number.' : 'Enter a valid Nigerian phone number.'), 'phone')
+      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : country === 'UG' ? 'Enter a valid Ugandan mobile number.' : country === 'KE' ? 'Enter a valid Kenyan mobile number.' : category === 'data' ? 'Enter a valid Nigerian phone number.' : 'Enter a valid Nigerian phone number.'), 'phone')
       if ((category === 'tv' || category === 'electricity') && !contactPhone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian contact phone number.'), 'contactPhone')
       if (country === 'NG' && dependencies.config.environment === 'sandbox' && category === 'airtime' && phone !== '08011111111') {
         return respond.fail(new PocketBillsStoreError(
@@ -349,15 +349,15 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       let customerName = ''
       let customerAddress = ''
       let international: InternationalBill | undefined
-      if (country === 'UG') {
+      if (isInternationalBillCountry(country)) {
         if (!identity.email) throw new PocketBillsStoreError('BILLS_EMAIL_REQUIRED','Sign in with your verified email before purchasing.')
-        const operatorId=internationalOperator(serviceId),productTypeId=category==='data'?'4':'1'
-        const variations=await dependencies.provider.listUgandaVariations(operatorId,productTypeId)
+        const operatorId=internationalOperator(serviceId,country),productTypeId=category==='data'?'4':'1',deliveryCurrency=billLocalCurrency(country) as 'UGX'|'KES'
+        const variations=await dependencies.provider.listInternationalVariations(country,operatorId,productTypeId)
         const variation=category==='airtime'?variations.find(v=>!v.fixedPrice):variations.find(v=>v.variationCode===req.body?.variation_code)
-        if(!variation) throw new PocketBillsStoreError('BILLS_INVALID_VARIATION','Select an available Uganda product.')
-        const priced=priceInternationalBill(variation,req.body?.amount_local)
+        if(!variation) throw new PocketBillsStoreError('BILLS_INVALID_VARIATION',`Select an available ${country === 'KE' ? 'Kenya' : 'Uganda'} product.`)
+        const priced=priceInternationalBill(variation,req.body?.amount_local,deliveryCurrency)
         amountNgn=priced.amountNgn;variationCode=variation.variationCode;variationName=variation.name
-        international={country:'UG',operatorId,productTypeId,deliveryCurrency:'UGX',deliveryAmount:priced.deliveryAmount}
+        international={country,operatorId,productTypeId,deliveryCurrency,deliveryAmount:priced.deliveryAmount}
       } else if (category === 'data' || category === 'tv') {
         variationCode = cleanText(req.body?.variation_code, 100)
         const variations = await dependencies.provider.listServiceVariations(serviceId)
@@ -596,13 +596,16 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
         return respond.success({limits:await readBillCountryLimits({country,category,services,provider:dependencies.provider,ngnPerUsd:fx.rate,remainingUsd,now:dependencies.now()})})
       }
       if (!serviceId) {
+        if (isInternationalBillCountry(country) && !services.length) return respond.fail(new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE',`VTpass has no ${category === 'data' ? 'mobile data' : 'airtime'} providers available for ${country === 'KE' ? 'Kenya' : 'Uganda'} on this account yet.`,503))
         return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name, minimumAmount:service.minimumAmount, maximumAmount:service.maximumAmount, ...(service.imageUrl?{imageUrl:service.imageUrl}:{}) })) })
       }
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
-      if (country === 'UG') {
-        const plans=await dependencies.provider.listUgandaVariations(internationalOperator(serviceId),category==='data'?'4':'1')
-        return respond.success({variations:plans.map(v=>({variationCode:v.variationCode,name:v.name,fixedPrice:v.fixedPrice,amountNgn:v.fixedPrice?v.chargedAmount.toFixed(2):'0',amountLocal:v.fixedPrice?v.amount.toFixed(2):'0',currency:'UGX',minimum:v.minimum,maximum:v.maximum,available:true}))})
+      if (isInternationalBillCountry(country)) {
+        const currency=billLocalCurrency(country) as 'UGX'|'KES'
+        const plans=await dependencies.provider.listInternationalVariations(country,internationalOperator(serviceId,country),category==='data'?'4':'1')
+        if (!plans.length) return respond.fail(new PocketBillsStoreError('BILLS_PLANS_UNAVAILABLE',`No ${category === 'airtime' ? 'airtime amounts' : 'data plans'} are currently available for ${country === 'KE' ? 'Kenya' : 'Uganda'}.`,503))
+        return respond.success({variations:plans.map(v=>({variationCode:v.variationCode,name:v.name,fixedPrice:v.fixedPrice,amountNgn:v.fixedPrice?v.chargedAmount.toFixed(2):'0',amountLocal:v.fixedPrice?v.amount.toFixed(2):'0',currency,minimum:v.minimum,maximum:v.maximum,available:true}))})
       }
       if (category === 'airtime') return respond.success({variations:[]})
       if (category === 'electricity') return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations: [] })

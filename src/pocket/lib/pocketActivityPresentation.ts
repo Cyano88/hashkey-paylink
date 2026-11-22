@@ -12,7 +12,7 @@ function rawPocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amount
   if(row.source==='wallet-bridge'&&['refunded','reversed'].includes(row.paycrestStatus||'')&&row.refundAmount&&row.refundAsset)return row.refundAmount+' '+row.refundAsset
   const local = row.amountNgn !== undefined && row.amountNgn !== '' && Number.isFinite(Number(row.amountNgn))
   if (local && (row.source === 'bills' || row.source?.startsWith('bank-') || row.source === 'xpay' || !row.amount || !Number.isFinite(Number(row.amount)))) {
-    return Number(row.amountNgn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (row.fiatCurrency === 'UGX' ? 'UGX' : 'NGN')
+    return (row.fiatCurrency || 'NGN') + ' ' + Number(row.amountNgn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   if (row.source === 'wallet-swap' && (!row.amount || !Number.isFinite(Number(row.amount)))) return 'Swap'
   const asset = row.assetSymbol || 'USDC'

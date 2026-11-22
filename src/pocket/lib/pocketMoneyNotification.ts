@@ -4,7 +4,7 @@ import type { PocketActivityRow } from '../models/pocketActivity'
 import { isIncomingPosPayment } from './pocketPurchaseKind'
 export type PocketMoneyNotice = { eventId:string; title:string; body:string; path:string; tag:string; occurredAt:number }
 const labels:Record<string,string>={base:'Base',arc:'Arc',polygon:'Polygon',arbitrum:'Arbitrum',ethereum:'Ethereum',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain'}
-const amount=(value:string,currency:string)=>currency+' '+(['NGN','UGX'].includes(currency)?Number(value).toLocaleString('en-US',{maximumFractionDigits:2}):value)
+const amount=(value:string,currency:string)=>currency+' '+(['NGN','UGX','KES'].includes(currency)?Number(value).toLocaleString('en-US',{maximumFractionDigits:2}):value)
 /** Notification truth follows the original purchase, never its funding debit. */
 export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice|null {
  const source=(row.source||'').replace(/_/g,'-'),state=(row.bankSettlementStatus||row.paycrestStatus||'').toLowerCase()
@@ -16,7 +16,7 @@ export function pocketMoneyNotification(row:PocketActivityRow):PocketMoneyNotice
  if(!success&&!refunded&&!refundAvailable&&!failed)return null
  if(!row.txHash)return null
  if(bank&&(!row.amountNgn||!Number.isFinite(Number(row.amountNgn))))return null
- const local=(bank||bill)&&row.amountNgn&&['NGN','UGX'].includes(row.fiatCurrency||'NGN')?amount(row.amountNgn,row.fiatCurrency||'NGN'):amount(row.assetSymbol?formatStockQuantity(row.amount):row.amount,row.assetSymbol||'USDC')
+ const local=(bank||bill)&&row.amountNgn&&['NGN','UGX','KES'].includes(row.fiatCurrency||'NGN')?amount(row.amountNgn,row.fiatCurrency||'NGN'):amount(row.assetSymbol?formatStockQuantity(row.amount):row.amount,row.assetSymbol||'USDC')
  const web=source==='hosted-checkout'||row.settlementType==='hosted_checkout'
  const gift=source==='gift'
  const kind=web?'Web payment '+(row.direction==='in'?'received':'sent'):gift?(row.direction==='in'?'Gift received':'Gift funded'):bank?'Bank transfer':bill?({airtime:'Airtime',data:'Data',electricity:'Electricity',tv:'TV'}[row.billCategory||'airtime']):merchant?'XPay payment':purchase?'Payment':source==='wallet-bridge'?'Bridge':source==='wallet-swap'?'Swap completed':row.direction==='in'?(row.assetSymbol||'USDC')+' received':(row.assetSymbol||'USDC')+' sent'

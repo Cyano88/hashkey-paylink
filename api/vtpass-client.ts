@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { assertInternationalBill, internationalVariations, type InternationalBill } from './vtpass-international.js'
-import { normalizeUgandaPhone } from '../src/pocket/lib/pocketBillCountry.js'
+import { normalizeInternationalBillPhone, type InternationalBillCountry, billLocalCurrency } from '../src/pocket/lib/pocketBillCountry.js'
 import type { VtpassPhase0Config } from './vtpass-config.js'
 
 export type VtpassTransactionStatus = 'delivered' | 'pending' | 'failed' | 'reversed'
@@ -381,19 +381,30 @@ export function createVtpassClient(options: VtpassClientOptions) {
     }
   }
 
-  async function listUgandaOperators(productTypeId: '1' | '4') {
-    const { body } = await requestJson(`/api/get-international-airtime-operators?code=UG&product_type_id=${productTypeId}`, 'GET')
+  async function listInternationalProductTypes(country: InternationalBillCountry) {
+    const {body} = await requestJson(`/api/get-international-airtime-product-types?code=${country}`,'GET')
     const content = record(body).content
-    if (!Array.isArray(content)) throw new VtpassClientError({code:'VTPASS_INVALID_RESPONSE',message:'Uganda providers are temporarily unavailable.',status:503})
+    if (!Array.isArray(content)) throw new VtpassClientError({code:'VTPASS_INVALID_RESPONSE',message:`${country} mobile services are temporarily unavailable.`,status:503})
     return content.flatMap(item => {
-      const v = record(item), id = text(v.operator_id), name = text(v.name)
-      return /^\d{1,8}$/.test(id) && name ? [{ serviceId:`ug-${id}`, name, imageUrl: text(v.operator_image), minimumAmount:null, maximumAmount:null, convenienceFee:'', productType:productTypeId }] : []
+      const value=record(item),id=text(value.product_type_id)
+      return (id==='1'||id==='4')&&text(value.name)?[{id,name:text(value.name)}]:[]
     })
   }
-  async function listUgandaVariations(operatorId: string, productTypeId: '1' | '4') {
+  async function listInternationalOperators(country: InternationalBillCountry, productTypeId: '1' | '4') {
+    const currency = billLocalCurrency(country)
+    if (!(await listInternationalProductTypes(country)).some(item=>item.id===productTypeId)) return []
+    const { body } = await requestJson(`/api/get-international-airtime-operators?code=${country}&product_type_id=${productTypeId}`, 'GET')
+    const content = record(body).content
+    if (!Array.isArray(content)) throw new VtpassClientError({code:'VTPASS_INVALID_RESPONSE',message:`${country} providers are temporarily unavailable.`,status:503})
+    return content.flatMap(item => {
+      const v = record(item), id = text(v.operator_id), name = text(v.name)
+      return /^\d{1,8}$/.test(id) && name ? [{ serviceId:`${country.toLowerCase()}-${id}`, name, imageUrl: text(v.operator_image), minimumAmount:null, maximumAmount:null, convenienceFee:'', productType:productTypeId, currency }] : []
+    })
+  }
+  async function listInternationalVariations(country: InternationalBillCountry, operatorId: string, productTypeId: '1' | '4') {
     if (!/^\d{1,8}$/.test(operatorId)) throw new VtpassClientError({code:'VTPASS_INVALID_SERVICE',message:'Choose an available network.',status:400})
     const {body} = await requestJson(`/api/service-variations?serviceID=foreign-airtime&operator_id=${operatorId}&product_type_id=${productTypeId}`, 'GET')
-    return internationalVariations(record(body).content, productTypeId)
+    return internationalVariations(record(body).content, productTypeId, billLocalCurrency(country) as 'UGX'|'KES')
   }
   async function purchaseInternational(input: { international: InternationalBill; variationCode:string; phone:string; requestId:string; email:string }) {
     assertPurchaseAllowed(config)
@@ -401,10 +412,10 @@ export function createVtpassClient(options: VtpassClientOptions) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) throw new VtpassClientError({code:'VTPASS_INVALID_EMAIL',message:'A verified contact email is required for this purchase.',status:400})
     const requestId=normalizeRequestId(input.requestId)
     assertPurchaseRequestIdDate(requestId,now())
-    const phone=normalizeUgandaPhone(input.phone)
+    const phone=normalizeInternationalBillPhone(input.international.country,input.phone)
     const {body}=await requestJson('/api/pay','POST',{
       request_id:requestId,serviceID:'foreign-airtime',billersCode:phone,phone,
-      variation_code:normalizeVariationCode(input.variationCode),country_code:'UG',
+      variation_code:normalizeVariationCode(input.variationCode),country_code:input.international.country,
       operator_id:input.international.operatorId,product_type_id:input.international.productTypeId,
       amount:Number(input.international.deliveryAmount),email:input.email,
     },true)
@@ -630,7 +641,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
   }
 
   return {
-    listUgandaOperators, listUgandaVariations, purchaseInternational,
+    listInternationalProductTypes, listInternationalOperators, listInternationalVariations, purchaseInternational,
     getWalletBalance,
     listServiceCategories,
     listAirtimeServices,

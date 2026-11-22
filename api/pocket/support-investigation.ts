@@ -3,7 +3,7 @@ import {supportOptions,type SupportOption} from '../../src/pocket/lib/pocketSupp
 import type {PocketActivityRow} from '../../src/pocket/models/pocketActivity.js'
 import type {SupportAccountAnswer} from './support-account-answer.js'
 import type {SupportChainFinding} from './support-investigation-chain.js'
-export type SupportInvestigation={issue:'missing'|'balance';product?:'usdc'|'bank'|'stocks'|'bills';network?:string;reference?:string;asset?:string;amount?:string;currency?:'USDC'|'NGN'|'UGX';date?:string;timeWindowMs?:number;details?:string;finding?:string;checkedAt?:number}
+export type SupportInvestigation={issue:'missing'|'balance';product?:'usdc'|'bank'|'stocks'|'bills';network?:string;reference?:string;asset?:string;amount?:string;currency?:'USDC'|'NGN'|'UGX'|'KES';date?:string;timeWindowMs?:number;details?:string;finding?:string;checkedAt?:number}
 type Input={question:string;owner:string;prior?:SupportInvestigation;selectedEventId?:string;offered?:SupportOption[];now:number}
 type Dependencies={payments:(owner:string)=>Promise<PocketActivityRow[]>;balanceCheck?:(owner:string,network:string,asset?:string)=>Promise<{text:string;observedAt?:number}>;chainCheck?:(owner:string,network:string,hash:string)=>Promise<SupportChainFinding>}
 const types=supportOptions(['investigate_usdc','investigate_bank','investigate_stocks','investigate_bills','human'])
@@ -31,8 +31,8 @@ export async function supportInvestigationAnswer(input:Input,deps:Dependencies):
  const hash=input.question.match(/\b0x[a-fA-F0-9]{64}\b/)?.[0]||input.question.match(/\b[1-9A-HJ-NP-Za-km-z]{80,90}\b/)?.[0]
  const ref=hash||input.question.match(/\b(?:reference|ref)\s*[:#]?\s+([a-zA-Z0-9_-]{6,120})\b/i)?.[1]
  if(ref&&ref!==state.reference){state.reference=ref;delete state.finding;delete state.checkedAt}
- const amountMatch=q.match(/(?:\b(\d[\d,]*(?:\.\d{1,6})?)\s*(usdc|ngn|ugx|naira|ugandan shillings)\b)|(?:(₦|ngn|ugx|ush)\s*(\d[\d,]*(?:\.\d{1,6})?))/i)
- if(amountMatch){state.amount=(amountMatch[1]||amountMatch[4]).replaceAll(',','');const unit=(amountMatch[2]||amountMatch[3]).toLowerCase();state.currency=unit==='usdc'?'USDC':['₦','ngn','naira'].includes(unit)?'NGN':'UGX';if(state.currency!=='USDC'&&!state.product)state.product='bank'}
+ const amountMatch=q.match(/(?:\b(\d[\d,]*(?:\.\d{1,6})?)\s*(usdc|ngn|ugx|kes|naira|ugandan shillings|kenyan shillings)\b)|(?:(₦|ngn|ugx|kes|ush)\s*(\d[\d,]*(?:\.\d{1,6})?))/i)
+ if(amountMatch){state.amount=(amountMatch[1]||amountMatch[4]).replaceAll(',','');const unit=(amountMatch[2]||amountMatch[3]).toLowerCase();state.currency=unit==='usdc'?'USDC':['₦','ngn','naira'].includes(unit)?'NGN':['kes','kenyan shillings'].includes(unit)?'KES':'UGX';if(state.currency!=='USDC'&&!state.product)state.product='bank'}
  const iso=input.question.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})\b/i)?.[0]
  const date=q.match(/\b(?:\d{4}-\d{2}-\d{2}|\d{2}[-/]\d{2}[-/]\d{2,4})(?:[t ](?:at )?\d{1,2}:\d{2}(?:\s*(?:utc|gmt|wat|eat)(?:[+-]\d{1,2})?)?)?\b/i)?.[0]
  const relative=q.match(/\b(?:about |around |roughly )?(\d{1,3})\s*(minutes?|mins?|hours?|hrs?|days?)\s+ago\b/);if(relative){const n=Number(relative[1]),unit=relative[2];if(n>0&&n<=90){const span=/^(minute|min)/.test(unit)?60000:/^(hour|hr)/.test(unit)?3600000:86400000;state.date=new Date(input.now-n*span).toISOString();state.timeWindowMs=span===86400000?43200000:span===3600000?1800000:600000}}

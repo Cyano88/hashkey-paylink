@@ -33,7 +33,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const canViewDetails = !receipt && Boolean(detailsRows?.length || Children.toArray(children).length)
   const canViewReceipt = Boolean(receipt)
   const localAmount = !receipt?.payerFees && receipt?.amountNgn && Number.isFinite(Number(receipt.amountNgn)) && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT')
-    ? localCurrencyAmount(Number(receipt.amountNgn),receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN') : undefined
+    ? localCurrencyAmount(Number(receipt.amountNgn),receipt.fiatCurrency === 'UGX' ? 'UGX' : receipt.fiatCurrency === 'KES' ? 'KES' : 'NGN') : undefined
   const usdcEquivalent = receipt?.payerFees ? payerCheckoutFeeRows(receipt.amount,receipt.payerFees)[3].value : receipt && (!receipt.asset || receipt.asset === 'USDC' || receipt.asset === 'USDT') && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
     ? `${formatPocketPaymentAmount(Number(receipt.amount))} ${receipt.asset || 'USDC'}` : undefined
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')

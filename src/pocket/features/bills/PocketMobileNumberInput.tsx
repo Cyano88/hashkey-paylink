@@ -1,4 +1,4 @@
-import {normalizeUgandaPhone,type PocketBillCountry} from '../../lib/pocketBillCountry'
+import {normalizeInternationalBillPhone,isInternationalBillCountry,type PocketBillCountry} from '../../lib/pocketBillCountry'
 import PocketBottomSheet from '../../components/PocketBottomSheet'
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from '../../components/PocketIcons'
@@ -89,11 +89,11 @@ export default function PocketMobileNumberInput({
   const [contactError, setContactError] = useState('')
   const manualNetworkOverride = useRef(false)
   const selectedNetwork = networkFromServiceId(selectedNetworkId)
-  const normalizedPhone = country==='UG' ? normalizeUgandaPhone(phoneNumber) || phoneNumber : normalizeNigerianMobileNumber(phoneNumber)
-  const hasCompleteNumber = country==='UG' ? normalizedPhone.replace(/\D/g,'').length >= (normalizedPhone.startsWith('256')?12:10) : normalizedPhone.startsWith('234')
-    ? normalizedPhone.length >= 13
-    : normalizedPhone.length >= 11
-  const invalidNumber = hasCompleteNumber && (country==='UG' ? !normalizeUgandaPhone(normalizedPhone) : !/^0\d{10}$/.test(normalizedPhone))
+  const international = isInternationalBillCountry(country)
+  const normalizedPhone = international ? normalizeInternationalBillPhone(country,phoneNumber) || phoneNumber : normalizeNigerianMobileNumber(phoneNumber)
+  const phoneDigits = normalizedPhone.replace(/\D/g,'')
+  const hasCompleteNumber = international ? phoneDigits.length >= 10 : normalizedPhone.startsWith('234') ? normalizedPhone.length >= 13 : normalizedPhone.length >= 11
+  const invalidNumber = hasCompleteNumber && (international ? !normalizeInternationalBillPhone(country,normalizedPhone) : !/^0\d{10}$/.test(normalizedPhone))
 
   useEffect(() => {
     const picker = (navigator as ContactPickerNavigator).contacts
@@ -101,7 +101,7 @@ export default function PocketMobileNumberInput({
   }, [])
 
   const updatePhone = (rawValue: string, resetManualOverride = false) => {
-    const nextPhone = country==='UG' ? rawValue.replace(/[^\d+]/g,'').slice(0,13) : cleanPhoneInput(rawValue)
+    const nextPhone = international ? rawValue.replace(/[^\d+]/g,'').slice(0,15) : cleanPhoneInput(rawValue)
     if (!nextPhone || resetManualOverride) manualNetworkOverride.current = false
 
     const detected = country==='NG' ? detectNigerianMobileNetwork(nextPhone) : null
@@ -133,7 +133,7 @@ export default function PocketMobileNumberInput({
       {networkOpen && <PocketBottomSheet title="Select network" onClose={() => setNetworkOpen(false)}>
         <h2 className="mb-3 text-sm font-bold">Select network</h2>
         <div role="listbox" aria-label="Mobile networks">{options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedNetworkId} onClick={() => { manualNetworkOverride.current = true; setContactError(''); onChange({ phoneNumber: normalizedPhone, networkId: option.value }); setNetworkOpen(false) }} className="flex min-h-14 w-full items-center gap-3 text-left text-sm font-semibold">
-          {country==='UG' ? <img src={option.imageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" /> : <NetworkMark network={networkFromServiceId(option.value)} />}<span className="flex-1">{option.label}</span><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border', option.value === selectedNetworkId ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} />
+          {international ? <img src={option.imageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" /> : <NetworkMark network={networkFromServiceId(option.value)} />}<span className="flex-1">{option.label}</span><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border', option.value === selectedNetworkId ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} />
         </button>)}</div>
       </PocketBottomSheet>}
 
@@ -146,7 +146,7 @@ export default function PocketMobileNumberInput({
         )}
       >
         <button type="button" aria-label={`Select ${category} network`} aria-haspopup="dialog" disabled={disabled || loading || options.length === 0} onClick={() => setNetworkOpen(true)} className="relative flex h-[50px] w-[72px] shrink-0 items-center gap-2 border-r border-gray-200 px-2.5 disabled:opacity-50 dark:border-[#262626]">
-          {country==='UG' ? <img src={options.find(o=>o.value===selectedNetworkId)?.imageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" /> : <NetworkMark network={selectedNetwork} />}
+          {international ? <img src={options.find(o=>o.value===selectedNetworkId)?.imageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" /> : <NetworkMark network={selectedNetwork} />}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-400" />
         </button>
 
@@ -160,7 +160,7 @@ export default function PocketMobileNumberInput({
             value={phoneNumber}
             onChange={event => updatePhone(event.target.value)}
             onBlur={event => updatePhone(event.target.value)}
-            placeholder={country==='UG'?'07XX XXX XXX':'0801 234 5678'}
+            placeholder={country==='KE'?'07XX XXX XXX or 01XX XXX XXX':country==='UG'?'07XX XXX XXX':'0801 234 5678'}
             aria-invalid={invalidNumber || Boolean(validationMessage)}
             className="h-11 w-full min-w-0 bg-transparent text-[15px] font-semibold tabular-nums tracking-[0.01em] text-gray-950 outline-none placeholder:text-gray-300 disabled:opacity-60 dark:text-white dark:placeholder:text-gray-600"
           />
@@ -180,7 +180,7 @@ export default function PocketMobileNumberInput({
       </div>
 
       {validationMessage && <p role="alert" className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{validationMessage}</p>}
-      {!validationMessage && invalidNumber && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{country==='UG'?'Enter a valid Ugandan mobile number.':'Enter a valid 11-digit Nigerian number.'}</p>}
+      {!validationMessage && invalidNumber && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{country==='KE'?'Enter a valid Kenyan mobile number.':country==='UG'?'Enter a valid Ugandan mobile number.':'Enter a valid 11-digit Nigerian number.'}</p>}
       {!validationMessage && !invalidNumber && contactError && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{contactError}</p>}
     </div>
   )

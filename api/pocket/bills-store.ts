@@ -2,6 +2,7 @@ import {ALLOWANCE_DAY_POLICY,currentAllowanceTimestamp,nextAllowanceReset} from 
 import {BILL_LIMITS_USD} from '../../src/lib/billLimits.js'
 import {billAsset} from './bills-asset.js'
 import {assertInternationalBill, type InternationalBill} from '../vtpass-international.js'
+import {normalizeInternationalBillPhone} from '../../src/pocket/lib/pocketBillCountry.js'
 import { formatUnits, isAddress, parseUnits } from 'viem'
 import { paymentFeeBreakdown } from '../../src/lib/platformFees.js'
 import { rankPocketDataPlans } from './bills-popularity.js'
@@ -370,14 +371,14 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const international = input.international
     if (international) {
       assertInternationalBill(international,phone)
-      if (!['airtime','data'].includes(category) || serviceId !== `ug-${international.operatorId}` || international.productTypeId !== (category==='data'?'4':'1') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.providerEmail || '')) throw new PocketBillsStoreError('BILLS_INVALID_DESTINATION','Invalid Uganda purchase.')
+      if (!['airtime','data'].includes(category) || serviceId !== `${international.country.toLowerCase()}-${international.operatorId}` || international.productTypeId !== (category==='data'?'4':'1') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.providerEmail || '')) throw new PocketBillsStoreError('BILLS_INVALID_DESTINATION','Invalid international mobile purchase.')
     }
-    const supportedService = international ? /^ug-\d+$/.test(serviceId) : category === 'airtime' ? AIRTIME_SERVICE_IDS.has(serviceId) : DATA_SERVICE_ID_PATTERN.test(serviceId)
+    const supportedService = international ? /^(?:ug|ke)-\d+$/.test(serviceId) : category === 'airtime' ? AIRTIME_SERVICE_IDS.has(serviceId) : DATA_SERVICE_ID_PATTERN.test(serviceId)
     if (!supportedService || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', `A supported ${category} provider is required.`)
     if ((international || category !== 'airtime') && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
       throw new PocketBillsStoreError('BILLS_INVALID_VARIATION', `A valid ${category === 'electricity' ? 'meter type' : 'plan'} is required.`)
     }
-    const validRecipient = international ? /^2567\d{8}$/.test(phone) : category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
+    const validRecipient = international ? normalizeInternationalBillPhone(international.country,phone) === phone : category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
     if (!validRecipient) {
       throw new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : category === 'data' ? 'Enter a valid Data recipient.' : 'Enter a valid Nigerian phone number.')
     }

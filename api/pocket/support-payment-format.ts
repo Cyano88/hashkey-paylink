@@ -4,7 +4,7 @@ export function supportPaymentAmount(row:PocketActivityRow){
  const local=Number(row.amountNgn)
  const usdc=Number(row.amount)
  const format=(amount:number)=>new Intl.NumberFormat('en-GB',{maximumFractionDigits:6}).format(amount)
- if(currency&&Number.isFinite(local)&&local>0)return (currency==='NGN'?'₦':'UGX ')+format(local)+' · '+(Number.isFinite(usdc)?format(usdc):row.amount)+' USDC'
+ if(currency&&Number.isFinite(local)&&local>0)return currency+' '+format(local)+' · '+(Number.isFinite(usdc)?format(usdc):row.amount)+' USDC'
  return (Number.isFinite(usdc)?format(usdc):row.amount)+' '+(row.assetSymbol||'USDC')
 }
 export function supportPaymentLabel(row:PocketActivityRow){

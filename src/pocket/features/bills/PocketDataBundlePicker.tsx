@@ -34,7 +34,7 @@ export default function PocketDataBundlePicker({
   disabled,
   onChange,
 }: {
-  currency?:'NGN'|'UGX'
+  currency?:'NGN'|'UGX'|'KES'
   serviceId: string
   variations: PocketDataVariation[]
   value: string

@@ -39,7 +39,7 @@ export type PocketActivityRow = {
   merchantId?: string
   contextLabel?: string
   settlementType?: string
-  fiatCurrency?: 'NGN' | 'UGX'
+  fiatCurrency?: 'NGN' | 'UGX' | 'KES'
   amountNgn?: string
   bridgeSettlementPending?: boolean
   handoffVerified?: boolean
