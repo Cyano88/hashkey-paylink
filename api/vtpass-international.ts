@@ -18,8 +18,9 @@ export function internationalVariations(content: any, productTypeId: '1' | '4', 
   // VTpass scopes this catalog by country in the request. Its documented
   // response does not include a currency field, so use that trusted country
   // context instead of requiring undocumented response metadata.
-  if ((currency !== 'UGX' && currency !== 'KES') || !Array.isArray(content?.variations)) throw invalid()
-  return content.variations.flatMap((v: any) => {
+  const variations = Array.isArray(content?.variations) ? content.variations : Array.isArray(content?.varations) ? content.varations : null
+  if ((currency !== 'UGX' && currency !== 'KES') || !variations) throw invalid()
+  return variations.flatMap((v: any) => {
     const fixedPrice = v.fixedPrice === 'Yes'
     const amount = Number(v.variation_amount), minimum = Number(v.variation_amount_min), maximum = Number(v.variation_amount_max)
     const rate = Number(v.variation_rate), chargedAmount = Number(v.charged_amount)

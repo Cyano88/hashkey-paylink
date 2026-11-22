@@ -404,7 +404,16 @@ export function createVtpassClient(options: VtpassClientOptions) {
   async function listInternationalVariations(country: InternationalBillCountry, operatorId: string, productTypeId: '1' | '4') {
     if (!/^\d{1,8}$/.test(operatorId)) throw new VtpassClientError({code:'VTPASS_INVALID_SERVICE',message:'Choose an available network.',status:400})
     const {body} = await requestJson(`/api/service-variations?serviceID=foreign-airtime&operator_id=${operatorId}&product_type_id=${productTypeId}`, 'GET')
-    return internationalVariations(record(body).content, productTypeId, billLocalCurrency(country) as 'UGX'|'KES')
+    const content = record(record(body).content)
+    const rows = Array.isArray(content.variations) ? content.variations : Array.isArray(content.varations) ? content.varations : null
+    if (!rows) console.warn('[vtpass-international-catalog-shape]', {country, productTypeId, contentFields:Object.keys(content).sort()})
+    const parsed = internationalVariations(content, productTypeId, billLocalCurrency(country) as 'UGX'|'KES')
+    if (!parsed.length) console.warn('[vtpass-international-catalog-empty]', {
+      country, productTypeId, contentFields: Object.keys(content).sort(),
+      variationCount: rows?.length ?? 0,
+      variationFields: rows?.length ? Object.keys(record(rows[0])).sort() : [],
+    })
+    return parsed
   }
   async function purchaseInternational(input: { international: InternationalBill; variationCode:string; phone:string; requestId:string; email:string }) {
     assertPurchaseAllowed(config)
