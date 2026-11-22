@@ -15,17 +15,27 @@ export function internationalOperator(serviceId: string, country: InternationalB
   return match[1]
 }
 export function internationalVariations(content: any, productTypeId: '1' | '4', currency: InternationalBillCurrency): InternationalVariation[] {
-  if (content?.currency !== currency || !Array.isArray(content.variations)) throw invalid()
+  // VTpass scopes this catalog by country in the request. Its documented
+  // response does not include a currency field, so use that trusted country
+  // context instead of requiring undocumented response metadata.
+  if ((currency !== 'UGX' && currency !== 'KES') || !Array.isArray(content?.variations)) throw invalid()
   return content.variations.flatMap((v: any) => {
     const fixedPrice = v.fixedPrice === 'Yes'
     const amount = Number(v.variation_amount), minimum = Number(v.variation_amount_min), maximum = Number(v.variation_amount_max)
     const rate = Number(v.variation_rate), chargedAmount = Number(v.charged_amount)
-    if (!/^\d+$/.test(String(v.variation_code)) || typeof v.name !== 'string' || v.charged_currency !== 'NGN'
-      || ![minimum, maximum, rate].every(n => Number.isFinite(n) && n > 0) || maximum < minimum
-      || fixedPrice && (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(chargedAmount) || chargedAmount <= 0)) return []
+    const declaredChargeCurrency = String(v.charged_currency ?? content.charged_currency ?? 'NGN').toUpperCase()
+    if (!/^\d+$/.test(String(v.variation_code)) || typeof v.name !== 'string' || !v.name.trim() || declaredChargeCurrency !== 'NGN') return []
+    if (fixedPrice) {
+      // Fixed plans need an explicit destination price and the exact provider
+      // debit. Bounds/rates are optional for fixed VTpass variations.
+      if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(chargedAmount) || chargedAmount <= 0) return []
+    } else if (![minimum, maximum, rate].every(n => Number.isFinite(n) && n > 0) || maximum < minimum) return []
     // VTpass's data catalogue also contains voice/SMS-only bundles. Do not label them Data.
     if (productTypeId === '4' && (!fixedPrice || !/\b(?:\d+(?:\.\d+)?\s*(?:GB|MB)|data)\b/i.test(v.name))) return []
-    return [{ variationCode: String(v.variation_code), name: v.name, fixedPrice, amount, minimum, maximum, rate, chargedAmount }]
+    const fixedMinimum = fixedPrice ? (Number.isFinite(minimum) && minimum > 0 ? minimum : amount) : minimum
+    const fixedMaximum = fixedPrice ? (Number.isFinite(maximum) && maximum >= fixedMinimum ? maximum : amount) : maximum
+    const fixedRate = fixedPrice ? (Number.isFinite(rate) && rate > 0 ? rate : chargedAmount / amount) : rate
+    return [{ variationCode: String(v.variation_code), name: v.name.trim(), fixedPrice, amount, minimum:fixedMinimum, maximum:fixedMaximum, rate:fixedRate, chargedAmount }]
   })
 }
 export function priceInternationalBill(variation: InternationalVariation, requested: unknown, currency: InternationalBillCurrency) {

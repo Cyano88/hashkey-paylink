@@ -100,6 +100,28 @@ assert.deepEqual(await dataReadClient.listDataServices(), [
 ])
 assert.deepEqual(await dataReadClient.listServiceVariations('mtn-data'), [{ variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amount: 100, fixedPrice: true }])
 
+const internationalCalls = []
+const internationalClient = queuedClient([
+  jsonResponse({ response_description: '000', content: [{ product_type_id: 4, name: 'Mobile Data' }] }),
+  jsonResponse({ response_description: '000', content: [{ operator_id: '7', name: 'Kenya Airtel', operator_image: 'https://sandbox.vtpass.com/resources/images/operators/7.png' }] }),
+  // VTpass's documented variation response does not require currency,
+  // charged_currency, or flexible-plan bounds/rates for fixed bundles.
+  jsonResponse({ response_description: '000', content: { serviceID: 'foreign-airtime', variations: [
+    { variation_code: '1234', name: '30GB Monthly Data', variation_amount: '30', fixedPrice: 'Yes', charged_amount: '510.00' },
+  ] } }),
+], internationalCalls)
+assert.deepEqual(await internationalClient.listInternationalOperators('KE', '4'), [{
+  serviceId: 'ke-7', name: 'Kenya Airtel', imageUrl: 'https://sandbox.vtpass.com/resources/images/operators/7.png',
+  minimumAmount: null, maximumAmount: null, convenienceFee: '', productType: '4', currency: 'KES',
+}])
+assert.deepEqual(await internationalClient.listInternationalVariations('KE', '7', '4'), [{
+  variationCode: '1234', name: '30GB Monthly Data', fixedPrice: true, amount: 30,
+  minimum: 30, maximum: 30, rate: 17, chargedAmount: 510,
+}])
+assert.match(internationalCalls[0].url, /get-international-airtime-product-types\?code=KE$/)
+assert.match(internationalCalls[1].url, /get-international-airtime-operators\?code=KE&product_type_id=4$/)
+assert.match(internationalCalls[2].url, /serviceID=foreign-airtime&operator_id=7&product_type_id=4$/)
+
 const deliveredCalls = []
 const deliveredClient = queuedClient([jsonResponse({
   code: '000',
