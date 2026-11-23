@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketEsimCheckout from './PocketEsimCheckout'
 import PocketTransactionSheet from './PocketTransactionSheet'
-import { PocketSkeletonBar } from './PocketContentSkeletons'
+import { PocketListSkeleton, PocketInlineRowsSkeleton, PocketSkeletonBar } from './PocketContentSkeletons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { pocketEsimRequest } from '../api/pocketEsimClient'
 import { pocketEsimAllowanceLabel, pocketEsimDisplayCurrency, pocketEsimPaymentLabel, type PocketEsimCatalog, type PocketEsimOrder, type PocketEsimTopUpDestination, type PocketEsimTopUpPlan } from '../lib/pocketEsim'
@@ -87,7 +87,7 @@ export default function PocketMyEsims({ catalog, initialOrderId, arrivalCountryC
           <span className="flex-1"><span className="block text-sm font-medium">{pocketEsimAllowanceLabel(plan)}</span><span className="mt-1 block text-xs text-gray-500">Valid for {plan.days} {plan.days === 1 ? 'day' : 'days'}</span></span><MoneyAmount currency="USD" amount={Number(plan.price.subtotal).toFixed(2)} /><ChevronRight className="h-4 w-4 text-gray-400" />
         </button>)}</div>
       </section>)}
-      {!topUpDestinations?.some(destination => destination.plans.length > 0) && !topUpError && <div className="space-y-3"><PocketSkeletonBar className="h-12 w-full" /><PocketSkeletonBar className="h-12 w-full" /></div>}
+      {topUpDestinations === null && !topUpError && <PocketInlineRowsSkeleton label="Loading top-up plans" rows={3} />}
       {topUpError && <div><p role="status" className="text-sm text-gray-500">{topUpError}</p><button type="button" className="mt-2 text-sm font-medium" onClick={() => setTopUpRetry(value => value + 1)}>Try again</button></div>}
     </> : <>
     <h2 className="mb-5 text-lg font-semibold">{title(selected)}</h2>
@@ -118,7 +118,7 @@ export default function PocketMyEsims({ catalog, initialOrderId, arrivalCountryC
       <details className="group my-5 text-sm"><summary className="flex list-none cursor-pointer items-center justify-between font-medium [&::-webkit-details-marker]:hidden"><span>Manual installation</span><ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" /></summary><dl className="mt-4 space-y-3 break-all"><dt className="text-gray-500">SM-DP+ address</dt><dd>{installation.activationCode.split('$')[1]}</dd><dt className="text-gray-500">Activation code</dt><dd>{installation.activationCode.split('$').slice(2).join('$')}</dd><dt className="text-gray-500">ICCID</dt><dd>{installation.iccid}</dd></dl></details>
       <button type="button" className="py-2 text-sm font-medium" onClick={() => { void navigator.clipboard.writeText(installation.activationCode).then(() => setCopy(true)).catch(() => setError('Could not copy. Open manual installation.')) }}>{copy ? 'Copied' : 'Copy activation code'}</button>
       </details>
-    </> : !error ? <PocketSkeletonBar className="mx-auto h-52 w-52 rounded-2xl" /> : <button type="button" className="pocket-cta-primary w-full" onClick={() => setInstallationRetry(value => value + 1)}>Try again</button>}
+    </> : !error ? <PocketInlineRowsSkeleton label="Loading eSIM details" rows={3} /> : <button type="button" className="pocket-cta-primary w-full" onClick={() => setInstallationRetry(value => value + 1)}>Try again</button>}
     {!expired && !depleted && topUpDestinations === null && !topUpError && catalog?.purchaseEnabled && <PocketSkeletonBar className="mt-4 h-12 w-full rounded-2xl" />}
     {!expired && !depleted && topUpDestinations?.some(destination => destination.plans.length > 0) && <button type="button" className="pocket-cta-secondary mt-4 w-full" onClick={() => setTopUpOpen(true)}>Add data to this eSIM</button>}
     {!expired && !depleted && topUpDestinations && !topUpDestinations.some(destination => destination.plans.length > 0) && !topUpError && catalog?.purchaseEnabled && <><p className="mt-4 text-sm text-gray-500">This eSIM can’t be topped up. Choose another plan to get a new eSIM.</p><button type="button" className="pocket-cta-secondary mt-3 w-full" onClick={onBrowsePlans}>Choose another plan</button></>}
@@ -131,7 +131,7 @@ export default function PocketMyEsims({ catalog, initialOrderId, arrivalCountryC
   </PocketBottomSheet>
   return <PocketBottomSheet title="My eSIMs" onClose={onClose}>
     {arrivalCountryCode && catalog && orders && !error && <div role="status" className="mb-4 rounded-2xl bg-gray-100 p-4 text-sm leading-6 dark:bg-[#171717]">{matchingArrivalOrder ? <><p>A saved plan lists coverage in {arrivalName}. Open it to review your current eSIM.</p><button type="button" className="mt-2 text-sm font-semibold" onClick={() => { setError(''); setSelected(matchingArrivalOrder) }}>Open matching eSIM</button></> : <><p>We couldn’t confirm that a saved plan covers {arrivalName}. Check available plans before using mobile data.</p><button type="button" className="mt-2 text-sm font-semibold" onClick={() => onBrowsePlans(arrivalCountryCode)}>Browse {arrivalName} plans</button></>}</div>}
-    {!orders && !error ? <div className="space-y-4"><PocketSkeletonBar className="h-16 w-full" /><PocketSkeletonBar className="h-16 w-full" /></div> : orders?.length ? <div className="divide-y divide-gray-100 dark:divide-[#262626]">{orders.map(item => <button key={item.id} className="flex min-h-20 w-full items-center justify-between gap-4 py-4 text-left" onClick={() => { setError(''); setSelected(item) }}><span><span className="block text-sm font-semibold">{title(item)}</span><span className="mt-1 block text-xs text-gray-500">{pocketEsimStatus(item.state).label}</span></span><span className="whitespace-nowrap text-sm"><MoneyAmount currency={pocketEsimDisplayCurrency(item.asset)} amount={Number(item.state === 'refunded' ? item.price.total : (item.totalDebit || item.price.total)).toFixed(2)}/></span></button>)}</div> : !error && <p className="py-8 text-center text-sm text-gray-500">Your eSIMs will appear here.</p>}
+    {!orders && !error ? <PocketListSkeleton label="Loading your eSIMs" rows={2} /> : orders?.length ? <div className="divide-y divide-gray-100 dark:divide-[#262626]">{orders.map(item => <button key={item.id} className="flex min-h-20 w-full items-center justify-between gap-4 py-4 text-left" onClick={() => { setError(''); setSelected(item) }}><span><span className="block text-sm font-semibold">{title(item)}</span><span className="mt-1 block text-xs text-gray-500">{pocketEsimStatus(item.state).label}</span></span><span className="whitespace-nowrap text-sm"><MoneyAmount currency={pocketEsimDisplayCurrency(item.asset)} amount={Number(item.state === 'refunded' ? item.price.total : (item.totalDebit || item.price.total)).toFixed(2)}/></span></button>)}</div> : !error && <p className="py-8 text-center text-sm text-gray-500">Your eSIMs will appear here.</p>}
     {error && <><p role="status" className="my-4 text-sm text-gray-500">{error}</p><button className="pocket-cta-primary w-full" onClick={() => setRetry(value => value + 1)}>Try again</button></>}
   </PocketBottomSheet>
 }

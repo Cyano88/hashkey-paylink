@@ -2,12 +2,24 @@ export function PocketSkeletonBar({ className = '' }: { className?: string }) {
   return <span aria-hidden="true" className={`pocket-shimmer block rounded-lg bg-gray-200/80 dark:bg-white/[0.08] ${className}`} />
 }
 
-export function PocketQuoteSkeleton({ label = 'Updating amount' }: { label?: string }) {
+export function PocketQuoteSkeleton({ label = 'Updating amount', rows = 3 }: { label?: string; rows?: number }) {
   return <div role="status" aria-label={label} aria-busy="true" className="space-y-4 rounded-2xl bg-gray-50 p-4 dark:bg-[#121212]">
-    {[0, 1, 2].map(index => <div key={index} className="flex items-center justify-between gap-5"><PocketSkeletonBar className="h-3 w-24" /><PocketSkeletonBar className="h-3 w-20" /></div>)}
+    {Array.from({ length: rows }, (_, index) => <div key={index} className="flex items-center justify-between gap-5"><PocketSkeletonBar className="h-3 w-24" /><PocketSkeletonBar className="h-3 w-20" /></div>)}
   </div>
 }
-
+export function PocketInlineRowsSkeleton({ label, rows = 3 }: { label: string; rows?: number }) {
+  return <div role="status" aria-label={label} aria-busy="true" className="space-y-4">
+    {Array.from({ length: rows }, (_, index) => <div key={index} aria-hidden="true" className="flex items-center justify-between gap-5"><PocketSkeletonBar className="h-3 w-24" /><PocketSkeletonBar className="h-3 w-20" /></div>)}
+  </div>
+}
+export function PocketListSkeleton({ label, rows = 2 }: { label: string; rows?: number }) {
+  return <div role="status" aria-label={label} aria-busy="true" className="divide-y divide-gray-100 dark:divide-[#262626]">
+    {Array.from({ length: rows }, (_, index) => <div key={index} aria-hidden="true" className="flex min-h-20 items-center justify-between gap-4 py-4">
+      <span className="flex-1 space-y-2"><PocketSkeletonBar className="h-3 w-36" /><PocketSkeletonBar className="h-2.5 w-24" /></span>
+      <PocketSkeletonBar className="h-3 w-16" />
+    </div>)}
+  </div>
+}
 export function PocketLoadingField({ label, cards = false }: { label: string; cards?: boolean }) {
   return <div role="status" aria-label={label} aria-busy="true" className={cards ? 'mt-2 grid grid-cols-2 gap-2' : 'mt-2'}>
     {cards ? [0, 1, 2, 3].map(index => <div key={index} className="space-y-3 rounded-2xl border border-gray-100 p-3 dark:border-[#262626]"><PocketSkeletonBar className="h-3 w-3/4" /><PocketSkeletonBar className="h-3 w-1/2" /></div>) : <PocketSkeletonBar className="h-12 w-full rounded-xl" />}

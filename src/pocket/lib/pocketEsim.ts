@@ -25,6 +25,10 @@ export function pocketEsimPaymentLabel(asset: 'USDC' | 'USDT'): 'Cash balance' |
   return asset === 'USDC' ? 'Cash balance' : 'USDT'
 }
 
+export function pocketEsimErrorMessage(message: string): string {
+  const shortfall = message.match(/^Add\s+([\d,]+(?:\.\d+)?)\s+USDC\s+to cover this send and fees\.?$/i)
+  return shortfall ? 'Add USD ' + shortfall[1] + ' to your Cash balance to cover this payment and fees.' : message
+}
 export type PocketEsimPrice = { subtotal: string; platformFee: string; total: string; currency: 'USD'; days: number }
 
 export type PocketEsimDestination = {

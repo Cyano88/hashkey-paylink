@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { formatUnits } from 'viem'
 import { MoneyAmount } from '../../components/MoneyText'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketSlideAction from './PocketSlideAction'
 import PocketTransactionSheet from './PocketTransactionSheet'
-import { PocketSkeletonBar } from './PocketContentSkeletons'
+import { PocketInlineRowsSkeleton } from './PocketContentSkeletons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { pocketEsimRequest } from '../api/pocketEsimClient'
-import { pocketEsimAllowanceLabel, pocketEsimDisplayCurrency, pocketEsimPaymentLabel, type PocketEsimOrder, type PocketEsimPlan } from '../lib/pocketEsim'
+import { pocketEsimAllowanceLabel, pocketEsimDisplayCurrency, pocketEsimErrorMessage, pocketEsimPaymentLabel, type PocketEsimOrder, type PocketEsimPlan } from '../lib/pocketEsim'
 import { markPocketActivityDirty } from '../lib/pocketActivityCache'
 import { pocketEsimStatus } from '../lib/pocketEsimStatus'
 import { readCirclePaymentFeeQuote } from '../../lib/circleEvmEmailWallet'
@@ -23,6 +24,7 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
   const [intent, setIntent] = useState<PocketEsimOrder | null>(existing || null)
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(!existing), [error, setError] = useState('')
   const [attempted, setAttempted] = useState(Boolean(existing && existing.state !== 'quoted'))
+  const [feeReady, setFeeReady] = useState(Boolean(existing && existing.state === 'quoted'))
   const [retry, setRetry] = useState(0)
   const alive = useRef(true), inFlight = useRef(false), latest = useRef({ getAccessToken, wallet, wallets, email })
   latest.current = { getAccessToken, wallet, wallets, email }
@@ -34,18 +36,30 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
   const persist = (id: string, data: Record<string, unknown>) => { localStorage.setItem(key(id), JSON.stringify({ ...readSaved(id), ...data })) }
   useEffect(() => {
     if (existing || !plan || attempted) return
-    let disposed = false; setLoading(true); setIntent(null); setError('')
+    let disposed = false; setLoading(true); setIntent(null); setError(''); setFeeReady(false)
     void (async () => {
       const base = await latest.current.wallet.ensureWallet('base')
       if (!base) throw Error('Open your Base wallet to continue.')
       const result = await pocketEsimRequest(latest.current.getAccessToken, { action: 'quote', requestKey: crypto.randomUUID(), packageCode: plan.id, days, asset: 'USDC', ...(topUpFor ? { profileId: topUpFor } : {}) })
       if (disposed) return
-      const session = await latest.current.wallet.getEvmSession('base', base.address)
-      const fee = await readCirclePaymentFeeQuote({ session, recipient: result.recipient, amount: result.intent.price.total, asset, feeMode: 'gross', purpose: 'wallet-send' })
-      if (disposed) return
-      const bound = await pocketEsimRequest(latest.current.getAccessToken, { action: 'fees', id: result.intent.id, feeQuoteToken: fee.token })
-      if (!disposed) setIntent(bound.intent)
-    })().catch(reason => { if (!disposed) setError(reason.message) }).finally(() => { if (!disposed) setLoading(false) })
+      try {
+        const session = await latest.current.wallet.getEvmSession('base', base.address)
+        const fee = await readCirclePaymentFeeQuote({ session, recipient: result.recipient, amount: result.intent.price.total, asset, feeMode: 'gross', purpose: 'wallet-send' })
+        if (disposed) return
+        const bound = await pocketEsimRequest(latest.current.getAccessToken, { action: 'fees', id: result.intent.id, feeQuoteToken: fee.token })
+        if (!disposed) { setIntent(bound.intent); setFeeReady(true) }
+      } catch (reason) {
+        if (disposed) return
+        const issue = reason as Error & { code?: string; feeDetails?: { networkFeeUnits?: string; totalUnits?: string } }
+        const networkFeeUnits = issue.feeDetails?.networkFeeUnits || ''
+        const totalUnits = issue.feeDetails?.totalUnits || ''
+        if (issue.code === 'INSUFFICIENT_PAYMENT_BALANCE' && /^\d+$/.test(networkFeeUnits) && /^\d+$/.test(totalUnits)) {
+          setIntent({ ...result.intent, networkFee: formatUnits(BigInt(networkFeeUnits), 6), totalDebit: formatUnits(BigInt(totalUnits), 6) })
+        }
+        setFeeReady(false)
+        throw reason
+      }
+    })().catch(reason => { if (!disposed) setError(pocketEsimErrorMessage(String(reason?.message || 'Could not update your eSIM. Please try again.'))) }).finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
   }, [plan?.id, days, existing?.id, topUpFor, retry])
   useEffect(() => {
@@ -112,8 +126,8 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
   if (intent && attempted && intent.state !== 'quoted') { const displayCurrency = pocketEsimDisplayCurrency(intent.asset); return <PocketTransactionSheet title={topUpFor ? 'eSIM top-up' : 'eSIM'} state={status.state} statusLabel={status.label} amount={`${displayCurrency} ${Number(intent.state === 'refunded' ? intent.price.total : (intent.totalDebit || intent.price.total)).toFixed(2)}`} detail={error || status.detail} onDone={onClose} detailsRows={[["Plan", intent.packageLabel || plan?.data || 'Travel data'], ['Paid with', pocketEsimPaymentLabel(intent.asset)], ['Fee', <MoneyAmount currency={displayCurrency} amount={(Number(intent.price.platformFee) + Number(intent.networkFee || 0)) < .01 ? '<0.01' : (Number(intent.price.platformFee) + Number(intent.networkFee || 0)).toFixed(2)} />], ['Total', <MoneyAmount currency={displayCurrency} amount={Number(intent.state === 'refunded' ? intent.price.total : (intent.totalDebit || intent.price.total)).toFixed(2)} />], ['Status', status.label]]} /> }
   return <PocketBottomSheet title={topUpFor ? 'Add data' : 'Confirm payment'} onClose={onClose} dismissible={!busy}>
     <h2 className="text-lg font-semibold">{plan ? pocketEsimAllowanceLabel(plan) : 'Travel data'}</h2>{plan && days && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Valid for {days} {days === 1 ? 'day' : 'days'}</p>}
-    {loading ? <div className="space-y-3"><PocketSkeletonBar className="h-5 w-full" /><PocketSkeletonBar className="h-5 w-full" /></div> : intent && <dl className="mb-6 space-y-3 text-sm">{([['Paid with', 'Cash balance', false], ['Plan', Number(intent.price.subtotal).toFixed(2), true], ['Fee', (Number(intent.price.platformFee) + Number(intent.networkFee || 0)) < .01 ? '<0.01' : (Number(intent.price.platformFee) + Number(intent.networkFee || 0)).toFixed(2), true], ['Total', Number(intent.state === 'refunded' ? intent.price.total : (intent.totalDebit || intent.price.total)).toFixed(2), true]] as Array<[string, string, boolean]>).map(([label, value, money]) => <div key={label} className="flex justify-between"><dt className="text-gray-500">{label}</dt><dd>{money ? <MoneyAmount currency="USD" amount={String(value)} /> : value}</dd></div>)}</dl>}
+    {loading ? <PocketInlineRowsSkeleton label="Updating eSIM payment" rows={4} /> : intent && <dl className="mb-6 space-y-3 text-sm">{([['Paid with', 'Cash balance', false], ['Plan', Number(intent.price.subtotal).toFixed(2), true], ['Fee', (Number(intent.price.platformFee) + Number(intent.networkFee || 0)) < .01 ? '<0.01' : (Number(intent.price.platformFee) + Number(intent.networkFee || 0)).toFixed(2), true], ['Total', Number(intent.state === 'refunded' ? intent.price.total : (intent.totalDebit || intent.price.total)).toFixed(2), true]] as Array<[string, string, boolean]>).map(([label, value, money]) => <div key={label} className="flex justify-between"><dt className="text-gray-500">{label}</dt><dd>{money ? <MoneyAmount currency="USD" amount={String(value)} /> : value}</dd></div>)}</dl>}
     {error && <p role="status" className="my-4 text-sm text-gray-500">{error}</p>}
-    {!loading && !intent && error ? <button className="pocket-cta-primary w-full" onClick={() => setRetry(value => value + 1)}>Try again</button> : <PocketSlideAction loadingContent={loading} status={busy ? 'pending' : 'idle'} disabled={!intent || loading || attempted} onPrepare={async () => { const base = await wallet.ensureWallet('base'); if (!base) throw Error('Open your Base wallet to continue.'); await wallet.getEvmSession('base', base.address) }} onConfirm={() => void pay()} labels={{ idle: 'Confirm payment', pending: 'Confirming payment', disabled: 'Preparing payment' }} />}
+    {!loading && error && !feeReady ? <button className="pocket-cta-primary w-full" onClick={() => setRetry(value => value + 1)}>Try again</button> : <PocketSlideAction loadingContent={loading} status={busy ? 'pending' : 'idle'} disabled={!intent || loading || attempted || !feeReady} onPrepare={async () => { const base = await wallet.ensureWallet('base'); if (!base) throw Error('Open your Base wallet to continue.'); await wallet.getEvmSession('base', base.address) }} onConfirm={() => void pay()} labels={{ idle: 'Confirm payment', pending: 'Confirming payment', disabled: 'Preparing payment' }} />}
   </PocketBottomSheet>
 }

@@ -5,7 +5,7 @@ import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import PocketCountryFlag from '../components/PocketCountryFlag'
-import { PocketSkeletonBar } from '../components/PocketContentSkeletons'
+import { PocketInlineRowsSkeleton, PocketSkeletonBar } from '../components/PocketContentSkeletons'
 import { Wifi, ChevronRight, Search } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketApiUrl } from '../lib/pocketRoutes'
@@ -106,7 +106,7 @@ export default function PocketEsimPage() {
       <h2 className="text-lg font-semibold">{pocketEsimAllowanceLabel(plan)} · {destination?.name}</h2>
       {!plan.daily && <dl className="mt-6 text-sm"><div className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">Valid for</dt><dd className="text-right font-medium">{plan.days} {plan.days === 1 ? 'day' : 'days'}</dd></div></dl>}
       {plan.daily && <label className="mt-5 flex items-center justify-between text-sm"><span>Trip length (days)</span><input aria-label="Trip length in days" type="text" inputMode="numeric" maxLength={3} value={days} onChange={event => { if (/^\d{0,3}$/.test(event.target.value)) { setPrice(null); setDays(event.target.value) } }} onBlur={() => setDays(String(Math.min(365, Math.max(1, Number(days) || 1))))} className="w-20 rounded-xl border-0 bg-gray-100 p-3 text-center outline-none  dark:bg-[#171717]" /></label>}
-      {priceError ? <p role="status" className="mt-5 text-sm text-gray-500 dark:text-gray-400">{priceError}</p> : !price ? <div role="status" aria-label="Updating price" className="mt-5 space-y-3"><PocketSkeletonBar className="h-5 w-full" /><PocketSkeletonBar className="h-5 w-full" /></div> : <><dl className="mt-5 space-y-3 text-sm">{[['Plan', price.subtotal]].map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="font-medium"><MoneyAmount currency="USD" amount={Number(amount) > 0 && Number(amount) < 0.01 ? '<0.01' : Number(amount).toFixed(2)}/></dd></div>)}</dl><p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Fee and total shown before payment.</p></>}
+      {priceError ? <p role="status" className="mt-5 text-sm text-gray-500 dark:text-gray-400">{priceError}</p> : !price ? <PocketInlineRowsSkeleton label="Updating eSIM price" rows={1} /> : <><dl className="mt-5 space-y-3 text-sm">{[['Plan', price.subtotal]].map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="font-medium"><MoneyAmount currency="USD" amount={Number(amount) > 0 && Number(amount) < 0.01 ? '<0.01' : Number(amount).toFixed(2)}/></dd></div>)}</dl></>}
       {plan.daily && <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">After you use your daily allowance, speeds may be slower until it resets the next day.</p>}
       <div className="mt-5 text-sm">
         <button type="button" aria-expanded={showPlanInfo} onClick={() => setShowPlanInfo(value => !value)} className="flex w-full items-center justify-between text-left font-medium text-gray-600 dark:text-gray-300"><span>Before you buy</span><ChevronRight className={`h-4 w-4 transition-transform ${showPlanInfo ? 'rotate-90' : ''}`} /></button>
