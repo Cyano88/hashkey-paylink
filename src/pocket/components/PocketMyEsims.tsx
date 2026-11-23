@@ -91,18 +91,18 @@ export default function PocketMyEsims({ catalog, initialOrderId, arrivalCountryC
       {topUpError && <div><p role="status" className="text-sm text-gray-500">{topUpError}</p><button type="button" className="mt-2 text-sm font-medium" onClick={() => setTopUpRetry(value => value + 1)}>Try again</button></div>}
     </> : <>
     <h2 className="mb-5 text-lg font-semibold">{title(selected)}</h2>
-    {arrivalCountryCode && catalog && <div role="status" className="mb-5 rounded-2xl bg-gray-100 p-4 text-sm leading-6 dark:bg-[#171717]">{coversCountry(selected, catalog, arrivalCountryCode) ? `This plan lists coverage in ${arrivalName}. Check the data left and valid-until date below.` : `This plan does not list coverage in ${arrivalName}. Choose a plan for that country before using mobile data.`}{!coversCountry(selected, catalog, arrivalCountryCode) && <button type="button" className="mt-2 block text-sm font-semibold" onClick={() => onBrowsePlans(arrivalCountryCode)}>Browse {arrivalName} plans</button>}</div>}
-    {installation && (dataRemaining || expires) && <dl className="mb-5 space-y-3 text-sm">{dataRemaining && <div className="flex justify-between gap-4"><dt className="text-gray-500">Data left</dt><dd className="font-medium">{dataRemaining}</dd></div>}{expires && <div className="flex justify-between gap-4"><dt className="text-gray-500">Valid until</dt><dd className="font-medium">{expires}</dd></div>}</dl>}
-    {installation && dataRemaining && <p className="mb-5 text-xs text-gray-500">Usage can take a few hours to update.</p>}
+    {arrivalCountryCode && catalog && <div role="status" className="mb-5 rounded-2xl bg-gray-100 p-4 text-sm leading-6 dark:bg-[#171717]">{coversCountry(selected, catalog, arrivalCountryCode) ? expired ? `This plan covers ${arrivalName}, but this eSIM has expired.` : depleted ? `This plan covers ${arrivalName}, but this eSIM has no data left.` : `This plan lists coverage in ${arrivalName}. Check that it is active and review the data left below.` : `This plan does not list coverage in ${arrivalName}. Choose a plan for that country before using mobile data.`}{!coversCountry(selected, catalog, arrivalCountryCode) && <button type="button" className="mt-2 block text-sm font-semibold" onClick={() => onBrowsePlans(arrivalCountryCode)}>Browse {arrivalName} plans</button>}</div>}
+    {installation && (expires || (dataRemaining && !expired)) && <dl className="mb-5 space-y-3 text-sm">{dataRemaining && !expired && <div className="flex justify-between gap-4"><dt className="text-gray-500">Data left</dt><dd className="font-medium">{dataRemaining}</dd></div>}{expires && <div className="flex justify-between gap-4"><dt className="text-gray-500">Valid until</dt><dd className="font-medium">{expires}</dd></div>}</dl>}
+    {installation && dataRemaining && !expired && !depleted && <p className="mb-5 text-xs text-gray-500">Usage can take a few hours to update.</p>}
     {installation ? <>
-      {expired ? <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">This plan has expired.</p> : depleted ? <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">This plan has no data remaining.</p> : esimAlreadyInstalled(installation) ? <p className="mb-5 text-sm text-gray-500">eSIM installed</p> : esimDevicePlatform() !== 'web' && <>
+      {expired ? <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">This eSIM has expired.</p> : depleted ? <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">This eSIM has no data left.</p> : esimAlreadyInstalled(installation) ? <p className="mb-5 text-sm text-gray-500">eSIM installed</p> : esimDevicePlatform() !== 'web' && <>
         <button type="button" disabled={opening} className="pocket-cta-primary w-full" onClick={() => {
           setOpening(true); setError('')
           void installEsim(installation.activationCode).catch(() => setError('Could not open setup. Use other installation options below.')).finally(() => setOpening(false))
         }}>{opening ? 'Opening setup' : 'Install eSIM'}</button>
         <p className="mt-3 text-sm text-gray-500">Approve installation on your phone, then select this eSIM for mobile data and turn on roaming.</p>
       </>}
-      <details className="group my-5 text-sm" open={esimAlreadyInstalled(installation)}>
+      {!expired && !depleted && <><details className="group my-5 text-sm" open={esimAlreadyInstalled(installation)}>
         <summary className="flex list-none cursor-pointer items-center justify-between font-medium [&::-webkit-details-marker]:hidden"><span>Internet setup</span><ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" /></summary>
         <p className="mt-3 text-gray-500">Select this eSIM for mobile data and turn on roaming.</p>
         {installation.apn ? <>
@@ -117,15 +117,15 @@ export default function PocketMyEsims({ catalog, initialOrderId, arrivalCountryC
       <p className="my-4 text-center text-sm text-gray-500">Scan this code from another screen using your phone’s eSIM setup.</p>
       <details className="group my-5 text-sm"><summary className="flex list-none cursor-pointer items-center justify-between font-medium [&::-webkit-details-marker]:hidden"><span>Manual installation</span><ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" /></summary><dl className="mt-4 space-y-3 break-all"><dt className="text-gray-500">SM-DP+ address</dt><dd>{installation.activationCode.split('$')[1]}</dd><dt className="text-gray-500">Activation code</dt><dd>{installation.activationCode.split('$').slice(2).join('$')}</dd><dt className="text-gray-500">ICCID</dt><dd>{installation.iccid}</dd></dl></details>
       <button type="button" className="py-2 text-sm font-medium" onClick={() => { void navigator.clipboard.writeText(installation.activationCode).then(() => setCopy(true)).catch(() => setError('Could not copy. Open manual installation.')) }}>{copy ? 'Copied' : 'Copy activation code'}</button>
-      </details>
+      </details></>}
     </> : !error ? <PocketInlineRowsSkeleton label="Loading eSIM details" rows={3} /> : <button type="button" className="pocket-cta-primary w-full" onClick={() => setInstallationRetry(value => value + 1)}>Try again</button>}
     {!expired && !depleted && topUpDestinations === null && !topUpError && catalog?.purchaseEnabled && <PocketSkeletonBar className="mt-4 h-12 w-full rounded-2xl" />}
     {!expired && !depleted && topUpDestinations?.some(destination => destination.plans.length > 0) && <button type="button" className="pocket-cta-secondary mt-4 w-full" onClick={() => setTopUpOpen(true)}>Add data to this eSIM</button>}
-    {!expired && !depleted && topUpDestinations && !topUpDestinations.some(destination => destination.plans.length > 0) && !topUpError && catalog?.purchaseEnabled && <><p className="mt-4 text-sm text-gray-500">This eSIM can’t be topped up. Choose another plan to get a new eSIM.</p><button type="button" className="pocket-cta-secondary mt-3 w-full" onClick={onBrowsePlans}>Choose another plan</button></>}
+    {!expired && !depleted && topUpDestinations && !topUpDestinations.some(destination => destination.plans.length > 0) && !topUpError && catalog?.purchaseEnabled && <><p className="mt-4 text-sm text-gray-500">This eSIM can’t be topped up. Choose a new plan to get a new eSIM.</p><button type="button" className="pocket-cta-secondary mt-3 w-full" onClick={() => onBrowsePlans(arrivalCountryCode || undefined)}>Choose a new plan</button></>}
     {topUpError && <div className="mt-4"><p role="status" className="text-sm text-gray-500">{topUpError}</p><button type="button" className="mt-2 text-sm font-medium" onClick={() => setTopUpRetry(value => value + 1)}>Try again</button></div>}
-      {expired && <p className="mb-3 text-sm text-gray-500">This eSIM can’t be topped up after it expires. A new plan needs a new eSIM.</p>}
-      {depleted && <p className="mb-3 text-sm text-gray-500">This eSIM can’t be topped up after its data runs out. A new plan needs a new eSIM.</p>}
-      {(expired || depleted) && <button type="button" className="pocket-cta-primary mt-2 w-full" onClick={onBrowsePlans}>Choose another plan</button>}
+      {expired && <p className="mb-3 text-sm text-gray-500">This eSIM can’t be topped up after it expires. Choose a new plan to get a new eSIM.</p>}
+      {depleted && <p className="mb-3 text-sm text-gray-500">This eSIM can’t be topped up after its data runs out. Choose a new plan to get a new eSIM.</p>}
+      {(expired || depleted) && <button type="button" className="pocket-cta-primary mt-2 w-full" onClick={() => onBrowsePlans(arrivalCountryCode || undefined)}>Choose a new plan</button>}
     {error && <p role="status" className="mt-4 text-sm text-gray-500">{error}</p>}
     </>}
   </PocketBottomSheet>

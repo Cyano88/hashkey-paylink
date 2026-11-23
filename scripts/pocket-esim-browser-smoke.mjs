@@ -8,8 +8,8 @@ const browser=await chromium.launch({headless:true,channel:'chrome'});
 const errors=[];
 try{
  const p=await browser.newPage({viewport:{width:393,height:852}});p.setDefaultTimeout(7000);p.on('pageerror',e=>errors.push(e.message));
- let mode='coming_soon';await p.route('**/api/pocket/esim/price',r=>r.fulfill({contentType:'application/json',body:JSON.stringify({purchaseEnabled:false,price:{subtotal:'5',platformFee:'0.0125',total:'5.0125',currency:'USD',days:7}})}));
- await p.route('**/api/pocket/esim/catalog',r=>mode==='error'?r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'private provider failure'})}):r.fulfill({contentType:'application/json',body:JSON.stringify({status:mode,purchaseEnabled:false,destinations:mode==='available'?[{id:'nigeria',name:'Nigeria',countryCode:'NG',region:false,plans:[{id:'ng-1gb',title:'1 GB',data:'1 GB',days:7,operator:'Provider',topUp:true,fairUsage:'',activation:''}]},{id:'europe',name:'Europe',countryCode:'',region:true,plans:[{id:'eu-1gb',title:'1 GB',data:'1 GB',days:7,operator:'Provider',topUp:false,fairUsage:'',activation:''}]}]:[]})}));
+ let mode='coming_soon',purchaseEnabled=false,profileStatus='NEW';await p.route('**/api/pocket/esim/price',r=>r.fulfill({contentType:'application/json',body:JSON.stringify({purchaseEnabled:false,price:{subtotal:'5',platformFee:'0.0125',total:'5.0125',currency:'USD',days:7}})}));
+ await p.route('**/api/pocket/esim/catalog',r=>mode==='error'?r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'private provider failure'})}):r.fulfill({contentType:'application/json',body:JSON.stringify({status:mode,purchaseEnabled,destinations:mode==='available'?[{id:'nigeria',name:'Nigeria',countryCode:'NG',region:false,plans:[{id:'ng-1gb',title:'1 GB',data:'1 GB',days:7,operator:'Provider',topUp:true,fairUsage:'',activation:''}]},{id:'europe',name:'Europe',countryCode:'',region:true,plans:[{id:'eu-1gb',title:'1 GB',data:'1 GB',days:7,operator:'Provider',topUp:false,fairUsage:'',activation:''}]}]:[]})}));
  await p.route('**/brand/countries/*.svg',r=>r.fulfill({contentType:'image/svg+xml',body:fs.readFileSync('public'+new URL(r.request().url()).pathname)}));
  await p.route('https://fixture.invalid/',r=>r.fulfill({contentType:'text/html',body:'<div id="app"></div>'}));
  async function start(){await p.goto('https://fixture.invalid/');for(const f of fs.readdirSync('dist/assets').filter(f=>f.endsWith('.css')&&(f.startsWith('index-')||f.startsWith('CirclePocketApp-'))))await p.addStyleTag({content:fs.readFileSync('dist/assets/'+f,'utf8')});await p.addStyleTag({content:'html,body,#app{height:100%;margin:0}body{font-family:Inter,Arial,sans-serif;background:#F5F5F7}'});await p.addScriptTag({content:bundle.outputFiles[0].text});await p.getByRole('heading',{name:'Services',exact:true}).waitFor();}
@@ -17,7 +17,7 @@ try{
  await p.screenshot({path:'.codex-temp/pocket-services-mobile.png'});
  await p.getByRole('button',{name:/eSIM/}).click();await p.getByRole('heading',{name:'Stay connected abroad'}).waitFor();assert.equal(await p.getByRole('button',{name:/pay|buy/i}).count(),0);await p.screenshot({path:'.codex-temp/pocket-esim-mobile.png'});
  await p.getByRole('button',{name:'Back',exact:true}).click();await p.getByRole('button',{name:/XPay/}).click();await p.getByRole('heading',{name:'XPay existing route'}).waitFor();
- mode='available';await start();await p.getByRole('button',{name:/eSIM/}).click();await p.getByRole('button',{name:'Nigeria'}).waitFor();assert.equal(await p.locator('img[src="/brand/countries/ng.svg"]').evaluate(i=>i.complete&&i.naturalWidth>0),true);await p.screenshot({path:'.codex-temp/pocket-esim-flags.png'});await p.getByRole('textbox',{name:'Search destinations'}).fill('Nigeria');await p.getByRole('button',{name:'Nigeria'}).click();await p.getByRole('button',{name:/1 GB 7 days/}).click();await p.getByRole('dialog',{name:'Plan details'}).waitFor();await p.getByText('5.01 USD',{exact:true}).waitFor();assert.equal(await p.getByRole('button',{name:'Coming soon',exact:true}).isDisabled(),true);assert.equal(await p.getByRole('dialog').locator('text=net_price').count(),0);await p.screenshot({path:'.codex-temp/pocket-esim-details-mobile.png'});
+ mode='available';await start();await p.getByRole('button',{name:/eSIM/}).click();await p.getByRole('button',{name:'Nigeria'}).waitFor();assert.equal(await p.locator('img[src="/brand/countries/ng.svg"]').evaluate(i=>i.complete&&i.naturalWidth>0),true);await p.screenshot({path:'.codex-temp/pocket-esim-flags.png'});await p.getByRole('textbox',{name:'Search destinations'}).fill('Nigeria');await p.getByRole('button',{name:'Nigeria'}).click();await p.getByRole('button',{name:/1 GB total.*Valid for 7 days/}).click();await p.getByRole('dialog',{name:'Plan details'}).waitFor();assert.equal(await p.getByRole('button',{name:'Coming soon',exact:true}).isDisabled(),true);assert.equal(await p.getByRole('dialog').locator('text=net_price').count(),0);await p.screenshot({path:'.codex-temp/pocket-esim-details-mobile.png'});
  await p.getByRole('button',{name:'Close',exact:true}).click();await p.getByRole('button',{name:'Back',exact:true}).click();await p.getByRole('textbox',{name:'Search destinations'}).fill('');await p.getByRole('button',{name:'Regional',exact:true}).click();await p.getByRole('button',{name:'Europe',exact:true}).waitFor();
  mode='error';await start();await p.getByRole('button',{name:/eSIM/}).click();await p.getByText('Could not update eSIM plans. Please try again.',{exact:true}).waitFor();assert.equal((await p.locator('body').innerText()).includes('private provider failure'),false);mode='coming_soon';await p.getByRole('button',{name:'Try again',exact:true}).click();await p.getByRole('heading',{name:'Stay connected abroad'}).waitFor();
  let installationAttempts=0, installed=false;
@@ -25,8 +25,9 @@ try{
    const body=r.request().postDataJSON();
    if(body?.action==='installation'){
      installationAttempts++;
-     return r.fulfill({status:installationAttempts===1?503:200,contentType:'application/json',body:JSON.stringify(installationAttempts===1?{error:'Could not update your eSIM. Please try again.'}:{installation:{iccid:'fixture-iccid',activationCode:'LPA:1$example.invalid$fixture-code',apn:'plus',status:installed?'IN_USE':'NEW',smdpStatus:installed?'INSTALLATION':'RELEASED'}})});
+     return r.fulfill({status:installationAttempts===1?503:200,contentType:'application/json',body:JSON.stringify(installationAttempts===1?{error:'Could not update your eSIM. Please try again.'}:{installation:{iccid:'fixture-iccid',activationCode:'LPA:1$example.invalid$fixture-code',apn:'plus',status:profileStatus,expiresAt:profileStatus==='EXPIRED'?'2026-10-21T00:00:00.000Z':'2027-01-01T00:00:00.000Z',totalVolume:'104857600',usedVolume:profileStatus==='USED_UP'?'104857600':'18874368',smdpStatus:installed?'INSTALLATION':'RELEASED'}})});
    }
+   if(body?.action==='topup-options') return r.fulfill({contentType:'application/json',body:JSON.stringify({destinations:[{id:'nigeria',name:'Nigeria',countryCode:'NG',region:false,plans:[{id:'ng-500mb',data:'500 MB',days:7,price:{subtotal:'2.50'}}]}]})});
    return r.fulfill({contentType:'application/json',body:JSON.stringify({orders:[{id:'esim_fixture',state:'ready',packageCode:'ng-1gb',days:7,asset:'USDT',network:'base',price:{total:'5.0125'},createdAt:1,expiresAt:2,txHash:'',refundTxHash:''}]})});
  });
  await p.getByRole('button',{name:'My eSIMs',exact:true}).click();
@@ -37,7 +38,7 @@ try{
  await p.getByRole('button',{name:'Copy activation code',exact:true}).waitFor();
  await p.getByText('Manual installation',{exact:true}).click();
  await p.getByText('example.invalid',{exact:true}).waitFor();
- await p.screenshot({path:'.codex-temp/pocket-esim-installation-mobile.png'});
+   await p.screenshot({path:'.codex-temp/pocket-esim-installation-mobile.png'});
  assert.equal(installationAttempts,2);
  await p.evaluate(()=>Object.defineProperty(navigator,'userAgent',{configurable:true,value:'Mozilla/5.0 (Linux; Android 16; Pixel)'}));
  await p.getByRole('button',{name:'Close',exact:true}).click();
@@ -46,12 +47,15 @@ try{
  await p.getByText('Internet setup',{exact:true}).click();
  await p.getByText('plus',{exact:true}).waitFor();
  assert.equal(await p.getByRole('button',{name:'Copy activation code',exact:true}).isVisible(),false);
- installed=true;
+ installed=true;profileStatus='IN_USE';
  await p.getByRole('button',{name:'Close',exact:true}).click();
  await p.getByRole('button',{name:/eSIM eSIM ready/}).click();
  await p.getByText('eSIM installed',{exact:true}).waitFor();
  assert.equal(await p.getByRole('button',{name:'Install eSIM',exact:true}).count(),0);
  await p.getByText('plus',{exact:true}).waitFor();
  await p.screenshot({path:'.codex-temp/pocket-esim-setup-mobile.png'});
- await p.setViewportSize({width:1280,height:900});await p.screenshot({path:'.codex-temp/pocket-esim-desktop.png'});assert.deepEqual(errors,[]);console.log('PASS eSIM catalog, search, regions, purchase gate, mobile/desktop sheets and installation failure/retry/manual details.');
+ purchaseEnabled=true;mode='available';await start();await p.getByRole('button',{name:/eSIM/}).click();await p.getByRole('button',{name:'My eSIMs',exact:true}).click();await p.getByRole('button',{name:/Nigeria.*Ready/i}).click();await p.getByRole('button',{name:'Add data to this eSIM',exact:true}).waitFor();await p.getByRole('button',{name:'Add data to this eSIM',exact:true}).click();await p.getByText('500 MB total',{exact:true}).waitFor();await p.getByText('Valid for 7 days',{exact:true}).waitFor();await p.getByText('USD 2.50',{exact:true}).waitFor();await p.screenshot({path:'.codex-temp/pocket-esim-topup-options-mobile.png'});
+ profileStatus='EXPIRED';await p.getByRole('button',{name:'Close',exact:true}).click();await p.getByRole('button',{name:/Nigeria.*Ready/i}).click();await p.getByText('This eSIM has expired.',{exact:true}).waitFor();assert.equal(await p.getByText('Internet setup',{exact:true}).count(),0);assert.equal(await p.getByRole('button',{name:'Open phone settings'}).count(),0);assert.equal(await p.getByRole('button',{name:'Choose a new plan',exact:true}).count(),1);await p.screenshot({path:'.codex-temp/pocket-esim-expired-mobile.png'});
+ profileStatus='USED_UP';await p.getByRole('button',{name:'Close',exact:true}).click();await p.getByRole('button',{name:/Nigeria.*Ready/i}).click();await p.getByText('This eSIM has no data left.',{exact:true}).waitFor();assert.equal(await p.getByText('Internet setup',{exact:true}).count(),0);assert.equal(await p.getByRole('button',{name:'Choose a new plan',exact:true}).count(),1);await p.screenshot({path:'.codex-temp/pocket-esim-depleted-mobile.png'});
+ await p.setViewportSize({width:1280,height:900});await p.screenshot({path:'.codex-temp/pocket-esim-desktop.png'});assert.deepEqual(errors,[]);console.log('PASS eSIM catalog, search, purchase gate, installation retry, top-up options, expired/depleted states and mobile/desktop sheets.');
 }finally{await browser.close()}
