@@ -10,7 +10,8 @@ export function esimActivityRow(item: EsimIntent): PocketActivityRow | null {
     payer: item.payer, recipient: 'Pocket eSIM', memo: item.packageLabel || 'Travel data', contextLabel: item.packageLabel || 'Travel data',
     amount: item.state === 'refunded' ? item.price.total : item.totalDebit || item.price.total,
     feeAmount: item.state === 'refunded' ? undefined : formatUnits(parseUnits(item.price.platformFee, 6) + parseUnits(item.networkFee || '0', 6), 6),
-    assetSymbol: item.asset, txHash: item.txHash, ...(item.refundTxHash ? { refundTxHash: item.refundTxHash } : {}),
-    ts: item.createdAt, paycrestStatus: status, direction: 'out', settlementType: 'esim_purchase',
+    assetSymbol: item.asset === 'USDC' ? 'USD' : item.asset, feeAsset: item.asset === 'USDC' ? 'USD' : item.asset,
+    txHash: item.txHash, ...(item.refundTxHash ? { refundTxHash: item.refundTxHash } : {}),
+    ts: item.createdAt, paycrestStatus: status, direction: 'out', settlementType: item.topUpFor ? 'esim_topup' : 'esim_purchase',
   }
 }

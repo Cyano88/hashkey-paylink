@@ -11,6 +11,20 @@ export type PocketEsimPlan = {
   activation: string
 }
 
+export function pocketEsimAllowanceLabel(plan: Pick<PocketEsimPlan, 'data' | 'daily'>): string {
+  const amount = plan.data.replace(/\s*\/\s*day$/i, '').trim()
+  return amount + (plan.daily ? ' per day' : ' total')
+}
+
+// Pocket Cash is backed by Base USDC; preserve USDT for accurate legacy receipts.
+export function pocketEsimDisplayCurrency(asset: 'USDC' | 'USDT'): 'USD' | 'USDT' {
+  return asset === 'USDC' ? 'USD' : 'USDT'
+}
+
+export function pocketEsimPaymentLabel(asset: 'USDC' | 'USDT'): 'Cash balance' | 'USDT' {
+  return asset === 'USDC' ? 'Cash balance' : 'USDT'
+}
+
 export type PocketEsimPrice = { subtotal: string; platformFee: string; total: string; currency: 'USD'; days: number }
 
 export type PocketEsimDestination = {
@@ -21,6 +35,9 @@ export type PocketEsimDestination = {
   plans: PocketEsimPlan[]
 }
 
+export type PocketEsimTopUpPlan = PocketEsimPlan & { price: PocketEsimPrice }
+export type PocketEsimTopUpDestination = Omit<PocketEsimDestination, 'plans'> & { plans: PocketEsimTopUpPlan[] }
+
 // Catalog access does not enable charging or provisioning.
 export type PocketEsimCatalog = {
   status: 'coming_soon' | 'available'
@@ -30,7 +47,7 @@ export type PocketEsimCatalog = {
 
 export type PocketEsimOrder = {
   id: string; state: 'quoted' | 'awaiting_payment' | 'payment_failed' | 'payment_received' | 'ordering' | 'order_unknown' | 'provisioning' | 'ready' | 'needs_review' | 'refund_eligible' | 'refunding' | 'refunded'; packageCode: string; days: number; asset: 'USDC' | 'USDT'; network: 'base'
-  price: PocketEsimPrice; createdAt: number; expiresAt: number; txHash: string; refundTxHash: string
+  price: PocketEsimPrice; createdAt: number; expiresAt: number; txHash: string; refundTxHash: string; topUpFor?: string
   networkFee?: string; totalDebit?: string
   packageLabel?: string
 }

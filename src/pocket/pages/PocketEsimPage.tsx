@@ -10,9 +10,10 @@ import { Wifi, ChevronRight, Search } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketApiUrl } from '../lib/pocketRoutes'
 import { xpayOrigin } from '../lib/pocketXPayNavigation'
-import type { PocketEsimCatalog, PocketEsimPlan, PocketEsimPrice } from '../lib/pocketEsim'
+import { pocketEsimAllowanceLabel, type PocketEsimCatalog, type PocketEsimPlan, type PocketEsimPrice } from '../lib/pocketEsim'
 import PocketEsimCheckout from '../components/PocketEsimCheckout'
 import PocketMyEsims from '../components/PocketMyEsims'
+import PocketTravelAlertsControl from '../components/PocketTravelAlerts'
 
 export default function PocketEsimPage() {
   const navigate = useNavigate(), location = useLocation(), [params, setParams] = useSearchParams()
@@ -26,8 +27,10 @@ export default function PocketEsimPage() {
   const [priceError, setPriceError] = useState('')
   const [checkout, setCheckout] = useState<{ plan: PocketEsimPlan; days: number } | null>(null)
   const [myEsims, setMyEsims] = useState(false)
+  const [showPlanInfo, setShowPlanInfo] = useState(false)
   const orderId = params.get('order') || ''
-  useEffect(() => { if (orderId) setMyEsims(true) }, [orderId])
+  const arrivalCountryCode = (params.get('arrival') || '').toUpperCase()
+  useEffect(() => { if (orderId || /^[A-Z]{2}$/.test(arrivalCountryCode)) setMyEsims(true) }, [orderId, arrivalCountryCode])
   const origin = xpayOrigin(location.state)
   const destination = catalog?.destinations.find(item => item.id === params.get('destination'))
   const tab = params.get('tab') === 'regional' ? 'regional' : 'countries'
@@ -37,6 +40,12 @@ export default function PocketEsimPage() {
     const next = new URLSearchParams(params)
     for (const [key, value] of Object.entries(changes)) value ? next.set(key, value) : next.delete(key)
     setParams(next, { replace: true, state: location.state })
+  }
+  const browseCountryPlans = (countryCode?: string) => {
+    setMyEsims(false)
+    const destinationId = countryCode && catalog?.destinations.find(item => item.id.toUpperCase() === countryCode)?.id
+    if (countryCode && !destinationId) changeParams({ order: '', arrival: '', destination: '', q: new Intl.DisplayNames(undefined, { type: 'region' }).of(countryCode) || countryCode })
+    else changeParams({ order: '', arrival: '', ...(destinationId ? { destination: destinationId } : {}) })
   }
   useEffect(() => {
     const abort = new AbortController()
@@ -72,6 +81,7 @@ export default function PocketEsimPage() {
   return <PocketRouteShell active="services" rail={origin} refreshEnabled={false} onSelect={tab => open(tab === 'profile' ? POCKET_ROUTES.profile : POCKET_ROUTES.home)}>
     <PocketFlowHeader title={destination?.name || 'eSIM'} centered onBack={() => destination ? changeParams({ destination: '' }) : open(POCKET_ROUTES.services)} />
     {!destination && <div className="mt-4 flex justify-end"><button type="button" className="text-sm font-medium text-gray-600 dark:text-gray-300" onClick={() => setMyEsims(true)}>My eSIMs</button></div>}
+    {!destination && <PocketTravelAlertsControl />}
     {!catalog && !error ? <section role="status" aria-label="Updating eSIM plans" className="mt-7 space-y-5"><PocketSkeletonBar className="h-12 w-full rounded-2xl" />{[0, 1, 2, 3].map(i => <PocketSkeletonBar key={i} className="h-16 w-full rounded-2xl" />)}</section>
       : error ? <section className="py-16 text-center"><p role="status" className="text-sm text-gray-500 dark:text-gray-400">{error}</p><button type="button" className="pocket-cta-primary mt-6 w-full" onClick={() => setRetry(value => value + 1)}>Try again</button></section>
       : catalog?.status === 'coming_soon' ? <section className="flex min-h-[55dvh] flex-col items-center justify-center text-center">
@@ -81,8 +91,8 @@ export default function PocketEsimPage() {
         <span className="mt-6 rounded-full bg-gray-100 px-5 py-2 text-sm font-medium text-gray-600 dark:bg-[#171717] dark:text-gray-300">Coming soon</span>
       </section>
       : destination ? <section className="mt-6 space-y-3" aria-label="Data packages">
-        {destination.plans.map(item => <button type="button" key={item.id} onClick={() => { setDays('1'); setPrice(null); setPlan(item) }} className="flex min-h-20 w-full items-center gap-4 rounded-2xl bg-gray-100 p-4 text-left dark:bg-[#171717]">
-          <span className="flex-1"><span className="block text-base font-semibold">{item.data}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{item.daily ? 'Daily high-speed allowance' : `${item.days} ${item.days === 1 ? 'day' : 'days'}`}{item.coverage?.length ? ` · ${item.coverage.length} countries / areas` : ''}</span></span><ChevronRight className="h-4 w-4" />
+        {destination.plans.map(item => <button type="button" key={item.id} onClick={() => { setDays('1'); setPrice(null); setShowPlanInfo(false); setPlan(item) }} className="flex min-h-20 w-full items-center gap-4 rounded-2xl bg-gray-100 p-4 text-left dark:bg-[#171717]">
+          <span className="flex-1"><span className="block text-base font-semibold">{pocketEsimAllowanceLabel(item)}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{item.daily ? 'Choose trip length' : `Valid for ${item.days} ${item.days === 1 ? 'day' : 'days'}`}{item.coverage?.length ? ` · ${item.coverage.length} countries / areas` : ''}</span></span><ChevronRight className="h-4 w-4" />
         </button>)}
       </section> : <section className="mt-5">
         <label className="flex h-12 items-center gap-3 rounded-2xl bg-gray-100 px-4 dark:bg-[#171717]"><Search className="h-5 w-5 shrink-0 text-gray-400" /><input aria-label="Search destinations" placeholder="Where are you travelling?" value={query} onChange={event => changeParams({ q: event.target.value })} className="min-w-0 flex-1 bg-transparent text-sm outline-none border-0 " /></label>
@@ -93,23 +103,22 @@ export default function PocketEsimPage() {
         {!rows.length && <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{query ? 'No matching destinations.' : 'No plans available right now.'}</p>}
       </section>}
     {plan && <PocketBottomSheet title="Plan details" onClose={() => setPlan(null)}>
-      <h2 className="text-lg font-semibold">{plan.data} · {destination?.name}</h2>
-      {!plan.daily && <dl className="mt-6 text-sm"><div className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">Validity</dt><dd className="text-right font-medium">{plan.days} {plan.days === 1 ? 'day' : 'days'}</dd></div></dl>}
-      {plan.daily && <label className="mt-5 flex items-center justify-between text-sm"><span>Days</span><input aria-label="Days" type="text" inputMode="numeric" maxLength={3} value={days} onChange={event => { if (/^\d{0,3}$/.test(event.target.value)) { setPrice(null); setDays(event.target.value) } }} onBlur={() => setDays(String(Math.min(365, Math.max(1, Number(days) || 1))))} className="w-20 rounded-xl border-0 bg-gray-100 p-3 text-center outline-none  dark:bg-[#171717]" /></label>}
-      {priceError ? <p role="status" className="mt-5 text-sm text-gray-500 dark:text-gray-400">{priceError}</p> : !price ? <div role="status" aria-label="Updating price" className="mt-5 space-y-3"><PocketSkeletonBar className="h-5 w-full" /><PocketSkeletonBar className="h-5 w-full" /></div> : <dl className="mt-5 space-y-3 text-sm">{[['Plan', price.subtotal], ['Platform fee', price.platformFee], ['Total', price.total]].map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="font-medium"><MoneyAmount currency="USD" amount={Number(amount) > 0 && Number(amount) < 0.01 ? '<0.01' : Number(amount).toFixed(2)}/></dd></div>)}</dl>}
-      {plan.daily && plan.fairUsage && <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">Up to {plan.fairUsage} after your daily allowance.</p>}
-      <details className="mt-5 text-sm">
-        <summary className="cursor-pointer font-medium text-gray-600 dark:text-gray-300">Plan information</summary>
-        <div className="mt-3 space-y-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
+      <h2 className="text-lg font-semibold">{pocketEsimAllowanceLabel(plan)} · {destination?.name}</h2>
+      {!plan.daily && <dl className="mt-6 text-sm"><div className="flex justify-between gap-5"><dt className="text-gray-500 dark:text-gray-400">Valid for</dt><dd className="text-right font-medium">{plan.days} {plan.days === 1 ? 'day' : 'days'}</dd></div></dl>}
+      {plan.daily && <label className="mt-5 flex items-center justify-between text-sm"><span>Trip length (days)</span><input aria-label="Trip length in days" type="text" inputMode="numeric" maxLength={3} value={days} onChange={event => { if (/^\d{0,3}$/.test(event.target.value)) { setPrice(null); setDays(event.target.value) } }} onBlur={() => setDays(String(Math.min(365, Math.max(1, Number(days) || 1))))} className="w-20 rounded-xl border-0 bg-gray-100 p-3 text-center outline-none  dark:bg-[#171717]" /></label>}
+      {priceError ? <p role="status" className="mt-5 text-sm text-gray-500 dark:text-gray-400">{priceError}</p> : !price ? <div role="status" aria-label="Updating price" className="mt-5 space-y-3"><PocketSkeletonBar className="h-5 w-full" /><PocketSkeletonBar className="h-5 w-full" /></div> : <><dl className="mt-5 space-y-3 text-sm">{[['Plan', price.subtotal]].map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="font-medium"><MoneyAmount currency="USD" amount={Number(amount) > 0 && Number(amount) < 0.01 ? '<0.01' : Number(amount).toFixed(2)}/></dd></div>)}</dl><p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Fee and total shown before payment.</p></>}
+      {plan.daily && <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">After you use your daily allowance, speeds may be slower until it resets the next day.</p>}
+      <div className="mt-5 text-sm">
+        <button type="button" aria-expanded={showPlanInfo} onClick={() => setShowPlanInfo(value => !value)} className="flex w-full items-center justify-between text-left font-medium text-gray-600 dark:text-gray-300"><span>Before you buy</span><ChevronRight className={`h-4 w-4 transition-transform ${showPlanInfo ? 'rotate-90' : ''}`} /></button>
+        {showPlanInfo && <div className="mt-3 space-y-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
           <p>Unlocked, eSIM-compatible phone required.</p>
           {plan.activation && <p>{plan.activation}</p>}
-          {!plan.daily && plan.fairUsage && <p>{plan.fairUsage}</p>}
           {plan.coverage?.length ? <p><span className="font-medium text-gray-700 dark:text-gray-200">Coverage: </span>{plan.coverage.join(', ')}</p> : null}
-        </div>
-      </details>
+        </div>}
+      </div>
       <button type="button" disabled={!catalog?.purchaseEnabled || !price || Boolean(priceError)} className="pocket-cta-primary mt-6 w-full" onClick={() => { setCheckout({ plan, days: plan.daily ? Number(days) : plan.days }); setPlan(null) }}>{catalog?.purchaseEnabled ? 'Continue' : 'Coming soon'}</button>
     </PocketBottomSheet>}
     {checkout && <PocketEsimCheckout plan={checkout.plan} days={checkout.days} onClose={() => { setCheckout(null); setMyEsims(true) }} />}
-    {myEsims && !checkout && <PocketMyEsims catalog={catalog} initialOrderId={orderId} onClose={() => { setMyEsims(false); if (orderId) changeParams({ order: '' }) }} />}
+    {myEsims && !checkout && <PocketMyEsims catalog={catalog} initialOrderId={orderId} arrivalCountryCode={/^[A-Z]{2}$/.test(arrivalCountryCode) ? arrivalCountryCode : undefined} onClose={() => { setMyEsims(false); if (orderId || arrivalCountryCode) changeParams({ order: '', arrival: '' }) }} onBrowsePlans={browseCountryPlans} />}
   </PocketRouteShell>
 }

@@ -52,7 +52,7 @@ function buildRuntime() {
 function current() { return runtime ??= buildRuntime() }
 export async function readPocketEsimActivity(owner: string) {
   if (!hasRenderDurableStore()) return { payments: [], merchants: [], collections: [] }
-  const payments = (await current().service.list(owner)).flatMap(item => { const row = esimActivityRow(item); return row ? [row] : [] })
+  const payments = (await current().service.activityList(owner)).flatMap(item => { const row = esimActivityRow(item); return row ? [row] : [] })
   return { payments, merchants: [], collections: [] }
 }
 const messages: Record<string, string> = {
@@ -60,6 +60,8 @@ const messages: Record<string, string> = {
   ESIM_QUOTE_EXPIRED: 'The price has changed. Please try again.', ESIM_PAYMENT_IN_PROGRESS: 'Open your existing eSIM order to continue.',
   ESIM_WALLET_UNAVAILABLE: 'Open your Base wallet to continue.', ESIM_LIMIT_EXCEEDED: 'Choose a smaller plan or shorter duration.',
   ESIM_REFUND_NOT_ELIGIBLE: 'This order is not eligible for a refund.', ESIM_NOT_READY: 'Your eSIM is being prepared.',
+  ESIM_PROFILE_UNAVAILABLE: 'This eSIM is not available for a top-up.', ESIM_TOPUP_NOT_AVAILABLE: 'This eSIM can no longer be topped up. Choose a new plan.', ESIM_TOPUP_UNAVAILABLE: 'This top-up option is no longer available.',
+  ESIM_CASH_BALANCE_ONLY: 'Start a new eSIM checkout to pay from your Cash balance.',
 }
 export async function pocketEsimOrdersHandler(req: Request, res: Response) {
   res.setHeader('Cache-Control', 'private, no-store')
@@ -71,12 +73,15 @@ export async function pocketEsimOrdersHandler(req: Request, res: Response) {
     const body = req.body || {}
     if (body.action === 'quote') {
       if (!esimPurchaseConfigured()) throw Error('ESIM_PURCHASE_DISABLED')
+      if (body.asset !== undefined && body.asset !== 'USDC') return res.status(400).json({ error: 'eSIM payments use your USD Cash balance.' })
       await circle.verifyConfiguredWallet()
-      const item = await service.quote({ ownerId: owner, requestKey: body.requestKey, packageCode: body.packageCode, days: body.days, asset: body.asset })
+      if (body.profileId !== undefined && (typeof body.profileId !== 'string' || !/^esim_[a-zA-Z0-9-]{1,64}$/.test(body.profileId))) return res.status(400).json({ error: 'Choose an eSIM to top up.' })
+      const item = await service.quote({ ownerId: owner, requestKey: body.requestKey, packageCode: body.packageCode, days: body.days, asset: body.asset, profileId: body.profileId })
       return res.json({ intent: publicEsimIntent(item), recipient: item.treasury })
     }
     if (typeof body.id !== 'string' || !/^esim_[a-zA-Z0-9-]{1,64}$/.test(body.id)) return res.status(400).json({ error: 'Choose an eSIM order.' })
     let item = await service.get(owner, body.id)
+    if (body.action === 'topup-options') return res.json({ destinations: await service.topUpOptions(owner, item.id) })
     if (body.action === 'fees') {
       const link = await readCircleLink(circleLinkKey(owner, 'base'))
       if (!link || link.circleWalletAddress.toLowerCase() !== item.payer.toLowerCase()) throw Error('ESIM_WALLET_UNAVAILABLE')

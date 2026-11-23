@@ -1,4 +1,4 @@
-import type { PocketEsimDestination } from '../../src/pocket/lib/pocketEsim.js'
+import { pocketEsimAllowanceLabel, type PocketEsimDestination } from '../../src/pocket/lib/pocketEsim.js'
 import { priceEsim, type EsimPricePolicy } from './esim-pricing.js'
 
 const ORIGIN = 'https://api.esimaccess.com/api/v1/open'
@@ -44,6 +44,16 @@ export function normalizeEsimCatalog(rows: Json[], locations: Json[] = []): Pock
     })
     groups.set(id, group)
   }
+  for (const group of groups.values()) {
+    // Keep provider API ordering from moving large monthly bundles to the end
+    // of the list. Compare data allowance numerically (including MB packages).
+    const allowance = (plan: PocketEsimDestination['plans'][number]) => {
+      const match = /^(\d+(?:\.\d+)?)\s*(GB|MB)/i.exec(plan.data)
+      if (!match) return 0
+      return Number(match[1]) * (match[2].toUpperCase() === 'GB' ? 1024 : 1)
+    }
+    group.plans.sort((a, b) => Number(a.daily) - Number(b.daily) || a.days - b.days || allowance(b) - allowance(a) || a.title.localeCompare(b.title))
+  }
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -53,6 +63,8 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
   let cached: PocketEsimDestination[] | null = null, cacheExpires = 0, retryAfter = 0
   let pending: Promise<PocketEsimDestination[]> | null = null
   let inventory: Json[] = []
+  let locations: Json[] = []
+  const topUpInventory = new Map<string, { rows: Json[]; expiresAt: number }>()
   async function request(path: string, payload: Json): Promise<Json> {
     const response = await fetchImpl(ORIGIN + path, {
       method: 'POST', redirect: 'error',
@@ -65,12 +77,13 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
     return body.obj
   }
   async function load() {
-    const [packages, daily, locations] = await Promise.all([
+    const [packages, daily, locationResult] = await Promise.all([
       request('/package/list', { type: 'BASE', dataType: '1' }), request('/package/list', { type: 'BASE', dataType: '2' }), request('/location/list', {}),
     ])
-    if (!Array.isArray(packages.packageList) || !Array.isArray(daily.packageList) || !Array.isArray(locations.locationList)) throw new Error('ESIM_PROVIDER_UNAVAILABLE')
+    if (!Array.isArray(packages.packageList) || !Array.isArray(daily.packageList) || !Array.isArray(locationResult.locationList)) throw new Error('ESIM_PROVIDER_UNAVAILABLE')
     inventory = [...packages.packageList, ...daily.packageList]
-    cached = normalizeEsimCatalog(inventory, locations.locationList)
+    locations = locationResult.locationList
+    cached = normalizeEsimCatalog(inventory, locations)
     cacheExpires = now() + 60 * 60_000
     return cached
   }
@@ -82,7 +95,29 @@ export function createEsimCatalogProvider({ accessCode, fetchImpl = fetch, now =
       if (!row || !cached?.some(destination => destination.plans.some(plan => plan.id === packageCode))) throw Error('ESIM_PLAN_UNAVAILABLE')
       const destination = cached?.find(item => item.plans.some(plan => plan.id === packageCode))
       const plan = destination?.plans.find(item => item.id === packageCode)
-      return { ...priceEsim(row, days, policy), packageCode, packageLabel: plan && destination ? `${plan.data} \u00b7 ${destination.name}` : 'Travel data', slug: typeof row.slug === 'string' ? row.slug : '', daily: Number(row.dataType) === 2 }
+      return { ...priceEsim(row, days, policy), packageCode, packageLabel: plan && destination ? `${pocketEsimAllowanceLabel(plan)} \u00b7 ${days} ${days === 1 ? 'day' : 'days'} \u00b7 ${destination.name}` : 'Travel data', slug: typeof row.slug === 'string' ? row.slug : '', daily: Number(row.dataType) === 2 }
+    },
+    async topUpOptions(iccid: string) {
+      if (!/^\d{10,22}$/.test(iccid)) throw new Error('ESIM_PROFILE_UNAVAILABLE')
+      await this.catalog()
+      let cachedOptions = topUpInventory.get(iccid)
+      if (!cachedOptions || cachedOptions.expiresAt <= now()) {
+        const result = await request('/package/list', { type: 'TOPUP', iccid })
+        if (!Array.isArray(result.packageList)) throw new Error('ESIM_PROVIDER_UNAVAILABLE')
+        cachedOptions = { rows: result.packageList, expiresAt: now() + 60_000 }
+        topUpInventory.set(iccid, cachedOptions)
+      }
+      return normalizeEsimCatalog(cachedOptions.rows, locations)
+    },
+    async priceTopUp(iccid: string, packageCode: string, days: number, policy?: EsimPricePolicy) {
+      const options = await this.topUpOptions(iccid)
+      const cachedOptions = topUpInventory.get(iccid)
+      const row = cachedOptions?.rows.find(item => item.slug === packageCode || item.packageCode === packageCode)
+      const destination = options.find(item => item.plans.some(plan => plan.id === (row?.packageCode || '')))
+      const plan = destination?.plans.find(item => item.id === row?.packageCode)
+      if (!row || !plan) throw new Error('ESIM_TOPUP_UNAVAILABLE')
+      const price = priceEsim(row, days, policy)
+      return { ...price, packageCode: typeof row.slug === 'string' ? row.slug : row.packageCode, packageLabel: `${pocketEsimAllowanceLabel(plan)} · ${days} ${days === 1 ? 'day' : 'days'} · ${destination.name}`, slug: typeof row.slug === 'string' ? row.slug : row.packageCode, daily: Number(row.dataType) === 2 }
     },
     async balance() {
       const value = await request('/balance/query', {})

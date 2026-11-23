@@ -1,7 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 
 export type EsimInstallation = {
-  iccid: string; activationCode: string; apn?: string; status?: string; smdpStatus?: string
+  iccid: string; activationCode: string; apn?: string; status?: string; smdpStatus?: string; totalVolume?: number; usedVolume?: number; expiresAt?: string
 }
 const native = registerPlugin<{ install(options: { activationCode: string }): Promise<void>; settings(): Promise<void> }>('PocketEsim')
 

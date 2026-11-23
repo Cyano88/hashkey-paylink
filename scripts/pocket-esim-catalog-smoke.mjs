@@ -4,10 +4,10 @@ import {createPocketEsimCatalogHandler} from '../api/pocket/esim.ts'
 
 const row={packageCode:'NG_1',name:'Nigeria 1GB',location:'NG',volume:1073741824,duration:7,durationUnit:'DAY',dataType:1,activeType:2,supportTopUpType:2,price:20000,retailPrice:50000,locationNetworkList:[{locationName:'Nigeria'}]}
 const locations=[{code:'NG',name:'Nigeria'},{code:'EA',name:'East Africa',type:2,subLocationList:[{code:'UG'},{code:'KE'}]}]
-const mapped=normalizeEsimCatalog([row,row,{...row,packageCode:'daily',dataType:2},null],locations)
-assert.equal(mapped[0].plans.length,2)
-assert.equal(mapped[0].plans[1].daily,true)
-assert.equal(mapped[0].plans[1].data,'1 GB / day')
+const mapped=normalizeEsimCatalog([row,{...row,packageCode:'30GB_30',name:'Nigeria 30GB',duration:30,volume:30*1073741824},{...row,packageCode:'50GB_30',name:'Nigeria 50GB',duration:30,volume:50*1073741824},{...row,packageCode:'daily',dataType:2},row,null],locations)
+assert.equal(mapped[0].plans.length,4)
+assert.deepEqual(mapped[0].plans.map(plan=>plan.id),['NG_1','50GB_30','30GB_30','daily'])
+assert.equal(mapped[0].plans[2].daily,false);assert.equal(mapped[0].plans[3].daily,true);assert.equal(mapped[0].plans[3].data,'1 GB / day')
 assert.equal(mapped[0].region,false)
 assert.equal(mapped[0].plans[0].data,'1 GB')
 assert.equal(mapped[0].plans[0].topUp,true)

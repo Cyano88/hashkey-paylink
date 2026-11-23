@@ -169,6 +169,7 @@ import paymentTxLookupHandler from './api/payment-tx-lookup.js'
 import publicConfigHandler from './api/public-config.js'
 import { pocketEsimCatalogHandler, pocketEsimPriceHandler } from './api/pocket/esim.js'
 import { pocketEsimOrdersHandler, drainPocketEsimOrders } from './api/pocket/esim-checkout.js'
+import { pocketEsimProviderWebhookHandler } from './api/pocket/esim-provider-webhook.js'
 import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
@@ -467,6 +468,7 @@ app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
 app.get('/api/pocket/esim/catalog', readLimiter, pocketEsimCatalogHandler)
 app.post('/api/pocket/esim/price', strictLimiter, pocketEsimPriceHandler)
+app.all('/api/pocket/esim/provider-hook/:token', readLimiter, pocketEsimProviderWebhookHandler)
 app.get('/api/pocket/esim/orders', readLimiter, pocketEsimOrdersHandler)
 app.post('/api/pocket/esim/orders', strictLimiter, pocketEsimOrdersHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)

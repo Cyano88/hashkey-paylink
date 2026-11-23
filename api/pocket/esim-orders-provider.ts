@@ -16,15 +16,22 @@ export function createEsimOrderProvider({ accessCode, fetchImpl = fetch }: { acc
       if (typeof result?.orderNo !== 'string' || !result.orderNo || (result.transactionId && result.transactionId !== input.transactionId)) throw Error('ESIM_ORDER_UNRESOLVED')
       return result.orderNo as string
     },
+    async topUp(input: { transactionId: string; iccid: string; esimTranNo?: string; packageCode: string; amount: number; daily: boolean; days: number }) {
+      if (!/^\d{10,22}$/.test(input.iccid) || !/^[a-zA-Z0-9_-]{1,100}$/.test(input.packageCode)) throw Error('ESIM_TOPUP_INVALID')
+      const result = await request('/esim/topup', { transactionId: input.transactionId, iccid: input.iccid, ...(input.esimTranNo ? { esimTranNo: input.esimTranNo } : {}), packageCode: input.packageCode, amount: input.amount, ...(input.daily ? { periodNum: input.days } : {}) })
+      if (result.iccid !== input.iccid || !Number.isSafeInteger(result.totalVolume) || !Number.isSafeInteger(result.orderUsage) || typeof result.expiredTime !== 'string') throw Error('ESIM_TOPUP_UNRESOLVED')
+      return result as { transactionId: string; iccid: string; totalVolume: number; orderUsage: number; expiredTime: string; totalDuration?: number }
+    },
     async profiles(orderNo: string) {
       if (!orderNo) throw Error('ESIM_ORDER_REQUIRED')
       const result = await request('/esim/query', { orderNo, pager: { pageNum: 1, pageSize: 10 } })
       if (!Array.isArray(result?.esimList)) throw Error('ESIM_PROVIDER_UNAVAILABLE')
       return result.esimList.filter((row: any) => row.orderNo === orderNo).map((row: any) => ({
-        iccid: String(row.iccid || ''), activationCode: String(row.ac || ''), status: String(row.esimStatus || ''),
+        iccid: String(row.iccid || ''), esimTranNo: String(row.esimTranNo || ''), activationCode: String(row.ac || ''), status: String(row.esimStatus || ''),
         apn: typeof row.apn === 'string' ? row.apn.trim() : '', smdpStatus: String(row.smdpStatus || ''),
         totalVolume: Number(row.totalVolume) || 0, usedVolume: Number(row.orderUsage) || 0, expiresAt: String(row.expiredTime || ''),
-      })) as { iccid: string; activationCode: string; status: string; apn: string; smdpStatus: string; totalVolume: number; usedVolume: number; expiresAt: string }[]
+        topUpCount: Array.isArray(row.packageList) ? Math.max(0, row.packageList.length - 1) : 0,
+      })) as { iccid: string; esimTranNo: string; activationCode: string; status: string; apn: string; smdpStatus: string; totalVolume: number; usedVolume: number; expiresAt: string; topUpCount: number }[]
     },
   }
 }

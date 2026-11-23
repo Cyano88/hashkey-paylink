@@ -8,6 +8,8 @@ import { Network } from '@capacitor/network'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { registerPlugin } from '@capacitor/core'
 import { isPocketNativeRuntime, POCKET_BASE_PATH } from '../lib/pocketRoutes'
+import { checkPocketTravelCountry } from '../lib/pocketTravelAlerts'
+import { PocketTravelArrivalNotice } from './PocketTravelAlerts'
 
 
 type PocketNativeInsets = { top: number; bottom: number; topPx?: number; bottomPx?: number; density?: number }
@@ -57,6 +59,12 @@ export default function PocketNativeBridge() {
   useEffect(() => {
     if (!isPocketNativeRuntime()) return
     let active = true
+    let checkingTravelCountry = false
+    const checkTravelCountry = () => {
+      if (checkingTravelCountry) return
+      checkingTravelCountry = true
+      void checkPocketTravelCountry().catch(() => undefined).finally(() => { checkingTravelCountry = false })
+    }
     const listeners: Array<Promise<{ remove: () => Promise<void> }>> = []
     const links = createPocketNativeLinkRouter((path, options) => navigateRef.current(path, options))
 
@@ -97,6 +105,7 @@ export default function PocketNativeBridge() {
       if (state.isActive) {
         syncInsets()
         syncStatusBar()
+        checkTravelCountry()
         window.dispatchEvent(new Event('focus'))
         document.dispatchEvent(new Event('visibilitychange'))
       }
@@ -105,6 +114,7 @@ export default function PocketNativeBridge() {
     void CapacitorApp.getLaunchUrl().then(result => {
       if (result?.url) links.launch(result.url)
     }).catch(() => undefined)
+    checkTravelCountry()
 
     return () => {
       active = false
@@ -118,10 +128,13 @@ export default function PocketNativeBridge() {
     }
   }, [])
 
-  if (!isPocketNativeRuntime() || online) return null
+  if (!isPocketNativeRuntime()) return null
   return (
-    <div className="fixed inset-x-0 top-0 z-[100] bg-gray-950 px-4 pb-2 pt-[max(0.5rem,var(--pocket-safe-top))] text-center text-[11px] font-semibold text-white dark:bg-white dark:text-gray-950">
-      Offline - balances and activity will update when you reconnect
-    </div>
+    <>
+      <PocketTravelArrivalNotice />
+      {!online && <div className="fixed inset-x-0 top-0 z-[100] bg-gray-950 px-4 pb-2 pt-[max(0.5rem,var(--pocket-safe-top))] text-center text-[11px] font-semibold text-white dark:bg-white dark:text-gray-950">
+        Offline - balances and activity will update when you reconnect
+      </div>}
+    </>
   )
 }
