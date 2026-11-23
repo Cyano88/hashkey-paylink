@@ -5,6 +5,7 @@ import PocketBottomSheet from './PocketBottomSheet'
 import PocketSlideAction from './PocketSlideAction'
 import PocketTransactionSheet from './PocketTransactionSheet'
 import { PocketInlineRowsSkeleton } from './PocketContentSkeletons'
+import PocketFundingAction from './PocketFundingAction'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketWalletController from '../controllers/usePocketWalletController'
@@ -23,6 +24,7 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
   const asset = 'USDC' as const
   const [intent, setIntent] = useState<PocketEsimOrder | null>(existing || null)
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(!existing), [error, setError] = useState('')
+  const [insufficientBalance, setInsufficientBalance] = useState(false)
   const [attempted, setAttempted] = useState(Boolean(existing && existing.state !== 'quoted'))
   const [feeReady, setFeeReady] = useState(Boolean(existing && existing.state === 'quoted'))
   const [retry, setRetry] = useState(0)
@@ -36,7 +38,7 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
   const persist = (id: string, data: Record<string, unknown>) => { localStorage.setItem(key(id), JSON.stringify({ ...readSaved(id), ...data })) }
   useEffect(() => {
     if (existing || !plan || attempted) return
-    let disposed = false; setLoading(true); setIntent(null); setError(''); setFeeReady(false)
+    let disposed = false; setLoading(true); setIntent(null); setError(''); setFeeReady(false); setInsufficientBalance(false)
     void (async () => {
       const base = await latest.current.wallet.ensureWallet('base')
       if (!base) throw Error('Open your Base wallet to continue.')
@@ -59,7 +61,7 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
         setFeeReady(false)
         throw reason
       }
-    })().catch(reason => { if (!disposed) setError(pocketEsimErrorMessage(String(reason?.message || 'Could not update your eSIM. Please try again.'))) }).finally(() => { if (!disposed) setLoading(false) })
+    })().catch(reason => { if (!disposed) { setInsufficientBalance((reason as { code?: string })?.code === 'INSUFFICIENT_PAYMENT_BALANCE'); setError(pocketEsimErrorMessage(String(reason?.message || 'Could not update your eSIM. Please try again.'))) } }).finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
   }, [plan?.id, days, existing?.id, topUpFor, retry])
   useEffect(() => {
@@ -128,6 +130,8 @@ export default function PocketEsimCheckout({ plan, days, existing, topUpFor, onC
     <h2 className="text-lg font-semibold">{plan ? pocketEsimAllowanceLabel(plan) : 'Travel data'}</h2>{plan && days && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Valid for {days} {days === 1 ? 'day' : 'days'}</p>}
     {loading ? <PocketInlineRowsSkeleton label="Updating eSIM payment" rows={4} /> : intent && <dl className="mb-6 space-y-3 text-sm">{([['Paid with', 'Cash balance', false], ['Plan', Number(intent.price.subtotal).toFixed(2), true], ['Fee', (Number(intent.price.platformFee) + Number(intent.networkFee || 0)) < .01 ? '<0.01' : (Number(intent.price.platformFee) + Number(intent.networkFee || 0)).toFixed(2), true], ['Total', Number(intent.state === 'refunded' ? intent.price.total : (intent.totalDebit || intent.price.total)).toFixed(2), true]] as Array<[string, string, boolean]>).map(([label, value, money]) => <div key={label} className="flex justify-between"><dt className="text-gray-500">{label}</dt><dd>{money ? <MoneyAmount currency="USD" amount={String(value)} /> : value}</dd></div>)}</dl>}
     {error && <p role="status" className="my-4 text-sm text-gray-500">{error}</p>}
-    {!loading && error && !feeReady ? <button className="pocket-cta-primary w-full" onClick={() => setRetry(value => value + 1)}>Try again</button> : <PocketSlideAction loadingContent={loading} status={busy ? 'pending' : 'idle'} disabled={!intent || loading || attempted || !feeReady} onPrepare={async () => { const base = await wallet.ensureWallet('base'); if (!base) throw Error('Open your Base wallet to continue.'); await wallet.getEvmSession('base', base.address) }} onConfirm={() => void pay()} labels={{ idle: 'Confirm payment', pending: 'Confirming payment', disabled: 'Preparing payment' }} />}
+    <PocketFundingAction showHint={false} flow="payment" asset={insufficientBalance ? 'USDC' : null} network="base" locked={busy} onReturn={async () => { await latest.current.wallets.refreshBalances(); setInsufficientBalance(false); setRetry(value => value + 1) }} onCancel={onClose}>
+      {!loading && error && !feeReady ? <button className="pocket-cta-primary w-full" onClick={() => setRetry(value => value + 1)}>Try again</button> : <PocketSlideAction loadingContent={loading} status={busy ? 'pending' : 'idle'} disabled={!intent || loading || attempted || !feeReady} onPrepare={async () => { const base = await wallet.ensureWallet('base'); if (!base) throw Error('Open your Base wallet to continue.'); await wallet.getEvmSession('base', base.address) }} onConfirm={() => void pay()} labels={{ idle: 'Confirm payment', pending: 'Confirming payment', disabled: 'Preparing payment' }} />}
+    </PocketFundingAction>
   </PocketBottomSheet>
 }
