@@ -39,11 +39,11 @@ export async function estimatePrivySponsoredBatchGas(rpc:XLayerCostRpc,wallet:He
  return estimatePrivyBatchCallDataGas(rpc,wallet,encodeXLayerSponsoredBatch(calls),chainId)
 }
 /** Native principal is supplied by the wallet, never by a balance override. */
-export async function estimatePrivyValueBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:PrivyValueCall[],chainId:56|196){
+export async function estimatePrivyValueBatchGas(rpc:XLayerCostRpc,wallet:Hex,calls:PrivyValueCall[],chainId:56|196|42220){
  return estimatePrivyBatchCallDataGas(rpc,wallet,encodePrivyValueBatch(calls),chainId)
 }
-async function estimatePrivyBatchCallDataGas(rpc:XLayerCostRpc,wallet:Hex,callData:Hex,chainId:56|196){
- if(![56,196].includes(chainId)||!isAddress(wallet)||await rpc('eth_chainId',[])!=='0x'+chainId.toString(16))return invalid()
+async function estimatePrivyBatchCallDataGas(rpc:XLayerCostRpc,wallet:Hex,callData:Hex,chainId:56|196|42220){
+ if(![56,196,42220].includes(chainId)||!isAddress(wallet)||await rpc('eth_chainId',[])!=='0x'+chainId.toString(16))return invalid()
  const code=await rpc('eth_getCode',[wallet,'latest'])
  const requiresDelegation=code==='0x'
  // Never replace another delegation. A code-only override models Privy's

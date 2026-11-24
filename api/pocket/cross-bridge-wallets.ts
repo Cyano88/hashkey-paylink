@@ -20,7 +20,7 @@ export function crossBridgeWalletFingerprint(binding:Pick<CrossBridgeWalletBindi
  if(!binding.ownerId||binding.source.network===binding.destination.network)fail()
  const normalize=(w:CrossBridgeWallet)=>{
   crossBridgeNetwork(w.network)
-  if(w.provider!==(['bsc','xlayer'].includes(w.network)?'privy':'circle')||typeof w.walletId!=='string'||!w.walletId.trim())fail()
+  if(w.provider!==(['bsc','xlayer','celo'].includes(w.network)?'privy':'circle')||typeof w.walletId!=='string'||!w.walletId.trim())fail()
   const canonical=address(w.network,w.address)
   return [w.network,w.provider,w.walletId,w.network==='solana'?canonical:canonical.toLowerCase()]
  }
@@ -30,8 +30,8 @@ export function crossBridgeWalletFingerprint(binding:Pick<CrossBridgeWalletBindi
 export async function resolveCrossBridgeWallets(ownerId:string,source:CrossBridgeNetwork,destination:CrossBridgeNetwork,deps:CrossBridgeWalletDependencies=defaults):Promise<CrossBridgeWalletBinding>{
  crossBridgeNetwork(source);crossBridgeNetwork(destination)
  if(!ownerId||source===destination)return fail()
- const external=(network:CrossBridgeNetwork)=>network==='bsc'||network==='xlayer'
- // One verified user lookup also guarantees BNB/X Layer share the same registered account.
+ const external=(network:CrossBridgeNetwork)=>network==='bsc'||network==='xlayer'||network==='celo'
+ // One verified Privy wallet is used for BNB, X Layer and Celo.
  const userPromise=external(source)||external(destination)?deps.user(ownerId):Promise.resolve(null)
  const resolve=async(network:CrossBridgeNetwork):Promise<CrossBridgeWallet>=>{
   if(external(network)){

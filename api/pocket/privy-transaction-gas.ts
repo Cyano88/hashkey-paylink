@@ -1,12 +1,12 @@
 import type {Hex} from 'viem'
 
-export type PrivyGasBinding = {transactionId: string; walletId: string; chainId: 56 | 196; hash: Hex}
+export type PrivyGasBinding = {transactionId: string; walletId: string; chainId: 56 | 196 | 42220; hash: Hex}
 const unavailable = (): never => {throw Error('Transaction gas billing is still being verified.')}
 /** Bind billed credits to a single provider transaction and chain. Wallet-wide
  * gas_spend totals must not be compared against one chain's reimbursement. */
 export function privyTransactionGasMicros(tx: unknown, binding: PrivyGasBinding): bigint | null {
  const t = tx as Record<string, any>
- if (!binding || ![56,196].includes(binding.chainId) || !/^[a-zA-Z0-9_-]{10,128}$/.test(binding.transactionId) || !/^[a-zA-Z0-9]{10,64}$/.test(binding.walletId) || !/^0x[0-9a-f]{64}$/i.test(binding.hash)) return unavailable()
+ if (!binding || ![56,196,42220].includes(binding.chainId) || !/^[a-zA-Z0-9_-]{10,128}$/.test(binding.transactionId) || !/^[a-zA-Z0-9]{10,64}$/.test(binding.walletId) || !/^0x[0-9a-f]{64}$/i.test(binding.hash)) return unavailable()
  if (!t || t.id !== binding.transactionId || t.wallet_id !== binding.walletId || t.caip2 !== 'eip155:' + binding.chainId || typeof t.transaction_hash !== 'string' || t.transaction_hash.toLowerCase() !== binding.hash.toLowerCase() || t.sponsored !== true) return unavailable()
  if (t.gas_credits_charged == null) return null
  const cost = t.gas_credits_charged

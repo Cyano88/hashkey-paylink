@@ -1,8 +1,8 @@
 import {crossBridgeAsset,type CrossBridgeNetwork,type CrossBridgeAsset} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
-import {RELAY_BSC_CHAINS} from './bsc-bridge-provider.js'
+import {RELAY_BSC_CHAINS} from './cross-bridge-chains.js'
 import type {validateCrossBridgeRelayQuote} from './cross-bridge-provider.js'
 export type CrossBridgeRoute=ReturnType<typeof validateCrossBridgeRelayQuote>
-export type CrossBridgeSettlementPlan={route:CrossBridgeRoute;sender:string;recipient:string}
+export type CrossBridgeSettlementPlan={route:CrossBridgeRoute;sender:string;recipient:string;purpose?:'cash'}
 export type CrossBridgeDeliveryCandidate={outcome:'completed'|'refunded';network:CrossBridgeNetwork;token:CrossBridgeAsset;recipient:string;hash:string;exactUnits:string|null;minimumUnits:string}
 export const sameCrossBridgeAddress=(n:CrossBridgeNetwork,a:unknown,b:string)=>typeof a==='string'&&(n==='solana'?a===b:a.toLowerCase()===b.toLowerCase())
 export const crossBridgeHash=(n:CrossBridgeNetwork,h:unknown):h is string=>typeof h==='string'&&(n==='solana'?/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(h):/^0x[0-9a-f]{64}$/i.test(h))

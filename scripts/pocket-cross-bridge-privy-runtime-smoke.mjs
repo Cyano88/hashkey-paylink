@@ -2,7 +2,7 @@ import {encodeFunctionData,encodeEventTopics,encodeAbiParameters,parseAbi} from 
 import {entryPoint07Abi} from 'viem/account-abstraction'
 import {readCrossBridgePrivySource} from '../api/pocket/cross-bridge-privy-source.ts'
 import {XLAYER_ENTRY_POINT} from '../api/pocket/xlayer-sponsored-cost.ts'
-import {RELAY_BSC_CHAINS} from '../api/pocket/bsc-bridge-provider.ts'
+import {RELAY_BSC_CHAINS} from '../api/pocket/cross-bridge-chains.ts'
 import assert from 'node:assert/strict'
 import {fixture,now} from './fixtures/cross-bridge.mjs'
 import {crossBridgeAssets} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
@@ -14,14 +14,14 @@ import {createCrossBridgePrivyRuntime} from '../api/pocket/cross-bridge-privy-ru
 import {createCrossBridgePrivyCost} from '../api/pocket/cross-bridge-privy-cost.ts'
 const secret='privy-cross-fixture-secret'.repeat(3),treasury='0x3333333333333333333333333333333333333333',sourceHash='0x'+'1'.repeat(64),kernel='0xd6cedde84be40893d153be9d467cd6ad37875b28'
 let cases=0
-for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source)){
+for(const source of ['bsc','xlayer','celo'])for(const asset of crossBridgeAssets(source)){
  const {q,i}=fixture(source,'base',asset.symbol,'USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
  const wallets={ownerId:'owner',source:{network:source,provider:'privy',walletId:'fixturewallet1234',address:i.sender},destination:{network:'base',provider:'circle',walletId:'destination',address:i.recipient}}
  wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
  const charged=await buildCrossBridgeChargedPlan(route,wallets,123n,treasury),saved=await createCrossBridgeReview({wallets,input:i,providerQuote:q,appFee:null,reimbursementUnits:123n,reimbursementRecipient:treasury,...charged,expiresAt:now+30000},{secret,now})
  let time=now,sends=0,proofs=0,rows=new Map(),l1=0
  const rpc=async(method,params)=>{
-  if(method==='eth_chainId')return source==='bsc'?'0x38':'0xc4'
+  if(method==='eth_chainId')return source==='bsc'?'0x38':source==='celo'?'0xa4ec':'0xc4'
   if(method==='eth_getCode')return '0xef0100'+kernel.slice(2)
   if(method==='eth_call'){if(params[0].to==='0x420000000000000000000000000000000000000F'){l1++;return '0x'+'123'.padStart(64,'0')}return '0x0'}
   if(method==='eth_estimateUserOperationGas'){assert.equal(params[0].callData,charged.plan.callData);return {callGasLimit:'0x10000',verificationGasLimit:'0x10000',preVerificationGas:'0x10000'}}
@@ -44,9 +44,9 @@ for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source
  const zero='0x'+'0'.repeat(40)
  let success=true,feeDebit=123n
  const sourceRpc=async({method})=>{
-  if(method==='eth_chainId')return source==='bsc'?'0x38':'0xc4'
+  if(method==='eth_chainId')return source==='bsc'?'0x38':source==='celo'?'0xa4ec':'0xc4'
   if(method==='eth_getBlockByNumber')return {number:'0x10',hash:blockHash,transactions:[sourceHash]}
-  if(method==='eth_getTransactionByHash')return {hash:sourceHash,to:XLAYER_ENTRY_POINT,input:txInput,chainId:source==='bsc'?'0x38':'0xc4',blockHash,blockNumber:'0x10',transactionIndex:'0x0'}
+  if(method==='eth_getTransactionByHash')return {hash:sourceHash,to:XLAYER_ENTRY_POINT,input:txInput,chainId:source==='bsc'?'0x38':source==='celo'?'0xa4ec':'0xc4',blockHash,blockNumber:'0x10',transactionIndex:'0x0'}
   if(method==='eth_getTransactionReceipt'){
    const logs=[{address:XLAYER_ENTRY_POINT,topics:encodeEventTopics({abi:events,eventName:'UserOperationEvent',args:{userOpHash,sender:i.sender,paymaster:zero}}),data:encodeAbiParameters([{type:'uint256'},{type:'bool'},{type:'uint256'},{type:'uint256'}],[0n,success,0n,1n])}]
    if(!asset.native&&success)for(const [to,value] of [[RELAY_BSC_CHAINS[source].depository,BigInt(i.amountUnits)],[treasury,feeDebit]])logs.push({address:asset.address,topics:encodeEventTopics({abi:events,eventName:'Transfer',args:{from:i.sender,to}}),data:encodeAbiParameters([{type:'uint256'}],[value])})
@@ -59,8 +59,8 @@ for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source
  success=false;assert.equal(await readCrossBridgePrivySource(review,sourceHash,userOpHash,{rpc:sourceRpc}),'failed');success=true
  await assert.rejects(()=>readCrossBridgePrivySource(review,sourceHash,'0x'+'d'.repeat(64),{rpc:sourceRpc}))
  const opts={env:{PRIVY_APP_ID:'fixtureapp',PRIVY_APP_SECRET:'server-secret',RELAY_API_KEY:'relay-key'},fetcher:async(url,init)=>{
-  if(url.includes('privy.io')){sends++;const body=JSON.parse(init.body);assert.equal(body.caip2,source==='bsc'?'eip155:56':'eip155:196');assert.equal(init.headers['privy-idempotency-key'],saved.quote.id);assert.equal(init.headers['privy-authorization-signature'],'ephemeral-signature');assert.deepEqual(body.params.calls,charged.plan.calls.map(c=>({to:c.target,data:c.data,value:'0x'+c.value.toString(16)})));assert.equal(rows.get(saved.quote.id).state,'submitting');throw Error('response lost')}
-  return {ok:true,json:async()=>({requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},user:i.sender,recipient:i.recipient,data:{inTxs:[{chainId:source==='bsc'?56:196,txHash:sourceHash}]}}]})}
+  if(url.includes('privy.io')){sends++;const body=JSON.parse(init.body);assert.equal(body.caip2,source==='bsc'?'eip155:56':source==='celo'?'eip155:42220':'eip155:196');assert.equal(init.headers['privy-idempotency-key'],saved.quote.id);assert.equal(init.headers['privy-authorization-signature'],'ephemeral-signature');assert.deepEqual(body.params.calls,charged.plan.calls.map(c=>({to:c.target,data:c.data,value:'0x'+c.value.toString(16)})));assert.equal(rows.get(saved.quote.id).state,'submitting');throw Error('response lost')}
+  return {ok:true,json:async()=>({requests:[{id:route.requestId,protocol:{orderId:route.orderId,hubType:'onchain'},user:i.sender,recipient:i.recipient,data:{inTxs:[{chainId:source==='bsc'?56:source==='celo'?42220:196,txHash:sourceHash}]}}]})}
  },overrides:{now:()=>time,durable:()=>true,wallets:async()=>{},approve:async()=>true,open:(token,owner,recovery)=>openCrossBridgeReview(token,owner,{secret,now:time,recovery}),source:async(review,hash)=>{proofs++;assert.equal(hash,sourceHash);assert.equal(review.charged.planHash,charged.planHash);return 'confirmed'},store:{read:async id=>structuredClone(rows.get(id)),mutate:async(id,fn)=>{const next=fn(structuredClone(rows.get(id)));rows.set(id,next);return structuredClone(next)}}}}
  const runtime=()=>createCrossBridgePrivyRuntime('owner',async()=>{},opts)
  await runtime().prepare(saved.quoteToken,'pin');assert.equal((await runtime().request(saved.quote.id)).headers['privy-idempotency-key'],saved.quote.id)
@@ -85,4 +85,4 @@ for(const source of ['bsc','xlayer'])for(const asset of crossBridgeAssets(source
  }
  cases++
 }
-console.log(`PASS ${cases} BSC/X Layer assets: exact native/token requests, L1-inclusive X Layer cost, BSC L1 exclusion, single durable dispatch, response-loss order discovery and exact source proof, expiry recovery, no stored signatures or repeat send. Mocked providers only.`)
+console.log(`PASS ${cases} BNB/X Layer/Celo assets: exact native/token requests, chain-specific network IDs, L1-inclusive X Layer cost, single durable dispatch, response-loss order discovery and exact source proof, expiry recovery, no stored signatures or repeat send. Mocked providers only.`)

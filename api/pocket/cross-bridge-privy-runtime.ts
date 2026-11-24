@@ -14,8 +14,9 @@ const hash=(v:unknown):v is string=>typeof v==='string'&&/^0x[0-9a-f]{64}$/i.tes
 const providerId=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9_-]{10,128}$/.test(v)
 export function crossBridgePrivyRequest(r:Review,appId:string){
  const q=r.quote,source=q.input.source,plan=r.charged.plan
- if(source!=='bsc'&&source!=='xlayer'||q.wallets.source.provider!=='privy'||plan.kind!=='evm'||!providerId(q.wallets.source.walletId)||! /^[a-zA-Z0-9]{1,128}$/.test(appId))return fail()
- return {version:1 as const,method:'POST' as const,url:'https://api.privy.io/v1/wallets/'+q.wallets.source.walletId+'/rpc',headers:{'privy-app-id':appId,'privy-idempotency-key':q.id,'privy-request-expiry':String(q.expiresAt)},body:{chain_type:'ethereum',method:'wallet_sendCalls',caip2:'eip155:'+inboundChains[source].id,sponsor:true,params:{calls:plan.calls.map(c=>({to:c.target,data:c.data,value:'0x'+c.value.toString(16)}))}}}
+ if(!['bsc','xlayer','celo'].includes(source)||q.wallets.source.provider!=='privy'||plan.kind!=='evm'||!providerId(q.wallets.source.walletId)||! /^[a-zA-Z0-9]{1,128}$/.test(appId))return fail()
+ const chain=inboundChains[source as 'bsc'|'xlayer'|'celo']
+ return {version:1 as const,method:'POST' as const,url:'https://api.privy.io/v1/wallets/'+q.wallets.source.walletId+'/rpc',headers:{'privy-app-id':appId,'privy-idempotency-key':q.id,'privy-request-expiry':String(q.expiresAt)},body:{chain_type:'ethereum',method:'wallet_sendCalls',caip2:'eip155:'+chain.id,sponsor:true,params:{calls:plan.calls.map(c=>({to:c.target,data:c.data,value:'0x'+c.value.toString(16)}))}}}
 }
 export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review)=>Promise<void>,options:{preflightRevalidatesWallets?:boolean;env?:NodeJS.ProcessEnv;fetcher?:typeof fetch;overrides?:Partial<CrossBridgeOperationDependencies>&{durable?:()=>boolean;wallets?:typeof revalidateCrossBridgeWallets;source?:typeof readCrossBridgePrivySource}}={}){
  const env=options.env??process.env,fetcher=options.fetcher??fetch,appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||'',o=options.overrides??{}
@@ -59,7 +60,7 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
     if(hash(tx.transaction_hash))return {sourceHash:tx.transaction_hash,...(userOperationHash?{userOperationHash}:{})}
    }
    if(userOperationHash){
-    const source=q.input.source as 'bsc'|'xlayer',client=inboundBridgeClient(source,env)
+    const source=q.input.source as 'bsc'|'xlayer'|'celo',client=inboundBridgeClient(source,env)
     if(await client.getChainId()!==inboundChains[source].id)return fail()
     const receipt:any=await client.request({method:'eth_getUserOperationReceipt' as any,params:[userOperationHash as Hex]} as any)
     if(receipt){if(!same(receipt.userOpHash,userOperationHash)||!same(receipt.sender,q.wallets.source.address)||!same(receipt.entryPoint,XLAYER_ENTRY_POINT)||!same(receipt.receipt?.to,XLAYER_ENTRY_POINT)||!hash(receipt.receipt?.transactionHash))return fail();return {sourceHash:receipt.receipt.transactionHash,userOperationHash}}
@@ -72,7 +73,7 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
    const body=await response.json(),records=body?.requests
    if(!Array.isArray(records)||records.length!==1)return null
    const found=records[0],txs=found?.data?.inTxs
-   if(!same(found.id,r.route.requestId)||!same(found.protocol?.orderId,r.route.orderId)||found.protocol?.hubType!=='onchain'||!same(found.user,q.input.sender)||(q.input.destination==='solana'?found.recipient!==q.input.recipient:!same(found.recipient,q.input.recipient))||!Array.isArray(txs)||txs.length!==1||txs[0].chainId!==inboundChains[q.input.source as 'bsc'|'xlayer'].id||!hash(txs[0].txHash))return null
+   if(!same(found.id,r.route.requestId)||!same(found.protocol?.orderId,r.route.orderId)||found.protocol?.hubType!=='onchain'||!same(found.user,q.input.sender)||(q.input.destination==='solana'?found.recipient!==q.input.recipient:!same(found.recipient,q.input.recipient))||!Array.isArray(txs)||txs.length!==1||txs[0].chainId!==inboundChains[q.input.source as 'bsc'|'xlayer'|'celo'].id||!hash(txs[0].txHash))return null
    await (o.source??readCrossBridgePrivySource)(r,txs[0].txHash,undefined,{env})
    return {sourceHash:txs[0].txHash}
   },

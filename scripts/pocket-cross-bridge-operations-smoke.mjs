@@ -12,7 +12,7 @@ const secret='fixture-cross-review-secret-'.repeat(3),treasury='0x33333333333333
 let reviews=[]
 for(const source of CROSS_BRIDGE_ROLLOUT_NETWORKS)for(const asset of crossBridgeAssets(source)){
  const destination=source==='base'?'polygon':'base',{q,i}=fixture(source,destination,asset.symbol,'USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
- const wallets={ownerId:'owner',source:{network:source,provider:['bsc','xlayer'].includes(source)?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:'circle',walletId:'dest',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
+ const wallets={ownerId:'owner',source:{network:source,provider:['bsc','xlayer','celo'].includes(source)?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:['bsc','xlayer','celo'].includes(destination)?'privy':'circle',walletId:'dest',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
  const recipient=source==='solana'?solTreasury:treasury,charged=await buildCrossBridgeChargedPlan(route,wallets,123n,recipient)
  const result=await createCrossBridgeReview({wallets,input:i,providerQuote:q,appFee:null,reimbursementUnits:123n,reimbursementRecipient:recipient,...charged,expiresAt:now+30000},{secret,now})
  const stored=JSON.parse(JSON.stringify(result)),opened=await openCrossBridgeReview(stored.quoteToken,'owner',{secret,now})

@@ -3,7 +3,7 @@ import type {openCrossBridgeReview} from './cross-bridge-review.js'
 import type {CircleKitSourceReceipt} from './circle-bridge-source-proof.js'
 import {revertedNativeBatch,type NativeCallTrace} from './native-send-quote.js'
 import {readFinalizedBridgeSource} from './circle-bridge-source-reader.js'
-import {RELAY_BSC_CHAINS} from './bsc-bridge-provider.js'
+import {RELAY_BSC_CHAINS} from './cross-bridge-chains.js'
 
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 const transfer=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])

@@ -4,7 +4,7 @@ import {POCKET_BSC} from './pocketBsc'
 import {POCKET_EURC} from './pocketEurc'
 import {xLayerUsde,xLayerUsdg} from './pocketXLayerPaymentAssets'
 
-export const CROSS_BRIDGE_NETWORKS=['ethereum','base','arbitrum','polygon','solana','arc','bsc','xlayer'] as const
+export const CROSS_BRIDGE_NETWORKS=['ethereum','base','arbitrum','polygon','solana','arc','bsc','xlayer','celo'] as const
 export type CrossBridgeNetwork=typeof CROSS_BRIDGE_NETWORKS[number]
 // Rollout eligibility is separate from asset support and historical recovery.
 export const CROSS_BRIDGE_ROLLOUT_NETWORKS=[...CROSS_BRIDGE_NETWORKS]
@@ -26,6 +26,11 @@ export function crossBridgeAssets(network:CrossBridgeNetwork):CrossBridgeAsset[]
   {symbol:'USDC',address:'0xb6ceceab302e2e4948951ee7843fc24e92933061',decimals:6,native:false},
   {symbol:'USDT',address:'0x779ded0c9e1022225f8e0630b35a9b54be713736',decimals:6,native:false},
   {...xLayerUsde,native:false},{...xLayerUsdg,native:false}]
+ if(network==='celo')return [
+  {symbol:'CELO',address:CROSS_BRIDGE_NATIVE_ADDRESS,decimals:18,native:true},
+  {symbol:'USDC',address:'0xcebA9300f2b948710d2653dD7B07f33A8B32118C',decimals:6,native:false},
+  {symbol:'USDT',address:'0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e',decimals:6,native:false},
+ ]
  const stablecoins:CrossBridgeAsset[]=[{symbol:'USDC',address:CHAIN_META[network].tokenAddress,decimals:6,native:false}]
  if(network!=='arc')stablecoins.push({symbol:'USDT',...POCKET_USDT_ASSETS[network],native:false})
  if(network==='base'||network==='arc')stablecoins.push({...POCKET_EURC[network]})

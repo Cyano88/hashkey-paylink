@@ -2,7 +2,7 @@ import {getAddress,isAddress} from 'viem'
 import {readBridgeRevenueConfig,bridgeRevenueUnits} from './bridge-revenue-config.js'
 import {EVM_PLATFORM_TREASURY} from '../../src/lib/platformFees.js'
 import type {CrossBridgeAsset,CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
-import {RELAY_BSC_CHAINS} from './bsc-bridge-provider.js'
+import {RELAY_BSC_CHAINS} from './cross-bridge-chains.js'
 export type RelayBridgeAppFee={recipient:`0x${string}`;bps:number}
 const fail=():never=>{throw Error('Bridge platform fee could not be verified.')}
 export function validateRelayBridgeAppFee(fee:RelayBridgeAppFee){

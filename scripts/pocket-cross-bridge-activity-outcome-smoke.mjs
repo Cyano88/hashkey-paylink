@@ -12,7 +12,7 @@ process.env.POCKET_SWAP_QUOTE_SECRET='activity-outcome-regression-'.repeat(4)
 const solTreasury=Keypair.fromSeed(new Uint8Array(32).fill(7)).publicKey.toBase58();let cases=0
 for(const source of CROSS_BRIDGE_NETWORKS)for(const destination of CROSS_BRIDGE_NETWORKS){if(source===destination)continue
  const {q,i}=fixture(source,destination,'USDC','USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
- const wallets={ownerId:'owner',source:{network:source,provider:['bsc','xlayer'].includes(source)?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:['bsc','xlayer'].includes(destination)?'privy':'circle',walletId:'dest',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
+ const wallets={ownerId:'owner',source:{network:source,provider:['bsc','xlayer','celo'].includes(source)?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:['bsc','xlayer','celo'].includes(destination)?'privy':'circle',walletId:'dest',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
  const recipient=source==='solana'?solTreasury:'0x3333333333333333333333333333333333333333',charged=await buildCrossBridgeChargedPlan(route,wallets,123n,recipient)
  const review=await createCrossBridgeReview({wallets,input:i,providerQuote:q,appFee:null,reimbursementUnits:123n,reimbursementRecipient:recipient,...charged,expiresAt:now+30000},{now})
  const base={id:review.quote.id,ownerId:'owner',quoteToken:review.quoteToken,state:'submitted',sourceHash:'source-hash',createdAt:now,updatedAt:Date.now()}

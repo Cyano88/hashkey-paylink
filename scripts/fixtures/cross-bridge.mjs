@@ -4,11 +4,12 @@ import {getOrderId} from '@relay-protocol/settlement-sdk'
 import {encodeFunctionData} from 'viem'
 import {crossBridgePair,crossBridgeAssets} from '../../src/pocket/lib/pocketCrossBridgeAssets.ts'
 import {crossBridgeDepositAbi} from '../../api/pocket/cross-bridge-provider.ts'
-import {RELAY_BSC_CHAINS,bscRelaySolanaDeposit} from '../../api/pocket/bsc-bridge-provider.ts'
+import {bscRelaySolanaDeposit} from '../../api/pocket/bsc-bridge-provider.ts'
+import {RELAY_BSC_CHAINS} from '../../api/pocket/cross-bridge-chains.ts'
 const template=JSON.parse(readFileSync(new URL('./bsc-bridge/usdc-out.json',import.meta.url),'utf8'))
 const solFixture=JSON.parse(readFileSync(new URL('./inbound-bridge/USDC-solana-bsc.json',import.meta.url),'utf8'))
 const evm='0xd7579fa0784288ef6eab335bc97d3c8ebc7ec435',sol=solFixture.input.sender
-const vmTypes={bnb:'ethereum-vm',xlayer:'ethereum-vm',ethereum:'ethereum-vm',polygon:'ethereum-vm',arc:'ethereum-vm',base:'ethereum-vm',arbitrum:'ethereum-vm',solana:'solana-vm'}
+const vmTypes={bnb:'ethereum-vm',xlayer:'ethereum-vm',ethereum:'ethereum-vm',polygon:'ethereum-vm',arc:'ethereum-vm',base:'ethereum-vm',arbitrum:'ethereum-vm',solana:'solana-vm',celo:'ethereum-vm'}
 const protocolChain=n=>n==='bsc'?'bnb':n,now=1790000000000
 function fixture(source,destination,from,to,alternateRefund=false,senderOverride){
  const {tokenIn,tokenOut}=crossBridgePair(source,destination,from,to)

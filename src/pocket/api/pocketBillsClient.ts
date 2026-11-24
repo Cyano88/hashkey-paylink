@@ -101,8 +101,12 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
   if (![quoteExpiresAt, createdAt, updatedAt].every(Number.isFinite)) {
     throw new PocketBillsApiError('Bill-payment response was invalid.')
   }
+  const international=record(intent.international)
+  const country=international.country
+  const currency=international.deliveryCurrency
+  const hasInternational=(country==='UG'&&currency==='UGX')||(country==='KE'&&currency==='KES')
   return {
-    ...(() => { const country=record(intent.international).country; const currency=record(intent.international).deliveryCurrency; return (country==='UG'||country==='KE')&&currency===billLocalCurrency(country)?{international:{country,deliveryCurrency:currency,deliveryAmount:text(record(intent.international).deliveryAmount)}}:{} })(),
+    ...(hasInternational ? {international:{country:country as 'UG'|'KE',deliveryCurrency:currency as 'UGX'|'KES',deliveryAmount:text(international.deliveryAmount)}} : {}),
     ...(intent.asset === 'USDT' ? {asset:'USDT' as const} : {}),
     id: text(intent.id),
     requestId: text(intent.requestId),

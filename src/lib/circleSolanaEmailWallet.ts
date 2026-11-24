@@ -171,7 +171,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
   })
 }
 
-function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk, bridge?: {asset?: 'USDT';amount:string;totalAmount?:string;destinationAddress:string}) {
+function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk, bridge?: {asset?: 'SOL'|'USDC'|'USDT';amount:string;totalAmount?:string;destinationAddress:string}) {
   sdk.setThemeColor({
     backdrop: '#020617',
     backdropOpacity: 0.42,
@@ -580,5 +580,17 @@ export async function signCircleSolanaTransaction(params: {
   if (result.type !== 'SIGN_TRANSACTION' || !result.data?.signedTransaction) {
     throw new Error(`Circle did not return a signed Solana transaction. Status: ${result.status || 'unknown'}`)
   }
+  return result.data.signedTransaction
+}
+
+/** Executes a Circle challenge already created by the server-side bridge journal.
+ * It only returns signed bytes; broadcasting remains with the journal runtime. */
+export async function executeCircleSolanaEmailChallenge(params:{session:SolanaEmailSession;challengeId:string;approval:{asset:'SOL'|'USDC'|'USDT';amount:string;totalAmount:string;destinationAddress:string}}){
+  if(!APP_ID)throw new Error('Circle Solana email wallet is not configured.')
+  if(!params.challengeId||params.challengeId.length>256)throw new Error('Circle signing challenge is unavailable.')
+  const sdk=createCircleSdk({appSettings:{appId:APP_ID},authentication:{userToken:params.session.userToken,encryptionKey:params.session.encryptionKey}})
+  applyHashPayLinkCircleSolanaUi(sdk,{...params.approval})
+  const result=await executeChallenge(sdk,params.challengeId)
+  if(result.type!=='SIGN_TRANSACTION'||!result.data?.signedTransaction)throw new Error(`Circle did not return a signed Solana transaction. Status: ${result.status||'unknown'}`)
   return result.data.signedTransaction
 }

@@ -1,7 +1,7 @@
 import {createHmac} from 'node:crypto'
 import {okxCredentials} from './xstocks-swap-provider.js'
 import {crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
-import {RELAY_BSC_CHAINS} from './bsc-bridge-provider.js'
+import {RELAY_BSC_CHAINS} from './cross-bridge-chains.js'
 import type {CrossBridgePrice} from './cross-bridge-reimbursement.js'
 const fail=():never=>{throw Object.assign(Error('Fresh bridge fee pricing is unavailable.'),{status:503})}
 /** Round gas upward and reimbursement-asset price downward. Never use floating

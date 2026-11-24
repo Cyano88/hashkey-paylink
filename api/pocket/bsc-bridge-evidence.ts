@@ -1,6 +1,7 @@
 import {decodeEventLog, parseAbi, type Hex} from 'viem'
 import {RELAY_BSC_CHAINS, bscBridgeTokenAddress, type BscRelayInput, type BscRelayRefund} from './bsc-bridge-provider.js'
 import {EVM_PLATFORM_TREASURY,EVM_GAS_REIMBURSEMENT} from '../../src/lib/platformFees.js'
+import {crossBridgeAsset,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 
 type Network = BscRelayInput['source']
 type Asset = BscRelayInput['asset']
@@ -15,19 +16,20 @@ export type BscBridgeBinding = BscRelayInput & {
 }
 const transfer = parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 const deposit = parseAbi(['event RelayErc20Deposit(address from,address token,uint256 amount,bytes32 id)'])
-const same = (network:Network,a:unknown,b:string) => typeof a==='string' && (network==='solana' ? a===b : a.toLowerCase()===b.toLowerCase())
+const same = (network:CrossBridgeNetwork,a:unknown,b:string) => typeof a==='string' && (network==='solana' ? a===b : a.toLowerCase()===b.toLowerCase())
 const hashValid = (network:Network,h:unknown):h is string => typeof h==='string' && (network==='solana' ? /^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(h) : /^0x[0-9a-fA-F]{64}$/.test(h))
 const decimals=(network:Network)=>network==='bsc'?18:6
 const rescale=(value:string,from:Network,to:Network)=>BigInt(value)*10n**BigInt(decimals(to))/10n**BigInt(decimals(from))
 const units = (v:unknown):v is string => typeof v==='string' && /^(0|[1-9]\d{0,77})$/.test(v)
 
 /** Caller must fetch this receipt from the pinned chain and verify its canonical block. */
-export function evmStablecoinDelta(receipt:any,network:Exclude<Network,'solana'>,asset:Asset,owner:string,hash:string):bigint|null {
-  if(!hashValid(network,hash)||receipt?.status!=='success'||!same(network,receipt.transactionHash,hash)||!Array.isArray(receipt.logs))return null
-  const token=bscBridgeTokenAddress(network,asset)
+export function evmStablecoinDelta(receipt:any,network:Exclude<CrossBridgeNetwork,'solana'>,asset:string,owner:string,hash:string):bigint|null {
+  if(!/^0x[0-9a-f]{64}$/i.test(hash)||receipt?.status!=='success'||!same(network,receipt.transactionHash,hash)||!Array.isArray(receipt.logs))return null
+  const token=crossBridgeAsset(network,asset)
+  if(token.native)return null
   let total=0n
   for(const log of receipt.logs){
-    if(!same(network,log.address,token))continue
+    if(!same(network,log.address,token.address))continue
     if(log.removed)return null
     try {
       const {args}=decodeEventLog({abi:transfer,eventName:'Transfer',data:log.data as Hex,topics:log.topics as [Hex,...Hex[]]})

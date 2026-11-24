@@ -27,7 +27,7 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
   const q=r.plan.route,s=r.settlement
   if(r.state==='source_failed')return r
   if(!s||r.state!==s.outcome||!crossBridgeDeliveryProven(s,BigInt(s.amountUnits)))return fail()
-  await d.ledger({eventKey:'cross-bridge:'+r.id+':'+r.state,ownerId:r.ownerId,executionId:r.id,rail:'wallet_bridge',state:r.state,asset:s.token.symbol,amount:formatUnits(BigInt(s.amountUnits),s.token.decimals),sourceNetwork:q.source,settlementNetwork:s.network,resourceId:r.id,providerReference:q.requestId,transactionHash:r.sourceHash,recordedAt:s.verifiedAt,metadata:{provider:'relay',destinationTxHash:s.hash,orderId:q.orderId,sourceAsset:q.tokenIn.symbol,sourceAmountUnits:q.amountUnits,settledAmountUnits:s.amountUnits}})
+  await d.ledger({eventKey:'cross-bridge:'+r.id+':'+r.state,ownerId:r.ownerId,executionId:r.id,rail:'wallet_bridge',state:r.state,asset:s.token.symbol,amount:formatUnits(BigInt(s.amountUnits),s.token.decimals),sourceNetwork:q.source,settlementNetwork:s.network,resourceId:r.id,providerReference:q.requestId,transactionHash:r.sourceHash,recordedAt:s.verifiedAt,metadata:{provider:'relay',...(r.plan.purpose==='cash'?{purpose:'cash'}:{}),destinationTxHash:s.hash,orderId:q.orderId,sourceAsset:q.tokenIn.symbol,sourceAmountUnits:q.amountUnits,settledAmountUnits:s.amountUnits}})
   return r
  }
  return async function reconcile(owner:string,id:string){

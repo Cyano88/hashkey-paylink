@@ -16,11 +16,12 @@ import {crossBridgePreflight} from './cross-bridge-quote.js'
 import {readCrossBridgePrices} from './cross-bridge-prices.js'
 import {sumPrivyTransactionGas} from './privy-transaction-gas.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
+import {inboundChains} from './inbound-bridge-networks.js'
 import {crossBridgeSelectionKey} from '../../src/pocket/lib/pocketCrossBridgeSelection.js'
 import type {CrossBridgeOperation} from './cross-bridge-operations.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export async function listCrossBridgeOperations(owner:string,blockingOnly=false){const journal=await readDurableJson<CrossBridgeJournal>(crossBridgeJournalKey());return Object.values(journal?.crossBridge??{}).filter(r=>r.ownerId===owner&&typeof r.quoteToken==='string'&&(!blockingOnly||!crossBridgeReservationReleased(journal,r))).sort((a,b)=>Number(b.updatedAt)-Number(a.updatedAt)) as CrossBridgeOperation[]}
-export function crossBridgePreview(r:Review){const q=r.quote,i=q.input,route=r.route;return {...(route.conversion?{conversion:{from:i.from,via:'USDC' as const}}:{}),id:q.id,rail:'cross',execution:q.wallets.source.provider,selectionKey:crossBridgeSelectionKey(i),source:i.source,destination:i.destination,asset:i.from,destinationAsset:i.to,walletAddress:i.sender,destinationAddress:i.recipient,amount:formatUnits(BigInt(i.amountUnits),route.tokenIn.decimals),receive:formatUnits(BigInt(route.receiveUnits),route.tokenOut.decimals),minimumReceive:formatUnits(BigInt(route.minimumUnits),route.tokenOut.decimals),fee:formatUnits(BigInt(q.reimbursementUnits),route.tokenIn.decimals),total:formatUnits(BigInt(q.totalUnits),route.tokenIn.decimals),expiresAt:q.expiresAt}}
+export function crossBridgePreview(r:Review){const q=r.quote,i=q.input,route=r.route;return {...(i.purpose?{purpose:i.purpose}:{}),...(route.conversion?{conversion:{from:i.from,via:'USDC' as const}}:{}),id:q.id,rail:'cross',execution:q.wallets.source.provider,selectionKey:crossBridgeSelectionKey(i),source:i.source,destination:i.destination,asset:i.from,destinationAsset:i.to,walletAddress:i.sender,destinationAddress:i.recipient,amount:formatUnits(BigInt(i.amountUnits),route.tokenIn.decimals),receive:formatUnits(BigInt(route.receiveUnits),route.tokenOut.decimals),minimumReceive:formatUnits(BigInt(route.minimumUnits),route.tokenOut.decimals),fee:formatUnits(BigInt(q.reimbursementUnits),route.tokenIn.decimals),total:formatUnits(BigInt(q.totalUnits),route.tokenIn.decimals),expiresAt:q.expiresAt}}
 export type CrossBridgeResponse={ok:boolean;quote:ReturnType<typeof crossBridgePreview>;quoteToken:string;status:string;deliveryObserved?:boolean;deliveryConfirmed?:boolean;challengeId?:string;txHash?:string;destinationTxHash?:string;amountOut?:string;refundAsset?:string;refundAmount?:string;refundNetwork?:string;refundTxHash?:string}
 export async function crossBridgeResponse(op:CrossBridgeOperation):Promise<CrossBridgeResponse>{
  const review=await openCrossBridgeReview(op.quoteToken,op.ownerId,{recovery:true}),settlement=op.settlement as any,delivery=op.delivery as any
@@ -45,14 +46,15 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
  if(q.wallets.source.provider!=='privy')return
  if(env.POCKET_PRIVY_TRANSACTION_BILLING_ENABLED!=='true'&&env.POCKET_PRIVY_COMBINED_BILLING_ENABLED!=='true')throw Error('Bridge sponsorship billing is unavailable.')
  const manual=await readManualBridgeRetry(retryScope(q))
- await checkXLayerBillingCoverage(q.wallets.source.address,{manualCrossBridgeException:manual?.originalId})
+ if(source==='bsc'||source==='xlayer')await checkXLayerBillingCoverage(q.wallets.source.address,{manualCrossBridgeException:manual?.originalId})
  const haltKey='pocket:cross-bridge-billing-halt:v1:'+source
  if(await readDurableJson(haltKey))throw Error('Bridge sponsorship is paused for fee reconciliation.')
  const ops=(await listCrossBridgeOperations(q.ownerId,true)).filter(o=>o.id!==q.id&&o.id!==manual?.originalId&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.createdAt>=Date.now()-28*86400000&&!['prepared','cancelled','not_submitted'].includes(o.state))
  if(!ops.length)return
  if(ops.some(o=>!['completed','refunded','source_failed'].includes(o.state)||!o.transactionId||!o.sourceHash))throw Error('Previous bridge billing is still being verified.')
  const appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||''
- const billed=await sumPrivyTransactionGas(ops.map(o=>({transactionId:o.transactionId!,walletId:q.wallets.source.walletId,chainId:source==='bsc'?56:196,hash:o.sourceHash as Hex})),async id=>{const r=await fetch('https://api.privy.io/v1/transactions/'+encodeURIComponent(id),{headers:{'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')},redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Bridge billing is unavailable.');return r.json()})
+ const privySource=source as 'bsc'|'xlayer'|'celo'
+ const billed=await sumPrivyTransactionGas(ops.map(o=>({transactionId:o.transactionId!,walletId:q.wallets.source.walletId,chainId:inboundChains[privySource].id,hash:o.sourceHash as Hex})),async id=>{const r=await fetch('https://api.privy.io/v1/transactions/'+encodeURIComponent(id),{headers:{'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')},redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Bridge billing is unavailable.');return r.json()})
  let coverage=0n
  for(const op of ops.filter(o=>o.state!=='source_failed')){const saved=await openCrossBridgeReview(op.quoteToken,q.ownerId,{recovery:true}),prices=await readCrossBridgePrices(saved.quote.input.source,saved.quote.input.from);coverage+=BigInt(saved.quote.reimbursementUnits)*prices.assetPrice.scaled8*95n/(10n**BigInt(saved.route.tokenIn.decimals)*100n*100n)}
  if(billed>coverage){await mutateDurableJson(haltKey,old=>old||{at:Date.now(),billedUsdMicros:String(billed),coverageUsdMicros:String(coverage)});throw Error('Bridge sponsorship is paused for fee reconciliation.')}

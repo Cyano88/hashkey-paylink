@@ -5,7 +5,7 @@ import {sponsoredSwapOperationProof} from './sponsored-swap-operation-proof.js'
 
 /** Exact approved ERC-4337 batch inside a finalized canonical transaction.
  * Receipt failures alone never prove that this user's operation failed. */
-export async function readSponsoredBridgeSource(network:'bsc'|'xlayer',hash:Hex,expected:{owner:string;callData:Hex;userOperationHash?:Hex},options:{env?:NodeJS.ProcessEnv;rpc?:Parameters<typeof readFinalizedBridgeReceipt>[3]}={}){
+export async function readSponsoredBridgeSource(network:'bsc'|'xlayer'|'celo',hash:Hex,expected:{owner:string;callData:Hex;userOperationHash?:Hex},options:{env?:NodeJS.ProcessEnv;rpc?:Parameters<typeof readFinalizedBridgeReceipt>[3]}={}){
  const client=options.rpc?undefined:inboundBridgeClient(network,options.env)
  const rpc=options.rpc??(async request=>client!.request(request as Parameters<NonNullable<typeof client>['request']>[0]))
  const pending=():never=>{throw Object.assign(Error('Bridge source operation is still being verified.'),{status:409,code:'bridge_source_evidence_pending'})}

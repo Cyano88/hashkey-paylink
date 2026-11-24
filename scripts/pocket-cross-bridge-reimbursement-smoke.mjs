@@ -39,7 +39,7 @@ assert.throws(()=>priceCrossBridgeReimbursement('base','ETH',10n**18n,price(),pr
 const treasury='0x3333333333333333333333333333333333333333',solTreasury=Keypair.fromSeed(new Uint8Array(32).fill(7)).publicKey.toBase58(),transferAbi=parseAbi(['function transfer(address to,uint256 amount) returns(bool)'])
 for(const network of CROSS_BRIDGE_NETWORKS){
  const token=crossBridgeAssets(network)[0],destination=network==='base'?'polygon':'base',{q,i}=fixture(network,destination,token.symbol,'USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
- const binding={ownerId:'fixture',fingerprint:'bound-wallets',source:{network,provider:network==='bsc'||network==='xlayer'?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:'circle',walletId:'destination',address:i.recipient}}
+ const binding={ownerId:'fixture',fingerprint:'bound-wallets',source:{network,provider:network==='bsc'||network==='xlayer'||network==='celo'?'privy':'circle',walletId:'source',address:i.sender},destination:{network:destination,provider:['bsc','xlayer','celo'].includes(destination)?'privy':'circle',walletId:'destination',address:i.recipient}}
  const recipient=network==='solana'?solTreasury:treasury,built=await buildCrossBridgeChargedPlan(route,binding,123n,recipient)
  assert.equal(built.totalUnits,BigInt(i.amountUnits)+123n)
  await assert.rejects(()=>buildCrossBridgeChargedPlan(route,binding,123n,network==='solana'?'11111111111111111111111111111111':'0x'+'0'.repeat(40)))

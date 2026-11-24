@@ -9,7 +9,7 @@ export type PocketAssetHolding = {
   network: string
   networkIcon: string
   quantity: number
-  valueUsd: number
+  valueUsd: number|null
   known: boolean
   stale?: boolean
 }
@@ -17,7 +17,7 @@ export type PocketAssetHolding = {
 export default function PocketAssetsSheet({ holdings, total, complete, visible, onClose }: {
   holdings: PocketAssetHolding[]; total: number; complete: boolean; visible: boolean; onClose: () => void
 }) {
-  const held = holdings.filter(row => row.known && row.quantity > 0).sort((a, b) => b.valueUsd - a.valueUsd)
+  const held = holdings.filter(row => row.known && row.quantity > 0).sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1))
   const needsRefresh = !complete || holdings.some(row => row.stale)
   const amount = (value: number) => !visible ? '••••' : value > 0 && value < 0.01 ? 'USD <0.01' : new Intl.NumberFormat('en', {style: 'currency',currencyDisplay:'code', currency: 'USD'}).format(value)
   return <PocketBottomSheet title="Your assets" onClose={onClose} fixedHeight="calc(414px + max(1.5rem, var(--pocket-safe-bottom)))">
@@ -28,7 +28,7 @@ export default function PocketAssetsSheet({ holdings, total, complete, visible, 
     <ul aria-label="Asset balances" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain divide-y divide-gray-100 pb-2 outline-none   dark:divide-white/[0.07]">
       {held.map(row => <li key={row.id} className="flex items-center gap-3 py-4">
         <span className="relative h-9 w-9 shrink-0">
-          <img src={row.icon} alt="" className="h-9 w-9 rounded-full object-cover grayscale contrast-200 dark:invert" />
+          {row.icon ? <img src={row.icon} alt="" className="h-9 w-9 rounded-full object-cover grayscale contrast-200 dark:invert" /> : <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300">{row.symbol.slice(0,4)}</span>}
           <img src={row.networkIcon} alt="" className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-white object-cover grayscale contrast-200 dark:border-[#121212] dark:bg-[#121212]" />
         </span>
         <div className="min-w-0 flex-1">
@@ -37,7 +37,7 @@ export default function PocketAssetsSheet({ holdings, total, complete, visible, 
         </div>
         <div className="shrink-0 text-right tabular-nums">
           <p className="text-sm font-medium">{visible ? <MoneyAmount currency={row.symbol} amount={['USDC','USDT'].includes(row.symbol.toUpperCase()) ? formatPocketDisplayAmount(row.quantity) : new Intl.NumberFormat('en', {maximumFractionDigits: 6}).format(row.quantity)}/> : '••••'}</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400"><MoneyText>{amount(row.valueUsd)}</MoneyText></p>
+          {row.valueUsd!==null&&<p className="mt-1 text-xs text-gray-500 dark:text-gray-400"><MoneyText>{amount(row.valueUsd)}</MoneyText></p>}
         </div>
       </li>)}
       {!held.length && <li className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{needsRefresh ? 'Your balances will appear when the connection returns.' : 'Your assets will appear here when you add funds.'}</li>}

@@ -27,7 +27,8 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    if(action==='quote'){
     const source=crossBridgeNetwork(b.source),destination=crossBridgeNetwork(b.destination),pair=crossBridgePair(source,destination,b.from,b.to)
     if(typeof b.amount!=='string'||!new RegExp('^\\d{1,20}(?:\\.\\d{1,'+pair.tokenIn.decimals+'})?$').test(b.amount))return res.status(400).json({ok:false,error:'Enter a valid amount.'})
-    const saved=await d.quote({ownerId:owner,source,destination,from:b.from,to:b.to,amountUnits:String(parseUnits(b.amount,pair.tokenIn.decimals)),circleUserToken:typeof b.circleUserToken==='string'?b.circleUserToken:undefined,maximum:b.maximum===true})
+    if(b.purpose!==undefined&&(b.purpose!=='cash'||destination!=='base'||b.to!=='USDC'))return res.status(400).json({ok:false,error:'Cash funding must be delivered as USDC to Base.'})
+    const saved=await d.quote({ownerId:owner,source,destination,from:b.from,to:b.to,amountUnits:String(parseUnits(b.amount,pair.tokenIn.decimals)),circleUserToken:typeof b.circleUserToken==='string'?b.circleUserToken:undefined,maximum:b.maximum===true,...(b.purpose==='cash'?{purpose:'cash' as const}:{})})
     const opened=await d.open(saved.quoteToken,owner)
     return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true})
    }
@@ -41,7 +42,8 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
     const approval=req.headers['x-pocket-payment-approval'],runtime=d.runtime(review,userToken,combined?{reuseEstimateMs:2000}:{})
     let op=await runtime.prepare(token,typeof approval==='string'?approval:'')
     if(combined&&op.state==='prepared')op=await runtime.submit(id,'')
-    return res.json({...await d.response(op),...('request' in runtime&&op.state==='prepared'?{request:await runtime.request(id)}:{})})
+    const solanaTransaction='solanaTransaction' in op?op.solanaTransaction:undefined
+    return res.json({...await d.response(op),...(typeof solanaTransaction==='string'?{transaction:solanaTransaction,lastValidBlockHeight:'lastValidBlockHeight' in op?op.lastValidBlockHeight:undefined}:{}),...('request' in runtime&&op.state==='prepared'?{request:await runtime.request(id)}:{})})
    }
    if(!existing)return res.json({ok:true,status:'not_submitted'})
    let op=existing as CrossBridgeOperation

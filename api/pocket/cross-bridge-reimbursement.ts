@@ -12,13 +12,13 @@ import type {CrossBridgeWalletBinding} from './cross-bridge-wallets.js'
 type Route=ReturnType<typeof validateCrossBridgeRelayQuote>
 export type CrossBridgeFeePolicy={providerBps:number;providerAllowanceUsdMicros:bigint;marginBps:number;minimumFeeUnits:bigint;maximumFeeUnits:bigint}
 export type CrossBridgePrice={scaled8:bigint;observedAt:number}
-export const crossBridgeGas:Record<CrossBridgeNetwork,{symbol:string;decimals:number}>={ethereum:{symbol:'ETH',decimals:18},base:{symbol:'ETH',decimals:18},arbitrum:{symbol:'ETH',decimals:18},polygon:{symbol:'POL',decimals:18},arc:{symbol:'USDC',decimals:18},bsc:{symbol:'BNB',decimals:18},xlayer:{symbol:'OKB',decimals:18},solana:{symbol:'SOL',decimals:9}}
+export const crossBridgeGas:Record<CrossBridgeNetwork,{symbol:string;decimals:number}>={ethereum:{symbol:'ETH',decimals:18},base:{symbol:'ETH',decimals:18},arbitrum:{symbol:'ETH',decimals:18},polygon:{symbol:'POL',decimals:18},arc:{symbol:'USDC',decimals:18},bsc:{symbol:'BNB',decimals:18},xlayer:{symbol:'OKB',decimals:18},celo:{symbol:'CELO',decimals:18},solana:{symbol:'SOL',decimals:9}}
 /** Match the existing Circle bridge's 0.1% / $0.0001 rounding allowance.
  * The platform absorbs this bounded difference; the approved debit never rises.
  * Sponsored billing and Solana rent retain strict coverage. */
 export function crossBridgeFeeCovered(network:CrossBridgeNetwork,asset:string,reserved:bigint,required:bigint,assetPrice:CrossBridgePrice){
  if(reserved<=0n||required<=0n||assetPrice.scaled8<=0n)return false
- if(network==='bsc'||network==='xlayer'||network==='solana')return required<=reserved
+ if(network==='bsc'||network==='xlayer'||network==='celo'||network==='solana')return required<=reserved
  const cap=100n*100n*10n**BigInt(crossBridgeAsset(network,asset).decimals)/assetPrice.scaled8
  const tolerance=reserved/1000n<cap?reserved/1000n:cap
  return required<=reserved+tolerance
@@ -62,7 +62,7 @@ export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridg
  if(same(reimbursementRecipient,binding.source.address))fail()
  if(route.source==='solana'){try{if(new PublicKey(reimbursementRecipient).equals(PublicKey.default))fail()}catch{fail()}}else if(!isAddress(reimbursementRecipient)||/^0x0{40}$/i.test(reimbursementRecipient))fail()
  for(const side of [binding.source,binding.destination]){const refund=route.refundOptions.find(r=>r.network===side.network);if(!refund||(side.network==='solana'?refund.recipient!==side.address:refund.recipient.toLowerCase()!==side.address.toLowerCase()))fail()}
- const sponsored=route.source==='bsc'||route.source==='xlayer'
+ const sponsored=route.source==='bsc'||route.source==='xlayer'||route.source==='celo'
  if(binding.source.provider!==(sponsored?'privy':'circle'))fail('Bridge wallet execution provider changed.')
  const totalUnits=BigInt(route.amountUnits)+reimbursementUnits
  if(totalUnits>=(route.source==='solana'?2n**64n:2n**128n))fail()

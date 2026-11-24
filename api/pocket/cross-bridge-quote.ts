@@ -23,7 +23,7 @@ export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string
  const source=wallets.source.network,token=crossBridgeAsset(source,asset)
  if(source==='solana')return createCrossBridgeSolanaCost(wallets,asset,new Connection(getRpc(),'confirmed'),loadRelayer().publicKey)
  const client=inboundBridgeClient(source,env),balance=async()=>{if(await client.getChainId()!==inboundChains[source].id)throw Error('Bridge network changed.');return token.native?client.getBalance({address:wallets.source.address as Hex}):client.readContract({address:token.address as Hex,abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[wallets.source.address as Hex]})}
- if(source==='bsc'||source==='xlayer')return {balance,estimate:createCrossBridgePrivyCost(wallets,asset,{env})}
+ if(source==='bsc'||source==='xlayer'||source==='celo')return {balance,estimate:createCrossBridgePrivyCost(wallets,asset,{env})}
  if(!userToken||userToken.length>8000)throw Error('Unlock your source wallet.')
  return {balance,estimate:async(plan:CrossBridgeChargedPlan,planHash:string):Promise<CrossBridgeCost>=>{
   if(plan.kind!=='evm')throw Error('Invalid Circle plan.')
@@ -40,7 +40,7 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  if(wallets.source.provider==='privy')await assertCrossBridgeCoverageReady(wallets.source.address,{},manual?.originalId)
  if(manual){const balance=readers.balance;readers.balance=async()=>{const units=await balance();return units> manual.reservedUnits?units-manual.reservedUnits:0n}}
  const quote=async(amountUnits:bigint)=>{
-  const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address}
+  const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address,...(input.purpose==='cash'?{purpose:'cash' as const}:{})}
   const appFee=relayBridgeAppFee(env)
   const native=needsNativeBridgeConversion(request)
   const xlayer=input.source==='xlayer'&&input.from!=='USDC'

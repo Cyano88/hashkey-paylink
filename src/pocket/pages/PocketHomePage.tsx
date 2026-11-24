@@ -17,7 +17,7 @@ import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
 import { pocketWalletPreparationNotice } from '../lib/pocketWalletPreparationNotice'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, ChevronRight, Eye, EyeOff, QrCode, Send, Receipt, Deposit } from '../components/PocketIcons'
+import { ArrowDownToLine, ChevronRight, Eye, EyeOff, QrCode, Send, Receipt, Deposit } from '../components/PocketIcons'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -25,6 +25,7 @@ import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import usePocketProfile from '../hooks/usePocketProfile'
+import usePocketCeloBalances from '../hooks/usePocketCeloBalances'
 import { formatPocketDollarAmount } from '../lib/pocketMoney'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import PocketRecentActivitySkeleton from '../components/PocketRecentActivitySkeleton'
@@ -50,6 +51,7 @@ export default function PocketHomePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
+  const celo = usePocketCeloBalances()
   usePocketProfile({ authenticated, email, getAccessToken })
   const usdtRows = POCKET_USDT_NETWORKS.map(network => {
     const row = wallets.displayRows.find(item => item.key === network)
@@ -67,7 +69,8 @@ export default function PocketHomePage() {
   const selectedActivityRow = currentPocketActivityRow(selectedActivity, activity.rows)
   const recent = activity.rows.filter(row => !isIncomingPosPayment(row)).slice(0, 4)
   const balancesVisible = !authenticated || (wallets.displayComplete && usdt.known)
-  const displayTotal = wallets.displayTotal + usdt.balance
+  const celoStablecoinValue = celo.holdings.reduce((sum,row)=>sum+(row.valueUsd??0),0)
+  const displayTotal = wallets.displayTotal + usdt.balance + celoStablecoinValue
   const activityReady = !authenticated || activity.resolved
 
   const open = (path: string) => navigate(POCKET_BASE_PATH + path, path===POCKET_ROUTES.xpay?{state:{xpayOrigin:'stablecoins'}}:undefined)
@@ -109,7 +112,7 @@ export default function PocketHomePage() {
       {[
         { label: 'Send', icon: Send, path: POCKET_ROUTES.transfer },
         { label: 'Bills', icon: Receipt, path: POCKET_ROUTES.bills },
-        { label: 'Swap', icon: ArrowLeftRight, path: POCKET_ROUTES.swap },
+        { label: 'Add cash', icon: ArrowDownToLine, path: POCKET_ROUTES.swap + '?mode=cash' },
         { label: 'Receive', icon: Deposit, path: POCKET_ROUTES.receive },
       ].map(item => <PocketHomeAction key={item.label} label={item.label} icon={<item.icon className="h-6 w-6" />} onClick={() => open(item.path)} />)}
     </section>
@@ -122,7 +125,7 @@ export default function PocketHomePage() {
     {assetsOpen && <PocketAssetsSheet total={displayTotal} complete={balancesVisible} visible={balanceVisible} onClose={() => setAssetsOpen(false)} holdings={[...NETWORKS.map(network => {
       const row = wallets.displayRows.find(item => item.key === network.key)
       return {id:'USDC:'+network.key,symbol:'USDC',icon:'/brand/usdc-circle-logo.png',network:network.label,networkIcon:network.logo,quantity:row?.balance ?? 0,valueUsd:row?.balance ?? 0,known:!authenticated || Boolean(row?.known),stale:row?.stale}
-    }), ...(pocketUsdtEnabled ? usdt.rows.map(row => {const network=NETWORKS.find(item=>item.key===row.network)!;return {id:'USDT:'+row.network,symbol:'USDT',icon:'/brand/usdt.svg',network:network.label,networkIcon:network.logo,quantity:row.balance,valueUsd:row.balance,known:row.known,stale:row.stale}}) : [])]} />}
+    }), ...(pocketUsdtEnabled ? usdt.rows.map(row => {const network=NETWORKS.find(item=>item.key===row.network)!;return {id:'USDT:'+row.network,symbol:'USDT',icon:'/brand/usdt.svg',network:network.label,networkIcon:network.logo,quantity:row.balance,valueUsd:row.balance,known:row.known,stale:row.stale}}) : []), ...celo.holdings]} />}
     {selectedActivityRow && <PocketActivityReceipt row={selectedActivityRow} onClose={() => setSelectedActivity(null)} />}
   </PocketRouteShell>
 }

@@ -4,7 +4,8 @@ import {getOrderId} from '@relay-protocol/settlement-sdk'
 import {encodeFunctionData,decodeFunctionData,parseAbi} from 'viem'
 import {CROSS_BRIDGE_NETWORKS,crossBridgeAssets,crossBridgePair} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
 import {crossBridgeRelayRequest,validateCrossBridgeRelayQuote,crossBridgeDepositAbi,quoteCrossBridgeRelay,fetchCrossBridgeRelayReview} from '../api/pocket/cross-bridge-provider.ts'
-import {RELAY_BSC_CHAINS,bscRelaySolanaDeposit} from '../api/pocket/bsc-bridge-provider.ts'
+import {bscRelaySolanaDeposit} from '../api/pocket/bsc-bridge-provider.ts'
+import {RELAY_BSC_CHAINS} from '../api/pocket/cross-bridge-chains.ts'
 import {fixture,now,evm,sol} from './fixtures/cross-bridge.mjs'
 let routes=0
 for(const source of CROSS_BRIDGE_NETWORKS)for(const destination of CROSS_BRIDGE_NETWORKS){if(source===destination)continue

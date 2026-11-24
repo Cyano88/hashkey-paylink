@@ -7,31 +7,32 @@ import {getOrderId,type Order} from '@relay-protocol/settlement-sdk'
 import {PublicKey} from '@solana/web3.js'
 import {decodeFunctionData,encodeFunctionData,parseAbi,type Address,type Hex} from 'viem'
 import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,crossBridgeAssets,CROSS_BRIDGE_NATIVE_ADDRESS,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
-import {RELAY_BSC_CHAINS,bscRelaySolanaDeposit} from './bsc-bridge-provider.js'
+import {bscRelaySolanaDeposit} from './bsc-bridge-provider.js'
+import {CROSS_BRIDGE_RELAY_CHAINS,crossBridgeProtocolChain,crossBridgeVmTypes} from './cross-bridge-chains.js'
 
-export type CrossBridgeInput={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string;sender:string;recipient:string;amountUnits:string}
+export type CrossBridgeInput={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string;sender:string;recipient:string;amountUnits:string;purpose?:'cash'}
 export type CrossBridgeRefund={network:CrossBridgeNetwork;asset:string;address:string;decimals:number;recipient:string}
 export const crossBridgeDepositAbi=parseAbi(['function depositNative(address depositor,bytes32 id) payable','function depositErc20(address depositor,address token,uint256 amount,bytes32 id)'])
 const approveAbi=parseAbi(['function approve(address spender,uint256 amount) returns(bool)'])
 const batchAbi=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
-const vmTypes={bnb:'ethereum-vm',xlayer:'ethereum-vm',ethereum:'ethereum-vm',polygon:'ethereum-vm',arc:'ethereum-vm',base:'ethereum-vm',arbitrum:'ethereum-vm',solana:'solana-vm'} as const
-const protocolChain=(n:CrossBridgeNetwork)=>n==='bsc'?'bnb':n
+const protocolChain=crossBridgeProtocolChain
 const same=(n:CrossBridgeNetwork,a:unknown,b:string)=>typeof a==='string'&&(n==='solana'?a===b:a.toLowerCase()===b.toLowerCase())
 const requireThat=(condition:unknown,message:string)=>{if(!condition)throw Error('Bridge quote: '+message)}
 const positiveUnits=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,38}$/.test(v)&&BigInt(v)<2n**128n
 function checkInput(i:CrossBridgeInput){
  const tokens=crossBridgePair(i.source,i.destination,i.from,i.to)
+ requireThat(i.purpose===undefined||i.purpose==='cash'&&i.destination==='base'&&i.to==='USDC','invalid cash destination')
  requireThat(positiveUnits(i.amountUnits)&&(i.source!=='solana'||BigInt(i.amountUnits)<2n**64n),'invalid amount')
  for(const [network,address] of [[i.source,i.sender],[i.destination,i.recipient]])requireThat(typeof address==='string'&&(network==='solana'?new PublicKey(address).toBase58()===address&&!new PublicKey(address).equals(PublicKey.default):/^0x[0-9a-fA-F]{40}$/.test(address)&&!/^0x0{40}$/.test(address)),'invalid wallet')
  return tokens
 }
 export function crossBridgeRelayRequest(i:CrossBridgeInput,appFee?:RelayBridgeAppFee|null){
  const {tokenIn,tokenOut}=checkInput(i)
- return {user:i.sender,recipient:i.recipient,refundTo:i.sender,originChainId:RELAY_BSC_CHAINS[i.source].id,destinationChainId:RELAY_BSC_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:relayBridgeAppFeeRequest(appFee)}
+ return {user:i.sender,recipient:i.recipient,refundTo:i.sender,originChainId:CROSS_BRIDGE_RELAY_CHAINS[i.source].id,destinationChainId:CROSS_BRIDGE_RELAY_CHAINS[i.destination].id,originCurrency:tokenIn.address,destinationCurrency:tokenOut.address,amount:i.amountUnits,tradeType:'EXACT_INPUT',slippageTolerance:'49',explicitDeposit:true,disableOriginSwaps:true,includeProtocolData:true,appFees:relayBridgeAppFeeRequest(appFee)}
 }
 /** No signing or broadcasting. Keep this separate from the existing same-asset adapters. */
 function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null){
- const {tokenIn,tokenOut}=checkInput(i),source=RELAY_BSC_CHAINS[i.source],destination=RELAY_BSC_CHAINS[i.destination],amount=BigInt(i.amountUnits)
+ const {tokenIn,tokenOut}=checkInput(i),source=CROSS_BRIDGE_RELAY_CHAINS[i.source],destination=CROSS_BRIDGE_RELAY_CHAINS[i.destination],amount=BigInt(i.amountUnits)
  const protocol=q?.protocol?.v2,order=protocol?.orderData as Order
  requireThat(protocol?.hubType==='onchain'&&order?.version==='v1'&&order.inputs?.length===1&&order.output?.payments?.length===1&&order.output.calls?.length===0&&order.fees?.length===0,'unsupported order')
  const platformFee=validateRelayBridgeAppFeeQuote(q,i.source,tokenIn,i.amountUnits,appFee)
@@ -56,9 +57,9 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
  })
  const details=protocol.paymentDetails
  requireThat(details?.chainId===protocolChain(i.source)&&same(i.source,details.depository,source.depository)&&same(i.source,details.currency,tokenIn.address)&&details.amount===i.amountUnits,'depository mismatch')
- const orderId=getOrderId(order,vmTypes) as Hex
+ const orderId=getOrderId(order,crossBridgeVmTypes) as Hex
  requireThat(same('base',protocol.orderId,orderId),'order hash mismatch')
- for(const [shown,token,network,units] of [[q.details?.currencyIn,tokenIn,i.source,i.amountUnits],[q.details?.currencyOut,tokenOut,i.destination,output.expectedAmount]] as const)requireThat(shown?.amount===units&&same(network,shown?.currency?.address,token.address)&&shown.currency.chainId===RELAY_BSC_CHAINS[network].id&&shown.currency.decimals===token.decimals,'display mismatch')
+ for(const [shown,token,network,units] of [[q.details?.currencyIn,tokenIn,i.source,i.amountUnits],[q.details?.currencyOut,tokenOut,i.destination,output.expectedAmount]] as const)requireThat(shown?.amount===units&&same(network,shown?.currency?.address,token.address)&&shown.currency.chainId===CROSS_BRIDGE_RELAY_CHAINS[network].id&&shown.currency.decimals===token.decimals,'display mismatch')
  requireThat(Array.isArray(q.steps)&&q.steps.length>=1&&q.steps.length<=2&&q.steps.every((s:any)=>s.kind==='transaction'&&s.items?.length===1&&!s.depositAddress)&&q.steps.filter((s:any)=>s.id==='deposit').length===1,'unsupported steps')
  const deposit=q.steps.find((s:any)=>s.id==='deposit'),requestId=deposit.requestId
  requireThat(typeof requestId==='string'&&/^0x[0-9a-fA-F]{64}$/.test(requestId)&&(!q.requestId||q.requestId===requestId)&&q.steps.every((s:any)=>!s.requestId||s.requestId===requestId),'invalid recovery identifier')

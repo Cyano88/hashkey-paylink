@@ -8,6 +8,7 @@ const NETWORKS = {
   arbitrum: { id: 42161, env: 'PRIVATE_RPC_URL_ARB', fallback: 'https://arb1.arbitrum.io/rpc' },
   polygon: { id: 137, env: 'PRIVATE_RPC_URL_POLYGON', fallback: 'https://polygon-bor-rpc.publicnode.com' },
   ethereum: { id: 1, env: 'PRIVATE_RPC_URL_ETHEREUM', fallback: 'https://ethereum-rpc.publicnode.com' },
+  celo: { id: 42220, env: 'PRIVATE_RPC_URL_CELO', fallback: 'https://forno.celo.org' },
 } as const
 export type ReadNetwork = keyof typeof NETWORKS
 const address = (v: unknown) => typeof v === 'string' && /^0x[\da-f]{40}$/i.test(v)

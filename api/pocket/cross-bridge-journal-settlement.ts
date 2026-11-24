@@ -29,7 +29,7 @@ export function createCrossBridgeJournalSettlement(d:CrossBridgeJournalSettlemen
   if(!states.includes(first.state)||!first.sourceHash)return first
   function view(op:CrossBridgeReservation|undefined):CrossBridgeSettlementRecord{
    if(!op||op.id!==id||op.ownerId!==owner||op.quoteToken!==token||op.fingerprint!==hash(token)||op.sourceHash!==first!.sourceHash||op.source!==first!.source||op.walletAddress!==first!.walletAddress||op.expiresAt!==q.expiresAt||!states.includes(op.state)||!Number.isSafeInteger(op.updatedAt))fail()
-   return {id,ownerId:owner,sourceHash:op.sourceHash!,state:op.state as CrossBridgeSettlementRecord['state'],updatedAt:op.updatedAt as number,plan:{route:review.route,sender:q.input.sender,recipient:q.input.recipient},...(op.observedDelivery?{observedDelivery:op.observedDelivery as CrossBridgeSettlementRecord['observedDelivery']}:{}),...(op.delivery?{delivery:op.delivery as CrossBridgeSettlementRecord['delivery']}:{}),...(op.settlement?{settlement:op.settlement as CrossBridgeSettlementRecord['settlement']}:{})}
+   return {id,ownerId:owner,sourceHash:op.sourceHash!,state:op.state as CrossBridgeSettlementRecord['state'],updatedAt:op.updatedAt as number,plan:{route:review.route,sender:q.input.sender,recipient:q.input.recipient,...(q.input.purpose==='cash'?{purpose:'cash' as const}:{})},...(op.observedDelivery?{observedDelivery:op.observedDelivery as CrossBridgeSettlementRecord['observedDelivery']}:{}),...(op.delivery?{delivery:op.delivery as CrossBridgeSettlementRecord['delivery']}:{}),...(op.settlement?{settlement:op.settlement as CrossBridgeSettlementRecord['settlement']}:{})}
   }
   const reconcile=createCrossBridgeSettlement({
    now:d.now,provider:d.provider,received:d.received,observed:d.observed,ledger:d.ledger,

@@ -1,6 +1,6 @@
 import {pocketBridgeRecoveryRoute} from '../lib/pocketBridgeOperation'
 import {useEffect,useRef} from 'react'
-import {activePocketEvmSession,connectFreshEvmSession} from '../controllers/usePocketWalletController'
+import {activePocketEvmSession,connectFreshEvmSession,restorePocketSolanaSession} from '../controllers/usePocketWalletController'
 import {pocketOperationExecuting,migratePocketOperations,readPocketOperations,trackPocketOperation,POCKET_OPERATIONS_UPDATED} from '../lib/pocketOperationRecovery'
 import {pocketApiUrl} from '../lib/pocketRoutes'
 import {prefetchPocketActivity} from './usePocketActivity'
@@ -38,9 +38,10 @@ export default function usePocketOperationRecovery(input:{authenticated:boolean;
       }
       const address=p.walletAddress||p.quote.walletAddress
       // A known transaction hash can be checked without restoring wallet authentication.
-      const session=network==='solana'||network==='bsc'||network==='xlayer'||!address||p.txHash?null:activePocketEvmSession(owner,network,address)??(p.quote.rail==='cross'?null:await connectFreshEvmSession(owner,network,address,latest.current.getAccessToken).catch(()=>null))
+      const session=network==='solana'&&address&&!p.txHash?await restorePocketSolanaSession(owner,address).catch(()=>null):network==='solana'||network==='bsc'||network==='xlayer'||network==='celo'||!address||p.txHash?null:activePocketEvmSession(owner,network,address)??await connectFreshEvmSession(owner,network,address,latest.current.getAccessToken).catch(()=>null)
       if(!valid())return
-      const response=await fetch(pocketApiUrl(route.path),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action:'status',quoteToken:p.quoteToken,txHash:p.txHash,...(session?{circleUserToken:session.userToken}:{})}),signal:AbortSignal.timeout(30000)})
+      const action=network==='solana'&&route.path==='/api/pocket/cross-bridge'&&typeof p.signedTransaction==='string'?'signed':'status'
+      const response=await fetch(pocketApiUrl(route.path),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({action,quoteToken:p.quoteToken,txHash:p.txHash,...(action==='signed'?{signedTransaction:p.signedTransaction}:{}),...(session?{circleUserToken:session.userToken}:{})}),signal:AbortSignal.timeout(30000)})
       const result=await response.json();if(!valid())return
       if(!response.ok||!result.ok)continue
       const state=result.status==='cancelled'?'cancelled':result.status==='not_submitted'?'not_submitted':result.status==='completed'?'completed':result.status==='failed'?'failed':result.status==='refunded'?'refunded':result.status==='awaiting_approval'?'awaiting_approval':result.status==='needs_attention'||result.status==='needs_review'?'needs_review':'processing'
