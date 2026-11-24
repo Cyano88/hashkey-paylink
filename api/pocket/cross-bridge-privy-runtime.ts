@@ -66,6 +66,9 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
     if(receipt){if(!same(receipt.userOpHash,userOperationHash)||!same(receipt.sender,q.wallets.source.address)||!same(receipt.entryPoint,XLAYER_ENTRY_POINT)||!same(receipt.receipt?.to,XLAYER_ENTRY_POINT)||!hash(receipt.receipt?.transactionHash))return fail();return {sourceHash:receipt.receipt.transactionHash,userOperationHash}}
     return {userOperationHash}
    }
+   // LI.FI uses its source transaction hash for status; it has no Relay order
+   // record to discover after a lost Privy response. Never query or replay Relay.
+   if(r.route.provider==='lifi')return null
    // Provider response loss may leave no transaction ID. Discover by the saved
    // Relay order, then prove this exact wallet batch before storing the hash.
    const response=await fetcher('https://api.relay.link/requests/v3?'+new URLSearchParams({id:r.route.requestId,orderId:r.route.orderId,limit:'1'}),{headers:{'x-api-key':env.RELAY_API_KEY||''},redirect:'error',signal:AbortSignal.timeout(10000)})

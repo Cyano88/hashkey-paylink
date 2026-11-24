@@ -12,6 +12,17 @@ const units=(v:unknown):v is string=>typeof v==='string'&&/^[1-9]\d{0,77}$/.test
 export function crossBridgeDeliveryCandidate(p:CrossBridgeSettlementPlan,sourceHash:string,status:any,requests:any):CrossBridgeDeliveryCandidate|null{
  const q=p.route,same=sameCrossBridgeAddress
  if(!crossBridgeHash(q.source,sourceHash)||!crossBridgeHash('base',q.orderId)||!crossBridgeHash('base',q.requestId)||!units(q.minimumUnits)||!units(q.receiveUnits)||BigInt(q.minimumUnits)>BigInt(q.receiveUnits))return null
+ if(q.provider==='lifi'){
+  const id=q.lifi.transactionId,refund=status?.status==='DONE'&&status?.substatus==='REFUNDED',completed=status?.status==='DONE'&&status?.substatus==='COMPLETED'
+  if(!id||!same('base',q.orderId,id)||!same('base',q.requestId,id)||!same('base',status?.transactionId||'',id)||!crossBridgeHash(q.source,sourceHash)||!['DONE','PENDING','NOT_FOUND'].includes(status?.status)||!same(q.source,status?.sending?.txHash||'',sourceHash)||status?.sending?.chainId!==42220||!same(q.source,status?.sending?.token?.address||'',q.tokenIn.address)||!same(q.source,status?.fromAddress||'',p.sender)||!same(q.destination,status?.toAddress||'',p.recipient)||status?.tool!=='squid')return null
+  if(!completed&&!refund)return null
+  const network=refund?q.source:q.destination,token=refund?q.tokenIn:q.tokenOut,recipient=refund?p.sender:p.recipient,chainId=refund?42220:8453
+  if(status?.receiving?.chainId!==chainId||!same(network,status?.receiving?.token?.address||'',token.address)||!crossBridgeHash(network,status?.receiving?.txHash))return null
+  const canonical=crossBridgeAsset(network,token.symbol)
+  if(!same(network,canonical.address,token.address)||canonical.decimals!==token.decimals)return null
+  const exactUnits=typeof status.receiving.amount==='string'&&units(status.receiving.amount)?status.receiving.amount:null
+  return {outcome:refund?'refunded':'completed',network,token:canonical,recipient,hash:status.receiving.txHash,exactUnits,minimumUnits:refund?'1':q.minimumUnits}
+ }
  if(!['success','refund'].includes(status?.status)||status.originChainId!==RELAY_BSC_CHAINS[q.source].id||!Array.isArray(status.inTxHashes)||status.inTxHashes.length!==1||!same(q.source,status.inTxHashes[0],sourceHash))return null
  if(!Array.isArray(requests?.requests)||requests.requests.length!==1)return null
  const r=requests.requests[0]

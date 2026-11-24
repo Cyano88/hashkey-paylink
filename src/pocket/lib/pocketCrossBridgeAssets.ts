@@ -30,6 +30,7 @@ export function crossBridgeAssets(network:CrossBridgeNetwork):CrossBridgeAsset[]
   {symbol:'CELO',address:CROSS_BRIDGE_NATIVE_ADDRESS,decimals:18,native:true},
   {symbol:'USDC',address:'0xcebA9300f2b948710d2653dD7B07f33A8B32118C',decimals:6,native:false},
   {symbol:'USDT',address:'0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e',decimals:6,native:false},
+  {symbol:'cNGN',address:'0xF6829D7393dAe24509eb1E52eE8e572e2E271a4f',decimals:6,native:false},
  ]
  const stablecoins:CrossBridgeAsset[]=[{symbol:'USDC',address:CHAIN_META[network].tokenAddress,decimals:6,native:false}]
  if(network!=='arc')stablecoins.push({symbol:'USDT',...POCKET_USDT_ASSETS[network],native:false})

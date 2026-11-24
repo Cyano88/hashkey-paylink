@@ -4,7 +4,7 @@ import {validateCrossBridgeRelayQuote} from '../api/pocket/cross-bridge-provider
 import {crossBridgeDeliveryCandidate,crossBridgeDeliveryProven} from '../api/pocket/cross-bridge-evidence.ts'
 import {createCrossBridgeSettlement} from '../api/pocket/cross-bridge-settlement.ts'
 import {CROSS_BRIDGE_ROLLOUT_NETWORKS,crossBridgeAssets} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
-import {RELAY_BSC_CHAINS} from '../api/pocket/bsc-bridge-provider.ts'
+import {CROSS_BRIDGE_RELAY_CHAINS as RELAY_BSC_CHAINS} from '../api/pocket/cross-bridge-chains.ts'
 const hash=n=>n==='solana'?'3'.repeat(88):'0x'+'a'.repeat(64),output=n=>n==='solana'?'4'.repeat(88):'0x'+'b'.repeat(64)
 function data(source='base',destination='bsc',from='ETH',to='USDT',alternate=false){
  const {q,i}=fixture(source,destination,from,to,alternate),route=validateCrossBridgeRelayQuote(q,i,now),plan={route,sender:i.sender,recipient:i.recipient}

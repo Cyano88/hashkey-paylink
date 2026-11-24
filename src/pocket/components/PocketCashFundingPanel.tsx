@@ -14,7 +14,7 @@ import type {PocketNetwork} from '../lib/pocketSchemas'
 const sourceNetworks:CrossBridgeNetwork[]=['celo','solana','bsc','xlayer','ethereum','arbitrum','polygon','arc']
 const labels:Record<CrossBridgeNetwork,string>={celo:'Celo',bsc:'BNB Chain',xlayer:'X Layer',ethereum:'Ethereum',arbitrum:'Arbitrum',polygon:'Polygon',arc:'Arc',base:'Base',solana:'Solana'}
 const privyNetworks=new Set<CrossBridgeNetwork>(['celo','bsc','xlayer'])
-type Quote={id:string;rail:'cross';execution:'privy'|'circle';selectionKey:string;source:CrossBridgeNetwork;destination:'base';destinationAddress:string;asset:string;destinationAsset:'USDC';amount:string;receive:string;minimumReceive:string;fee:string;total:string;expiresAt:number;purpose:'cash'}
+type Quote={id:string;rail:'cross';execution:'privy'|'circle';provider:'relay'|'lifi';providerFee?:string;nativeFee?:string;nativeFeeAsset?:'CELO';selectionKey:string;source:CrossBridgeNetwork;destination:'base';destinationAddress:string;asset:string;destinationAsset:'USDC';amount:string;receive:string;minimumReceive:string;fee:string;total:string;expiresAt:number;purpose:'cash'}
 type Review={quote:Quote;quoteToken:string}
 type Props={owner:string;privyAddress?:string;getAccessToken():Promise<string|null>;ensureWallet(network:PocketNetwork):Promise<{address:string}|null>;getSession(network:Exclude<PocketNetwork,'solana'>,address:string):Promise<CircleEvmEmailSession>;getSolanaSession(address:string):Promise<SolanaEmailSession>;onBusyChange(value:boolean):void;onTracked(id:string,asset:string):void;refresh():Promise<unknown>}
 const cleanAmount=(value:string)=>/^\d{1,20}(?:\.\d{1,18})?$/.test(value)&&Number(value)>0
@@ -56,7 +56,7 @@ export default function PocketCashFundingPanel(p:Props){
    if(!mounted.current||ownerRef.current!==owner||version.current!==requestVersion)return
    const result=await request('/api/pocket/cross-bridge',{action:'quote',purpose:'cash',source:network,destination:'base',from:asset,to:'USDC',amount,circleUserToken},p.getAccessToken)
    const q=result?.quote as Quote,token=result?.quoteToken
-   if(!q||q.purpose!=='cash'||q.source!==network||q.destination!=='base'||q.asset!==asset||q.destinationAsset!=='USDC'||q.execution!==(privyNetworks.has(network)?'privy':'circle')||q.expiresAt<=Date.now()||typeof token!=='string'||!token)throw Error('The quote changed. Review it again.')
+   if(!q||q.purpose!=='cash'||q.source!==network||q.destination!=='base'||q.asset!==asset||q.destinationAsset!=='USDC'||!['relay','lifi'].includes(q.provider)||q.provider==='lifi'&&(network!=='celo'||asset!=='cNGN'||!q.nativeFee||q.nativeFeeAsset!=='CELO'||!q.providerFee)||q.execution!==(privyNetworks.has(network)?'privy':'circle')||q.expiresAt<=Date.now()||typeof token!=='string'||!token)throw Error('The quote changed. Review it again.')
    if(!mounted.current||ownerRef.current!==owner||version.current!==requestVersion)return
    setReview({quote:q,quoteToken:token});setPhase('review')
   }catch(e){if(mounted.current&&ownerRef.current===owner&&version.current===requestVersion)setError((e as Error).message||'Could not get a cash funding quote.')}
@@ -123,12 +123,13 @@ export default function PocketCashFundingPanel(p:Props){
     <p className="text-xs text-gray-500 dark:text-gray-400">Cash balance receives</p><p className="mt-1 text-2xl font-semibold tabular-nums">USDC {review?.quote.receive}</p>
     <div className="mt-4 space-y-3 text-sm">
      <div className="flex justify-between gap-3"><span className="text-gray-500">Amount sent</span><span className="font-medium">{review?.quote.amount} {asset} on {labels[network]}</span></div>
-     <div className="flex justify-between gap-3"><span className="text-gray-500">Fee</span><span className="font-medium">{review?.quote.fee} {asset}</span></div>
-     <div className="flex justify-between gap-3 border-t border-gray-200 pt-3 font-semibold dark:border-white/10"><span>Total debit</span><span>{review?.quote.total} {asset}</span></div>
+     {review?.quote.provider==='lifi'&&<><div className="flex justify-between gap-3"><span className="text-gray-500">Jumper fee (deducted from amount)</span><span className="font-medium">{review.quote.providerFee} {asset}</span></div><div className="flex justify-between gap-3"><span className="text-gray-500">Additional CELO required</span><span className="font-medium">{review.quote.nativeFee} CELO</span></div></>}
+     <div className="flex justify-between gap-3"><span className="text-gray-500">Pocket fee</span><span className="font-medium">{review?.quote.fee} {asset}</span></div>
+     <div className="flex justify-between gap-3 border-t border-gray-200 pt-3 font-semibold dark:border-white/10"><span>Total {asset} debit</span><span>{review?.quote.total} {asset}</span></div>
      <div className="flex justify-between gap-3"><span className="text-gray-500">Minimum received</span><span className="font-medium">USDC {review?.quote.minimumReceive}</span></div>
     </div>
    </div>
-   <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Your Cash balance updates after the transfer reaches Base and is verified.</p>
+   <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{review?.quote.provider==='lifi'?'CELO is taken separately from your Celo wallet. ':''}Your Cash balance updates after the transfer reaches Base and is verified.</p>
    {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
    <div className="mt-auto"><PocketSlideAction approvalRequired onPrepare={async()=>{if(!review||review.quote.expiresAt<=Date.now())throw Error('The quote expired. Review it again.')}} status={busy?'pending':'idle'} disabled={!review||busy||review.quote.expiresAt<=Date.now()} onConfirm={()=>void submit()} labels={{idle:'Add to Cash balance',disabled:'Quote expired',pending:'Confirming',submitted:'Adding cash',successful:'Cash added'}}/></div>
   </>}

@@ -49,6 +49,12 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
   const direct=await fetchCrossBridgeRelayReview(converted?{...request,from:'USDC',amountUnits:converted.minimumUnits}:request,env.RELAY_API_KEY||'',fetch,appFee)
   const providerQuote=conversion?{kind:native?'evm-conversion':xlayer?'xlayer-conversion':'eurc-conversion',swap:conversion,bridge:direct.providerQuote}:direct.providerQuote
   const provider={...direct,providerQuote,route:validateCrossBridgeRelayQuote(providerQuote,request,direct.requestedAt,appFee)}
+  if(provider.route.provider==='lifi'){
+   const client=inboundBridgeClient('celo',env)
+   if(await client.getChainId()!==inboundChains.celo.id)throw Error('Celo network changed. Review the route again.')
+   const nativeBalance=await client.getBalance({address:wallets.source.address as Hex})
+   if(nativeBalance<BigInt(provider.route.lifi.nativeValueUnits))throw Object.assign(Error('This route also needs CELO in your Celo wallet. Add the amount shown in the review, then try again.'),{status:422,code:'insufficient_native_celo'})
+  }
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)
   await revalidateCrossBridgeWallets(wallets)
@@ -75,15 +81,17 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
   if(reuseEstimateMs>0&&recent?.id===q.id&&recent.planHash===charged.planHash&&d.now()-recent.at<Math.min(reuseEstimateMs,2000)&&recent.cost.expiresAt>d.now())return recent.cost
   const cost=await readers.estimate(charged.plan,charged.planHash);recent={id:q.id,planHash:charged.planHash,at:d.now(),cost};return cost
  }
- return Promise.all([measured('balanceMs',()=>readers.balance()),measured('estimateMs',estimate)])
+ const nativeBalance=route.provider==='lifi'?measured('nativeBalanceMs',async()=>{const client=inboundBridgeClient('celo',env);if(await client.getChainId()!==inboundChains.celo.id)throw Error('Celo network changed.');return client.getBalance({address:q.wallets.source.address as Hex})}):Promise.resolve(undefined)
+ return Promise.all([measured('balanceMs',()=>readers.balance()),measured('estimateMs',estimate),nativeBalance])
  }
  // Billing and simulation are independent read/check paths. Verify wallet
  // ownership before balance/simulation, and require BOTH paths before reserve
  // or dispatch. Slow historical billing must not serialize the current reads.
- const [,[balance,cost]]=await Promise.all([measured('policyMs',()=>guard(review)),freshReads()])
+ const [,[balance,cost,nativeBalance]]=await Promise.all([measured('policyMs',()=>guard(review)),freshReads()])
  if(env.NODE_ENV==='production')console.info('pocket_bridge_preflight_timing',JSON.stringify({id:q.id,source:q.input.source,...durations,totalMs:Date.now()-started}))
  const manual=q.wallets.source.provider==='privy'?await d.manualRetry(retryScope(q)):undefined
  if(balance<charged.totalUnits+(manual?.reservedUnits??0n))throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
+ if(route.provider==='lifi'&&(nativeBalance===undefined||nativeBalance<BigInt(route.lifi.nativeValueUnits)))throw Object.assign(Error('Add the required CELO to your Celo wallet before confirming.'),{status:422,code:'insufficient_native_celo'})
  fresh()
  if(cost.expiresAt<=d.now())throw Object.assign(Error('Bridge cost expired. Review again.'),{status:409,code:'bridge_review_invalid'})
  const policy=crossBridgeConfiguredPolicy(q.input.source,q.input.from,cost.assetPrice,env),price=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy,d.now())

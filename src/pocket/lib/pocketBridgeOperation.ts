@@ -4,7 +4,7 @@ import {crossBridgeSelectionKey} from './pocketCrossBridgeSelection'
 export function pocketBridgeRecoveryRoute(q:any):{kind:'api';path:string}|{kind:'sponsored'} {
  if(q?.rail==='cross'){
   const key=crossBridgeSelectionKey({source:q.source,destination:q.destination,from:q.asset,to:q.destinationAsset})
-  if(q.selectionKey!==key||q.execution!==(['bsc','xlayer','celo'].includes(q.source)?'privy':'circle'))throw Error('Bridge route identity changed.')
+  if(q.selectionKey!==key||q.execution!==(['bsc','xlayer','celo'].includes(q.source)?'privy':'circle')||q.provider!==undefined&&!['relay','lifi'].includes(q.provider))throw Error('Bridge route identity changed.')
   return {kind:'api',path:'/api/pocket/cross-bridge'}
  }
  if(!q||q.selectionKey||q.tokenIn||q.tokenOut||q.destinationAsset&&q.destinationAsset!==q.asset)throw Error('This bridge route needs a compatible status adapter. Its saved transfer is retained.')
@@ -35,6 +35,6 @@ export function pocketBridgeReceived(p:any,state:string):string|undefined {
 export function samePocketBridgeOperationRoute(a:any,b:any):boolean {
  try{
   const x=pocketBridgeOperationAssets(a),y=pocketBridgeOperationAssets(b)
-  return a.id===b.id&&a.source===b.source&&a.destination===b.destination&&a.rail===b.rail&&a.execution===b.execution&&a.purpose===b.purpose&&x.source===y.source&&x.destination===y.destination&&a.selectionKey===b.selectionKey
+  return a.id===b.id&&a.source===b.source&&a.destination===b.destination&&a.rail===b.rail&&a.execution===b.execution&&a.provider===b.provider&&a.purpose===b.purpose&&x.source===y.source&&x.destination===y.destination&&a.selectionKey===b.selectionKey
  }catch{return false}
 }

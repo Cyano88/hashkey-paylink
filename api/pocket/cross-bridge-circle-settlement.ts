@@ -12,6 +12,12 @@ export function createCrossBridgeCircleSettlement(options:{env?:NodeJS.ProcessEn
   source:(record,review)=>readCrossBridgeCircleSourceState(review,record.sourceHash),
   provider:async record=>{
    const q=record.plan.route,key=(env.RELAY_API_KEY||'').trim()
+   if(q.provider==='lifi'){
+    const params=new URLSearchParams({txHash:record.sourceHash,fromChain:'42220',toChain:'8453',bridge:'squid'})
+    const response=await fetcher('https://li.quest/v1/status?'+params,{headers:env.LIFI_API_KEY?{'x-lifi-api-key':env.LIFI_API_KEY}:{},redirect:'error',signal:AbortSignal.timeout(12000)})
+    if(!response.ok)throw Error('Jumper delivery is still being verified.')
+    return {status:await response.json(),requests:{}}
+   }
    if(!key)throw Error('Bridge provider recovery is unavailable.')
    const get=async(path:string)=>{
     const response=await fetcher('https://api.relay.link'+path,{headers:{'x-api-key':key},redirect:'error',signal:AbortSignal.timeout(12000)})

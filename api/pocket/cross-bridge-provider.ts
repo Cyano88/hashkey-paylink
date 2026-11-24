@@ -9,6 +9,7 @@ import {decodeFunctionData,encodeFunctionData,parseAbi,type Address,type Hex} fr
 import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,crossBridgeAssets,CROSS_BRIDGE_NATIVE_ADDRESS,type CrossBridgeNetwork} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import {bscRelaySolanaDeposit} from './bsc-bridge-provider.js'
 import {CROSS_BRIDGE_RELAY_CHAINS,crossBridgeProtocolChain,crossBridgeVmTypes} from './cross-bridge-chains.js'
+import {fetchCrossBridgeLifiReview,validateCrossBridgeLifiQuote,type CrossBridgeLifiQuote} from './cross-bridge-lifi-provider.js'
 
 export type CrossBridgeInput={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string;sender:string;recipient:string;amountUnits:string;purpose?:'cash'}
 export type CrossBridgeRefund={network:CrossBridgeNetwork;asset:string;address:string;decimals:number;recipient:string}
@@ -95,8 +96,9 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
  }
  return {provider:'relay' as const,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
 }
-export type CrossBridgeRoute=ReturnType<typeof validateDirectCrossBridgeRelayQuote>&{conversion?:ReturnType<typeof validateEurcConversion>}
+export type CrossBridgeRoute=(ReturnType<typeof validateDirectCrossBridgeRelayQuote>|ReturnType<typeof validateCrossBridgeLifiQuote>)&{conversion?:ReturnType<typeof validateEurcConversion>}
 export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null):CrossBridgeRoute {
+ if(q?.kind==='lifi-cross-bridge')return validateCrossBridgeLifiQuote(q as CrossBridgeLifiQuote,i,now)
  if(q?.kind!=='eurc-conversion'&&q?.kind!=='xlayer-conversion'&&q?.kind!=='evm-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
  const conversion=q.kind==='evm-conversion'?validateNativeBridgeConversion(q.swap,i,now):q.kind==='xlayer-conversion'?validateXLayerConversion(q.swap,i,now):validateEurcConversion(q.swap as EurcConversion,i,now)
  const bridge=validateDirectCrossBridgeRelayQuote(q.bridge,{...i,from:'USDC',amountUnits:conversion.minimumUnits},now,appFee)
@@ -112,6 +114,7 @@ export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:stri
  if(!response.ok){
   const failure=await response.json().catch(()=>null),inputError=[400,422].includes(response.status)
   const tooSmall=inputError&&failure?.errorCode==='AMOUNT_TOO_LOW',noRoute=inputError&&failure?.errorCode==='NO_SWAP_ROUTES_FOUND'
+  if(noRoute&&!appFee&&i.source==='celo'&&i.destination==='base'&&i.from==='cNGN'&&i.to==='USDC'&&i.purpose==='cash')return fetchCrossBridgeLifiReview(i,fetcher,now)
   throw Object.assign(Error(tooSmall?'Amount too small.':noRoute?'No route is available for this token pair. Try another token or network.':response.status===429?'Bridge service is busy. Try again shortly.':'This bridge route is currently unavailable.'),{status:tooSmall||noRoute?422:response.status===429?429:503,code:tooSmall?'amount_too_low':noRoute?'route_unavailable':response.status===429?'rate_limited':'provider_unavailable',retryAfter:response.status===429?Math.max(1,Math.min(300,Number(response.headers.get('Retry-After'))||60)):undefined})
  }
  const providerQuote=await response.json(),route=validateCrossBridgeRelayQuote(providerQuote,i,requestedAt,appFee)
