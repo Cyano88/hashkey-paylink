@@ -3,13 +3,15 @@ import {createCrossBridgeHandler} from '../api/pocket/cross-bridge-api.ts'
 import {createCrossBridgeWorker} from '../api/pocket/cross-bridge-worker.ts'
 const owner='owner',token='sealed',id='bridge-id'
 let enabled=true,identity=owner,op,submitted=0,signed=0,reconciled=0
-const review={quote:{id,ownerId:owner,input:{source:'solana'},wallets:{source:{provider:'circle'}}}}
+const review={route:{provider:'relay'},quote:{id,ownerId:owner,input:{source:'solana'},wallets:{source:{provider:'circle'}}}}
 const response=async r=>({ok:true,status:r.state,quoteToken:r.quoteToken})
 const store={read:async()=>op,mutate:async(_id,fn)=>op=await fn(op)}
 const runtime=()=>({prepare:async()=>op={id,ownerId:owner,quoteToken:token,state:'prepared',updatedAt:0},submit:async()=>{submitted++;return op={...op,state:'pending'}},signed:async()=>{signed++;return op={...op,sourceHash:'hash',state:'submitted'}},status:async()=>op,broadcast:async()=>op})
 const handler=createCrossBridgeHandler({identity:async()=>({userId:identity}),durable:()=>true,enabled:()=>enabled,open:async(t,o)=>{assert.equal(t,token);assert.equal(o,owner);return review},store,runtime,list:async()=>op?[op]:[],response,reconcile:async()=>{reconciled++;return op}})
 async function call(action,extra={}){let code=200,data;await handler({method:'POST',body:{action,quoteToken:token,...extra},headers:{}},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this}});return {code,data}}
 assert.equal((await call('nonsense')).code,400)
+const previewOnly=await call('quote',{source:'celo',destination:'base',from:'cNGN',to:'USDC',amount:'2100'})
+assert.equal(previewOnly.code,422);assert.equal(previewOnly.data.code,'bridge_preview_only');assert.equal(op,undefined)
 enabled=false;assert.equal((await call('prepare')).code,409);enabled=true
 await call('prepare');assert.equal((await call('status')).data.status,'prepared');assert.equal(op.state,'prepared','Status must not cancel a bridge awaiting submission');assert.equal(submitted,0)
 await call('prepare');await call('submit');assert.equal(submitted,1)
