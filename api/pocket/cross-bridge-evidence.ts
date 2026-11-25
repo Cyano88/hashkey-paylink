@@ -2,7 +2,7 @@ import {crossBridgeAsset,type CrossBridgeNetwork,type CrossBridgeAsset} from '..
 import {RELAY_BSC_CHAINS} from './cross-bridge-chains.js'
 import type {validateCrossBridgeRelayQuote} from './cross-bridge-provider.js'
 export type CrossBridgeRoute=ReturnType<typeof validateCrossBridgeRelayQuote>
-export type CrossBridgeSettlementPlan={route:CrossBridgeRoute;sender:string;recipient:string;purpose?:'cash'}
+export type CrossBridgeSettlementPlan={route:CrossBridgeRoute;verifiedOuterSender?:string;sender:string;recipient:string;purpose?:'cash'}
 export type CrossBridgeDeliveryCandidate={outcome:'completed'|'refunded';network:CrossBridgeNetwork;token:CrossBridgeAsset;recipient:string;hash:string;exactUnits:string|null;minimumUnits:string}
 export const sameCrossBridgeAddress=(n:CrossBridgeNetwork,a:unknown,b:string)=>typeof a==='string'&&(n==='solana'?a===b:a.toLowerCase()===b.toLowerCase())
 export const crossBridgeHash=(n:CrossBridgeNetwork,h:unknown):h is string=>typeof h==='string'&&(n==='solana'?/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(h):/^0x[0-9a-f]{64}$/i.test(h))
@@ -14,7 +14,7 @@ export function crossBridgeDeliveryCandidate(p:CrossBridgeSettlementPlan,sourceH
  if(!crossBridgeHash(q.source,sourceHash)||!crossBridgeHash('base',q.orderId)||!crossBridgeHash('base',q.requestId)||!units(q.minimumUnits)||!units(q.receiveUnits)||BigInt(q.minimumUnits)>BigInt(q.receiveUnits))return null
  if(q.provider==='lifi'){
   const id=q.lifi.transactionId,refund=status?.status==='DONE'&&status?.substatus==='REFUNDED',completed=status?.status==='DONE'&&status?.substatus==='COMPLETED'
-  if(!id||!same('base',q.orderId,id)||!same('base',q.requestId,id)||!same('base',status?.transactionId||'',id)||!crossBridgeHash(q.source,sourceHash)||!['DONE','PENDING','NOT_FOUND'].includes(status?.status)||!same(q.source,status?.sending?.txHash||'',sourceHash)||status?.sending?.chainId!==RELAY_BSC_CHAINS[q.source].id||!same(q.source,status?.sending?.token?.address||'',q.tokenIn.address)||!same(q.source,status?.fromAddress||'',p.sender)||!same(q.destination,status?.toAddress||'',p.recipient)||status?.tool!==q.lifi.tool)return null
+  if(!id||!same('base',q.orderId,id)||!same('base',q.requestId,id)||!same('base',status?.transactionId||'',id)||!crossBridgeHash(q.source,sourceHash)||!['DONE','PENDING','NOT_FOUND'].includes(status?.status)||!same(q.source,status?.sending?.txHash||'',sourceHash)||status?.sending?.chainId!==RELAY_BSC_CHAINS[q.source].id||!same(q.source,status?.sending?.token?.address||'',q.tokenIn.address)||(!same(q.source,status?.fromAddress||'',p.sender)&&!(q.lifi.tool==='layerswap'&&p.verifiedOuterSender&&same(q.source,status?.fromAddress||'',p.verifiedOuterSender)))||!same(q.destination,status?.toAddress||'',p.recipient)||status?.tool!==q.lifi.tool)return null
   if(!completed&&!refund)return null
   const network=refund?q.source:q.destination,token=refund?q.tokenIn:q.tokenOut,recipient=refund?p.sender:p.recipient,chainId=RELAY_BSC_CHAINS[network].id
   if(status?.receiving?.chainId!==chainId||!same(network,status?.receiving?.token?.address||'',token.address)||!crossBridgeHash(network,status?.receiving?.txHash))return null

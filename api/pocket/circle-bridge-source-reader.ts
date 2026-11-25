@@ -22,8 +22,8 @@ function receipt(value:unknown,txHash:string,allowReverted=false){
   if(typeof l.address!=='string'||!/^0x[0-9a-f]{40}$/i.test(l.address)||typeof l.data!=='string'||!/^0x(?:[0-9a-f]{2})*$/i.test(l.data)||!Array.isArray(l.topics))pending()
   return {address:l.address as string,data:l.data as Hex,topics:(l.topics as unknown[]).map(t=>hash(t) as Hex),removed:false}
  })
- const proof:CircleKitSourceReceipt={status:r.status==='0x1'?'success':'reverted',transactionHash:txHash,logs}
- return {blockHash,blockNumber,index,proof,fingerprint:JSON.stringify([r.status,blockHash,String(blockNumber),String(index),logs])}
+ const proof:CircleKitSourceReceipt={status:r.status==='0x1'?'success':'reverted',transactionHash:txHash,...(typeof r.from==='string'&&/^0x[0-9a-f]{40}$/i.test(r.from)?{sender:r.from.toLowerCase()}:{}),logs}
+ return {blockHash,blockNumber,index,proof,fingerprint:JSON.stringify([proof.sender,r.status,blockHash,String(blockNumber),String(index),logs])}
 }
 /** Internal read-only verifier for an already authenticated, sealed expectation.
  * Requires finalized-tag and callTracer support; never falls back to latest or

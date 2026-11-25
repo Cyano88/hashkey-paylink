@@ -7,7 +7,7 @@ const transmitter='0x81D40F21F12A8F0E3252Bccb954D722d4c464B64'
 const events=parseAbi(['event MessageSent(bytes message)','event Transfer(address indexed from,address indexed to,uint256 value)'])
 type Batch=Awaited<ReturnType<typeof buildCircleKitFeeBatch>>
 type Log={address:string;topics:readonly Hex[];data:Hex;removed?:boolean}
-export type CircleKitSourceReceipt={status:string;transactionHash:string;logs:readonly Log[]}
+export type CircleKitSourceReceipt={sender?:string;status:string;transactionHash:string;logs:readonly Log[]}
 export type CircleKitSourceExpectation={walletAddress:Hex;destinationAddress:string;txHash:Hex;batch:Batch;developerFeeUnits:bigint}
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const fail=():never=>{throw Object.assign(Error('Circle bridge source and fee evidence could not be verified.'),{status:409,code:'circle_bridge_evidence_pending'})}

@@ -12,7 +12,7 @@ import {crossBridgeReservationStore} from './cross-bridge-reservation.js'
 import {crossBridgeEnabled,crossBridgePreview,crossBridgeResponse,crossBridgeRuntime,listCrossBridgeOperations,reconcileCrossBridge} from './cross-bridge-runtime.js'
 import {crossBridgeNetwork,crossBridgePair,CROSS_BRIDGE_ROLLOUT_NETWORKS} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import type {CrossBridgeOperation} from './cross-bridge-operations.js'
-import {readCrossBridgeCircleSourceState} from './cross-bridge-circle-source.js'
+import {recoverLayerSwapSource,readCrossBridgeCircleSourceState} from './cross-bridge-circle-source.js'
 const defaults={identity:verifiedPrivyUser,durable:hasRenderDurableStore,enabled:crossBridgeEnabled,quote:quoteCrossBridgeOwned,open:openCrossBridgeReview,store:crossBridgeReservationStore,runtime:crossBridgeRuntime,list:listCrossBridgeOperations,reconcile:reconcileCrossBridge,response:crossBridgeResponse}
 /** No client-supplied wallets, fee policy, calls, source proof or settlement. */
 export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
@@ -72,6 +72,16 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    }
    if(!existing)return res.json({ok:true,status:'not_submitted'})
    let op=existing as CrossBridgeOperation
+   if(action==='status'&&review.route.provider==='lifi'&&review.route.lifi.tool==='layerswap'&&!op.verifiedOuterSender&&['pending','submitting','submitted','source_confirmed'].includes(op.state)){
+    try{
+     const proof=await recoverLayerSwapSource(review,op.sourceHash)
+     if(proof)op=await d.store.mutate(id,current=>{
+      if(!current||current.ownerId!==owner||current.quoteToken!==token)throw Error('Bridge identity changed.')
+      if(!['pending','submitting','submitted','source_confirmed'].includes(current.state)||current.sourceHash&&current.sourceHash!==proof.hash)return current
+      return {...current,sourceHash:proof.hash,verifiedOuterSender:proof.sender,state:current.state==='source_confirmed'?'source_confirmed':'submitted',updatedAt:Date.now()}
+     }) as CrossBridgeOperation
+    }catch{/* Keep polling when the canonical debit cannot yet be verified. */}
+   }
    if(action==='cancel'&&!op.sourceHash&&review.quote.wallets.source.provider==='circle'&&review.quote.input.source!=='solana'&&userToken)op=await d.runtime(review,userToken).status(id)
    if(action==='cancel'){
     const cancelled=await d.store.mutate(id,current=>{
