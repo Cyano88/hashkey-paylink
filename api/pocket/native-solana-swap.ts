@@ -1,3 +1,4 @@
+import {quoteNativeSwap} from './native-swap-quote.js'
 import type {Request,Response} from 'express'
 import {Connection} from '@solana/web3.js'
 import bs58 from 'bs58'
@@ -21,11 +22,15 @@ export function createNativeSolanaSwapHandler(overrides:Partial<typeof defaults>
    const {userId:ownerId}=await d.identity(req)
    if(req.method==='GET'){const pending=(await d.list(ownerId,500,actionName,true)).filter(r=>r.metadata?.network==='solana'&&['started','submitted'].includes(r.status)&&r.metadata.quoteToken).map(r=>({quote:solSwapReview(openSolSwap(r.metadata!.quoteToken,ownerId,true,d.now())),quoteToken:r.metadata!.quoteToken,challengeId:r.metadata?.challengeId}));return res.json({ok:true,enabled:d.enabled(),pending})}
    const action=req.body?.action
-   if(!['quote','execute','submit','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
-   if(action==='quote'&&req.body.network!=='solana')return res.status(400).json({ok:false,error:'Select the Solana network.'})
-   if(['quote','execute'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'Solana swaps are not available yet.'})
+   if(!['preview','quote','execute','submit','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
+   if(['preview','quote'].includes(action)&&req.body.network!=='solana')return res.status(400).json({ok:false,error:'Select the Solana network.'})
+   if(['preview','quote','execute'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'Solana swaps are not available yet.'})
    const link=await d.readLink(circleLinkKey(ownerId,'solana','payment'))
    if(!link||link.privyUserId!==ownerId||link.chain!=='solana'||(link.purpose??'payment')!=='payment'||link.circleBlockchain!=='SOL')return res.status(409).json({ok:false,error:'Reconnect your Solana wallet.'})
+   if(action==='preview'){
+    const quote=await quoteNativeSwap({network:'solana',from:req.body.from,to:req.body.to,amount:req.body.amount})
+    return res.json({ok:true,quote})
+   }
    const rpc=d.rpc();if(await rpc.getGenesisHash()!=='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d')throw Error('Wrong Solana network.')
    if(action==='quote'){const q=await d.quote({ownerId,walletId:link.circleWalletId,walletAddress:link.circleWalletAddress,from:req.body.from,to:req.body.to,amount:req.body.amount},rpc);return res.json({ok:true,quote:solSwapReview(q),quoteToken:sealSolSwap(q),sufficientBalance:true})}
    const token=String(req.body.quoteToken||''),q=openSolSwap(token,ownerId,true,d.now()),key='pocket:native-swap:'+q.id

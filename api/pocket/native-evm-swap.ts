@@ -1,3 +1,4 @@
+import {quoteNativeSwap} from './native-swap-quote.js'
 import {readNativeUsdcRate,nativeFeeToUsdcUnits} from '../payment-network-fees.js'
 ﻿import type {Request,Response} from 'express'
 import {nativeEvmExecutionEnabled} from './native-evm-gas-policy.js'
@@ -31,13 +32,17 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     return res.json({ok:true,enabled:d.enabled(requested as NativeEvmNetwork|undefined),pending})
    }
    const action=req.body?.action,token=String(req.body?.quoteToken||'')
-   if(!['quote','execute','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
+   if(!['preview','quote','execute','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported swap action.'})
    if(!['status','cancel'].includes(action)&&!d.enabled())return res.status(409).json({ok:false,error:'Native swaps are not available yet.'})
-   const q=action==='quote'?null:openNativeEvmSwap(token,ownerId,true,d.now()),network=(q?.network||req.body.network) as NativeEvmNetwork
+   const q=['preview','quote'].includes(action)?null:openNativeEvmSwap(token,ownerId,true,d.now()),network=(q?.network||req.body.network) as NativeEvmNetwork
    if(!Object.hasOwn(nativeEvmNetworks,network))return res.status(400).json({ok:false,error:'Choose a supported swap network.'})
    if(!['status','cancel'].includes(action)&&!d.enabled(network))return res.status(409).json({ok:false,error:'Swaps on this network are not available yet.'})
    const link=await d.readLink(circleLinkKey(ownerId,network,'payment'))
    if(!link||link.privyUserId!==ownerId||link.chain!==network||(link.purpose??'payment')!=='payment'||link.circleBlockchain!==nativeEvmNetworks[network].blockchain)return res.status(409).json({ok:false,error:'Reconnect your wallet on this network.'})
+   if(action==='preview'){
+    const quote=await quoteNativeSwap({network:network,from:req.body.from,to:req.body.to,amount:req.body.amount})
+    return res.json({ok:true,quote})
+   }
    const walletId=link.circleWalletId,walletAddress=getAddress(link.circleWalletAddress),userToken=String(req.body.circleUserToken||'')
    if(q&&(q.walletId!==walletId||q.walletAddress.toLowerCase()!==walletAddress.toLowerCase()))return res.status(409).json({ok:false,error:'Your wallet changed. Reopen this swap.'})
    const estimate=(callData:Hex)=>d.estimate({chain:network,userToken,walletId,walletAddress,callData})
