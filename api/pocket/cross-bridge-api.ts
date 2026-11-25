@@ -53,7 +53,19 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
     const combined=b.dispatch===true
     if(combined&&review.quote.wallets.source.provider!=='circle')throw Error('This bridge requires wallet authorization.')
     const approval=req.headers['x-pocket-payment-approval'],runtime=d.runtime(review,userToken,combined?{reuseEstimateMs:2000}:{})
-    let op=await runtime.prepare(token,typeof approval==='string'?approval:'')
+    let op:CrossBridgeOperation
+    try{
+     op=await runtime.prepare(token,typeof approval==='string'?approval:'')
+    }catch(error){
+     if((error as {code?:string}).code==='wallet_action_pending'){
+      // Recheck the prior transfer only. The current quote and approval are never replayed.
+      try{
+       const prior=(await d.list(owner,true)).find(row=>row.id!==id&&row.state==='submitted'&&row.sourceHash&&row.source===review.quote.input.source&&row.walletAddress===review.quote.wallets.source.address)
+       if(prior)await d.reconcile(owner,prior.id)
+      }catch{/* The reservation stays in force when proof is unavailable. */}
+     }
+     throw error
+    }
     if(combined&&op.state==='prepared')op=await runtime.submit(id,'')
     const solanaTransaction='solanaTransaction' in op?op.solanaTransaction:undefined
     return res.json({...await d.response(op),...(typeof solanaTransaction==='string'?{transaction:solanaTransaction,lastValidBlockHeight:'lastValidBlockHeight' in op?op.lastValidBlockHeight:undefined}:{}),...('request' in runtime&&op.state==='prepared'?{request:await runtime.request(id)}:{})})

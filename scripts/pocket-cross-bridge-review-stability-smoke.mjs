@@ -18,12 +18,12 @@ const env={POCKET_SWAP_QUOTE_SECRET:secret,POCKET_CROSS_BRIDGE_MIN_FEE_USD_MICRO
 let cases=0
 for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(source)){
  const destination=source==='base'?'polygon':'base',{q,i}=fixture(source,destination,asset.symbol,'USDC'),route=validateCrossBridgeRelayQuote(q,i,now)
- const wallets={ownerId:'fixture',source:{network:source,provider:['bsc','xlayer'].includes(source)?'privy':'circle',walletId:'sourcewalletfixture',address:i.sender},destination:{network:destination,provider:'circle',walletId:'destination',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
+ const wallets={ownerId:'fixture',source:{network:source,provider:['bsc','xlayer','celo'].includes(source)?'privy':'circle',walletId:'sourcewalletfixture',address:i.sender},destination:{network:destination,provider:'circle',walletId:'destination',address:i.recipient}};wallets.fingerprint=crossBridgeWalletFingerprint(wallets)
  let time=now,gas=1000000n,priceAge=15000,delay=0,balance=10n**35n
  const price=()=>({scaled8:100000000n,observedAt:time-priceAge})
  const policy=crossBridgeConfiguredPolicy(source,asset.symbol,price(),env)
- assert.equal(policy.providerBps,['bsc','xlayer'].includes(source)?100:source==='solana'?0:500)
- assert.equal(policy.marginBps,['bsc','xlayer'].includes(source)?1500:source==='solana'?0:5000)
+ assert.equal(policy.providerBps,['bsc','xlayer','celo'].includes(source)?100:source==='solana'?0:500)
+ assert.equal(policy.marginBps,['bsc','xlayer','celo'].includes(source)?1500:source==='solana'?0:5000)
  const readers={balance:async()=>balance,estimate:async(plan,planHash)=>{time+=delay;return{source,asset:asset.symbol,planHash,nativeUnits:gas,rentUnits:0n,gasPrice:price(),assetPrice:price(),expiresAt:time+30000-priceAge}}}
  const charged=await quoteCrossBridgeCharges(route,wallets,crossBridgeReimbursementRecipient(source,env),policy,{...readers,now:()=>time})
  assert.equal(charged.expiresAt,route.expiresAt,'15-second-old price must not shorten a freshly verified executable route')
@@ -83,7 +83,7 @@ for(const source of CROSS_BRIDGE_NETWORKS)for(const asset of crossBridgeAssets(s
  const preflight=crossBridgePreflight('request-only',async()=>{guards++},env,{now:()=>time,revalidate:async()=>{},readers:()=>readers})
  time=now+21000;priceAge=0
  await preflight(review)
- if(!['solana','bsc','xlayer'].includes(source)){
+ if(!['solana','bsc','xlayer','celo'].includes(source)){
   assert.equal(bufferedNativeFee(formatUnits(1000000n,18)),1500000n)
   gas=1400000n;await preflight(review)
   // A second check must consume the reserve, not rebuild another 50% margin.

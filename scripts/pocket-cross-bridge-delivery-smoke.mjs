@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {encodeAbiParameters,encodeEventTopics,parseAbi} from 'viem'
 import {readCrossBridgeDelivery,observeCrossBridgeDelivery} from '../api/pocket/cross-bridge-delivery.ts'
 import {CROSS_BRIDGE_ROLLOUT_NETWORKS,crossBridgeAssets} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
-import {RELAY_BSC_CHAINS} from '../api/pocket/bsc-bridge-provider.ts'
+import {RELAY_BSC_CHAINS} from '../api/pocket/cross-bridge-chains.ts'
 const hash='0x'+'a'.repeat(64),block='0x'+'b'.repeat(64),anchor='0x'+'c'.repeat(64),recipient='0x'+'1'.repeat(40),sender='0x'+'2'.repeat(40),abi=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
 let count=0
 for(const network of CROSS_BRIDGE_ROLLOUT_NETWORKS){if(network==='solana')continue;for(const token of crossBridgeAssets(network)){

@@ -33,3 +33,17 @@ assert.equal((await call('prepare',{dispatch:true,circleUserToken:'fixture'})).d
 review.quote.wallets.source.provider='privy';op=undefined;
 assert.equal((await call('prepare',{dispatch:true})).code,409);assert.equal(submitted,before+1,'Privy must supply its own signed authorization');
 console.log('PASS combined Circle preparation, retained PIN gate/runtime path, and Privy bypass rejection')
+
+const prior={id:'earlier',state:'submitted',source:'base',walletAddress:'wallet',sourceHash:'saved-hash'}
+const checks=[]
+const blocked=createCrossBridgeHandler({identity:async()=>({userId:owner}),durable:()=>true,enabled:()=>true,
+ open:async()=>({quote:{id,ownerId:owner,input:{source:'base'},wallets:{source:{provider:'circle',address:'wallet'}}}}),
+ store:{read:async()=>undefined},list:async()=>[{...prior,walletAddress:'other'},prior],
+ runtime:()=>({prepare:async()=>{checks.push('prepare');throw Object.assign(Error('Already confirming'),{code:'wallet_action_pending',status:409})},
+ submit:async()=>assert.fail('A blocked request cannot dispatch')}),
+ reconcile:async(who,key)=>{assert.equal(who,owner);checks.push(key);return {...prior,state:'completed'}}})
+let blockedStatus
+await blocked({method:'POST',body:{action:'prepare',quoteToken:token,dispatch:true},headers:{}},{setHeader(){},status(s){blockedStatus=s;return this},json(){}})
+assert.equal(blockedStatus,409)
+assert.deepEqual(checks,['prepare','earlier'])
+console.log('PASS wallet conflict rechecks only the matching prior transfer without resubmission')
