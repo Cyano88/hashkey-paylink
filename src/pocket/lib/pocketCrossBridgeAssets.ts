@@ -2,6 +2,7 @@ import {CHAIN_META} from '../../lib/chains'
 import {POCKET_USDT_ASSETS} from './pocketUsdtAssets'
 import {POCKET_BSC} from './pocketBsc'
 import {POCKET_EURC} from './pocketEurc'
+import {POCKET_CNGN} from './pocketCngn'
 import {xLayerUsde,xLayerUsdg} from './pocketXLayerPaymentAssets'
 
 export const CROSS_BRIDGE_NETWORKS=['ethereum','base','arbitrum','polygon','solana','arc','bsc','xlayer','celo'] as const
@@ -30,10 +31,11 @@ export function crossBridgeAssets(network:CrossBridgeNetwork):CrossBridgeAsset[]
   {symbol:'CELO',address:CROSS_BRIDGE_NATIVE_ADDRESS,decimals:18,native:true},
   {symbol:'USDC',address:'0xcebA9300f2b948710d2653dD7B07f33A8B32118C',decimals:6,native:false},
   {symbol:'USDT',address:'0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e',decimals:6,native:false},
-  {symbol:'cNGN',address:'0xF6829D7393dAe24509eb1E52eE8e572e2E271a4f',decimals:6,native:false},
+  {...POCKET_CNGN.celo},
  ]
  const stablecoins:CrossBridgeAsset[]=[{symbol:'USDC',address:CHAIN_META[network].tokenAddress,decimals:6,native:false}]
  if(network!=='arc')stablecoins.push({symbol:'USDT',...POCKET_USDT_ASSETS[network],native:false})
+ if(network==='base')stablecoins.push({...POCKET_CNGN.base})
  if(network==='base'||network==='arc')stablecoins.push({...POCKET_EURC[network]})
  if(network==='solana')return [{symbol:'SOL',address:'11111111111111111111111111111111',decimals:9,native:true},...stablecoins]
  if(network==='polygon')return [{symbol:'POL',address:CROSS_BRIDGE_NATIVE_ADDRESS,decimals:18,native:true},...stablecoins]

@@ -2,7 +2,7 @@ import {needsNativeBridgeConversion,quoteNativeBridgeConversion,validateNativeBr
 import {quoteXLayerConversion,validateXLayerConversion} from './cross-bridge-xlayer-conversion.js'
 import {quoteEurcConversion,validateEurcConversion} from './cross-bridge-eurc-conversion.js'
 import {Connection} from '@solana/web3.js'
-import {parseAbi,parseUnits,type Hex} from 'viem'
+import {formatUnits,parseAbi,parseUnits,type Hex} from 'viem'
 import {getRpc,loadRelayer} from '../relay-solana.js'
 import {inboundBridgeClient,inboundChains} from './inbound-bridge-networks.js'
 import {readCrossBridgePrices} from './cross-bridge-prices.js'
@@ -19,6 +19,7 @@ import {quoteBridgeMaximum} from './bridge-max-quote.js'
 import {assertCrossBridgeCoverageReady} from './cross-bridge-coverage.js'
 import {readManualBridgeRetry,retryScope} from './cross-bridge-manual-retry.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
+function within<T>(promise:Promise<T|undefined>,timeoutMs:number):Promise<T|undefined>{return new Promise(resolve=>{const timer=setTimeout(()=>resolve(undefined),timeoutMs);promise.then(value=>{clearTimeout(timer);resolve(value)},()=>{clearTimeout(timer);resolve(undefined)})})}
 export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string,userToken:string,env:NodeJS.ProcessEnv=process.env){
  const source=wallets.source.network,token=crossBridgeAsset(source,asset)
  if(source==='solana')return createCrossBridgeSolanaCost(wallets,asset,new Connection(getRpc(),'confirmed'),loadRelayer().publicKey)
@@ -39,6 +40,7 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  const manual=wallets.source.provider==='privy'?await readManualBridgeRetry({ownerId:input.ownerId,source:input.source,walletAddress:wallets.source.address,from:input.from,destination:input.destination,to:input.to,...(!input.maximum?{amountUnits:input.amountUnits}:{})}):undefined
  if(wallets.source.provider==='privy')await assertCrossBridgeCoverageReady(wallets.source.address,{},manual?.originalId)
  if(manual){const balance=readers.balance;readers.balance=async()=>{const units=await balance();return units> manual.reservedUnits?units-manual.reservedUnits:0n}}
+ const destinationPricePromise=within(readCrossBridgePrices(input.destination,input.to).then(prices=>prices.assetPrice).catch(()=>undefined),1800)
  const quote=async(amountUnits:bigint)=>{
   const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address,...(input.purpose==='cash'?{purpose:'cash' as const}:{})}
   const appFee=relayBridgeAppFee(env)
@@ -58,7 +60,8 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)
   await revalidateCrossBridgeWallets(wallets)
-  const result=await createCrossBridgeReview({wallets,input:request,providerQuote:provider.providerQuote,appFee,...charged,expiresAt:Math.min(charged.expiresAt,provider.requestedAt+45000)})
+  const destinationPrice=await destinationPricePromise,receiveAmount=Number(formatUnits(BigInt(provider.route.receiveUnits),provider.route.tokenOut.decimals)),receiveUsdValue=destinationPrice?receiveAmount*Number(destinationPrice.scaled8)/1e8:undefined
+  const result=await createCrossBridgeReview({wallets,input:request,providerQuote:provider.providerQuote,appFee,...charged,...(receiveUsdValue&&Number.isFinite(receiveUsdValue)?{receiveUsdValue}:{}),expiresAt:Math.min(charged.expiresAt,provider.requestedAt+45000)})
   return {quote:result,amountUnits,totalUnits:charged.totalUnits,expiresAt:result.quote.expiresAt}
  }
  if(input.maximum)return (await quoteBridgeMaximum({balanceUnits:await readers.balance(),quote})).quote
