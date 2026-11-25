@@ -17,7 +17,7 @@ import {crossBridgePreflight} from './cross-bridge-quote.js'
 import {readCrossBridgePrices} from './cross-bridge-prices.js'
 import {sumPrivyTransactionGas} from './privy-transaction-gas.js'
 import {checkXLayerBillingCoverage} from './xlayer-billing-guard.js'
-import {inboundChains} from './inbound-bridge-networks.js'
+import {inboundBridgeClient,inboundChains} from './inbound-bridge-networks.js'
 import {crossBridgeSelectionKey} from '../../src/pocket/lib/pocketCrossBridgeSelection.js'
 import type {CrossBridgeOperation} from './cross-bridge-operations.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
