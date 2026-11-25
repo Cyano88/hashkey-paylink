@@ -41,6 +41,10 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
      const {route}=await fetchCrossBridgeRelayReview(input,process.env.RELAY_API_KEY||'',fetch,relayBridgeAppFee(process.env))
      return res.json({ok:true,estimate:{source,destination,from:b.from,to:b.to,amount:b.amount,receive:formatUnits(BigInt(route.receiveUnits),pair.tokenOut.decimals),...(route.provider==='lifi'&&route.lifi.receiveUsdValue?{receiveUsdValue:route.lifi.receiveUsdValue}:{}),expiresAt:route.expiresAt}})
     }
+    // Privy does not currently offer app-paid gas for the Celo sender.
+    // Keep the new return bridge available for price previews and existing status reads.
+    if(source==='celo'&&destination==='base'&&b.from==='cNGN'&&b.to==='USDC'&&!b.purpose)
+     return res.status(422).json({ok:false,code:'bridge_preview_only',error:'Preview only.'})
     const saved=await d.quote({ownerId:owner,source,destination,from:b.from,to:b.to,amountUnits:String(parseUnits(b.amount,pair.tokenIn.decimals)),circleUserToken:typeof b.circleUserToken==='string'?b.circleUserToken:undefined,maximum:b.maximum===true,...(b.purpose==='cash'?{purpose:'cash' as const}:{})})
     const opened=await d.open(saved.quoteToken,owner)
     return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true})
