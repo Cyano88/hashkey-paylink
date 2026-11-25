@@ -1,6 +1,7 @@
 import {createCrossBridgeJournalSettlement,type CrossBridgeJournalSettlementDependencies} from './cross-bridge-journal-settlement.js'
 import {readCrossBridgeCircleSourceState} from './cross-bridge-circle-source.js'
 import {appendPocketMoneyLedgerEvent} from './money-ledger.js'
+import {CROSS_BRIDGE_RELAY_CHAINS} from './cross-bridge-chains.js'
 
 /** Circle source adapter over the existing shared operation journal. Source
  * execution, Relay identity and finalized destination receipt are independent
@@ -13,7 +14,7 @@ export function createCrossBridgeCircleSettlement(options:{env?:NodeJS.ProcessEn
   provider:async record=>{
    const q=record.plan.route,key=(env.RELAY_API_KEY||'').trim()
    if(q.provider==='lifi'){
-    const params=new URLSearchParams({txHash:record.sourceHash,fromChain:'42220',toChain:'8453',bridge:'squid'})
+    const params=new URLSearchParams({txHash:record.sourceHash,fromChain:String(CROSS_BRIDGE_RELAY_CHAINS[q.source].id),toChain:String(CROSS_BRIDGE_RELAY_CHAINS[q.destination].id),bridge:q.lifi.tool})
     const response=await fetcher('https://li.quest/v1/status?'+params,{headers:env.LIFI_API_KEY?{'x-lifi-api-key':env.LIFI_API_KEY}:{},redirect:'error',signal:AbortSignal.timeout(12000)})
     if(!response.ok)throw Error('Jumper delivery is still being verified.')
     return {status:await response.json(),requests:{}}

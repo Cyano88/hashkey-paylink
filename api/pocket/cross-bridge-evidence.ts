@@ -14,9 +14,9 @@ export function crossBridgeDeliveryCandidate(p:CrossBridgeSettlementPlan,sourceH
  if(!crossBridgeHash(q.source,sourceHash)||!crossBridgeHash('base',q.orderId)||!crossBridgeHash('base',q.requestId)||!units(q.minimumUnits)||!units(q.receiveUnits)||BigInt(q.minimumUnits)>BigInt(q.receiveUnits))return null
  if(q.provider==='lifi'){
   const id=q.lifi.transactionId,refund=status?.status==='DONE'&&status?.substatus==='REFUNDED',completed=status?.status==='DONE'&&status?.substatus==='COMPLETED'
-  if(!id||!same('base',q.orderId,id)||!same('base',q.requestId,id)||!same('base',status?.transactionId||'',id)||!crossBridgeHash(q.source,sourceHash)||!['DONE','PENDING','NOT_FOUND'].includes(status?.status)||!same(q.source,status?.sending?.txHash||'',sourceHash)||status?.sending?.chainId!==42220||!same(q.source,status?.sending?.token?.address||'',q.tokenIn.address)||!same(q.source,status?.fromAddress||'',p.sender)||!same(q.destination,status?.toAddress||'',p.recipient)||status?.tool!=='squid')return null
+  if(!id||!same('base',q.orderId,id)||!same('base',q.requestId,id)||!same('base',status?.transactionId||'',id)||!crossBridgeHash(q.source,sourceHash)||!['DONE','PENDING','NOT_FOUND'].includes(status?.status)||!same(q.source,status?.sending?.txHash||'',sourceHash)||status?.sending?.chainId!==RELAY_BSC_CHAINS[q.source].id||!same(q.source,status?.sending?.token?.address||'',q.tokenIn.address)||!same(q.source,status?.fromAddress||'',p.sender)||!same(q.destination,status?.toAddress||'',p.recipient)||status?.tool!==q.lifi.tool)return null
   if(!completed&&!refund)return null
-  const network=refund?q.source:q.destination,token=refund?q.tokenIn:q.tokenOut,recipient=refund?p.sender:p.recipient,chainId=refund?42220:8453
+  const network=refund?q.source:q.destination,token=refund?q.tokenIn:q.tokenOut,recipient=refund?p.sender:p.recipient,chainId=RELAY_BSC_CHAINS[network].id
   if(status?.receiving?.chainId!==chainId||!same(network,status?.receiving?.token?.address||'',token.address)||!crossBridgeHash(network,status?.receiving?.txHash))return null
   const canonical=crossBridgeAsset(network,token.symbol)
   if(!same(network,canonical.address,token.address)||canonical.decimals!==token.decimals)return null

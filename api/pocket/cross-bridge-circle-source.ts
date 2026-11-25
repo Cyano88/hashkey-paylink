@@ -4,6 +4,7 @@ import type {CircleKitSourceReceipt} from './circle-bridge-source-proof.js'
 import {revertedNativeBatch,type NativeCallTrace} from './native-send-quote.js'
 import {readFinalizedBridgeSource} from './circle-bridge-source-reader.js'
 import {RELAY_BSC_CHAINS} from './cross-bridge-chains.js'
+import {lifiAbi,LIFI_DIAMOND} from '../../src/pocket/lib/pocketLifiOutbound.js'
 
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 const transfer=parseAbi(['event Transfer(address indexed from,address indexed to,uint256 value)'])
@@ -39,6 +40,24 @@ export function proveCrossBridgeCircleSource(review:Review,hash:string,receipt:C
  for(let n=0;n<outgoing.length;n++){
   const actual=outgoing[n],expected=plan.calls[n]
   if(!same(actual.to,expected.target)||!same(actual.input,expected.data)||BigInt(actual.value||'0')!==expected.value)pending()
+ }
+ if(route.provider==='lifi'&&route.source==='base'&&route.destination==='celo'&&route.lifi.tool==='layerswap'){
+  const movements:Array<{from:string;to:string;value:bigint}>=[]
+  for(const log of receipt.logs){
+   if(log.removed)pending()
+   if(!same(log.address,route.tokenIn.address))continue
+   try{const event=decodeEventLog({abi:transfer,eventName:'Transfer',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true});if(same(event.args.from,wallet)||same(event.args.to,wallet))movements.push(event.args)}catch{/* Ignore unrelated ERC20 logs. */}
+  }
+  const reimbursement=movements.filter(m=>same(m.from,wallet)&&same(m.to,q.reimbursementRecipient)&&m.value===BigInt(q.reimbursementUnits))
+  if(reimbursement.length!==1)return pending()
+  const principalMovements=movements.filter(m=>m!==reimbursement[0]),principalDebit=principalMovements.reduce((sum,m)=>sum+(same(m.from,wallet)?m.value:0n)-(same(m.to,wallet)?m.value:0n),0n)
+  if(principalDebit!==BigInt(route.amountUnits))return pending()
+  const started=receipt.logs.filter(log=>{
+   if(log.removed||!same(log.address,LIFI_DIAMOND))return false
+   try{const {args}=decodeEventLog({abi:lifiAbi,eventName:'LiFiTransferStarted',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true});const b=args.bridgeData;return same(b.transactionId,route.lifi.transactionId)&&b.bridge==='layerswap'&&same(b.sendingAssetId,route.lifi.bridgeTokenAddress)&&same(b.receiver,q.input.recipient)&&b.minAmount===BigInt(route.lifi.bridgeMinimumUnits)&&b.destinationChainId===42220n&&b.hasSourceSwaps&&!b.hasDestinationCall}catch{return false}
+  })
+  if(started.length!==1)return pending()
+  return {sourceConfirmed:true as const,txHash:hash,totalUnits:q.totalUnits,reimbursementUnits:q.reimbursementUnits,planHash:q.planHash}
  }
  if(!route.tokenIn.native){
   const movements:Array<{from:string;to:string;value:bigint}>=[]

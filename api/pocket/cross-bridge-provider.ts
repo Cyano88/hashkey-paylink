@@ -10,6 +10,7 @@ import {assertCrossBridgeRollout,crossBridgePair,crossBridgeAsset,crossBridgeAss
 import {bscRelaySolanaDeposit} from './bsc-bridge-provider.js'
 import {CROSS_BRIDGE_RELAY_CHAINS,crossBridgeProtocolChain,crossBridgeVmTypes} from './cross-bridge-chains.js'
 import {fetchCrossBridgeLifiReview,validateCrossBridgeLifiQuote,type CrossBridgeLifiQuote} from './cross-bridge-lifi-provider.js'
+import {lifiBridgeRevenue} from './lifi-bridge-revenue.js'
 
 export type CrossBridgeInput={source:CrossBridgeNetwork;destination:CrossBridgeNetwork;from:string;to:string;sender:string;recipient:string;amountUnits:string;purpose?:'cash'}
 export type CrossBridgeRefund={network:CrossBridgeNetwork;asset:string;address:string;decimals:number;recipient:string}
@@ -98,7 +99,10 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
 }
 export type CrossBridgeRoute=(ReturnType<typeof validateDirectCrossBridgeRelayQuote>|ReturnType<typeof validateCrossBridgeLifiQuote>)&{conversion?:ReturnType<typeof validateEurcConversion>}
 export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null):CrossBridgeRoute {
- if(q?.kind==='lifi-cross-bridge')return validateCrossBridgeLifiQuote(q as CrossBridgeLifiQuote,i,now)
+ if(q?.kind==='lifi-cross-bridge'){
+  const revenue=appFee?{recipient:appFee.recipient,bps:appFee.bps,amountUnits:(BigInt(i.amountUnits)*BigInt(appFee.bps)/10000n).toString()}:undefined
+  return validateCrossBridgeLifiQuote(q as CrossBridgeLifiQuote,i,now,revenue)
+ }
  if(q?.kind!=='eurc-conversion'&&q?.kind!=='xlayer-conversion'&&q?.kind!=='evm-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
  const conversion=q.kind==='evm-conversion'?validateNativeBridgeConversion(q.swap,i,now):q.kind==='xlayer-conversion'?validateXLayerConversion(q.swap,i,now):validateEurcConversion(q.swap as EurcConversion,i,now)
  const bridge=validateDirectCrossBridgeRelayQuote(q.bridge,{...i,from:'USDC',amountUnits:conversion.minimumUnits},now,appFee)
@@ -114,6 +118,11 @@ export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:stri
  if(!response.ok){
   const failure=await response.json().catch(()=>null),inputError=[400,422].includes(response.status)
   const tooSmall=inputError&&failure?.errorCode==='AMOUNT_TOO_LOW',noRoute=inputError&&failure?.errorCode==='NO_SWAP_ROUTES_FOUND'
+  if(noRoute&&i.source==='base'&&i.destination==='celo'&&(i.from==='cNGN'||i.from==='USDC')&&i.to==='cNGN'&&i.purpose===undefined){
+   const revenue=lifiBridgeRevenue(BigInt(i.amountUnits))
+   if(appFee&&(!revenue||appFee.bps!==revenue.bps||appFee.recipient.toLowerCase()!==revenue.recipient.toLowerCase()))throw Object.assign(Error('Jumper fee collection is not enabled for this route.'),{status:503,code:'lifi_revenue_unavailable'})
+   return fetchCrossBridgeLifiReview(i,fetcher,now,revenue)
+  }
   if(noRoute&&!appFee&&i.source==='celo'&&i.destination==='base'&&i.from==='cNGN'&&i.to==='USDC'&&i.purpose==='cash')return fetchCrossBridgeLifiReview(i,fetcher,now)
   throw Object.assign(Error(tooSmall?'Amount too small.':noRoute?'No route is available for this token pair. Try another token or network.':response.status===429?'Bridge service is busy. Try again shortly.':'This bridge route is currently unavailable.'),{status:tooSmall||noRoute?422:response.status===429?429:503,code:tooSmall?'amount_too_low':noRoute?'route_unavailable':response.status===429?'rate_limited':'provider_unavailable',retryAfter:response.status===429?Math.max(1,Math.min(300,Number(response.headers.get('Retry-After'))||60)):undefined})
  }
