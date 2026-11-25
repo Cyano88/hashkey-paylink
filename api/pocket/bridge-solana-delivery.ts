@@ -25,24 +25,24 @@ export function solanaBridgeNativeDelta(tx:any,recipient:string,hash:string):big
 type DeliveryRpc=Pick<Connection,'getGenesisHash'|'getParsedTransaction'|'getSlot'|'getBlockSignatures'>
 const MAINNET_GENESIS='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d'
 /** A provider's delivery/refund hash is a candidate, not settlement proof. */
-export async function readSolanaBridgeDelivery(asset:'SOL'|'USDC'|'USDT',recipient:string,hash:string,rpcOverride?:DeliveryRpc,verifyTransaction?:(tx:NonNullable<Awaited<ReturnType<Connection['getParsedTransaction']>>>)=>boolean){
+async function verifySolanaBridgeDelivery(commitment:'confirmed'|'finalized',asset:'SOL'|'USDC'|'USDT',recipient:string,hash:string,rpcOverride?:DeliveryRpc,verifyTransaction?:(tx:NonNullable<Awaited<ReturnType<Connection['getParsedTransaction']>>>)=>boolean){
  if(!/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(hash))return null
- const rpc=rpcOverride??new Connection(getRpc(),{commitment:'finalized',disableRetryOnRateLimit:true,fetch:async(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(10000),redirect:'error'})})
+ const rpc=rpcOverride??new Connection(getRpc(),{commitment,disableRetryOnRateLimit:true,fetch:async(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(10000),redirect:'error'})})
  if(await rpc.getGenesisHash()!==MAINNET_GENESIS)throw Error('Solana delivery network mismatch.')
- const options={commitment:'finalized' as const,maxSupportedTransactionVersion:0}
+ const options={commitment,maxSupportedTransactionVersion:0}
  const tx=await rpc.getParsedTransaction(hash,options)
  if(!tx||!Number.isSafeInteger(tx.slot)||tx.slot<0)return null
  const readDelta=(value:any)=>asset==='SOL'?solanaBridgeNativeDelta(value,recipient,hash):solanaBridgeTokenDelta(value,asset,recipient,hash)
  const delta=readDelta(tx)
  if(delta===null)return null
  if(verifyTransaction&&!verifyTransaction(tx))return null
- const finalized=await rpc.getSlot('finalized')
- if(!Number.isSafeInteger(finalized)||finalized<tx.slot)return null
- const block=await rpc.getBlockSignatures(tx.slot,'finalized')
+ const checkpoint=await rpc.getSlot(commitment)
+ if(!Number.isSafeInteger(checkpoint)||checkpoint<tx.slot)return null
+ const block=await rpc.getBlockSignatures(tx.slot,commitment)
  const includes=(value:typeof block)=>value&&new PublicKey(value.blockhash).toBase58()===value.blockhash&&value.signatures.filter(s=>s===hash).length===1
  if(!includes(block))return null
  const again=await rpc.getParsedTransaction(hash,options)
- const blockAgain=await rpc.getBlockSignatures(tx.slot,'finalized')
+ const blockAgain=await rpc.getBlockSignatures(tx.slot,commitment)
  if(await rpc.getGenesisHash()!==MAINNET_GENESIS)throw Error('Solana delivery network changed.')
  if(!again||again.slot!==tx.slot||!includes(blockAgain)||blockAgain!.blockhash!==block!.blockhash)return null
  // Recheck the exact transaction and token-account evidence after block reads.
@@ -50,3 +50,6 @@ export async function readSolanaBridgeDelivery(asset:'SOL'|'USDC'|'USDT',recipie
  if(fingerprint(again)!==fingerprint(tx)||readDelta(again)!==delta)return null
  return delta
 }
+
+export const readSolanaBridgeDelivery=verifySolanaBridgeDelivery.bind(null,'finalized')
+export const observeSolanaBridgeDelivery=verifySolanaBridgeDelivery.bind(null,'confirmed')
