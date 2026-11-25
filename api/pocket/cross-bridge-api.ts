@@ -1,5 +1,9 @@
+import {fetchCrossBridgeRelayReview} from './cross-bridge-provider.js'
+import {resolveCrossBridgeWallets} from './cross-bridge-wallets.js'
+import {relayBridgeAppFee} from './relay-bridge-app-fee.js'
+import {assertCrossBridgeRollout} from '../../src/pocket/lib/pocketCrossBridgeAssets.js'
 import type {Request,Response} from 'express'
-import {parseUnits} from 'viem'
+import {formatUnits,parseUnits} from 'viem'
 import {verifiedPrivyUser} from '../privy-circle-link.js'
 import {hasRenderDurableStore} from '../render-durable-store.js'
 import {openCrossBridgeReview} from './cross-bridge-review.js'
@@ -22,12 +26,21 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    if(!d.durable())return res.status(503).json({ok:false,error:'Bridge recovery storage is unavailable.'})
    if(req.method==='GET')return res.json({ok:true,enabled:d.enabled(owner),networks:CROSS_BRIDGE_ROLLOUT_NETWORKS,pending:await Promise.all((await d.list(owner)).filter(r=>!['prepared','cancelled','not_submitted'].includes(r.state)).slice(0,50).map(d.response))})
    const b=req.body||{},action=b.action
-   if(!['quote','prepare','submit','signed','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported bridge action.'})
-   if(['quote','prepare','submit'].includes(action)&&!d.enabled(owner))return res.status(409).json({ok:false,error:'This bridge is not enabled for this account.'})
-   if(action==='quote'){
+   if(!['preview','quote','prepare','submit','signed','status','cancel'].includes(action))return res.status(400).json({ok:false,error:'Unsupported bridge action.'})
+   if(['preview','quote','prepare','submit'].includes(action)&&!d.enabled(owner))return res.status(409).json({ok:false,error:'This bridge is not enabled for this account.'})
+   if(action==='quote'||action==='preview'){
     const source=crossBridgeNetwork(b.source),destination=crossBridgeNetwork(b.destination),pair=crossBridgePair(source,destination,b.from,b.to)
     if(typeof b.amount!=='string'||!new RegExp('^\\d{1,20}(?:\\.\\d{1,'+pair.tokenIn.decimals+'})?$').test(b.amount))return res.status(400).json({ok:false,error:'Enter a valid amount.'})
     if(b.purpose!==undefined&&(b.purpose!=='cash'||destination!=='base'||b.to!=='USDC'))return res.status(400).json({ok:false,error:'Cash funding must be delivered as USDC to Base.'})
+    if(action==='preview'){
+     assertCrossBridgeRollout(source,destination)
+     const amountUnits=parseUnits(b.amount,pair.tokenIn.decimals)
+     if(amountUnits<=0n)return res.status(400).json({ok:false,error:'Enter an amount above zero.'})
+     const wallets=await resolveCrossBridgeWallets(owner,source,destination)
+     const input={source,destination,from:b.from,to:b.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address,...(b.purpose==='cash'?{purpose:'cash' as const}:{})}
+     const {route}=await fetchCrossBridgeRelayReview(input,process.env.RELAY_API_KEY||'',fetch,relayBridgeAppFee(process.env))
+     return res.json({ok:true,estimate:{source,destination,from:b.from,to:b.to,amount:b.amount,receive:formatUnits(BigInt(route.receiveUnits),pair.tokenOut.decimals),expiresAt:route.expiresAt}})
+    }
     const saved=await d.quote({ownerId:owner,source,destination,from:b.from,to:b.to,amountUnits:String(parseUnits(b.amount,pair.tokenIn.decimals)),circleUserToken:typeof b.circleUserToken==='string'?b.circleUserToken:undefined,maximum:b.maximum===true,...(b.purpose==='cash'?{purpose:'cash' as const}:{})})
     const opened=await d.open(saved.quoteToken,owner)
     return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true})
@@ -71,7 +84,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    }
    if(op.sourceHash){try{op=await d.reconcile(owner,id) as CrossBridgeOperation}catch{/* Keep the journaled state while proof is unavailable. */}}
    return res.json(await d.response(op))
-  }catch(error){const e=error as Error&{status?:number;code?:string;maximumAmountUnits?:string;feeCheck?:unknown};if(['cross_bridge_fee_changed','cross_bridge_fee_unavailable','pocket_fee_limit'].includes(e.code||'')&&e.feeCheck)console.warn('pocket_bridge_fee_recheck',JSON.stringify({action:req.body?.action,check:e.feeCheck}));return res.status(e.status&&e.status>=400&&e.status<=599?e.status:409).json({ok:false,error:e.message||'Bridge is temporarily unavailable.',...(e.code?{code:e.code}:{}),...(e.maximumAmountUnits?{maximumAmountUnits:e.maximumAmountUnits}:{})})}finally{if(['quote','prepare','submit'].includes(req.body?.action))console.info('pocket_bridge_timing',JSON.stringify({action:req.body.action,combined:req.body.dispatch===true,durationMs:Date.now()-startedAt}))}
+  }catch(error){const e=error as Error&{status?:number;code?:string;maximumAmountUnits?:string;feeCheck?:unknown};if(['cross_bridge_fee_changed','cross_bridge_fee_unavailable','pocket_fee_limit'].includes(e.code||'')&&e.feeCheck)console.warn('pocket_bridge_fee_recheck',JSON.stringify({action:req.body?.action,check:e.feeCheck}));return res.status(e.status&&e.status>=400&&e.status<=599?e.status:409).json({ok:false,error:e.message||'Bridge is temporarily unavailable.',...(e.code?{code:e.code}:{}),...(e.maximumAmountUnits?{maximumAmountUnits:e.maximumAmountUnits}:{})})}finally{if(['preview','quote','prepare','submit'].includes(req.body?.action))console.info('pocket_bridge_timing',JSON.stringify({action:req.body.action,combined:req.body.dispatch===true,durationMs:Date.now()-startedAt}))}
  }
 }
 export default createCrossBridgeHandler()
