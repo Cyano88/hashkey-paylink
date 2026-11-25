@@ -62,3 +62,16 @@ await assert.rejects(()=>reconcile('other',id));assert.equal(sourceCalls,0)
 await assert.rejects(()=>reconcile('owner',id),/ledger temporarily/);assert.equal((await h.service.read('owner',id)).state,'completed');assert.equal(events.size,0)
 await reconcile('owner',id);assert.equal(events.size,1);assert.equal(sourceCalls,1);assert.equal([...events.values()][0].asset,'USDC');assert.equal([...events.values()][0].metadata.sourceAsset,'BNB');assert.equal(h.counts()[0],1);assert.doesNotThrow(()=>JSON.parse(h.dump()));assert.equal((await h.service.read('owner',id)).settlement.hash,destinationHash)
 console.log('PASS shared-journal settlement and post-restart ledger repair: one operation, no duplicate dispatch, original charged plan retained, actual output asset recorded. Injected proof fixtures only.')
+
+// A combined approval claims its dispatch in the same transaction as its reservation.
+const combined=harness()
+let checks=0
+const combinedService=createCrossBridgeOperations({...combined.deps,preflight:async()=>{checks++}})
+await combinedService.prepare(review.quoteToken,'owner','approval','ephemeral')
+await combinedService.prepare(review.quoteToken,'owner','approval','ephemeral')
+assert.equal(checks,1)
+assert.equal(combined.counts()[0],1)
+const race=harness()
+await Promise.all([1,2].map(()=>race.service.prepare(review.quoteToken,'owner','approval','ephemeral')))
+assert.equal(race.counts()[0],1)
+console.log('PASS combined bridge uses one preflight and concurrent or repeated approvals dispatch once')

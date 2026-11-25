@@ -60,19 +60,27 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
    return {...r,...refs,state:r.state==='source_confirmed'?'source_confirmed':r.sourceHash||refs.sourceHash?'submitted':'pending',updatedAt:d.now()}
   }),owner,id)
  }
+ async function dispatch(reviewed:Review,latest:CrossBridgeOperation,owner:string,id:string,authorization:string){
+   let result:CrossBridgeObservation|null=null
+   try{result=await d.dispatch(reviewed,structuredClone(latest),authorization)}catch{/* Unknown outcome stays reserved. Never retry dispatch here. */}
+   return apply(owner,id,latest.fingerprint,result)
+ }
  return {
   read,
-  async prepare(token:string,owner:string,approval:string){
+  async prepare(token:string,owner:string,approval:string,dispatchAuthorization?:string){
    const reviewed=await d.open(token,owner,true),q=reviewed.quote,previous=await store.read(q.id),fingerprint=hash(token)
    if(previous){const r=owned(previous,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
    const fresh=await d.open(token,owner,false)
    if(!await d.approve(owner,approval))fail('Confirm this bridge with your PIN or fingerprint.')
    const spend=await d.preflight(fresh)
-   return owned(await store.mutate(q.id,current=>{
+   let claimed=false
+   const operation=owned(await store.mutate(q.id,current=>{
     if(current){const r=owned(current,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
     if(q.expiresAt<=d.now())fail('Bridge quote expired. Review it again.')
-    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:'prepared',createdAt:d.now(),updatedAt:d.now()}
-   }),owner,q.id)
+    claimed=!!dispatchAuthorization
+    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:claimed?'submitting':'prepared',createdAt:d.now(),updatedAt:d.now()}
+   },!!dispatchAuthorization),owner,q.id)
+   return claimed&&dispatchAuthorization?dispatch(fresh,operation,owner,q.id,dispatchAuthorization):operation
   },
   async cancel(owner:string,id:string){return owned(await store.mutate(id,current=>{
    const r=owned(current,owner,id)
@@ -90,9 +98,7 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
     reserved=true;return {...r,...(spend?{spend}:{}),state:'submitting',updatedAt:d.now()}
    }),owner,id)
    if(!reserved)return latest
-   let result:CrossBridgeObservation|null=null
-   try{result=await d.dispatch(reviewed,structuredClone(latest),authorization)}catch{/* Unknown outcome stays reserved. Never retry dispatch here. */}
-   return apply(owner,id,op.fingerprint,result)
+   return dispatch(reviewed,latest,owner,id,authorization)
   },
   async status(owner:string,id:string){
    const op=await read(owner,id)

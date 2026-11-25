@@ -78,10 +78,12 @@ export function hasRenderDurableStore() {
   return Boolean(pool)
 }
 
-export async function readDurableJson<T>(key: string): Promise<T | undefined> {
+export async function readDurableJson<T>(key: string, path?: string[]): Promise<T | undefined> {
   if (!pool) return undefined
   await ensureSchema()
-  const result = await pool.query('select value from render_durable_kv where store_key = $1 limit 1', [key])
+  const result = path
+    ? await pool.query('select value #> $2::text[] as value from render_durable_kv where store_key = $1', [key, path])
+    : await pool.query('select value from render_durable_kv where store_key = $1 limit 1', [key])
   return result.rows[0]?.value as T | undefined
 }
 

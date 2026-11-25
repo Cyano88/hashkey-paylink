@@ -58,9 +58,9 @@ export function createCrossAwareXLayerMutator(transaction=withDurablePostgresTra
 export const mutateCrossAwareXLayer=createCrossAwareXLayerMutator()
 /** The new lifecycle is embedded in the existing action journal. No copied
  * reservation store. Lock order: journal, four BSC rows, X Layer requests. */
-export function createCrossBridgeReservationStore(transaction=withDurablePostgresTransaction,now=Date.now,readJournal=()=>readDurableJson<Journal>(crossBridgeJournalKey()),legacyFinalized=xlayerReservationFinalized){return {
- read:async(id:string)=>structuredClone((await readJournal())?.crossBridge?.[id]),
- mutate:async(id:string,fn:(r:CrossBridgeReservation|undefined)=>CrossBridgeReservation)=>transaction(async client=>{
+export function createCrossBridgeReservationStore(transaction=withDurablePostgresTransaction,now=Date.now,readJournal?:()=>Promise<Journal|undefined>,legacyFinalized=xlayerReservationFinalized){return {
+ read:async(id:string)=>readJournal?structuredClone((await readJournal())?.crossBridge?.[id]):(await readDurableJson<CrossBridgeReservation>(crossBridgeJournalKey(),['crossBridge',id]))??undefined,
+ mutate:async(id:string,fn:(r:CrossBridgeReservation|undefined)=>CrossBridgeReservation,claimOnCreate=false)=>transaction(async client=>{
   const journal=await lockBridgeJournal(client),before=journal.crossBridge?.[id],next=fn(structuredClone(before))
   if(next.id!==id||!next.ownerId||!next.walletAddress||!next.source||!Number.isFinite(next.expiresAt)||!next.fingerprint)invalid()
   if(before&&(before.ownerId!==next.ownerId||before.fingerprint!==next.fingerprint||before.source!==next.source||before.walletAddress!==next.walletAddress))invalid()
@@ -70,9 +70,10 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
    const {ledgerPublishedAt,...proof}=next
    if(!['completed','refunded'].includes(before.state)||before.ledgerPublishedAt!==undefined||!Number.isSafeInteger(ledgerPublishedAt)||Number(ledgerPublishedAt)<=0||JSON.stringify(before)!==JSON.stringify(proof))invalid()
   }
+  if(before&&JSON.stringify(before)===JSON.stringify(next))return structuredClone(next)
   const reserve=!before||before.state==='prepared'&&next.state==='submitting'
   if(reserve){
-   if(!before&&next.state!=='prepared')invalid()
+   if(!before&&next.state!=='prepared'&&!(claimOnCreate&&next.state==='submitting'))invalid()
    const scope={network:next.source,address:next.walletAddress,ownerId:next.ownerId}
    // Circle Solana signs raw bytes; only our signed relay can broadcast them.
    // Retire expired unsigned attempts atomically with a new reservation. A late
@@ -95,24 +96,26 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
     if(wallet.network===next.source&&same(next.source,wallet.address,next.walletAddress))busy()
    }
   }
-  for(const key of CROSS_BRIDGE_BSC_KEYS){
+  if(reserve&&next.source==='bsc')for(const key of CROSS_BRIDGE_BSC_KEYS){
    await client.query("insert into render_durable_kv (store_key,value,updated_at) values ($1,'null'::jsonb,now()) on conflict (store_key) do nothing",[key])
    const rows=await client.query('select value from render_durable_kv where store_key=$1 for update',[key])
-   if(reserve&&next.source==='bsc')for(const op of Object.values(rows.rows[0]?.value?.operations??{}) as any[]){
+   for(const op of Object.values(rows.rows[0]?.value?.operations??{}) as any[]){
     if(['completed','failed','refunded','cancelled','not_submitted'].includes(op.state)||op.state==='prepared'&&op.quote.expiresAt<=now()&&!op.hash&&!op.transactionId&&!op.userOperationHash)continue
     if(same('bsc',op.quote.walletAddress,next.walletAddress))busy()
    }
   }
-  await client.query("insert into render_durable_kv (store_key,value,updated_at) values ($1,'null'::jsonb,now()) on conflict (store_key) do nothing",[XLAYER_RESERVATION_KEY])
-  const rows=await client.query('select value from render_durable_kv where store_key=$1 for update',[XLAYER_RESERVATION_KEY])
-  const legacyRows=Object.entries(rows.rows[0]?.value?.requests??{}) as [string,any][]
-  const finalizedLegacy=new Set<string>()
-  if(reserve&&next.source==='xlayer')await Promise.all(legacyRows.filter(([,r])=>same('xlayer',r.wallet,next.walletAddress)&&!r.bridgeQuoteToken&&r.hash).map(async([id,r])=>{if(await legacyFinalized(r))finalizedLegacy.add(id)}))
-  if(reserve&&next.source==='xlayer')for(const [requestId,r] of legacyRows){
-   if(!same('xlayer',r.wallet,next.walletAddress))continue
-   const notSent=!r.hash&&!r.transactionId&&!r.userOperationHash&&r.providerFailure?.status===400&&r.providerFailure?.code==='transaction_broadcast_failure'
-   const settled=Object.values(journal.actions??{}).some(a=>a.resourceId===requestId&&a.ownerId===r.owner&&a.metadata?.source==='xlayer'&&a.metadata?.execution==='privy'&&['completed','failed'].includes(a.status))
-   if(!notSent&&!settled&&!finalizedLegacy.has(requestId))busy()
+  if(reserve&&next.source==='xlayer'){
+   await client.query("insert into render_durable_kv (store_key,value,updated_at) values ($1,'null'::jsonb,now()) on conflict (store_key) do nothing",[XLAYER_RESERVATION_KEY])
+   const rows=await client.query('select value from render_durable_kv where store_key=$1 for update',[XLAYER_RESERVATION_KEY])
+   const legacyRows=Object.entries(rows.rows[0]?.value?.requests??{}) as [string,any][]
+   const finalizedLegacy=new Set<string>()
+   await Promise.all(legacyRows.filter(([,r])=>same('xlayer',r.wallet,next.walletAddress)&&!r.bridgeQuoteToken&&r.hash).map(async([id,r])=>{if(await legacyFinalized(r))finalizedLegacy.add(id)}))
+   for(const [requestId,r] of legacyRows){
+    if(!same('xlayer',r.wallet,next.walletAddress))continue
+    const notSent=!r.hash&&!r.transactionId&&!r.userOperationHash&&r.providerFailure?.status===400&&r.providerFailure?.code==='transaction_broadcast_failure'
+    const settled=Object.values(journal.actions??{}).some(a=>a.resourceId===requestId&&a.ownerId===r.owner&&a.metadata?.source==='xlayer'&&a.metadata?.execution==='privy'&&['completed','failed'].includes(a.status))
+    if(!notSent&&!settled&&!finalizedLegacy.has(requestId))busy()
+   }
   }
   journal.crossBridge={...journal.crossBridge,[id]:next}
   await client.query('update render_durable_kv set value=$2::jsonb,updated_at=now() where store_key=$1',[crossBridgeJournalKey(),JSON.stringify(journal)])

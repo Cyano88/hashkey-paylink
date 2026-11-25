@@ -60,6 +60,7 @@ export function createCrossBridgeCircleRuntime(ownerId:string,userToken:string,p
   },
  })
  return {
+  prepareAndSubmit:(token:string,approval:string)=>{ready();return service.prepare(token,ownerId,approval,userToken)},
   prepare:(token:string,approval:string)=>{ready();return service.prepare(token,ownerId,approval)},
   submit:(id:string)=>{ready();return service.submit(ownerId,id,userToken)},
   status:(id:string)=>{ready();return service.status(ownerId,id)},

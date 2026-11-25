@@ -50,7 +50,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
     return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true})
    }
    const token=typeof b.quoteToken==='string'?b.quoteToken:'',review=await d.open(token,owner,{recovery:!['prepare','submit'].includes(action)}),id=review.quote.id
-   const existing=await d.store.read(id)
+   const existing=action==='prepare'?undefined:await d.store.read(id)
    if(existing&&(existing.ownerId!==owner||existing.quoteToken!==token))throw Error('Bridge owner or review changed.')
    const userToken=typeof b.circleUserToken==='string'?b.circleUserToken:''
    if(action==='prepare'){
@@ -59,7 +59,8 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
     const approval=req.headers['x-pocket-payment-approval'],runtime=d.runtime(review,userToken,combined?{reuseEstimateMs:2000}:{})
     let op:CrossBridgeOperation
     try{
-     op=await runtime.prepare(token,typeof approval==='string'?approval:'')
+     const approved=typeof approval==='string'?approval:''
+     op=combined&&'prepareAndSubmit' in runtime?await runtime.prepareAndSubmit(token,approved):await runtime.prepare(token,approved)
     }catch(error){
      if((error as {code?:string}).code==='wallet_action_pending'){
       // Recheck the prior transfer only. The current quote and approval are never replayed.
