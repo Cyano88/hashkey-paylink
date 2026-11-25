@@ -55,7 +55,7 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
    const client=inboundBridgeClient('celo',env)
    if(await client.getChainId()!==inboundChains.celo.id)throw Error('Celo network changed. Review the route again.')
    const nativeBalance=await client.getBalance({address:wallets.source.address as Hex})
-   if(nativeBalance<BigInt(provider.route.lifi.nativeValueUnits))throw Object.assign(Error('This route also needs CELO in your Celo wallet. Add the amount shown in the review, then try again.'),{status:422,code:'insufficient_native_celo'})
+   if(nativeBalance<BigInt(provider.route.lifi.nativeValueUnits))throw Object.assign(Error('This route requires '+formatUnits(BigInt(provider.route.lifi.nativeValueUnits),18)+' CELO in your Celo wallet.'),{status:422,code:'insufficient_native_celo'})
   }
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)

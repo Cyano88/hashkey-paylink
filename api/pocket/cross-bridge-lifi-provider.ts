@@ -36,10 +36,11 @@ export type CrossBridgeLifiDetails={transactionId:Hex;providerFeeUnits:string;re
 export function validateCrossBridgeLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridgeInput,now=Date.now(),revenue?:PocketBridgeRevenue){
  if(i.source==='base'&&i.destination==='celo'&&(i.from==='cNGN'||i.from==='USDC')&&i.to==='cNGN'&&i.purpose===undefined)return validateBaseCeloCngnLifiQuote(q,i,now,revenue)
  const fail=()=>invalid()
- if(revenue)return fail()
- if(i.source!=='celo'||i.destination!=='base'||i.from!=='cNGN'||i.to!=='USDC'||i.purpose!=='cash'||!units(i.amountUnits))return fail()
+ const reviewed=(q.response as any)?.mode==='celo-base-squid'
+ if(!reviewed&&(revenue||i.purpose!=='cash'))return fail()
+ if(i.source!=='celo'||i.destination!=='base'||i.from!=='cNGN'||i.to!=='USDC'||!units(i.amountUnits))return fail()
  if(!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt<=now||q.expiresAt-q.issuedAt>45000)return fail()
- const b=q.response as any,a=b?.action,e=b?.estimate,t=b?.transactionRequest
+ const b=reviewed?(q.response as any).step:q.response as any,a=b?.action,e=b?.estimate,t=b?.transactionRequest
  if(b?.type!=='lifi'||b?.tool!=='squid'||!Array.isArray(b.includedSteps)||b.includedSteps.length!==3)return fail()
  if(a?.fromChainId!==42220||a?.toChainId!==8453||!same(a.fromAddress,i.sender)||!same(a.toAddress,i.recipient)||!same(a.fromToken?.address,CNGN)||a.fromToken?.decimals!==6||a.fromAmount!==i.amountUnits||!same(a.toToken?.address,BASE_USDC)||a.toToken?.decimals!==6)return fail()
  if(e?.tool!=='squid'||e.fromAmount!==i.amountUnits||!units(e.toAmount)||!units(e.toAmountMin)||BigInt(e.toAmountMin)>BigInt(e.toAmount)||!same(e.approvalAddress,DIAMOND))return fail()
@@ -54,14 +55,31 @@ export function validateCrossBridgeLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridg
  const fee=feeStep.estimate?.feeCosts?.find((x:any)=>x.name==='LIFI Fixed Fee'&&x.included===true&&same(x.token?.address,CNGN))
  const receiverFee=e.feeCosts?.find((x:any)=>x.name==='Gas receiver fee'&&x.included===false&&same(x.token?.address,CELO))
  if(!fee||!units(fee.amount)||BigInt(fee.amount)>=BigInt(i.amountUnits)||!receiverFee||!units(receiverFee.amount)||BigInt(receiverFee.amount)!==value)return fail()
- if(feeStep.estimate?.fromAmount!==i.amountUnits||feeStep.estimate?.toAmount!==String(BigInt(i.amountUnits)-BigInt(fee.amount))||swapStep.action?.fromAmount!==String(BigInt(i.amountUnits)-BigInt(fee.amount)))return fail()
+ const platformUnits=BigInt(revenue?.amountUnits||0)
+ if(reviewed){
+  const costs=e.feeCosts
+  const distribution=costs.filter((c:any)=>c.name==='Distributions')
+  if(costs.some((c:any)=>!['LIFI Fixed Fee','Distributions','Gas receiver fee'].includes(c.name)&&c.amount!=='0')||
+   distribution.length!==(platformUnits>0n?1:0)||!same(feeStep.estimate?.approvalAddress,BASE_FEE_FORWARDER)||
+   !same(swapStep.estimate?.approvalAddress,'0x911a744ab8eccB504173fBCAbBD7C34648F2A773')||
+   BigInt(fee.amount)!==BigInt(i.amountUnits)*25n/10000n)return fail()
+  if(platformUnits>0n&&(!revenue||distribution[0].amount!==String(platformUnits)||!distribution[0].included||!same(distribution[0].token?.address,CNGN)||!same(distribution[0].feeSplit?.recipients?.[0]?.walletAddress,revenue.recipient)))return fail()
+ }
+ if(feeStep.estimate?.fromAmount!==i.amountUnits||feeStep.estimate?.toAmount!==String(BigInt(i.amountUnits)-BigInt(fee.amount)-platformUnits)||swapStep.action?.fromAmount!==String(BigInt(i.amountUnits)-BigInt(fee.amount)-platformUnits))return fail()
  if(!same(feeStep.estimate?.approvalAddress,steps[0].estimate?.approvalAddress)||!same(swapStep.estimate?.approvalAddress,steps[1].estimate?.approvalAddress))return fail()
  let decoded:any
  try{decoded=decodeFunctionData({abi:squidAbi,data:t.data})}catch{return fail()}
  const [bridge,swaps,squid]=decoded.args as any
- if(!same(bridge.bridge,'squid')||bridge.integrator!=='lifi-api'||!zero(bridge.referrer)||!same(bridge.receiver,i.recipient)||bridge.destinationChainId!==8453n||!bridge.hasSourceSwaps||bridge.hasDestinationCall||!same(bridge.sendingAssetId,AXL_USDC)||bridge.minAmount<BigInt(e.toAmountMin)||bridge.minAmount>BigInt(e.toAmount))return fail()
+ if(!same(bridge.bridge,'squid')||bridge.integrator!==(reviewed?'hashpaylink':'lifi-api')||!zero(bridge.referrer)||!same(bridge.receiver,i.recipient)||bridge.destinationChainId!==8453n||!bridge.hasSourceSwaps||bridge.hasDestinationCall||!same(bridge.sendingAssetId,AXL_USDC)||bridge.minAmount<BigInt(e.toAmountMin)||bridge.minAmount>BigInt(e.toAmount))return fail()
  if(swaps.length!==2||!same(swaps[0].sendingAssetId,CNGN)||!same(swaps[0].receivingAssetId,CNGN)||swaps[0].fromAmount!==BigInt(i.amountUnits)||!swaps[0].requiresDeposit||!same(swaps[0].callTo,feeStep.estimate.approvalAddress)||!same(swaps[0].approveTo,feeStep.estimate.approvalAddress)||!hex(swaps[0].callData)||
-    !same(swaps[1].sendingAssetId,CNGN)||!same(swaps[1].receivingAssetId,AXL_USDC)||swaps[1].fromAmount!==BigInt(i.amountUnits)-BigInt(fee.amount)||swaps[1].requiresDeposit||!same(swaps[1].callTo,swapStep.estimate.approvalAddress)||!same(swaps[1].approveTo,swapStep.estimate.approvalAddress)||!hex(swaps[1].callData))return fail()
+    !same(swaps[1].sendingAssetId,CNGN)||!same(swaps[1].receivingAssetId,AXL_USDC)||swaps[1].fromAmount!==BigInt(i.amountUnits)-BigInt(fee.amount)-platformUnits||swaps[1].requiresDeposit||!same(swaps[1].callTo,swapStep.estimate.approvalAddress)||!same(swaps[1].approveTo,swapStep.estimate.approvalAddress)||!hex(swaps[1].callData))return fail()
+ if(reviewed){
+  const call=decodeFunctionData({abi:lifiAbi,data:swaps[0].callData})
+  if(call.functionName!=='forwardERC20Fees')return fail()
+  const [token,distributions]=call.args
+  if(!same(token,CNGN)||distributions.length!==(platformUnits>0n?2:1)||distributions.filter(d=>same(d.recipient,LIFI_FEE_RECIPIENT)&&d.amount===BigInt(fee.amount)).length!==1)return fail()
+  if(revenue)assertPocketBridgeRevenue(BigInt(i.amountUnits),revenue,distributions)
+ }
  if(squid.routeType!==0||squid.destinationChain!=='base'||squid.destinationAddress!==SQUID_ROUTER||squid.bridgedTokenSymbol!=='axlUSDC'||!same(squid.depositAssetId,AXL_USDC)||squid.fee!==value||squid.sourceCalls.length!==1||!zero(squid.sourceCalls[0].target)||squid.sourceCalls[0].value!==0n||squid.sourceCalls[0].callData!=='0x'||!/^0x0*$/i.test(squid.sourceCalls[0].payload)||!hex(squid.payload)||squid.payload.length>30000)return fail()
  const canonical=encodeFunctionData({abi:squidAbi,functionName:'swapAndStartBridgeTokensViaSquid',args:decoded.args as any})
  if(canonical.toLowerCase()!==t.data.toLowerCase())return fail()
@@ -71,7 +89,7 @@ export function validateCrossBridgeLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridg
  const platformFee={provider:'lifi',amount:String(fee.amount)}
  const id=bridge.transactionId as Hex
  const refundOptions=[{network:'celo' as const,asset:'cNGN',address:CNGN,decimals:6,recipient:i.sender},{network:'base' as const,asset:'USDC',address:BASE_USDC,decimals:6,recipient:i.recipient}]
- return {provider:'lifi' as const,platformFee,orderId:id,requestId:id,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:String(e.toAmount),minimumUnits:String(e.toAmountMin),expiresAt:q.expiresAt,refundOptions,execution,lifi:{transactionId:id,providerFeeUnits:String(fee.amount),nativeValueUnits:String(value),bridgeTokenAddress:AXL_USDC,bridgeMinimumUnits:String(bridge.minAmount),tool:'squid' as const}}
+ return {provider:'lifi' as const,platformFee,orderId:id,requestId:id,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:String(e.toAmount),minimumUnits:String(e.toAmountMin),expiresAt:q.expiresAt,refundOptions,execution,lifi:{transactionId:id,providerFeeUnits:String(fee.amount),integratorFeeUnits:String(platformUnits),nativeValueUnits:String(value),bridgeTokenAddress:AXL_USDC,bridgeMinimumUnits:String(bridge.minAmount),tool:'squid' as const}}
 }
 
 /** Verify the Base cNGN -> USDC -> LayerSwap -> Celo cNGN route. The provider
@@ -149,12 +167,21 @@ function validateBaseCeloCngnLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridgeInput
 
 export async function fetchCrossBridgeLifiReview(i:CrossBridgeInput,fetcher=fetch,now=Date.now,revenue?:PocketBridgeRevenue){
  if(i.source==='base'&&i.destination==='celo'&&(i.from==='cNGN'||i.from==='USDC')&&i.to==='cNGN'&&i.purpose===undefined)return fetchBaseCeloCngnLifiReview(i,fetcher,now,revenue)
- const requestedAt=now(),params=new URLSearchParams({fromChain:'42220',toChain:'8453',fromToken:CNGN,toToken:BASE_USDC,fromAmount:i.amountUnits,fromAddress:i.sender,toAddress:i.recipient,slippage:'0.005',allowBridges:'squid',allowExchanges:'nordstern'})
- const response=await fetcher('https://li.quest/v1/quote?'+params,{headers:process.env.LIFI_API_KEY?{'x-lifi-api-key':process.env.LIFI_API_KEY}:{},redirect:'error',signal:AbortSignal.timeout(20000)})
- if(!response.ok)throw Object.assign(Error('Jumper could not find a route right now. Try again later.'),{status:response.status===429?429:503,code:response.status===429?'rate_limited':'lifi_route_unavailable'})
- const body=await response.json(),quote:CrossBridgeLifiQuote={kind:'lifi-cross-bridge',response:body,issuedAt:requestedAt,expiresAt:requestedAt+30000},route=validateCrossBridgeLifiQuote(quote,i,requestedAt)
- if(route.expiresAt<=now())throw Error('Bridge quote expired. Review again.')
- return {providerQuote:quote,route,requestedAt}
+ const requestedAt=now(),headers={'content-type':'application/json',...(process.env.LIFI_API_KEY?{'x-lifi-api-key':process.env.LIFI_API_KEY}:{})}
+ const options={integrator:'hashpaylink',fee:0,slippage:0.005,allowSwitchChain:false,bridges:{allow:['squid']},exchanges:{allow:['nordstern']},...(revenue&&BigInt(revenue.amountUnits)>0n?{distributionFees:[{receiver:revenue.recipient,percentage:revenue.bps/10000}]}:{})}
+ const unavailable=()=>Object.assign(Error('No route is available for this amount.'),{status:422,code:'route_unavailable'})
+ const post=async(path:string,body:unknown)=>{
+  const response=await fetcher('https://li.quest/v1/advanced/'+path,{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(15000)})
+  if(response.status===404||response.status===422)throw unavailable()
+  if(!response.ok)throw Object.assign(Error('Bridge service is temporarily unavailable.'),{status:response.status===429?429:503})
+  return response.json()
+ }
+ const result=await post('routes',{fromChainId:42220,toChainId:8453,fromTokenAddress:CNGN,toTokenAddress:BASE_USDC,fromAmount:i.amountUnits,fromAddress:i.sender,toAddress:i.recipient,options})
+ const route=result.routes?.find((r:any)=>r.steps?.length===1&&r.steps[0].tool==='squid')
+ if(!route)throw unavailable()
+ const step=await post('stepTransaction',route.steps[0])
+ const quote:CrossBridgeLifiQuote={kind:'lifi-cross-bridge',response:{mode:'celo-base-squid',step},issuedAt:requestedAt,expiresAt:requestedAt+30000}
+ return {providerQuote:quote,route:validateCrossBridgeLifiQuote(quote,i,now(),revenue),requestedAt}
 }
 
 async function fetchBaseCeloCngnLifiReview(i:CrossBridgeInput,fetcher:typeof fetch,now:()=>number,revenue?:PocketBridgeRevenue){

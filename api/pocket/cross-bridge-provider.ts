@@ -118,12 +118,13 @@ export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:stri
  if(!response.ok){
   const failure=await response.json().catch(()=>null),inputError=[400,422].includes(response.status)
   const tooSmall=inputError&&failure?.errorCode==='AMOUNT_TOO_LOW',noRoute=inputError&&failure?.errorCode==='NO_SWAP_ROUTES_FOUND'
-  if(noRoute&&i.source==='base'&&i.destination==='celo'&&(i.from==='cNGN'||i.from==='USDC')&&i.to==='cNGN'&&i.purpose===undefined){
+  const outbound=i.source==='base'&&i.destination==='celo'&&(i.from==='cNGN'||i.from==='USDC')&&i.to==='cNGN'&&i.purpose===undefined
+  const inbound=i.source==='celo'&&i.destination==='base'&&i.from==='cNGN'&&i.to==='USDC'
+  if(noRoute&&(outbound||inbound)){
    const revenue=lifiBridgeRevenue(BigInt(i.amountUnits))
    if(appFee&&(!revenue||appFee.bps!==revenue.bps||appFee.recipient.toLowerCase()!==revenue.recipient.toLowerCase()))throw Object.assign(Error('Jumper fee collection is not enabled for this route.'),{status:503,code:'lifi_revenue_unavailable'})
    return fetchCrossBridgeLifiReview(i,fetcher,now,revenue)
   }
-  if(noRoute&&!appFee&&i.source==='celo'&&i.destination==='base'&&i.from==='cNGN'&&i.to==='USDC'&&i.purpose==='cash')return fetchCrossBridgeLifiReview(i,fetcher,now)
   throw Object.assign(Error(tooSmall?'Amount too small.':noRoute?'No route is available for this token pair. Try another token or network.':response.status===429?'Bridge service is busy. Try again shortly.':'This bridge route is currently unavailable.'),{status:tooSmall||noRoute?422:response.status===429?429:503,code:tooSmall?'amount_too_low':noRoute?'route_unavailable':response.status===429?'rate_limited':'provider_unavailable',retryAfter:response.status===429?Math.max(1,Math.min(300,Number(response.headers.get('Retry-After'))||60)):undefined})
  }
  const providerQuote=await response.json(),route=validateCrossBridgeRelayQuote(providerQuote,i,requestedAt,appFee)
