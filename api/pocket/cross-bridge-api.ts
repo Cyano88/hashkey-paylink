@@ -39,7 +39,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
      const wallets=await resolveCrossBridgeWallets(owner,source,destination)
      const input={source,destination,from:b.from,to:b.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address,...(b.purpose==='cash'?{purpose:'cash' as const}:{})}
      const {route}=await fetchCrossBridgeRelayReview(input,process.env.RELAY_API_KEY||'',fetch,relayBridgeAppFee(process.env))
-     return res.json({ok:true,estimate:{source,destination,from:b.from,to:b.to,amount:b.amount,receive:formatUnits(BigInt(route.receiveUnits),pair.tokenOut.decimals),expiresAt:route.expiresAt}})
+     return res.json({ok:true,estimate:{source,destination,from:b.from,to:b.to,amount:b.amount,receive:formatUnits(BigInt(route.receiveUnits),pair.tokenOut.decimals),...(route.provider==='lifi'&&route.lifi.receiveUsdValue?{receiveUsdValue:route.lifi.receiveUsdValue}:{}),expiresAt:route.expiresAt}})
     }
     const saved=await d.quote({ownerId:owner,source,destination,from:b.from,to:b.to,amountUnits:String(parseUnits(b.amount,pair.tokenIn.decimals)),circleUserToken:typeof b.circleUserToken==='string'?b.circleUserToken:undefined,maximum:b.maximum===true,...(b.purpose==='cash'?{purpose:'cash' as const}:{})})
     const opened=await d.open(saved.quoteToken,owner)

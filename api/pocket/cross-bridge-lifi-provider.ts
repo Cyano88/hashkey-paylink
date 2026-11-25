@@ -29,7 +29,7 @@ const zero=(v:unknown)=>typeof v==='string'&&/^0x0{40}$/i.test(v)
 const hex=(v:unknown):v is Hex=>typeof v==='string'&&/^0x(?:[0-9a-f]{2})*$/i.test(v)
 
 export type CrossBridgeLifiQuote={kind:'lifi-cross-bridge';response:unknown;issuedAt:number;expiresAt:number}
-export type CrossBridgeLifiDetails={transactionId:Hex;providerFeeUnits:string;bridgeFeeInputUnits?:string;providerFeeUsd?:string;integratorFeeUnits?:string;nativeValueUnits:string;bridgeTokenAddress:string;bridgeMinimumUnits:string;tool:'squid'|'layerswap'}
+export type CrossBridgeLifiDetails={transactionId:Hex;providerFeeUnits:string;receiveUsdValue?:number;bridgeFeeInputUnits?:string;providerFeeUsd?:string;integratorFeeUnits?:string;nativeValueUnits:string;bridgeTokenAddress:string;bridgeMinimumUnits:string;tool:'squid'|'layerswap'}
 
 /** Narrow LI.FI fallback: only the verified Celo cNGN -> Base USDC Squid path.
  * It fails closed if LI.FI changes its route shape, fee model, or call targets. */
@@ -137,8 +137,14 @@ function validateBaseCeloCngnLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridgeInput
  const approve=(n:bigint)=>({target:inputToken as Address,value:0n,data:encodeFunctionData({abi:squidAbi,functionName:'approve',args:[DIAMOND as Address,n]})})
  const calls=[approve(0n),approve(amount),{target:DIAMOND as Address,value:0n,data:t.data as Hex},approve(0n)]
  const execution={kind:'evm' as const,calls,callData:encodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),functionName:'executeBatch',args:[calls]})}
+ // Use the executable step's destination valuation. A missing market price
+ // never changes the token amount, settlement minimum or payment authorization.
+ const receiveUsd=Number(e.toAmountUSD)
+ const marketValue=Number(e.toAmount)/1e6*Number(a.toToken.priceUSD)
+ const receiveUsdValue=receiveUsd>0&&Number.isFinite(marketValue)&&marketValue>0&&
+  Math.abs(marketValue-receiveUsd)<=Math.max(0.0001,marketValue*0.01)?receiveUsd:undefined
  const tokenIn=crossBridgeAsset('base',i.from),tokenOut=crossBridgeAsset('celo','cNGN'),refundOptions=[{network:'base' as const,asset:i.from,address:inputToken,decimals:6,recipient:i.sender},{network:'celo' as const,asset:'cNGN',address:CNGN,decimals:6,recipient:i.recipient}]
- return {provider:'lifi' as const,platformFee:{provider:'lifi',amount:String(fee.amount)},orderId:bridge.transactionId as Hex,requestId:bridge.transactionId as Hex,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:String(e.toAmount),minimumUnits:String(e.toAmountMin),expiresAt:q.expiresAt,refundOptions,execution,lifi:{transactionId:bridge.transactionId as Hex,providerFeeUnits:String(fee.amount),bridgeFeeInputUnits:String(bridgeFeeInputUnits),providerFeeUsd:String(bridgeFee.amountUSD),...(expectedRevenue>0n?{integratorFeeUnits:String(expectedRevenue)}:{}),nativeValueUnits:'0',bridgeTokenAddress:BASE_USDC,bridgeMinimumUnits:String(bridge.minAmount),tool:'layerswap' as const}}
+ return {provider:'lifi' as const,platformFee:{provider:'lifi',amount:String(fee.amount)},orderId:bridge.transactionId as Hex,requestId:bridge.transactionId as Hex,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:String(e.toAmount),minimumUnits:String(e.toAmountMin),expiresAt:q.expiresAt,refundOptions,execution,lifi:{transactionId:bridge.transactionId as Hex,providerFeeUnits:String(fee.amount),...(receiveUsdValue?{receiveUsdValue}:{}),bridgeFeeInputUnits:String(bridgeFeeInputUnits),providerFeeUsd:String(bridgeFee.amountUSD),...(expectedRevenue>0n?{integratorFeeUnits:String(expectedRevenue)}:{}),nativeValueUnits:'0',bridgeTokenAddress:BASE_USDC,bridgeMinimumUnits:String(bridge.minAmount),tool:'layerswap' as const}}
 }
 
 export async function fetchCrossBridgeLifiReview(i:CrossBridgeInput,fetcher=fetch,now=Date.now,revenue?:PocketBridgeRevenue){
