@@ -12,9 +12,9 @@ assert.equal(nativeBridgeTraceDelta({...trace,calls:[{...call(router,recipient,1
 assert.equal(nativeBridgeTraceDelta({...trace,calls:[{...call(router,recipient,100n,[call(router,recipient,100n)]),revertReason:'parent reverted'},...trace.calls]},recipient),10n)
 assert.equal(nativeBridgeTraceDelta({...trace,calls:[{...call(router,recipient,100n),type:'DELEGATECALL'},...trace.calls]},recipient),10n)
 for(const t of [{...trace,from:recipient},{...trace,error:'revert'},{...trace,calls:[{...call(router,recipient,100n),type:'SELFDESTRUCT'}]},{...trace,calls:[{...call(router,recipient,100n),type:'CREATE'}]},{...trace,calls:[{...call(router,recipient,1n),value:'-1'}]},{...trace,calls:'broken'}])assert.throws(()=>nativeBridgeTraceDelta(t,recipient))
-for(const network of ['ethereum','base','arbitrum','polygon','bsc','xlayer']){
+for(const network of ['ethereum','base','arbitrum','polygon','bsc','xlayer','celo']){
  let fault='',traces=0,txReads=0
- const token=crossBridgeAsset(network,network==='bsc'?'BNB':network==='xlayer'?'OKB':network==='polygon'?'POL':'ETH')
+ const token=crossBridgeAsset(network,network==='bsc'?'BNB':network==='xlayer'?'OKB':network==='polygon'?'POL':network==='celo'?'CELO':'ETH')
  const rpc=async({method,params})=>{
   if(method==='eth_chainId')return '0x'+(fault==='chain'?(network==='polygon'?1:137):inboundChains[network].id).toString(16)
   if(method==='eth_getTransactionReceipt')return {transactionHash:hash,blockHash:block,blockNumber:'0x1',transactionIndex:'0x0',status:fault==='receipt'&&traces>0?'0x0':'0x1',logs:[]}
