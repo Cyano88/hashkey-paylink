@@ -11,12 +11,12 @@ const busy=():never=>{throw Object.assign(Error('Another action from this wallet
 // finality must keep settlement pending, but cannot reserve spent source funds.
 // A provider hash or observed destination delivery alone never releases a lock.
 function sourceExecuted(r:CrossBridgeReservation){return r.state==='source_confirmed'&&typeof r.sourceHash==='string'&&(r.source==='solana'?/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(r.sourceHash):/^0x[0-9a-f]{64}$/i.test(r.sourceHash))}
-function active(r:CrossBridgeReservation,now:number){return !crossBridgeReservationTerminal(r.state)&&!sourceExecuted(r)&&!(r.state==='prepared'&&r.expiresAt<=now&&!r.sourceHash&&!r.challengeId&&!r.transactionId&&!r.userOperationHash)}
+export function activeBridgeReservation(r:CrossBridgeReservation,now:number){return !crossBridgeReservationTerminal(r.state)&&!sourceExecuted(r)&&!(r.state==='prepared'&&r.expiresAt<=now&&!r.sourceHash&&!r.challengeId&&!r.transactionId&&!r.userOperationHash)}
 export function assertNoCrossBridgeReservation(journal:unknown,scope:{network?:string;address?:string;ownerId?:string},now=Date.now(),except?:string,manualException?:string){
  const rows=(journal as CrossBridgeJournal|undefined)?.crossBridge??{}
  for(const [id,r] of Object.entries(rows)){
   if(!r||typeof r.source!=='string'||typeof r.walletAddress!=='string'||typeof r.state!=='string'||!Number.isFinite(r.expiresAt))invalid()
-  if(id===except||id===manualException||!active(r,now)||crossBridgeReservationReleased(journal as CrossBridgeJournal,r,now))continue
+  if(id===except||id===manualException||!activeBridgeReservation(r,now)||crossBridgeReservationReleased(journal as CrossBridgeJournal,r,now))continue
   if(scope.network&&scope.network!==r.source)continue
   if(scope.address&&!same(r.source,scope.address,r.walletAddress))continue
   if(!scope.address&&scope.ownerId&&scope.ownerId!==r.ownerId)continue

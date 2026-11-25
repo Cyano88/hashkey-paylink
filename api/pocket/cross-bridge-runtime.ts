@@ -1,4 +1,4 @@
-import {formatUnits,type Hex} from 'viem'
+import {formatUnits,parseAbi,type Hex} from 'viem'
 import {readManualBridgeRetry,retryScope} from './cross-bridge-manual-retry.js'
 import {crossBridgeReservationReleased} from './cross-bridge-release.js'
 import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
@@ -6,7 +6,8 @@ import {crossBridgeJournalKey,crossBridgeReservationStore} from './cross-bridge-
 import type {CrossBridgeJournal} from './cross-bridge-reservation-guard.js'
 import {openCrossBridgeReview} from './cross-bridge-review.js'
 import {createCrossBridgeCircleSettlement} from './cross-bridge-circle-settlement.js'
-import {readCrossBridgeCircleSourceState} from './cross-bridge-circle-source.js'
+import {readIncludedBridgeDebit} from './circle-bridge-source-reader.js'
+import {proveCrossBridgeCircleSource,readCrossBridgeCircleSourceState} from './cross-bridge-circle-source.js'
 import {readCrossBridgePrivySource} from './cross-bridge-privy-source.js'
 import {readCrossBridgeSolanaSource} from './cross-bridge-solana-source.js'
 import {createCrossBridgeCircleRuntime} from './cross-bridge-circle-runtime.js'
@@ -21,7 +22,7 @@ import {crossBridgeSelectionKey} from '../../src/pocket/lib/pocketCrossBridgeSel
 import type {CrossBridgeOperation} from './cross-bridge-operations.js'
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export async function listCrossBridgeOperations(owner:string,blockingOnly=false){const journal=await readDurableJson<CrossBridgeJournal>(crossBridgeJournalKey());return Object.values(journal?.crossBridge??{}).filter(r=>r.ownerId===owner&&typeof r.quoteToken==='string'&&(!blockingOnly||!crossBridgeReservationReleased(journal,r))).sort((a,b)=>Number(b.updatedAt)-Number(a.updatedAt)) as CrossBridgeOperation[]}
-export function crossBridgePreview(r:Review){const q=r.quote,i=q.input,route=r.route;return {...(i.purpose?{purpose:i.purpose}:{}),...(route.conversion?{conversion:{from:i.from,via:'USDC' as const}}:{}),id:q.id,rail:'cross',execution:q.wallets.source.provider,provider:route.provider,selectionKey:crossBridgeSelectionKey(i),source:i.source,destination:i.destination,asset:i.from,destinationAsset:i.to,walletAddress:i.sender,destinationAddress:i.recipient,amount:formatUnits(BigInt(i.amountUnits),route.tokenIn.decimals),receive:formatUnits(BigInt(route.receiveUnits),route.tokenOut.decimals),...(q.receiveUsdValue?{receiveUsdValue:q.receiveUsdValue}:{}),minimumReceive:formatUnits(BigInt(route.minimumUnits),route.tokenOut.decimals),fee:formatUnits(BigInt(q.reimbursementUnits),route.tokenIn.decimals),total:formatUnits(BigInt(q.totalUnits),route.tokenIn.decimals),...(route.provider==='lifi'?{providerFee:formatUnits(BigInt(route.lifi.providerFeeUnits),route.tokenIn.decimals),...('providerFeeUsd' in route.lifi&&route.lifi.providerFeeUsd?{providerFeeUsd:Number(route.lifi.providerFeeUsd)}:{}),...(route.lifi.nativeValueUnits!=='0'?{nativeFee:formatUnits(BigInt(route.lifi.nativeValueUnits),18),nativeFeeAsset:'CELO'}:{})}:{}),expiresAt:q.expiresAt}}
+export function crossBridgePreview(r:Review){const q=r.quote,i=q.input,route=r.route;return {...(i.purpose?{purpose:i.purpose}:{}),...(route.conversion?{conversion:{from:i.from,via:'USDC' as const}}:{}),id:q.id,rail:'cross',execution:q.wallets.source.provider,provider:route.provider,selectionKey:crossBridgeSelectionKey(i),source:i.source,destination:i.destination,asset:i.from,destinationAsset:i.to,walletAddress:i.sender,destinationAddress:i.recipient,amount:formatUnits(BigInt(i.amountUnits),route.tokenIn.decimals),receive:formatUnits(BigInt(route.receiveUnits),route.tokenOut.decimals),...(q.receiveUsdValue?{receiveUsdValue:q.receiveUsdValue}:{}),minimumReceive:formatUnits(BigInt(route.minimumUnits),route.tokenOut.decimals),fee:formatUnits(BigInt(q.reimbursementUnits),route.tokenIn.decimals),total:formatUnits(BigInt(q.totalUnits),route.tokenIn.decimals),...(route.provider==='lifi'?{combinedFee:formatUnits(BigInt(q.reimbursementUnits)+BigInt(route.lifi.providerFeeUnits)+BigInt(route.lifi.integratorFeeUnits||0)+BigInt(route.lifi.bridgeFeeInputUnits||0),route.tokenIn.decimals),providerFee:formatUnits(BigInt(route.lifi.providerFeeUnits),route.tokenIn.decimals),...('providerFeeUsd' in route.lifi&&route.lifi.providerFeeUsd?{providerFeeUsd:Number(route.lifi.providerFeeUsd)}:{}),...(route.lifi.nativeValueUnits!=='0'?{nativeFee:formatUnits(BigInt(route.lifi.nativeValueUnits),18),nativeFeeAsset:'CELO'}:{})}:{}),expiresAt:q.expiresAt}}
 export type CrossBridgeResponse={ok:boolean;quote:ReturnType<typeof crossBridgePreview>;quoteToken:string;status:string;deliveryObserved?:boolean;deliveryConfirmed?:boolean;challengeId?:string;txHash?:string;destinationTxHash?:string;amountOut?:string;refundAsset?:string;refundAmount?:string;refundNetwork?:string;refundTxHash?:string}
 export async function crossBridgeResponse(op:CrossBridgeOperation):Promise<CrossBridgeResponse>{
  const review=await openCrossBridgeReview(op.quoteToken,op.ownerId,{recovery:true}),settlement=op.settlement as any,delivery=op.delivery as any
@@ -60,7 +61,32 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
  if(billed>coverage){await mutateDurableJson(haltKey,old=>old||{at:Date.now(),billedUsdMicros:String(billed),coverageUsdMicros:String(coverage)});throw Error('Bridge sponsorship is paused for fee reconciliation.')}
 }
 export function crossBridgeRuntime(review:Review,userToken:string,options:{reuseEstimateMs?:number}={}){
- const owner=review.quote.ownerId,preflight=crossBridgePreflight(userToken,crossBridgePolicyGuard,process.env,{},options.reuseEstimateMs)
+ const owner=review.quote.ownerId,check=crossBridgePreflight(userToken,crossBridgePolicyGuard,process.env,{},options.reuseEstimateMs)
+ const preflight=async(r:Review)=>{
+  const spend=await check(r),q=r.quote,source=q.input.source
+  if(q.wallets.source.provider!=='circle'||source==='solana')return spend
+  const prior=(await listCrossBridgeOperations(owner,true)).filter(o=>o.id!==q.id&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.state==='submitted'&&!!o.sourceHash)
+  if(!prior.length)return spend
+  // Prove prior debits only when reserving them again could reject this amount.
+  const saved=await Promise.all(prior.map(async o=>({o,r:await openCrossBridgeReview(o.quoteToken,owner,{recovery:true})})))
+  const sameAsset=saved.filter(v=>v.r.quote.input.from===spend.asset)
+  if(BigInt(spend.units)+sameAsset.reduce((sum,v)=>sum+BigInt(v.r.quote.totalUnits),0n)<=BigInt(spend.balance))return spend
+  const client=inboundBridgeClient(source),proofs:Array<{id:string;hash:string;height:bigint;blockHash:string}>=[]
+  for(const {o,r:old} of sameAsset){
+   try{
+    const proof=await readIncludedBridgeDebit(source as Parameters<typeof readIncludedBridgeDebit>[0],o.sourceHash!,async(receipt,trace)=>proveCrossBridgeCircleSource(old,o.sourceHash!,receipt,trace))
+    proofs.push({id:o.id,hash:o.sourceHash!,height:BigInt(proof.blockNumber),blockHash:proof.blockHash})
+   }catch{/* Unproven debits keep their amount reserved. */}
+  }
+  if(!proofs.length)return spend
+  const token=r.route.tokenIn,address=q.input.sender as Hex,head=await client.getBlock()
+  if(await client.getChainId()!==inboundChains[source].id)throw Error('Bridge network changed.')
+  const balance=token.native?await client.getBalance({address,blockNumber:head.number}):await client.readContract({address:token.address as Hex,abi:parseAbi(['function balanceOf(address) view returns(uint256)']),functionName:'balanceOf',args:[address],blockNumber:head.number})
+  const included:Record<string,string>={}
+  for(const p of proofs)if(p.height<=head.number&&(await client.getBlock({blockNumber:p.height})).hash===p.blockHash)included[p.id]=p.hash
+  if((await client.getBlock({blockNumber:head.number})).hash!==head.hash)return spend
+  return {...spend,balance:String(balance),included}
+ }
  // This shared preflight freshly validates both wallets on every invocation.
  // Avoid a second sequential lookup in the wrapper; dispatch checks remain.
  const validation={preflightRevalidatesWallets:true}

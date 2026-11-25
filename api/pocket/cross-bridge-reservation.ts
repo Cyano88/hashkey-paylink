@@ -1,3 +1,7 @@
+import type {BridgeSpend} from './cross-bridge-operations.js'
+import {openCrossBridgeReview} from './cross-bridge-review.js'
+import {crossBridgeReservationReleased} from './cross-bridge-release.js'
+import {activeBridgeReservation} from './cross-bridge-reservation-guard.js'
 import {xlayerReservationFinalized} from './xlayer-reservation-finality.js'
 import {bindManualBridgeRetry} from './cross-bridge-manual-retry.js'
 import type {PoolClient} from 'pg'
@@ -10,6 +14,28 @@ export {assertNoCrossBridgeReservation,type CrossBridgeReservation} from './cros
 const same=(network:string,a:string,b:string)=>network==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
 const invalid=():never=>{throw Object.assign(Error('Bridge reservation storage needs reconciliation.'),{status:503})}
 const busy=():never=>{throw Object.assign(Error('Another action from this wallet is still being confirmed.'),{status:409,code:'wallet_action_pending'})}
+// Called inside the journal row lock, for a new bridge or its single dispatch claim.
+export async function assertBridgeFunds(journal:Journal,next:CrossBridgeReservation,spend:BridgeSpend,now:number,manualException?:string){
+ const needs=[spend,...(spend.extra?[spend.extra]:[])]
+ const reserved=new Map<string,bigint>()
+ for(const old of Object.values(journal.crossBridge??{})){
+  if(old.id===next.id||old.id===manualException||old.source!==next.source||!same(next.source,old.walletAddress,next.walletAddress)||crossBridgeReservationReleased(journal,old,now))continue
+  const retiredDuringRead=spend.readAt!==undefined&&Number(old.updatedAt)>=spend.readAt&&['source_confirmed','completed','refunded'].includes(old.state)
+  if(!activeBridgeReservation(old,now)&&!retiredDuringRead)continue
+  if(old.sourceHash&&spend.included?.[old.id]===old.sourceHash)continue
+  let prior=old.spend as BridgeSpend|undefined
+  if(!prior){
+   // Previously saved operations retain their authenticated, fee-inclusive review.
+   const r=await openCrossBridgeReview(String(old.quoteToken),old.ownerId,{recovery:true})
+   if(r.quote.id!==old.id||r.quote.input.source!==old.source||!same(old.source,r.quote.input.sender,old.walletAddress))invalid()
+   prior={asset:r.quote.input.from,units:r.quote.totalUnits,balance:'0',...(r.route.provider==='lifi'&&r.route.lifi.nativeValueUnits!=='0'?{extra:{asset:'CELO',units:r.route.lifi.nativeValueUnits,balance:'0'}}:{})}
+  }
+  for(const part of [prior,...(prior.extra?[prior.extra]:[])])reserved.set(part.asset,(reserved.get(part.asset)??0n)+BigInt(part.units))
+ }
+ for(const part of needs){
+  if(BigInt(part.balance)<BigInt(part.units)+(reserved.get(part.asset)??0n))throw Object.assign(Error('Insufficient available '+part.asset+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
+ }
+}
 export async function lockBridgeJournal(client:PoolClient):Promise<Journal>{
  const key=crossBridgeJournalKey()
  await client.query("insert into render_durable_kv (store_key,value,updated_at) values ($1,'{}'::jsonb,now()) on conflict (store_key) do nothing",[key])
@@ -60,7 +86,8 @@ export function createCrossBridgeReservationStore(transaction=withDurablePostgre
     }
    }
    const manualException=bindManualBridgeRetry(journal,next,now())
-   assertNoCrossBridgeReservation(journal,scope,now(),id,manualException)
+   if(next.spend)await assertBridgeFunds(journal,next,next.spend as BridgeSpend,now(),manualException)
+   else assertNoCrossBridgeReservation(journal,scope,now(),id,manualException)
    for(const r of Object.values(journal.actions??{}))if(walletReservationActions.has(r.action)&&['started','submitted'].includes(r.status)&&r.ownerId===next.ownerId&&(!r.metadata?.source&&!r.metadata?.network||(r.metadata.source||r.metadata.network)===next.source)&&(!r.metadata?.walletAddress||same(next.source,r.metadata.walletAddress,next.walletAddress)))busy()
    for(const bucket of Object.values(journal.circleKit??{}))for(const op of Object.values(bucket.operations??{}) as any[]){
     if(['cancelled','not_submitted'].includes(op.state)||op.state==='prepared'&&op.quote.expiresAt<=now())continue

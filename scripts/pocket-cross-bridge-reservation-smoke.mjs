@@ -81,3 +81,17 @@ db=new Map([[keys[0],{crossBridge:{old:oldSol},actions:{block:{ownerId:'owner',a
 await assert.rejects(()=>reserve('new','solana'));assert.equal(db.get(keys[0]).crossBridge.old.state,'pending','failed replacement rolls back retirement');
 for(const source of ['base','arc','ethereum','arbitrum','polygon']){db=new Map([[keys[0],{crossBridge:{old:{...oldSol,source}}}]]);await assert.rejects(()=>reserve('new',source),e=>e.code==='wallet_action_pending');}
 console.log('PASS expired unsigned Solana replacement; signed, submitted, unexpired and EVM protected; terminal late write rejected; rollback atomic');
+
+db=new Map()
+const spend=(id,asset,units,balance)=>cross.mutate(id,()=>({...row(id,'base'),spend:{asset,units,balance}}))
+const pair=await Promise.allSettled([spend('one','USDC','60','100'),spend('two','USDC','60','100')])
+assert.equal(pair.filter(r=>r.status==='fulfilled').length,1)
+assert.equal(pair.find(r=>r.status==='rejected').reason.code,'insufficient_balance')
+await spend('three','USDC','40','100')
+await spend('four','USDT','100','100')
+await cross.mutate('one',r=>({...r,state:'submitting'}))
+const hash='0x'+'d'.repeat(64)
+await cross.mutate('one',r=>({...r,state:'submitted',sourceHash:hash}))
+await cross.mutate('five',()=>({...row('five','base'),spend:{asset:'USDC',units:'10',balance:'50',included:{one:hash}}}))
+await assert.rejects(()=>spend('six','USDC','1','50'),e=>e.code==='insufficient_balance')
+console.log('PASS overlapping transfers use source-asset budgets; concurrent overspend rejected; verified debit counted once')

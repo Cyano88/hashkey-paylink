@@ -100,4 +100,5 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
  const policy=crossBridgeConfiguredPolicy(q.input.source,q.input.from,cost.assetPrice,env),price=priceCrossBridgeReimbursement(q.input.source,route.tokenIn.symbol,cost.nativeUnits+cost.rentUnits,cost.gasPrice,cost.assetPrice,policy,d.now())
  if(!crossBridgeFeeCovered(q.input.source,route.tokenIn.symbol,BigInt(q.reimbursementUnits),price.coverageFeeUnits,cost.assetPrice)||BigInt(q.reimbursementUnits)>policy.maximumFeeUnits)throw Object.assign(Error('Bridge fee changed. Review again.'),{status:409,code:'cross_bridge_fee_changed',feeCheck:{source:q.input.source,asset:q.input.from,reservedUnits:q.reimbursementUnits,requiredUnits:String(price.coverageFeeUnits),maximumUnits:String(policy.maximumFeeUnits),quoteAgeMs:d.now()-q.issuedAt,remainingMs:q.expiresAt-d.now()}})
  fresh()
+ return {readAt:started,asset:q.input.from,units:String(charged.totalUnits),balance:String(balance-(manual?.reservedUnits??0n)),...(nativeBalance!==undefined&&route.provider==='lifi'?{extra:{asset:'CELO',units:route.lifi.nativeValueUnits,balance:String(nativeBalance)}}:{})}
 }}

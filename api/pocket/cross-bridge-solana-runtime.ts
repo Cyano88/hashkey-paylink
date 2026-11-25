@@ -5,7 +5,7 @@ import {hasRenderDurableStore} from '../render-durable-store.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {revalidateCrossBridgeWallets} from './cross-bridge-wallets.js'
 import {openCrossBridgeReview} from './cross-bridge-review.js'
-import {createCrossBridgeOperations,type CrossBridgeOperationDependencies} from './cross-bridge-operations.js'
+import {createCrossBridgeOperations,type CrossBridgeOperationDependencies,type BridgeSpend} from './cross-bridge-operations.js'
 import {crossBridgeReservationStore} from './cross-bridge-reservation.js'
 import {prepareCrossBridgeSolanaTransaction,CROSS_BRIDGE_SOLANA_GENESIS} from './cross-bridge-solana-transaction.js'
 import {validateCrossBridgeSolanaTransaction} from './cross-bridge-solana-source.js'
@@ -17,12 +17,12 @@ const defaults={now:Date.now,durable:hasRenderDurableStore,store:crossBridgeRese
 }
 /** Raw Circle signing never broadcasts. Fully signed bytes are durably recorded
  * before broadcast; retries may only rebroadcast those identical bytes. */
-export function createCrossBridgeSolanaRuntime(ownerId:string,userToken:string,preflight:(r:Review)=>Promise<void>,overrides:Partial<Omit<typeof defaults,'store'>>&{store?:CrossBridgeOperationDependencies['store'];preflightRevalidatesWallets?:boolean}={}){
+export function createCrossBridgeSolanaRuntime(ownerId:string,userToken:string,preflight:(r:Review)=>Promise<void|BridgeSpend>,overrides:Partial<Omit<typeof defaults,'store'>>&{store?:CrossBridgeOperationDependencies['store'];preflightRevalidatesWallets?:boolean}={}){
  if(!ownerId||ownerId.length>256||userToken.length>8000||typeof preflight!=='function')return fail()
  const d={...defaults,...overrides},store=d.store!
  const ready=()=>{if(!d.durable())throw Error('Bridge recovery storage is unavailable.')}
  const open=async(token:string,owner:string,recovery:boolean)=>{ready();if(owner!==ownerId)return fail();const r=await d.open(token,owner,{recovery,now:d.now()});if(r.quote.input.source!=='solana'||r.quote.wallets.source.provider!=='circle'||r.charged.plan.kind!=='solana')return fail();return r}
- const service=createCrossBridgeOperations({store,now:d.now,open,approve:(owner,approval)=>d.approve(approval,owner,d.now()),preflight:async r=>{if(!d.preflightRevalidatesWallets)await d.wallets(r.quote.wallets);await preflight(r)},
+ const service=createCrossBridgeOperations({store,now:d.now,open,approve:(owner,approval)=>d.approve(approval,owner,d.now()),preflight:async r=>{if(!d.preflightRevalidatesWallets)await d.wallets(r.quote.wallets);return preflight(r)},
   dispatch:async(r,op,authorization)=>{
    if(authorization!==userToken||typeof op.solanaTransaction!=='string')return fail()
    validateCrossBridgeSolanaTransaction(r,op.solanaTransaction,op.solanaTransaction,false)

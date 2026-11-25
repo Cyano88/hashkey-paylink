@@ -29,7 +29,7 @@ const zero=(v:unknown)=>typeof v==='string'&&/^0x0{40}$/i.test(v)
 const hex=(v:unknown):v is Hex=>typeof v==='string'&&/^0x(?:[0-9a-f]{2})*$/i.test(v)
 
 export type CrossBridgeLifiQuote={kind:'lifi-cross-bridge';response:unknown;issuedAt:number;expiresAt:number}
-export type CrossBridgeLifiDetails={transactionId:Hex;providerFeeUnits:string;providerFeeUsd?:string;integratorFeeUnits?:string;nativeValueUnits:string;bridgeTokenAddress:string;bridgeMinimumUnits:string;tool:'squid'|'layerswap'}
+export type CrossBridgeLifiDetails={transactionId:Hex;providerFeeUnits:string;bridgeFeeInputUnits?:string;providerFeeUsd?:string;integratorFeeUnits?:string;nativeValueUnits:string;bridgeTokenAddress:string;bridgeMinimumUnits:string;tool:'squid'|'layerswap'}
 
 /** Narrow LI.FI fallback: only the verified Celo cNGN -> Base USDC Squid path.
  * It fails closed if LI.FI changes its route shape, fee model, or call targets. */
@@ -97,6 +97,11 @@ function validateBaseCeloCngnLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridgeInput
  else if(distributionFee||fees.some((x:any)=>x.name==='Distributions'))return fail()
  if(fees.length!==(expectedRevenue>0n?3:2)||fees.some((x:any)=>!['LIFI Fixed Fee','LayerSwap fee','Distributions'].includes(x.name)||x.included!==true))return fail()
  if(!bridgeFee||!units(bridgeFee.amount)||!Number.isFinite(Number(bridgeFee.amountUSD))||Number(bridgeFee.amountUSD)<=0)return fail()
+ // Express the included bridge cost in source units solely for the review.
+ const inputPrice=Number(a.fromToken.priceUSD)
+ if(!direct&&(!Number.isFinite(inputPrice)||inputPrice<=0))return fail()
+ const bridgeFeeInputUnits=direct?BigInt(bridgeFee.amount):BigInt(Math.round(Number(bridgeFee.amountUSD)/inputPrice*1e6))
+
  let decoded:any
  try{decoded=decodeFunctionData({abi:lifiAbi,data:t.data})}catch{return fail()}
  if(decoded.functionName!=='swapAndStartBridgeTokensViaLayerSwap')return fail()
@@ -133,7 +138,7 @@ function validateBaseCeloCngnLifiQuote(q:CrossBridgeLifiQuote,i:CrossBridgeInput
  const calls=[approve(0n),approve(amount),{target:DIAMOND as Address,value:0n,data:t.data as Hex},approve(0n)]
  const execution={kind:'evm' as const,calls,callData:encodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),functionName:'executeBatch',args:[calls]})}
  const tokenIn=crossBridgeAsset('base',i.from),tokenOut=crossBridgeAsset('celo','cNGN'),refundOptions=[{network:'base' as const,asset:i.from,address:inputToken,decimals:6,recipient:i.sender},{network:'celo' as const,asset:'cNGN',address:CNGN,decimals:6,recipient:i.recipient}]
- return {provider:'lifi' as const,platformFee:{provider:'lifi',amount:String(fee.amount)},orderId:bridge.transactionId as Hex,requestId:bridge.transactionId as Hex,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:String(e.toAmount),minimumUnits:String(e.toAmountMin),expiresAt:q.expiresAt,refundOptions,execution,lifi:{transactionId:bridge.transactionId as Hex,providerFeeUnits:String(fee.amount),providerFeeUsd:String(bridgeFee.amountUSD),...(expectedRevenue>0n?{integratorFeeUnits:String(expectedRevenue)}:{}),nativeValueUnits:'0',bridgeTokenAddress:BASE_USDC,bridgeMinimumUnits:String(bridge.minAmount),tool:'layerswap' as const}}
+ return {provider:'lifi' as const,platformFee:{provider:'lifi',amount:String(fee.amount)},orderId:bridge.transactionId as Hex,requestId:bridge.transactionId as Hex,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:String(e.toAmount),minimumUnits:String(e.toAmountMin),expiresAt:q.expiresAt,refundOptions,execution,lifi:{transactionId:bridge.transactionId as Hex,providerFeeUnits:String(fee.amount),bridgeFeeInputUnits:String(bridgeFeeInputUnits),providerFeeUsd:String(bridgeFee.amountUSD),...(expectedRevenue>0n?{integratorFeeUnits:String(expectedRevenue)}:{}),nativeValueUnits:'0',bridgeTokenAddress:BASE_USDC,bridgeMinimumUnits:String(bridge.minAmount),tool:'layerswap' as const}}
 }
 
 export async function fetchCrossBridgeLifiReview(i:CrossBridgeInput,fetcher=fetch,now=Date.now,revenue?:PocketBridgeRevenue){

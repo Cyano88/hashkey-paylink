@@ -48,6 +48,10 @@ export async function readObservedBridgeReceipt(source:keyof typeof inboundChain
  const result=await readFinalizedEnvelope(source,transactionHash,async(receipt)=>({receipt}),rpcOverride,false,false,false)
  return {receipt:result.receipt,source:result.source,blockHash:result.blockHash,blockNumber:result.blockNumber}
 }
+// Canonical inclusion for balance accounting only. Settlement still requires finality.
+export async function readIncludedBridgeDebit<T>(source:CircleKitSourceExpectation['batch']['source'],hash:string,prove:(r:CircleKitSourceReceipt,t:NativeCallTrace)=>Promise<T>){
+ return readFinalizedEnvelope(source,hash,prove,undefined,false,true,false)
+}
 async function readFinalizedEnvelope<T>(source:keyof typeof inboundChains,transactionHash:string,prove:(receipt:CircleKitSourceReceipt,trace:NativeCallTrace,context:{blockHash:string;blockNumber:bigint;index:bigint})=>Promise<T>,rpcOverride:Rpc|undefined,allowReverted:boolean,needsTrace:boolean,requireFinality=true){
  const txHash=hash(transactionHash)
  if(!Object.hasOwn(inboundChains,source)||(source==='bsc'||source==='xlayer')&&(!rpcOverride||needsTrace))pending()

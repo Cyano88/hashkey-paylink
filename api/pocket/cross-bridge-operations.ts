@@ -4,6 +4,7 @@ import {crossBridgeReservationStore,type CrossBridgeReservation} from './cross-b
 import {crossBridgeReservationTerminal} from './cross-bridge-reservation-guard.js'
 import {crossBridgeHash} from './cross-bridge-evidence.js'
 
+export type BridgeSpend={readAt?:number;included?:Record<string,string>;asset:string;units:string;balance:string;extra?:{asset:string;units:string;balance:string}}
 type Review=Awaited<ReturnType<typeof openCrossBridgeReview>>
 export type CrossBridgeOperation=CrossBridgeReservation&{quoteToken:string;createdAt:number;updatedAt:number}
 export type CrossBridgeObservation={sourceHash?:string;challengeId?:string;transactionId?:string;userOperationHash?:string;definitelyNotSubmitted?:boolean;approvalNotSubmitted?:boolean}
@@ -13,7 +14,7 @@ export type CrossBridgeOperationDependencies={
  open(token:string,owner:string,recovery:boolean):Promise<Review>;
  approve(owner:string,approval:string):Promise<boolean>;
  // Revalidates wallet ownership, approved fee coverage/balance and exact execution.
- preflight(review:Review):Promise<void>;
+ preflight(review:Review):Promise<void|BridgeSpend>;
  // Must use operation.id as provider idempotency key. Authorization stays in memory.
  dispatch(review:Review,operation:CrossBridgeOperation,authorization:string):Promise<CrossBridgeObservation|null>;
  // Read-only provider lookup. An unknown result must never create another send.
@@ -66,11 +67,11 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
    if(previous){const r=owned(previous,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
    const fresh=await d.open(token,owner,false)
    if(!await d.approve(owner,approval))fail('Confirm this bridge with your PIN or fingerprint.')
-   await d.preflight(fresh)
+   const spend=await d.preflight(fresh)
    return owned(await store.mutate(q.id,current=>{
     if(current){const r=owned(current,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
     if(q.expiresAt<=d.now())fail('Bridge quote expired. Review it again.')
-    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,quoteToken:token,expiresAt:q.expiresAt,state:'prepared',createdAt:d.now(),updatedAt:d.now()}
+    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:'prepared',createdAt:d.now(),updatedAt:d.now()}
    }),owner,q.id)
   },
   async cancel(owner:string,id:string){return owned(await store.mutate(id,current=>{
@@ -80,13 +81,13 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
   async submit(owner:string,id:string,authorization:string){
    const op=await read(owner,id);if(op.state!=='prepared')return op
    if(typeof authorization!=='string'||!authorization||authorization.length>16000)fail('Unlock your source wallet.')
-   const reviewed=await d.open(op.quoteToken,owner,false);await d.preflight(reviewed)
+   const reviewed=await d.open(op.quoteToken,owner,false);const spend=await d.preflight(reviewed)
    let reserved=false
    const latest=owned(await store.mutate(id,current=>{
     const r=owned(current,owner,id);if(r.fingerprint!==op.fingerprint)fail()
     if(r.state!=='prepared')return r
     if(r.expiresAt<=d.now())fail('Bridge quote expired. Review it again.')
-    reserved=true;return {...r,state:'submitting',updatedAt:d.now()}
+    reserved=true;return {...r,...(spend?{spend}:{}),state:'submitting',updatedAt:d.now()}
    }),owner,id)
    if(!reserved)return latest
    let result:CrossBridgeObservation|null=null
