@@ -95,7 +95,10 @@ function validateDirectCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.n
   const calls=tokenIn.native?[depositCall]:[approve(0n),approve(amount),depositCall,approve(0n)]
   execution={kind:'evm' as const,calls,callData:encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[calls]})}
  }
- return {provider:'relay' as const,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
+ const usd=q.details.currencyOut.amountUsd
+ const value=typeof usd==='string'&&/^\d+(?:\.\d+)?$/.test(usd)?Number(usd):NaN
+ const receiveUsdValue=Number.isFinite(value)&&value>0&&value<=1e15?value:undefined
+ return {provider:'relay' as const,receiveUsdValue,platformFee,orderId,requestId,source:i.source,destination:i.destination,tokenIn,tokenOut,amountUnits:i.amountUnits,receiveUnits:output.expectedAmount,minimumUnits:output.minimumAmount,expiresAt:Math.min(now+45000,order.output.deadline*1000),refundOptions,execution}
 }
 export type CrossBridgeRoute=(ReturnType<typeof validateDirectCrossBridgeRelayQuote>|ReturnType<typeof validateCrossBridgeLifiQuote>)&{conversion?:ReturnType<typeof validateEurcConversion>}
 export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.now(),appFee?:RelayBridgeAppFee|null):CrossBridgeRoute {

@@ -86,3 +86,10 @@ console.log('PASS Arc selection and direct provider validation in both direction
 
 for(const refund of ['ETH','USDT']){const {q,i}=fixture('ethereum','base','ETH','EURC',refund);assert.equal(validateCrossBridgeRelayQuote(q,i,now).refundOptions[1].asset,refund)}
 console.log('PASS supported alternate destination refunds remain wallet and order bound; explicit source refund recipient')
+
+const celoQuote=fixture('base','celo','USDC','CELO')
+for(const [raw,expected] of [['0.969729',0.969729],['0',undefined],['unknown',undefined],[undefined,undefined]]){
+ celoQuote.q.details.currencyOut.amountUsd=raw
+ assert.equal(validateCrossBridgeRelayQuote(celoQuote.q,celoQuote.i,now).receiveUsdValue,expected)
+}
+console.log('PASS quoted CELO destination USD and unavailable price handling')

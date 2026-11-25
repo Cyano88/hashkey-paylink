@@ -39,7 +39,8 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
      const wallets=await resolveCrossBridgeWallets(owner,source,destination)
      const input={source,destination,from:b.from,to:b.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address,...(b.purpose==='cash'?{purpose:'cash' as const}:{})}
      const {route}=await fetchCrossBridgeRelayReview(input,process.env.RELAY_API_KEY||'',fetch,relayBridgeAppFee(process.env))
-     return res.json({ok:true,estimate:{source,destination,from:b.from,to:b.to,amount:b.amount,receive:formatUnits(BigInt(route.receiveUnits),pair.tokenOut.decimals),...(route.provider==='lifi'&&route.lifi.receiveUsdValue?{receiveUsdValue:route.lifi.receiveUsdValue}:{}),expiresAt:route.expiresAt}})
+     const receiveUsdValue=route.provider==='lifi'?route.lifi.receiveUsdValue:route.receiveUsdValue
+     return res.json({ok:true,estimate:{source,destination,from:b.from,to:b.to,amount:b.amount,receive:formatUnits(BigInt(route.receiveUnits),pair.tokenOut.decimals),...(receiveUsdValue?{receiveUsdValue}:{}),expiresAt:route.expiresAt}})
     }
     // Privy does not currently offer app-paid gas for the Celo sender.
     // Keep the new return bridge available for price previews and existing status reads.

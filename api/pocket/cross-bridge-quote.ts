@@ -64,7 +64,9 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)
   await revalidateCrossBridgeWallets(wallets)
-  const destinationPrice=await destinationPricePromise,receiveAmount=Number(formatUnits(BigInt(provider.route.receiveUnits),provider.route.tokenOut.decimals)),receiveUsdValue=(provider.route.provider==='lifi'?provider.route.lifi.receiveUsdValue:undefined)??(destinationPrice?receiveAmount*Number(destinationPrice.scaled8)/1e8:undefined)
+  const quotedUsd=provider.route.provider==='lifi'?provider.route.lifi.receiveUsdValue:provider.route.receiveUsdValue
+  const destinationPrice=quotedUsd===undefined?await destinationPricePromise:undefined
+  const receiveAmount=Number(formatUnits(BigInt(provider.route.receiveUnits),provider.route.tokenOut.decimals)),receiveUsdValue=quotedUsd??(destinationPrice?receiveAmount*Number(destinationPrice.scaled8)/1e8:undefined)
   const result=await createCrossBridgeReview({wallets,input:request,providerQuote:provider.providerQuote,appFee,...charged,...(receiveUsdValue&&Number.isFinite(receiveUsdValue)?{receiveUsdValue}:{}),expiresAt:Math.min(charged.expiresAt,provider.requestedAt+45000)})
   return {quote:result,amountUnits,totalUnits:charged.totalUnits,expiresAt:result.quote.expiresAt}
  }
