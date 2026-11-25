@@ -1,4 +1,4 @@
-import {readNativeBridgeDelivery,type NativeBridgeNetwork} from './bridge-native-delivery.js'
+import {observeNativeBridgeDelivery,readNativeBridgeDelivery,type NativeBridgeNetwork} from './bridge-native-delivery.js'
 import {decodeEventLog,parseAbi} from 'viem'
 import {readCanonicalEvmBridgeReceipt} from './bridge-evm-delivery.js'
 import {readSolanaBridgeDelivery} from './bridge-solana-delivery.js'
@@ -11,7 +11,8 @@ const transfer=parseAbi(['event Transfer(address indexed from,address indexed to
  * from finalized delivery used to release reservations and publish the ledger. */
 export async function observeCrossBridgeDelivery(c:CrossBridgeDeliveryCandidate,options:Parameters<typeof readCanonicalEvmBridgeReceipt>[2]={}){
  const token=crossBridgeAsset(c.network,c.token.symbol)
- if(c.outcome!=='completed'||token.native||c.network==='solana'||!sameCrossBridgeAddress(c.network,token.address,c.token.address)||token.decimals!==c.token.decimals)return null
+ if(c.outcome!=='completed'||c.network==='solana'||token.native!==c.token.native||!sameCrossBridgeAddress(c.network,token.address,c.token.address)||token.decimals!==c.token.decimals)return null
+ if(token.native)return observeNativeBridgeDelivery(c.network as NativeBridgeNetwork,c.hash,c.recipient,options)
  const client=c.network==='bsc'||c.network==='xlayer'?inboundBridgeClient(c.network):null
  const {receipt}=await readObservedBridgeReceipt(c.network,c.hash,options.rpc??(client?async request=>client.request(request as Parameters<typeof client.request>[0]):undefined))
  let delta=0n

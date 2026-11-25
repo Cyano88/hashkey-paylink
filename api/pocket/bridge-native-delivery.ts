@@ -1,6 +1,6 @@
 import {inboundBridgeClient,inboundChains} from './inbound-bridge-networks.js'
 import {readBridgeProofEvmRpc} from '../evm-read.js'
-import {readFinalizedBridgeReceipt} from './circle-bridge-source-reader.js'
+import {observeBridgeReceiptProof,readFinalizedBridgeReceipt} from './circle-bridge-source-reader.js'
 import type {NativeCallTrace} from './native-send-quote.js'
 export type NativeBridgeNetwork='ethereum'|'base'|'arbitrum'|'polygon'|'bsc'|'xlayer'|'celo'
 const pending=():never=>{throw Object.assign(Error('Native bridge delivery is still being verified.'),{status:409,code:'bridge_native_delivery_pending'})}
@@ -27,12 +27,12 @@ export function nativeBridgeTraceDelta(trace:NativeCallTrace,recipient:string){
 }
 /** The provider hash must first match the saved delivery/refund plan. Gas-paying
  * recipient transactions remain unresolved; no guessed gas or balance delta. */
-export async function readNativeBridgeDelivery(network:NativeBridgeNetwork,hash:string,recipient:string,options:{env?:NodeJS.ProcessEnv;rpc?:Parameters<typeof readFinalizedBridgeReceipt>[3]}={}){
+async function nativeBridgeDelivery(reader:typeof observeBridgeReceiptProof,network:NativeBridgeNetwork,hash:string,recipient:string,options:{env?:NodeJS.ProcessEnv;rpc?:Parameters<typeof readFinalizedBridgeReceipt>[3]}={}){
  if(!['ethereum','base','arbitrum','polygon','bsc','xlayer','celo'].includes(network)||!address(recipient))pending()
  const client=!options.rpc&&(network==='bsc'||network==='xlayer')?inboundBridgeClient(network,options.env):undefined
  const raw=options.rpc??(client?async(request:{method:string;params:unknown[]})=>client.request(request as Parameters<typeof client.request>[0]):async({method,params}:{method:string;params:unknown[]})=>readBridgeProofEvmRpc(network as 'base'|'arbitrum'|'ethereum'|'polygon'|'celo',method,params))
  const rpc:NonNullable<typeof options.rpc>=async request=>{try{return await raw(request)}catch{throw Object.assign(Error('Native bridge RPC evidence is unavailable.'),{status:503,code:'bridge_native_rpc_unavailable'})}}
- const proof=await readFinalizedBridgeReceipt(network,hash,async(_receipt,context)=>{
+ const proof=await reader(network,hash,async(_receipt,context)=>{
   const transaction=async()=>{
    const t=await rpc({method:'eth_getTransactionByHash',params:[hash]}) as Record<string,unknown>|null
    if(!t||!same(t.hash,hash)||!same(t.blockHash,context.blockHash)||quantity(t.blockNumber)!==context.blockNumber||quantity(t.transactionIndex)!==context.index||quantity(t.chainId)!==BigInt(inboundChains[network].id)||!address(t.from)||!address(t.to)||typeof t.input!=='string'||!/^0x(?:[0-9a-f]{2})*$/i.test(t.input))return pending()
@@ -47,3 +47,6 @@ export async function readNativeBridgeDelivery(network:NativeBridgeNetwork,hash:
  },rpc)
  return proof.amount
 }
+
+export const readNativeBridgeDelivery=nativeBridgeDelivery.bind(null,readFinalizedBridgeReceipt)
+export const observeNativeBridgeDelivery=nativeBridgeDelivery.bind(null,observeBridgeReceiptProof)

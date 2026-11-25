@@ -40,6 +40,9 @@ export async function readFinalizedBridgeSource<T>(source:CircleKitSourceExpecta
 export async function readFinalizedBridgeReceipt<T>(source:keyof typeof inboundChains,transactionHash:string,prove:(receipt:CircleKitSourceReceipt,context:{blockHash:string;blockNumber:bigint;index:bigint})=>Promise<T>,rpcOverride?:Rpc,allowReverted=false){
  return readFinalizedEnvelope(source,transactionHash,(receipt,_trace,context)=>prove(receipt,context),rpcOverride,allowReverted,false)
 }
+export async function observeBridgeReceiptProof<T>(source:keyof typeof inboundChains,transactionHash:string,prove:(receipt:CircleKitSourceReceipt,context:{blockHash:string;blockNumber:bigint;index:bigint})=>Promise<T>,rpcOverride?:Rpc){
+ return readFinalizedEnvelope(source,transactionHash,(receipt,_trace,context)=>prove(receipt,context),rpcOverride,false,false,false)
+}
 /** Non-final observation for progress only. Never use this as settlement proof. */
 export async function readObservedBridgeReceipt(source:keyof typeof inboundChains,transactionHash:string,rpcOverride?:Rpc){
  const result=await readFinalizedEnvelope(source,transactionHash,async(receipt)=>({receipt}),rpcOverride,false,false,false)

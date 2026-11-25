@@ -1,7 +1,7 @@
 import {createReadService} from '../api/evm-read.ts'
 import assert from 'node:assert/strict'
 import {nativeBridgeTraceDelta} from '../api/pocket/bridge-native-delivery.ts'
-import {readCrossBridgeDelivery} from '../api/pocket/cross-bridge-delivery.ts'
+import {observeCrossBridgeDelivery,readCrossBridgeDelivery} from '../api/pocket/cross-bridge-delivery.ts'
 import {crossBridgeAsset} from '../src/pocket/lib/pocketCrossBridgeAssets.ts'
 import {inboundChains} from '../api/pocket/inbound-bridge-networks.ts'
 const sender='0x'+'1'.repeat(40),router='0x'+'2'.repeat(40),recipient='0x'+'3'.repeat(40),hash='0x'+'a'.repeat(64),block='0x'+'b'.repeat(64),anchor='0x'+'c'.repeat(64)
@@ -28,5 +28,11 @@ for(const network of ['ethereum','base','arbitrum','polygon','bsc','xlayer','cel
  assert.equal(await read(),10n)
  if(!['bsc','xlayer'].includes(network)){const production=createReadService(async(_url,init)=>{const body=JSON.parse(init.body);return Response.json({result:await rpc(body)})},Date.now,{bridgeProof:true});assert.equal(await readCrossBridgeDelivery(candidate,{rpc:({method,params})=>production(network,method,params)}),10n,'production proof adapter must permit native transaction identity reads')} 
  for(const f of ['chain','receipt','reorg','membership','unfinalized','hash','txBlock','txChanged','noTrace','traceBinding','traceChanged']){fault=f;traces=txReads=0;await assert.rejects(read,f)}
+ fault='unfinalized';traces=txReads=0
+ assert.equal(await observeCrossBridgeDelivery(candidate,{rpc}),10n)
+ for(const issue of ['reorg','receipt','hash','txChanged','noTrace','traceChanged']){
+  fault=issue;traces=txReads=0
+  await assert.rejects(()=>observeCrossBridgeDelivery(candidate,{rpc}),issue)
+ }
  console.log('PASS '+network+' native delivery: exact finalized transaction and trace, net received value, fresh evidence; unavailable tracing, binding mismatch, mutation and reorg reject settlement.')
 }
