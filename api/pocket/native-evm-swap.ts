@@ -97,13 +97,18 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     return res.json({ok:true,status:saved.status,challengeId:saved.metadata?.challengeId,txHash:saved.metadata?.txHash})
    }
    if(!existing)return res.json({ok:true,status:'not_submitted'})
+   if(!existing.metadata?.txHash&&['cancelled','not_submitted'].includes(existing.status))return res.json({ok:true,status:'not_submitted',reason:existing.metadata?.approvalOutcome||existing.status})
    if(['completed','failed'].includes(existing.status)||existing.metadata?.txHash)return res.json({ok:true,...await reconcileNativeEvmSwap(existing,{rpc:d.rpc,record:d.record})})
    let challengeId=existing.metadata?.challengeId
    if(!challengeId&&userToken){const recovered=await d.recoverChallenge({chain:network,userToken,walletId,walletAddress,refId:key});if(recovered){existing=await d.record({...existing,status:'submitted',metadata:{...existing.metadata!,challengeId:recovered}});challengeId=existing.metadata?.challengeId}}
    if(['completed','failed'].includes(existing.status)||existing.metadata?.txHash)return res.json({ok:true,...await reconcileNativeEvmSwap(existing,{rpc:d.rpc,record:d.record})})
    if(!challengeId||!userToken)return res.json({ok:true,status:'pending',challengeId})
    const provider=await d.challengeStatus({chain:network,userToken,walletId,walletAddress,challengeId})
-   if(!provider.txHash&&((action==='cancel'&&provider.status==='awaiting_approval')||('notSubmitted' in provider&&provider.notSubmitted===true))){const saved=await d.record({...existing,status:action==='cancel'?'cancelled':'not_submitted',metadata:{...existing.metadata!,approvalOutcome:action==='cancel'?'cancelled':'expired'}});return res.json({ok:true,status:saved.metadata?.txHash?'pending':['cancelled','not_submitted'].includes(saved.status)?'not_submitted':saved.status,txHash:saved.metadata?.txHash,reason:action==='cancel'?'cancelled':'approval_expired'})}
+   if(!provider.txHash&&((action==='cancel'&&provider.status==='awaiting_approval')||('notSubmitted' in provider&&provider.notSubmitted===true))){
+    const outcome='approvalOutcome' in provider&&provider.approvalOutcome?provider.approvalOutcome:action==='cancel'?'cancelled':'expired'
+    const saved=await d.record({...existing,status:outcome==='cancelled'?'cancelled':'not_submitted',metadata:{...existing.metadata!,approvalOutcome:outcome}})
+    return res.json({ok:true,status:saved.metadata?.txHash?'pending':['cancelled','not_submitted'].includes(saved.status)?'not_submitted':saved.status,txHash:saved.metadata?.txHash,reason:outcome==='expired'?'approval_expired':outcome})
+   }
    if(provider.status==='failed'){if(provider.txHash&&!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid swap reference.');const saved=await d.record({...existing,status:'failed',metadata:{...existing.metadata!,...(provider.txHash?{txHash:provider.txHash}:{})}});return res.json({ok:true,status:saved.status,txHash:saved.metadata?.txHash})}
    if(!provider.txHash)return res.json({ok:true,status:provider.status==='awaiting_approval'?'awaiting_approval':'pending',challengeId})
    if(!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid swap reference.')

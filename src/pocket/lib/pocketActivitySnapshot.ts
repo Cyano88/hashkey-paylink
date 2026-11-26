@@ -147,7 +147,7 @@ export function mergePocketActivitySnapshot(previous: PocketActivityReadData | u
     ...incoming,
     dismissedSwapApprovalIds:[...dismissed],
     groupedTransactionHashes:[...grouped],
-    payments: mergePocketActivityRows(previous?.payments ?? [], incoming.payments).filter(row=>(!row.txHash||!grouped.has(row.txHash.toLowerCase()))&&!(row.source==='wallet-swap'&&row.chain==='arc'&&!row.txHash&&dismissed.has(row.providerReference||'')&&!['completed','confirmed','paid','success','successful','refunded'].includes(row.paycrestStatus||''))),
+    payments: mergePocketActivityRows(previous?.payments ?? [], incoming.payments).filter(row=>(!row.txHash||!grouped.has(row.txHash.toLowerCase()))&&!(row.source==='wallet-swap'&&!row.txHash&&(row.chain==='arc'&&dismissed.has(row.providerReference||'')||row.eventId.startsWith('pocket-native-swap:')&&dismissed.has(row.eventId))&&!['completed','confirmed','paid','success','successful','refunded'].includes(row.paycrestStatus||''))),
     merchants: [...new Map([...(previous?.merchants ?? []), ...incoming.merchants].map(row => [row.merchant_id, {...row,deleted_at:row.deleted_at||retired.get(row.merchant_id)}])).values()],
     collections: [...new Map([...(previous?.collections ?? []), ...incoming.collections].map(row => [row.eventId, row])).values()],
   }

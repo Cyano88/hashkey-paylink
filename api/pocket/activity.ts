@@ -63,14 +63,15 @@ type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
   if(record.action==='wallet.bsc-bridge'&&record.metadata?.approvalCancelled==='true'&&!record.metadata.txHash)return undefined
-  if (['cancelled', 'not_submitted'].includes(record.status) && !record.metadata?.txHash) return undefined
+  const unsuccessfulCashApproval=record.action==='wallet.native-swap'&&record.metadata?.purpose==='cash'&&record.status==='not_submitted'&&record.metadata.approvalOutcome!=='cancelled'&&!record.metadata.txHash
+  if (['cancelled', 'not_submitted'].includes(record.status) && !record.metadata?.txHash&&!unsuccessfulCashApproval) return undefined
   if(record.action==='wallet.bsc-swap'&&record.metadata){const m=record.metadata;return bscSwapActivity({id:m.operationId,wallet:m.walletAddress,from:m.from,to:m.to,amount:m.amount,amountOut:m.amountOut,fee:m.feeEstimated==='false'?m.fee:undefined,feeAsset:m.feeAsset,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
   if(record.action==='wallet.cash-conversion'&&record.metadata){const m=record.metadata;return cashConversionActivity({id:record.idempotencyKey.replace(/^pocket:cash-conversion:/,''),wallet:m.walletAddress,amount:m.amount,amountOut:m.amountOut,fee:m.feeAmount,txHash:m.txHash,status:record.status,createdAt:record.createdAt,updatedAt:record.updatedAt})}
   if(record.action==='wallet.bsc-send'&&record.metadata){const m=record.metadata;return {eventId:'pocket-bsc-send:'+m.operationId,txHash:m.txHash||'',chain:'bsc',payer:m.walletAddress,recipient:m.recipientAddress,amount:m.amount,feeAmount:m.fee,assetSymbol:m.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+m.assetSymbol}}
   if(record.action==='wallet.native-send'&&record.metadata)return {eventId:'pocket-native-send:'+record.id,txHash:record.metadata.txHash||'',chain:record.metadata.network,payer:record.metadata.walletAddress,recipient:record.metadata.recipient,amount:record.metadata.amount,feeAmount:record.metadata.feeAmount,assetSymbol:record.metadata.assetSymbol,memo:'Sent',ts:record.createdAt,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:record.status==='completed'?'confirmed':record.status==='failed'?'failed':'processing',activityLabel:'Sent '+record.metadata.assetSymbol}
   if(record.action==='wallet.native-swap'&&record.metadata){
     const m=record.metadata
-    return {...(record.status==='completed'&&m.amountOut&&m.toAsset?{receivedAmount:m.amountOut,destinationAsset:m.toAsset}:{}),eventId:'pocket-native-swap:'+record.id,txHash:m.txHash||'',chain:m.network,payer:m.walletAddress,memo:m.assetSymbol+' to '+m.toAsset,amount:m.amount,assetSymbol:m.assetSymbol,ts:record.createdAt,statusUpdatedAt:record.updatedAt,source:'wallet-swap',contextLabel:m.amount+' '+m.assetSymbol+' to '+(m.amountOut?m.amountOut+' ':'')+m.toAsset,settlementType:'wallet_swap',paycrestStatus:['started','submitted'].includes(record.status)?'processing':record.status,activityLabel:'Token swap',...(m.purpose==='cash'&&m.network==='base'&&m.toAsset==='USDC'?{cashFunding:true,activityLabel:'Cash funding',destination:'Cash balance'}:{}),direction:'out'}
+    return {...(record.status==='completed'&&m.amountOut&&m.toAsset?{receivedAmount:m.amountOut,destinationAsset:m.toAsset}:{}),eventId:'pocket-native-swap:'+record.id,txHash:m.txHash||'',chain:m.network,payer:m.walletAddress,memo:m.assetSymbol+' to '+m.toAsset,amount:m.amount,assetSymbol:m.assetSymbol,ts:record.createdAt,statusUpdatedAt:record.updatedAt,source:'wallet-swap',contextLabel:m.amount+' '+m.assetSymbol+' to '+(m.amountOut?m.amountOut+' ':'')+m.toAsset,settlementType:'wallet_swap',paycrestStatus:['started','submitted'].includes(record.status)?'processing':record.status,activityLabel:'Token swap',...(unsuccessfulCashApproval?{paycrestStatus:'failed'}:{}),...(m.purpose==='cash'&&m.network==='base'&&m.toAsset==='USDC'?{cashFunding:true,activityLabel:'Cash funding',destination:'Cash balance'}:{}),direction:'out'}
   }
   if(record.action.startsWith('gift.'))return giftActivityRow(record)
   if (record.action === 'wallet.swap' && record.metadata) return {
@@ -463,7 +464,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
     const assetRows = assetActions.flatMap(record => { const row = bridgeActivityRow(record); return row ? [row] : [] })
     const closedRecords=assetActions.filter(record=>['cancelled','not_submitted'].includes(record.status)&&!record.metadata?.txHash)
     const closedApprovals=new Set(closedRecords.filter(record=>record.action==='wallet.swap').map(record=>record.resourceId||record.idempotencyKey.replace(/^pocket:arc-swap:/,'')))
-    const closedNativeEvents=new Set(closedRecords.filter(record=>record.action==='wallet.native-swap').map(record=>'pocket-native-swap:'+record.id))
+    const closedNativeEvents=new Set(closedRecords.filter(record=>record.action==='wallet.native-swap'&&!(record.status==='not_submitted'&&record.metadata?.purpose==='cash'&&record.metadata.approvalOutcome!=='cancelled')).map(record=>'pocket-native-swap:'+record.id))
     const retained=snapshot.payments.filter(row=>{
       if(row.source!=='wallet-swap'||row.txHash||['completed','confirmed','paid','success','successful','refunded'].includes(row.paycrestStatus||''))return true
       return !closedNativeEvents.has(row.eventId)&&!(row.chain==='arc'&&closedApprovals.has(row.providerReference||''))
@@ -479,7 +480,7 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
       hashes.add(funding.txHash.toLowerCase())
       if (funding.destinationTxHash) hashes.add(funding.destinationTxHash.toLowerCase())
     }
-    return { ...snapshot, dismissedSwapApprovalIds:[...new Set([...(snapshot.dismissedSwapApprovalIds||[]),...closedApprovals])], groupedTransactionHashes: [...hashes], payments: payments.filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
+    return { ...snapshot, dismissedSwapApprovalIds:[...new Set([...(snapshot.dismissedSwapApprovalIds||[]),...closedApprovals,...closedNativeEvents])], groupedTransactionHashes: [...hashes], payments: payments.filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
   }
 
 export default createDurablePocketActivityHandler({
