@@ -39,3 +39,11 @@ assert.equal(notice(cross).body,'0.2 USDC bridged from Base to 0.177184 USDT on 
 assert.equal(notice({...cross,paycrestStatus:'processing'}),null);
 assert.equal(notice({...cross,receivedAmount:undefined}),null);
 assert.equal(notice({...cross,destinationTxHash:undefined}),null);
+
+const baseTopUp={...conversion,eventId:'pocket-native-swap:cash-test',amount:'0.000309',assetSymbol:'ETH',destinationAsset:'USDC',receivedAmount:'0.521931',cashFunding:true}
+assert.equal(notice(baseTopUp).title,'$0.52 added to cash balance')
+assert.equal(notice({...baseTopUp,receivedAmount:undefined}),null)
+assert.equal(notice({...baseTopUp,paycrestStatus:'processing'}),null)
+assert.equal(notice({...baseTopUp,cashFunding:false}).title,'Swap successful')
+assert.equal(notice({...baseTopUp,receivedAmount:'0.004'}).title,'Less than $0.01 added to cash balance')
+assert.equal(notice({...baseTopUp,paycrestStatus:'failed'}).title,'Cash funding failed')

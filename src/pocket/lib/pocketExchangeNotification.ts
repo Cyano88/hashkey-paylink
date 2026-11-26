@@ -13,6 +13,18 @@ export function pocketExchangeNotification(row:PocketActivityRow){
  const network=networks[row.chain],destination=networks[row.destination||'']
  if(!network||!swap&&!destination)return null
  const paid=quantity(row.amount,row.assetSymbol),kind=swap?'Swap':'Bridge'
+ // A same-network top-up uses the swap rail but credits the settled USDC output to Cash.
+ if(swap&&row.cashFunding&&row.chain==='base'&&row.destination==='Cash balance'&&row.eventId.startsWith('pocket-native-swap:')){
+  const completed=!failed&&!refunded
+  if(completed&&(row.destinationAsset!=='USDC'||!valid(row.receivedAmount)))return null
+  const tag='pocket-payment:wallet-swap:'+row.eventId
+  const dollars=completed?Number(row.receivedAmount).toLocaleString('en-US',{style:'currency',currency:'USD'}):''
+  const credited=completed&&Number(row.receivedAmount)<0.01?'Less than $0.01':dollars
+  return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),tag,
+   title:completed?credited+' added to cash balance':refunded?'Cash funding refunded':'Cash funding failed',
+   body:completed?'Your cash balance has been updated.':refunded?'Your cash top-up was refunded. Open for details.':'Your cash top-up was not completed. Open for details.',
+   path:'/activity?receipt='+encodeURIComponent(row.eventId),occurredAt:row.statusUpdatedAt||row.ts}
+ }
  if(isCashFunding(row)||row.cashFunding&&row.destination==='base'){
   // A USDT bridge is only the first leg. Cash success belongs to the final USDC conversion.
   if(row.cashFunding&&row.assetSymbol==='USDT'&&!failed&&!refunded)return null
