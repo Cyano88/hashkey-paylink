@@ -19,7 +19,7 @@ export const NATIVE_SWAP_CONTRACTS={
 export const NATIVE_SWAP_BATCH_ABI=parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const swapAbi=[...routerAbi,...COMPACT_V3_ABI] as Abi
 const approveAbi=parseAbi(['function approve(address spender,uint256 amount) returns(bool)','function transfer(address recipient,uint256 amount) returns(bool)'])
-export type NativeEvmSwapBinding={ownerId:string;walletId:string;walletAddress:Hex;network:NativeEvmNetwork;from:string;to:string;amount:string}
+export type NativeEvmSwapBinding={purpose?:'cash';ownerId:string;walletId:string;walletAddress:Hex;network:NativeEvmNetwork;from:string;to:string;amount:string}
 export type NativeEvmSwapQuote=NativeEvmSwapBinding&FeeRouting&{version:1|2;stableFeeUnits?:string;rateScaled8?:string;totalInputUnits?:string;id:string;amountUnits:string;inputUsdPrice?:number;outputUsdPrice?:number;expectedOutUnits:string;minimumOutUnits:string;priceImpact:string;tx:{from:Hex;to:Hex;data:Hex;value:string};spender:Hex;feeUnits:string;callData:Hex;issuedAt:number;expiresAt:number;positiveSlippageFee?:{capPercent:number;recipient:Hex}}
 const fail=()=>{throw Object.assign(Error('Swap details changed. Review the amount and fee again.'),{status:409})}
 export const sameSwapAddress=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
@@ -30,6 +30,7 @@ export function nativeSwapCalls(q:NativeEvmSwapQuote,fee=BigInt(q.feeUnits)){
 }
 export function nativeSwapBatch(q:NativeEvmSwapQuote,fee=BigInt(q.feeUnits)){return encodeFunctionData({abi:NATIVE_SWAP_BATCH_ABI,functionName:'executeBatch',args:[nativeSwapCalls(q,fee)]})}
 export function validateNativeEvmSwap(q:NativeEvmSwapQuote,recovery=false,now=Date.now()){
+ if(q.purpose!==undefined&&(q.purpose!=='cash'||q.network!=='base'||q.to!=='USDC'||!['ETH','cNGN'].includes(q.from)))fail()
  if(!Object.hasOwn(nativeEvmNetworks,q.network)||!q.ownerId||!q.walletId||!isAddress(q.walletAddress)||/^0x0{40}$/i.test(q.walletAddress)||![1,2].includes(q.version)||sameSwapAddress(q.walletAddress,EVM_PLATFORM_TREASURY)||! /^[0-9a-f-]{36}$/i.test(q.id))fail()
  const {tokenIn,tokenOut}=nativeSwapPair(q.network,q.from,q.to),contracts=NATIVE_SWAP_CONTRACTS[q.network]
  if(!Number.isSafeInteger(q.issuedAt)||!Number.isSafeInteger(q.expiresAt)||q.issuedAt>now+5000||q.expiresAt-q.issuedAt!==45000||!recovery&&q.expiresAt<=now)fail()
@@ -87,7 +88,7 @@ export async function quoteNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(
  * Legacy v1 quotes remain readable for pending operations and receipt recovery. */
 export async function quoteReimbursedNativeEvmSwap(binding:NativeEvmSwapBinding,estimate:(data:Hex)=>Promise<string>,read:typeof okxGet=okxGet,now:()=>number=Date.now,affordable?:(quote:NativeEvmSwapQuote)=>Promise<boolean>,rateScaled8?:bigint){
  const {tokenIn,tokenOut}=nativeSwapPair(binding.network,binding.from,binding.to)
- if(tokenIn.native||tokenIn.symbol==='EURC')return quoteNativeEvmSwap(binding,estimate,read,now,affordable)
+ if(tokenIn.native||tokenIn.symbol==='EURC'||tokenIn.symbol==='cNGN')return quoteNativeEvmSwap(binding,estimate,read,now,affordable)
  if(!rateScaled8||rateScaled8<=0n||rateScaled8>10n**15n)throw Object.assign(Error('Network fee pricing is unavailable. Try again.'),{status:503})
  const total=nativeSwapUnits(binding.amount,tokenIn.decimals),id=randomUUID(),spender=getAddress(NATIVE_SWAP_CONTRACTS[binding.network].spender)
  let nativeCap=1n

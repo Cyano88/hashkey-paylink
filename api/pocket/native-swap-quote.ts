@@ -19,7 +19,8 @@ export async function quoteNativeSwap(input:{network:NativeSwapNetwork;from:stri
  const same=(a:unknown,b:string)=>typeof a==='string'&&(network==='solana'?a===b:a.toLowerCase()===b.toLowerCase())
  if(!route||String(route.chainIndex)!==chainIndex[network]||String(route.fromTokenAmount)!==String(units)||route.swapMode&&route.swapMode!=='exactIn')fail('Could not verify this swap route.',502)
  for(const [actual,expected] of [[route.fromToken,tokenIn],[route.toToken,tokenOut]] as const){
-  if(!actual||!same(actual.tokenContractAddress,expected.address)||String(actual.decimal)!==String(expected.decimals)||actual.isHoneyPot===true||actual.taxRate==null||!/^0(?:\.0+)?$/.test(String(actual.taxRate)))fail('Could not verify this swap asset.',502)
+  if(actual?.isHoneyPot===true)throw Object.assign(Error('This asset is unavailable for conversion.'),{status:422,code:'swap_asset_flagged'})
+  if(!actual||!same(actual.tokenContractAddress,expected.address)||String(actual.decimal)!==String(expected.decimals)||actual.taxRate==null||!/^0(?:\.0+)?$/.test(String(actual.taxRate)))fail('Could not verify this swap asset.',502)
  }
  if(typeof route.toTokenAmount!=='string'||!/^[1-9]\d{0,77}$/.test(route.toTokenAmount))fail('No output amount is available.',502)
  const impact=route.priceImpactPercent

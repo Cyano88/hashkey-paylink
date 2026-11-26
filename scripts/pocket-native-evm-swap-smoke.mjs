@@ -44,3 +44,11 @@ for(const network of ['ethereum','base','arbitrum','polygon']){
 }
 console.log('PASS native balance and output-funded fee shortfalls stop before a reverting second estimate on all EVM networks');
 console.log('PASS '+count+' EVM swap directions: exact calldata/batch/approval/fee, sealed owner and expiry, malicious mutation rejection, exact onchain output and reimbursement proof')
+
+const cashFixture=await fixture('base',false,'USDC')
+const cashQuote={...cashFixture.q,purpose:'cash'}
+assert.doesNotThrow(()=>validateNativeEvmSwap(cashQuote,false,cashFixture.now))
+for(const patch of [{network:'arbitrum'},{to:'USDT'},{from:'USDC'},{purpose:'other'}]){
+ assert.throws(()=>validateNativeEvmSwap({...cashQuote,...patch},false,cashFixture.now))
+}
+console.log('PASS Base cash conversion scope and output binding')

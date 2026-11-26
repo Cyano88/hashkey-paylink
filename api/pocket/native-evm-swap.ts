@@ -16,7 +16,7 @@ const actionName='wallet.native-swap',balanceAbi=parseAbi(['function balanceOf(a
 const defaults={identity:verifiedPrivyUser,readLink:readCircleLink,claim:claimCirclePocketAction,find:findCirclePocketAction,list:listCirclePocketActions,record:recordCirclePocketAction,approval:consumePocketPaymentApproval,estimate:estimateCircleNativeSend,challenge:createCircleGasStationEvmChallenge,challengeStatus:readCircleEvmChallenge,recoverChallenge:recoverCircleNativeSendChallenge,rpc:nativeSendRpc,quote:quoteReimbursedNativeEvmSwap,rate:readNativeUsdcRate,now:Date.now,enabled:(network?:NativeEvmNetwork)=>nativeEvmExecutionEnabled(process.env.POCKET_NATIVE_EVM_SWAP_ENABLED)&&(!network||Boolean(({ethereum:process.env.PRIVATE_RPC_URL_ETHEREUM,base:process.env.PRIVATE_RPC_URL,arbitrum:process.env.PRIVATE_RPC_URL_ARB,polygon:process.env.PRIVATE_RPC_URL_POLYGON})[network]))}
 export function nativeSwapReview(q:NativeEvmSwapQuote){
  const {tokenIn,tokenOut}=nativeSwapPair(q.network,q.from,q.to),deduct=q.version===1&&tokenOut.native?BigInt(q.feeUnits):0n
- return {id:q.id,network:q.network,walletAddress:q.walletAddress,tokenIn,tokenOut,amount:q.amount,inputUsdPrice:q.inputUsdPrice,outputUsdPrice:q.outputUsdPrice,expectedOut:formatUnits(BigInt(q.expectedOutUnits)-deduct,tokenOut.decimals),minimumOut:formatUnits(BigInt(q.minimumOutUnits)-deduct,tokenOut.decimals),fee:formatUnits(BigInt(q.version===2?q.stableFeeUnits!:q.feeUnits),q.version===2?6:18),feeAsset:q.version===2?tokenIn.symbol:nativeEvmNetworks[q.network].symbol,feeFromOutput:q.version===1&&tokenOut.native,feeIncludedInInput:q.version===2,positiveSlippageFee:q.positiveSlippageFee,expiresAt:q.expiresAt}
+ return {...(q.purpose?{purpose:q.purpose}:{}),id:q.id,network:q.network,walletAddress:q.walletAddress,tokenIn,tokenOut,amount:q.amount,inputUsdPrice:q.inputUsdPrice,outputUsdPrice:q.outputUsdPrice,expectedOut:formatUnits(BigInt(q.expectedOutUnits)-deduct,tokenOut.decimals),minimumOut:formatUnits(BigInt(q.minimumOutUnits)-deduct,tokenOut.decimals),fee:formatUnits(BigInt(q.version===2?q.stableFeeUnits!:q.feeUnits),q.version===2?6:18),feeAsset:q.version===2?tokenIn.symbol:nativeEvmNetworks[q.network].symbol,feeFromOutput:q.version===1&&tokenOut.native,feeIncludedInInput:q.version===2,positiveSlippageFee:q.positiveSlippageFee,expiresAt:q.expiresAt}
 }
 export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
@@ -61,12 +61,15 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     if(tokenIn.native)return BigInt(await preflightRead('eth_getBalance',[walletAddress,'pending']))>=BigInt(quote.amountUnits)+BigInt(quote.feeUnits)
     const balance=await preflightRead('eth_call',[{to:tokenIn.address,data:encodeFunctionData({abi:balanceAbi,functionName:'balanceOf',args:[walletAddress]})},'pending'])
     // v2 stable-input amounts include the atomic stablecoin reimbursement.
-    return BigInt(balance)>=BigInt(quote.totalInputUnits||quote.amountUnits)
+    if(BigInt(balance)<BigInt(quote.totalInputUnits||quote.amountUnits))return false
+    if(quote.version===1&&!nativeSwapPair(network,quote.from,quote.to).tokenOut.native)return BigInt(await preflightRead('eth_getBalance',[walletAddress,'pending']))>=BigInt(quote.feeUnits)
+    return true
    }
    if(action==='quote'){
     const pair=nativeSwapPair(network,req.body.from,req.body.to)
-    const rate=pair.tokenIn.native||pair.tokenIn.symbol==='EURC'?undefined:await d.rate(network==='polygon'?'polygon':'ethereum',undefined,d.now,pair.tokenIn.symbol as 'USDC'|'USDT')
-    const quote=await d.quote({ownerId,walletId,walletAddress,network,from:req.body.from,to:req.body.to,amount:req.body.amount},estimate,undefined,d.now,preflight,rate)
+    const rate=pair.tokenIn.native||['EURC','cNGN'].includes(pair.tokenIn.symbol)?undefined:await d.rate(network==='polygon'?'polygon':'ethereum',undefined,d.now,pair.tokenIn.symbol as 'USDC'|'USDT')
+    if(req.body.purpose!==undefined&&(req.body.purpose!=='cash'||network!=='base'||req.body.to!=='USDC'||!['ETH','cNGN'].includes(req.body.from)))return res.status(400).json({ok:false,error:'Choose a supported cash funding asset.'})
+    const quote=await d.quote({...(req.body.purpose==='cash'?{purpose:'cash' as const}:{}),ownerId,walletId,walletAddress,network,from:req.body.from,to:req.body.to,amount:req.body.amount},estimate,undefined,d.now,preflight,rate)
     return res.json({ok:true,quote:nativeSwapReview(quote),quoteToken:sealNativeEvmSwap(quote),sufficientBalance:await preflight(quote)})
    }
    const quote=q!,key='pocket:native-swap:'+quote.id
@@ -85,7 +88,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
     if(quote.expiresAt<=d.now())return res.status(409).json({ok:false,code:'swap_quote_expired',error:'Swap quote expired. Review the updated amount.'})
     if(nativeRequired>BigInt(quote.feeUnits)||feeInsufficient)return res.status(409).json({ok:false,error:'Network fees changed. Review the updated estimate.'})
     const review=nativeSwapReview(quote)
-    const metadata={feeAmount:review.fee,feeAsset:review.feeAsset,quoteToken:token,network,walletAddress,amount:quote.amount,assetSymbol:quote.from,toAsset:quote.to,intentFingerprint:network+':'+walletId}
+    const metadata={...(quote.purpose==='cash'?{purpose:'cash'}:{}),feeAmount:review.fee,feeAsset:review.feeAsset,quoteToken:token,network,walletAddress,amount:quote.amount,assetSymbol:quote.from,toAsset:quote.to,intentFingerprint:network+':'+walletId}
     const claim=await d.claim({ownerId,idempotencyKey:key,action:actionName,metadata,dedupe:{metadataKey:'intentFingerprint',metadataValue:metadata.intentFingerprint,statuses:['started','submitted']}})
     if(!claim.claimed)return res.status(409).json({ok:false,error:'A swap from this wallet is still being checked.'})
     const result=await d.challenge({chain:network,userToken,walletId,walletAddress,callData:quote.callData,idempotencyKey:quote.id,refId:key})
@@ -106,7 +109,7 @@ export function createNativeEvmSwapHandler(overrides:Partial<typeof defaults>={}
    if(!/^0x[0-9a-f]{64}$/i.test(provider.txHash))throw Error('Invalid swap reference.')
    existing=await d.record({...existing,status:'submitted',metadata:{...existing.metadata!,txHash:provider.txHash}})
    return res.json({ok:true,...await reconcileNativeEvmSwap(existing,{rpc:d.rpc,record:d.record}),challengeId})
-  }catch(reason){const e=reason as Error&{status?:number};return res.status(e.status||503).json({ok:false,error:e.status?e.message:'Could not verify this swap yet. Try again shortly.'})}
+  }catch(reason){const e=reason as Error&{status?:number;code?:string};return res.status(e.status||503).json({ok:false,...(e.code==='swap_asset_flagged'?{code:e.code}:{}),error:e.status?e.message:'Could not verify this swap yet. Try again shortly.'})}
  }
 }
 export default createNativeEvmSwapHandler()
