@@ -30,7 +30,13 @@ export async function crossBridgeCollectedCoverage(wallet?:string,overrides:Part
  for(const r of records){
   if(manualException&&r.id===manualException)continue
   if(typeof r.quoteToken!=='string'||!r.sourceHash||!['submitted','source_confirmed','completed','refunded','source_failed'].includes(r.state))return unresolved()
-  const review=await d.open(r.quoteToken,r.ownerId,{recovery:true}),state=await d.source(review,r.sourceHash as Hex,r.userOperationHash as Hex|undefined)
+  const review=await d.open(r.quoteToken,r.ownerId,{recovery:true})
+  // The settlement journal records these states only after verifying the exact
+  // source debit and fee. Bind that decision to this sealed operation.
+  const q=review.quote
+  const matches=q.id===r.id&&q.ownerId===r.ownerId&&q.input.source===r.source&&q.input.sender.toLowerCase()===r.walletAddress.toLowerCase()&&/^0x[0-9a-f]{64}$/i.test(r.sourceHash)
+  const verified=matches&&['source_confirmed','completed','refunded'].includes(r.state)
+  const state=verified?'confirmed':matches&&r.state==='source_failed'?'failed':await d.source(review,r.sourceHash as Hex,r.userOperationHash as Hex|undefined)
   let coverageUsdMicros=0n
   if(state==='confirmed'){const prices=await d.prices(review.quote.input.source,review.quote.input.from);coverageUsdMicros=BigInt(review.quote.reimbursementUnits)*prices.assetPrice.scaled8*95n/(10n**BigInt(review.route.tokenIn.decimals)*10000n)}
   output.push({walletId:review.quote.wallets.source.walletId,at:Number(r.createdAt),hash:r.sourceHash,coverageUsdMicros})

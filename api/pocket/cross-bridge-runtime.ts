@@ -52,7 +52,7 @@ export async function crossBridgePolicyGuard(review:Review,env:NodeJS.ProcessEnv
  if(await readDurableJson(haltKey))throw Error('Bridge sponsorship is paused for fee reconciliation.')
  const ops=(await listCrossBridgeOperations(q.ownerId,true)).filter(o=>o.id!==q.id&&o.id!==manual?.originalId&&o.source===source&&o.walletAddress.toLowerCase()===q.input.sender.toLowerCase()&&o.createdAt>=Date.now()-28*86400000&&!['prepared','cancelled','not_submitted'].includes(o.state))
  if(!ops.length)return
- if(ops.some(o=>!['completed','refunded','source_failed'].includes(o.state)||!o.transactionId||!o.sourceHash))throw Error('Previous bridge billing is still being verified.')
+ if(ops.some(o=>!['source_confirmed','completed','refunded','source_failed'].includes(o.state)||!o.transactionId||!o.sourceHash))throw Error('Previous bridge billing is still being verified.')
  const appId=env.PRIVY_APP_ID||env.VITE_PRIVY_APP_ID||'',secret=env.PRIVY_APP_SECRET||''
  const privySource=source as 'bsc'|'xlayer'|'celo'
  const billed=await sumPrivyTransactionGas(ops.map(o=>({transactionId:o.transactionId!,walletId:q.wallets.source.walletId,chainId:inboundChains[privySource].id,hash:o.sourceHash as Hex})),async id=>{const r=await fetch('https://api.privy.io/v1/transactions/'+encodeURIComponent(id),{headers:{'privy-app-id':appId,Authorization:'Basic '+Buffer.from(appId+':'+secret).toString('base64')},redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Bridge billing is unavailable.');return r.json()})

@@ -11,6 +11,14 @@ for(const source of ['bsc','xlayer']){
  assert.equal(prices,0,'unconfirmed receipt must not enter a billed-versus-zero coverage comparison')
  proof='failed';assert.equal((await crossBridgeCollectedCoverage(wallet,deps))[0].coverageUsdMicros,0n)
  proof='confirmed';assert.equal((await crossBridgeCollectedCoverage(wallet,deps))[0].coverageUsdMicros,950000n)
+ const bound={...deps,open:async()=>{const review=await deps.open();Object.assign(review.quote,{id:row.id,ownerId:row.ownerId});review.quote.input.sender=wallet;return review}}
+ proof='pending';reads=0
+ for(const state of ['source_confirmed','completed','refunded','source_failed']){
+  row.state=state
+  assert.equal((await crossBridgeCollectedCoverage(wallet,bound))[0].coverageUsdMicros,state==='source_failed'?0n:950000n)
+ }
+ assert.equal(reads,0,'verified operations must not depend on historical RPC availability')
+ await assert.rejects(()=>crossBridgeCollectedCoverage(wallet,deps),e=>e.code==='bridge_source_evidence_pending')
  row.state='submitting';delete row.sourceHash;reads=0
  await assert.rejects(()=>assertCrossBridgeCoverageReady(wallet,deps),pending)
  await assert.rejects(()=>crossBridgeCollectedCoverage(wallet,deps),pending)
