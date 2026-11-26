@@ -16,7 +16,7 @@ import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnap
 import { listCirclePocketActions } from '../circle-pocket-action-journal.js'
 import { findEvmUsdcTransfer, normalizeEvmUsdcChain } from '../usdc-transfer-verify.js'
 import { pocketRequestRepository } from './request-store.js'
-import { listPocketPushOwners, pocketPushConfigured, sendPocketPush } from './push-devices.js'
+import { deliveredPocketPushEvents, listPocketPushOwners, pocketPushConfigured, sendPocketPush } from './push-devices.js'
 import { findSolanaUsdcTransfer, readPocketLinkedWalletAddresses, readPocketWalletChainActivity } from './wallet-chain-activity.js'
 
 const NETWORK_LABELS: Record<string, string> = { base: 'Base', arbitrum: 'Arbitrum', solana: 'Solana', arc: 'Arc' }
@@ -93,12 +93,37 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
   let errors = 0
   for (const ownerId of owners) {
     try {
-      const [rawRows, wallets, actions, requests, context] = await Promise.all([
+      let preference:ReturnType<Dependencies['readDisplayCurrency']>|undefined
+      const sendNotice=async(notice:NonNullable<ReturnType<typeof pocketMoneyNotification>>)=>{
+        const {cashCredit,...payload}=notice
+        if(cashCredit){
+          preference??=dependencies.readDisplayCurrency(ownerId).catch(()=>undefined)
+          const currency=await preference
+          const quote=currency==='NGN'||currency==='UGX'?await dependencies.readCashRate('1',currency,'USDC').catch(()=>undefined):undefined
+          payload.body=cashNotificationBody(cashCredit,currency,quote,dependencies.now())
+        }
+        return dependencies.sendPush(ownerId,payload.eventId,payload)
+      }
+      const cutoff = dependencies.now() - lookbackMs
+      // Cash receipts already carry the verified credit. An unrelated wallet scan
+      // must not delay their push or age them out during a worker restart.
+      const context = await dependencies.readContext(ownerId)
+      const since = dependencies.now() - 24 * 60 * 60_000
+      const cashNotices = context.map(pocketMoneyNotification).filter((n): n is NonNullable<typeof n> => !!n?.cashCredit && n.occurredAt >= since)
+      const cashSent = cashNotices.length && dependencies.sendPush === sendPocketPush
+        ? await deliveredPocketPushEvents(ownerId,cashNotices.map(n=>n.eventId)) : new Set<string>()
+      for (const notice of cashNotices) {
+        if (cashSent.has(notice.eventId)) continue
+        if (await sendNotice(notice)) {
+          cashSent.add(notice.eventId)
+          notifications++
+        }
+      }
+      const [rawRows, wallets, actions, requests] = await Promise.all([
         dependencies.readActivity(ownerId, { timeoutMs: 8_000, limit: 100 }),
         dependencies.readWallets(ownerId),
         dependencies.listActions(ownerId, 500),
         dependencies.listRequests(ownerId),
-        dependencies.readContext(ownerId),
       ])
       const deferred = await dependencies.readDeferred(ownerId)
       const eventPushes = await dependencies.readEventPushes(ownerId)
@@ -120,24 +145,12 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       const currentActions = await dependencies.listActions(ownerId, 500)
       notificationContext = await dependencies.readContext(ownerId)
       for (const hash of actionHashes(currentActions)) ignoredHashes.add(hash)
-      let preference:ReturnType<Dependencies['readDisplayCurrency']>|undefined
-      const sendNotice=async(notice:NonNullable<ReturnType<typeof pocketMoneyNotification>>)=>{
-        const {cashCredit,...payload}=notice
-        if(cashCredit){
-          preference??=dependencies.readDisplayCurrency(ownerId).catch(()=>undefined)
-          const currency=await preference
-          const quote=currency==='NGN'||currency==='UGX'?await dependencies.readCashRate('1',currency,'USDC').catch(()=>undefined):undefined
-          payload.body=cashNotificationBody(cashCredit,currency,quote,dependencies.now())
-        }
-        return dependencies.sendPush(ownerId,payload.eventId,payload)
-      }
-      const cutoff = dependencies.now() - lookbackMs
       // Provider records own payment wording. Suppress the debit, fee logs,
       // refund deposit and every attached funding leg even before delivery.
       for (const row of notificationContext) {
         for (const hash of [row.txHash,row.refundTxHash,row.destinationTxHash,...(row.paymentFunding||[]).flatMap(f=>[f.txHash,f.destinationTxHash])]) if(hash) ignoredHashes.add(hash.toLowerCase())
         const notice=pocketMoneyNotification(row)
-        if(notice && notice.occurredAt>=cutoff){await sendNotice(notice);notifications++}
+        if(notice && !cashSent.has(notice.eventId) && notice.occurredAt>=cutoff && await sendNotice(notice))notifications++
       }
       const isConfirmedMoney = (row: (typeof rows)[number]) => {
         const source = String(row.source ?? '').toLowerCase()

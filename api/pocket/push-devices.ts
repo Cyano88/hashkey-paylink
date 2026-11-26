@@ -194,6 +194,11 @@ async function sendApplePushWithEnvironmentFallback(
   return sendApplePush('https://api.sandbox.push.apple.com', credentials, deviceToken, eventId, input)
 }
 
+export async function deliveredPocketPushEvents(ownerId:string,eventIds:string[]) {
+  const {delivered}=normalized(await readDurableJson<PocketPushStore>(STORE_KEY))
+  return new Set(eventIds.filter(id=>Boolean(delivered[ownerId+':'+id])))
+}
+
 export async function sendPocketPush(ownerId: string, eventId: string, input: { category?: PocketNoticeCategory; title: string; body: string; path: string; tag?: string; occurredAt?: number }) {
   if (isPocketInboxNotice(input)) await savePocketNotice(ownerId,eventId,input)
   const serviceAccount = firebaseServiceAccount()
