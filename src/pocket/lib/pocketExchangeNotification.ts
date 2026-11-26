@@ -13,6 +13,8 @@ export function pocketExchangeNotification(row:PocketActivityRow){
  const network=networks[row.chain],destination=networks[row.destination||'']
  if(!network||!swap&&!destination)return null
  const paid=quantity(row.amount,row.assetSymbol),kind=swap?'Swap':'Bridge'
+ // Recovery rows precede the canonical receipt and must not emit a second notification.
+ if(swap&&row.cashFunding&&row.eventId.startsWith('operation:'))return null
  // A same-network top-up uses the swap rail but credits the settled USDC output to Cash.
  if(swap&&row.cashFunding&&row.chain==='base'&&row.destination==='Cash balance'&&row.eventId.startsWith('pocket-native-swap:')){
   const completed=!failed&&!refunded
