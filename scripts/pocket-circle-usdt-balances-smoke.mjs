@@ -26,7 +26,7 @@ const reader=createCircleDisplayBalanceReader(async()=>{providerCalls++;return {
 const fallback=async()=>{rpcCalls++;return 0}
 await Promise.all([reader(link,fallback),reader(link,fallback)])
 assert.equal(providerCalls,1);assert.equal(rpcCalls,0)
-await reader(link,fallback,true);assert.equal(providerCalls,2);assert.equal(rpcCalls,0,'manual display refresh stays on Circle')
+await Promise.all(Array.from({length:8},()=>reader(link,fallback,true)));assert.equal(providerCalls,2);assert.equal(rpcCalls,0,'manual display refresh stays on Circle')
 const handler=createPocketBalancesHandler({verifyUser:async()=>({userId:'fixture'}),readLink:async key=>key==='fixture:base'?link:null,readBalance:fallback,readDisplayBalance:reader})
 let body
 await handler({method:'GET',query:{}},{setHeader(){},json(v){body=v},status(){return this}})

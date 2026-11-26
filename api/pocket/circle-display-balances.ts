@@ -33,13 +33,17 @@ export async function fetchCircleStablecoinBalances(link:CircleLinkRecord,fetche
 
 export function createCircleDisplayBalanceReader(provider:(link:CircleLinkRecord)=>Promise<number|{balance:number;usdt?:number}>=fetchCircleDisplayBalance,now=Date.now,rpcOnFresh=true){
  type Result={balance:number;usdt?:number;observedAt:number;source:'circle'|'rpc'}
- const entries=new Map<string,{result?:Result;pending?:Promise<Result>;retryAt?:number}>()
+ const entries=new Map<string,{result?:Result;pending?:Promise<Result>;pendingFresh?:boolean;retryAt?:number}>()
  return async(link:CircleLinkRecord,fallback:()=>Promise<number>,fresh=false):Promise<Result>=>{
   const key=JSON.stringify([link.privyUserId,link.chain,link.circleWalletId,link.circleWalletAddress,link.updatedAt]);let entry=entries.get(key)
   if(!entry){entry={};entries.set(key,entry)}
-  if(entry.pending){await entry.pending;if(!fresh)return entry.result!}
+  while(entry.pending){
+   if(!fresh||entry.pendingFresh||!rpcOnFresh)return entry.pending
+   try{await entry.pending}catch{/* A forced verification may retry an ordinary read. */}
+  }
   if(!fresh&&entry.result&&now()-entry.result.observedAt<30000)return entry.result
   const current=entry
+  current.pendingFresh=fresh
   current.pending=(async()=>{if((!fresh||!rpcOnFresh)&&now()>=(current.retryAt||0)){try{const value=await provider(link);return {...(typeof value==='number'?{balance:value}:value),observedAt:now(),source:'circle' as const}}catch{current.retryAt=now()+60000}}return {balance:await fallback(),observedAt:now(),source:'rpc' as const}})()
   try{current.result=await current.pending;return current.result}finally{current.pending=undefined;if(entries.size>500)for(const[k,v]of entries)if(k!==key&&!v.pending){entries.delete(k);break}}
  }
