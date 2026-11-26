@@ -461,8 +461,13 @@ export async function transformPocketActivitySnapshot(owner:string, snapshot:imp
     const [hashes, history, bankRoutes, assetActions, marketplaceRows] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false }), listCirclePocketActions(owner, 500, 'bank-withdraw.route'), listCirclePocketActions(owner, 500),readPocketMarketplaceActivity(owner)])
     const bankRows = history.payments.map(sanitizedActivityRow)
     const assetRows = assetActions.flatMap(record => { const row = bridgeActivityRow(record); return row ? [row] : [] })
-    const closedApprovals = new Set(assetActions.filter(record=>record.action==='wallet.swap'&&['cancelled','not_submitted'].includes(record.status)&&!record.metadata?.txHash).map(record=>record.resourceId||record.idempotencyKey.replace(/^pocket:arc-swap:/,'')))
-    const retained = snapshot.payments.filter(row=>!(row.source==='wallet-swap'&&row.chain==='arc'&&!row.txHash&&closedApprovals.has(row.providerReference||'')&&!['completed','confirmed','paid','success','successful','refunded'].includes(row.paycrestStatus||'')))
+    const closedRecords=assetActions.filter(record=>['cancelled','not_submitted'].includes(record.status)&&!record.metadata?.txHash)
+    const closedApprovals=new Set(closedRecords.filter(record=>record.action==='wallet.swap').map(record=>record.resourceId||record.idempotencyKey.replace(/^pocket:arc-swap:/,'')))
+    const closedNativeEvents=new Set(closedRecords.filter(record=>record.action==='wallet.native-swap').map(record=>'pocket-native-swap:'+record.id))
+    const retained=snapshot.payments.filter(row=>{
+      if(row.source!=='wallet-swap'||row.txHash||['completed','confirmed','paid','success','successful','refunded'].includes(row.paycrestStatus||''))return true
+      return !closedNativeEvents.has(row.eventId)&&!(row.chain==='arc'&&closedApprovals.has(row.providerReference||''))
+    })
     const linkedRows = mergePocketActivityRows(retained, assetRows).map(row => {
       if (row.source !== 'wallet-bridge' || row.fundingParent) return row
       const route = bankRoutes.find(item => item.metadata?.txHash?.toLowerCase() === row.txHash.toLowerCase() && item.metadata?.source === row.chain)
