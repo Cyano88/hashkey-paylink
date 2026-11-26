@@ -68,6 +68,17 @@ for(const source of ['bsc','xlayer','celo'])for(const asset of crossBridgeAssets
  time+=90000;assert.equal((await runtime().status(saved.quote.id)).sourceHash,sourceHash);assert.equal(proofs,1)
  await runtime().submit(saved.quote.id,'ephemeral-signature');assert.equal(sends,1);assert.equal((await runtime().cancel(saved.quote.id)).state,'submitted');assert(!JSON.stringify([...rows]).includes('ephemeral-signature'))
  await assert.rejects(()=>createCrossBridgePrivyRuntime('other',async()=>{},opts).read(saved.quote.id))
+ if(source==='xlayer'){
+  rows=new Map();time=now
+  let preflights=0
+  const before=sends,combined=createCrossBridgePrivyRuntime('owner',async()=>{preflights++},opts)
+  const dispatch=()=>combined.prepareAuthorizedCash(saved.quoteToken,'pin','ephemeral-signature')
+  assert.equal((await dispatch()).state,'submitting')
+  await dispatch()
+  assert.equal(preflights,1)
+  assert.equal(sends,before+1)
+  assert(!JSON.stringify([...rows]).includes('ephemeral-signature'))
+ }
  for(const delegated of [false,true])for(const failure of ['wallet','expiry']){
   rows=new Map();time=now;let reads=0;const before=sends
   const validate=async()=>{if(++reads===3){if(failure==='wallet')throw Error('lookup unavailable');time=saved.quote.expiresAt-4000}}

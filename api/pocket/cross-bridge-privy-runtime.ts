@@ -82,6 +82,7 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
   },
  })
  return {
+  prepareAuthorizedCash:(token:string,approval:string,authorization:string)=>{ready();return service.prepare(token,ownerId,approval,authorization)},
   prepare:(token:string,approval:string)=>{ready();return service.prepare(token,ownerId,approval)},
   request:async(id:string)=>{ready();const op=await service.read(ownerId,id);if(op.state!=='prepared')return fail();return crossBridgePrivyRequest(await open(op.quoteToken,ownerId,false),appId)},
   submit:(id:string,authorization:string)=>{ready();return service.submit(ownerId,id,authorization)},
