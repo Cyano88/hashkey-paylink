@@ -4,7 +4,7 @@ import {formatStockQuantity} from './pocketStockDisplay'
 
 const networks:Record<string,string>={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain',celo:'Celo'}
 const valid=(value:string|undefined)=>!!value&&/^\d+(?:\.\d+)?$/.test(value)&&Number.isFinite(Number(value))&&Number(value)>0
-const cashBody=(amount:string)=>(Number(amount)<0.01?'Less than $0.01':Number(amount).toLocaleString('en-US',{style:'currency',currency:'USD'}))+' added to your cash balance.'
+const cashBody='Your cash balance was topped up.'
 const quantity=(value:string,symbol:string)=>formatStockQuantity(value)+' '+symbol
 /** Exchange notifications use terminal journal truth, never a quote or a source-only confirmation. */
 export function pocketExchangeNotification(row:PocketActivityRow){
@@ -23,7 +23,8 @@ export function pocketExchangeNotification(row:PocketActivityRow){
   const tag='pocket-payment:wallet-swap:'+row.eventId
   return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),tag,
    title:completed?'Cash added':refunded?'Cash funding refunded':'Cash funding failed',
-   body:completed?cashBody(row.receivedAmount!):refunded?'Your cash top-up was refunded. Open for details.':'Your cash top-up was not completed. Open for details.',
+   ...(completed?{cashCredit:row.receivedAmount!}:{}),
+   body:completed?cashBody:refunded?'Your cash top-up was refunded. Open for details.':'Your cash top-up was not completed. Open for details.',
    path:'/activity?receipt='+encodeURIComponent(row.eventId),occurredAt:row.statusUpdatedAt||row.ts}
  }
  if(isCashFunding(row)||row.cashFunding&&row.destination==='base'){
@@ -32,7 +33,7 @@ export function pocketExchangeNotification(row:PocketActivityRow){
   const received=row.cashReceivedAmount??(row.destinationAsset==='USDC'?row.receivedAmount:undefined)??(isCashConversion(row)?(row.contextLabel||'').match(/^\d+(?:\.\d+)? (?:USDT|EURC) to (\d+(?:\.\d+)?) USDC$/)?.[1]:undefined)
   if(!failed&&!refunded&&!valid(received))return null
   const tag='pocket-payment:'+(isCashConversion(row)?'cash-conversion':'wallet-bridge')+':'+row.eventId
-  return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),title:refunded?'Cash funding refunded':failed?'Cash funding failed':'Cash added',body:refunded?'Your cash top-up was refunded. Open for details.':failed?'Your cash top-up was not completed. Open for details.':cashBody(received!),path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
+  return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),title:refunded?'Cash funding refunded':failed?'Cash funding failed':'Cash added',...(!refunded&&!failed?{cashCredit:received!}:{}),body:refunded?'Your cash top-up was refunded. Open for details.':failed?'Your cash top-up was not completed. Open for details.':cashBody,path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
  }
  let title=kind+' successful',body=swap?`Your swap on ${network} completed.`:`${paid} bridged from ${network} to ${destination}.`
  if(!swap&&!failed&&!refunded&&row.destinationAsset){

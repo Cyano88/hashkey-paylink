@@ -1,3 +1,6 @@
+import {localCurrencyProfileRepository} from '../local-currency-profile.js'
+import {readPocketPaycrestQuote} from './fx-quote.js'
+import {cashNotificationBody} from './cash-notification-body.js'
 import {selectPocketPushOwners} from './fair-owner-batch.js'
 import {readWalletEventPushes,acknowledgeWalletEventPushes} from './wallet-event-push.js'
 import {readDeferredTransferPushes,saveDeferredTransferPushes} from './deferred-transfer-push.js'
@@ -22,6 +25,8 @@ const acceptedRecoveryAttemptAt = new Map<string, number>()
 const ACCEPTED_RECOVERY_BACKOFF_MS = 10 * 60_000
 
 type Dependencies = {
+  readDisplayCurrency(ownerId:string):Promise<'USDC'|'NGN'|'UGX'|undefined>
+  readCashRate:typeof readPocketPaycrestQuote
   readEventPushes:typeof readWalletEventPushes
   acknowledgeEventPushes:typeof acknowledgeWalletEventPushes
   readDeferred: typeof readDeferredTransferPushes
@@ -56,6 +61,8 @@ function actionHashes(records: Awaited<ReturnType<typeof listCirclePocketActions
 
 export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
+    readDisplayCurrency:async ownerId=>(await localCurrencyProfileRepository.get(ownerId))?.displayCurrency,
+    readCashRate:readPocketPaycrestQuote,
     readEventPushes:readWalletEventPushes,
     acknowledgeEventPushes:acknowledgeWalletEventPushes,
     readDeferred: readDeferredTransferPushes,
@@ -113,13 +120,24 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       const currentActions = await dependencies.listActions(ownerId, 500)
       notificationContext = await dependencies.readContext(ownerId)
       for (const hash of actionHashes(currentActions)) ignoredHashes.add(hash)
+      let preference:ReturnType<Dependencies['readDisplayCurrency']>|undefined
+      const sendNotice=async(notice:NonNullable<ReturnType<typeof pocketMoneyNotification>>)=>{
+        const {cashCredit,...payload}=notice
+        if(cashCredit){
+          preference??=dependencies.readDisplayCurrency(ownerId).catch(()=>undefined)
+          const currency=await preference
+          const quote=currency==='NGN'||currency==='UGX'?await dependencies.readCashRate('1',currency,'USDC').catch(()=>undefined):undefined
+          payload.body=cashNotificationBody(cashCredit,currency,quote,dependencies.now())
+        }
+        return dependencies.sendPush(ownerId,payload.eventId,payload)
+      }
       const cutoff = dependencies.now() - lookbackMs
       // Provider records own payment wording. Suppress the debit, fee logs,
       // refund deposit and every attached funding leg even before delivery.
       for (const row of notificationContext) {
         for (const hash of [row.txHash,row.refundTxHash,row.destinationTxHash,...(row.paymentFunding||[]).flatMap(f=>[f.txHash,f.destinationTxHash])]) if(hash) ignoredHashes.add(hash.toLowerCase())
         const notice=pocketMoneyNotification(row)
-        if(notice && notice.occurredAt>=cutoff){await dependencies.sendPush(ownerId,notice.eventId,notice);notifications++}
+        if(notice && notice.occurredAt>=cutoff){await sendNotice(notice);notifications++}
       }
       const isConfirmedMoney = (row: (typeof rows)[number]) => {
         const source = String(row.source ?? '').toLowerCase()
@@ -204,7 +222,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       for (const row of confirmed) {
         const notice=pocketMoneyNotification(row)
         if(!notice)continue
-        const delivered=await dependencies.sendPush(ownerId,notice.eventId,notice)
+        const delivered=await sendNotice(notice)
         if(delivered===true)deliveredEventIds.add(row.eventId)
         notifications += 1
       }

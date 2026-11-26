@@ -10,7 +10,7 @@ const handler=createPocketActivityHandler({verifyUser:async()=>({userId:'owner'}
 let response,code=200;const res={status(n){code=n;return this},json(value){response=value;return this}}
 await handler({method:'GET',query:{}},res)
 assert.equal(code,200);assert.equal(response.payments.length,records.length)
-for(const row of response.payments){assert.equal(row.cashFunding,true);const notice=pocketMoneyNotification(row);if(row.assetSymbol==='USDT')assert.equal(notice,null);else{assert.equal(notice.title,'Cash added');assert.equal(notice.body,'$0.95 added to your cash balance.')}}
+for(const row of response.payments){assert.equal(row.cashFunding,true);const notice=pocketMoneyNotification(row);if(row.assetSymbol==='USDT')assert.equal(notice,null);else{assert.equal(notice.title,'Cash added');assert.equal(notice.cashCredit,'0.95');assert.equal(notice.body,'Your cash balance was topped up.')}}
 console.log('PASS persisted journal -> Activity -> notification: Cash purpose retained across CCTP/BNB/X Layer/USDT, exact received amounts and silent intermediate deposits')
 
 import {mergePocketActivitySnapshot} from '../src/pocket/lib/pocketActivitySnapshot.ts'
