@@ -16,13 +16,13 @@ for(const [chain,label] of Object.entries(networks))for(const assetSymbol of ['U
 console.log('PASS all seven networks, both stablecoins, bridge routes, precise output display, malformed context, status gates, refunds, stable dedup IDs and silent funding')
 
 const cashRow={eventId:'pocket-bridge:cash',source:'wallet-bridge',chain:'arc',destination:'base',assetSymbol:'USDC',amount:'0.5',txHash:'0xcash',paycrestStatus:'completed',activityLabel:'Cash funding',ts:1}
-assert.equal(pocketExchangeNotification(cashRow).title,'Added to cash balance')
+assert.equal(pocketExchangeNotification(cashRow),null)
 assert.equal(pocketExchangeNotification({...cashRow,paycrestStatus:'processing'}),null)
 assert.equal(pocketExchangeNotification({...cashRow,activityLabel:'USDC bridge'}).title,'Bridge successful')
 
 for(const chain of ['arc','arbitrum','ethereum','polygon','solana','bsc','xlayer']){
  const cash={...cashRow,chain,cashFunding:true,cashReceivedAmount:'0.478321',amount:'0.5'}
- const n=notice(cash);assert.equal(n.title,'Added to cash balance');assert.equal(n.body,'0.478321 USD added to your cash balance.');assert.equal(n.eventId,notice(cash).eventId)
+ const n=notice(cash);assert.equal(n.title,'Cash added');assert.equal(n.body,'$0.48 added to your cash balance.');assert.equal(n.eventId,notice(cash).eventId)
  assert.equal(notice({...cash,cashReceivedAmount:undefined}),null,'Never substitute the amount paid for the received amount')
  assert.equal(notice({...cash,assetSymbol:'USDT'}),null,'Intermediate USDT delivery stays silent')
  assert.equal(notice({...cash,assetSymbol:'USDT',paycrestStatus:'failed'}).title,'Cash funding failed')
@@ -31,7 +31,7 @@ for(const chain of ['arc','arbitrum','ethereum','polygon','solana','bsc','xlayer
  assert.equal(notice({...cash,cashFunding:undefined,cashReceivedAmount:undefined,activityLabel:'USDC bridge'}).title,'Bridge successful')
 }
 const conversion={...cashRow,eventId:'pocket-cash-conversion:final',source:'wallet-swap',chain:'base',destination:'Cash balance',assetSymbol:'USDT',amount:'1',contextLabel:'1 USDT to 0.99 USDC'}
-assert.equal(notice(conversion).body,'0.99 USD added to your cash balance.')
+assert.equal(notice(conversion).body,'$0.99 added to your cash balance.')
 console.log('PASS Cash pushes: verified received amount, silent USDT intermediate legs, final conversion, refunds, cancellations and ordinary bridge isolation')
 
 const cross={eventId:'cross',source:'wallet-bridge',chain:'base',destination:'arbitrum',assetSymbol:'USDC',destinationAsset:'USDT',amount:'0.2',receivedAmount:'0.177184',destinationTxHash:'delivery',txHash:'source',paycrestStatus:'completed',ts:1};
@@ -41,10 +41,21 @@ assert.equal(notice({...cross,receivedAmount:undefined}),null);
 assert.equal(notice({...cross,destinationTxHash:undefined}),null);
 
 const baseTopUp={...conversion,eventId:'pocket-native-swap:cash-test',amount:'0.000309',assetSymbol:'ETH',destinationAsset:'USDC',receivedAmount:'0.521931',cashFunding:true}
-assert.equal(notice(baseTopUp).title,'$0.52 added to cash balance')
+assert.equal(notice(baseTopUp).body,'$0.52 added to your cash balance.')
 assert.equal(notice({...baseTopUp,receivedAmount:undefined}),null)
 assert.equal(notice({...baseTopUp,paycrestStatus:'processing'}),null)
 assert.equal(notice({...baseTopUp,cashFunding:false}).title,'Swap successful')
-assert.equal(notice({...baseTopUp,receivedAmount:'0.004'}).title,'Less than $0.01 added to cash balance')
+assert.equal(notice({...baseTopUp,receivedAmount:'0.004'}).body,'Less than $0.01 added to your cash balance.')
 assert.equal(notice({...baseTopUp,paycrestStatus:'failed'}).title,'Cash funding failed')
 assert.equal(notice({...baseTopUp,eventId:'operation:local',destination:'USDC'}),null)
+
+const q={purpose:'cash',rail:'cross',source:'arc',destination:'base',destinationAsset:'USDC'}
+const {pocketCashDelivery}=await import('../src/pocket/lib/pocketCashDelivery.ts')
+const observed={txHash:'source',destinationTxHash:'destination',amountOut:'0.876518',deliveryObserved:true}
+assert.equal(pocketCashDelivery(q,observed,'pending'),'0.876518')
+for(const missing of ['txHash','destinationTxHash','amountOut','deliveryObserved'])assert.equal(pocketCashDelivery(q,{...observed,[missing]:undefined},'pending'),undefined)
+assert.equal(pocketCashDelivery({...q,destinationAsset:'USDT'},observed,'pending'),undefined)
+assert.equal(pocketCashDelivery(q,observed,'refunded'),undefined)
+const direct={...cashRow,eventId:'pocket-cross-bridge:id',source:'wallet-bridge',chain:'celo',assetSymbol:'USDT',cashFunding:true,destinationAsset:'USDC',destinationTxHash:'destination',cashReceivedAmount:'0.876518'}
+assert.equal(notice(direct).body,'$0.88 added to your cash balance.')
+assert.equal(notice(direct).eventId,notice({...direct,statusUpdatedAt:101}).eventId)

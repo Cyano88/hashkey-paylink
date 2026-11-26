@@ -2,8 +2,9 @@ import type {PocketActivityRow} from '../models/pocketActivity'
 import {isCashConversion,isCashFunding} from './pocketCashConversion'
 import {formatStockQuantity} from './pocketStockDisplay'
 
-const networks:Record<string,string>={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain'}
+const networks:Record<string,string>={arc:'Arc',ethereum:'Ethereum',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',solana:'Solana',xlayer:'X Layer',bsc:'BNB Chain',celo:'Celo'}
 const valid=(value:string|undefined)=>!!value&&/^\d+(?:\.\d+)?$/.test(value)&&Number.isFinite(Number(value))&&Number(value)>0
+const cashBody=(amount:string)=>(Number(amount)<0.01?'Less than $0.01':Number(amount).toLocaleString('en-US',{style:'currency',currency:'USD'}))+' added to your cash balance.'
 const quantity=(value:string,symbol:string)=>formatStockQuantity(value)+' '+symbol
 /** Exchange notifications use terminal journal truth, never a quote or a source-only confirmation. */
 export function pocketExchangeNotification(row:PocketActivityRow){
@@ -14,26 +15,24 @@ export function pocketExchangeNotification(row:PocketActivityRow){
  if(!network||!swap&&!destination)return null
  const paid=quantity(row.amount,row.assetSymbol),kind=swap?'Swap':'Bridge'
  // Recovery rows precede the canonical receipt and must not emit a second notification.
- if(swap&&row.cashFunding&&row.eventId.startsWith('operation:'))return null
+ if((swap||row.cashFunding)&&row.eventId.startsWith('operation:'))return null
  // A same-network top-up uses the swap rail but credits the settled USDC output to Cash.
  if(swap&&row.cashFunding&&row.chain==='base'&&row.destination==='Cash balance'&&row.eventId.startsWith('pocket-native-swap:')){
   const completed=!failed&&!refunded
   if(completed&&(row.destinationAsset!=='USDC'||!valid(row.receivedAmount)))return null
   const tag='pocket-payment:wallet-swap:'+row.eventId
-  const dollars=completed?Number(row.receivedAmount).toLocaleString('en-US',{style:'currency',currency:'USD'}):''
-  const credited=completed&&Number(row.receivedAmount)<0.01?'Less than $0.01':dollars
   return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),tag,
-   title:completed?credited+' added to cash balance':refunded?'Cash funding refunded':'Cash funding failed',
-   body:completed?'Your cash balance has been updated.':refunded?'Your cash top-up was refunded. Open for details.':'Your cash top-up was not completed. Open for details.',
+   title:completed?'Cash added':refunded?'Cash funding refunded':'Cash funding failed',
+   body:completed?cashBody(row.receivedAmount!):refunded?'Your cash top-up was refunded. Open for details.':'Your cash top-up was not completed. Open for details.',
    path:'/activity?receipt='+encodeURIComponent(row.eventId),occurredAt:row.statusUpdatedAt||row.ts}
  }
  if(isCashFunding(row)||row.cashFunding&&row.destination==='base'){
   // A USDT bridge is only the first leg. Cash success belongs to the final USDC conversion.
-  if(row.cashFunding&&row.assetSymbol==='USDT'&&!failed&&!refunded)return null
-  const received=isCashConversion(row)?(row.contextLabel||'').match(/^\d+(?:\.\d+)? USDT to (\d+(?:\.\d+)?) USDC$/)?.[1]:row.cashReceivedAmount??(row.cashFunding?undefined:row.amount)
+  if(!swap&&row.cashFunding&&row.assetSymbol==='USDT'&&row.destinationAsset!=='USDC'&&!failed&&!refunded)return null
+  const received=row.cashReceivedAmount??(row.destinationAsset==='USDC'?row.receivedAmount:undefined)??(isCashConversion(row)?(row.contextLabel||'').match(/^\d+(?:\.\d+)? (?:USDT|EURC) to (\d+(?:\.\d+)?) USDC$/)?.[1]:undefined)
   if(!failed&&!refunded&&!valid(received))return null
   const tag='pocket-payment:'+(isCashConversion(row)?'cash-conversion':'wallet-bridge')+':'+row.eventId
-  return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),title:refunded?'Cash funding refunded':failed?'Cash funding failed':'Added to cash balance',body:refunded?'Your cash top-up was refunded. Open for details.':failed?'Your cash top-up was not completed. Open for details.':quantity(received!,'USD')+' added to your cash balance.',path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
+  return {eventId:tag+':'+(refunded?'refunded':failed?'failed':'completed'),title:refunded?'Cash funding refunded':failed?'Cash funding failed':'Cash added',body:refunded?'Your cash top-up was refunded. Open for details.':failed?'Your cash top-up was not completed. Open for details.':cashBody(received!),path:'/activity?receipt='+encodeURIComponent(row.eventId),tag,occurredAt:row.statusUpdatedAt||row.ts}
  }
  let title=kind+' successful',body=swap?`Your swap on ${network} completed.`:`${paid} bridged from ${network} to ${destination}.`
  if(!swap&&!failed&&!refunded&&row.destinationAsset){
