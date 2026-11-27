@@ -1,3 +1,4 @@
+import {pendingApprovalUnits} from './cross-bridge-reservation.js'
 import {needsNativeBridgeConversion,quoteNativeBridgeConversion,validateNativeBridgeConversion} from './cross-bridge-evm-conversion.js'
 import {quoteXLayerConversion,validateXLayerConversion} from './cross-bridge-xlayer-conversion.js'
 import {quoteEurcConversion,validateEurcConversion} from './cross-bridge-eurc-conversion.js'
@@ -40,6 +41,18 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
  const manual=wallets.source.provider==='privy'?await readManualBridgeRetry({ownerId:input.ownerId,source:input.source,walletAddress:wallets.source.address,from:input.from,destination:input.destination,to:input.to,...(!input.maximum?{amountUnits:input.amountUnits}:{})}):undefined
  if(wallets.source.provider==='privy')await assertCrossBridgeCoverageReady(wallets.source.address,{},manual?.originalId)
  if(manual){const balance=readers.balance;readers.balance=async()=>{const units=await balance();return units> manual.reservedUnits?units-manual.reservedUnits:0n}}
+ if(input.purpose==='cash'&&wallets.source.provider==='circle'&&input.source!=='solana'){
+  const held=await pendingApprovalUnits(input.ownerId,input.source,wallets.source.address,input.from)
+  if(held>0n){
+   const balance=readers.balance
+   readers.balance=async()=>{
+    const wallet=await balance()
+    if(wallet<=held)throw Object.assign(Error('Your '+input.from+' balance is reserved for an earlier wallet approval.'),{status:409,code:'cash_balance_reserved'})
+    return wallet-held
+   }
+   if(!input.maximum&&BigInt(input.amountUnits)>await readers.balance())throw Object.assign(Error('Part of your '+input.from+' balance is reserved for an earlier wallet approval.'),{status:409,code:'cash_balance_reserved'})
+  }
+ }
  const destinationPricePromise=within(readCrossBridgePrices(input.destination,input.to).then(prices=>prices.assetPrice).catch(()=>undefined),1800)
  const quote=async(amountUnits:bigint)=>{
   const request:CrossBridgeInput={source:input.source,destination:input.destination,from:input.from,to:input.to,amountUnits:String(amountUnits),sender:wallets.source.address,recipient:wallets.destination.address,...(input.purpose==='cash'?{purpose:'cash' as const}:{})}

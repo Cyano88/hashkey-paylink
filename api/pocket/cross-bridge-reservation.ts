@@ -36,6 +36,17 @@ export async function assertBridgeFunds(journal:Journal,next:CrossBridgeReservat
   if(BigInt(part.balance)<BigInt(part.units)+(reserved.get(part.asset)??0n))throw Object.assign(Error('Insufficient available '+part.asset+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  }
 }
+// Wallet reads include funds held for a Circle approval that has no source debit yet.
+export async function pendingApprovalUnits(owner:string,source:string,address:string,asset:string){
+ const journal=await readDurableJson<Journal>(crossBridgeJournalKey())
+ let held=0n
+ for(const row of Object.values(journal?.crossBridge??{})){
+  if(row.ownerId!==owner||row.source!==source||!same(source,row.walletAddress,address)||row.state!=='pending'||!row.challengeId||row.sourceHash)continue
+  const spend=row.spend as BridgeSpend|undefined
+  if(spend?.asset===asset)held+=BigInt(spend.units)
+ }
+ return held
+}
 export async function lockBridgeJournal(client:PoolClient):Promise<Journal>{
  const key=crossBridgeJournalKey()
  await client.query("insert into render_durable_kv (store_key,value,updated_at) values ($1,'{}'::jsonb,now()) on conflict (store_key) do nothing",[key])
