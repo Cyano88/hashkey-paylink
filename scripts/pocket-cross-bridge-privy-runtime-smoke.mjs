@@ -88,9 +88,9 @@ for(const source of ['bsc','xlayer','celo'])for(const asset of crossBridgeAssets
   assert.equal(sends,before,'no provider dispatch after '+failure)
   await guarded.status(saved.quote.id);assert.equal(sends,before)
  }
- for(const response of [{status:400,code:'request_expired',expected:'not_submitted'},{status:500,code:'request_expired',expected:'submitting'},{status:400,code:'unknown',expected:'submitting'}]){
+ for(const response of [{status:400,code:'invalid_data',expected:'not_submitted'},{status:400,code:'invalid_data',data:{transaction_id:'already-submitted'},expected:'submitting'},{status:503,code:'invalid_data',expected:'submitting'},{status:400,code:'request_expired',expected:'not_submitted'},{status:500,code:'request_expired',expected:'submitting'},{status:400,code:'unknown',expected:'submitting'}]){
   rows=new Map();time=now;let requests=0
-  const rejected=createCrossBridgePrivyRuntime('owner',async()=>{},{...opts,fetcher:async()=>{requests++;return {ok:false,status:response.status,json:async()=>({code:response.code})}}})
+  const rejected=createCrossBridgePrivyRuntime('owner',async()=>{},{...opts,fetcher:async()=>{requests++;return {ok:false,status:response.status,json:async()=>({code:response.code,data:response.data})}}})
   await rejected.prepare(saved.quoteToken,'pin');assert.equal((await rejected.submit(saved.quote.id,'ephemeral-signature')).state,response.expected);assert.equal(requests,1)
   await rejected.submit(saved.quote.id,'ephemeral-signature');assert.equal(requests,1,'rejection or uncertainty must never repeat dispatch')
  }

@@ -42,7 +42,7 @@ export function createCrossBridgePrivyRuntime(ownerId:string,preflight:(r:Review
    if(!response.ok)console.warn('pocket_bridge_privy_response',JSON.stringify({id:op.id,source:r.quote.input.source,status:response.status,code:typeof body?.code==='string'&&/^[a-zA-Z0-9_]{1,80}$/.test(body.code)?body.code:'unknown',hasReference:!!(data?.hash||data?.transaction_id||data?.user_operation_hash)}))
    // Only the response to this first dispatch can establish rejection. Status
    // recovery never replays an expired request to infer its earlier outcome.
-   if(!response.ok){if((response.status===400&&body?.code==='transaction_broadcast_failure'||response.status>=400&&response.status<500&&body?.code==='request_expired')&&!data?.hash&&!data?.transaction_id&&!data?.user_operation_hash)return {definitelyNotSubmitted:true};return null}
+   if(!response.ok){if((response.status===400&&['invalid_data','transaction_broadcast_failure'].includes(body?.code)||response.status>=400&&response.status<500&&body?.code==='request_expired')&&!data?.hash&&!data?.transaction_id&&!data?.user_operation_hash)return {definitelyNotSubmitted:true};return null}
    if(data?.caip2!==request.body.caip2)return fail()
    return {...(hash(data.hash)?{sourceHash:data.hash}:{}),...(providerId(data.transaction_id)?{transactionId:data.transaction_id}:{}),...(hash(data.user_operation_hash)?{userOperationHash:data.user_operation_hash}:{})}
   },
