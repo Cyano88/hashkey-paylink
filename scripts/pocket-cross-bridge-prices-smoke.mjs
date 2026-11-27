@@ -25,3 +25,20 @@ assert.equal(precise.assetPrice.scaled8,99984669n)
 await assert.rejects(()=>readCrossBridgePrices('base','USDC',{now:()=>now,credentials,fetcher:async(url,init)=>({ok:true,json:async()=>({code:'0',data:JSON.parse(init.body).map(row=>({...row,time:String(now),price:'1.'+'1'.repeat(65)}))})})}))
 await assert.rejects(()=>readCrossBridgePrices('base','USDC',{credentials:{}}))
 console.log(`PASS fresh, identity-bound prices for ${count} source assets; adverse decimal rounding, native deduplication, missing/duplicate/wrong-chain/stale/future/malformed/zero data rejected. HTTP fixtures only.`)
+
+const second=Math.floor(now/1000)
+const fallback=(age,stableId='usd-coin')=>({credentials,now:()=>now,fetcher:async url=>url.startsWith('https://web3.okx.com/')?{ok:false,status:429}:{ok:true,json:async()=>({celo:{usd:0.06123456789,last_updated_at:second},[stableId]:{usd:0.99912345678,last_updated_at:second-age}})}})
+const result=await readCrossBridgePrices('celo','USDC',fallback(0))
+assert.equal(result.gasPrice.scaled8,6123457n)
+assert.equal(result.assetPrice.scaled8,99912345n)
+await assert.rejects(()=>readCrossBridgePrices('celo','USDC',fallback(30)))
+await assert.rejects(()=>readCrossBridgePrices('celo','USDC',fallback(0,'tether')))
+console.log('PASS fresh Celo secondary prices, rounding, timestamp and identity checks')
+
+const books=age=>({...fallback(60),fetcher:async url=>{
+ if(!url.startsWith('https://api.kraken.com/'))return {ok:false,status:503}
+ const pair=new URL(url).searchParams.get('pair')
+ return {ok:true,json:async()=>({error:[],result:{[pair]:{asks:[['0.0617','5',second-age]],bids:[['0.9998','5',second]]}}})}
+}})
+assert.equal((await readCrossBridgePrices('celo','USDC',books(0))).assetPrice.scaled8,99980000n)
+await assert.rejects(()=>readCrossBridgePrices('celo','USDC',books(30)))

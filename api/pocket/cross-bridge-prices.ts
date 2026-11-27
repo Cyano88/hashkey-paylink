@@ -31,6 +31,44 @@ export async function readCrossBridgePrices(network:CrossBridgeNetwork,asset:str
  return request
 }
 async function fetchPrices(network:CrossBridgeNetwork,asset:string,options:PriceOptions):Promise<Prices>{
+ try{return await fetchOkxPrices(network,asset,options)}catch(error){
+  if(network!=='celo'||!['CELO','USDC','USDT'].includes(asset))throw error
+ }
+ try{return await readCeloMarketPrices(asset,options)}catch{
+  try{return await readCeloBookPrices(asset,options)}catch{return fail()}
+ }
+}
+async function readCeloBookPrices(asset:string,options:PriceOptions):Promise<Prices>{
+ const book=async(symbol:string)=>{
+  const response=await (options.fetcher??fetch)('https://api.kraken.com/0/public/Depth?pair='+symbol+'USD&count=1',{redirect:'error',signal:AbortSignal.timeout(2500)})
+  if(!response.ok)return fail()
+  const data=await response.json(),key=symbol==='USDT'?'USDTZUSD':symbol+'USD'
+  if(!Array.isArray(data.error)||data.error.length||!data.result?.[key])return fail()
+  return data.result[key]
+ }
+ const native=book('CELO'),[gas,token]=await Promise.all([native,asset==='CELO'?native:book(asset)])
+ const read=(level:unknown,up:boolean)=>{
+  if(!Array.isArray(level)||!Number.isSafeInteger(level[2]))return fail()
+  const observedAt=level[2]*1000,now=(options.now??Date.now)()
+  if(observedAt<=now-30000||observedAt>now+5000)return fail()
+  return {scaled8:scaled(level[0],up),observedAt}
+ }
+ return {gasPrice:read(gas.asks?.[0],true),assetPrice:read(token.bids?.[0],false)}
+}
+async function readCeloMarketPrices(asset:string,options:PriceOptions):Promise<Prices>{
+ const id=asset==='USDC'?'usd-coin':asset==='USDT'?'tether':'celo'
+ const ids=id==='celo'?id:'celo,'+id
+ const response=await (options.fetcher??fetch)('https://api.coingecko.com/api/v3/simple/price?ids='+ids+'&vs_currencies=usd&include_last_updated_at=true&precision=full',{redirect:'error',signal:AbortSignal.timeout(3500)})
+ if(!response.ok)return fail()
+ const rows=await response.json(),now=(options.now??Date.now)()
+ function read(id:string,up:boolean):CrossBridgePrice{
+  const row=rows?.[id],observedAt=row?.last_updated_at*1000
+  if(!Number.isSafeInteger(row?.last_updated_at)||observedAt<=now-30000||observedAt>now+5000||typeof row.usd!=='number')return fail()
+  return {scaled8:scaled(String(row.usd),up),observedAt}
+ }
+ return {gasPrice:read('celo',true),assetPrice:read(id,false)}
+}
+async function fetchOkxPrices(network:CrossBridgeNetwork,asset:string,options:PriceOptions):Promise<Prices>{
  // Circle-issued Arc USDC/EURC share the same denomination as their Base assets.
  // Use fresh, timestamped market prices, never a fixed dollar peg.
  const pricingNetwork=network==='arc'?'base':network
