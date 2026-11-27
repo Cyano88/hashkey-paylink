@@ -7,11 +7,11 @@ const transfer=parseAbi(['event Transfer(address indexed from,address indexed to
 const lifiStarted=parseAbi(['event LiFiTransferStarted((bytes32 transactionId,string bridge,string integrator,address referrer,address sendingAssetId,address receiver,uint256 minAmount,uint256 destinationChainId,bool hasSourceSwaps,bool hasDestinationCall) bridgeData)'])
 const same=(a:unknown,b:string)=>typeof a==='string'&&a.toLowerCase()===b.toLowerCase()
 const pending=():never=>{throw Object.assign(Error('Bridge source debit is still being verified.'),{status:409})}
-export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOperationHash?:Hex,options:Parameters<typeof readSponsoredBridgeSource>[3]={}){
+export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOperationHash?:Hex,options:NonNullable<Parameters<typeof readSponsoredBridgeSource>[3]>&{onWalletGasPaid?:(units:string)=>Promise<void>}={}){
  const {quote:q,route,charged}=review,source=route.source
  if(!['bsc','xlayer','celo'].includes(source)||q.wallets.source.provider!=='privy'||charged.plan.kind!=='evm')return pending()
  const privySource=source as 'bsc'|'xlayer'|'celo'
- const {receipt,outcome}=await readSponsoredBridgeSource(privySource,hash,{owner:q.wallets.source.address,callData:charged.plan.callData,userOperationHash},options)
+ const {receipt,outcome,paidGasUnits}=await readSponsoredBridgeSource(privySource,hash,{owner:q.wallets.source.address,callData:charged.plan.callData,userOperationHash,walletGas:!!q.walletGasUnits},options)
  if(outcome==='failed')return 'failed' as const
  if(route.provider==='lifi'){
   if(source!=='celo'||route.lifi.tool!=='squid'||route.tokenIn.symbol!=='cNGN'||route.lifi.transactionId!==route.orderId||route.lifi.bridgeTokenAddress.toLowerCase()!=='0xeb466342c4d449bc9f53a865d5cb90586f405215')return pending()
@@ -49,7 +49,7 @@ export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOper
    const debit=movements.reduce((sum,m)=>sum+(same(m.from,q.input.sender)?m.value:0n)-(same(m.to,q.input.sender)?m.value:0n),0n)
    if(debit!==BigInt(route.amountUnits))pending()
   }else{
-  const expected=[{to:RELAY_BSC_CHAINS[privySource].depository,value:BigInt(route.amountUnits)},{to:q.reimbursementRecipient,value:BigInt(q.reimbursementUnits)}]
+  const expected=[{to:RELAY_BSC_CHAINS[privySource].depository,value:BigInt(route.amountUnits)},...(q.walletGasUnits?[]:[{to:q.reimbursementRecipient,value:BigInt(q.reimbursementUnits)}])]
   if(movements.length!==expected.length)pending()
   for(const item of expected){const index=movements.findIndex(m=>same(m.from,q.input.sender)&&same(m.to,item.to)&&m.value===item.value);if(index<0)pending();movements.splice(index,1)}
   }
@@ -58,5 +58,6 @@ export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOper
   const deposits=receipt.logs.flatMap(log=>{if(log.removed)pending();if(!same(log.address,route.conversion!.bridgeToken.address))return [];try{return [decodeEventLog({abi:transfer,eventName:'Transfer',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true}).args]}catch{return []}}).filter(m=>same(m.from,q.input.sender)&&same(m.to,RELAY_BSC_CHAINS[privySource].depository))
   if(deposits.length!==1||deposits[0].value!==BigInt(route.conversion.minimumUnits))pending()
  }
+ if(paidGasUnits)await options.onWalletGasPaid?.(paidGasUnits)
  return 'confirmed' as const
 }

@@ -1,3 +1,5 @@
+import {celoCashGas} from './celo-cash-gas.js'
+import {buildCrossBridgeChargedPlan} from './cross-bridge-reimbursement.js'
 import {pendingApprovalUnits} from './cross-bridge-reservation.js'
 import {needsNativeBridgeConversion,quoteNativeBridgeConversion,validateNativeBridgeConversion} from './cross-bridge-evm-conversion.js'
 import {quoteXLayerConversion,validateXLayerConversion} from './cross-bridge-xlayer-conversion.js'
@@ -34,7 +36,7 @@ export function crossBridgeReaders(wallets:CrossBridgeWalletBinding,asset:string
   return {source,asset,planHash,nativeUnits:parseUnits(fee,18),rentUnits:0n,...prices,expiresAt:Math.min(start+30000,prices.gasPrice.observedAt+30000,prices.assetPrice.observedAt+30000)}
  }}
 }
-export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'|'recipient'>&{ownerId:string;circleUserToken?:string;maximum?:boolean},env:NodeJS.ProcessEnv=process.env){
+export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'|'recipient'>&{ownerId:string;circleUserToken?:string;maximum?:boolean;walletGas?:boolean},env:NodeJS.ProcessEnv=process.env){
  if(input.from==='EURC'&&env.POCKET_CROSS_EURC_ENABLED==='false')throw Object.assign(Error('Combined EURC bridges are not enabled yet.'),{status:409,code:'eurc_bridge_not_enabled'})
  assertCrossBridgeRollout(input.source,input.destination)
  const wallets=await resolveCrossBridgeWallets(input.ownerId,input.source,input.destination),readers=crossBridgeReaders(wallets,input.from,input.circleUserToken||'',env)
@@ -74,6 +76,18 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
     throw Object.assign(Error('Allow '+displayMinimum+' CELO in your wallet for this route.'),{status:422,code:'insufficient_native_celo'})
    }
   }
+  const recipient=crossBridgeReimbursementRecipient(input.source,env)
+  if(input.walletGas&&input.purpose==='cash'&&input.source==='celo'&&input.destination==='base'&&input.to==='USDC'&&['USDC','USDT'].includes(input.from)){
+   const built=await buildCrossBridgeChargedPlan(provider.route,wallets,0n,recipient,true)
+   if(built.plan.kind!=='evm')throw Error('Celo transaction unavailable.')
+   const [balance,gas]=await Promise.all([readers.balance(),celoCashGas(wallets.source.address as Hex,built.plan.callData,env)])
+   if(balance<amountUnits)throw Object.assign(Error('Insufficient '+input.from+' balance.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance)})
+   await revalidateCrossBridgeWallets(wallets)
+   const prices=await readCrossBridgePrices('celo',input.from)
+   priceCrossBridgeReimbursement('celo',input.from,gas.units,prices.gasPrice,prices.assetPrice,crossBridgeConfiguredPolicy('celo',input.from,prices.assetPrice,env))
+   const quote=await createCrossBridgeReview({wallets,input:request,providerQuote,appFee,...built,reimbursementUnits:0n,reimbursementRecipient:recipient,walletGasUnits:String(gas.units),receiveUsdValue:provider.route.receiveUsdValue,expiresAt:Math.min(provider.route.expiresAt,provider.requestedAt+45000)})
+   return {quote,amountUnits,totalUnits:amountUnits,expiresAt:quote.quote.expiresAt}
+  }
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
   const charged=await quoteCrossBridgeCharges(provider.route,wallets,crossBridgeReimbursementRecipient(input.source,env),policy,readers)
   await revalidateCrossBridgeWallets(wallets)
@@ -92,6 +106,15 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
  const {quote:q,route,charged}=review
  const fresh=()=>{if(q.expiresAt<=d.now())throw Error('Bridge quote expired. Review again.')};fresh();assertCrossBridgeRollout(q.input.source,q.input.destination)
  if(q.reimbursementRecipient!==crossBridgeReimbursementRecipient(q.input.source,env)||JSON.stringify(q.appFee)!==JSON.stringify(relayBridgeAppFee(env)))throw Error('Bridge fee policy changed.')
+ if(q.walletGasUnits){
+  await Promise.all([guard(review),d.revalidate(q.wallets)])
+  if(charged.plan.kind!=='evm')throw Error('Celo transaction unavailable.')
+  const readAt=d.now(),[balance,gas]=await Promise.all([d.readers(q.wallets,q.input.from,userToken,env).balance(),celoCashGas(q.wallets.source.address as Hex,charged.plan.callData,env)])
+  if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' balance.'),{status:422,code:'insufficient_balance'})
+  if(gas.estimatedUnits>BigInt(q.walletGasUnits))throw Object.assign(Error('The Celo network fee changed. Review the updated fee.'),{status:409,code:'cross_bridge_fee_changed'})
+  fresh()
+  return {readAt,asset:q.input.from,units:String(charged.totalUnits),balance:String(balance),extra:{asset:'CELO',units:q.walletGasUnits,balance:String(gas.balance)}}
+ }
  const durations:Record<string,number>={},started=Date.now()
  const measured=async<T>(stage:string,read:()=>Promise<T>)=>{const start=Date.now();try{return await read()}finally{durations[stage]=Date.now()-start}}
  const freshReads=async()=>{

@@ -55,9 +55,9 @@ export function crossBridgeReimbursementRecipient(network:CrossBridgeNetwork,env
 }
 export type CrossBridgeChargedPlan={kind:'evm';calls:Array<{target:Hex;value:bigint;data:Hex}>;callData:Hex}|{kind:'solana';instructions:TransactionInstruction[]}
 /** route must be the server validator result, never client-supplied calls. */
-export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridgeWalletBinding,reimbursementUnits:bigint,reimbursementRecipient:string):Promise<{plan:CrossBridgeChargedPlan;totalUnits:bigint;planHash:string}>{
+export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridgeWalletBinding,reimbursementUnits:bigint,reimbursementRecipient:string,walletGas=false):Promise<{plan:CrossBridgeChargedPlan;totalUnits:bigint;planHash:string}>{
  const {tokenIn,tokenOut}=crossBridgePair(route.source,route.destination,route.tokenIn.symbol,route.tokenOut.symbol)
- if(binding.source.network!==route.source||binding.destination.network!==route.destination||JSON.stringify(tokenIn)!==JSON.stringify(route.tokenIn)||JSON.stringify(tokenOut)!==JSON.stringify(route.tokenOut)||reimbursementUnits<=0n)fail()
+ if(binding.source.network!==route.source||binding.destination.network!==route.destination||JSON.stringify(tokenIn)!==JSON.stringify(route.tokenIn)||JSON.stringify(tokenOut)!==JSON.stringify(route.tokenOut)||(walletGas?!(route.source==='celo'&&route.destination==='base'&&route.provider==='relay'&&['USDC','USDT'].includes(tokenIn.symbol)&&tokenOut.symbol==='USDC'&&reimbursementUnits===0n):reimbursementUnits<=0n))fail()
  const same=(a:string,b:string)=>route.source==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
  if(same(reimbursementRecipient,binding.source.address))fail()
  if(route.source==='solana'){try{if(new PublicKey(reimbursementRecipient).equals(PublicKey.default))fail()}catch{fail()}}else if(!isAddress(reimbursementRecipient)||/^0x0{40}$/i.test(reimbursementRecipient))fail()
@@ -66,7 +66,7 @@ export async function buildCrossBridgeChargedPlan(route:Route,binding:CrossBridg
  if(binding.source.provider!==(sponsored?'privy':'circle'))fail('Bridge wallet execution provider changed.')
  const totalUnits=BigInt(route.amountUnits)+reimbursementUnits
  if(totalUnits>=(route.source==='solana'?2n**64n:2n**128n))fail()
- const fees=[{recipient:reimbursementRecipient,units:reimbursementUnits}]
+ const fees=walletGas?[]:[{recipient:reimbursementRecipient,units:reimbursementUnits}]
  let plan:CrossBridgeChargedPlan
  if(route.execution.kind==='evm'){
   const calls=[...route.execution.calls,...fees.map(f=>tokenIn.native?{target:f.recipient as Hex,value:f.units,data:'0x' as Hex}:{target:tokenIn.address as Hex,value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[f.recipient as Hex,f.units]})})]

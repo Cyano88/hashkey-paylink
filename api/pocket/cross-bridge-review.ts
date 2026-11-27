@@ -7,7 +7,7 @@ import {assertCrossBridgeRollout} from '../../src/pocket/lib/pocketCrossBridgeAs
 
 /** Persist only JSON primitives and the original provider response. Reconstruct
  * bigint calls and Solana instructions through the same validators on every read. */
-export type CrossBridgeReview={version:1;id:string;ownerId:string;wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:string;reimbursementRecipient:string;totalUnits:string;planHash:string;issuedAt:number;expiresAt:number;receiveUsdValue?:number}
+export type CrossBridgeReview={version:1;id:string;ownerId:string;wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:string;reimbursementRecipient:string;totalUnits:string;planHash:string;issuedAt:number;expiresAt:number;receiveUsdValue?:number;walletGasUnits?:string}
 const fail=():never=>{throw Object.assign(Error('Bridge review changed or expired. Review it again.'),{status:409,code:'bridge_review_invalid'})}
 const mac=(body:string,secret:string)=>{if(secret.length<32)throw Error('Bridge review signing is unavailable.');return createHmac('sha256',secret).update('pocket:cross-bridge-review:v1:'+body).digest()}
 const same=(network:string,a:string,b:string)=>network==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
@@ -26,15 +26,18 @@ export async function openCrossBridgeReview(token:string,owner:string,options:{r
  if(q.wallets.fingerprint!==crossBridgeWalletFingerprint(q.wallets)||q.wallets.source.network!==q.input?.source||q.wallets.destination.network!==q.input.destination||!same(q.input.source,q.input.sender,q.wallets.source.address)||!same(q.input.destination,q.input.recipient,q.wallets.destination.address))fail()
  if(!options.recovery)assertCrossBridgeRollout(q.input.source,q.input.destination)
  const route=validateCrossBridgeRelayQuote(q.providerQuote,q.input,q.issuedAt,q.appFee)
- const charged=await buildCrossBridgeChargedPlan(route,q.wallets,units(q.reimbursementUnits),q.reimbursementRecipient)
+ const walletGas=q.walletGasUnits!==undefined
+ if(walletGas&&(q.input.purpose!=='cash'||units(q.walletGasUnits)===0n))fail()
+ const charged=await buildCrossBridgeChargedPlan(route,q.wallets,units(q.reimbursementUnits),q.reimbursementRecipient,walletGas)
  if(charged.planHash!==q.planHash||charged.totalUnits!==units(q.totalUnits)||q.expiresAt>route.expiresAt)fail()
  return {quote:q,route,charged}
 }
 /** Authenticated service supplies a validated provider response, live wallet
  * binding and priced charges. This function neither estimates nor dispatches. */
-export async function createCrossBridgeReview(input:{wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:bigint;reimbursementRecipient:string;planHash:string;totalUnits:bigint;expiresAt:number;receiveUsdValue?:number},options:{now?:number;secret?:string}={}){
+export async function createCrossBridgeReview(input:{wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:bigint;reimbursementRecipient:string;planHash:string;totalUnits:bigint;expiresAt:number;receiveUsdValue?:number;walletGasUnits?:string},options:{now?:number;secret?:string}={}){
  const issuedAt=options.now??Date.now()
  const q:CrossBridgeReview=JSON.parse(JSON.stringify({version:1,id:randomUUID(),ownerId:input.wallets.ownerId,wallets:input.wallets,input:input.input,providerQuote:input.providerQuote,appFee:input.appFee,reimbursementUnits:String(input.reimbursementUnits),reimbursementRecipient:input.reimbursementRecipient,planHash:input.planHash,totalUnits:String(input.totalUnits),issuedAt,expiresAt:Math.min(input.expiresAt,issuedAt+45000)}))
+ if(input.walletGasUnits!==undefined)q.walletGasUnits=input.walletGasUnits
  if(typeof input.receiveUsdValue==='number'&&Number.isFinite(input.receiveUsdValue)&&input.receiveUsdValue>0&&input.receiveUsdValue<=1e15)q.receiveUsdValue=input.receiveUsdValue
  const token=sealCrossBridgeReview(q,options.secret)
  await openCrossBridgeReview(token,q.ownerId,options)

@@ -4,7 +4,8 @@ import {entryPoint07Abi} from 'viem/account-abstraction'
 import type {XLayerCall} from './xlayer-reimbursement.js'
 
 export const XLAYER_ENTRY_POINT='0x0000000071727de22e5e9d8baf0edac6f37da032' as Hex
-const kernel='0xd6cedde84be40893d153be9d467cd6ad37875b28'
+export const privyKernel='0xd6cedde84be40893d153be9d467cd6ad37875b28'
+const kernel=privyKernel
 const kernelAbi=parseAbi(['function execute(bytes32 mode,bytes executionCalldata)'])
 const eventAbi=parseAbi(['event UserOperationEvent(bytes32 indexed userOpHash,address indexed sender,address indexed paymaster,uint256 nonce,bool success,uint256 actualGasCost,uint256 actualGasUsed)'])
 const stub='0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c'

@@ -10,7 +10,7 @@ import {validateCrossBridgeRelayQuote} from '../api/pocket/cross-bridge-provider
 import {buildCrossBridgeChargedPlan} from '../api/pocket/cross-bridge-reimbursement.ts'
 import {crossBridgeWalletFingerprint} from '../api/pocket/cross-bridge-wallets.ts'
 import {createCrossBridgeReview,openCrossBridgeReview} from '../api/pocket/cross-bridge-review.ts'
-import {createCrossBridgePrivyRuntime} from '../api/pocket/cross-bridge-privy-runtime.ts'
+import {createCrossBridgePrivyRuntime,crossBridgePrivyRequest} from '../api/pocket/cross-bridge-privy-runtime.ts'
 import {createCrossBridgePrivyCost} from '../api/pocket/cross-bridge-privy-cost.ts'
 const secret='privy-cross-fixture-secret'.repeat(3),treasury='0x3333333333333333333333333333333333333333',sourceHash='0x'+'1'.repeat(64),kernel='0xd6cedde84be40893d153be9d467cd6ad37875b28'
 let cases=0
@@ -53,6 +53,26 @@ for(const source of ['bsc','xlayer','celo'])for(const asset of crossBridgeAssets
    return {status:'0x1',transactionHash:sourceHash,blockHash,blockNumber:'0x10',transactionIndex:'0x0',logs:logs.map((log,index)=>({...log,removed:false,blockHash,blockNumber:'0x10',transactionIndex:'0x0',transactionHash:sourceHash,logIndex:'0x'+index.toString(16)}))}
   }
   throw Error(method)
+ }
+ if(source==='celo'&&['USDC','USDT'].includes(asset.symbol)){
+  const built=await buildCrossBridgeChargedPlan(route,wallets,0n,treasury,true)
+  assert.equal(built.totalUnits,BigInt(i.amountUnits))
+  assert.equal(built.plan.calls.length,route.execution.calls.length)
+  const nativePaid=await createCrossBridgeReview({wallets,input:{...i,purpose:'cash'},providerQuote:q,appFee:null,reimbursementUnits:0n,reimbursementRecipient:treasury,...built,walletGasUnits:'120000',expiresAt:now+30000},{secret,now})
+  const opened=await openCrossBridgeReview(nativePaid.quoteToken,'owner',{secret,now})
+  assert.equal(crossBridgePrivyRequest(opened,'fixture').body.sponsor,undefined)
+  assert.equal(crossBridgePrivyRequest(review,'fixture').body.sponsor,true)
+  let sender=i.sender,debit=true,paid
+  const walletRpc=async req=>{
+   if(req.method==='eth_getCode')return '0xef0100'+kernel.slice(2)
+   const raw=await sourceRpc(req)
+   if(req.method==='eth_getTransactionByHash')return {...raw,from:sender,to:i.sender,input:built.plan.callData,value:'0x0'}
+   if(req.method==='eth_getTransactionReceipt')return {...raw,gasUsed:'0x10',effectiveGasPrice:'0x2',l1Fee:'0x3',from:i.sender,logs:debit?[raw.logs[1]]:[]}
+   return raw
+  }
+  const proof=()=>readCrossBridgePrivySource(opened,sourceHash,undefined,{rpc:walletRpc,onWalletGasPaid:async units=>{paid=units}})
+  assert.equal(await proof(),'confirmed');assert.equal(paid,'35')
+  sender=treasury;await assert.rejects(proof);sender=i.sender;debit=false;await assert.rejects(proof)
  }
  assert.equal(await readCrossBridgePrivySource(review,sourceHash,userOpHash,{rpc:sourceRpc}),'confirmed')
  if(!asset.native){feeDebit=122n;await assert.rejects(()=>readCrossBridgePrivySource(review,sourceHash,userOpHash,{rpc:sourceRpc}));feeDebit=123n}

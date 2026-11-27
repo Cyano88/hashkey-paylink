@@ -80,7 +80,7 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
     if(current){const r=owned(current,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
     if(q.expiresAt<=d.now())fail('Bridge quote expired. Review it again.')
     claimed=!!dispatchAuthorization
-    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...payload,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:claimed?'submitting':'prepared',createdAt:d.now(),updatedAt:d.now()}
+    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...(q.walletGasUnits?{walletPaysGas:true}:{}),...payload,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:claimed?'submitting':'prepared',createdAt:d.now(),updatedAt:d.now()}
    },!!dispatchAuthorization),owner,q.id)
    return claimed&&dispatchAuthorization?dispatch(fresh,operation,owner,q.id,dispatchAuthorization):operation
   },
