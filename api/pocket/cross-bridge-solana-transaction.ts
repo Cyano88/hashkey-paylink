@@ -53,7 +53,8 @@ export async function prepareCrossBridgeSolanaTransaction(review:Review,connecti
  if(route.tokenIn.native)return prepareNativeSolanaBridge(review,connection,relayer,now)
  const addresses=[owner,plan.instructions[0].keys[5].pubkey,plan.instructions[0].keys[6].pubkey,plan.instructions[1].keys[2].pubkey]
  const before=await connection.getMultipleAccountsInfo(addresses,'confirmed')
- if(!before[0]||!Number.isSafeInteger(before[0].lamports))return fail()
+ // An SPL token authority can sign with no native account. The sponsor pays gas.
+ if(before.length!==4||before[0]!==null&&!Number.isSafeInteger(before[0]?.lamports))return fail()
  const amounts=before.slice(1).map((account,index)=>crossBridgeSolanaTokenAmount(account,mint,index===0?owner:index===1?plan.instructions[0].keys[3].pubkey:undefined))
  if(amounts[0]<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' for this bridge and fee.'),{status:422,code:'insufficient_balance'})
  const latest=await connection.getLatestBlockhash('confirmed'),tx=new Transaction({recentBlockhash:latest.blockhash,feePayer:relayer.publicKey}).add(...plan.instructions)
@@ -63,7 +64,7 @@ export async function prepareCrossBridgeSolanaTransaction(review:Review,connecti
  tx.partialSign(relayer)
  const simulation=await connection.simulateTransaction(new VersionedTransaction(tx.compileMessage()),{sigVerify:false,replaceRecentBlockhash:false,commitment:'confirmed',accounts:{encoding:'base64',addresses:addresses.map(a=>a.toBase58())}})
  const after=simulation.value.accounts
- if(simulation.value.err||!after||after.length!==4||!after[0]||after[0].lamports!==before[0].lamports)return fail()
+ if(simulation.value.err||!after||after.length!==4||after[0]!==null&&!Number.isSafeInteger(after[0]?.lamports)||(after[0]?.lamports??0)!==(before[0]?.lamports??0))return fail()
  const afterAmounts=after.slice(1).map((account,index)=>{if(!account||account.data[1]!=='base64')return fail();return crossBridgeSolanaTokenAmount({...account,owner:new PublicKey(account.owner),data:Buffer.from(account.data[0],'base64')},mint,index===0?owner:index===1?plan.instructions[0].keys[3].pubkey:undefined)})
  if(afterAmounts[0]!==amounts[0]-charged.totalUnits||afterAmounts[1]!==amounts[1]+BigInt(q.input.amountUnits)||afterAmounts[2]!==amounts[2]+BigInt(q.reimbursementUnits))return fail()
  if(q.expiresAt<=now()||!Number.isSafeInteger(latest.lastValidBlockHeight)||latest.lastValidBlockHeight<=0)return fail()

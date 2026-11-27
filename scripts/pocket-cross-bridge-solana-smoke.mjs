@@ -26,6 +26,9 @@ for(const asset of ['USDC','USDT']){
  missing=true;await assert.rejects(()=>cost.estimate(charged.plan,charged.planHash));missing=false
  const options={now:()=>now,running:async()=>{}}
  const prepared=await prepareCrossBridgeSolanaTransaction(review,rpc,sponsor,options)
+ const unfundedAuthorityRpc={...rpc,getMultipleAccountsInfo:async keys=>keys.map(key=>key.equals(user.publicKey)?null:info(key)),simulateTransaction:async()=>{const sim=await rpc.simulateTransaction();sim.value.accounts[0]=null;return sim}}
+ assert.equal((await prepareCrossBridgeSolanaTransaction(review,unfundedAuthorityRpc,sponsor,options)).transaction,prepared.transaction)
+ await assert.rejects(()=>prepareCrossBridgeSolanaTransaction(review,{...unfundedAuthorityRpc,simulateTransaction:rpc.simulateTransaction},sponsor,options))
  badRent=true;await assert.rejects(()=>prepareCrossBridgeSolanaTransaction(review,rpc,sponsor,options));badRent=false
  const signed=Transaction.from(Buffer.from(prepared.transaction,'base64'));signed.partialSign(user);const raw=signed.serialize().toString('base64'),hash=bs58.encode(signed.signature)
  validateCrossBridgeSolanaTransaction(review,prepared.transaction,raw,true)
