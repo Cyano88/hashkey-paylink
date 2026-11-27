@@ -44,8 +44,10 @@ export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOper
    if(same(e.args.from,q.input.sender)||same(e.args.to,q.input.sender))movements.push(e.args)
   }
   if(route.conversion){
-   const feeIndex=movements.findIndex(m=>same(m.from,q.input.sender)&&same(m.to,q.reimbursementRecipient)&&m.value===BigInt(q.reimbursementUnits))
-   if(feeIndex<0)pending();movements.splice(feeIndex,1)
+   if(!q.walletGasUnits){
+    const feeIndex=movements.findIndex(m=>same(m.from,q.input.sender)&&same(m.to,q.reimbursementRecipient)&&m.value===BigInt(q.reimbursementUnits))
+    if(feeIndex<0)pending();movements.splice(feeIndex,1)
+   }
    const debit=movements.reduce((sum,m)=>sum+(same(m.from,q.input.sender)?m.value:0n)-(same(m.to,q.input.sender)?m.value:0n),0n)
    if(debit!==BigInt(route.amountUnits))pending()
   }else{

@@ -1,3 +1,4 @@
+import {isCeloCashConversion,quoteCeloCashConversion,validateCeloCashConversion} from './cross-bridge-celo-cash-conversion.js'
 import {crossBridgeSolanaNativeDeposit} from './cross-bridge-solana-native.js'
 import {validateNativeBridgeConversion} from './cross-bridge-evm-conversion.js'
 import {validateXLayerConversion} from './cross-bridge-xlayer-conversion.js'
@@ -106,8 +107,8 @@ export function validateCrossBridgeRelayQuote(q:any,i:CrossBridgeInput,now=Date.
   const revenue=appFee?{recipient:appFee.recipient,bps:appFee.bps,amountUnits:(BigInt(i.amountUnits)*BigInt(appFee.bps)/10000n).toString()}:undefined
   return validateCrossBridgeLifiQuote(q as CrossBridgeLifiQuote,i,now,revenue)
  }
- if(q?.kind!=='eurc-conversion'&&q?.kind!=='xlayer-conversion'&&q?.kind!=='evm-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
- const conversion=q.kind==='evm-conversion'?validateNativeBridgeConversion(q.swap,i,now):q.kind==='xlayer-conversion'?validateXLayerConversion(q.swap,i,now):validateEurcConversion(q.swap as EurcConversion,i,now)
+ if(q?.kind!=='celo-cash-conversion'&&q?.kind!=='eurc-conversion'&&q?.kind!=='xlayer-conversion'&&q?.kind!=='evm-conversion')return validateDirectCrossBridgeRelayQuote(q,i,now,appFee)
+ const conversion=q.kind==='celo-cash-conversion'?validateCeloCashConversion(q.swap,i,now):q.kind==='evm-conversion'?validateNativeBridgeConversion(q.swap,i,now):q.kind==='xlayer-conversion'?validateXLayerConversion(q.swap,i,now):validateEurcConversion(q.swap as EurcConversion,i,now)
  const bridge=validateDirectCrossBridgeRelayQuote(q.bridge,{...i,from:'USDC',amountUnits:conversion.minimumUnits},now,appFee)
  if(bridge.execution.kind!=='evm')throw Error('Invalid converted bridge execution.')
  const calls=[...conversion.calls,...bridge.execution.calls]
@@ -121,6 +122,21 @@ export async function fetchCrossBridgeRelayReview(i:CrossBridgeInput,apiKey:stri
  if(!response.ok){
   const failure=await response.json().catch(()=>null),inputError=[400,422].includes(response.status)
   const tooSmall=inputError&&failure?.errorCode==='AMOUNT_TOO_LOW',noRoute=inputError&&failure?.errorCode==='NO_SWAP_ROUTES_FOUND'
+  if(noRoute&&isCeloCashConversion(i)){
+   const swap=await quoteCeloCashConversion(i,requestedAt)
+   const conversion=validateCeloCashConversion(swap,i,requestedAt)
+   const bridgeInput={...i,from:'USDC',amountUnits:conversion.minimumUnits}
+   const bridgeResponse=await fetcher('https://api.relay.link/quote/v2',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey},body:JSON.stringify(crossBridgeRelayRequest(bridgeInput,appFee)),signal:AbortSignal.timeout(20000)})
+   if(bridgeResponse.ok){
+    const providerQuote={kind:'celo-cash-conversion',swap,bridge:await bridgeResponse.json()}
+    const route=validateCrossBridgeRelayQuote(providerQuote,i,requestedAt,appFee)
+    if(route.expiresAt<=now())throw Error('Bridge quote expired. Review again.')
+    return {providerQuote,route,requestedAt}
+   }
+   if(bridgeResponse.status>=500||bridgeResponse.status===429)throw Object.assign(Error('Funding options are temporarily unavailable.'),{status:bridgeResponse.status,code:'provider_unavailable'})
+   const failure=await bridgeResponse.json().catch(()=>null)
+   if(failure?.errorCode==='AMOUNT_TOO_LOW')throw Object.assign(Error('Amount too small.'),{status:422,code:'amount_too_low'})
+  }
   const outbound=i.source==='base'&&i.destination==='celo'&&(i.from==='cNGN'||i.from==='USDC')&&i.to==='cNGN'&&i.purpose===undefined
   const inbound=i.source==='celo'&&i.destination==='base'&&i.from==='cNGN'&&i.to==='USDC'
   if(noRoute&&(outbound||inbound)){
