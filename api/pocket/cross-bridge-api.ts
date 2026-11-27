@@ -52,6 +52,8 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
     return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true,...(opened.quote.input.purpose==='cash'&&['xlayer','bsc'].includes(opened.quote.input.source)&&opened.quote.wallets.source.provider==='privy'?{signingRequest:crossBridgePrivyRequest(opened,process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID||'')}:{})})
    }
    const token=typeof b.quoteToken==='string'?b.quoteToken:'',review=await d.open(token,owner,{recovery:!['prepare','submit'].includes(action)}),id=review.quote.id
+   if(['prepare','submit'].includes(action)&&review.quote.input.source==='celo'&&review.quote.input.purpose==='cash'&&review.quote.wallets.source.provider==='privy')
+    return res.status(422).json({ok:false,code:'celo_cash_preview_only',error:'Cash top-ups from Celo are currently unavailable.'})
    const existing=action==='prepare'?undefined:await d.store.read(id)
    if(existing&&(existing.ownerId!==owner||existing.quoteToken!==token))throw Error('Bridge owner or review changed.')
    const userToken=typeof b.circleUserToken==='string'?b.circleUserToken:''

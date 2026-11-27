@@ -10,6 +10,10 @@ const runtime=()=>({prepare:async()=>op={id,ownerId:owner,quoteToken:token,state
 const handler=createCrossBridgeHandler({identity:async()=>({userId:identity}),durable:()=>true,enabled:()=>enabled,open:async(t,o)=>{assert.equal(t,token);assert.equal(o,owner);return review},store,runtime,list:async()=>op?[op]:[],response,reconcile:async()=>{reconciled++;return op}})
 async function call(action,extra={}){let code=200,data;await handler({method:'POST',body:{action,quoteToken:token,...extra},headers:{}},{setHeader(){},status(n){code=n;return this},json(v){data=v;return this}});return {code,data}}
 assert.equal((await call('nonsense')).code,400)
+review.quote.input={source:'celo',purpose:'cash'};review.quote.wallets.source.provider='privy'
+for(const action of ['prepare','submit'])assert.equal((await call(action)).data.code,'celo_cash_preview_only')
+assert.equal(submitted,0);assert.equal(op,undefined)
+review.quote.input={source:'solana'};review.quote.wallets.source.provider='circle'
 const previewOnly=await call('quote',{source:'celo',destination:'base',from:'cNGN',to:'USDC',amount:'2100'})
 assert.equal(previewOnly.code,422);assert.equal(previewOnly.data.code,'bridge_preview_only');assert.equal(op,undefined)
 enabled=false;assert.equal((await call('prepare')).code,409);enabled=true
