@@ -62,7 +62,7 @@ export function createCrossBridgeSettlement(d:CrossBridgeSettlementDependencies)
    return update(row)
   })
   if(source==='failed')return publish(await advance(row=>({...row,state:'source_failed',updatedAt:d.now()})))
-  const saved=source==='confirmed'?await advance(row=>({...row,state:'source_confirmed',updatedAt:d.now()})):r
+  const saved=source==='confirmed'&&r.state!=='source_confirmed'?await advance(row=>({...row,state:'source_confirmed',updatedAt:d.now()})):r
   if(terminal(saved.state))return publish(saved)
   if(deliveryResult.status==='rejected')throw deliveryResult.reason
   if(!deliveryResult.value)return r.observedDelivery?advance(row=>({...row,observedDelivery:null,updatedAt:d.now()})):saved

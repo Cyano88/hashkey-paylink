@@ -27,9 +27,9 @@ assert(candidate);assert.equal(candidate.token.symbol,'USDC');assert(crossBridge
 refund.request.data.refundCurrencyData.currency.decimals=18;assert.equal(crossBridgeDeliveryCandidate(refund.plan,hash('bsc'),refund.status,refund.requests),null)
 function harness(...route){
  const f=data(...route),initial={id:'operation',ownerId:'owner',plan:f.plan,sourceHash:hash(f.plan.route.source),state:'submitted',updatedAt:now}
- let row=structuredClone(initial),source='confirmed',received=BigInt(f.plan.route.receiveUnits),observed=null,ledgerFailures=0,sourceCalls=0,providerCalls=0,beforeRead
- const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;if(source instanceof Error)throw source;return source},provider:async()=>{providerCalls++;return f},observed:async()=>observed,received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
- return {f,initial,events,run:createCrossBridgeSettlement(d),get row(){return row},set row(v){row=v},set source(v){source=v},set received(v){received=v},set observed(v){observed=v},set ledgerFailures(v){ledgerFailures=v},set beforeRead(v){beforeRead=v},get providerCalls(){return providerCalls},get sourceCalls(){return sourceCalls}}
+ let row=structuredClone(initial),source='confirmed',received=BigInt(f.plan.route.receiveUnits),observed=null,ledgerFailures=0,sourceCalls=0,writes=0,providerCalls=0,beforeRead
+ const events=new Map(),d={now:()=>now,read:async()=>structuredClone(row),mutate:async(id,fn)=>{writes++;row=fn(structuredClone(row));return structuredClone(row)},source:async()=>{sourceCalls++;if(source instanceof Error)throw source;return source},provider:async()=>{providerCalls++;return f},observed:async()=>observed,received:async()=>{if(beforeRead)await beforeRead();return received},ledger:async e=>{if(ledgerFailures-->0)throw Error('Ledger unavailable');events.set(e.eventKey,e)}}
+ return {f,initial,events,run:createCrossBridgeSettlement(d),get writes(){return writes},get row(){return row},set row(v){row=v},set source(v){source=v},set received(v){received=v},set observed(v){observed=v},set ledgerFailures(v){ledgerFailures=v},set beforeRead(v){beforeRead=v},get providerCalls(){return providerCalls},get sourceCalls(){return sourceCalls}}
 }
 let h=harness();await assert.rejects(()=>h.run('other','operation'));assert.equal(h.sourceCalls,0)
 {
@@ -46,6 +46,7 @@ h=harness();h.source='pending';h.f.status.status='failure';await h.run('owner','
 h=harness();h.source='failed';assert.equal((await h.run('owner','operation')).state,'source_failed');assert.equal(h.providerCalls,1);assert.equal(h.events.size,0)
 h=harness();h.f.status.status='failure';assert.equal((await h.run('owner','operation')).state,'source_confirmed');assert.equal(h.events.size,0)
 h=harness();h.received=null;assert.equal((await h.run('owner','operation')).state,'source_confirmed')
+{const writes=h.writes;await h.run('owner','operation');assert.equal(h.writes,writes,'Repeated source confirmation without new delivery evidence must not write the journal')}
 h=harness();h.ledgerFailures=1;await assert.rejects(()=>h.run('owner','operation'),/Ledger/);assert.equal(h.row.state,'completed');assert.equal(h.events.size,0);await h.run('owner','operation');assert.equal(h.events.size,1);assert.equal(h.sourceCalls,1)
 const event=[...h.events.values()][0];assert.equal(event.asset,'USDT');assert.equal(event.amount,'2');assert.equal(event.metadata.sourceAsset,'ETH')
 h=harness();await Promise.all([h.run('owner','operation'),h.run('owner','operation')]);assert.equal(h.events.size,1);assert.equal(h.row.state,'completed')
