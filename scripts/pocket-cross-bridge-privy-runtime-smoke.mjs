@@ -68,7 +68,7 @@ for(const source of ['bsc','xlayer','celo'])for(const asset of crossBridgeAssets
  time+=90000;assert.equal((await runtime().status(saved.quote.id)).sourceHash,sourceHash);assert.equal(proofs,1)
  await runtime().submit(saved.quote.id,'ephemeral-signature');assert.equal(sends,1);assert.equal((await runtime().cancel(saved.quote.id)).state,'submitted');assert(!JSON.stringify([...rows]).includes('ephemeral-signature'))
  await assert.rejects(()=>createCrossBridgePrivyRuntime('other',async()=>{},opts).read(saved.quote.id))
- if(source==='xlayer'){
+ if(source==='xlayer'||source==='bsc'){
   rows=new Map();time=now
   let preflights=0
   const before=sends,combined=createCrossBridgePrivyRuntime('owner',async()=>{preflights++},opts)

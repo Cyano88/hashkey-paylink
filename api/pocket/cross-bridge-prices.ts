@@ -13,7 +13,24 @@ function scaled(value:unknown,up:boolean){
  if(result<=0n||result>10n**20n)return fail()
  return result
 }
-export async function readCrossBridgePrices(network:CrossBridgeNetwork,asset:string,options:{fetcher?:typeof fetch;now?:()=>number;credentials?:ReturnType<typeof okxCredentials>}={}):Promise<{gasPrice:CrossBridgePrice;assetPrice:CrossBridgePrice}>{
+type PriceOptions={fetcher?:typeof fetch;now?:()=>number;credentials?:ReturnType<typeof okxCredentials>}
+type Prices={gasPrice:CrossBridgePrice;assetPrice:CrossBridgePrice}
+const pending=new Map<string,Promise<Prices>>()
+const recent=new Map<string,{at:number;prices:Prices}>()
+export async function readCrossBridgePrices(network:CrossBridgeNetwork,asset:string,options:PriceOptions={}):Promise<Prices>{
+ if(options.fetcher||options.credentials)return fetchPrices(network,asset,options)
+ const key=JSON.stringify([network,asset]),now=(options.now??Date.now)(),entry=recent.get(key)
+ if(entry&&now>=entry.at&&now-entry.at<2000&&Math.min(entry.prices.gasPrice.observedAt,entry.prices.assetPrice.observedAt)>now-5000)return entry.prices
+ const active=pending.get(key)
+ if(active)return active
+ const request=fetchPrices(network,asset,options).then(prices=>{
+  recent.set(key,{at:(options.now??Date.now)(),prices})
+  return prices
+ }).finally(()=>pending.delete(key))
+ pending.set(key,request)
+ return request
+}
+async function fetchPrices(network:CrossBridgeNetwork,asset:string,options:PriceOptions):Promise<Prices>{
  // Circle-issued Arc USDC/EURC share the same denomination as their Base assets.
  // Use fresh, timestamped market prices, never a fixed dollar peg.
  const pricingNetwork=network==='arc'?'base':network
@@ -25,7 +42,7 @@ export async function readCrossBridgePrices(network:CrossBridgeNetwork,asset:str
  const path='/api/v6/dex/market/price',body=JSON.stringify(addresses.map(tokenContractAddress=>({chainIndex,tokenContractAddress}))),timestamp=new Date(now()).toISOString()
  const signature=createHmac('sha256',credentials.secret).update(timestamp+'POST'+path+body).digest('base64')
  const response=await fetcher('https://web3.okx.com'+path,{method:'POST',body,redirect:'error',signal:AbortSignal.timeout(5000),headers:{'Content-Type':'application/json','OK-ACCESS-KEY':credentials.key,'OK-ACCESS-SIGN':signature,'OK-ACCESS-PASSPHRASE':credentials.passphrase,'OK-ACCESS-TIMESTAMP':timestamp}})
- if(!response.ok)return fail()
+ if(!response.ok){if(process.env.NODE_ENV==='production')console.warn('bridge_fee_price_http',{network,asset,status:response.status});return fail()}
  const result=await response.json()
  if(result?.code!=='0'||!Array.isArray(result.data)||result.data.length!==addresses.length)return fail()
  const same=(a:unknown,b:string)=>typeof a==='string'&&(network==='solana'?a===b:a.toLowerCase()===b.toLowerCase())
@@ -35,7 +52,7 @@ export async function readCrossBridgePrices(network:CrossBridgeNetwork,asset:str
   const row=rows[0]
   if(typeof row.time!=='string'&&typeof row.time!=='number'||!/^\d{13}$/.test(String(row.time)))return fail()
   const observedAt=Number(row.time)
-  if(!Number.isSafeInteger(observedAt)||observedAt>now()+5000||observedAt+30000<=now())return fail()
+  if(!Number.isSafeInteger(observedAt)||observedAt>now()+5000||observedAt+30000<=now()){if(process.env.NODE_ENV==='production')console.warn('bridge_fee_price_time',{network,asset,ageMs:now()-observedAt});return fail()}
   return {scaled8:scaled(row.price,up),observedAt}
  }
  return {gasPrice:read(native,true),assetPrice:read(address,false)}

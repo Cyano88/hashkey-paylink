@@ -49,7 +49,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
      return res.status(422).json({ok:false,code:'bridge_preview_only',error:'Preview only.'})
     const saved=await d.quote({ownerId:owner,source,destination,from:b.from,to:b.to,amountUnits:String(parseUnits(b.amount,pair.tokenIn.decimals)),circleUserToken:typeof b.circleUserToken==='string'?b.circleUserToken:undefined,maximum:b.maximum===true,...(b.purpose==='cash'?{purpose:'cash' as const}:{})})
     const opened=await d.open(saved.quoteToken,owner)
-    return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true,...(opened.quote.input.purpose==='cash'&&opened.quote.input.source==='xlayer'&&opened.quote.wallets.source.provider==='privy'?{signingRequest:crossBridgePrivyRequest(opened,process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID||'')}:{})})
+    return res.json({ok:true,quote:crossBridgePreview(opened),quoteToken:saved.quoteToken,sufficientBalance:true,...(opened.quote.input.purpose==='cash'&&['xlayer','bsc'].includes(opened.quote.input.source)&&opened.quote.wallets.source.provider==='privy'?{signingRequest:crossBridgePrivyRequest(opened,process.env.PRIVY_APP_ID||process.env.VITE_PRIVY_APP_ID||'')}:{})})
    }
    const token=typeof b.quoteToken==='string'?b.quoteToken:'',review=await d.open(token,owner,{recovery:!['prepare','submit'].includes(action)}),id=review.quote.id
    const existing=action==='prepare'?undefined:await d.store.read(id)
@@ -57,7 +57,7 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
    const userToken=typeof b.circleUserToken==='string'?b.circleUserToken:''
    if(action==='prepare'){
     const combined=b.dispatch===true
-    if(combined&&review.quote.wallets.source.provider==='privy'&&review.quote.input.source==='xlayer'&&review.quote.input.purpose==='cash'){
+    if(combined&&review.quote.wallets.source.provider==='privy'&&['xlayer','bsc'].includes(review.quote.input.source)&&review.quote.input.purpose==='cash'){
      const approval=req.headers['x-pocket-payment-approval']
      const runtime=d.runtime(review,'')
      if(!('prepareAuthorizedCash' in runtime)||typeof approval!=='string'||!approval||typeof b.authorization!=='string'||!b.authorization||b.authorization.length>16000)throw Error('Confirm the top-up in your wallet.')
