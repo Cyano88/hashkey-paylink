@@ -14,6 +14,7 @@ export type CrossBridgeOperationDependencies={
  open(token:string,owner:string,recovery:boolean):Promise<Review>;
  approve(owner:string,approval:string):Promise<boolean>;
  // Revalidates wallet ownership, approved fee coverage/balance and exact execution.
+ prepareSigningPayload?(review:Review):Promise<{solanaTransaction:string;lastValidBlockHeight:number;networkFeeLamports:string}>;
  preflight(review:Review):Promise<void|BridgeSpend>;
  // Must use operation.id as provider idempotency key. Authorization stays in memory.
  dispatch(review:Review,operation:CrossBridgeOperation,authorization:string):Promise<CrossBridgeObservation|null>;
@@ -72,13 +73,14 @@ export function createCrossBridgeOperations(d:CrossBridgeOperationDependencies){
    if(previous){const r=owned(previous,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
    const fresh=await d.open(token,owner,false)
    if(!await d.approve(owner,approval))fail('Confirm this bridge with your PIN or fingerprint.')
+   const payload=dispatchAuthorization&&d.prepareSigningPayload?await d.prepareSigningPayload(fresh):undefined
    const spend=await d.preflight(fresh)
    let claimed=false
    const operation=owned(await store.mutate(q.id,current=>{
     if(current){const r=owned(current,owner,q.id);if(r.fingerprint!==fingerprint)fail();return r}
     if(q.expiresAt<=d.now())fail('Bridge quote expired. Review it again.')
     claimed=!!dispatchAuthorization
-    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:claimed?'submitting':'prepared',createdAt:d.now(),updatedAt:d.now()}
+    return {id:q.id,ownerId:owner,source:q.input.source,walletAddress:q.wallets.source.address,fingerprint,...payload,...(spend?{spend}:{}),quoteToken:token,expiresAt:q.expiresAt,state:claimed?'submitting':'prepared',createdAt:d.now(),updatedAt:d.now()}
    },!!dispatchAuthorization),owner,q.id)
    return claimed&&dispatchAuthorization?dispatch(fresh,operation,owner,q.id,dispatchAuthorization):operation
   },

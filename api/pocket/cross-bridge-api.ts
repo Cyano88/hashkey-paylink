@@ -97,6 +97,14 @@ export function createCrossBridgeHandler(overrides:Partial<typeof defaults>={}){
     }catch{/* Keep polling when the canonical debit cannot yet be verified. */}
    }
    if(action==='cancel'&&!op.sourceHash&&review.quote.wallets.source.provider==='circle'&&review.quote.input.source!=='solana'&&userToken)op=await d.runtime(review,userToken).status(id)
+   const expiredPreparation=(row:CrossBridgeOperation)=>review.quote.input.source==='solana'&&row.state==='prepared'&&row.expiresAt<=Date.now()&&!row.challengeId&&!row.transactionId&&!row.userOperationHash&&!row.signedTransaction&&!row.sourceHash
+   if(action==='status'&&expiredPreparation(op)){
+    const resolved=await d.store.mutate(id,current=>{
+     if(!current||current.ownerId!==owner||current.quoteToken!==token)throw Error('Bridge identity changed.')
+     return expiredPreparation(current as CrossBridgeOperation)?{...current,state:'not_submitted',updatedAt:Date.now()}:current
+    })
+    return res.json(await d.response(resolved as CrossBridgeOperation))
+   }
    if(action==='cancel'){
     const cancelled=await d.store.mutate(id,current=>{
      if(!current||current.ownerId!==owner||current.quoteToken!==token)throw Error('Bridge identity changed.')

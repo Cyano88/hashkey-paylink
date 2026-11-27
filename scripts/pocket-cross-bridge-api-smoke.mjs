@@ -14,6 +14,8 @@ const previewOnly=await call('quote',{source:'celo',destination:'base',from:'cNG
 assert.equal(previewOnly.code,422);assert.equal(previewOnly.data.code,'bridge_preview_only');assert.equal(op,undefined)
 enabled=false;assert.equal((await call('prepare')).code,409);enabled=true
 await call('prepare');assert.equal((await call('status')).data.status,'prepared');assert.equal(op.state,'prepared','Status must not cancel a bridge awaiting submission');assert.equal(submitted,0)
+op.expiresAt=Date.now()-1000;op.challengeId='existing';assert.equal((await call('status')).data.status,'prepared')
+delete op.challengeId;assert.equal((await call('status')).data.status,'not_submitted');assert.equal(submitted,0)
 await call('prepare');await call('submit');assert.equal(submitted,1)
 assert.equal((await call('cancel')).data.status,'cancelled');assert.equal(signed,0)
 await call('prepare');await call('submit');await call('signed',{signedTransaction:'signed-by-owner'});assert.equal(signed,1);assert.equal(reconciled,1)

@@ -23,6 +23,11 @@ export function createCrossBridgeSolanaRuntime(ownerId:string,userToken:string,p
  const ready=()=>{if(!d.durable())throw Error('Bridge recovery storage is unavailable.')}
  const open=async(token:string,owner:string,recovery:boolean)=>{ready();if(owner!==ownerId)return fail();const r=await d.open(token,owner,{recovery,now:d.now()});if(r.quote.input.source!=='solana'||r.quote.wallets.source.provider!=='circle'||r.charged.plan.kind!=='solana')return fail();return r}
  const service=createCrossBridgeOperations({store,now:d.now,open,approve:(owner,approval)=>d.approve(approval,owner,d.now()),preflight:async r=>{if(!d.preflightRevalidatesWallets)await d.wallets(r.quote.wallets);return preflight(r)},
+  prepareSigningPayload:async reviewed=>{
+   const prepared=await d.prepare(reviewed)
+   validateCrossBridgeSolanaTransaction(reviewed,prepared.transaction,prepared.transaction,false)
+   return {solanaTransaction:prepared.transaction,lastValidBlockHeight:prepared.lastValidBlockHeight,networkFeeLamports:prepared.networkFeeLamports}
+  },
   dispatch:async(r,op,authorization)=>{
    if(authorization!==userToken||typeof op.solanaTransaction!=='string')return fail()
    validateCrossBridgeSolanaTransaction(r,op.solanaTransaction,op.solanaTransaction,false)
@@ -45,6 +50,10 @@ export function createCrossBridgeSolanaRuntime(ownerId:string,userToken:string,p
   return op
  }
  return {
+  async prepareAndSubmit(token:string,approval:string){
+   ready();if(!userToken)throw Error('Reconnect your Solana wallet before confirming.')
+   return service.prepare(token,ownerId,approval,userToken)
+  },
   async prepare(token:string,approval:string){
    ready();let op=await service.prepare(token,ownerId,approval)
    if(op.state!=='prepared'||op.solanaTransaction)return op

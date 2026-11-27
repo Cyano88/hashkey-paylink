@@ -39,7 +39,10 @@ for(const asset of ['USDC','USDT']){
  let time=now,rows=new Map(),challenges=0,broadcasts=0,observed=false
  const store={read:async id=>structuredClone(rows.get(id)),mutate:async(id,fn)=>{const next=fn(structuredClone(rows.get(id)));rows.set(id,next);return structuredClone(next)}}
  const runtime=createCrossBridgeSolanaRuntime('owner','ephemeral-user-token',async()=>{}, {store,durable:()=>true,now:()=>time,open:(token,owner,o)=>openCrossBridgeReview(token,owner,{...o,secret}),wallets:async()=>{},approve:async()=>true,prepare:async()=>prepared,challenge:async()=>{challenges++;return {challengeId:'11111111-1111-4111-8111-111111111111'}},rpc:()=>({getGenesisHash:rpc.getGenesisHash,getBlockHeight:async()=>50,getSignatureStatuses:async()=>({value:[observed?{confirmationStatus:'confirmed',err:null}:null]}),sendRawTransaction:async bytes=>{broadcasts++;assert.equal(bytes.toString('base64'),raw);assert.equal(rows.get(saved.quote.id).signedTransaction,raw);return hash}})})
- await runtime.prepare(saved.quoteToken,'pin');await runtime.submit(saved.quote.id);await runtime.submit(saved.quote.id);assert.equal(challenges,1)
+ if(asset==='USDT'){
+  const approval=await runtime.prepareAndSubmit(saved.quoteToken,'pin');assert.ok(approval.challengeId);assert.equal(broadcasts,0)
+  await runtime.prepareAndSubmit(saved.quoteToken,'pin');assert.equal(challenges,1)
+ }else await runtime.prepare(saved.quoteToken,'pin');await runtime.submit(saved.quote.id);await runtime.submit(saved.quote.id);assert.equal(challenges,1)
  time+=90000;await runtime.signed(saved.quote.id,raw);assert.equal(broadcasts,1);assert.equal(rows.get(saved.quote.id).sourceHash,hash)
  await runtime.status(saved.quote.id);assert.equal(broadcasts,1);observed=true;await runtime.broadcast(saved.quote.id);assert.equal(broadcasts,1)
  assert.equal((await runtime.cancel(saved.quote.id)).state,'submitted');assert(!JSON.stringify([...rows]).includes('ephemeral-user-token'))
