@@ -80,7 +80,7 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
   if(input.walletGas&&input.purpose==='cash'&&input.source==='celo'&&input.destination==='base'&&input.to==='USDC'&&['USDC','USDT','cNGN'].includes(input.from)){
    const built=await buildCrossBridgeChargedPlan(provider.route,wallets,0n,recipient,true)
    if(built.plan.kind!=='evm')throw Error('Celo transaction unavailable.')
-   const [balance,gas]=await Promise.all([readers.balance(),celoCashGas(wallets.source.address as Hex,built.plan.callData,env)])
+   const [balance,gas]=await Promise.all([readers.balance(),celoCashGas(wallets.source.address as Hex,built.plan.callData,env,provider.route.provider==='lifi')])
    if(balance<amountUnits)throw Object.assign(Error('Insufficient '+input.from+' balance.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance)})
    await revalidateCrossBridgeWallets(wallets)
    const feeAsset=input.from==='cNGN'?'CELO':input.from
@@ -112,7 +112,7 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
  if(q.walletGasUnits){
   await Promise.all([guard(review),d.revalidate(q.wallets)])
   if(charged.plan.kind!=='evm')throw Error('Celo transaction unavailable.')
-  const readAt=d.now(),[balance,gas]=await Promise.all([d.readers(q.wallets,q.input.from,userToken,env).balance(),celoCashGas(q.wallets.source.address as Hex,charged.plan.callData,env)])
+  const readAt=d.now(),[balance,gas]=await Promise.all([d.readers(q.wallets,q.input.from,userToken,env).balance(),celoCashGas(q.wallets.source.address as Hex,charged.plan.callData,env,route.provider==='lifi')])
   if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' balance.'),{status:422,code:'insufficient_balance'})
   if(gas.estimatedUnits>BigInt(q.walletGasUnits))throw Object.assign(Error('The Celo network fee changed. Review the updated fee.'),{status:409,code:'cross_bridge_fee_changed'})
   const requiredNative=BigInt(q.walletGasUnits)+(route.provider==='lifi'?BigInt(route.lifi.nativeValueUnits):0n)
