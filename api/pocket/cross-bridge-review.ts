@@ -7,7 +7,7 @@ import {assertCrossBridgeRollout} from '../../src/pocket/lib/pocketCrossBridgeAs
 
 /** Persist only JSON primitives and the original provider response. Reconstruct
  * bigint calls and Solana instructions through the same validators on every read. */
-export type CrossBridgeReview={version:1;id:string;ownerId:string;wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:string;reimbursementRecipient:string;totalUnits:string;planHash:string;issuedAt:number;expiresAt:number;receiveUsdValue?:number;walletGasUnits?:string}
+export type CrossBridgeReview={version:1;id:string;ownerId:string;wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:string;reimbursementRecipient:string;totalUnits:string;planHash:string;issuedAt:number;expiresAt:number;receiveUsdValue?:number;walletGasUnits?:string;highNetworkFee?:boolean}
 const fail=():never=>{throw Object.assign(Error('Bridge review changed or expired. Review it again.'),{status:409,code:'bridge_review_invalid'})}
 const mac=(body:string,secret:string)=>{if(secret.length<32)throw Error('Bridge review signing is unavailable.');return createHmac('sha256',secret).update('pocket:cross-bridge-review:v1:'+body).digest()}
 const same=(network:string,a:string,b:string)=>network==='solana'?a===b:a.toLowerCase()===b.toLowerCase()
@@ -34,10 +34,13 @@ export async function openCrossBridgeReview(token:string,owner:string,options:{r
 }
 /** Authenticated service supplies a validated provider response, live wallet
  * binding and priced charges. This function neither estimates nor dispatches. */
-export async function createCrossBridgeReview(input:{wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:bigint;reimbursementRecipient:string;planHash:string;totalUnits:bigint;expiresAt:number;receiveUsdValue?:number;walletGasUnits?:string},options:{now?:number;secret?:string}={}){
+export async function createCrossBridgeReview(input:{wallets:CrossBridgeWalletBinding;input:CrossBridgeInput;providerQuote:unknown;appFee:RelayBridgeAppFee|null;reimbursementUnits:bigint;reimbursementRecipient:string;planHash:string;totalUnits:bigint;expiresAt:number;receiveUsdValue?:number;walletGasUnits?:string;highNetworkFee?:boolean},options:{now?:number;secret?:string}={}){
  const issuedAt=options.now??Date.now()
  const q:CrossBridgeReview=JSON.parse(JSON.stringify({version:1,id:randomUUID(),ownerId:input.wallets.ownerId,wallets:input.wallets,input:input.input,providerQuote:input.providerQuote,appFee:input.appFee,reimbursementUnits:String(input.reimbursementUnits),reimbursementRecipient:input.reimbursementRecipient,planHash:input.planHash,totalUnits:String(input.totalUnits),issuedAt,expiresAt:Math.min(input.expiresAt,issuedAt+45000)}))
- if(input.walletGasUnits!==undefined)q.walletGasUnits=input.walletGasUnits
+ if(input.walletGasUnits!==undefined){
+  q.walletGasUnits=input.walletGasUnits
+  if(input.highNetworkFee)q.highNetworkFee=true
+ }
  if(typeof input.receiveUsdValue==='number'&&Number.isFinite(input.receiveUsdValue)&&input.receiveUsdValue>0&&input.receiveUsdValue<=1e15)q.receiveUsdValue=input.receiveUsdValue
  const token=sealCrossBridgeReview(q,options.secret)
  await openCrossBridgeReview(token,q.ownerId,options)

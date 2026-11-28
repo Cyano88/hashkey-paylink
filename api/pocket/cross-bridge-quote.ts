@@ -87,8 +87,14 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
    const prices=await readCrossBridgePrices('celo',feeAsset)
    const routeValue=provider.route.provider==='lifi'?BigInt(provider.route.lifi.nativeValueUnits):0n
    if(gas.balance<gas.units+routeValue)throw Object.assign(Error('Add CELO to cover the route and network fee.'),{status:422,code:'celo_cash_gas_needed'})
-   priceCrossBridgeReimbursement('celo',feeAsset,gas.units+routeValue,prices.gasPrice,prices.assetPrice,crossBridgeConfiguredPolicy('celo',feeAsset,prices.assetPrice,env))
-   const quote=await createCrossBridgeReview({wallets,input:request,providerQuote,appFee,...built,reimbursementUnits:0n,reimbursementRecipient:recipient,walletGasUnits:String(gas.units),receiveUsdValue:provider.route.provider==='relay'?provider.route.receiveUsdValue:undefined,expiresAt:Math.min(provider.route.expiresAt,provider.requestedAt+45000)})
+   let highNetworkFee=false
+   try{
+    priceCrossBridgeReimbursement('celo',feeAsset,gas.units+routeValue,prices.gasPrice,prices.assetPrice,crossBridgeConfiguredPolicy('celo',feeAsset,prices.assetPrice,env))
+   }catch(error){
+    if((error as {code?:string})?.code!=='pocket_fee_limit')throw error
+    highNetworkFee=true
+   }
+   const quote=await createCrossBridgeReview({wallets,input:request,providerQuote,appFee,...built,reimbursementUnits:0n,reimbursementRecipient:recipient,walletGasUnits:String(gas.units),highNetworkFee,receiveUsdValue:provider.route.provider==='relay'?provider.route.receiveUsdValue:undefined,expiresAt:Math.min(provider.route.expiresAt,provider.requestedAt+45000)})
    return {quote,amountUnits,totalUnits:amountUnits,expiresAt:quote.quote.expiresAt}
   }
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
