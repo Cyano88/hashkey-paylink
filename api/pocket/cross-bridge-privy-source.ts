@@ -23,7 +23,7 @@ export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOper
    }
   }
   const reimbursement=movements.filter(m=>same(m.from,q.input.sender)&&same(m.to,q.reimbursementRecipient)&&m.value===BigInt(q.reimbursementUnits))
-  if(reimbursement.length!==1)return pending()
+  if(reimbursement.length!==(q.walletGasUnits?0:1))return pending()
   const remaining=movements.filter(m=>m!==reimbursement[0]),debit=remaining.reduce((sum,m)=>sum+(same(m.from,q.input.sender)?m.value:0n)-(same(m.to,q.input.sender)?m.value:0n),0n)
   if(debit!==BigInt(route.amountUnits))return pending()
   const matches=receipt.logs.filter((log:any)=>{
@@ -31,6 +31,7 @@ export async function readCrossBridgePrivySource(review:Review,hash:Hex,userOper
    try{const {args}=decodeEventLog({abi:lifiStarted,eventName:'LiFiTransferStarted',topics:log.topics as [Hex,...Hex[]],data:log.data,strict:true});const b=args.bridgeData;return same(b.transactionId,route.lifi.transactionId)&&b.bridge==='squid'&&same(b.sendingAssetId,route.lifi.bridgeTokenAddress)&&same(b.receiver,q.input.recipient)&&b.minAmount===BigInt(route.lifi.bridgeMinimumUnits)&&b.destinationChainId===8453n&&b.hasSourceSwaps&&!b.hasDestinationCall}catch{return false}
   })
   if(matches.length!==1)return pending()
+  if(paidGasUnits)await options.onWalletGasPaid?.(String(BigInt(paidGasUnits)+BigInt(route.lifi.nativeValueUnits)))
   return 'confirmed' as const
  }
  // Successful exact atomic Kernel batch proves native call values. ERC20 calls

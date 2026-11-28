@@ -77,15 +77,18 @@ export async function quoteCrossBridgeOwned(input:Omit<CrossBridgeInput,'sender'
    }
   }
   const recipient=crossBridgeReimbursementRecipient(input.source,env)
-  if(input.walletGas&&input.purpose==='cash'&&input.source==='celo'&&input.destination==='base'&&input.to==='USDC'&&['USDC','USDT'].includes(input.from)){
+  if(input.walletGas&&input.purpose==='cash'&&input.source==='celo'&&input.destination==='base'&&input.to==='USDC'&&['USDC','USDT','cNGN'].includes(input.from)){
    const built=await buildCrossBridgeChargedPlan(provider.route,wallets,0n,recipient,true)
    if(built.plan.kind!=='evm')throw Error('Celo transaction unavailable.')
    const [balance,gas]=await Promise.all([readers.balance(),celoCashGas(wallets.source.address as Hex,built.plan.callData,env)])
    if(balance<amountUnits)throw Object.assign(Error('Insufficient '+input.from+' balance.'),{status:422,code:'insufficient_balance',maximumAmountUnits:String(balance)})
    await revalidateCrossBridgeWallets(wallets)
-   const prices=await readCrossBridgePrices('celo',input.from)
-   priceCrossBridgeReimbursement('celo',input.from,gas.units,prices.gasPrice,prices.assetPrice,crossBridgeConfiguredPolicy('celo',input.from,prices.assetPrice,env))
-   const quote=await createCrossBridgeReview({wallets,input:request,providerQuote,appFee,...built,reimbursementUnits:0n,reimbursementRecipient:recipient,walletGasUnits:String(gas.units),receiveUsdValue:provider.route.receiveUsdValue,expiresAt:Math.min(provider.route.expiresAt,provider.requestedAt+45000)})
+   const feeAsset=input.from==='cNGN'?'CELO':input.from
+   const prices=await readCrossBridgePrices('celo',feeAsset)
+   const routeValue=provider.route.provider==='lifi'?BigInt(provider.route.lifi.nativeValueUnits):0n
+   if(gas.balance<gas.units+routeValue)throw Object.assign(Error('Add CELO to cover the route and network fee.'),{status:422,code:'celo_cash_gas_needed'})
+   priceCrossBridgeReimbursement('celo',feeAsset,gas.units+routeValue,prices.gasPrice,prices.assetPrice,crossBridgeConfiguredPolicy('celo',feeAsset,prices.assetPrice,env))
+   const quote=await createCrossBridgeReview({wallets,input:request,providerQuote,appFee,...built,reimbursementUnits:0n,reimbursementRecipient:recipient,walletGasUnits:String(gas.units),receiveUsdValue:provider.route.provider==='relay'?provider.route.receiveUsdValue:undefined,expiresAt:Math.min(provider.route.expiresAt,provider.requestedAt+45000)})
    return {quote,amountUnits,totalUnits:amountUnits,expiresAt:quote.quote.expiresAt}
   }
   const prices=await readCrossBridgePrices(input.source,input.from),policy=crossBridgeConfiguredPolicy(input.source,input.from,prices.assetPrice,env)
@@ -112,8 +115,10 @@ export function crossBridgePreflight(userToken:string,guard:(review:Review)=>Pro
   const readAt=d.now(),[balance,gas]=await Promise.all([d.readers(q.wallets,q.input.from,userToken,env).balance(),celoCashGas(q.wallets.source.address as Hex,charged.plan.callData,env)])
   if(balance<charged.totalUnits)throw Object.assign(Error('Insufficient '+q.input.from+' balance.'),{status:422,code:'insufficient_balance'})
   if(gas.estimatedUnits>BigInt(q.walletGasUnits))throw Object.assign(Error('The Celo network fee changed. Review the updated fee.'),{status:409,code:'cross_bridge_fee_changed'})
+  const requiredNative=BigInt(q.walletGasUnits)+(route.provider==='lifi'?BigInt(route.lifi.nativeValueUnits):0n)
+  if(gas.balance<requiredNative)throw Object.assign(Error('Add CELO to cover the route and network fee.'),{status:422,code:'celo_cash_gas_needed'})
   fresh()
-  return {readAt,asset:q.input.from,units:String(charged.totalUnits),balance:String(balance),extra:{asset:'CELO',units:q.walletGasUnits,balance:String(gas.balance)}}
+  return {readAt,asset:q.input.from,units:String(charged.totalUnits),balance:String(balance),extra:{asset:'CELO',units:String(requiredNative),balance:String(gas.balance)}}
  }
  const durations:Record<string,number>={},started=Date.now()
  const measured=async<T>(stage:string,read:()=>Promise<T>)=>{const start=Date.now();try{return await read()}finally{durations[stage]=Date.now()-start}}
